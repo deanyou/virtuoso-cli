@@ -60,7 +60,7 @@ fn handle_connection(mut conn: TcpStream) -> io::Result<()> {
     let result = read_until_delimiter(timeout)?;
 
     conn.write_all(&result)?;
-    conn.shutdown(std::net::Shutdown::Both)?;
+    let _ = conn.shutdown(std::net::Shutdown::Both);
 
     Ok(())
 }
@@ -80,7 +80,14 @@ fn read_until_delimiter(timeout_secs: u64) -> io::Result<Vec<u8>> {
             ]);
         }
 
-        let n = stdin.lock().read(&mut one_byte)?;
+        let n = match stdin.lock().read(&mut one_byte) {
+            Ok(n) => n,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
         if n == 0 {
             std::thread::sleep(std::time::Duration::from_millis(1));
             continue;
