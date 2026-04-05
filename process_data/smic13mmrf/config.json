@@ -1,0 +1,32 @@
+{
+  "name": "smic13mmrf",
+  "node": "130nm",
+  "description": "SMIC 13mm RF 1P3M 8K process",
+  "vdd_options": [1.2, 3.3],
+  "nmos_device": "n12",
+  "pmos_device": "p12",
+  "l_min": 120e-9,
+  "l_values": [200e-9, 500e-9, 1e-6],
+  "w_default": 1e-6,
+  "vgs_range": [0.2, 1.2],
+  "vgs_step": 0.05,
+  "model_file": "/foundry/smic/013mmrf/pdk/20250911/cadence/0.13um_1p3m_8k/models/spectre/ms013_io33_v2p6_7p_spe.lib",
+  "model_sections": ["tt", "res_tt", "dio_tt", "bjt_tt", "mim_tt", "var_tt", "mom_tt"],
+  "rf_model_file": "/foundry/smic/013mmrf/pdk/20250911/cadence/0.13um_1p3m_8k/models/spectre/ms013_io33_rf_v1p9_spe.lib",
+  "rf_model_sections": ["mos_tt", "res_tt", "mom_tt", "var_tt"],
+  "testbench": {
+    "lib": "FT0001A_SH",
+    "nmos_cell": "gmid",
+    "nmos_view": "schematic",
+    "nmos_inst": "/NM0"
+  },
+  "corners": {
+    "tt":  {"section": "tt",  "temp": 27},
+    "ss":  {"section": "ss",  "temp": 125},
+    "ff":  {"section": "ff",  "temp": -40},
+    "sf":  {"section": "sf",  "temp": 27},
+    "fs":  {"section": "fs",  "temp": 27}
+  },
+  "characterized_date": "2026-04-05",
+  "characterized_by": "virtuoso-cli automated"
+}
