@@ -111,7 +111,7 @@ pub struct SessionInfo {
 }
 
 impl SessionInfo {
-    fn sessions_dir() -> std::path::PathBuf {
+    pub(crate) fn sessions_dir() -> std::path::PathBuf {
         dirs::cache_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
             .join("virtuoso_bridge")

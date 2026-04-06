@@ -2,18 +2,10 @@
 ;RBD = RB Daemon
 ;RBM = RB Monitor
 
-; Configuration variables for the RAMIC Bridge
 ; Daemon binary path: resolved at load-time, never hardcoded.
-; Priority: (1) RB_DAEMON_PATH env var, (2) virtuoso-daemon on PATH.
-; Preserve manually set value across reloads using unless(boundp(...)).
-; Always resolve RBDPath if not yet set or previously resolved to empty.
-; Priority: (1) RB_DAEMON_PATH env var, (2) virtuoso-daemon on PATH,
-;           (3) ~/.cargo/bin/virtuoso-daemon, (4) empty (will warn below).
-; Preserve a non-empty manually set value across reloads.
-; Resolve RBDPath when not yet set or previously empty.
-; sh() in SKILL returns t/nil (not stdout), so `which` cannot be used.
+; sh() returns t/nil (not stdout), so `which` cannot be used for path detection.
 ; Priority: (1) RB_DAEMON_PATH env var, (2) ~/.cargo/bin/virtuoso-daemon.
-; Preserve a non-empty manually set value across reloads.
+; Re-resolved on reload if previously empty or the file no longer exists.
 when(!boundp('RBDPath) || RBDPath == "" || RBDPath == nil || !isFile(RBDPath)
     RBDPath = let((fromEnv cargoPath)
         fromEnv = getShellEnvVar("RB_DAEMON_PATH")

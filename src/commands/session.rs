@@ -8,18 +8,12 @@ pub fn list(format: OutputFormat) -> Result<Value> {
         VirtuosoError::Execution(format!("failed to read sessions: {e}"))
     })?;
 
-    // Filter to only alive sessions, cleaning up stale files as we go
+    let sessions_dir = SessionInfo::sessions_dir();
     sessions.retain(|s| {
         if s.is_alive() {
             true
         } else {
-            // Remove stale session file
-            let path = dirs::cache_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                .join("virtuoso_bridge")
-                .join("sessions")
-                .join(format!("{}.json", s.id));
-            let _ = std::fs::remove_file(&path);
+            let _ = std::fs::remove_file(sessions_dir.join(format!("{}.json", s.id)));
             false
         }
     });

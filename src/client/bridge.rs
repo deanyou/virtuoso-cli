@@ -106,7 +106,7 @@ impl VirtuosoClient {
 
     pub fn execute_skill(&self, skill_code: &str, timeout: Option<u64>) -> Result<VirtuosoResult> {
         // Guard: block SKILL expressions that can hang the daemon
-        if let Some(warning) = check_dangerous_skill(skill_code) {
+        if let Some(warning) = check_blocking_skill(skill_code) {
             return Err(VirtuosoError::Execution(warning));
         }
 
@@ -308,7 +308,7 @@ fn is_port_open(port: u16) -> bool {
     TcpStream::connect(format!("127.0.0.1:{port}")).is_ok()
 }
 
-fn check_dangerous_skill(code: &str) -> Option<String> {
+fn check_blocking_skill(code: &str) -> Option<String> {
     if code.contains("system(") || code.contains("sh(") {
         let lower = code.to_lowercase();
         if lower.contains("find /") || lower.contains("find \"/") {
