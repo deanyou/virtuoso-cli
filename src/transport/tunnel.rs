@@ -38,7 +38,7 @@ pub struct SSHClient {
 impl SSHClient {
     pub fn from_env(keep_remote_files: bool) -> Result<Self> {
         let cfg = Config::from_env()?;
-        let mut runner = SSHRunner::new(&cfg.remote_host);
+        let mut runner = SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
         if let Some(ref user) = cfg.remote_user {
             runner = runner.with_user(user);
         }

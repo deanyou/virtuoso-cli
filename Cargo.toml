@@ -6,7 +6,7 @@ description = "CLI tool to control Cadence Virtuoso from anywhere, locally or re
 license = "MIT"
 
 [[bin]]
-name = "virtuoso"
+name = "vcli"
 path = "src/main.rs"
 
 [[bin]]

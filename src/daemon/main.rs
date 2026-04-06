@@ -27,7 +27,10 @@ fn main() {
         process::exit(1);
     });
 
-    eprintln!("[virtuoso-daemon] listening on {host}:{port}");
+    let actual_port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
+    // Print actual port so bridge.il can read it (important when port=0 was passed)
+    eprintln!("PORT:{actual_port}");
+    eprintln!("[virtuoso-daemon] listening on {host}:{actual_port}");
 
     for stream in listener.incoming() {
         match stream {

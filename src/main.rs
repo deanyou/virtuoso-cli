@@ -16,7 +16,7 @@ use output::{OutputFormat, print_json};
 
 #[derive(Parser)]
 #[command(
-    name = "virtuoso",
+    name = "vcli",
     about = "Control Cadence Virtuoso from anywhere",
     long_about = "CLI tool for AI agents and humans to control Cadence Virtuoso, locally or remotely.\n\n\
         Examples:\n  \
@@ -45,6 +45,13 @@ struct Cli {
     /// Enable debug logging
     #[arg(long, short, global = true)]
     verbose: bool,
+
+    /// Connect to a specific Virtuoso session by ID (e.g. eda-meow-1).
+    /// Use `virtuoso session list` to see available sessions.
+    /// If omitted: auto-selects when only one session exists; errors if multiple.
+    /// Also reads from VB_SESSION environment variable.
+    #[arg(long, global = true)]
+    session: Option<String>,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -91,6 +98,10 @@ enum Commands {
     /// Transistor sizing from gm/Id lookup tables
     #[command(subcommand)]
     Design(DesignCmd),
+
+    /// List and inspect active Virtuoso bridge sessions
+    #[command(subcommand)]
+    Session(SessionCmd),
 
     /// Show CLI command schema as JSON for agent introspection
     #[command(
@@ -387,6 +398,19 @@ enum SimCmd {
 
     /// Show simulation results directory and contents
     Results,
+
+    /// Force netlist regeneration
+    #[command(
+        long_about = "Attempt to regenerate the simulation netlist programmatically.\n\n\
+            Examples:\n  \
+            virtuoso sim netlist\n  \
+            virtuoso sim netlist --recreate"
+    )]
+    Netlist {
+        /// Force full netlist recreation
+        #[arg(long)]
+        recreate: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -482,6 +506,26 @@ enum DesignCmd {
     },
 }
 
+#[derive(Subcommand)]
+enum SessionCmd {
+    /// List all active Virtuoso bridge sessions
+    #[command(
+        long_about = "Show all registered Virtuoso sessions.\n\n\
+            Each Virtuoso instance running RBStart() registers a session file.\n\
+            Use the session ID with --session to connect to a specific instance.\n\n\
+            Examples:\n  \
+            virtuoso session list\n  \
+            virtuoso session list --format json"
+    )]
+    List,
+
+    /// Show details for a specific session
+    Show {
+        /// Session ID (e.g. eda-meow-1)
+        id: String,
+    },
+}
+
 fn parse_key_val(s: &str) -> std::result::Result<(String, String), String> {
     let pos = s.find('=').ok_or_else(|| format!("invalid KEY=VALUE: no '=' in '{s}'"))?;
     Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
@@ -510,6 +554,13 @@ fn main() {
         Some(FormatArg::Table) => OutputFormat::Table,
         None => OutputFormat::resolve(None),
     };
+
+    // Propagate --session (or VB_SESSION env) so VirtuosoClient::from_env() picks it up
+    let session_from_env = std::env::var("VB_SESSION").ok();
+    let effective_session = cli.session.as_ref().or(session_from_env.as_ref());
+    if let Some(s) = effective_session {
+        std::env::set_var("VB_SESSION", s);
+    }
 
     let is_status_cmd = matches!(&cli.command, Commands::Tunnel(TunnelCmd::Status));
 
@@ -582,6 +633,7 @@ fn main() {
             } => commands::sim::sweep(&var, from, to, step, &analysis, &measure, timeout),
             SimCmd::Corner { file, timeout } => commands::sim::corner(&file, timeout),
             SimCmd::Results => commands::sim::results(),
+            SimCmd::Netlist { recreate } => commands::sim::netlist(recreate),
         },
         Commands::Process(cmd) => match cmd {
             ProcessCmd::Char {
@@ -598,6 +650,10 @@ fn main() {
             DesignCmd::Explore { pdk, r#type } => {
                 commands::design::explore(&pdk, &r#type, format)
             }
+        },
+        Commands::Session(cmd) => match cmd {
+            SessionCmd::List => commands::session::list(format),
+            SessionCmd::Show { id } => commands::session::show(&id, format),
         },
         Commands::Schema { all, noun, verb } => {
             let schema = if all || noun.is_none() {

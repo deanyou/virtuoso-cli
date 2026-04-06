@@ -25,7 +25,7 @@ impl SpectreSimulator {
         let remote = cfg.is_remote();
 
         let ssh_runner = if remote {
-            let mut runner = SSHRunner::new(&cfg.remote_host);
+            let mut runner = SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
             if let Some(ref user) = cfg.remote_user {
                 runner = runner.with_user(user);
             }

@@ -3,26 +3,51 @@
 ;RBM = RB Monitor
 
 ; Configuration variables for the RAMIC Bridge
-; Load RBDPath from environment variable RB_DAEMON_PATH, fallback to default if not set
-RBDPath = if(getShellEnvVar("RB_DAEMON_PATH") then
-                getShellEnvVar("RB_DAEMON_PATH")
+; Daemon binary path: resolved at load-time, never hardcoded.
+; Priority: (1) RB_DAEMON_PATH env var, (2) virtuoso-daemon on PATH.
+; Preserve manually set value across reloads using unless(boundp(...)).
+; Always resolve RBDPath if not yet set or previously resolved to empty.
+; Priority: (1) RB_DAEMON_PATH env var, (2) virtuoso-daemon on PATH,
+;           (3) ~/.cargo/bin/virtuoso-daemon, (4) empty (will warn below).
+; Preserve a non-empty manually set value across reloads.
+; Resolve RBDPath when not yet set or previously empty.
+; sh() in SKILL returns t/nil (not stdout), so `which` cannot be used.
+; Priority: (1) RB_DAEMON_PATH env var, (2) ~/.cargo/bin/virtuoso-daemon.
+; Preserve a non-empty manually set value across reloads.
+when(!boundp('RBDPath) || RBDPath == "" || RBDPath == nil || !isFile(RBDPath)
+    RBDPath = let((fromEnv cargoPath)
+        fromEnv = getShellEnvVar("RB_DAEMON_PATH")
+        if(fromEnv then
+            fromEnv
+        else
+            cargoPath = strcat(getShellEnvVar("HOME") "/.cargo/bin/virtuoso-daemon")
+            if(isFile(cargoPath) then
+                cargoPath
             else
-                "./ramic_bridge_daemon.py"
+                ""
             )
-; Load RBPython from environment variable RB_PYTHON_PATH, fallback to "python" if not set
-RBPython = if(getShellEnvVar("RB_PYTHON_PATH") then
-                getShellEnvVar("RB_PYTHON_PATH")
-            else
-                "python"
-            )
-RBPort = 65432                                                                   ; TCP port for client connections
-RBLocal = nil                                                                      ; Local-only connections (127.0.0.1 vs 0.0.0.0)
-RBEcho = nil                                                                     ; Echo bridging messages for debugging
-RBDLog = nil                                                                     ; Enable daemon logging to /tmp/RB.log
+        )
+    )
+)
+when(RBDPath == "" || RBDPath == nil
+    printf("[RAMIC Bridge] ERROR: virtuoso-daemon not found.\n")
+    printf("[RAMIC Bridge] Set RB_DAEMON_PATH or run: cargo install --path <repo> --bin virtuoso-daemon --features daemon\n")
+)
+; RBPython is no longer used (daemon is a standalone binary), kept for compatibility
+unless(boundp('RBPython) RBPython = "")
+; All state vars preserved across reloads — only initialized if not yet bound.
+; RBPort must NOT be reset on reload: the running daemon's actual port would be lost.
+unless(boundp('RBPort)      RBPort      = 0)   ; 0 = OS assigns; updated by RBIpcErrHandler
+unless(boundp('RBLocal)     RBLocal     = nil)
+unless(boundp('RBEcho)      RBEcho      = nil)
+unless(boundp('RBDLog)      RBDLog      = nil)
 
-; IPC process handle. Do not reset on reload: a live daemon keeps the port;
-; clearing RBIpc would make RBStart spawn a second daemon -> bind failure (exit 1).
+; IPC process handle — must survive reload so we don't spawn a second daemon.
 unless(boundp('RBIpc) RBIpc = 'unbound)
+
+; Session management — persist across reloads so session_id stays stable
+unless(boundp('RBSessionId)   RBSessionId   = "")
+unless(boundp('RBSessionSeq)  RBSessionSeq  = 0)
 
 procedure(RBIpcDataHandler(ipcId data)
   ; Handler for successful data received from the Python daemon
@@ -41,8 +66,19 @@ procedure(RBIpcDataHandler(ipcId data)
 )
 
 procedure(RBIpcErrHandler(ipcId data)
-    ; Daemon process stderr etc.; not echoed to CIW (use RBDLog or host logs if needed)
-    nil
+    ; Parse "PORT:XXXXX" line emitted by daemon on startup to capture actual bound port.
+    ; The daemon prints this to stderr before accepting connections.
+    rexCompile("PORT:\\([0-9][0-9]*\\)")
+    when(rexExecute(data)
+        let((actualPort)
+            actualPort = atoi(rexSubstitute("\\1"))
+            when(actualPort > 0
+                RBPort = actualPort
+                RBWriteSession(RBSessionId RBPort)
+                printf("[RAMIC Bridge] Session '%s' on port %d\n" RBSessionId RBPort)
+            )
+        )
+    )
 )
 
 procedure(RBIpcFinishHandler(ipcId data)
@@ -54,12 +90,15 @@ procedure(RBIpcFinishHandler(ipcId data)
 )
 
 procedure(RBStart()
-    ; Start the RAMIC Bridge daemon process
-    ; This launches the Python daemon as a child process of Virtuoso
+    ; Start the RAMIC Bridge daemon process.
+    ; Passes port=0 so the OS assigns a free port automatically — supports multiple
+    ; Virtuoso instances on the same host without port conflicts.
+    ; The daemon prints "PORT:XXXXX" to stderr; RBIpcErrHandler captures it and
+    ; writes the session registration file.
 	if(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) then
 		printf("[RAMIC Bridge (%L)] is already running\n", RBIpc)
 	else
-		prog((host logpath)
+		prog((host logpath hostname username)
 			; Determine host binding based on RBLocal setting
 			if(RBLocal then
 				host = "127.0.0.1"  ; Local-only connections
@@ -72,17 +111,27 @@ procedure(RBStart()
 			else
 				logpath = ""
 			)
-			; Start the Python daemon process with IPC handlers
-			RBIpc = ipcBeginProcess(sprintf(nil "%s %L %L %L" RBPython RBDPath host RBPort) "" 'RBIpcDataHandler 'RBIpcErrHandler 'RBIpcFinishHandler logpath)
+			; Generate stable session_id: hostname-username-N (increments per RBStart)
+			hostname = getShellEnvVar("HOSTNAME")
+			unless(hostname hostname = "localhost")
+			hostname = car(parseString(hostname "."))  ; strip domain
+			username = getShellEnvVar("USER")
+			unless(username username = "user")
+			RBSessionSeq = RBSessionSeq + 1
+			RBSessionId = sprintf(nil "%s-%s-%d" hostname username RBSessionSeq)
+			; Start the daemon with port=0 (OS assigns free port).
+			; RBIpcErrHandler will parse PORT:N from stderr and write session file.
+			RBIpc = ipcBeginProcess(sprintf(nil "%s %s 0" RBDPath host) "" 'RBIpcDataHandler 'RBIpcErrHandler 'RBIpcFinishHandler logpath)
 		)
 		printf("[RAMIC Bridge (%L)] start at (%s)\n" RBIpc getCurrentTime())
 	)
 )
 
 procedure(RBStop()
-    ; Stop the RAMIC Bridge daemon process
+    ; Stop the RAMIC Bridge daemon process and remove session registration file.
 	if(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) then
 		ipcKillProcess(RBIpc)
+		RBDeleteSession(RBSessionId)
 	else
 		printf("[RAMIC Bridge] is already down\n" )
 	)
@@ -93,9 +142,42 @@ procedure(RBStopAll()
     ; 1. Try graceful SIGTERM first, then force SIGKILL after 2s
     ; 2. Also kill any process holding the configured RBPort
     ; 3. Reset Skill-side IPC state
-    sh(sprintf(nil "pgrep -f 'python.*ramic_bridge_daemon' | xargs -r kill 2>/dev/null; sleep 2; pgrep -f 'python.*ramic_bridge_daemon' | xargs -r kill -9 2>/dev/null; fuser -k %d/tcp 2>/dev/null" RBPort))
+    ; 4. Remove this session's registration file
+    sh(sprintf(nil "pgrep -f 'virtuoso-daemon' | xargs -r kill 2>/dev/null; sleep 2; pgrep -f 'virtuoso-daemon' | xargs -r kill -9 2>/dev/null; fuser -k %d/tcp 2>/dev/null" RBPort))
+    RBDeleteSession(RBSessionId)
     RBIpc = 'unbound
     printf("[RAMIC Bridge] RBStopAll: all daemon processes killed, port %d released\n" RBPort)
+)
+
+procedure(RBWriteSession(sessionId port)
+    ; Write session registration file using sh() to avoid SKILL fprintf buffering issues.
+    ; File: ~/.cache/virtuoso_bridge/sessions/<session_id>.json
+    let((dir filename hostname username)
+        when(sessionId != ""
+            hostname = getShellEnvVar("HOSTNAME")
+            unless(hostname hostname = "localhost")
+            username = getShellEnvVar("USER")
+            unless(username username = "user")
+            dir = strcat(getShellEnvVar("HOME") "/.cache/virtuoso_bridge/sessions")
+            filename = strcat(dir "/" sessionId ".json")
+            ; Use printf to write JSON (avoids sh() output-capture limitation)
+            sh(sprintf(nil "mkdir -p \"%s\"" dir))
+            sh(sprintf(nil "printf '{\"id\":\"%s\",\"port\":%d,\"pid\":0,\"host\":\"%s\",\"user\":\"%s\",\"created\":\"%s\"}' > \"%s\""
+                sessionId port hostname username getCurrentTime() filename))
+        )
+    )
+)
+
+procedure(RBDeleteSession(sessionId)
+    ; Remove session registration file on bridge stop.
+    let((filename)
+        when(sessionId != ""
+            filename = strcat(getShellEnvVar("HOME") "/.cache/virtuoso_bridge/sessions/" sessionId ".json")
+            when(isFile(filename)
+                deleteFile(filename)
+            )
+        )
+    )
 )
 
 ; ============================================================================
@@ -232,7 +314,7 @@ procedure(RBMRefresh()
     ; Refresh the monitor display with current status and settings
 	when(boundp('RBMonInstalled)
 	if(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) then
-		RBMonitor->RBMState->value = sprintf(nil "RAMIC Bridge State: Running (%L)" RBIpc)
+		RBMonitor->RBMState->value = sprintf(nil "RAMIC Bridge State: Running | Session: %s | Port: %d" RBSessionId RBPort)
 	else
 		RBMonitor->RBMState->value = "RAMIC Bridge State: Down"
 	)
@@ -270,6 +352,39 @@ procedure(RBMApply()
 
 procedure(RBPrintEmptyLines()
 	printf("\n\n\n\n\n\n\n\n\n\n\n\n")
+)
+
+; ============================================================================
+; virtuoso_cli() — convenience wrapper: start bridge + print connection info
+; ============================================================================
+; Call this in .cdsinit or CIW instead of calling RBStart() directly.
+; Prints session ID and the vcli command to use in the terminal.
+
+procedure(vcli()
+    ; Start bridge (no-op if already running)
+    RBStart()
+    ; Print connection summary
+    if(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) then
+        printf("\n")
+        printf("┌─────────────────────────────────────────┐\n")
+        printf("│  vcli (Virtuoso CLI Bridge) — Ready     │\n")
+        printf("├─────────────────────────────────────────┤\n")
+        printf("│  Session : %-29s │\n" RBSessionId)
+        if(RBPort > 0 then
+            printf("│  Port    : %-29d │\n" RBPort)
+        else
+            printf("│  Port    : (assigning...)               │\n")
+        )
+        printf("├─────────────────────────────────────────┤\n")
+        printf("│  Terminal: vcli skill exec 'version()'  │\n")
+        printf("│  Sessions: vcli session list            │\n")
+        printf("└─────────────────────────────────────────┘\n")
+        printf("\n")
+        ; Session file is written automatically by RBIpcErrHandler when PORT: arrives.
+        ; Do NOT call RBWriteSession here — it would race with the async handler.
+    else
+        printf("[vcli] Bridge failed to start. Check RBDPath=%s\n" RBDPath)
+    )
 )
 
 ; Auto-start the bridge when this file is loaded (no second daemon if already up)

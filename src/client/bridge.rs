@@ -53,10 +53,42 @@ impl VirtuosoClient {
             None
         };
 
-        let port = tunnel
-            .as_ref()
-            .and_then(|t| t.saved_port())
-            .unwrap_or(cfg.port);
+        // Session-aware port resolution:
+        // 1. --session / VB_SESSION → load port from session file
+        // 2. No session specified → auto-select if exactly one session exists
+        // 3. Fallback to VB_PORT / config.port for backward compat
+        let port = if let Some(base_port) = tunnel.as_ref().and_then(|t| t.saved_port()) {
+            base_port
+        } else if let Ok(session_id) = std::env::var("VB_SESSION") {
+            match crate::models::SessionInfo::load(&session_id) {
+                Ok(s) => {
+                    tracing::info!("connecting to session '{}' on port {}", s.id, s.port);
+                    s.port
+                }
+                Err(e) => {
+                    return Err(crate::error::VirtuosoError::Config(format!(
+                        "session '{session_id}' not found: {e}. Run `virtuoso session list`."
+                    )));
+                }
+            }
+        } else {
+            // No session specified — try auto-discovery
+            match crate::models::SessionInfo::list() {
+                Ok(sessions) if sessions.len() == 1 => {
+                    let s = &sessions[0];
+                    tracing::info!("auto-selected session '{}' on port {}", s.id, s.port);
+                    s.port
+                }
+                Ok(sessions) if sessions.len() > 1 => {
+                    let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+                    return Err(crate::error::VirtuosoError::Config(format!(
+                        "multiple Virtuoso sessions active: {}. Use --session <id> to select one.",
+                        ids.join(", ")
+                    )));
+                }
+                _ => cfg.port, // 0 sessions or list failed → use VB_PORT
+            }
+        };
 
         Ok(Self {
             host: "127.0.0.1".into(),
@@ -73,6 +105,11 @@ impl VirtuosoClient {
     }
 
     pub fn execute_skill(&self, skill_code: &str, timeout: Option<u64>) -> Result<VirtuosoResult> {
+        // Guard: block SKILL expressions that can hang the daemon
+        if let Some(warning) = check_dangerous_skill(skill_code) {
+            return Err(VirtuosoError::Execution(warning));
+        }
+
         let timeout = timeout.unwrap_or(self.timeout);
         let start = Instant::now();
 
@@ -269,6 +306,20 @@ impl VirtuosoClient {
 
 fn is_port_open(port: u16) -> bool {
     TcpStream::connect(format!("127.0.0.1:{port}")).is_ok()
+}
+
+fn check_dangerous_skill(code: &str) -> Option<String> {
+    if code.contains("system(") || code.contains("sh(") {
+        let lower = code.to_lowercase();
+        if lower.contains("find /") || lower.contains("find \"/") {
+            return Some(
+                "Blocked: system()/sh() with recursive 'find /' can hang the SKILL daemon. \
+                 Use a specific directory instead (e.g., find /home/...)."
+                    .into(),
+            );
+        }
+    }
+    None
 }
 
 pub fn escape_skill_string(s: &str) -> String {

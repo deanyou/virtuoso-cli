@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub remote_host: String,
+    pub remote_host: Option<String>,
     pub remote_user: Option<String>,
     pub port: u16,
     pub jump_host: Option<String>,
@@ -24,8 +24,7 @@ impl Config {
             }
         }
 
-        let remote_host = env::var("VB_REMOTE_HOST")
-            .map_err(|_| VirtuosoError::Config("VB_REMOTE_HOST not set".into()))?;
+        let remote_host = env::var("VB_REMOTE_HOST").ok().filter(|s| !s.is_empty());
 
         let port: u16 = env::var("VB_PORT")
             .ok()
@@ -63,13 +62,14 @@ impl Config {
     }
 
     pub fn is_remote(&self) -> bool {
-        !self.remote_host.is_empty()
+        self.remote_host.is_some()
     }
 
     pub fn ssh_target(&self) -> String {
+        let host = self.remote_host.as_deref().unwrap_or("");
         match &self.remote_user {
-            Some(user) => format!("{user}@{}", self.remote_host),
-            None => self.remote_host.clone(),
+            Some(user) => format!("{user}@{host}"),
+            None => host.to_string(),
         }
     }
 

@@ -27,13 +27,18 @@ pub fn setup(lib: &str, cell: &str, view: &str, simulator: &str) -> Result<Value
 pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
-    // Check if resultsDir is set; if not, create one
+    // Check if resultsDir is set — do NOT override if it is, as changing
+    // resultsDir while an ADE session is active causes run() to silently
+    // return nil (ADE binds the session to a specific results path).
     let rdir = client.execute_skill("resultsDir()", None)?;
     let rdir_val = rdir.output.trim().trim_matches('"');
     if rdir_val == "nil" || rdir_val.is_empty() {
-        let default_dir = format!("/tmp/virtuoso_sim_{}", std::process::id());
-        client.execute_skill(&format!("resultsDir(\"{default_dir}\")"), None)?;
-        tracing::info!("auto-set resultsDir to {}", default_dir);
+        return Err(VirtuosoError::Execution(
+            "resultsDir is not set. Run `virtuoso sim setup` first, or open \
+             ADE L for your testbench and run at least one simulation to \
+             establish the session path."
+                .into(),
+        ));
     }
 
     // Send analysis setup
@@ -59,6 +64,24 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
     // Get actual results dir
     let rdir = client.execute_skill("resultsDir()", None)?;
     let results_dir = rdir.output.trim().trim_matches('"').to_string();
+
+    // Validate: run() returning nil usually means simulation didn't execute
+    let run_output = result.output.trim().trim_matches('"');
+    if run_output == "nil" {
+        let check = client.execute_skill(
+            &format!(r#"isFile("{results_dir}/psf/spectre.out")"#),
+            None,
+        )?;
+        let has_spectre_out = check.output.trim().trim_matches('"');
+        if has_spectre_out == "nil" || has_spectre_out == "0" {
+            return Err(VirtuosoError::Execution(
+                "Simulation failed: run() returned nil and no spectre.out found. \
+                 The netlist may be missing or stale — regenerate via ADE \
+                 (Simulation → Netlist and Run) or `virtuoso sim netlist`."
+                    .into(),
+            ));
+        }
+    }
 
     Ok(json!({
         "status": "success",
@@ -97,9 +120,49 @@ pub fn measure(analysis: &str, exprs: &[String]) -> Result<Value> {
         }));
     }
 
+    // Detect all-nil results and provide diagnostics
+    let all_nil = !measures.is_empty()
+        && measures.iter().all(|m| {
+            m.get("value")
+                .and_then(|v| v.as_str())
+                .map(|s| s == "nil")
+                .unwrap_or(false)
+        });
+
+    let mut warnings: Vec<String> = Vec::new();
+    if all_nil {
+        let rdir_for_check = rdir_val.to_string();
+        let spectre_exists = client
+            .execute_skill(
+                &format!(r#"isFile("{rdir_for_check}/psf/spectre.out")"#),
+                None,
+            )
+            .map(|r| {
+                let v = r.output.trim().trim_matches('"');
+                v != "nil" && v != "0"
+            })
+            .unwrap_or(false);
+
+        if !spectre_exists {
+            warnings.push(
+                "All measurements returned nil. No spectre.out found — simulation \
+                 may not have run. Check netlist with `virtuoso sim netlist`."
+                    .into(),
+            );
+        } else {
+            warnings.push(
+                "All measurements returned nil. Spectre ran but produced no matching \
+                 data — verify signal names match your schematic and that the correct \
+                 analysis type is selected."
+                    .into(),
+            );
+        }
+    }
+
     Ok(json!({
         "status": "success",
         "measures": measures,
+        "warnings": warnings,
     }))
 }
 
@@ -231,4 +294,46 @@ pub fn results() -> Result<Value> {
         "results_dir": dir,
         "contents": types_result.output.trim(),
     }))
+}
+
+pub fn netlist(recreate: bool) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+
+    // Method 1: Ocean createNetlist
+    let r1 = client.execute_skill(
+        if recreate {
+            "createNetlist(?recreateAll t ?display nil)"
+        } else {
+            "createNetlist(?display nil)"
+        },
+        Some(60),
+    )?;
+    let r1_out = r1.output.trim().trim_matches('"');
+    if r1.ok() && r1_out != "nil" {
+        return Ok(json!({
+            "status": "success",
+            "method": "createNetlist",
+            "output": r1_out,
+        }));
+    }
+
+    // Method 2: ASI session-based netlisting
+    let r2 = client.execute_skill(
+        "asiCreateNetlist(asiGetSession(hiGetCurrentWindow()))",
+        Some(60),
+    )?;
+    let r2_out = r2.output.trim().trim_matches('"');
+    if r2.ok() && r2_out != "nil" {
+        return Ok(json!({
+            "status": "success",
+            "method": "asiCreateNetlist",
+            "output": r2_out,
+        }));
+    }
+
+    Err(VirtuosoError::Execution(
+        "Cannot create netlist programmatically. \
+         Open ADE L for this cell and run Simulation → Netlist and Run."
+            .into(),
+    ))
 }

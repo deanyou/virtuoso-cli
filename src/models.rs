@@ -98,6 +98,68 @@ fn default_version() -> u32 {
     1
 }
 
+/// Registration record written by bridge.il when a Virtuoso session starts.
+/// Lives at ~/.cache/virtuoso_bridge/sessions/<id>.json
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub id: String,
+    pub port: u16,
+    pub pid: u32,
+    pub host: String,
+    pub user: String,
+    pub created: String,
+}
+
+impl SessionInfo {
+    fn sessions_dir() -> std::path::PathBuf {
+        dirs::cache_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+            .join("virtuoso_bridge")
+            .join("sessions")
+    }
+
+    pub fn load(id: &str) -> std::io::Result<Self> {
+        let path = Self::sessions_dir().join(format!("{id}.json"));
+        let json = std::fs::read_to_string(&path).map_err(|e| {
+            std::io::Error::new(e.kind(), format!("session '{id}' not found: {e}"))
+        })?;
+        serde_json::from_str(&json)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+    }
+
+    pub fn list() -> std::io::Result<Vec<Self>> {
+        let dir = Self::sessions_dir();
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+        let mut sessions = Vec::new();
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().map_or(false, |e| e == "json") {
+                if let Ok(json) = std::fs::read_to_string(&path) {
+                    if let Ok(s) = serde_json::from_str::<Self>(&json) {
+                        sessions.push(s);
+                    }
+                }
+            }
+        }
+        sessions.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(sessions)
+    }
+
+    /// Check if the daemon is still alive by checking if the port is bound.
+    pub fn is_alive(&self) -> bool {
+        use std::net::TcpStream;
+        use std::time::Duration;
+        TcpStream::connect_timeout(
+            &format!("127.0.0.1:{}", self.port).parse().unwrap(),
+            Duration::from_millis(200),
+        )
+        .is_ok()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TunnelState {
     #[serde(default = "default_version")]

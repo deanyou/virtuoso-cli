@@ -13,7 +13,7 @@ pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
             "action": "start",
             "resource": "tunnel",
             "target": {
-                "remote_host": cfg.remote_host,
+                "remote_host": cfg.remote_host.as_deref().unwrap_or("local"),
                 "port": cfg.port,
             },
             "dry_run": true,
@@ -32,7 +32,7 @@ pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
     Ok(json!({
         "status": "started",
         "port": client.port,
-        "remote_host": cfg.remote_host,
+        "remote_host": cfg.remote_host.as_deref().unwrap_or("local"),
         "daemon_responsive": daemon_ok,
     }))
 }
@@ -124,7 +124,7 @@ pub fn status(format: OutputFormat) -> Result<Value> {
 
     let mut result = json!({
         "config": {
-            "remote_host": if cfg.is_remote() { &cfg.remote_host } else { "local" },
+            "remote_host": cfg.remote_host.as_deref().unwrap_or("local"),
             "port": cfg.port,
             "timeout": cfg.timeout,
         }
@@ -132,7 +132,7 @@ pub fn status(format: OutputFormat) -> Result<Value> {
 
     let tunnel_info = if let Some(state) = TunnelState::load()? {
         let port_open = std::net::TcpStream::connect(format!("127.0.0.1:{}", state.port)).is_ok();
-        let host_match = !cfg.is_remote() || state.remote_host == cfg.remote_host;
+        let host_match = !cfg.is_remote() || Some(&state.remote_host) == cfg.remote_host.as_ref();
 
         json!({
             "running": true,

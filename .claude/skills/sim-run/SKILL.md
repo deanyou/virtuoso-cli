@@ -30,15 +30,28 @@ virtuoso sim run --analysis tran --stop 10u --timeout 300 --format json
 virtuoso sim run --analysis ac --start 1 --stop 1e9 --dec 10 --timeout 300 --format json
 ```
 
-## Important: resultsDir
+## Important: resultsDir — DO NOT CHANGE
 
-`sim run` auto-creates a resultsDir if none is set, but **always set it explicitly before first run**:
+⚠️ **The ADE session binds `run()` to the resultsDir established when the GUI session
+was first created. Changing it to any other path silently breaks `run()` (returns nil).**
 
 ```bash
-virtuoso skill exec 'resultsDir("/tmp/my_sim")' --format json
+# ✅ Find the canonical path from the runSimulation script
+cat <netlist_dir>/runSimulation | grep "\-raw"
+# → -raw ../../../../tmp/opt_5t_ota/psf  →  canonical = /tmp/opt_5t_ota
+
+# ✅ If resultsDir is nil, restore to canonical path
+virtuoso skill exec 'resultsDir("/tmp/opt_5t_ota")'
+
+# ❌ Never do this before a run — it will break run()
+virtuoso skill exec 'resultsDir("/tmp/some_new_path")'
 ```
 
-If `sim setup` shows `results_dir: "spectre"` (relative path), the dir is not properly configured — set it explicitly.
+`sim run` now returns a clear error if `resultsDir` is nil instead of auto-setting it
+to a temp path (which would break the ADE session binding).
+
+Also: **do not call `sim setup` again once a working ADE session exists** — it resets
+the Ocean session state and can cause `run()` to return nil.
 
 ## Verify success
 
