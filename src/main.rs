@@ -425,11 +425,11 @@ enum ProcessCmd {
             virtuoso process char --lib myLib --cell gmid_p --inst /PM0 --type pmos --output process_data/myPDK"
     )]
     Char {
-        /// Library name
-        #[arg(long)]
+        /// Library name (unused in --netlist mode)
+        #[arg(long, default_value = "")]
         lib: String,
-        /// Cell name (single-transistor testbench)
-        #[arg(long)]
+        /// Cell name (unused in --netlist mode)
+        #[arg(long, default_value = "")]
         cell: String,
         /// View name
         #[arg(long, default_value = "schematic")]
@@ -443,7 +443,7 @@ enum ProcessCmd {
         /// L values to sweep (comma-separated, in meters)
         #[arg(long, default_value = "200e-9,500e-9,1e-6")]
         l_values: String,
-        /// VGS start voltage
+        /// VGS start voltage (VSG for pmos in --netlist mode)
         #[arg(long, default_value = "0.3")]
         vgs_start: f64,
         /// VGS stop voltage
@@ -458,6 +458,30 @@ enum ProcessCmd {
         /// Timeout per simulation point
         #[arg(long, short, default_value = "60")]
         timeout: u64,
+        /// Use direct Spectre netlist (no Virtuoso session required)
+        #[arg(long)]
+        netlist: bool,
+        /// Model file path (required for --netlist mode)
+        #[arg(long, default_value = "")]
+        model_file: String,
+        /// Model section (e.g. tt, ff, ss)
+        #[arg(long, default_value = "tt")]
+        model_section: String,
+        /// Supply voltage (VDD) for netlist mode
+        #[arg(long, default_value = "1.2")]
+        vdd: f64,
+        /// Spectre model name for NMOS device (PDK-specific, e.g. n12, nfet_01v8, nch)
+        #[arg(long, default_value = "n12")]
+        nmos_model: String,
+        /// Spectre model name for PMOS device (PDK-specific, e.g. p12, pfet_01v8, pch)
+        #[arg(long, default_value = "p12")]
+        pmos_model: String,
+        /// Instance name in netlist (default: NM0 for nmos, PM0 for pmos)
+        #[arg(long)]
+        inst_name: Option<String>,
+        /// Saturation bias VDS/VSD (default: 0.6V)
+        #[arg(long, default_value = "0.6")]
+        vds: f64,
     },
 }
 
@@ -639,10 +663,24 @@ fn main() {
         },
         Commands::Process(cmd) => match cmd {
             ProcessCmd::Char {
-                lib, cell, view, inst, r#type, l_values, vgs_start, vgs_stop, vgs_step, output, timeout,
+                lib, cell, view, inst, r#type, l_values, vgs_start, vgs_stop, vgs_step,
+                output, timeout, netlist, model_file, model_section, vdd,
+                nmos_model, pmos_model, inst_name, vds,
             } => {
                 let l_vals: Vec<f64> = l_values.split(',').filter_map(|s| s.trim().parse().ok()).collect();
-                commands::process::char(&lib, &cell, &view, &inst, &r#type, &l_vals, vgs_start, vgs_stop, vgs_step, &output, timeout)
+                if netlist {
+                    let device_model = if r#type == "pmos" { &pmos_model } else { &nmos_model };
+                    let resolved_inst = inst_name.unwrap_or_else(|| {
+                        if r#type == "pmos" { "PM0".into() } else { "NM0".into() }
+                    });
+                    commands::process::char_netlist(
+                        &r#type, &l_vals, vgs_start, vgs_stop, vgs_step,
+                        &output, &model_file, &model_section, vdd,
+                        device_model, &resolved_inst, vds,
+                    )
+                } else {
+                    commands::process::char(&lib, &cell, &view, &inst, &r#type, &l_vals, vgs_start, vgs_stop, vgs_step, &output, timeout)
+                }
             }
         },
         Commands::Design(cmd) => match cmd {

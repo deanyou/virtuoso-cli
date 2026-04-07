@@ -129,11 +129,12 @@ pub fn char_netlist(
     model_file: &str,
     model_section: &str,
     vdd: f64,
+    device_model: &str,
+    inst_name: &str,
+    vds: f64,
 ) -> Result<Value> {
     let is_pmos = device_type == "pmos";
-    let device_name = if is_pmos { "p12" } else { "n12" };
-    let inst_name = if is_pmos { "PM0" } else { "NM0" };
-    let vsd = 0.6_f64; // saturation bias
+    let vsd = vds;
 
     let mut all_data: Vec<Value> = Vec::new();
     let mut total_points = 0;
@@ -155,7 +156,7 @@ parameters VDD={vdd} VSD={vsd} W=1u L={l:e} vgs_val={vgs_start}
 Vvdd (vdd 0) vsource dc=VDD
 Vsg  (vdd g) vsource dc=vgs_val
 Vsd  (vdd d) vsource dc=VSD
-{inst_name} (d g vdd vdd) {device_name} w=W l=L
+{inst_name} (d g vdd vdd) {device_model} w=W l=L
 vgs_sweep dc param=vgs_val start={vgs_start} stop={vgs_stop} step={vgs_step} oppoint=rawfile
 save {inst_name}:oppoint
 "#
@@ -167,7 +168,7 @@ include "{model_file}" section={model_section}
 parameters VDS={vsd} W=1u L={l:e} vgs_val={vgs_start}
 Vvgs (g 0) vsource dc=vgs_val
 Vvds (d 0) vsource dc=VDS
-{inst_name} (d g 0 0) {device_name} w=W l=L
+{inst_name} (d g 0 0) {device_model} w=W l=L
 vgs_sweep dc param=vgs_val start={vgs_start} stop={vgs_stop} step={vgs_step} oppoint=rawfile
 save {inst_name}:oppoint
 "#
