@@ -39,8 +39,8 @@ pub fn list(format: OutputFormat) -> Result<Value> {
     }
 
     println!(
-        "{:<20} {:>6}  {:>7}  {:<12}  {}",
-        "SESSION ID", "PORT", "PID", "HOST", "CREATED"
+        "{:<20} {:>6}  {:>7}  {:<12}  CREATED",
+        "SESSION ID", "PORT", "PID", "HOST"
     );
     println!("{}", "-".repeat(72));
     for s in &sessions {

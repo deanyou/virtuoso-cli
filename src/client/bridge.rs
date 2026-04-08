@@ -1,4 +1,3 @@
-use crate::client::editor::{LayoutEditor, SchematicEditor};
 use crate::client::layout_ops::LayoutOps;
 use crate::client::schematic_ops::SchematicOps;
 use crate::error::{Result, VirtuosoError};
@@ -261,7 +260,7 @@ impl VirtuosoClient {
         } else {
             std::fs::copy(local, remote)
                 .map(|_| ())
-                .map_err(|e| VirtuosoError::Io(e))
+                .map_err(VirtuosoError::Io)
         }
     }
 
@@ -271,7 +270,7 @@ impl VirtuosoClient {
         } else {
             std::fs::copy(remote, local)
                 .map(|_| ())
-                .map_err(|e| VirtuosoError::Io(e))
+                .map_err(VirtuosoError::Io)
         }
     }
 

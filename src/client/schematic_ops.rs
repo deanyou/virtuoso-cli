@@ -42,9 +42,9 @@ impl SchematicOps {
     pub fn create_wire_between_terms(
         &self,
         inst1: &str,
-        term1: &str,
+        _term1: &str,
         inst2: &str,
-        term2: &str,
+        _term2: &str,
         net_name: &str,
     ) -> String {
         let inst1 = escape_skill_string(inst1);
@@ -63,7 +63,7 @@ impl SchematicOps {
         )
     }
 
-    pub fn create_pin(&self, net_name: &str, pin_type: &str, origin: (i64, i64)) -> String {
+    pub fn create_pin(&self, net_name: &str, _pin_type: &str, origin: (i64, i64)) -> String {
         let net_name = escape_skill_string(net_name);
         let (x, y) = origin;
         format!(

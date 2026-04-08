@@ -1,7 +1,7 @@
 pub mod corner;
 
 use crate::client::bridge::escape_skill_string;
-use corner::{AnalysisConfig, Corner, CornerConfig, Measure};
+use corner::{AnalysisConfig, CornerConfig};
 use std::collections::HashMap;
 
 pub fn setup_skill(lib: &str, cell: &str, view: &str, simulator: &str) -> String {
@@ -100,11 +100,11 @@ pub fn corner_skill(config: &CornerConfig) -> String {
     let analysis = analysis_skill(&config.analysis);
 
     // Build corner data list
-    let corner_entries: Vec<String> = config
+    let _corner_entries: Vec<String> = config
         .corners
         .iter()
         .map(|c| {
-            let name = escape_skill_string(&c.name);
+            let _name = escape_skill_string(&c.name);
             let section = escape_skill_string(&c.section);
             // Collect extra vars
             let vars: Vec<String> = c
@@ -139,7 +139,7 @@ pub fn corner_skill(config: &CornerConfig) -> String {
         .join("\n");
 
     // Build corner names for identification
-    let corner_names: Vec<String> = config
+    let _corner_names: Vec<String> = config
         .corners
         .iter()
         .map(|c| format!("\"{}\"", escape_skill_string(&c.name)))
@@ -155,7 +155,7 @@ pub fn corner_skill(config: &CornerConfig) -> String {
 
     skill.push_str("let((results)\n  results = nil\n");
 
-    for (i, corner) in config.corners.iter().enumerate() {
+    for corner in config.corners.iter() {
         let name = escape_skill_string(&corner.name);
         let section = escape_skill_string(&corner.section);
         let vars_code: String = corner

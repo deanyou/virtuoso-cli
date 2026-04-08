@@ -57,8 +57,8 @@ impl VirtuosoResult {
     }
 
     pub fn save_json(&self, path: &std::path::Path) -> std::io::Result<()> {
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(self).map_err(|e| std::io::Error::other(e.to_string()))?;
         std::fs::write(path, json)
     }
 }
@@ -79,8 +79,8 @@ impl SimulationResult {
     }
 
     pub fn save_json(&self, path: &std::path::Path) -> std::io::Result<()> {
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(self).map_err(|e| std::io::Error::other(e.to_string()))?;
         std::fs::write(path, json)
     }
 }
@@ -132,8 +132,7 @@ impl SessionInfo {
         let path = Self::sessions_dir().join(format!("{id}.json"));
         let json = std::fs::read_to_string(&path)
             .map_err(|e| std::io::Error::new(e.kind(), format!("session '{id}' not found: {e}")))?;
-        serde_json::from_str(&json)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+        serde_json::from_str(&json).map_err(|e| std::io::Error::other(e.to_string()))
     }
 
     pub fn list() -> std::io::Result<Vec<Self>> {
@@ -145,7 +144,7 @@ impl SessionInfo {
         for entry in std::fs::read_dir(&dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.extension().map_or(false, |e| e == "json") {
+            if path.extension().is_some_and(|e| e == "json") {
                 if let Ok(json) = std::fs::read_to_string(&path) {
                     if let Ok(s) = serde_json::from_str::<Self>(&json) {
                         sessions.push(s);
@@ -186,8 +185,8 @@ impl TunnelState {
             .join("virtuoso_bridge");
         std::fs::create_dir_all(&cache_dir)?;
         let state_path = cache_dir.join("state.json");
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(self).map_err(|e| std::io::Error::other(e.to_string()))?;
         std::fs::write(state_path, json)
     }
 
@@ -202,7 +201,7 @@ impl TunnelState {
         let json = std::fs::read_to_string(state_path)?;
         serde_json::from_str(&json)
             .map(Some)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            .map_err(|e| std::io::Error::other(e.to_string()))
     }
 
     pub fn clear() -> std::io::Result<()> {

@@ -8,7 +8,7 @@ use crate::models::RemoteTaskResult;
 
 fn shell_quote(s: &str) -> String {
     shlex::try_quote(s)
-        .unwrap_or_else(|_| std::borrow::Cow::Borrowed(s))
+        .unwrap_or(std::borrow::Cow::Borrowed(s))
         .into_owned()
 }
 
@@ -50,7 +50,7 @@ impl SSHRunner {
     }
 
     pub fn test_connection(&self, timeout: Option<u64>) -> Result<bool> {
-        let timeout = timeout.unwrap_or(self.connect_timeout);
+        let _timeout = timeout.unwrap_or(self.connect_timeout);
         let mut cmd = self.build_ssh_cmd();
         cmd.arg("exit").arg("0");
 
@@ -65,7 +65,7 @@ impl SSHRunner {
     }
 
     pub fn run_command(&self, command: &str, timeout: Option<u64>) -> Result<RemoteTaskResult> {
-        let timeout = timeout.unwrap_or(self.timeout);
+        let _timeout = timeout.unwrap_or(self.timeout);
         let start = Instant::now();
 
         let mut cmd = self.build_ssh_cmd();
@@ -89,7 +89,7 @@ impl SSHRunner {
             .map_err(|e| VirtuosoError::Ssh(format!("ssh failed: {e}")))?;
 
         let elapsed = start.elapsed().as_secs_f64();
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let _stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
 
         let mut timings = HashMap::new();
@@ -111,7 +111,7 @@ impl SSHRunner {
     }
 
     pub fn upload(&self, local: &str, remote: &str) -> Result<()> {
-        let target = self.remote_target();
+        let _target = self.remote_target();
 
         let status = Command::new("tar")
             .arg("cf")
@@ -202,7 +202,7 @@ impl SSHRunner {
     }
 
     pub fn download(&self, remote: &str, local: &str) -> Result<()> {
-        let target = self.remote_target();
+        let _target = self.remote_target();
 
         let local_path = std::path::Path::new(local);
         if let Some(parent) = local_path.parent() {

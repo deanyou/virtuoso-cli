@@ -53,7 +53,7 @@ impl LayoutOps {
     pub fn create_label(
         &self,
         layer: &str,
-        purpose: &str,
+        _purpose: &str,
         text: &str,
         origin: (i64, i64),
     ) -> String {

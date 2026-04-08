@@ -22,24 +22,24 @@ impl<'a> LayoutEditor<'a> {
     }
 
     pub fn add_rect(&mut self, layer: &str, purpose: &str, bbox: [(i64, i64); 4]) {
-        let ops = LayoutOps::default();
+        let ops = LayoutOps;
         self.commands.push(ops.create_rect(layer, purpose, &bbox));
     }
 
     pub fn add_polygon(&mut self, layer: &str, purpose: &str, points: Vec<(i64, i64)>) {
-        let ops = LayoutOps::default();
+        let ops = LayoutOps;
         self.commands
             .push(ops.create_polygon(layer, purpose, &points));
     }
 
     pub fn add_path(&mut self, layer: &str, purpose: &str, width: i64, points: Vec<(i64, i64)>) {
-        let ops = LayoutOps::default();
+        let ops = LayoutOps;
         self.commands
             .push(ops.create_path(layer, purpose, width, &points));
     }
 
     pub fn add_via(&mut self, via_def: &str, origin: (i64, i64)) {
-        let ops = LayoutOps::default();
+        let ops = LayoutOps;
         self.commands.push(ops.create_via(via_def, origin));
     }
 
@@ -51,7 +51,7 @@ impl<'a> LayoutEditor<'a> {
         origin: (i64, i64),
         orient: &str,
     ) {
-        let ops = LayoutOps::default();
+        let ops = LayoutOps;
         self.commands
             .push(ops.create_instance(lib, cell, view, origin, orient));
     }
@@ -82,36 +82,36 @@ impl<'a> SchematicEditor<'a> {
         name: &str,
         origin: (i64, i64),
     ) {
-        let ops = SchematicOps::default();
+        let ops = SchematicOps;
         self.commands
             .push(ops.create_instance(lib, cell, view, name, origin));
     }
 
     pub fn add_wire(&mut self, points: Vec<(i64, i64)>, layer: &str, net_name: &str) {
-        let ops = SchematicOps::default();
+        let ops = SchematicOps;
         self.commands
             .push(ops.create_wire(&points, layer, net_name));
     }
 
     pub fn add_label(&mut self, net_name: &str, origin: (i64, i64)) {
-        let ops = SchematicOps::default();
+        let ops = SchematicOps;
         self.commands.push(ops.create_wire_label(net_name, origin));
     }
 
     pub fn add_pin(&mut self, net_name: &str, pin_type: &str, origin: (i64, i64)) {
-        let ops = SchematicOps::default();
+        let ops = SchematicOps;
         self.commands
             .push(ops.create_pin(net_name, pin_type, origin));
     }
 
     pub fn set_param(&mut self, inst_name: &str, param: &str, value: &str) {
-        let ops = SchematicOps::default();
+        let ops = SchematicOps;
         self.commands
             .push(ops.set_instance_param(inst_name, param, value));
     }
 
     pub fn assign_net(&mut self, inst_name: &str, term_name: &str, net_name: &str) {
-        let ops = SchematicOps::default();
+        let ops = SchematicOps;
         self.commands
             .push(ops.assign_net(inst_name, term_name, net_name));
     }

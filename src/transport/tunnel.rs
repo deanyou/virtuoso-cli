@@ -58,7 +58,7 @@ impl SSHClient {
         })
     }
 
-    pub fn warm(&mut self, timeout: Option<u64>) -> Result<()> {
+    pub fn warm(&mut self, _timeout: Option<u64>) -> Result<()> {
         self.ensure_remote_setup()?;
         self.ensure_tunnel()?;
         self.save_state()?;
@@ -264,7 +264,7 @@ impl SSHClient {
         let path = format!("{setup_dir}/{binary_name}");
 
         let embedded = RESOURCES
-            .get_file(&format!("daemons/{binary_name}"))
+            .get_file(format!("daemons/{binary_name}"))
             .ok_or_else(|| {
                 VirtuosoError::Ssh(format!("{binary_name} not found in resources, build with: cargo build --features daemon --release && cp target/release/virtuoso-daemon resources/daemons/{binary_name}"))
             })?;
