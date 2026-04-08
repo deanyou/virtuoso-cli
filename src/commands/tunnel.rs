@@ -85,7 +85,10 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
                 tracing::warn!("could not kill process {}", state.pid);
             }
         } else {
-            tracing::warn!("PID {} is not an SSH process, skipping kill (use --force to override)", state.pid);
+            tracing::warn!(
+                "PID {} is not an SSH process, skipping kill (use --force to override)",
+                state.pid
+            );
         }
     }
 
@@ -147,22 +150,18 @@ pub fn status(format: OutputFormat) -> Result<Value> {
     };
     result["tunnel"] = tunnel_info;
 
-    let port = TunnelState::load()?
-        .map(|s| s.port)
-        .unwrap_or(cfg.port);
+    let port = TunnelState::load()?.map(|s| s.port).unwrap_or(cfg.port);
 
-    let daemon_info =
-        if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
-            let vc =
-                crate::client::bridge::VirtuosoClient::local("127.0.0.1", port, cfg.timeout);
-            match vc.test_connection(Some(5)) {
-                Ok(true) => json!({ "responsive": true }),
-                Ok(false) => json!({ "responsive": false, "detail": "unexpected response" }),
-                Err(e) => json!({ "responsive": false, "detail": e.to_string() }),
-            }
-        } else {
-            json!({ "responsive": false, "detail": "port not reachable" })
-        };
+    let daemon_info = if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
+        let vc = crate::client::bridge::VirtuosoClient::local("127.0.0.1", port, cfg.timeout);
+        match vc.test_connection(Some(5)) {
+            Ok(true) => json!({ "responsive": true }),
+            Ok(false) => json!({ "responsive": false, "detail": "unexpected response" }),
+            Err(e) => json!({ "responsive": false, "detail": e.to_string() }),
+        }
+    } else {
+        json!({ "responsive": false, "detail": "port not reachable" })
+    };
     result["daemon"] = daemon_info;
 
     if format == OutputFormat::Table {

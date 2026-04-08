@@ -28,9 +28,9 @@ pub fn place(
     orient: &str,
     params: &[(String, String)],
 ) -> Result<Value> {
-    let (lib, cell) = master.split_once('/').ok_or_else(|| {
-        VirtuosoError::Config("--master must be lib/cell format".into())
-    })?;
+    let (lib, cell) = master
+        .split_once('/')
+        .ok_or_else(|| VirtuosoError::Config("--master must be lib/cell format".into()))?;
     let _ = orient; // TODO: pass orient to create_instance
 
     let client = VirtuosoClient::from_env()?;
@@ -48,14 +48,20 @@ pub fn place(
 }
 
 pub fn wire_from_strings(net: &str, points: &[String]) -> Result<Value> {
-    let pts: Vec<(i64, i64)> = points.iter().map(|s| {
-        let (x, y) = s.split_once(',')
-            .ok_or_else(|| VirtuosoError::Config(format!("Point '{s}' must be x,y")))?;
-        Ok((
-            x.parse().map_err(|_| VirtuosoError::Config(format!("Bad x: {x}")))?,
-            y.parse().map_err(|_| VirtuosoError::Config(format!("Bad y: {y}")))?,
-        ))
-    }).collect::<Result<Vec<_>>>()?;
+    let pts: Vec<(i64, i64)> = points
+        .iter()
+        .map(|s| {
+            let (x, y) = s
+                .split_once(',')
+                .ok_or_else(|| VirtuosoError::Config(format!("Point '{s}' must be x,y")))?;
+            Ok((
+                x.parse()
+                    .map_err(|_| VirtuosoError::Config(format!("Bad x: {x}")))?,
+                y.parse()
+                    .map_err(|_| VirtuosoError::Config(format!("Bad y: {y}")))?,
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
     wire(net, &pts)
 }
 
@@ -70,12 +76,12 @@ pub fn wire(net: &str, points: &[(i64, i64)]) -> Result<Value> {
 }
 
 pub fn conn(net: &str, from: &str, to: &str) -> Result<Value> {
-    let (inst1, term1) = from.split_once(':').ok_or_else(|| {
-        VirtuosoError::Config("--from must be inst:term format".into())
-    })?;
-    let (inst2, term2) = to.split_once(':').ok_or_else(|| {
-        VirtuosoError::Config("--to must be inst:term format".into())
-    })?;
+    let (inst1, term1) = from
+        .split_once(':')
+        .ok_or_else(|| VirtuosoError::Config("--from must be inst:term format".into()))?;
+    let (inst2, term2) = to
+        .split_once(':')
+        .ok_or_else(|| VirtuosoError::Config("--to must be inst:term format".into()))?;
     let client = VirtuosoClient::from_env()?;
     let mut ed = SchematicEditor::new(&client);
     ed.assign_net(inst1, term1, net);
@@ -151,7 +157,9 @@ pub struct SpecTarget {
     pub view: String,
 }
 
-fn default_view() -> String { "schematic".into() }
+fn default_view() -> String {
+    "schematic".into()
+}
 
 #[derive(Deserialize)]
 pub struct SpecInstance {
@@ -192,23 +200,23 @@ pub struct SpecPin {
 }
 
 pub fn build(spec_path: &str) -> Result<Value> {
-    let spec_str = fs::read_to_string(spec_path).map_err(|e| {
-        VirtuosoError::Config(format!("Cannot read spec file {spec_path}: {e}"))
-    })?;
-    let spec: SchematicSpec = serde_json::from_str(&spec_str).map_err(|e| {
-        VirtuosoError::Config(format!("Invalid spec JSON: {e}"))
-    })?;
+    let spec_str = fs::read_to_string(spec_path)
+        .map_err(|e| VirtuosoError::Config(format!("Cannot read spec file {spec_path}: {e}")))?;
+    let spec: SchematicSpec = serde_json::from_str(&spec_str)
+        .map_err(|e| VirtuosoError::Config(format!("Invalid spec JSON: {e}")))?;
 
     let client = VirtuosoClient::from_env()?;
 
     // 1. Open/create cellview
-    let open_skill = client.schematic.open_cellview(
-        &spec.target.lib, &spec.target.cell, &spec.target.view,
-    );
+    let open_skill =
+        client
+            .schematic
+            .open_cellview(&spec.target.lib, &spec.target.cell, &spec.target.view);
     let r = client.execute_skill(&open_skill, None)?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
-            "Failed to open cellview: {}", r.output
+            "Failed to open cellview: {}",
+            r.output
         )));
     }
 
@@ -217,7 +225,8 @@ pub fn build(spec_path: &str) -> Result<Value> {
     for inst in &spec.instances {
         let (lib, cell) = inst.master.split_once('/').ok_or_else(|| {
             VirtuosoError::Config(format!(
-                "Instance {} master '{}' must be lib/cell", inst.name, inst.master
+                "Instance {} master '{}' must be lib/cell",
+                inst.name, inst.master
             ))
         })?;
         ed.add_instance(lib, cell, "symbol", &inst.name, (inst.x, inst.y));
@@ -228,7 +237,8 @@ pub fn build(spec_path: &str) -> Result<Value> {
     let r = ed.execute()?;
     if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
-            "Failed to place instances: {}", r.output
+            "Failed to place instances: {}",
+            r.output
         )));
     }
 
@@ -240,9 +250,10 @@ pub fn build(spec_path: &str) -> Result<Value> {
             let (i1, t1) = c.from.split_once(':').ok_or_else(|| {
                 VirtuosoError::Config(format!("Bad from '{}' in connection", c.from))
             })?;
-            let (i2, t2) = c.to.split_once(':').ok_or_else(|| {
-                VirtuosoError::Config(format!("Bad to '{}' in connection", c.to))
-            })?;
+            let (i2, t2) = c
+                .to
+                .split_once(':')
+                .ok_or_else(|| VirtuosoError::Config(format!("Bad to '{}' in connection", c.to)))?;
             assignments.push((i1.into(), t1.into(), c.net.clone()));
             assignments.push((i2.into(), t2.into(), c.net.clone()));
         }
@@ -257,19 +268,25 @@ pub fn build(spec_path: &str) -> Result<Value> {
 
         // Load the RB_connectTerminal helper procedure
         let helper_path = "/tmp/rb_schematic_helper.il";
-        fs::write(helper_path, include_str!("../../resources/rb_connect_terminal.il"))
-            .map_err(|e| VirtuosoError::Config(format!("Cannot write helper: {e}")))?;
+        fs::write(
+            helper_path,
+            include_str!("../../resources/rb_connect_terminal.il"),
+        )
+        .map_err(|e| VirtuosoError::Config(format!("Cannot write helper: {e}")))?;
         let r = client.execute_skill(&format!(r#"load("{helper_path}")"#), None)?;
         if !r.skill_ok() {
             return Err(VirtuosoError::Execution(format!(
-                "Failed to load connection helper: {}", r.output
+                "Failed to load connection helper: {}",
+                r.output
             )));
         }
 
         // Generate connection script
         let mut lines = vec!["let((cv)".to_string(), "cv = RB_SCH_CV".to_string()];
         for (inst, term, net) in &assignments {
-            lines.push(format!(r#"RB_connectTerminal(cv "{inst}" "{term}" "{net}")"#));
+            lines.push(format!(
+                r#"RB_connectTerminal(cv "{inst}" "{term}" "{net}")"#
+            ));
         }
         lines.push("t)".to_string());
 
@@ -279,7 +296,8 @@ pub fn build(spec_path: &str) -> Result<Value> {
         let r = client.execute_skill(&format!(r#"load("{script_path}")"#), None)?;
         if !r.skill_ok() {
             return Err(VirtuosoError::Execution(format!(
-                "Failed to create connections: {}", r.output
+                "Failed to create connections: {}",
+                r.output
             )));
         }
     }
@@ -293,7 +311,8 @@ pub fn build(spec_path: &str) -> Result<Value> {
         let r = ed.execute()?;
         if !r.ok() {
             return Err(VirtuosoError::Execution(format!(
-                "Failed to create pins: {}", r.output
+                "Failed to create pins: {}",
+                r.output
             )));
         }
     }

@@ -172,7 +172,9 @@ impl SSHRunner {
 
         let mut cmd = self.build_ssh_cmd();
         let quoted_remote = shell_quote(remote);
-        cmd.arg("sh").arg("-c").arg(format!("cat > {quoted_remote}"));
+        cmd.arg("sh")
+            .arg("-c")
+            .arg(format!("cat > {quoted_remote}"));
 
         let output = cmd
             .stdin(Stdio::piped())

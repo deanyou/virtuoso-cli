@@ -56,9 +56,7 @@ pub fn measure_skill(analysis_type: &str, exprs: &[String]) -> String {
             .map(|e| format!("  {e}"))
             .collect::<Vec<_>>()
             .join("\n");
-        format!(
-            "selectResult('{analysis_type})\nlist(\n{body}\n)"
-        )
+        format!("selectResult('{analysis_type})\nlist(\n{body}\n)")
     }
 }
 

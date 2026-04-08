@@ -57,7 +57,10 @@ pub fn size(
         let obj = result.as_object().unwrap();
         println!("  Transistor Sizing Result:");
         println!("  ┌───────────────────────────────────┐");
-        for key in &["device","pdk","gmid","l_nm","w_um","id_uA","gain_VV","gain_dB","ft_GHz","vov_mV","vth_V"] {
+        for key in &[
+            "device", "pdk", "gmid", "l_nm", "w_um", "id_uA", "gain_VV", "gain_dB", "ft_GHz",
+            "vov_mV", "vth_V",
+        ] {
             if let Some(v) = obj.get(*key) {
                 let display = match v {
                     Value::String(s) => s.clone(),
@@ -88,8 +91,14 @@ pub fn explore(pdk: &str, device_type: &str, format: OutputFormat) -> Result<Val
                 format!("{}µ", l * 1e6)
             };
             println!("  L = {l_label}:");
-            println!("  {:>6} {:>7} {:>7} {:>10} {:>8} {:>8}", "gm/Id", "gain", "gain_dB", "Id(A)", "Vov(mV)", "fT(GHz)");
-            println!("  {:>6} {:>7} {:>7} {:>10} {:>8} {:>8}", "─────", "─────", "──────", "────────", "──────", "──────");
+            println!(
+                "  {:>6} {:>7} {:>7} {:>10} {:>8} {:>8}",
+                "gm/Id", "gain", "gain_dB", "Id(A)", "Vov(mV)", "fT(GHz)"
+            );
+            println!(
+                "  {:>6} {:>7} {:>7} {:>10} {:>8} {:>8}",
+                "─────", "─────", "──────", "────────", "──────", "──────"
+            );
 
             for pt in l_entry["points"].as_array().unwrap() {
                 let gmid = pt["gmid"].as_f64().unwrap();
@@ -100,7 +109,12 @@ pub fn explore(pdk: &str, device_type: &str, format: OutputFormat) -> Result<Val
 
                 println!(
                     "  {:>6.1} {:>7.1} {:>7.1} {:>10.3e} {:>8.0} {:>8.2}",
-                    gmid, gain, 20.0 * gain.log10(), id, vov * 1000.0, ft / 1e9
+                    gmid,
+                    gain,
+                    20.0 * gain.log10(),
+                    id,
+                    vov * 1000.0,
+                    ft / 1e9
                 );
             }
             println!();
@@ -117,15 +131,14 @@ fn load_lookup(pdk: &str, device_type: &str) -> Result<Value> {
             "lookup table not found: {path}. Run: virtuoso process char"
         ))
     })?;
-    serde_json::from_str(&content).map_err(|e| {
-        VirtuosoError::Config(format!("invalid lookup JSON: {e}"))
-    })
+    serde_json::from_str(&content)
+        .map_err(|e| VirtuosoError::Config(format!("invalid lookup JSON: {e}")))
 }
 
 fn find_closest_l(lookup: &Value, l_target: f64) -> Result<Vec<Value>> {
-    let data = lookup["data"].as_array().ok_or_else(|| {
-        VirtuosoError::Config("lookup has no data array".into())
-    })?;
+    let data = lookup["data"]
+        .as_array()
+        .ok_or_else(|| VirtuosoError::Config("lookup has no data array".into()))?;
 
     let entry = data
         .iter()

@@ -116,9 +116,8 @@ impl VirtuosoClient {
         let addr: std::net::SocketAddr = format!("{}:{}", self.host, self.port)
             .parse()
             .map_err(|e| VirtuosoError::Connection(format!("invalid address: {e}")))?;
-        let mut stream =
-            TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(timeout))
-                .map_err(|e| VirtuosoError::Connection(e.to_string()))?;
+        let mut stream = TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(timeout))
+            .map_err(|e| VirtuosoError::Connection(e.to_string()))?;
         stream
             .set_read_timeout(Some(std::time::Duration::from_secs(timeout)))
             .ok();

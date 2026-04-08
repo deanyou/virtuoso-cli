@@ -130,9 +130,8 @@ impl SessionInfo {
 
     pub fn load(id: &str) -> std::io::Result<Self> {
         let path = Self::sessions_dir().join(format!("{id}.json"));
-        let json = std::fs::read_to_string(&path).map_err(|e| {
-            std::io::Error::new(e.kind(), format!("session '{id}' not found: {e}"))
-        })?;
+        let json = std::fs::read_to_string(&path)
+            .map_err(|e| std::io::Error::new(e.kind(), format!("session '{id}' not found: {e}")))?;
         serde_json::from_str(&json)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
     }

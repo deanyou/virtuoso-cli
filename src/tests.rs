@@ -162,16 +162,28 @@ mod ssh_runner_tests {
     fn build_ssh_cmd_contains_host() {
         let r = SSHRunner::new("my-eda-host").with_user("meow");
         let cmd = r.build_ssh_cmd();
-        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert!(args.contains(&"meow@my-eda-host".to_string()), "args: {args:?}");
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.contains(&"meow@my-eda-host".to_string()),
+            "args: {args:?}"
+        );
     }
 
     #[test]
     fn build_ssh_cmd_includes_batchmode() {
         let r = SSHRunner::new("eda");
         let cmd = r.build_ssh_cmd();
-        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert!(args.contains(&"BatchMode=yes".to_string()), "args: {args:?}");
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.contains(&"BatchMode=yes".to_string()),
+            "args: {args:?}"
+        );
     }
 
     #[test]
@@ -180,8 +192,14 @@ mod ssh_runner_tests {
         r.jump_host = Some("bastion.corp.com".into());
         r.jump_user = Some("admin".into());
         let cmd = r.build_ssh_cmd();
-        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        let j_idx = args.iter().position(|a| a == "-J").expect("-J flag missing");
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let j_idx = args
+            .iter()
+            .position(|a| a == "-J")
+            .expect("-J flag missing");
         assert_eq!(args[j_idx + 1], "admin@bastion.corp.com");
     }
 
@@ -209,7 +227,8 @@ mod ssh_runner_tests {
     #[test]
     fn summarize_error_dns() {
         let r = SSHRunner::new("eda");
-        let msg = r.summarize_error("Could not resolve hostname bad-host: Name or service not known");
+        let msg =
+            r.summarize_error("Could not resolve hostname bad-host: Name or service not known");
         assert!(msg.contains("hostname resolution"), "got: {msg}");
     }
 
@@ -264,7 +283,10 @@ mod session_info_tests {
         let result = SessionInfo::load(fake_id);
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains(fake_id), "error should mention the session id: {msg}");
+        assert!(
+            msg.contains(fake_id),
+            "error should mention the session id: {msg}"
+        );
     }
 
     #[test]

@@ -9,12 +9,12 @@ mod models;
 mod ocean;
 mod output;
 mod spectre;
-mod transport;
 #[cfg(test)]
 mod tests;
+mod transport;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use output::{OutputFormat, print_json};
+use output::{print_json, OutputFormat};
 
 #[derive(Parser)]
 #[command(
@@ -186,12 +186,10 @@ enum TunnelCmd {
 #[derive(Subcommand)]
 enum SkillCmd {
     /// Execute a SKILL expression and return result
-    #[command(
-        long_about = "Send a SKILL expression to Virtuoso for evaluation.\n\n\
+    #[command(long_about = "Send a SKILL expression to Virtuoso for evaluation.\n\n\
             Examples:\n  \
             virtuoso skill exec '1+1'\n  \
-            virtuoso skill exec 'geGetEditCellView()' --timeout 60"
-    )]
+            virtuoso skill exec 'geGetEditCellView()' --timeout 60")]
     Exec {
         /// SKILL expression to evaluate
         code: String,
@@ -216,12 +214,10 @@ enum SkillCmd {
 #[derive(Subcommand)]
 enum CellCmd {
     /// Open a cellview for editing
-    #[command(
-        long_about = "Open a cellview in Virtuoso.\n\n\
+    #[command(long_about = "Open a cellview in Virtuoso.\n\n\
             Examples:\n  \
             virtuoso cell open --lib myLib --cell myCell\n  \
-            virtuoso cell open --lib myLib --cell myCell --view schematic --mode r"
-    )]
+            virtuoso cell open --lib myLib --cell myCell --view schematic --mode r")]
     Open {
         /// Library name
         #[arg(long)]
@@ -257,12 +253,10 @@ enum CellCmd {
 #[derive(Subcommand)]
 enum SimCmd {
     /// Set simulator and design target
-    #[command(
-        long_about = "Configure simulator and design for simulation.\n\n\
+    #[command(long_about = "Configure simulator and design for simulation.\n\n\
             Examples:\n  \
             virtuoso sim setup --lib FT0001A_SH --cell Bandgap_LDO\n  \
-            virtuoso sim setup --lib myLib --cell myCell --simulator spectre"
-    )]
+            virtuoso sim setup --lib myLib --cell myCell --simulator spectre")]
     Setup {
         /// Library name
         #[arg(long)]
@@ -282,13 +276,11 @@ enum SimCmd {
     },
 
     /// Run a simulation analysis
-    #[command(
-        long_about = "Execute a simulation with specified analysis type.\n\n\
+    #[command(long_about = "Execute a simulation with specified analysis type.\n\n\
             Examples:\n  \
             virtuoso sim run --analysis tran --stop 10u\n  \
             virtuoso sim run --analysis dc --from 0 --to 1.2 --step 0.01\n  \
-            virtuoso sim run --analysis ac --start 1 --stop 1e9 --dec 10"
-    )]
+            virtuoso sim run --analysis ac --start 1 --stop 1e9 --dec 10")]
     Run {
         /// Analysis type: tran, dc, ac, stb
         #[arg(long)]
@@ -332,12 +324,10 @@ enum SimCmd {
     },
 
     /// Extract waveform measurements from last simulation
-    #[command(
-        long_about = "Extract metrics from simulation results.\n\n\
+    #[command(long_about = "Extract metrics from simulation results.\n\n\
             Examples:\n  \
             virtuoso sim measure --expr 'ymax(VT(\"/OUT\"))'\n  \
-            virtuoso sim measure --analysis tran --expr 'cross(VT(\"/OUT\") 0.6 1 \"rising\")'"
-    )]
+            virtuoso sim measure --analysis tran --expr 'cross(VT(\"/OUT\") 0.6 1 \"rising\")'")]
     Measure {
         /// Measurement expression (can be repeated)
         #[arg(long, required = true)]
@@ -631,14 +621,12 @@ enum SchematicCmd {
 #[derive(Subcommand)]
 enum SessionCmd {
     /// List all active Virtuoso bridge sessions
-    #[command(
-        long_about = "Show all registered Virtuoso sessions.\n\n\
+    #[command(long_about = "Show all registered Virtuoso sessions.\n\n\
             Each Virtuoso instance running RBStart() registers a session file.\n\
             Use the session ID with --session to connect to a specific instance.\n\n\
             Examples:\n  \
             virtuoso session list\n  \
-            virtuoso session list --format json"
-    )]
+            virtuoso session list --format json")]
     List,
 
     /// Show details for a specific session
@@ -649,7 +637,9 @@ enum SessionCmd {
 }
 
 fn parse_key_val(s: &str) -> std::result::Result<(String, String), String> {
-    let pos = s.find('=').ok_or_else(|| format!("invalid KEY=VALUE: no '=' in '{s}'"))?;
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=VALUE: no '=' in '{s}'"))?;
     Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }
 
@@ -731,19 +721,32 @@ fn main() {
                 param,
                 timeout,
             } => {
-                let mut params: std::collections::HashMap<String, String> = param.into_iter().collect();
-                if let Some(v) = stop { params.insert("stop".into(), v); }
-                if let Some(v) = start { params.insert("start".into(), v); }
-                if let Some(v) = from { params.insert("from".into(), v); }
-                if let Some(v) = to { params.insert("to".into(), v); }
-                if let Some(v) = step { params.insert("step".into(), v); }
-                if let Some(v) = dec { params.insert("dec".into(), v); }
-                if let Some(v) = errpreset { params.insert("errpreset".into(), v); }
+                let mut params: std::collections::HashMap<String, String> =
+                    param.into_iter().collect();
+                if let Some(v) = stop {
+                    params.insert("stop".into(), v);
+                }
+                if let Some(v) = start {
+                    params.insert("start".into(), v);
+                }
+                if let Some(v) = from {
+                    params.insert("from".into(), v);
+                }
+                if let Some(v) = to {
+                    params.insert("to".into(), v);
+                }
+                if let Some(v) = step {
+                    params.insert("step".into(), v);
+                }
+                if let Some(v) = dec {
+                    params.insert("dec".into(), v);
+                }
+                if let Some(v) = errpreset {
+                    params.insert("errpreset".into(), v);
+                }
                 commands::sim::run(&analysis, &params, timeout)
             }
-            SimCmd::Measure { expr, analysis } => {
-                commands::sim::measure(&analysis, &expr)
-            }
+            SimCmd::Measure { expr, analysis } => commands::sim::measure(&analysis, &expr),
             SimCmd::Sweep {
                 var,
                 from,
@@ -759,39 +762,86 @@ fn main() {
         },
         Commands::Process(cmd) => match cmd {
             ProcessCmd::Char {
-                lib, cell, view, inst, r#type, l_values, vgs_start, vgs_stop, vgs_step,
-                output, timeout, netlist, model_file, model_section, vdd,
-                nmos_model, pmos_model, inst_name, vds,
+                lib,
+                cell,
+                view,
+                inst,
+                r#type,
+                l_values,
+                vgs_start,
+                vgs_stop,
+                vgs_step,
+                output,
+                timeout,
+                netlist,
+                model_file,
+                model_section,
+                vdd,
+                nmos_model,
+                pmos_model,
+                inst_name,
+                vds,
             } => {
-                let l_vals: Vec<f64> = l_values.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                let l_vals: Vec<f64> = l_values
+                    .split(',')
+                    .filter_map(|s| s.trim().parse().ok())
+                    .collect();
                 if netlist {
-                    let device_model = if r#type == "pmos" { &pmos_model } else { &nmos_model };
+                    let device_model = if r#type == "pmos" {
+                        &pmos_model
+                    } else {
+                        &nmos_model
+                    };
                     let resolved_inst = inst_name.unwrap_or_else(|| {
-                        if r#type == "pmos" { "PM0".into() } else { "NM0".into() }
+                        if r#type == "pmos" {
+                            "PM0".into()
+                        } else {
+                            "NM0".into()
+                        }
                     });
                     commands::process::char_netlist(
-                        &r#type, &l_vals, vgs_start, vgs_stop, vgs_step,
-                        &output, &model_file, &model_section, vdd,
-                        device_model, &resolved_inst, vds,
+                        &r#type,
+                        &l_vals,
+                        vgs_start,
+                        vgs_stop,
+                        vgs_step,
+                        &output,
+                        &model_file,
+                        &model_section,
+                        vdd,
+                        device_model,
+                        &resolved_inst,
+                        vds,
                     )
                 } else {
-                    commands::process::char(&lib, &cell, &view, &inst, &r#type, &l_vals, vgs_start, vgs_stop, vgs_step, &output, timeout)
+                    commands::process::char(
+                        &lib, &cell, &view, &inst, &r#type, &l_vals, vgs_start, vgs_stop, vgs_step,
+                        &output, timeout,
+                    )
                 }
             }
         },
         Commands::Design(cmd) => match cmd {
-            DesignCmd::Size { gmid, l, gm, id, pdk, r#type } => {
-                commands::design::size(gmid, l, gm, id, &pdk, &r#type, format)
-            }
-            DesignCmd::Explore { pdk, r#type } => {
-                commands::design::explore(&pdk, &r#type, format)
-            }
+            DesignCmd::Size {
+                gmid,
+                l,
+                gm,
+                id,
+                pdk,
+                r#type,
+            } => commands::design::size(gmid, l, gm, id, &pdk, &r#type, format),
+            DesignCmd::Explore { pdk, r#type } => commands::design::explore(&pdk, &r#type, format),
         },
         Commands::Schematic(cmd) => match cmd {
-            SchematicCmd::Open { lib, cell, view } => {
-                commands::schematic::open(&lib, &cell, &view)
-            }
-            SchematicCmd::Place { master, name, x, y, orient, params } => {
+            SchematicCmd::Open { lib, cell, view } => commands::schematic::open(&lib, &cell, &view),
+            SchematicCmd::Place {
+                master,
+                name,
+                x,
+                y,
+                orient,
+                params,
+            } => {
                 let param_pairs: Vec<(String, String)> = params
                     .unwrap_or_default()
                     .split(',')
@@ -806,15 +856,9 @@ fn main() {
             SchematicCmd::Wire { net, points } => {
                 commands::schematic::wire_from_strings(&net, &points)
             }
-            SchematicCmd::Conn { net, from, to } => {
-                commands::schematic::conn(&net, &from, &to)
-            }
-            SchematicCmd::Label { net, x, y } => {
-                commands::schematic::label(&net, x, y)
-            }
-            SchematicCmd::Pin { net, dir, x, y } => {
-                commands::schematic::pin(&net, &dir, x, y)
-            }
+            SchematicCmd::Conn { net, from, to } => commands::schematic::conn(&net, &from, &to),
+            SchematicCmd::Label { net, x, y } => commands::schematic::label(&net, x, y),
+            SchematicCmd::Pin { net, dir, x, y } => commands::schematic::pin(&net, &dir, x, y),
             SchematicCmd::Check => commands::schematic::check(),
             SchematicCmd::Save => commands::schematic::save(),
             SchematicCmd::Build { spec } => commands::schematic::build(&spec),

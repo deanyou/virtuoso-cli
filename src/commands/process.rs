@@ -18,10 +18,8 @@ pub fn char(
     let client = VirtuosoClient::from_env()?;
 
     client.execute_skill("simulator('spectre)", None)?;
-    let design_result = client.execute_skill(
-        &format!("design(\"{lib}\" \"{cell}\" \"{view}\")"),
-        None,
-    )?;
+    let design_result =
+        client.execute_skill(&format!("design(\"{lib}\" \"{cell}\" \"{view}\")"), None)?;
     if !design_result.skill_ok() {
         return Err(VirtuosoError::NotFound(format!(
             "design {lib}/{cell}/{view} not found"
@@ -59,7 +57,10 @@ pub fn char(
                 }
                 match v.parse::<f64>() {
                     Ok(f) => opvals.set(p, f),
-                    Err(_) => { ok = false; break; }
+                    Err(_) => {
+                        ok = false;
+                        break;
+                    }
                 }
             }
 
@@ -155,15 +156,19 @@ save {inst_name}:oppoint
             .args([
                 netlist_path.to_str().expect("netlist path is UTF-8"),
                 "+aps",
-                "-format", "psfascii",
-                "-raw", raw_str,
+                "-format",
+                "psfascii",
+                "-raw",
+                raw_str,
             ])
             .output()
             .map_err(|e| VirtuosoError::Execution(format!("spectre failed: {e}")))?;
 
         if !output_run.status.success() {
             let stderr = String::from_utf8_lossy(&output_run.stderr);
-            return Err(VirtuosoError::Execution(format!("spectre error at L={l:e}: {stderr}")));
+            return Err(VirtuosoError::Execution(format!(
+                "spectre error at L={l:e}: {stderr}"
+            )));
         }
 
         let psf_path = raw_dir.join("vgs_sweep.dc");
@@ -204,15 +209,18 @@ fn write_lookup_json(output: &str, device_type: &str, data: Vec<Value>) -> Resul
     });
     let output_path = format!("{output}/{device_type}_lookup.json");
     std::fs::create_dir_all(output).map_err(VirtuosoError::Io)?;
-    std::fs::write(&output_path, serde_json::to_string_pretty(&lookup).map_err(VirtuosoError::Json)?)
-        .map_err(VirtuosoError::Io)?;
+    std::fs::write(
+        &output_path,
+        serde_json::to_string_pretty(&lookup).map_err(VirtuosoError::Json)?,
+    )
+    .map_err(VirtuosoError::Io)?;
     Ok(output_path)
 }
 
 /// Accumulated oppoint values from one PSF block or one SKILL query set.
 #[derive(Default)]
 struct OpVals {
-    gm:  Option<f64>,
+    gm: Option<f64>,
     ids: Option<f64>,
     gds: Option<f64>,
     vth: Option<f64>,
@@ -222,7 +230,7 @@ struct OpVals {
 impl OpVals {
     fn set(&mut self, key: &str, v: f64) {
         match key {
-            "gm"  => self.gm  = Some(v),
+            "gm" => self.gm = Some(v),
             "ids" => self.ids = Some(v),
             "gds" => self.gds = Some(v),
             "vth" => self.vth = Some(v),
@@ -232,13 +240,15 @@ impl OpVals {
     }
 
     fn build_point(&self, vgs: f64, is_pmos: bool) -> Option<Value> {
-        let gm  = self.gm?;
-        let id  = self.ids?.abs();
+        let gm = self.gm?;
+        let id = self.ids?.abs();
         let gds = self.gds?.abs();
         let vth = self.vth?;
         let cgs = self.cgs?.abs();
 
-        if id < 1e-15 || gm < 1e-15 { return None; }
+        if id < 1e-15 || gm < 1e-15 {
+            return None;
+        }
 
         let gmid = gm / id;
         let gain = gm / gds;
@@ -260,7 +270,7 @@ impl OpVals {
 }
 
 fn parse_psf_oppoint(psf: &str, inst: &str, is_pmos: bool) -> Result<Vec<Value>> {
-    let gm_key  = format!("\"{}:gm\"",  inst);
+    let gm_key = format!("\"{}:gm\"", inst);
     let ids_key = format!("\"{}:ids\"", inst);
     let gds_key = format!("\"{}:gds\"", inst);
     let vth_key = format!("\"{}:vth\"", inst);
@@ -280,7 +290,11 @@ fn parse_psf_oppoint(psf: &str, inst: &str, is_pmos: bool) -> Result<Vec<Value>>
                 }
                 vals = OpVals::default();
             }
-            let v: f64 = line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            let v: f64 = line
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.0);
             current_vgs = Some(v);
             continue;
         }
@@ -293,11 +307,17 @@ fn parse_psf_oppoint(psf: &str, inst: &str, is_pmos: bool) -> Result<Vec<Value>>
             }
         };
 
-        if let Some(v) = parse_val(&gm_key)       { vals.gm  = Some(v); }
-        else if let Some(v) = parse_val(&ids_key)  { vals.ids = Some(v); }
-        else if let Some(v) = parse_val(&gds_key)  { vals.gds = Some(v); }
-        else if let Some(v) = parse_val(&vth_key)  { vals.vth = Some(v); }
-        else if let Some(v) = parse_val(&cgs_key)  { vals.cgs = Some(v); }
+        if let Some(v) = parse_val(&gm_key) {
+            vals.gm = Some(v);
+        } else if let Some(v) = parse_val(&ids_key) {
+            vals.ids = Some(v);
+        } else if let Some(v) = parse_val(&gds_key) {
+            vals.gds = Some(v);
+        } else if let Some(v) = parse_val(&vth_key) {
+            vals.vth = Some(v);
+        } else if let Some(v) = parse_val(&cgs_key) {
+            vals.cgs = Some(v);
+        }
     }
 
     if let Some(vgs) = current_vgs {

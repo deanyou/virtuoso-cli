@@ -136,8 +136,7 @@ impl SpectreSimulator {
             .spawn()
             .map_err(|e| VirtuosoError::Execution(format!("spectre failed to start: {e}")))?;
 
-        let deadline =
-            std::time::Instant::now() + std::time::Duration::from_secs(self.timeout);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(self.timeout);
         let status = loop {
             match child.try_wait() {
                 Ok(Some(s)) => break s,

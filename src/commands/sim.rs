@@ -11,9 +11,7 @@ pub fn setup(lib: &str, cell: &str, view: &str, simulator: &str) -> Result<Value
     let result = client.execute_skill(&skill, None)?;
 
     if !result.ok() {
-        return Err(VirtuosoError::Execution(
-            result.errors.join("; "),
-        ));
+        return Err(VirtuosoError::Execution(result.errors.join("; ")));
     }
 
     Ok(json!({
@@ -45,9 +43,7 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
     let analysis_skill = ocean::analysis_skill_simple(analysis, params);
     let analysis_result = client.execute_skill(&analysis_skill, None)?;
     if !analysis_result.ok() {
-        return Err(VirtuosoError::Execution(
-            analysis_result.errors.join("; "),
-        ));
+        return Err(VirtuosoError::Execution(analysis_result.errors.join("; ")));
     }
 
     // Send save
@@ -56,9 +52,7 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
     // Execute run
     let result = client.execute_skill("run()", Some(timeout))?;
     if !result.ok() {
-        return Err(VirtuosoError::Execution(
-            result.errors.join("; "),
-        ));
+        return Err(VirtuosoError::Execution(result.errors.join("; ")));
     }
 
     // Get actual results dir
@@ -68,10 +62,8 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
     // Validate: run() returning nil usually means simulation didn't execute
     let run_output = result.output.trim().trim_matches('"');
     if run_output == "nil" {
-        let check = client.execute_skill(
-            &format!(r#"isFile("{results_dir}/psf/spectre.out")"#),
-            None,
-        )?;
+        let check =
+            client.execute_skill(&format!(r#"isFile("{results_dir}/psf/spectre.out")"#), None)?;
         let has_spectre_out = check.output.trim().trim_matches('"');
         if has_spectre_out == "nil" || has_spectre_out == "0" {
             return Err(VirtuosoError::Execution(
@@ -189,9 +181,7 @@ pub fn sweep(
     let result = client.execute_skill(&skill, Some(timeout))?;
 
     if !result.ok() {
-        return Err(VirtuosoError::Execution(
-            result.errors.join("; "),
-        ));
+        return Err(VirtuosoError::Execution(result.errors.join("; ")));
     }
 
     let parsed = ocean::parse_skill_list(result.output.trim());
@@ -223,22 +213,18 @@ pub fn sweep(
 }
 
 pub fn corner(file: &str, timeout: u64) -> Result<Value> {
-    let content = std::fs::read_to_string(file).map_err(|e| {
-        VirtuosoError::NotFound(format!("corner config not found: {file}: {e}"))
-    })?;
+    let content = std::fs::read_to_string(file)
+        .map_err(|e| VirtuosoError::NotFound(format!("corner config not found: {file}: {e}")))?;
 
-    let config: CornerConfig = serde_json::from_str(&content).map_err(|e| {
-        VirtuosoError::Config(format!("invalid corner config: {e}"))
-    })?;
+    let config: CornerConfig = serde_json::from_str(&content)
+        .map_err(|e| VirtuosoError::Config(format!("invalid corner config: {e}")))?;
 
     let client = VirtuosoClient::from_env()?;
     let skill = ocean::corner_skill(&config);
     let result = client.execute_skill(&skill, Some(timeout))?;
 
     if !result.ok() {
-        return Err(VirtuosoError::Execution(
-            result.errors.join("; "),
-        ));
+        return Err(VirtuosoError::Execution(result.errors.join("; ")));
     }
 
     let parsed = ocean::parse_skill_list(result.output.trim());
@@ -274,18 +260,14 @@ pub fn results() -> Result<Value> {
     let result = client.execute_skill("resultsDir()", None)?;
 
     if !result.ok() {
-        return Err(VirtuosoError::Execution(
-            result.errors.join("; "),
-        ));
+        return Err(VirtuosoError::Execution(result.errors.join("; ")));
     }
 
     let dir = result.output.trim().trim_matches('"').to_string();
 
     // Query available result types
     let types_result = client.execute_skill(
-        &format!(
-            r#"let((dir files) dir="{dir}" when(isDir(dir) files=getDirFiles(dir)) files)"#
-        ),
+        &format!(r#"let((dir files) dir="{dir}" when(isDir(dir) files=getDirFiles(dir)) files)"#),
         None,
     )?;
 

@@ -82,9 +82,7 @@ impl SchematicOps {
         // dbOpenCellViewByType with viewType="schematic" mode="a":
         //   creates cellview if absent, opens for editing (non-interactive)
         // Store in RB_SCH_CV global for use by subsequent commands
-        format!(
-            r#"RB_SCH_CV = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "schematic" "a")"#
-        )
+        format!(r#"RB_SCH_CV = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "schematic" "a")"#)
     }
 
     pub fn save(&self) -> String {
@@ -119,11 +117,12 @@ impl SchematicOps {
             lines.push(format!(
                 r#"iterm = car(setof(x inst~>instTerms strcmp(x~>name "{term_name}")==0))"#
             ));
-            lines.push(format!(
-                r#"net = dbMakeNet(cv "{net_name}")"#
-            ));
+            lines.push(format!(r#"net = dbMakeNet(cv "{net_name}")"#));
             // Create a wire at the instTerm position to connect it
-            lines.push(r#"when(iterm schCreateWire(cv net "draw" "full" list(list(0 0) list(0 0))))"#.to_string());
+            lines.push(
+                r#"when(iterm schCreateWire(cv net "draw" "full" list(list(0 0) list(0 0))))"#
+                    .to_string(),
+            );
         }
         lines.push("t)".to_string());
         lines.join("\n")

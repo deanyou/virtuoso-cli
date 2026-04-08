@@ -4,9 +4,8 @@ use crate::output::OutputFormat;
 use serde_json::{json, Value};
 
 pub fn list(format: OutputFormat) -> Result<Value> {
-    let mut sessions = SessionInfo::list().map_err(|e| {
-        VirtuosoError::Execution(format!("failed to read sessions: {e}"))
-    })?;
+    let mut sessions = SessionInfo::list()
+        .map_err(|e| VirtuosoError::Execution(format!("failed to read sessions: {e}")))?;
 
     let sessions_dir = SessionInfo::sessions_dir();
     sessions.retain(|s| {
@@ -39,19 +38,24 @@ pub fn list(format: OutputFormat) -> Result<Value> {
         return Ok(json!({"status": "success", "count": 0}));
     }
 
-    println!("{:<20} {:>6}  {:>7}  {:<12}  {}", "SESSION ID", "PORT", "PID", "HOST", "CREATED");
+    println!(
+        "{:<20} {:>6}  {:>7}  {:<12}  {}",
+        "SESSION ID", "PORT", "PID", "HOST", "CREATED"
+    );
     println!("{}", "-".repeat(72));
     for s in &sessions {
-        println!("{:<20} {:>6}  {:>7}  {:<12}  {}", s.id, s.port, s.pid, s.host, s.created);
+        println!(
+            "{:<20} {:>6}  {:>7}  {:<12}  {}",
+            s.id, s.port, s.pid, s.host, s.created
+        );
     }
 
     Ok(json!({"status": "success", "count": sessions.len()}))
 }
 
 pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
-    let s = SessionInfo::load(id).map_err(|e| {
-        VirtuosoError::NotFound(format!("session '{id}' not found: {e}"))
-    })?;
+    let s = SessionInfo::load(id)
+        .map_err(|e| VirtuosoError::NotFound(format!("session '{id}' not found: {e}")))?;
 
     Ok(json!({
         "status": "success",
