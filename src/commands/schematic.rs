@@ -41,7 +41,7 @@ pub fn place(
     }
     let r = ed.execute()?;
     Ok(json!({
-        "status": if r.ok() { "success" } else { "error" },
+        "status": if r.skill_ok() { "success" } else { "error" },
         "instance": name, "master": master,
         "output": r.output,
     }))
@@ -88,7 +88,7 @@ pub fn conn(net: &str, from: &str, to: &str) -> Result<Value> {
     ed.assign_net(inst2, term2, net);
     let r = ed.execute()?;
     Ok(json!({
-        "status": if r.ok() { "success" } else { "error" },
+        "status": if r.skill_ok() { "success" } else { "error" },
         "net": net, "from": from, "to": to,
         "output": r.output,
     }))
@@ -235,7 +235,7 @@ pub fn build(spec_path: &str) -> Result<Value> {
         }
     }
     let r = ed.execute()?;
-    if !r.ok() {
+    if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to place instances: {}",
             r.output
@@ -309,7 +309,7 @@ pub fn build(spec_path: &str) -> Result<Value> {
             ed.add_pin(&p.net, &p.pin_type, (p.x, p.y));
         }
         let r = ed.execute()?;
-        if !r.ok() {
+        if !r.skill_ok() {
             return Err(VirtuosoError::Execution(format!(
                 "Failed to create pins: {}",
                 r.output

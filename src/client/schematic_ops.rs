@@ -98,44 +98,14 @@ impl SchematicOps {
         )
     }
 
-    /// Generate SKILL script that assigns net names to instance terminals.
-    /// Returns a complete SKILL script string to write to a temp file and load.
-    pub fn generate_connection_script(
-        &self,
-        connections: &[(String, String, String)], // (inst, term, net)
-    ) -> String {
-        let mut lines = Vec::new();
-        lines.push("let((cv inst iterm net)".to_string());
-        lines.push("cv = RB_SCH_CV".to_string());
-        for (inst_name, term_name, net_name) in connections {
-            let inst_name = escape_skill_string(inst_name);
-            let term_name = escape_skill_string(term_name);
-            let net_name = escape_skill_string(net_name);
-            lines.push(format!(
-                r#"inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0))"#
-            ));
-            lines.push(format!(
-                r#"iterm = car(setof(x inst~>instTerms strcmp(x~>name "{term_name}")==0))"#
-            ));
-            lines.push(format!(r#"net = dbMakeNet(cv "{net_name}")"#));
-            // Create a wire at the instTerm position to connect it
-            lines.push(
-                r#"when(iterm schCreateWire(cv net "draw" "full" list(list(0 0) list(0 0))))"#
-                    .to_string(),
-            );
-        }
-        lines.push("t)".to_string());
-        lines.join("\n")
-    }
-
-    /// Assign net name to instance terminal — simplified version.
-    /// Creates a named net and connects it to the instTerm.
+    /// Assign net name to instance terminal.
+    /// Creates a named net and connects it to the instTerm via let-scoped locals.
     pub fn assign_net(&self, inst_name: &str, term_name: &str, net_name: &str) -> String {
         let inst_name = escape_skill_string(inst_name);
         let term_name = escape_skill_string(term_name);
         let net_name = escape_skill_string(net_name);
         format!(
-            r#"RB_INST = car(setof(i RB_SCH_CV~>instances strcmp(i~>name "{inst_name}")==0)) RB_ITERM = car(setof(x RB_INST~>instTerms strcmp(x~>name "{term_name}")==0)) RB_NET = dbMakeNet(RB_SCH_CV "{net_name}") schCreateWire(RB_SCH_CV RB_NET "draw" "full" list(list(0 0) list(0 0)))"#
+            r#"let((inst iterm net) inst = car(setof(i RB_SCH_CV~>instances strcmp(i~>name "{inst_name}")==0)) iterm = car(setof(x inst~>instTerms strcmp(x~>name "{term_name}")==0)) net = dbMakeNet(RB_SCH_CV "{net_name}") schCreateWire(RB_SCH_CV net "draw" "full" list(list(0 0) list(0 0))))"#
         )
     }
 }
