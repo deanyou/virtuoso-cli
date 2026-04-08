@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "CLI tool to control Cadence Virtuoso from anywhere, locally or remotely"
 license = "MIT"
+repository = "https://github.com/deanyou/virtuoso-cli"
+homepage = "https://github.com/deanyou/virtuoso-cli"
+keywords = ["eda", "cadence", "virtuoso", "analog-ic", "spectre"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = [".cadence/", ".claude/", ".pensieve/", "plots/", "docs/plans/", "sim/", "process_data/"]
 
 [[bin]]
 name = "vcli"
