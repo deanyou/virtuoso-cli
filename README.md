@@ -1,8 +1,10 @@
 # vcli — Virtuoso CLI
 
 <p align="center">
+  <a href="https://crates.io/crates/virtuoso-cli"><img src="https://img.shields.io/crates/v/virtuoso-cli.svg" alt="crates.io"/></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-1.75+-blue.svg" alt="Rust 1.75+"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"/></a>
+  <a href="https://github.com/deanyou/virtuoso-cli/actions"><img src="https://github.com/deanyou/virtuoso-cli/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
 </p>
 
 <p align="center">
@@ -34,18 +36,23 @@ Control Cadence Virtuoso from anywhere — locally or remotely. Designed for AI 
 
 ### Installation
 
+**From crates.io (recommended):**
+
+```bash
+cargo install virtuoso-cli                          # vcli (main CLI)
+cargo install virtuoso-cli --features daemon        # virtuoso-daemon (bridge backend)
+```
+
+**From source:**
+
 ```bash
 git clone https://github.com/deanyou/virtuoso-cli.git
 cd virtuoso-cli
-
-# Install vcli (main CLI)
 cargo install --path . --bin vcli
-
-# Install virtuoso-daemon (RAMIC bridge backend)
 cargo install --path . --bin virtuoso-daemon --features daemon
 ```
 
-Both `vcli` and `virtuoso-daemon` are installed to `~/.cargo/bin/`.
+Both binaries are installed to `~/.cargo/bin/`.
 
 > **Note**: Do not name the binary `virtuoso` — it conflicts with Cadence's `virtuoso` executable.
 
@@ -194,14 +201,19 @@ vcli skill exec    # connects to port N
 
 ### 安装
 
+**从 crates.io 安装（推荐）：**
+
+```bash
+cargo install virtuoso-cli                          # vcli（主 CLI）
+cargo install virtuoso-cli --features daemon        # virtuoso-daemon（bridge 后端）
+```
+
+**从源码安装：**
+
 ```bash
 git clone https://github.com/deanyou/virtuoso-cli.git
 cd virtuoso-cli
-
-# 安装 vcli（主 CLI）
 cargo install --path . --bin vcli
-
-# 安装 virtuoso-daemon（RAMIC bridge 后端）
 cargo install --path . --bin virtuoso-daemon --features daemon
 ```
 
