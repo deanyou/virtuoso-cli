@@ -409,6 +409,28 @@ enum SimCmd {
         #[arg(long)]
         recreate: bool,
     },
+
+    /// Launch simulation asynchronously (returns job ID)
+    RunAsync {
+        /// Path to netlist file (.scs)
+        #[arg(long)]
+        netlist: String,
+    },
+
+    /// Check status of an async simulation job
+    JobStatus {
+        /// Job ID
+        id: String,
+    },
+
+    /// List all simulation jobs
+    JobList,
+
+    /// Cancel a running simulation job
+    JobCancel {
+        /// Job ID
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -777,6 +799,10 @@ fn main() {
             SimCmd::Corner { file, timeout } => commands::sim::corner(&file, timeout),
             SimCmd::Results => commands::sim::results(),
             SimCmd::Netlist { recreate } => commands::sim::netlist(recreate),
+            SimCmd::RunAsync { netlist } => commands::sim::run_async(&netlist),
+            SimCmd::JobStatus { id } => commands::sim::job_status(&id),
+            SimCmd::JobList => commands::sim::job_list(),
+            SimCmd::JobCancel { id } => commands::sim::job_cancel(&id),
         },
         Commands::Process(cmd) => match cmd {
             ProcessCmd::Char {

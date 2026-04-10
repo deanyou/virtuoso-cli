@@ -1,5 +1,6 @@
 use crate::error::{Result, VirtuosoError};
 use crate::models::{ExecutionStatus, SimulationResult};
+use crate::spectre::jobs::{Job, JobStatus};
 use crate::transport::ssh::SSHRunner;
 use std::collections::HashMap;
 use std::fs;
@@ -88,6 +89,69 @@ impl SpectreSimulator {
                 .map_err(|e| VirtuosoError::Execution(e.to_string()))?;
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
         }
+    }
+
+    /// Launch simulation in background, return job ID immediately.
+    pub fn run_async(&self, netlist: &str) -> Result<Job> {
+        if self.remote {
+            return Err(VirtuosoError::Config(
+                "async remote simulation not yet supported".into(),
+            ));
+        }
+
+        let run_id = Uuid::new_v4().to_string()[..8].to_string();
+        let run_dir = self.work_dir.join(&run_id);
+        fs::create_dir_all(&run_dir).map_err(|e| VirtuosoError::Execution(e.to_string()))?;
+
+        let netlist_path = run_dir.join("input.scs");
+        fs::write(&netlist_path, netlist).map_err(|e| VirtuosoError::Execution(e.to_string()))?;
+
+        let raw_dir = run_dir.join("raw");
+        fs::create_dir_all(&raw_dir).map_err(|e| VirtuosoError::Execution(e.to_string()))?;
+
+        let log_path = run_dir.join("spectre.out");
+
+        let mut cmd = Command::new(&self.spectre_cmd);
+        cmd.arg("-64")
+            .arg(&netlist_path)
+            .arg("+escchars")
+            .arg("+log")
+            .arg(&log_path)
+            .arg("-format")
+            .arg(&self.output_format)
+            .arg("-raw")
+            .arg(&raw_dir)
+            .arg("+lqtimeout")
+            .arg("900")
+            .arg("-maxw")
+            .arg("5")
+            .arg("-maxn")
+            .arg("5")
+            .arg("+logstatus");
+
+        for arg in &self.spectre_args {
+            cmd.arg(arg);
+        }
+
+        let child = cmd
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| VirtuosoError::Execution(format!("spectre failed to start: {e}")))?;
+
+        let job = Job {
+            id: run_id,
+            status: JobStatus::Running,
+            netlist_path: netlist_path.to_string_lossy().into(),
+            raw_dir: Some(raw_dir.to_string_lossy().into()),
+            pid: Some(child.id()),
+            created: chrono::Local::now().to_rfc3339(),
+            finished: None,
+            error: None,
+        };
+        job.save()?;
+        // Process runs detached — status checked lazily via Job::refresh()
+        Ok(job)
     }
 
     fn run_local(

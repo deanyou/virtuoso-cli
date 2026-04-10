@@ -2,6 +2,8 @@ use crate::client::bridge::VirtuosoClient;
 use crate::error::{Result, VirtuosoError};
 use crate::ocean;
 use crate::ocean::corner::CornerConfig;
+use crate::spectre::jobs::Job;
+use crate::spectre::runner::SpectreSimulator;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -318,4 +320,45 @@ pub fn netlist(recreate: bool) -> Result<Value> {
          Open ADE L for this cell and run Simulation → Netlist and Run."
             .into(),
     ))
+}
+
+// ── Async job commands ──────────────────────────────────────────────
+
+pub fn run_async(netlist_path: &str) -> Result<Value> {
+    let content = std::fs::read_to_string(netlist_path)
+        .map_err(|e| VirtuosoError::Config(format!("Cannot read netlist '{netlist_path}': {e}")))?;
+    let sim = SpectreSimulator::from_env()?;
+    let job = sim.run_async(&content)?;
+    Ok(json!({
+        "status": "launched",
+        "job_id": job.id,
+        "pid": job.pid,
+        "netlist": netlist_path,
+    }))
+}
+
+pub fn job_status(id: &str) -> Result<Value> {
+    let mut job = Job::load(id)?;
+    job.refresh()?;
+    Ok(serde_json::to_value(&job).map_err(|e| VirtuosoError::Execution(e.to_string()))?)
+}
+
+pub fn job_list() -> Result<Value> {
+    let mut jobs = Job::list_all()?;
+    for job in &mut jobs {
+        let _ = job.refresh();
+    }
+    Ok(json!({
+        "count": jobs.len(),
+        "jobs": serde_json::to_value(&jobs).unwrap_or_default(),
+    }))
+}
+
+pub fn job_cancel(id: &str) -> Result<Value> {
+    let mut job = Job::load(id)?;
+    job.cancel()?;
+    Ok(json!({
+        "status": "cancelled",
+        "job_id": id,
+    }))
 }
