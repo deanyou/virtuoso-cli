@@ -30,9 +30,13 @@ Control Cadence Virtuoso from anywhere — locally or remotely. Designed for AI 
 - **Dynamic port assignment** — Daemon binds port 0 (OS assigns), eliminating port collision
 - **Session auto-discovery** — Single session connects automatically; multiple sessions require `--session` or `VB_SESSION`
 - **Three programming modes** — Raw SKILL expressions, high-level API, or load `.il` files directly
-- **Local + remote modes** — Direct local connection or SSH tunnel for remote servers
+- **Local + remote modes** — Direct local connection or SSH tunnel with ControlMaster multiplexing
 - **Agent-native CLI** — Noun-verb command structure, JSON structured output, schema introspection, semantic exit codes
-- **Spectre simulation integration** — Built-in local/remote simulation runner and PSF result parser
+- **Schematic editing & reading** — Create, place, wire, connect + read instances, nets, pins, parameters
+- **Maestro ADE management** — Open/close sessions, set variables, run simulations, export results
+- **Spectre simulation** — Sync/async simulation, job registry with status tracking, PSF parser
+- **Multi-profile support** — `--profile` flag for concurrent connections to multiple Virtuoso instances
+- **Command logging** — All SKILL executions logged to `~/.cache/virtuoso_bridge/logs/commands.log`
 
 ### Installation
 
@@ -116,7 +120,7 @@ Session files: `~/.cache/virtuoso_bridge/sessions/<id>.json`
 ### Command Reference
 
 ```
-vcli
+vcli [--profile P] [--session S] [--format json|table]
 ├── init                              Generate .env config template
 ├── session                           Manage bridge sessions
 │   ├── list                              List all active sessions
@@ -125,13 +129,33 @@ vcli
 │   ├── start [--timeout N] [--dry-run]
 │   ├── stop [--force] [--dry-run]
 │   ├── restart [--timeout N]
-│   └── status
+│   ├── status
+│   └── diagnose                          Full connection diagnostics
 ├── skill                             Execute SKILL code
 │   ├── exec <code> [--timeout N]
 │   └── load <file>
 ├── cell                              Manage cellviews
 │   ├── open --lib L --cell C [--view V] [--mode M] [--dry-run]
 │   ├── save / close / info
+├── schematic                         Schematic editing & reading
+│   ├── open / save / check / build --spec file.json
+│   ├── place / wire / conn / label / pin
+│   ├── list-instances / list-nets / list-pins
+│   └── get-params --inst M1
+├── maestro                           Maestro ADE session management
+│   ├── open --lib L --cell C
+│   ├── close / list-sessions / save
+│   ├── set-var / get-analyses / add-output
+│   ├── run / export
+├── sim                               Simulation
+│   ├── setup / run / measure / sweep / corner
+│   ├── run-async --netlist file.scs
+│   ├── job-status / job-list / job-cancel
+│   └── results / netlist
+├── design                            gm/Id sizing tools
+│   ├── size / explore
+├── process                           Process characterization
+│   └── char [--netlist]
 └── schema [--all] [noun] [verb]      Output command schema (for Agent discovery)
 ```
 
@@ -140,11 +164,12 @@ vcli
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VB_SESSION` | — | Target session ID (for multi-instance) |
-| `VB_PORT` | — | Direct port (fallback when no session file) |
+| `VB_PORT` | per-user hash | Direct port (fallback when no session file) |
 | `VB_REMOTE_HOST` | — | SSH remote hostname or alias |
 | `VB_REMOTE_USER` | current user | SSH login username |
 | `VB_JUMP_HOST` | — | Bastion/jump host address |
 | `VB_TIMEOUT` | `30` | Connection/execution timeout (seconds) |
+| `VB_PROFILE` | — | Config profile (reads `VB_*_<profile>` vars) |
 | `RB_DAEMON_PATH` | auto-detected | Override daemon binary path |
 
 ### How It Works
@@ -195,9 +220,13 @@ vcli skill exec    # connects to port N
 - **动态端口分配** — daemon 绑定端口 0（OS 自动分配），彻底避免端口冲突
 - **session 自动发现** — 只有一个 session 时无需指定；多个 session 时通过 `--session` 或 `VB_SESSION` 选择
 - **三种编程方式** — 原始 SKILL 表达式、高阶 API、或直接加载 .il 文件
-- **本地+远程模式** — 支持本地直连或 SSH 隧道远程控制
+- **本地+远程模式** — 支持本地直连或 SSH 隧道（ControlMaster 连接复用）
 - **Agent 原生 CLI** — noun-verb 命令结构、JSON 结构化输出、schema 自省、语义化退出码
-- **Spectre 仿真集成** — 内置本地/远程仿真运行器和 PSF 结果解析
+- **原理图编辑与读取** — 创建、放置、连线 + 读取实例/网络/引脚/参数
+- **Maestro ADE 管理** — 打开/关闭 session、设置变量、运行仿真、导出结果
+- **Spectre 仿真** — 同步/异步仿真、Job 注册与状态跟踪、PSF 结果解析
+- **多 Profile 支持** — `--profile` 参数支持同时连接多个 Virtuoso 实例
+- **命令日志** — 所有 SKILL 调用记录到 `~/.cache/virtuoso_bridge/logs/commands.log`
 
 ### 安装
 
@@ -281,22 +310,34 @@ Session 注册文件保存在 `~/.cache/virtuoso_bridge/sessions/<id>.json`。
 ### 命令参考
 
 ```
-vcli
+vcli [--profile P] [--session S] [--format json|table]
 ├── init                              创建 .env 配置模板
 ├── session                           管理 bridge session
 │   ├── list                              列出所有活跃 session
 │   └── show [id]                         查看 session 详情
 ├── tunnel                            管理 SSH 隧道
-│   ├── start [--timeout N] [--dry-run]
-│   ├── stop [--force] [--dry-run]
-│   ├── restart [--timeout N]
-│   └── status
+│   ├── start / stop / restart / status
+│   └── diagnose                          完整连接诊断
 ├── skill                             执行 SKILL 代码
 │   ├── exec <code> [--timeout N]
 │   └── load <file>
 ├── cell                              管理 cellview
-│   ├── open --lib L --cell C [--view V] [--mode M] [--dry-run]
-│   ├── save / close / info
+│   ├── open / save / close / info
+├── schematic                         原理图编辑与读取
+│   ├── open / save / check / build --spec file.json
+│   ├── place / wire / conn / label / pin
+│   ├── list-instances / list-nets / list-pins
+│   └── get-params --inst M1
+├── maestro                           Maestro ADE 仿真管理
+│   ├── open / close / list-sessions / save
+│   ├── set-var / get-analyses / add-output
+│   ├── run / export
+├── sim                               仿真
+│   ├── setup / run / measure / sweep / corner
+│   ├── run-async / job-status / job-list / job-cancel
+│   └── results / netlist
+├── design                            gm/Id 设计工具
+├── process                           工艺表征
 └── schema [--all] [noun] [verb]      输出命令 schema（供 Agent 发现）
 ```
 
@@ -305,11 +346,12 @@ vcli
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `VB_SESSION` | - | 目标 session ID（多实例时使用） |
-| `VB_PORT` | - | 直连端口（无 session 文件时的回退值） |
+| `VB_PORT` | 按用户名 hash | 直连端口（无 session 文件时的回退值） |
 | `VB_REMOTE_HOST` | - | SSH 远程主机名或别名 |
 | `VB_REMOTE_USER` | 当前用户 | SSH 登录用户名 |
 | `VB_JUMP_HOST` | - | 跳板机/堡垒机地址 |
 | `VB_TIMEOUT` | `30` | 连接/执行超时（秒） |
+| `VB_PROFILE` | - | 配置 profile（读取 `VB_*_<profile>` 变量） |
 | `RB_DAEMON_PATH` | 自动检测 | 覆盖 daemon 二进制路径 |
 
 ### 工作原理
