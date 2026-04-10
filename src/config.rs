@@ -46,7 +46,7 @@ impl Config {
 
         let port: u16 = Self::env_with_profile("VB_PORT", profile)
             .and_then(|v| v.parse().ok())
-            .unwrap_or_else(|| Self::default_port());
+            .unwrap_or_else(Self::default_port);
 
         if port == 0 {
             return Err(VirtuosoError::Config(

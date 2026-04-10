@@ -20,6 +20,7 @@ mod config_tests {
         jump_user: Option<&str>,
     ) -> Config {
         Config {
+            profile: None,
             remote_host: remote_host.map(String::from),
             remote_user: remote_user.map(String::from),
             port: 65432,

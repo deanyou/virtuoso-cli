@@ -39,11 +39,8 @@ impl MaestroOps {
     }
 
     /// List all design variables. Returns JSON via sprintf.
-    pub fn list_vars(&self, session: &str) -> String {
-        let session = escape_skill_string(session);
-        format!(
-            r#"let((vars out sep) vars = asiGetDesignVarList(asiGetCurrentSession()) out = "[" sep = "" foreach(v vars out = strcat(out sep sprintf(nil "{{\"name\":\"%s\",\"value\":\"%s\"}}" car(v) cadr(v))) sep = ",") strcat(out "]"))"#
-        )
+    pub fn list_vars(&self, _session: &str) -> String {
+        r#"let((vars out sep) vars = asiGetDesignVarList(asiGetCurrentSession()) out = "[" sep = "" foreach(v vars out = strcat(out sep sprintf(nil "{\"name\":\"%s\",\"value\":\"%s\"}" car(v) cadr(v))) sep = ",") strcat(out "]"))"#.to_string()
     }
 
     /// Get enabled analyses for a session.

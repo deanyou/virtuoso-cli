@@ -340,7 +340,7 @@ pub fn run_async(netlist_path: &str) -> Result<Value> {
 pub fn job_status(id: &str) -> Result<Value> {
     let mut job = Job::load(id)?;
     job.refresh()?;
-    Ok(serde_json::to_value(&job).map_err(|e| VirtuosoError::Execution(e.to_string()))?)
+    serde_json::to_value(&job).map_err(|e| VirtuosoError::Execution(e.to_string()))
 }
 
 pub fn job_list() -> Result<Value> {
