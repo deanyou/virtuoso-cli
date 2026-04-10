@@ -81,13 +81,20 @@ mod config_tests {
         assert_eq!(cfg.ssh_jump(), None);
     }
 
+    /// Helper to clean env vars before/after each config test.
+    fn clean_env() {
+        env::remove_var("VB_PORT");
+        env::remove_var("VB_REMOTE_HOST");
+        env::remove_var("VB_PROFILE");
+    }
+
     #[test]
     fn vb_port_zero_is_error() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_env();
         env::set_var("VB_PORT", "0");
-        env::remove_var("VB_REMOTE_HOST");
         let result = Config::from_env();
-        env::remove_var("VB_PORT");
+        clean_env();
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -97,30 +104,31 @@ mod config_tests {
 
     #[test]
     fn vb_port_default_when_unset() {
-        let _lock = ENV_LOCK.lock().unwrap();
-        env::remove_var("VB_PORT");
-        env::remove_var("VB_REMOTE_HOST");
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_env();
         let cfg = Config::from_env().unwrap();
-        assert_eq!(cfg.port, 65432);
+        clean_env();
+        // Default port is derived from username hash: 65000 + sum(bytes) % 500
+        assert!(cfg.port >= 65000 && cfg.port < 65500);
     }
 
     #[test]
     fn vb_port_custom() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_env();
         env::set_var("VB_PORT", "12345");
-        env::remove_var("VB_REMOTE_HOST");
         let cfg = Config::from_env().unwrap();
-        env::remove_var("VB_PORT");
+        clean_env();
         assert_eq!(cfg.port, 12345);
     }
 
     #[test]
     fn vb_remote_host_empty_means_local() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_env();
         env::set_var("VB_REMOTE_HOST", "");
-        env::remove_var("VB_PORT");
         let cfg = Config::from_env().unwrap();
-        env::remove_var("VB_REMOTE_HOST");
+        clean_env();
         assert!(!cfg.is_remote());
         assert!(cfg.remote_host.is_none());
     }
@@ -278,7 +286,7 @@ mod session_info_tests {
     #[test]
     fn session_load_missing_returns_error() {
         // Point to a temp dir with no files
-        let tmp = TempDir::new().unwrap();
+        let _tmp = TempDir::new().unwrap();
         let fake_id = "nonexistent-session-xyz";
         // load() uses the real cache dir, so just verify the error message shape
         let result = SessionInfo::load(fake_id);
