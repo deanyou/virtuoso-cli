@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub profile: Option<String>,
     pub remote_host: Option<String>,
     pub remote_user: Option<String>,
     pub port: u16,
@@ -54,6 +55,7 @@ impl Config {
         }
 
         Ok(Self {
+            profile: profile.map(|s| s.to_string()),
             remote_host,
             remote_user: Self::env_with_profile("VB_REMOTE_USER", profile),
             port,

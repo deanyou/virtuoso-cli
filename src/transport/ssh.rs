@@ -263,6 +263,22 @@ impl SSHRunner {
             &format!("ConnectTimeout={}", self.connect_timeout),
         ]);
 
+        // ControlMaster: reuse SSH connections to avoid repeated handshakes
+        let control_dir = dirs::cache_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+            .join("virtuoso_bridge")
+            .join("ssh");
+        let _ = std::fs::create_dir_all(&control_dir);
+        let control_path = control_dir.join("%h-%p-%r");
+        cmd.args([
+            "-o",
+            "ControlMaster=auto",
+            "-o",
+            &format!("ControlPath={}", control_path.display()),
+            "-o",
+            "ControlPersist=600",
+        ]);
+
         if let Some(ref key) = self.ssh_key_path {
             cmd.arg("-i").arg(key);
         }

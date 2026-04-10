@@ -179,39 +179,53 @@ pub struct TunnelState {
 }
 
 impl TunnelState {
-    pub fn save(&self) -> std::io::Result<()> {
+    fn state_path(profile: Option<&str>) -> std::path::PathBuf {
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
             .join("virtuoso_bridge");
-        std::fs::create_dir_all(&cache_dir)?;
-        let state_path = cache_dir.join("state.json");
-        let json =
-            serde_json::to_string_pretty(self).map_err(|e| std::io::Error::other(e.to_string()))?;
-        std::fs::write(state_path, json)
+        let _ = std::fs::create_dir_all(&cache_dir);
+        let filename = match profile {
+            Some(p) if !p.is_empty() => format!("state_{p}.json"),
+            _ => "state.json".into(),
+        };
+        cache_dir.join(filename)
     }
 
-    pub fn load() -> std::io::Result<Option<Self>> {
-        let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("virtuoso_bridge");
-        let state_path = cache_dir.join("state.json");
-        if !state_path.exists() {
+    pub fn save_with_profile(&self, profile: Option<&str>) -> std::io::Result<()> {
+        let path = Self::state_path(profile);
+        let json =
+            serde_json::to_string_pretty(self).map_err(|e| std::io::Error::other(e.to_string()))?;
+        std::fs::write(path, json)
+    }
+
+    pub fn save(&self) -> std::io::Result<()> {
+        self.save_with_profile(std::env::var("VB_PROFILE").ok().as_deref())
+    }
+
+    pub fn load_with_profile(profile: Option<&str>) -> std::io::Result<Option<Self>> {
+        let path = Self::state_path(profile);
+        if !path.exists() {
             return Ok(None);
         }
-        let json = std::fs::read_to_string(state_path)?;
+        let json = std::fs::read_to_string(path)?;
         serde_json::from_str(&json)
             .map(Some)
             .map_err(|e| std::io::Error::other(e.to_string()))
     }
 
-    pub fn clear() -> std::io::Result<()> {
-        let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("virtuoso_bridge");
-        let state_path = cache_dir.join("state.json");
-        if state_path.exists() {
-            std::fs::remove_file(state_path)?;
+    pub fn load() -> std::io::Result<Option<Self>> {
+        Self::load_with_profile(std::env::var("VB_PROFILE").ok().as_deref())
+    }
+
+    pub fn clear_with_profile(profile: Option<&str>) -> std::io::Result<()> {
+        let path = Self::state_path(profile);
+        if path.exists() {
+            std::fs::remove_file(path)?;
         }
         Ok(())
+    }
+
+    pub fn clear() -> std::io::Result<()> {
+        Self::clear_with_profile(std::env::var("VB_PROFILE").ok().as_deref())
     }
 }
