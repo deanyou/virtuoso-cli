@@ -100,10 +100,18 @@ vcli --session eda-meow-2 skill exec 'getCurrentTime()' # specify session explic
 **Remote mode:**
 ```bash
 vcli init           # generate .env template
-# edit .env: set VB_REMOTE_HOST
+# edit .env: set VB_REMOTE_HOST, VB_SPECTRE_CMD (absolute path)
 vcli tunnel start
 vcli skill exec 'getCurrentTime()'
 vcli tunnel stop
+```
+
+**Remote async simulation:**
+```bash
+vcli sim run-async --netlist my_tb.scs   # launch on remote server, return immediately
+vcli sim job-list                        # check all jobs (auto-refreshes status via SSH)
+vcli sim job-status <id>                 # detailed status for one job
+vcli sim job-cancel <id>                 # kill remote spectre process
 ```
 
 ### Multi-Session Architecture
@@ -291,10 +299,18 @@ vcli --session eda-meow-2 skill exec 'getCurrentTime()' # 多 session 时指定�
 **远程模式：**
 ```bash
 vcli init           # 生成 .env 配置模板
-# 编辑 .env：设置 VB_REMOTE_HOST
+# 编辑 .env：设置 VB_REMOTE_HOST、VB_SPECTRE_CMD（绝对路径）
 vcli tunnel start
 vcli skill exec 'getCurrentTime()'
 vcli tunnel stop
+```
+
+**远程异步仿真：**
+```bash
+vcli sim run-async --netlist my_tb.scs   # 在远程服务器启动仿真，立即返回
+vcli sim job-list                        # 查看所有 job（通过 SSH 自动刷新状态）
+vcli sim job-status <id>                 # 查看单个 job 详情
+vcli sim job-cancel <id>                 # 终止远程 spectre 进程
 ```
 
 ### 多 Session 工作原理
