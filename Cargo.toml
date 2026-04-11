@@ -15,6 +15,10 @@ name = "vcli"
 path = "src/main.rs"
 
 [[bin]]
+name = "vtui"
+path = "src/vtui.rs"
+
+[[bin]]
 name = "virtuoso-daemon"
 path = "src/daemon/main.rs"
 required-features = ["daemon"]
