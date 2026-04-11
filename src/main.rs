@@ -15,6 +15,7 @@ mod spectre;
 #[cfg(test)]
 mod tests;
 mod transport;
+mod tui;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use output::{print_json, OutputFormat};
@@ -138,6 +139,9 @@ enum Commands {
         /// Command verb (e.g. start)
         verb: Option<String>,
     },
+
+    /// Interactive TUI dashboard
+    Tui,
 }
 
 #[derive(Subcommand)]
@@ -1029,6 +1033,13 @@ fn main() {
                 commands::schema::show(noun.as_deref(), verb.as_deref())
             };
             print_json(&schema);
+            return;
+        }
+        Commands::Tui => {
+            if let Err(e) = tui::run_tui() {
+                eprintln!("TUI error: {e}");
+                std::process::exit(1);
+            }
             return;
         }
     };

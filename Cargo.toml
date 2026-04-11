@@ -40,6 +40,8 @@ uuid = { version = "1", features = ["v4"] }
 dirs = "5"
 chrono = { version = "0.4", features = ["serde"] }
 libc = "0.2"
+ratatui = "0.29"
+crossterm = "0.28"
 
 [profile.release]
 lto = true

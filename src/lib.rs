@@ -11,3 +11,4 @@ pub mod ocean;
 pub mod output;
 pub mod spectre;
 pub mod transport;
+pub mod tui;
