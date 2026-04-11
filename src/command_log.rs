@@ -2,7 +2,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 
-fn log_path() -> PathBuf {
+pub fn log_path() -> PathBuf {
     let dir = dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join("virtuoso_bridge")

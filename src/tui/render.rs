@@ -9,6 +9,18 @@ use ratatui::Frame;
 
 const SPINNERS: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
 
+use ratatui::style::Color;
+
+fn kv_line(label: &str, value: &str, theme: &Theme, value_color: Option<Color>) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(label.to_string(), Style::default().fg(theme.text_dim)),
+        Span::styled(
+            value.to_string(),
+            Style::default().fg(value_color.unwrap_or(theme.text)),
+        ),
+    ])
+}
+
 pub fn render(frame: &mut Frame, state: &TuiState, theme: &Theme) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -141,32 +153,14 @@ fn render_detail(frame: &mut Frame, state: &TuiState, theme: &Theme, area: Rect)
     match state.active_tab {
         ActiveTab::Sessions => {
             if let Some(s) = state.selected_session_info() {
+                let port = s.port.to_string();
+                let pid = s.pid.to_string();
                 let lines = vec![
-                    Line::from(vec![
-                        Span::styled("  Session: ", Style::default().fg(theme.text_dim)),
-                        Span::styled(
-                            &s.id,
-                            Style::default()
-                                .fg(theme.primary)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                    ]),
-                    Line::from(vec![
-                        Span::styled("  Port:    ", Style::default().fg(theme.text_dim)),
-                        Span::styled(s.port.to_string(), Style::default().fg(theme.text)),
-                    ]),
-                    Line::from(vec![
-                        Span::styled("  PID:     ", Style::default().fg(theme.text_dim)),
-                        Span::styled(s.pid.to_string(), Style::default().fg(theme.text)),
-                    ]),
-                    Line::from(vec![
-                        Span::styled("  Host:    ", Style::default().fg(theme.text_dim)),
-                        Span::styled(&s.host, Style::default().fg(theme.text)),
-                    ]),
-                    Line::from(vec![
-                        Span::styled("  Created: ", Style::default().fg(theme.text_dim)),
-                        Span::styled(&s.created, Style::default().fg(theme.text)),
-                    ]),
+                    kv_line("  Session: ", &s.id, theme, Some(theme.primary)),
+                    kv_line("  Port:    ", &port, theme, None),
+                    kv_line("  PID:     ", &pid, theme, None),
+                    kv_line("  Host:    ", &s.host, theme, None),
+                    kv_line("  Created: ", &s.created, theme, None),
                 ];
                 let p = Paragraph::new(lines).block(block);
                 frame.render_widget(p, area);
@@ -186,35 +180,15 @@ fn render_detail(frame: &mut Frame, state: &TuiState, theme: &Theme, area: Rect)
                     JobStatus::Cancelled => ("cancelled", theme.text_dim),
                 };
                 let mut lines = vec![
-                    Line::from(vec![
-                        Span::styled("  Job ID:  ", Style::default().fg(theme.text_dim)),
-                        Span::styled(
-                            &j.id,
-                            Style::default()
-                                .fg(theme.primary)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                    ]),
-                    Line::from(vec![
-                        Span::styled("  Status:  ", Style::default().fg(theme.text_dim)),
-                        Span::styled(status_str, Style::default().fg(color)),
-                    ]),
-                    Line::from(vec![
-                        Span::styled("  Created: ", Style::default().fg(theme.text_dim)),
-                        Span::styled(&j.created, Style::default().fg(theme.text)),
-                    ]),
+                    kv_line("  Job ID:  ", &j.id, theme, Some(theme.primary)),
+                    kv_line("  Status:  ", status_str, theme, Some(color)),
+                    kv_line("  Created: ", &j.created, theme, None),
                 ];
                 if let Some(ref fin) = j.finished {
-                    lines.push(Line::from(vec![
-                        Span::styled("  Finished:", Style::default().fg(theme.text_dim)),
-                        Span::styled(fin, Style::default().fg(theme.text)),
-                    ]));
+                    lines.push(kv_line("  Finished:", fin, theme, None));
                 }
-                if let Some(ref err) = j.error {
-                    lines.push(Line::from(vec![
-                        Span::styled("  Error:   ", Style::default().fg(theme.text_dim)),
-                        Span::styled(err, Style::default().fg(theme.error)),
-                    ]));
+                if let Some(ref e) = j.error {
+                    lines.push(kv_line("  Error:   ", e, theme, Some(theme.error)));
                 }
                 let p = Paragraph::new(lines).block(block);
                 frame.render_widget(p, area);
@@ -236,26 +210,17 @@ fn render_bottom(frame: &mut Frame, state: &TuiState, theme: &Theme, area: Rect)
 
     let mut lines = Vec::new();
     if let Some(ref t) = state.tunnel_state {
-        lines.push(Line::from(vec![
-            Span::styled("  Tunnel:  ", Style::default().fg(theme.text_dim)),
-            Span::styled("active", Style::default().fg(theme.success)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  Port:    ", Style::default().fg(theme.text_dim)),
-            Span::styled(t.port.to_string(), Style::default().fg(theme.text)),
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("  Remote:  ", Style::default().fg(theme.text_dim)),
-            Span::styled(&t.remote_host, Style::default().fg(theme.text)),
-        ]));
+        let port = t.port.to_string();
+        lines.push(kv_line("  Tunnel:  ", "active", theme, Some(theme.success)));
+        lines.push(kv_line("  Port:    ", &port, theme, None));
+        lines.push(kv_line("  Remote:  ", &t.remote_host, theme, None));
     } else {
-        lines.push(Line::from(vec![
-            Span::styled("  Tunnel:  ", Style::default().fg(theme.text_dim)),
-            Span::styled(
-                "not active (local mode)",
-                Style::default().fg(theme.text_dim),
-            ),
-        ]));
+        lines.push(kv_line(
+            "  Tunnel:  ",
+            "not active (local mode)",
+            theme,
+            Some(theme.text_dim),
+        ));
     }
 
     lines.push(Line::default());

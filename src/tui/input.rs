@@ -16,10 +16,8 @@ pub fn handle_key(state: &mut TuiState, key: KeyEvent) -> EventAction {
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('l') => {
                 state.show_log = false;
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if state.log_scroll + 1 < state.log_lines.len() {
-                    state.log_scroll += 1;
-                }
+            KeyCode::Char('j') | KeyCode::Down if state.log_scroll + 1 < state.log_lines.len() => {
+                state.log_scroll += 1;
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 state.log_scroll = state.log_scroll.saturating_sub(1);
