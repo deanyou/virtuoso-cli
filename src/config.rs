@@ -11,6 +11,8 @@ pub struct Config {
     pub port: u16,
     pub jump_host: Option<String>,
     pub jump_user: Option<String>,
+    pub ssh_port: Option<u16>,
+    pub ssh_key: Option<String>,
     pub timeout: u64,
     pub keep_remote_files: bool,
     pub spectre_cmd: String,
@@ -61,6 +63,8 @@ impl Config {
             port,
             jump_host: Self::env_with_profile("VB_JUMP_HOST", profile),
             jump_user: Self::env_with_profile("VB_JUMP_USER", profile),
+            ssh_port: Self::env_with_profile("VB_SSH_PORT", profile).and_then(|v| v.parse().ok()),
+            ssh_key: Self::env_with_profile("VB_SSH_KEY", profile),
             timeout: Self::env_with_profile("VB_TIMEOUT", profile)
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(30),

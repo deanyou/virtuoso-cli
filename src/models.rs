@@ -156,6 +156,45 @@ impl SessionInfo {
         Ok(sessions)
     }
 
+    /// List sessions on a remote host via SSH.
+    /// Reads all session JSON files from `~/.cache/virtuoso_bridge/sessions/`.
+    pub fn list_remote(runner: &crate::transport::ssh::SSHRunner) -> std::io::Result<Vec<Self>> {
+        let script = r#"for f in "$HOME"/.cache/virtuoso_bridge/sessions/*.json; do [ -f "$f" ] && echo "---SESSION---" && cat "$f"; done"#;
+        let result = runner
+            .run_command(script, None)
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
+
+        let mut sessions = Vec::new();
+        for chunk in result.stdout.split("---SESSION---") {
+            let chunk = chunk.trim();
+            if chunk.is_empty() {
+                continue;
+            }
+            if let Ok(s) = serde_json::from_str::<Self>(chunk) {
+                sessions.push(s);
+            }
+        }
+        sessions.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(sessions)
+    }
+
+    /// Fetch remote sessions and sync them to the local sessions directory.
+    /// Returns the number of sessions synced.
+    pub fn sync_from_remote(runner: &crate::transport::ssh::SSHRunner) -> std::io::Result<usize> {
+        let remote = Self::list_remote(runner)?;
+        let dir = Self::sessions_dir();
+        std::fs::create_dir_all(&dir)?;
+        let mut count = 0;
+        for s in &remote {
+            let path = dir.join(format!("{}.json", s.id));
+            let json = serde_json::to_string_pretty(s)
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+            std::fs::write(path, json)?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
     /// Check if the daemon is still alive by checking if the port is bound.
     pub fn is_alive(&self) -> bool {
         use std::net::TcpStream;

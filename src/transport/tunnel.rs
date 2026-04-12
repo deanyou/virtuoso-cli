@@ -49,6 +49,8 @@ impl SSHClient {
             }
             runner = r;
         }
+        runner.ssh_port = cfg.ssh_port;
+        runner.ssh_key_path = cfg.ssh_key.clone();
 
         Ok(Self {
             runner,
@@ -205,6 +207,12 @@ impl SSHClient {
             "ControlPersist=600",
         ]);
 
+        if let Some(p) = self.runner.ssh_port {
+            cmd.arg("-p").arg(p.to_string());
+        }
+        if let Some(ref key) = self.runner.ssh_key_path {
+            cmd.arg("-i").arg(key);
+        }
         if let Some(ref jump) = self.runner.jump_host {
             cmd.arg("-J").arg(jump);
         }

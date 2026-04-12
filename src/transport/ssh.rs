@@ -17,6 +17,7 @@ pub struct SSHRunner {
     pub user: Option<String>,
     pub jump_host: Option<String>,
     pub jump_user: Option<String>,
+    pub ssh_port: Option<u16>,
     pub ssh_key_path: Option<String>,
     pub ssh_config_path: Option<String>,
     pub timeout: u64,
@@ -31,6 +32,7 @@ impl SSHRunner {
             user: None,
             jump_host: None,
             jump_user: None,
+            ssh_port: None,
             ssh_key_path: None,
             ssh_config_path: None,
             timeout: 30,
@@ -279,6 +281,9 @@ impl SSHRunner {
             "ControlPersist=600",
         ]);
 
+        if let Some(port) = self.ssh_port {
+            cmd.arg("-p").arg(port.to_string());
+        }
         if let Some(ref key) = self.ssh_key_path {
             cmd.arg("-i").arg(key);
         }

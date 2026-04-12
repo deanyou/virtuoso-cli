@@ -26,6 +26,8 @@ mod config_tests {
             port: 65432,
             jump_host: jump_host.map(String::from),
             jump_user: jump_user.map(String::from),
+            ssh_port: None,
+            ssh_key: None,
             timeout: 30,
             keep_remote_files: false,
             spectre_cmd: "spectre".into(),

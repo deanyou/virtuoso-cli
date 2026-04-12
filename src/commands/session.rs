@@ -1,9 +1,21 @@
+use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
 use crate::models::SessionInfo;
 use crate::output::OutputFormat;
+use crate::transport::tunnel::SSHClient;
 use serde_json::{json, Value};
 
 pub fn list(format: OutputFormat) -> Result<Value> {
+    // In remote mode, sync session files from remote host first.
+    // Best effort: failures are silent so local cache still works.
+    if let Ok(cfg) = Config::from_env() {
+        if cfg.is_remote() {
+            if let Ok(client) = SSHClient::from_env(cfg.keep_remote_files) {
+                let _ = SessionInfo::sync_from_remote(&client.runner);
+            }
+        }
+    }
+
     let mut sessions = SessionInfo::list()
         .map_err(|e| VirtuosoError::Execution(format!("failed to read sessions: {e}")))?;
 

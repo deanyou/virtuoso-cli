@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
-use crate::models::TunnelState;
+use crate::models::{SessionInfo, TunnelState};
 use crate::output::OutputFormat;
 use crate::transport::tunnel::SSHClient;
 use serde_json::{json, Value};
@@ -23,6 +23,11 @@ pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
     let mut client = SSHClient::from_env(cfg.keep_remote_files)?;
     client.warm(timeout)?;
 
+    // Auto-discover remote sessions and sync them to local cache.
+    // This allows `vcli skill exec` to find the Virtuoso daemon port
+    // without manual docker cp or session file copying.
+    let sessions_synced = SessionInfo::sync_from_remote(&client.runner).unwrap_or(0);
+
     let vc = crate::client::bridge::VirtuosoClient::from_env()?;
     let daemon_ok = matches!(vc.test_connection(Some(cfg.timeout)), Ok(true));
 
@@ -31,6 +36,7 @@ pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
         "port": client.port,
         "remote_host": cfg.remote_host.as_deref().unwrap_or("local"),
         "daemon_responsive": daemon_ok,
+        "sessions_synced": sessions_synced,
     }))
 }
 

@@ -72,6 +72,11 @@ impl TuiState {
             ("VB_TIMEOUT", "Timeout in seconds (default: 30)"),
             ("VB_JUMP_HOST", "Bastion/jump host address"),
             ("VB_JUMP_USER", "Jump host username"),
+            ("VB_SSH_PORT", "SSH port (default: 22)"),
+            (
+                "VB_SSH_KEY",
+                "SSH private key path (e.g. ~/.ssh/id_ed25519)",
+            ),
             ("VB_SPECTRE_CMD", "Spectre binary path (default: spectre)"),
             ("VB_SPECTRE_ARGS", "Extra spectre arguments"),
             ("VB_KEEP_REMOTE_FILES", "Keep remote files (true/false)"),
