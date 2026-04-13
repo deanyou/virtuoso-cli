@@ -33,7 +33,7 @@ Control Cadence Virtuoso from anywhere — locally or remotely. Designed for AI 
 - **Local + remote modes** — Direct local connection or SSH tunnel with ControlMaster multiplexing
 - **Agent-native CLI** — Noun-verb command structure, JSON structured output, schema introspection, semantic exit codes
 - **Schematic editing & reading** — Create, place, wire, connect + read instances, nets, pins, parameters
-- **Maestro ADE management** — Open/close sessions, set variables, run simulations, export results
+- **Maestro ADE management** — Open/close Explorer (`maestro`) view sessions, set variables, run simulations, export results (IC23.1+ unified ADE)
 - **Spectre simulation** — Sync/async simulation, job registry with status tracking, PSF parser
 - **Multi-profile support** — `--profile` flag for concurrent connections to multiple Virtuoso instances
 - **Command logging** — All SKILL executions logged to `~/.cache/virtuoso_bridge/logs/commands.log`
@@ -114,6 +114,15 @@ vcli sim job-status <id>                 # detailed status for one job
 vcli sim job-cancel <id>                 # kill remote spectre process
 ```
 
+**Maestro ADE Explorer (IC23.1+):**
+```bash
+# IC23.1 unified ADE uses "maestro" view (formerly adexl/ade_xl)
+vcli maestro open --lib myLib --cell myCell            # defaults to view=maestro
+vcli maestro set-var --session fnxSession4 --name W --value 10u
+vcli maestro run --session fnxSession4                 # async run
+vcli maestro export --session fnxSession4 --path out.csv
+```
+
 ### Multi-Session Architecture
 
 ```
@@ -151,7 +160,7 @@ vcli [--profile P] [--session S] [--format json|table]
 │   ├── place / wire / conn / label / pin
 │   ├── list-instances / list-nets / list-pins
 │   └── get-params --inst M1
-├── maestro                           Maestro ADE session management
+├── maestro                           Maestro ADE Explorer (maestro view) sessions
 │   ├── open --lib L --cell C
 │   ├── close / list-sessions / save
 │   ├── set-var / get-analyses / add-output
@@ -232,7 +241,7 @@ vcli skill exec    # connects to port N
 - **本地+远程模式** — 支持本地直连或 SSH 隧道（ControlMaster 连接复用）
 - **Agent 原生 CLI** — noun-verb 命令结构、JSON 结构化输出、schema 自省、语义化退出码
 - **原理图编辑与读取** — 创建、放置、连线 + 读取实例/网络/引脚/参数
-- **Maestro ADE 管理** — 打开/关闭 session、设置变量、运行仿真、导出结果
+- **Maestro ADE 管理** — 打开/关闭 Explorer（`maestro` view）session、设置变量、运行仿真、导出结果（IC23.1+ 统一 ADE）
 - **Spectre 仿真** — 同步/异步仿真、Job 注册与状态跟踪、PSF 结果解析
 - **多 Profile 支持** — `--profile` 参数支持同时连接多个 Virtuoso 实例
 - **命令日志** — 所有 SKILL 调用记录到 `~/.cache/virtuoso_bridge/logs/commands.log`
@@ -313,6 +322,15 @@ vcli sim job-status <id>                 # 查看单个 job 详情
 vcli sim job-cancel <id>                 # 终止远程 spectre 进程
 ```
 
+**Maestro ADE Explorer（IC23.1+）：**
+```bash
+# IC23.1 统一 ADE 使用 "maestro" view（旧版本为 adexl/ade_xl）
+vcli maestro open --lib myLib --cell myCell            # 默认 view=maestro
+vcli maestro set-var --session fnxSession4 --name W --value 10u
+vcli maestro run --session fnxSession4                 # 异步运行
+vcli maestro export --session fnxSession4 --path out.csv
+```
+
 ### 多 Session 工作原理
 
 ```
@@ -346,7 +364,7 @@ vcli [--profile P] [--session S] [--format json|table]
 │   ├── place / wire / conn / label / pin
 │   ├── list-instances / list-nets / list-pins
 │   └── get-params --inst M1
-├── maestro                           Maestro ADE 仿真管理
+├── maestro                           Maestro ADE Explorer（maestro view）仿真
 │   ├── open / close / list-sessions / save
 │   ├── set-var / get-analyses / add-output
 │   ├── run / export
