@@ -9,4 +9,5 @@ process_data/
 sim/
 .cadence/
 plots/
-0b3a823c/
+# Async sim job output dirs (8-char UUID)
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/
