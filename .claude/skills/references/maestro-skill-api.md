@@ -262,7 +262,7 @@ If the `axl*` functions are unavailable (older Virtuoso versions), corners can a
         <model enabled="1">toplevel_modified.scs
             <modeltest>All</modeltest>
             <modelblock>Global</modelblock>
-            <modelfile>/home/zhangz/T28/toplevel_modified.scs</modelfile>
+            <modelfile>${HOME}/toplevel_modified.scs</modelfile>
             <modelsection>"top_tt"</modelsection>
         </model>
     </models>

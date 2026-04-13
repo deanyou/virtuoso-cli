@@ -64,14 +64,14 @@ session = open_session(client, LIB, CELL)  # creates empty maestro
 client.execute_skill(f'maeCreateTest("TEST_NAME" ?session "{session}" '
                      f'?lib "{LIB}" ?cell "{CELL}" ?view "schematic")')
 
-# Set variables via Python
-maeSetVar("Fs", "1G", ?session session)
+# Set variables via Python (note: bare maeSetVar() call must be inside execute_skill)
+client.execute_skill(f'maeSetVar("Fs" "1G" ?session "{session}")')
 
 # Set analysis via .il file (backtick syntax)
 client.load_il("setup_tran.il")  # contains maeSetAnalysis(test "tran" ?enable t ?options `(...))
 
 # Set outputs via Python (each needs a unique name, NOT nil)
-maeAddOutput("VOUTP", test, ?outputType "net" ?signalName "/VOUTP")
+client.execute_skill(f'maeAddOutput("VOUTP" "TEST_NAME" ?outputType "net" ?signalName "/VOUTP" ?session "{session}")')
 ```
 
 **Analysis options: use bare variable names, not `VAR("...")`.**

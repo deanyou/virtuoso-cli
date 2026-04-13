@@ -3,6 +3,9 @@
 # Creates a tmux session for Virtuoso TUI workflow
 # Left pane: SSH to Docker with X11 forwarding for Virtuoso
 # Right pane: Local vcli commands (port 36539 already tunneled)
+#
+# [user-specific] Edit SSH credentials, port numbers, and paths before running.
+set -e
 
 SESSION="virtuoso-tui"
 SSH_OPTS="-o StrictHostKeyChecking=accept-new -o BatchMode=yes"

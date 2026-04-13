@@ -50,7 +50,7 @@ client.download_file("/tmp/debug.png", "output/debug.png")
 
 **Never call `maeMakeEditable()` unconditionally.** It can deadlock the bridge.
 
-**Recovery when stuck:** if the remote has no `python3` or `xdotool`, send Enter via Python 2.7 + ctypes directly on the Virtuoso display:
+**Recovery when stuck:** send Enter via Python 2.7 + X11 ctypes directly on the Virtuoso display (no external tools needed):
 ```bash
 # Find the Virtuoso DISPLAY (check /proc/<pid>/environ)
 DISPLAY=<virtuoso_display> python2.7 -c "
