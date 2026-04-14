@@ -62,15 +62,17 @@ impl VirtuosoClient {
         let port = if let Some(base_port) = tunnel.as_ref().and_then(|t| t.saved_port()) {
             base_port
         } else if let Ok(session_id) = std::env::var("VB_SESSION") {
+            // VB_SESSION may be a Maestro session name (e.g. "fnxSession8") rather than
+            // a bridge session ID — Maestro sessions don't have session files.
+            // Fall back to VB_PORT in that case.
             match crate::models::SessionInfo::load(&session_id) {
                 Ok(s) => {
                     tracing::info!("connecting to session '{}' on port {}", s.id, s.port);
                     s.port
                 }
-                Err(e) => {
-                    return Err(crate::error::VirtuosoError::Config(format!(
-                        "session '{session_id}' not found: {e}. Run `virtuoso session list`."
-                    )));
+                Err(_) => {
+                    tracing::debug!("session '{}' not a bridge session (no file), using VB_PORT", session_id);
+                    cfg.port
                 }
             }
         } else {
