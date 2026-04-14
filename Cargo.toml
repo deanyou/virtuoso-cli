@@ -1,6 +1,6 @@
 [package]
 name = "virtuoso-cli"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "CLI tool to control Cadence Virtuoso from anywhere, locally or remotely"
 license = "MIT"
