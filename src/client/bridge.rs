@@ -71,7 +71,10 @@ impl VirtuosoClient {
                     s.port
                 }
                 Err(_) => {
-                    tracing::debug!("session '{}' not a bridge session (no file), using VB_PORT", session_id);
+                    tracing::debug!(
+                        "session '{}' not a bridge session (no file), using VB_PORT",
+                        session_id
+                    );
                     cfg.port
                 }
             }
