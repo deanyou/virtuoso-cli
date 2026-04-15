@@ -425,9 +425,11 @@ pub fn job_list() -> Result<Value> {
     for job in &mut jobs {
         let _ = job.refresh();
     }
+    let jobs_value = serde_json::to_value(&jobs)
+        .map_err(|e| VirtuosoError::Execution(format!("Failed to serialize jobs: {e}")))?;
     Ok(json!({
         "count": jobs.len(),
-        "jobs": serde_json::to_value(&jobs).unwrap_or_default(),
+        "jobs": jobs_value,
     }))
 }
 

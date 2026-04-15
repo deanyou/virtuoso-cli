@@ -7,6 +7,35 @@ use crate::error::{Result, VirtuosoError};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+/// Cadence symbol orientation. Exactly the 8 values SKILL accepts.
+#[derive(Debug, Clone, Copy, Deserialize, clap::ValueEnum)]
+#[clap(rename_all = "verbatim")]
+pub enum Orient {
+    R0,
+    R90,
+    R180,
+    R270,
+    MX,
+    MY,
+    MXR90,
+    MYR90,
+}
+
+impl Orient {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::R0 => "R0",
+            Self::R90 => "R90",
+            Self::R180 => "R180",
+            Self::R270 => "R270",
+            Self::MX => "MX",
+            Self::MY => "MY",
+            Self::MXR90 => "MXR90",
+            Self::MYR90 => "MYR90",
+        }
+    }
+}
+
 // ── Atomic commands ─────────────────────────────────────────────────
 
 pub fn open(lib: &str, cell: &str, view: &str) -> Result<Value> {
@@ -25,7 +54,7 @@ pub fn place(
     name: &str,
     x: i64,
     y: i64,
-    orient: &str,
+    orient: Orient,
     params: &[(String, String)],
 ) -> Result<Value> {
     let (lib, cell) = master
@@ -33,7 +62,7 @@ pub fn place(
         .ok_or_else(|| VirtuosoError::Config("--master must be lib/cell format".into()))?;
     let client = VirtuosoClient::from_env()?;
     let mut ed = SchematicEditor::new(&client);
-    ed.add_instance(lib, cell, "symbol", name, (x, y), orient);
+    ed.add_instance(lib, cell, "symbol", name, (x, y), orient.as_str());
     for (k, v) in params {
         ed.set_param(name, k, v);
     }
@@ -168,13 +197,13 @@ pub struct SpecInstance {
     #[serde(default)]
     pub y: i64,
     #[serde(default = "default_orient")]
-    pub orient: String,
+    pub orient: Orient,
     #[serde(default)]
     pub params: HashMap<String, String>,
 }
 
-fn default_orient() -> String {
-    "R0".into()
+fn default_orient() -> Orient {
+    Orient::R0
 }
 
 #[derive(Deserialize)]
@@ -233,7 +262,7 @@ pub fn build(spec_path: &str) -> Result<Value> {
                 inst.name, inst.master
             ))
         })?;
-        ed.add_instance(lib, cell, "symbol", &inst.name, (inst.x, inst.y), &inst.orient);
+        ed.add_instance(lib, cell, "symbol", &inst.name, (inst.x, inst.y), inst.orient.as_str());
         for (k, v) in &inst.params {
             ed.set_param(&inst.name, k, v);
         }

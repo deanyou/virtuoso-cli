@@ -675,9 +675,9 @@ enum SchematicCmd {
         /// Y coordinate
         #[arg(long, default_value = "0")]
         y: i64,
-        /// Orientation (R0, R90, R180, R270, MY, MX)
-        #[arg(long, default_value = "R0")]
-        orient: String,
+        /// Orientation
+        #[arg(long, value_enum, default_value_t = commands::schematic::Orient::R0)]
+        orient: commands::schematic::Orient,
         /// Instance parameters as key=value pairs (e.g. w=14u,l=1u)
         #[arg(long)]
         params: Option<String>,
@@ -947,7 +947,7 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
                     Some((k.to_string(), v.to_string()))
                 })
                 .collect();
-            commands::schematic::place(&master, &name, x, y, &orient, &param_pairs)
+            commands::schematic::place(&master, &name, x, y, orient, &param_pairs)
         }
         SchematicCmd::Wire { net, points } => commands::schematic::wire_from_strings(&net, &points),
         SchematicCmd::Conn { net, from, to } => commands::schematic::conn(&net, &from, &to),
