@@ -588,28 +588,37 @@ enum MaestroCmd {
     /// List all active Maestro sessions
     ListSessions,
 
-    /// Set a design variable
+    /// Set a design variable value
     SetVar {
-        #[arg(long)]
-        session: String,
         #[arg(long)]
         name: String,
         #[arg(long)]
         value: String,
     },
 
-    /// Get enabled analyses
+    /// Get a design variable value
+    GetVar {
+        #[arg(long)]
+        name: String,
+    },
+
+    /// List all design variables
+    ListVars,
+
+    /// Get enabled analyses for a test
     GetAnalyses {
         #[arg(long)]
         session: String,
     },
 
-    /// Add an output expression
+    /// Add an output expression to a test
     AddOutput {
+        /// Output name (e.g. "maxOut")
         #[arg(long)]
-        session: String,
+        output_name: String,
+        /// Test name (e.g. "AC")
         #[arg(long)]
-        name: String,
+        test_name: String,
         #[arg(long)]
         expr: String,
     },
@@ -634,6 +643,55 @@ enum MaestroCmd {
         #[arg(long)]
         path: String,
     },
+
+    // --- Result Reading Commands ---
+
+    /// Open a history run for programmatic result access
+    OpenResults {
+        /// History run name (e.g. "Interactive.1")
+        #[arg(long)]
+        history: String,
+    },
+
+    /// Close the currently open results
+    CloseResults,
+
+    /// List all test names that have results in the current history
+    ResultTests,
+
+    /// List all output names for a given test in the current history
+    ResultOutputs {
+        #[arg(long)]
+        test_name: String,
+    },
+
+    /// Get the value of a specific output
+    GetOutputValue {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        test_name: String,
+        /// Corner name (optional)
+        #[arg(long)]
+        corner: Option<String>,
+    },
+
+    /// Get the spec pass/fail status for an output
+    SpecStatus {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        test_name: String,
+    },
+
+    /// Get simulation messages (errors/warnings) from last run
+    SimMessages {
+        #[arg(long)]
+        session: String,
+    },
+
+    /// List available history runs for the current Maestro session
+    HistoryList,
 }
 
 #[derive(Subcommand)]
@@ -973,19 +1031,36 @@ fn main() {
             MaestroCmd::Close { session } => commands::maestro::close(&session),
             MaestroCmd::ListSessions => commands::maestro::list_sessions(),
             MaestroCmd::SetVar {
-                session,
                 name,
                 value,
-            } => commands::maestro::set_var(&session, &name, &value),
+            } => commands::maestro::set_var(&name, &value),
+            MaestroCmd::GetVar { name } => commands::maestro::get_var(&name),
+            MaestroCmd::ListVars => commands::maestro::list_vars(),
             MaestroCmd::GetAnalyses { session } => commands::maestro::get_analyses(&session),
             MaestroCmd::AddOutput {
-                session,
-                name,
+                output_name,
+                test_name,
                 expr,
-            } => commands::maestro::add_output(&session, &name, &expr),
+            } => commands::maestro::add_output(&output_name, &test_name, &expr),
             MaestroCmd::Run { session } => commands::maestro::run(&session),
             MaestroCmd::Save { session } => commands::maestro::save(&session),
             MaestroCmd::Export { session, path } => commands::maestro::export(&session, &path),
+            MaestroCmd::OpenResults { history } => commands::maestro::open_results(&history),
+            MaestroCmd::CloseResults => commands::maestro::close_results(),
+            MaestroCmd::ResultTests => commands::maestro::get_result_tests(),
+            MaestroCmd::ResultOutputs { test_name } => {
+                commands::maestro::get_result_outputs(&test_name)
+            }
+            MaestroCmd::GetOutputValue {
+                name,
+                test_name,
+                corner,
+            } => commands::maestro::get_output_value(&name, &test_name, corner.as_deref()),
+            MaestroCmd::SpecStatus { name, test_name } => {
+                commands::maestro::get_spec_status(&name, &test_name)
+            }
+            MaestroCmd::SimMessages { session } => commands::maestro::get_sim_messages(&session),
+            MaestroCmd::HistoryList => commands::maestro::get_history_list(),
         },
         Commands::Schematic(cmd) => match cmd {
             SchematicCmd::Open { lib, cell, view } => commands::schematic::open(&lib, &cell, &view),
