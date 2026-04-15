@@ -77,13 +77,15 @@ impl MaestroOps {
         )
     }
 
-    /// Add an output expression to the test.
-    /// maeAddOutput(t_outputName t_testName [?outputType ?expr ?session])
-    pub fn add_output(&self, output_name: &str, test_name: &str, expr: &str) -> String {
+    /// Add an output expression to the session (resolves setup name internally).
+    /// maeAddOutput(t_outputName t_testName ?expr e)
+    pub fn add_output(&self, session: &str, output_name: &str, expr: &str) -> String {
+        let session = escape_skill_string(session);
         let output_name = escape_skill_string(output_name);
-        let test_name = escape_skill_string(test_name);
         let expr = escape_skill_string(expr);
-        format!(r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#)
+        format!(
+            r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeAddOutput("{output_name}" setup ?expr "{expr}"))"#
+        )
     }
 
     /// Set the design target for a test.
