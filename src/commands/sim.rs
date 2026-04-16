@@ -341,15 +341,11 @@ pub fn netlist(lib: &str, cell: &str, view: &str, recreate: bool) -> Result<Valu
     let nr = client.execute_skill(create_cmd, Some(60))?;
     let nr_out = nr.output.trim().trim_matches('"').to_string();
 
-    if !nr.ok() || nr_out == "nil" {
+    if !nr.skill_ok() {
+        let errs = if nr.errors.is_empty() { "none".into() } else { nr.errors.join("; ") };
         return Err(VirtuosoError::Execution(format!(
-            "createNetlist returned nil. Errors: {}. \
-             Ensure the schematic is saved and the PDK models are loaded.",
-            if nr.errors.is_empty() {
-                "none".to_string()
-            } else {
-                nr.errors.join("; ")
-            }
+            "createNetlist returned nil. Errors: {errs}. \
+             Ensure the schematic is saved and the PDK models are loaded."
         )));
     }
 
@@ -357,15 +353,23 @@ pub fn netlist(lib: &str, cell: &str, view: &str, recreate: bool) -> Result<Valu
     // createNetlist returns either:
     //   (a) the full path to input.scs  — use directly
     //   (b) the resultsDir path         — append /netlist/input.scs
-    //   (c) "t"                         — fall back to resultsDir()
+    //   (c) "t"                         — reuse resultsDir from setup (sr.output)
     let candidate = if nr_out.ends_with(".scs") {
         nr_out.clone()
     } else if nr_out != "t" && !nr_out.is_empty() {
         format!("{nr_out}/netlist/input.scs")
     } else {
-        // createNetlist returned "t"; ask for resultsDir explicitly
-        let rdir = client.execute_skill("resultsDir()", None)?;
-        let rdir_val = rdir.output.trim().trim_matches('"').to_string();
+        // createNetlist returned "t"; reuse the resultsDir captured during setup,
+        // falling back to an extra SKILL call only if setup returned nil.
+        let rdir_val = {
+            let from_setup = sr.output.trim().trim_matches('"');
+            if from_setup != "nil" && !from_setup.is_empty() {
+                from_setup.to_string()
+            } else {
+                let rdir = client.execute_skill("resultsDir()", None)?;
+                rdir.output.trim().trim_matches('"').to_string()
+            }
+        };
         if rdir_val == "nil" || rdir_val.is_empty() {
             return Err(VirtuosoError::Execution(
                 "createNetlist returned 't' but resultsDir() is nil. \
@@ -377,14 +381,9 @@ pub fn netlist(lib: &str, cell: &str, view: &str, recreate: bool) -> Result<Valu
     };
 
     // Step 4: Verify the file actually exists on disk.
-    let check = client.execute_skill(
-        &format!(r#"isFile("{candidate}")"#),
-        None,
-    )?;
-    let file_exists = {
-        let v = check.output.trim().trim_matches('"');
-        v != "nil" && v != "0"
-    };
+    let check = client.execute_skill(&format!(r#"isFile("{candidate}")"#), None)?;
+    let v = check.output.trim().trim_matches('"');
+    let file_exists = v != "nil" && v != "0";
 
     if !file_exists {
         return Err(VirtuosoError::Execution(format!(
