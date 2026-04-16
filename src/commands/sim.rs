@@ -316,46 +316,88 @@ pub fn results() -> Result<Value> {
     }))
 }
 
-pub fn netlist(recreate: bool) -> Result<Value> {
+pub fn netlist(lib: &str, cell: &str, view: &str, recreate: bool) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
-    // Method 1: Ocean createNetlist
-    let r1 = client.execute_skill(
-        if recreate {
-            "createNetlist(?recreateAll t ?display nil)"
-        } else {
-            "createNetlist(?display nil)"
-        },
-        Some(60),
-    )?;
-    let r1_out = r1.output.trim().trim_matches('"');
-    if r1.ok() && r1_out != "nil" {
-        return Ok(json!({
-            "status": "success",
-            "method": "createNetlist",
-            "output": r1_out,
-        }));
+    // Step 1: Establish Ocean session (simulator + design) so createNetlist has
+    // a target even on a cold start without a prior ADE session.
+    // setup_skill ends with resultsDir() — may return "nil" if not yet bound;
+    // that's acceptable here since createNetlist returns the path directly.
+    let setup = ocean::setup_skill(lib, cell, view, "spectre");
+    let sr = client.execute_skill(&setup, None)?;
+    if !sr.ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "sim setup failed before netlisting: {}",
+            sr.errors.join("; ")
+        )));
     }
 
-    // Method 2: ASI session-based netlisting
-    let r2 = client.execute_skill(
-        "asiCreateNetlist(asiGetSession(hiGetCurrentWindow()))",
-        Some(60),
-    )?;
-    let r2_out = r2.output.trim().trim_matches('"');
-    if r2.ok() && r2_out != "nil" {
-        return Ok(json!({
-            "status": "success",
-            "method": "asiCreateNetlist",
-            "output": r2_out,
-        }));
+    // Step 2: createNetlist — returns the netlist file path on success, nil on failure.
+    let create_cmd = if recreate {
+        "createNetlist(?recreateAll t ?display nil)"
+    } else {
+        "createNetlist(?display nil)"
+    };
+    let nr = client.execute_skill(create_cmd, Some(60))?;
+    let nr_out = nr.output.trim().trim_matches('"').to_string();
+
+    if !nr.ok() || nr_out == "nil" {
+        return Err(VirtuosoError::Execution(format!(
+            "createNetlist returned nil. Errors: {}. \
+             Ensure the schematic is saved and the PDK models are loaded.",
+            if nr.errors.is_empty() {
+                "none".to_string()
+            } else {
+                nr.errors.join("; ")
+            }
+        )));
     }
 
-    Err(VirtuosoError::Execution(
-        "Cannot create netlist programmatically. \
-         Open ADE L for this cell and run Simulation → Netlist and Run."
-            .into(),
-    ))
+    // Step 3: Resolve the actual netlist path.
+    // createNetlist returns either:
+    //   (a) the full path to input.scs  — use directly
+    //   (b) the resultsDir path         — append /netlist/input.scs
+    //   (c) "t"                         — fall back to resultsDir()
+    let candidate = if nr_out.ends_with(".scs") {
+        nr_out.clone()
+    } else if nr_out != "t" && !nr_out.is_empty() {
+        format!("{nr_out}/netlist/input.scs")
+    } else {
+        // createNetlist returned "t"; ask for resultsDir explicitly
+        let rdir = client.execute_skill("resultsDir()", None)?;
+        let rdir_val = rdir.output.trim().trim_matches('"').to_string();
+        if rdir_val == "nil" || rdir_val.is_empty() {
+            return Err(VirtuosoError::Execution(
+                "createNetlist returned 't' but resultsDir() is nil. \
+                 Run `vcli sim setup` first or open ADE L for this cell."
+                    .into(),
+            ));
+        }
+        format!("{rdir_val}/netlist/input.scs")
+    };
+
+    // Step 4: Verify the file actually exists on disk.
+    let check = client.execute_skill(
+        &format!(r#"isFile("{candidate}")"#),
+        None,
+    )?;
+    let file_exists = {
+        let v = check.output.trim().trim_matches('"');
+        v != "nil" && v != "0"
+    };
+
+    if !file_exists {
+        return Err(VirtuosoError::Execution(format!(
+            "createNetlist ran but file not found at '{candidate}'. \
+             createNetlist output was: '{nr_out}'. \
+             Check resultsDir() and ensure write permissions."
+        )));
+    }
+
+    Ok(json!({
+        "status": "success",
+        "netlist_path": candidate,
+    }))
 }
 
 // ── Async job commands ──────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: knowledge: ratatui-tui-architecture; maxim: test-with-ci-toolchain-before-push
+- Last Note: knowledge: smic-pdk-transistor-w-skill, cadence-ic23-schcreateinst
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`

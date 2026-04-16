@@ -417,15 +417,28 @@ enum SimCmd {
     /// Show simulation results directory and contents
     Results,
 
-    /// Force netlist regeneration
+    /// Regenerate simulation netlist (self-contained: sets up session then exports)
     #[command(
-        long_about = "Attempt to regenerate the simulation netlist programmatically.\n\n\
+        long_about = "Set up the Ocean session and regenerate the Spectre netlist.\n\
+            Does not require a prior `sim setup` or open ADE window.\n\n\
             Examples:\n  \
-            virtuoso sim netlist\n  \
-            virtuoso sim netlist --recreate"
+            virtuoso sim netlist --lib FT0001A_SH --cell ota5t\n  \
+            virtuoso sim netlist --lib FT0001A_SH --cell ota5t --recreate"
     )]
     Netlist {
-        /// Force full netlist recreation
+        /// Library name
+        #[arg(long)]
+        lib: String,
+
+        /// Cell name
+        #[arg(long)]
+        cell: String,
+
+        /// View name
+        #[arg(long, default_value = "schematic")]
+        view: String,
+
+        /// Force full netlist recreation (clears stale cache)
         #[arg(long)]
         recreate: bool,
     },
@@ -898,7 +911,12 @@ fn dispatch_sim(cmd: SimCmd) -> error::Result<serde_json::Value> {
         } => commands::sim::sweep(&var, from, to, step, &analysis, &measure, timeout),
         SimCmd::Corner { file, timeout } => commands::sim::corner(&file, timeout),
         SimCmd::Results => commands::sim::results(),
-        SimCmd::Netlist { recreate } => commands::sim::netlist(recreate),
+        SimCmd::Netlist {
+            lib,
+            cell,
+            view,
+            recreate,
+        } => commands::sim::netlist(&lib, &cell, &view, recreate),
         SimCmd::RunAsync { netlist } => commands::sim::run_async(&netlist),
         SimCmd::JobStatus { id } => commands::sim::job_status(&id),
         SimCmd::JobList => commands::sim::job_list(),
