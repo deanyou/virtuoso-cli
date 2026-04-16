@@ -35,12 +35,18 @@ The netlister reads the OA C++ DB property `simW` (not the SKILL-accessible CDF 
 ### What WORKS
 
 ```skill
-cv = dbOpenCellViewByType("FT0001A_SH" "ota5t" "schematic" "schematic" "a")
+; ⚠️ In IC23, use 3-arg form — 4/5-arg with viewType returns nil
+cv = dbOpenCellViewByType("FT0001A_SH" "ota5t" "schematic")   ; opens in "a" mode
+; If Ocean holds the cv, reuse it:
+; cv = car(setof(ocv dbGetOpenCellViews()
+;                and(ocv~>libName=="FT0001A_SH" ocv~>cellName=="ota5t" ocv~>mode=="a")))
 m1 = car(setof(i cv~>instances i~>name=="M1"))
 cdf = cdfGetInstCDF(m1)
 cdfFindParamByName(cdf "simW")~>value = "1.1u"   ; ← key: set simW not w or fw
 cdfFindParamByName(cdf "l")~>value   = "500n"
 dbSave(cv)
+; Note: dbSave alone invalidates extraction timestamp (OSSHNL-109).
+; vcli sim netlist auto-recovers via schCheck+dbSave internally.
 ```
 
 Then export netlist:
@@ -48,6 +54,11 @@ Then export netlist:
 simulator('spectre)
 design("FT0001A_SH" "ota5t" "schematic")
 createNetlist(?recreateAll t ?display nil)
+```
+
+Or use vcli (handles OSSHNL-109 automatically):
+```bash
+vcli sim netlist --lib FT0001A_SH --cell ota5t --recreate
 ```
 
 The exported `.scs` will contain `w=1.1u l=500n` for M1.
@@ -64,7 +75,8 @@ The exported `.scs` will contain `w=1.1u l=500n` for M1.
 ### Diagnostic SKILL (read `propMapping`)
 
 ```skill
-cv = dbOpenCellViewByType("FT0001A_SH" "ota5t" "schematic" "schematic" "r")
+; 3-arg form opens in "a" mode by default in IC23
+cv = dbOpenCellViewByType("FT0001A_SH" "ota5t" "schematic")
 m1 = car(setof(i cv~>instances i~>name=="M1"))
 cdf = cdfGetInstCDF(m1)
 sprintf(nil "%L" cdf~>propMapping)

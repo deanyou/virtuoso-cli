@@ -5,12 +5,13 @@ description: |
   (1) run() returns nil in <1s with no spectre.out, (2) createNetlist() returns nil,
   (3) sim results are all nil after changing W/L to design variables,
   (4) netlist file was deleted or is stale, (5) sim run previously worked but
-  now fails after calling `sim setup` again. Covers: the resultsDir binding trap
-  (MOST COMMON), stale netlists, sim setup disrupting sessions, direct spectre
+  now fails after calling `sim setup` again, (6) OSSHNL-109 error after SKILL edit.
+  Covers: the resultsDir binding trap (MOST COMMON), OSSHNL-109 extraction timestamp
+  stale error, stale netlists, sim setup disrupting sessions, direct spectre
   invocation as bypass, and PSF signal naming (I0.NM0 prefix).
 author: Claude Code
-version: 2.0.0
-date: 2026-04-06
+version: 2.1.0
+date: 2026-04-16
 ---
 
 # Ocean run() Reliability & Netlist Regeneration
@@ -78,14 +79,64 @@ virtuoso skill exec 'asiGetSession(hiGetCurrentWindow())'
 
 ---
 
-## Root Cause 3: Stale or Missing Netlist
+## Root Cause 3: OSSHNL-109 — Extraction Timestamp Stale
+
+**Symptom**: `createNetlist` returns nil. `si.foregnd.log` contains:
+```
+ERROR (OSSHNL-109): The cellview '…/schematic' has been modified since the last extraction.
+Run Check and Save.
+```
+**artSimEnvLog** shows: `generate netlist... ...unsuccessful.`
+
+**Root cause**: `dbSave(cv)` writes the OA file but does NOT update the extraction
+timestamp. `schCheck(cv)` is what updates it. Calling `dbSave` without `schCheck`
+leaves the timestamp stale; the next incremental `createNetlist` sees a mismatch.
+
+**Fix**: Run `schCheck(cv)` before `dbSave(cv)`. Or use `vcli sim netlist` — it
+auto-recovers by running `schCheck + dbSave` and retrying when `createNetlist` returns nil.
+
+```bash
+# vcli handles OSSHNL-109 automatically (v0.1.7+)
+vcli sim netlist --lib FT0001A_SH --cell ota5t
+```
+
+Manual fix in SKILL:
+```skill
+; Get the cv (3-arg form opens "a" mode in IC23; fallback for Ocean-held cv)
+cv = dbOpenCellViewByType("lib" "cell" "view")
+unless(cv
+  cv = car(setof(ocv dbGetOpenCellViews()
+                 and(ocv~>libName=="lib" ocv~>cellName=="cell" ocv~>mode=="a"))))
+chk = schCheck(cv)
+when(car(chk)==0 dbSave(cv))   ; only save if no check errors
+```
+
+**Also note**: `dbReplaceProp(inst "w" ...)` sets the display parameter, NOT the
+netlisted `simW`. For SMIC PDK n12/p12 width changes, use:
+```skill
+cdfFindParamByName(cdfGetInstCDF(inst) "simW")~>value = "1.3u"
+```
+
+---
+
+## Root Cause 4: Stale or Missing Netlist
 
 After editing a schematic (e.g., adding desVar variables), the netlist becomes stale.
 `createNetlist()` requires an ADE L window open for that cell — without it, returns nil.
 
 ---
 
-## Solution A: Restore resultsDir (for Root Cause 1)
+## Solution A: vcli sim netlist (handles OSSHNL-109 automatically, v0.1.7+)
+
+```bash
+# Regenerate netlist — auto-recovers from OSSHNL-109 via schCheck+dbSave retry
+vcli sim netlist --lib <lib> --cell <cell>
+vcli sim netlist --lib <lib> --cell <cell> --recreate   # force full recreation
+```
+
+---
+
+## Solution B: Restore resultsDir (for Root Cause 1)
 
 ```bash
 virtuoso skill exec 'resultsDir("/tmp/opt_5t_ota")'
@@ -164,6 +215,7 @@ Or in SKILL: `openResults("/psf/path") selectResult('acSweep) VF("net1")`
 3. `run()` → returns path (OK) or nil (broken)?
 4. PSF dir has `.dc`/`.ac` files → simulation produced data
 5. PSF dir only has `simRunData`, `artistLogFile`, `variables_file` → simulation failed
+6. `cat <netlist_dir>/si.foregnd.log` → contains OSSHNL-109? → use `vcli sim netlist` to auto-fix
 
 ---
 
