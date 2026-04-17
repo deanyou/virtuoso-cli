@@ -74,7 +74,7 @@ virtuoso sim measure --analysis dcOp --expr 'value(getData("/NM0:gm" ?result "dc
 - **`simulator('spectre)` resets modelFile** — always re-set modelFile after `sim setup`
 - **Ocean functions don't work inside `let` blocks** — call `simulator()`, `design()`, `analysis()`, `run()` at top level
 - **Ocean state persists across CLI calls** — no need to re-setup between runs, but modelFile must be set each session
-- **`design()` returns nil**: the cell may not have the view you specified — check with `v~>name`
+- **`design()` returns nil**: two causes — (a) the cell may not have the view you specified (check `v~>name`), or (b) the library is not registered in this Virtuoso session (Virtuoso started from wrong directory). Run `ddGetLibList()` to check; if the library is absent, call `hiLoadCDSLibDefs` from the CIW (never via bridge)
 - **`run()` takes <0.3s and no spectre.out**: modelFile not set or paths wrong — spectre silently fails
 - **`run()` takes >1s with spectre.out**: real execution happened — check spectre.out for errors
 - **Netlisting error OSSHNL-116**: a subcell has no spectre/schematic view (e.g., `notes` cell)
