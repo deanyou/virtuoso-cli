@@ -54,6 +54,21 @@ The fallback via `dbGetOpenCellViews()` finds the already-open writable cv handl
 2. On nil: run `schCheck+dbSave` via SKILL (with cv fallback)
 3. Retry createNetlist
 
+### Distinguishing OSSHNL-109 from Library-Not-Registered (both produce err_count == -1)
+
+When `dbOpenCellViewByType` returns nil (`err_count == -1`), two root causes are possible:
+- **OSSHNL-109**: library IS registered, cv is held open in "a" mode by Ocean
+- **Library not registered**: Virtuoso was started from a directory without a `cds.lib` that includes the library
+
+Use a `ddGetLibList()` probe to distinguish them:
+```skill
+when(car(setof(l ddGetLibList() l~>name=="FT0001A_SH")) "found")
+```
+- Returns `"found"` → OSSHNL-109, proceed with schCheck+retry
+- Returns nil → library not registered, return actionable error to user
+
+See [[cadence-virtuoso-library-not-registered]] for the fix.
+
 ## When to Use
 - Any time `createNetlist` returns nil after a SKILL-based schematic edit
 - When `si.foregnd.log` contains OSSHNL-109
@@ -62,3 +77,4 @@ The fallback via `dbGetOpenCellViews()` finds the already-open writable cv handl
 ## Context Links
 - Related: [[cadence-ic23-dbopencellviewbytype]] (cv open modes, already-held cv pattern)
 - Related: [[smic-pdk-transistor-w-skill]] (what to set for W/L changes)
+- Related: [[cadence-virtuoso-library-not-registered]] (same err_count == -1 symptom, different root cause)
