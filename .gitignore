@@ -11,3 +11,5 @@ sim/
 plots/
 # Async sim job output dirs (8-char UUID)
 [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/
+cds.lib
+libManager.log

@@ -366,9 +366,36 @@ fn create_netlist_inner(
         .unwrap_or(-1);
 
     if err_count == -1 {
-        // cv not openable (no ADE window open); schCheck cannot run.
-        // createNetlist may have written the file anyway — return "t" so the
-        // caller resolves via resultsDir() and verifies the file exists.
+        // cv not openable — two distinct causes:
+        //   (a) OSSHNL-109: library IS registered, cv held open in "a" mode by Ocean.
+        //       createNetlist may have written the file; return "t" so the caller
+        //       resolves via resultsDir() and verifies the file exists.
+        //   (b) Library not registered in this Virtuoso session (e.g. Virtuoso was
+        //       started from a directory without a cds.lib that includes the library).
+        //       createNetlist silently returned nil; returning "t" would produce a
+        //       confusing "file not found" error downstream.
+        //
+        // Distinguish by checking ddGetLibList() for the library name.
+        let lib_probe = format!(
+            r#"when(car(setof(l ddGetLibList() l~>name=="{lib_e}")) "found")"#
+        );
+        let probe_r = client.execute_skill(&lib_probe, None)?;
+        let lib_found = probe_r.output.trim().trim_matches('"');
+        if lib_found != "found" {
+            let cwd_r = client.execute_skill("getWorkingDir()", None)?;
+            let cwd = cwd_r.output.trim().trim_matches('"');
+            let cwd_note = if !cwd.is_empty() && cwd != "nil" {
+                format!(" Virtuoso was started from '{cwd}'.")
+            } else {
+                String::new()
+            };
+            return Err(VirtuosoError::Execution(format!(
+                "Library '{lib}' is not registered in the current Virtuoso session.{cwd_note} \
+                 Start Virtuoso from the project directory whose cds.lib includes '{lib}', \
+                 or run hiLoadCDSLibDefs() in the CIW to register it at runtime."
+            )));
+        }
+        // Library is registered but cv cannot be opened (OSSHNL-109 fallback).
         return Ok("t".into());
     }
     if err_count != 0 {
@@ -439,14 +466,27 @@ pub fn netlist(lib: &str, cell: &str, view: &str, recreate: bool, analyses: &[St
         format!("{nr_out}/netlist/input.scs")
     } else {
         // createNetlist returned "t"; reuse the resultsDir captured during setup,
-        // falling back to an extra SKILL call only if setup returned nil.
+        // falling back to an extra SKILL call if setup returned nil or a relative path.
+        // If resultsDir is relative, prepend getWorkingDir() to make it absolute.
         let rdir_val = {
             let from_setup = sr.output.trim().trim_matches('"');
-            if from_setup != "nil" && !from_setup.is_empty() {
+            let raw = if from_setup != "nil" && !from_setup.is_empty() && from_setup.starts_with('/') {
                 from_setup.to_string()
             } else {
                 let rdir = client.execute_skill("resultsDir()", None)?;
                 rdir.output.trim().trim_matches('"').to_string()
+            };
+            if raw != "nil" && !raw.is_empty() && !raw.starts_with('/') {
+                // Relative path — prepend Ocean's working directory
+                let cwd_r = client.execute_skill("getWorkingDir()", None)?;
+                let cwd = cwd_r.output.trim().trim_matches('"');
+                if cwd != "nil" && !cwd.is_empty() {
+                    format!("{cwd}/{raw}")
+                } else {
+                    raw
+                }
+            } else {
+                raw
             }
         };
         if rdir_val == "nil" || rdir_val.is_empty() {
