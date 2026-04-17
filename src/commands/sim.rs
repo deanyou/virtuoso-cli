@@ -393,7 +393,6 @@ fn create_netlist_inner(
                  or run hiLoadCDSLibDefs() in the CIW to register it at runtime."
             )));
         }
-        // Library is registered but cv cannot be opened (OSSHNL-109 fallback).
         return Ok("t".into());
     }
     if err_count != 0 {
@@ -481,8 +480,8 @@ pub fn netlist(
                     let rdir = client.execute_skill("resultsDir()", None)?;
                     rdir.output.trim().trim_matches('"').to_string()
                 };
-            if raw != "nil" && !raw.is_empty() && !raw.starts_with('/') {
-                // Relative path — prepend Ocean's working directory
+            // Relative path — prepend Ocean's working directory to make it absolute.
+            if !raw.is_empty() && raw != "nil" && !raw.starts_with('/') {
                 let cwd_r = client.execute_skill("getWorkingDir()", None)?;
                 let cwd = cwd_r.output.trim().trim_matches('"');
                 if cwd != "nil" && !cwd.is_empty() {
