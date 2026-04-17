@@ -70,15 +70,26 @@ virtuoso skill exec 'resultsDir()' --format json
 
 | run() output | Meaning |
 |-------------|---------|
-| Returns resultsDir path | Simulation completed |
+| Returns resultsDir path AND PSF data files exist | Simulation completed ✓ |
+| Returns resultsDir path BUT only artistLogFile/simRunData/spectre.out | **Spectre failed** — run() does NOT check spectre's exit code |
 | Returns nil, takes <0.01s | Analysis not configured or session lost |
 | Returns nil, takes >0.1s | Netlisting ran but spectre may have failed |
+
+⚠️ **`run()` returning a non-nil path is not sufficient proof of success.** Spectre can
+terminate with fatal errors (e.g., SFE-868) and `run()` still returns the resultsDir.
+Always verify PSF data files exist:
+```bash
+tail -2 <resultsDir>/psf/spectre.out
+# ✓ "spectre completes with 0 errors"
+# ✗ "spectre terminated prematurely due to fatal error"
+```
 
 ## Common errors in spectre.out
 
 | Error | Fix |
 |-------|-----|
-| SFE-868: Cannot open input file | Model path wrong — verify file exists |
+| SFE-868: ADE-generated path `.../oa/lib/../models/...` | Patch input.scs: replace with direct absolute model path + `section=tt` — see `/spectre-netlist-gotchas` §8 |
+| SFE-868: Cannot open input file (other) | Model path wrong — verify file exists |
 | SFE-675: no valid section name | Empty section `""` in modelFile for .lib — remove it |
 | SFE-1997: parameter not assigned | Set `desVar()` for the missing parameter |
 | OSSHNL-116: Cannot descend into views | Subcell missing spectre view — remove instance or add view |

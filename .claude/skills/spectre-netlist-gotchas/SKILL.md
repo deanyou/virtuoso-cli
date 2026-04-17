@@ -9,7 +9,8 @@ description: |
   (5) parsing PSF ASCII output from Spectre (dc_op.dc, ac_gain.ac, noise_an.noise),
   (6) phase margin calculation for inverting amplifier topologies,
   (7) slew rate measurement gives wrong result with small-signal step — need large signal,
-  (8) ICMR from DC sweep — use transistor region fields, not CM gain (which is ≈ 0).
+  (8) ICMR from DC sweep — use transistor region fields, not CM gain (which is ≈ 0),
+  (9) SFE-868 from ADE-generated netlist — oa/lib/../ model path only works in ADE interactive mode.
 author: Claude Code
 version: 1.0.0
 date: 2026-04-07
@@ -231,6 +232,67 @@ vov_m4 = abs(op["m4:vdsat"])     # NMOS load overdrive
 vov_m2 = abs(op["m2:vdsat"])     # PMOS diff pair overdrive
 vtail  = op["vtail"]
 output_swing = (vtail - vov_m2) - vov_m4
+```
+
+---
+
+## 8. ADE-Generated Netlist: Model Path Fails for Direct Invocation (SFE-868)
+
+### Problem
+Running `spectre input.scs` directly on an ADE-generated netlist fails with SFE-868:
+```
+ERROR (SFE-868): Cannot open the input file
+  '.../oa/smic13mmrf_1233/../models/spectre/ms013_io33_v2p6_7p_spe.lib'
+ERROR (SFE-868): Cannot open the input file 'tt'
+spectre terminated prematurely due to fatal error.
+```
+
+### Root Cause
+ADE generates model include paths using an OA-relative pattern:
+```
+include ".../oa/smic13mmrf_1233//../models/spectre/ms013_io33_v2p6_7p_spe.lib"
+include "tt"
+```
+The `..` goes up one level from `smic13mmrf_1233/` into `oa/` — resolving to
+`oa/models/spectre/` which does not exist. When ADE runs spectre via `runSimulation`
+with `+adespetkn=adespe`, it uses OA-aware path resolution that bypasses this
+filesystem issue. Standalone spectre does plain filesystem `..` traversal and fails.
+
+### Fix: Patch to Absolute Path Before Running
+```bash
+# Find the correct path (one level up from oa/):
+# .../0.13um_1p3m_8k/oa/smic13mmrf_1233/../  →  .../0.13um_1p3m_8k/oa/  (wrong)
+# correct:  .../0.13um_1p3m_8k/models/spectre/...
+
+# Replace the two broken lines with a direct include + section:
+sed -i \
+  -e 's|include ".*/oa/smic13mmrf_1233//../models/spectre/ms013_io33_v2p6_7p_spe.lib"|include "/foundry/smic/013mmrf/pdk/20250911/cadence/0.13um_1p3m_8k/models/spectre/ms013_io33_v2p6_7p_spe.lib" section=tt|' \
+  -e '/^include "tt"$/d' \
+  input.scs
+```
+
+Or manually replace:
+```
+// ✗ ADE-generated (broken for standalone)
+include ".../oa/smic13mmrf_1233//../models/spectre/ms013_io33_v2p6_7p_spe.lib"
+include "tt"
+
+// ✓ Direct path (works for standalone spectre)
+include "/foundry/smic/013mmrf/pdk/20250911/cadence/0.13um_1p3m_8k/models/spectre/ms013_io33_v2p6_7p_spe.lib" section=tt
+```
+
+### Warning: Patch Is Overwritten on Re-Netlist
+Every `vcli sim netlist --recreate` regenerates input.scs with the broken ADE path.
+Reapply the patch after each re-netlist when using standalone spectre.
+
+### Also: `vcli sim run` Reports Success Even When Spectre Fails This Way
+`run()` returns the resultsDir (non-nil = "success" to Ocean) the moment spectre
+is launched, before spectre's exit code is checked. Always verify:
+```bash
+tail -2 <resultsDir>/psf/spectre.out
+# ✓ "spectre completes with 0 errors"
+# ✗ "spectre terminated prematurely due to fatal error"
+ls <resultsDir>/psf/*.dc 2>/dev/null || echo "NO DATA FILES — sim failed"
 ```
 
 ---

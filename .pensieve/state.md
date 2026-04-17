@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: knowledge: cadence-osshnl-109 fix verified; smic-pdk-transistor-w-skill fixed 5-arg form; ocean-netlist-regen skill updated
+- Last Note: added spectre-ade-model-path and ocean-design-cell-switch knowledge entries
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`
