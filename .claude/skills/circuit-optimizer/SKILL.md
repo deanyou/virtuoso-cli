@@ -282,9 +282,9 @@ ls process_data/*/opt_history/*.json
 # Continues in the current phase with accumulated history
 ```
 
-## Bandgap IP Support (vcli optim)
+## Bandgap IP Support
 
-For bandgap circuits, use the dedicated `vcli optim` command group instead of manual iteration.
+For bandgap circuits, use the bundled script `scripts/run_bandgap_sweep.py`.
 
 ### Bandgap FOM (Figure of Merit)
 
@@ -302,7 +302,7 @@ If feasible:   cost = w_vbg * |1 - Vbg/Vbg_target|
 
 Default weights: `w_vbg=1.0`, `w_psrr=0.5`, `w_tc=0.3`
 
-### Bandgap Workflow with vcli optim
+### Bandgap Workflow
 
 ```bash
 # Step 1: Write spec YAML
@@ -328,29 +328,49 @@ EOF
 # template.scs must contain: parameters W=${W} L=${L}
 
 # Step 3: Run batch (all W×L combos)
-vcli optim run --spec bandgap.yaml --netlist template.scs --timeout 600
+python ${CLAUDE_SKILL_DIR}/scripts/run_bandgap_sweep.py run \
+  --spec bandgap.yaml --netlist template.scs --timeout 600
 # → {"optim_id": "bg-a3c4f9", "total_jobs": 50, "completed": 48, ...}
 
 # Step 4: Check status
-vcli optim status bg-a3c4f9
+python ${CLAUDE_SKILL_DIR}/scripts/run_bandgap_sweep.py status bg-a3c4f9
 
 # Step 5: Score results — read raw PSF dirs, apply FOM above
-# best_dir = state["best"]["raw_dir"]
-# measure Vbg, PSRR, TC from PSF files
+# best["raw_dir"] contains the PSF directory for the best job
 
 # Step 6: Suggest next W×L range (exploit best, halve step)
 # Update spec YAML with narrower range around best params
-# Repeat from Step 3 (up to max_iter total iterations)
+# Repeat from Step 3 (multi-iteration loop driven by this skill)
 
 # Step 7: Generate report
-vcli optim report bg-a3c4f9 --output bg_report.md
+python ${CLAUDE_SKILL_DIR}/scripts/run_bandgap_sweep.py report bg-a3c4f9 --output bg_report.md
 ```
 
-### When to Use vcli optim vs Manual Loop
+### Spec YAML Reference
+
+```yaml
+ip_type: bandgap        # required, identifies IP type
+target:
+  Vbg: 1.20             # required (V) — nominal bandgap voltage
+  PSRR: 80              # optional (dB)
+  TC: 20                # optional (ppm/°C)
+params:
+  W:                    # any parameter name matching ${W} in template
+    min: 1e-6
+    max: 10e-6
+    step: 1e-6
+  L:
+    min: 0.18e-6
+    max: 1e-6
+    step: 0.18e-6
+corner: tt              # optional, default "tt"
+```
+
+### When to Use Script vs Manual Loop
 
 | Scenario | Use |
 |----------|-----|
-| Bandgap W/L sweep | `vcli optim run` |
+| Bandgap W/L sweep | `run_bandgap_sweep.py run` |
 | OTA multi-param (gmid, L, Cc) | Manual iteration (this skill) |
 | PVT corners on known sizing | `vcli sim corner` |
 | Arbitrary IP first sizing | `/spec-driven-circuit-design` then this skill |

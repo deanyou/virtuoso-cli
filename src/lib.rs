@@ -9,7 +9,6 @@ pub mod exit_codes;
 pub mod models;
 pub mod ocean;
 pub mod output;
-pub mod spec;
 pub mod spectre;
 pub mod transport;
 pub mod tui;
