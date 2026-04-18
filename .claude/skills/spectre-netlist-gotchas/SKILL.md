@@ -21,28 +21,45 @@ date: 2026-04-07
 Lessons from standalone Spectre simulation (no ADE/Virtuoso), covering vsource syntax,
 noise analysis setup, PSF ASCII parsing, and PM calculation for inverting topologies.
 
-## 1. vsource AC Stimulus: `mag=` not `ac=`
+## 1. vsource AC Stimulus: `mag=` not `ac=`; `type=dc` suppresses AC
 
 ### Problem
-In native Spectre language (`simulator lang=spectre`), using `ac=1` on a vsource
-causes **SFE-30** (invalid parameter).
+Two failure modes, both produce zero AC response with no error:
+
+**A)** Using `ac=1` causes **SFE-30** (invalid parameter in native Spectre lang).
+
+**B)** Any vsource without `mag=` has **zero AC response by default** — this is true
+whether or not `type=dc` is specified. The AC small-signal amplitude defaults to 0.
+Verified: `vsource dc=1.0` and `vsource dc=1.0 type=dc` both produce `(0.0 0.0)` at
+every frequency. `type=dc` is not the cause; the absence of `mag=` is.
 
 ### Root Cause
-`ac=` is SPICE-compatibility syntax only. Native Spectre uses `mag=` for small-signal
-AC amplitude.
+- `ac=` is SPICE-compatibility syntax only; native Spectre uses `mag=` for AC amplitude
+- Default AC magnitude for all vsource types is `mag=0` — must be set explicitly
+- Typical trap: engineer sets up a DC supply for DC analysis, forgets `mag=1` for AC
 
 ### Fix
 ```spectre
-// ✗ WRONG — SPICE-compat only
+// ✗ WRONG — SPICE-compat only, causes SFE-30
 Vip (vip 0) vsource dc=0.9 ac=1
 
-// ✓ CORRECT — native Spectre
+// ✗ WRONG — no mag= → zero AC response (true with OR without type=dc)
+VVDDA (VDDA 0) vsource dc=3.3
+VVDDA (VDDA 0) vsource dc=3.3 type=dc   // same result — still zero AC
+
+// ✓ CORRECT — pure AC stimulus
 Vip (vip 0) vsource dc=0.9 mag=1
+
+// ✓ CORRECT — DC supply with AC perturbation (PSRR measurement)
+VVDDA (VDDA 0) vsource dc=3.3 type=dc mag=1 srcType=dc
 ```
 
 ### Discovery
 Run `spectre -h vsource` to see all valid parameters. The relevant parameter is:
 `mag=0 V (Small signal voltage)`.
+
+Symptom: AC analysis runs without error, all node voltages show `(0.0 0.0)` complex
+values → verify `mag=1` is present on the excitation source.
 
 ---
 
@@ -296,7 +313,6 @@ ls <resultsDir>/psf/*.dc 2>/dev/null || echo "NO DATA FILES — sim failed"
 ```
 
 ---
-
 ## Quick Reference: Spectre Help
 
 ```bash

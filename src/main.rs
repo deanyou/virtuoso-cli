@@ -11,6 +11,7 @@ mod exit_codes;
 mod models;
 mod ocean;
 mod output;
+mod spec;
 mod spectre;
 #[cfg(test)]
 mod tests;
@@ -143,6 +144,10 @@ enum Commands {
     /// Manage Virtuoso windows and dialogs
     #[command(subcommand)]
     Window(WindowCmd),
+
+    /// Automated circuit optimization (spec-driven batch simulation)
+    #[command(subcommand)]
+    Optim(OptimCmd),
 
     /// Interactive TUI dashboard
     Tui,
@@ -820,6 +825,45 @@ enum WindowCmd {
     },
 }
 
+#[derive(Subcommand)]
+enum OptimCmd {
+    /// Run batch optimization from a spec YAML and netlist template
+    #[command(long_about = "Parse BandgapSpec YAML, expand parameter combinations,\n\
+        run all Spectre jobs, and store results.\n\n\
+        Examples:\n  \
+        vcli optim run --spec bandgap.yaml --netlist template.scs\n  \
+        vcli optim run --spec bandgap.yaml --netlist template.scs --max-iter 5 --timeout 600")]
+    Run {
+        /// Path to spec YAML file (BandgapSpec)
+        #[arg(long)]
+        spec: String,
+        /// Path to Spectre netlist template (uses ${W}, ${L} placeholders)
+        #[arg(long)]
+        netlist: String,
+        /// Maximum optimization iterations (for multi-round loops driven by skill)
+        #[arg(long, default_value = "20")]
+        max_iter: u32,
+        /// Per-batch timeout in seconds
+        #[arg(long, short, default_value = "600")]
+        timeout: u64,
+    },
+
+    /// Show status of a previous optim run
+    Status {
+        /// Optim job ID (e.g. bg-a3c4f9)
+        id: String,
+    },
+
+    /// Generate Markdown report from stored optim results
+    Report {
+        /// Optim job ID
+        id: String,
+        /// Output file path (prints to stdout if omitted)
+        #[arg(long)]
+        output: Option<String>,
+    },
+}
+
 fn parse_key_val(s: &str) -> std::result::Result<(String, String), String> {
     let pos = s
         .find('=')
@@ -1070,6 +1114,16 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
     }
 }
 
+fn dispatch_optim(cmd: OptimCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        OptimCmd::Run { spec, netlist, max_iter, timeout } => {
+            commands::optim::run(&spec, &netlist, max_iter, timeout)
+        }
+        OptimCmd::Status { id } => commands::optim::status(&id),
+        OptimCmd::Report { id, output } => commands::optim::report(&id, output.as_deref()),
+    }
+}
+
 fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
     match cmd {
         WindowCmd::List => commands::window::list(),
@@ -1164,6 +1218,7 @@ fn main() {
             SessionCmd::Show { id } => commands::session::show(&id, format),
         },
         Commands::Window(cmd) => dispatch_window(cmd),
+        Commands::Optim(cmd) => dispatch_optim(cmd),
         // Already handled above; unreachable but required for exhaustive match
         Commands::Schema { .. } | Commands::Tui => unreachable!(),
     };

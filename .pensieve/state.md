@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: added spectre-ade-model-path and ocean-design-cell-switch knowledge entries
+- Last Note: corrected vsource AC root cause: mag=0 default (not type=dc specific); zombie reproduced with /proc Z state
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`

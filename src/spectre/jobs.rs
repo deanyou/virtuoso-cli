@@ -100,6 +100,22 @@ impl Job {
 
             if !alive {
                 self.finish_from_log()?;
+            } else if self.remote_host.is_none() {
+                // For local jobs: zombie processes answer kill -0 with "alive".
+                // Check the log directly — if spectre already printed its completion
+                // line, reap it regardless of PID status.
+                let log_dir = std::path::Path::new(&self.netlist_path)
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."));
+                let log = log_dir.join("spectre.out");
+                if log.exists() {
+                    let content = fs::read_to_string(&log).unwrap_or_default();
+                    if content.contains("completes with 0 errors")
+                        || content.contains("completes with")
+                    {
+                        self.finish_from_log()?;
+                    }
+                }
             }
         }
         Ok(())
