@@ -152,10 +152,10 @@ pub fn report(optim_id: &str, output: Option<&str>) -> Result<Value> {
 
     let mut md = String::new();
     md.push_str("# Bandgap Optimization Report\n\n");
-    let _ = write!(md, "**Optim ID:** `{}`  \n", state.optim_id);
-    let _ = write!(md, "**Spec:** {}  \n", state.spec_file);
-    let _ = write!(md, "**Corner:** {}  \n", state.corner);
-    let _ = write!(md, "**Status:** {}  \n\n", state.status);
+    let _ = writeln!(md, "**Optim ID:** `{}`  ", state.optim_id);
+    let _ = writeln!(md, "**Spec:** {}  ", state.spec_file);
+    let _ = writeln!(md, "**Corner:** {}  ", state.corner);
+    let _ = writeln!(md, "**Status:** {}  \n", state.status);
 
     md.push_str("## Iteration Summary\n\n");
     let _ = write!(
@@ -176,10 +176,10 @@ pub fn report(optim_id: &str, output: Option<&str>) -> Result<Value> {
             .map(|(k, v)| format!("{k}={v:.3e}"))
             .collect();
         let raw = job.raw_dir.as_deref().unwrap_or("-");
-        let _ = write!(
+        let _ = writeln!(
             md,
-            "| {} | {} | {} |\n",
-            serde_json::to_value(&job.status)
+            "| {} | {} | {} |",
+            serde_json::to_value(job.status)
                 .ok()
                 .and_then(|v| v.as_str().map(str::to_owned))
                 .unwrap_or_default(),
@@ -190,11 +190,11 @@ pub fn report(optim_id: &str, output: Option<&str>) -> Result<Value> {
 
     if let Some(ref best) = state.best {
         md.push_str("\n## Best Result\n\n");
-        let _ = write!(md, "**Iteration:** {}  \n", best.iteration);
+        let _ = writeln!(md, "**Iteration:** {}  ", best.iteration);
         for (k, v) in &best.params {
-            let _ = write!(md, "**{k}:** {v:.3e}  \n");
+            let _ = writeln!(md, "**{k}:** {v:.3e}  ");
         }
-        let _ = write!(md, "**Raw dir:** `{}`  \n", best.raw_dir);
+        let _ = writeln!(md, "**Raw dir:** `{}`  ", best.raw_dir);
     }
 
     if let Some(path) = output {
