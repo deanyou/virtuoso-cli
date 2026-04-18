@@ -79,7 +79,17 @@ Skills 也会被自动触发。如果用户描述匹配某 skill 的 description
 
 ## 主程序 vs Skill 的归属原则
 
-**一句话**：主程序做原子操作，Skill 做流程编排。
+**一句话**：主程序做原子操作，Skill 做流程编排和高阶扩展。
+
+> **决策标准（先问这三个问题）**
+> 1. 没有它，CI 的 exit code 会丢失信息吗？→ 是 → binary
+> 2. 它的逻辑会随工艺/IP/方法论变化吗？→ 是 → skill
+> 3. 它是多个原子操作的组合编排吗？→ 是 → skill script（`scripts/*.py`）
+>
+> **反面教材**：`vcli optim`（已于 2026-04-18 迁移）
+> 原实现把"YAML 解析 + 参数笛卡尔积 + 批量 Spectre + 报告"全放进 binary。
+> 迁移后变成 `circuit-optimizer/scripts/run_bandgap_sweep.py`（~200 行 Python），
+> 删除了 650 行 Rust 和 `serde_yaml` 依赖。Spec YAML 格式改了不需要重编译。
 
 ### 固化进主程序（binary）
 
@@ -108,6 +118,21 @@ Skills 也会被自动触发。如果用户描述匹配某 skill 的 description
 | 原理图拓扑生成 | 原子操作（create-inst 等）进主程序，拓扑级编排留 skill |
 | `sim setup` 调用时机 | 命令本身在主程序，"何时该调"的判断逻辑留 skill |
 | 复杂错误诊断 | 确定性修复进主程序，多路径推理留 skill（ocean-netlist-regen） |
+| 批量仿真 + 报告生成 | **skill script**（`scripts/*.py`）——不需要 VirtuosoError，无 bridge RTT 瓶颈 |
+| IP 规格 YAML 解析 | **skill script**——规格字段随工艺/IP 变化，不能绑定到编译期 |
+
+### Skill Script 的位置约定
+
+当逻辑太复杂放不进 SKILL.md，但又不该进 binary 时，放到对应 skill 的 `scripts/` 目录：
+
+```
+.claude/skills/<skill-name>/
+├── SKILL.md                   ← 调用入口，用 ${CLAUDE_SKILL_DIR}/scripts/xxx.py
+└── scripts/
+    └── xxx.py                 ← 自包含 Python，stdlib + 少量依赖（pyyaml 等）
+```
+
+从 SKILL.md 中通过 `${CLAUDE_SKILL_DIR}` 引用，Claude 执行时路径始终正确。
 
 ## 添加新命令（项目特定工作流）
 
