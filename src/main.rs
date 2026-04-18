@@ -828,11 +828,13 @@ enum WindowCmd {
 #[derive(Subcommand)]
 enum OptimCmd {
     /// Run batch optimization from a spec YAML and netlist template
-    #[command(long_about = "Parse BandgapSpec YAML, expand parameter combinations,\n\
+    #[command(
+        long_about = "Parse BandgapSpec YAML, expand parameter combinations,\n\
         run all Spectre jobs, and store results.\n\n\
         Examples:\n  \
         vcli optim run --spec bandgap.yaml --netlist template.scs\n  \
-        vcli optim run --spec bandgap.yaml --netlist template.scs --max-iter 5 --timeout 600")]
+        vcli optim run --spec bandgap.yaml --netlist template.scs --max-iter 5 --timeout 600"
+    )]
     Run {
         /// Path to spec YAML file (BandgapSpec)
         #[arg(long)]
@@ -1116,9 +1118,12 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
 
 fn dispatch_optim(cmd: OptimCmd) -> error::Result<serde_json::Value> {
     match cmd {
-        OptimCmd::Run { spec, netlist, max_iter, timeout } => {
-            commands::optim::run(&spec, &netlist, max_iter, timeout)
-        }
+        OptimCmd::Run {
+            spec,
+            netlist,
+            max_iter,
+            timeout,
+        } => commands::optim::run(&spec, &netlist, max_iter, timeout),
         OptimCmd::Status { id } => commands::optim::status(&id),
         OptimCmd::Report { id, output } => commands::optim::report(&id, output.as_deref()),
     }

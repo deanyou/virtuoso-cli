@@ -145,7 +145,10 @@ params:
     step: 1.0e-6
 "#;
         let spec: BandgapSpec = serde_yaml::from_str(yaml).expect("parses");
-        assert!(spec.validate().is_err(), "negative min should fail validation");
+        assert!(
+            spec.validate().is_err(),
+            "negative min should fail validation"
+        );
     }
 
     #[test]
