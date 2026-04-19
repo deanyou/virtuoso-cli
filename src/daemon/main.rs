@@ -57,8 +57,7 @@ fn handle_connection(mut conn: TcpStream, cb_port: u16) -> io::Result<()> {
     let timeout = req.timeout.unwrap_or(30);
 
     // Clean up any stale callback files before sending the request
-    let data_file = format!("/tmp/.ramic_cb_{cb_port}");
-    let done_file = format!("/tmp/.ramic_cb_{cb_port}.done");
+    let (data_file, done_file) = callback_files(cb_port);
     let _ = std::fs::remove_file(&data_file);
     let _ = std::fs::remove_file(&done_file);
 
@@ -75,12 +74,18 @@ fn handle_connection(mut conn: TcpStream, cb_port: u16) -> io::Result<()> {
     Ok(())
 }
 
+fn callback_files(cb_port: u16) -> (String, String) {
+    (
+        format!("/tmp/.ramic_cb_{cb_port}"),
+        format!("/tmp/.ramic_cb_{cb_port}.done"),
+    )
+}
+
 /// Poll for the temp file written by RBSendCallback in ramic_bridge.il.
 /// RBSendCallback writes data to /tmp/.ramic_cb_{port+1} then creates
 /// /tmp/.ramic_cb_{port+1}.done as an atomic completion marker.
 fn read_callback_file(cb_port: u16, timeout_secs: u64) -> io::Result<Vec<u8>> {
-    let data_file = format!("/tmp/.ramic_cb_{cb_port}");
-    let done_file = format!("/tmp/.ramic_cb_{cb_port}.done");
+    let (data_file, done_file) = callback_files(cb_port);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
 
     loop {
@@ -107,7 +112,7 @@ fn read_callback_file(cb_port: u16, timeout_secs: u64) -> io::Result<Vec<u8>> {
             }
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 

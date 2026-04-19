@@ -504,6 +504,7 @@ to match the target PDK and operating conditions.
 | No `mag=` on AC source | AC output all zeros | Add `mag=1` (or `mag=0.5`) |
 | Series resistor as oprobe | Noise result millions × too high | Use 1TΩ parallel Rprobe |
 | node name as oprobe/iprobe | SFE-1997 | Use element name, not node |
+| `outputport=` / `inputport=` in noise | SFE-106 "invalid parameter" | Standalone spectre uses `oprobe=` / `iprobe=` |
 | `val0`/`val1` wrong units | Pulse has wrong swing | Check V vs A (vsource vs isource) |
 | Missing `global 0` | Ground not connected | Add `global 0` at top |
 | Wrong port order in XDUT | Circuit biased wrong | Match port order to subckt declaration |

@@ -57,7 +57,7 @@ procedure(RBSendCallback(msg)
 )
 
 procedure(RBIpcDataHandler(ipcId data)
-  ; Handler for successful data received from the daemon.
+  ; IPC data handler: eval SKILL expression, send STX (success) or NAK (error) via callback file.
   ; evalstring() bypasses CIW's interactive loop — printf output is line-buffered
   ; and won't appear until a "\n" is received or hiFlush() is called explicitly.
   ; We call hiFlush() after every evalstring to force CIW UI refresh.

@@ -200,9 +200,9 @@ impl VirtuosoClient {
             };
 
             // STX = transport success; NAK = transport error (includes daemon timeout).
-            // The daemon sends NAK+"TimeoutError"+RS on deadline — no need to text-match
-            // under STX. Doing so would reject any SKILL function that legitimately
-            // returns the string "TimeoutError".
+            // The daemon sends NAK+"TimeoutError" (no RS) on deadline — no need to
+            // text-match under STX. Doing so would reject any SKILL function that
+            // legitimately returns the string "TimeoutError".
             if status_byte == STX {
                 result.output = payload;
             } else if status_byte == NAK {

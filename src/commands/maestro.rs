@@ -122,9 +122,8 @@ pub fn export(session: &str, path: &str) -> Result<Value> {
 
 /// Inspect the focused ADE window and return session metadata.
 ///
-/// Makes two SKILL calls:
-/// 1. Get focused window title + session list
-/// 2. Get simulation run directory for the detected (or specified) session
+/// Always makes one SKILL call (focused window title + session list).
+/// Makes a second call only when `session` is provided (to get run_dir).
 pub fn session_info(session: Option<&str>) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
@@ -136,9 +135,7 @@ pub fn session_info(session: Option<&str>) -> Result<Value> {
     let focused = extract_first_skill_string(&r.output);
     let parsed = focused.as_deref().and_then(parse_ade_title);
 
-    let session_name = session.map(str::to_owned);
-
-    let run_dir = if let Some(s) = session_name.as_deref() {
+    let run_dir = if let Some(s) = session {
         let skill2 = client.maestro.run_dir_skill(s);
         let r2 = client.execute_skill(&skill2, None)?;
         if r2.skill_ok() {
@@ -153,7 +150,7 @@ pub fn session_info(session: Option<&str>) -> Result<Value> {
     Ok(json!({
         "status": "success",
         "focused_window": focused,
-        "session": session_name,
+        "session": session,
         "application": parsed.as_ref().map(|p| p.application.as_str()),
         "lib": parsed.as_ref().map(|p| p.lib.as_str()),
         "cell": parsed.as_ref().map(|p| p.cell.as_str()),
