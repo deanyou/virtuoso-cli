@@ -64,10 +64,28 @@ vcli skill exec 'list(design() resultsDir())'
 # Bad:  ((FT0001A_SH ota5t schematic) "/path/to/ota5t/...")
 ```
 
+### design() Returns nil After vcli sim setup on a Fresh Session
+
+Even when `vcli sim setup` returns `"status": "success"`, calling `design()` (no
+args) in a subsequent SKILL call may still return `nil`. This happens when the
+Ocean session had no prior design registered.
+
+**Workaround**: Always call `design("LIB" "CELL" "VIEW")` explicitly before
+`sim run` or `createNetlist` if `design()` returns nil:
+
+```bash
+VB_PORT=38991 VB_SESSION=meowu-meow-2 vcli skill exec 'design()' --format json
+# If nil, call explicitly:
+VB_PORT=38991 VB_SESSION=meowu-meow-2 vcli skill exec 'design("FT0001A_SH" "Bandgap" "schematic")'
+# Re-set modelFile after design() call (simulator reset clears it):
+VB_PORT=38991 VB_SESSION=meowu-meow-2 vcli skill exec 'modelFile(...)'
+```
+
 ## When to Use
 - When switching simulation target cells between runs
 - When `vcli sim netlist --cell X` produces a netlist at a different cell's path
 - When `resultsDir()` returns a path for the wrong cell after `sim setup`
+- When `design()` returns nil despite `vcli sim setup` succeeding
 
 ## Context Links
 - Related: [[ocean-netlist-regen]] — full Ocean simulation reliability reference

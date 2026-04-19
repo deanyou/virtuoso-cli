@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: corrected vsource AC root cause: mag=0 default (not type=dc specific); zombie reproduced with /proc Z state
+- Last Note: vcli-bridge-cli-name, smic-rhrpo-netlist-terminals, llm-netlist-repair decision, ocean-design-cell-switch update
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`

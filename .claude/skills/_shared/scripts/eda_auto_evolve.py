@@ -159,6 +159,8 @@ def run_evolution(skill_name: str) -> dict:
 
     update_index(skill_name)
 
+    _trigger_signal_match()
+
     return {
         "skill": skill_name,
         "analyzed": len(entries),
@@ -166,6 +168,14 @@ def run_evolution(skill_name: str) -> dict:
         "new_memories": len(new_files),
         "new_files": new_files,
     }
+
+
+def _trigger_signal_match() -> None:
+    """Refresh .pensieve/signals/latest.json after every evolution run."""
+    import subprocess
+    matcher = Path(__file__).parent / "signal_matcher.py"
+    if matcher.exists():
+        subprocess.run(["python3", str(matcher)], capture_output=True, timeout=15)
 
 
 if __name__ == "__main__":

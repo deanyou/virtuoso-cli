@@ -364,6 +364,53 @@ params:
     max: 1e-6
     step: 0.18e-6
 corner: tt              # optional, default "tt"
+evolution_strategy: balanced  # optional — see Strategy Presets below
+```
+
+### Strategy Presets
+
+`evolution_strategy` controls the exploration/exploitation balance and convergence tolerance.
+
+| Strategy | When to use | Surrogate behavior | Convergence gate |
+|----------|------------|-------------------|-----------------|
+| `balanced` (default) | Normal sizing run | Exploit best ×2, explore new ×1 in each batch | Δ < 1% for 2 consecutive iterations |
+| `innovate` | First sizing of new topology; need broad landscape view | Explore ×3, exploit ×1; accept 10% FOM degradation if coverage improves | Δ < 5%; max 30 iterations |
+| `harden` | Known-good sizing; tighten to meet worst corner | Exploit only (±10% around best point); reject any candidate outside current feasible region | Δ < 0.2% for 3 consecutive iterations |
+| `repair-only` | One spec failing; all others nominal | Freeze all params except the one linked to failing spec; minimize that spec's violation only | Failing spec enters feasible region |
+
+**Surrogate reasoning adjustments per strategy:**
+
+```
+balanced:
+  - Evaluate top-3 candidates from surrogate model
+  - Pick 2 that exploit (lowest predicted cost near current best)
+  - Pick 1 that explores (highest uncertainty region)
+
+innovate:
+  - Latin hypercube sample 5 new points across full parameter range
+  - Keep 1 best from previous iteration (anchor)
+  - Looser feasibility: skip corners beyond "tt" for first 3 iterations
+
+harden:
+  - Grid search ±10% around best known point (step = original_step / 5)
+  - All corners mandatory from iteration 1
+  - Reject candidates where any spec degrades vs. current best
+
+repair-only:
+  - Identify failing spec → find its dominant parameter (sensitivity analysis)
+  - Fix all other params at their best-known values
+  - Sweep only the dominant parameter in [current - 3σ, current + 3σ]
+  - Stop when failing spec first enters [min, max] feasible window
+```
+
+**In the history JSON, record the strategy:**
+```json
+{
+  "evolution_strategy": "harden",
+  "iteration": 5,
+  "best_cost": 0.032,
+  ...
+}
 ```
 
 ### When to Use Script vs Manual Loop
