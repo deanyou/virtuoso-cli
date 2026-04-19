@@ -47,14 +47,31 @@ fn read_callback_file(cb_port: u16, timeout_secs: u64) -> io::Result<Vec<u8>> {
 }
 ```
 
-`cb_port = port + 1`（daemon 启动参数 `argv[2]` 的端口加一）。
+`cb_port = actual_port + 1`，其中 `actual_port` 是 `listener.local_addr()` 得到的
+**实际绑定端口**，不是 `argv[2]`（bridge 通常传 `0` 让 OS 分配端口）。
+
+### ⚠️ 关键陷阱：cb_port 必须用 actual_port
+
+IL 里 `cbPort = RBPort + 1`，`RBPort` 是 `RBIpcErrHandler` 解析 `PORT:XXXXX`
+stderr 行后得到的**实际端口**。daemon 如果用 `argv[2]`（可能是 `0`），算出
+`cb_port = 1`，与 IL 写的 `PORT+1` 完全不同，导致双方轮询/写入不同文件。
+
+症状：callback 文件**有内容**（`/tmp/.ramic_cb_{actual_port+1}` 存在），
+但 daemon 始终 TimeoutError — 说明是 cb_port 算错而非 IL 问题。
+
+诊断方法：
+```bash
+# 看 daemon 在等哪个端口的文件（当前会话实际端口）
+ls /tmp/.ramic_cb_* 2>/dev/null
+# 若文件名里的数字 ≠ vcli 连接的端口+1，就是 cb_port 计算错误
+```
 
 ### 关键细节
 
 | 项目 | 值 |
 |------|---|
-| 数据文件 | `/tmp/.ramic_cb_{PORT+1}` |
-| 完成标记 | `/tmp/.ramic_cb_{PORT+1}.done` |
+| 数据文件 | `/tmp/.ramic_cb_{actual_port+1}` |
+| 完成标记 | `/tmp/.ramic_cb_{actual_port+1}.done` |
 | 结果格式 | `STX + %L + RS` 或 `NAK + %L + RS` |
 | RS 处理 | daemon 读取后去掉末尾 `0x1E` 再发给 vcli 客户端 |
 | 幂等性 | 每次请求前清理残留文件，避免上次遗留的 `.done` 被误读 |
@@ -74,7 +91,8 @@ fn read_callback_file(cb_port: u16, timeout_secs: u64) -> io::Result<Vec<u8>> {
 2. `~/.cargo/bin/virtuoso-daemon`（cargo install 路径）
 
 ## When to Use
-- 调试 `vcli skill exec` 第二次调用挂起时
+- 调试 `vcli skill exec` 每次调用都 TimeoutError（第一次也超时）
+- 调试第二次及以后调用超时（`ipcWriteProcess` 平台 bug 症状）
 - 理解为何不用 `ipcWriteProcess`
 - 修改 daemon 通信协议时（需同步改 IL 和 Rust）
 - 确认哪个 daemon 文件是活跃实现

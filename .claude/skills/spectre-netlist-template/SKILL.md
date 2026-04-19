@@ -465,6 +465,37 @@ tran1 tran stop=50n maxstep=1p errpreset=moderate
 
 ---
 
+## Automated Script: inject_stimulus.py
+
+For batch or scripted use, the skill ships a Python helper that auto-detects circuit
+type and generates a complete testbench file — no Virtuoso running required.
+
+```bash
+# Auto-detect from ADE-exported netlist, write bandgap_tb.scs
+python ${CLAUDE_SKILL_DIR}/scripts/inject_stimulus.py bandgap.scs
+
+# Explicit type override
+python ${CLAUDE_SKILL_DIR}/scripts/inject_stimulus.py amp.scs --type ota
+
+# Override output path
+python ${CLAUDE_SKILL_DIR}/scripts/inject_stimulus.py amp.scs -o amp_testbench.scs
+
+# Pass cell name to help disambiguation (e.g. "Bandgap" → bandgap type)
+python ${CLAUDE_SKILL_DIR}/scripts/inject_stimulus.py chip.scs --cell Bandgap
+
+# List detected subcircuits and bail (useful for inspection)
+python ${CLAUDE_SKILL_DIR}/scripts/inject_stimulus.py chip.scs --list
+
+# Then run directly with Spectre
+spectre bandgap_tb.scs -raw psf -format psfascii
+```
+
+The script requires no third-party libraries (stdlib only).
+After generation, review and adjust parameter values (VDD, CL, temperatures, etc.)
+to match the target PDK and operating conditions.
+
+---
+
 ## Common Mistakes (see also spectre-netlist-gotchas)
 
 | Mistake | Symptom | Fix |

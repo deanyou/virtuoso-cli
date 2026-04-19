@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: bridge-lite adoption: callback-file-ipc knowledge + adoption decision
+- Last Note: fix cb_port bug: actual_port+1 not argv+1; add diagnosis pattern to knowledge
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`
