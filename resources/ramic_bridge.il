@@ -41,21 +41,35 @@ unless(boundp('RBIpc) RBIpc = 'unbound)
 unless(boundp('RBSessionId)   RBSessionId   = "")
 unless(boundp('RBSessionSeq)  RBSessionSeq  = 0)
 
+procedure(RBSendCallback(msg)
+  ; Write result to a temp file pair instead of ipcWriteProcess — works around
+  ; the IC23.1/RHEL8 bug where ipcWriteProcess stops firing after the first call.
+  ; Daemon polls for the .done marker, reads data file, then deletes both.
+  let((cbPort dataFile doneFile port)
+    cbPort = RBPort + 1
+    dataFile = sprintf(nil "/tmp/.ramic_cb_%d" cbPort)
+    doneFile = sprintf(nil "/tmp/.ramic_cb_%d.done" cbPort)
+    port = outfile(dataFile "w")
+    when(port fprintf(port "%s" msg) close(port))
+    port = outfile(doneFile "w")
+    when(port close(port))
+  )
+)
+
 procedure(RBIpcDataHandler(ipcId data)
   ; Handler for successful data received from the daemon.
   ; evalstring() bypasses CIW's interactive loop — printf output is line-buffered
   ; and won't appear until a "\n" is received or hiFlush() is called explicitly.
   ; We call hiFlush() after every evalstring to force CIW UI refresh.
-  let((result)
+  let((result resultStr)
     when(RBEcho printf("[RAMIC Bridge (%L)] receive:%L\n" ipcId data))
     if(errset(result=evalstring(data)) then
-	    ; Success: Send response with STX (0x02) start marker and RS (0x1E) end marker
-	    ipcWriteProcess(ipcId sprintf(nil "%c%L%c" intToChar(2) result intToChar(30)))
-		when(RBEcho printf("[RAMIC Bridge (%L)] return:%L\n" ipcId result))
-	else
-        ; Error: NAK + payload to daemon only (no CIW printf; client parses errors)
-        ipcWriteProcess(ipcId sprintf(nil "%c%L%c" intToChar(21) errset.errset intToChar(30)))
+        resultStr = sprintf(nil "%c%L%c" intToChar(2) result intToChar(30))
+        when(RBEcho printf("[RAMIC Bridge (%L)] return:%L\n" ipcId result))
+    else
+        resultStr = sprintf(nil "%c%L%c" intToChar(21) errset.errset intToChar(30))
     )
+    RBSendCallback(resultStr)
     hiFlush()  ; force CIW UI refresh — evalstring is line-buffered unlike interactive CIW
   )
 )

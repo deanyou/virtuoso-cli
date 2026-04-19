@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: vcli-bridge-cli-name, smic-rhrpo-netlist-terminals, llm-netlist-repair decision, ocean-design-cell-switch update
+- Last Note: bridge-lite adoption: callback-file-ipc knowledge + adoption decision
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`

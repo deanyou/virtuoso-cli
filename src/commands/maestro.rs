@@ -119,3 +119,103 @@ pub fn export(session: &str, path: &str) -> Result<Value> {
         "output": r.output,
     }))
 }
+
+/// Inspect the focused ADE window and return session metadata.
+///
+/// Makes two SKILL calls:
+/// 1. Get focused window title + session list
+/// 2. Get simulation run directory for the detected (or specified) session
+pub fn session_info(session: Option<&str>) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+
+    let skill = client.maestro.focused_window_skill();
+    let r = client.execute_skill(&skill, None)?;
+
+    // SKILL output: ("ADE Assembler Editing: LIB CELL VIEW*" ("t1" ...) ("sess1" ...))
+    // Extract the first element (focused window title) from the SKILL list string
+    let focused = extract_first_skill_string(&r.output);
+    let parsed = focused.as_deref().and_then(parse_ade_title);
+
+    let session_name = session.map(str::to_owned);
+
+    let run_dir = if let Some(s) = session_name.as_deref() {
+        let skill2 = client.maestro.run_dir_skill(s);
+        let r2 = client.execute_skill(&skill2, None)?;
+        if r2.skill_ok() {
+            Some(r2.output.trim_matches('"').to_string())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    Ok(json!({
+        "status": "success",
+        "focused_window": focused,
+        "session": session_name,
+        "application": parsed.as_ref().map(|p| p.application.as_str()),
+        "lib": parsed.as_ref().map(|p| p.lib.as_str()),
+        "cell": parsed.as_ref().map(|p| p.cell.as_str()),
+        "view": parsed.as_ref().map(|p| p.view.as_str()),
+        "editable": parsed.as_ref().map(|p| p.editable),
+        "unsaved_changes": parsed.as_ref().map(|p| p.unsaved_changes),
+        "run_dir": run_dir,
+    }))
+}
+
+/// Extract the first quoted string from a SKILL list like `("foo" ...)`.
+fn extract_first_skill_string(s: &str) -> Option<String> {
+    let s = s.trim().strip_prefix('(')?;
+    let start = s.find('"')?;
+    let inner = &s[start + 1..];
+    let end = inner.find('"')?;
+    Some(inner[..end].to_string())
+}
+
+struct AdeWindowInfo {
+    application: String,
+    lib: String,
+    cell: String,
+    view: String,
+    editable: bool,
+    unsaved_changes: bool,
+}
+
+/// Parse an ADE window title: `ADE Assembler Editing: LIB CELL VIEW[*]`
+fn parse_ade_title(title: &str) -> Option<AdeWindowInfo> {
+    let rest = title.strip_prefix("ADE ")?;
+
+    let (app, rest) = if let Some(r) = rest.strip_prefix("Assembler ") {
+        ("assembler", r)
+    } else if let Some(r) = rest.strip_prefix("Explorer ") {
+        ("explorer", r)
+    } else {
+        return None;
+    };
+
+    let (editable, rest) = if let Some(r) = rest.strip_prefix("Editing: ") {
+        (true, r)
+    } else if let Some(r) = rest.strip_prefix("Reading: ") {
+        (false, r)
+    } else {
+        return None;
+    };
+
+    let mut parts = rest.split_whitespace();
+    let lib = parts.next()?.to_string();
+    let cell = parts.next()?.to_string();
+    let view_raw = parts.next()?;
+    let unsaved_changes = view_raw.ends_with('*');
+    let view = view_raw.trim_end_matches('*').to_string();
+
+    Some(AdeWindowInfo {
+        application: app.to_string(),
+        lib,
+        cell,
+        view,
+        editable,
+        unsaved_changes,
+    })
+}
+

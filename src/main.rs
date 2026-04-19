@@ -666,6 +666,13 @@ enum MaestroCmd {
         #[arg(long)]
         path: String,
     },
+
+    /// Inspect focused ADE window and return session metadata
+    SessionInfo {
+        /// Session name for run_dir lookup (optional; omit to skip run_dir)
+        #[arg(long)]
+        session: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1031,6 +1038,9 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
         MaestroCmd::Run { session } => commands::maestro::run(&session),
         MaestroCmd::Save { session } => commands::maestro::save(&session),
         MaestroCmd::Export { session, path } => commands::maestro::export(&session, &path),
+        MaestroCmd::SessionInfo { session } => {
+            commands::maestro::session_info(session.as_deref())
+        }
     }
 }
 
