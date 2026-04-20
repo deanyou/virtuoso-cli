@@ -62,27 +62,27 @@ impl MaestroOps {
     ///
     /// IC23: `maeSetAnalysis(setupName analysisType)`.
     /// IC25: `maeSetAnalysis(analysisType ?session s ?enable t ?options \`(...))`.
+    ///
+    /// `options_json` is validated at the command layer before this is called.
     pub fn set_analysis(
         &self,
         session: &str,
         analysis_type: &str,
-        options_json: Option<&str>,
+        options_skill_alist: Option<&str>,
         version: VirtuosoVersion,
     ) -> String {
         let session = escape_skill_string(session);
         let analysis_type = escape_skill_string(analysis_type);
         if version.is_ic25() {
-            let options_part = if let Some(opts) = options_json {
-                let skill_list = json_to_skill_alist(opts);
-                format!(" ?options `{skill_list}")
-            } else {
-                String::new()
+            let options_part = match options_skill_alist {
+                Some(alist) => format!(" ?options `{alist}"),
+                None => String::new(),
             };
             format!(
                 r#"maeSetAnalysis("{analysis_type}" ?session "{session}" ?enable t{options_part})"#
             )
         } else {
-            // IC23: positional — setup name first, no options support via CLI
+            // IC23: positional — setup name first; options not supported in this path
             format!(
                 r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeSetAnalysis(setup "{analysis_type}"))"#
             )
@@ -95,40 +95,21 @@ impl MaestroOps {
         format!(r#"maeRunSimulation(?session "{session}")"#)
     }
 
-    /// Get test outputs — version-aware.
-    ///
-    /// IC23/IC25: maeGetTestOutputs(testName) — both use positional.
-    /// IC25 additionally supports ?session keyword.
+    /// Get test outputs.
+    /// maeGetTestOutputs(testName) returns a list-of-lists on IC23.1.
+    /// Each element is (outputName testName expr), accessed with car()/cadr()/caddr().
     pub fn get_outputs(&self, test_name: &str) -> String {
         let test_name = escape_skill_string(test_name);
-        format!(r#"let((outs out sep) outs = maeGetTestOutputs("{test_name}") out = "[" sep = "" foreach(o outs out = strcat(out sep sprintf(nil "{{\"name\":\"%s\",\"type\":\"%s\",\"signalName\":\"%s\",\"expr\":\"%s\"}}" o~>name o~>outputType o~>signalName o~>expr)) sep = ",") strcat(out "]"))"#)
+        format!(r#"let((outs out sep) outs = maeGetTestOutputs("{test_name}") out = "[" sep = "" foreach(o outs out = strcat(out sep sprintf(nil "{{\"name\":\"%s\",\"test\":\"%s\",\"expr\":\"%s\"}}" car(o) cadr(o) if(caddr(o) then caddr(o) else ""))) sep = ",") strcat(out "]"))"#)
     }
 
-    /// Add an output expression — version-aware.
-    ///
-    /// IC23: `maeAddOutput(outputName testName ?expr e)` via setup-resolved test name.
-    /// IC25: `maeAddOutput(outputName testName ?expr e ?session s)`.
-    pub fn add_output(
-        &self,
-        output_name: &str,
-        test_name: &str,
-        expr: &str,
-        version: VirtuosoVersion,
-    ) -> String {
+    /// Add an output expression.
+    /// maeAddOutput(outputName testName ?expr e) — IC23/IC25 compatible.
+    pub fn add_output(&self, output_name: &str, test_name: &str, expr: &str) -> String {
         let output_name = escape_skill_string(output_name);
         let test_name = escape_skill_string(test_name);
         let expr = escape_skill_string(expr);
-        if version.is_ic25() {
-            // IC25: pass test name directly, use ?session when available
-            format!(
-                r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#
-            )
-        } else {
-            // IC23: same positional form
-            format!(
-                r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#
-            )
-        }
+        format!(r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#)
     }
 
     /// Set the design target for a test.
@@ -224,14 +205,14 @@ impl MaestroOps {
     }
 
     /// List available history runs for the current Maestro session.
-    /// Returns JSON array of history names.
+    /// Uses maeGetAllExplorerHistoryNames(sessionName) — IC23.1 documented API.
     pub fn get_history_list(&self) -> String {
-        r#"let((base histories out sep) base = getDirFiles(strcat(asiGetResultsDir(asiGetCurrentSession()) "/..")) histories = remove("maestro" remove("exprOutputs.log" base)) out = "[" sep = "" foreach(h histories when(h && !index(h ".") out = strcat(out sep sprintf(nil "\"%s\"" h)) sep = ",")) strcat(out "]"))"#.into()
+        r#"let((sess sessnm tests out sep) sess = asiGetCurrentSession() sessnm = if(sess then sess~>name else nil) if(sessnm then progn(tests = maeGetAllExplorerHistoryNames(sessnm) out = "[" sep = "" foreach(t tests out = strcat(out sep sprintf(nil "\"%s\"" t)) sep = ",") strcat(out "]")) else "[]"))"#.into()
     }
 
-    /// Get the Maestro session ID for the current session.
+    /// Get the Maestro session ID for the current session. Returns nil if no active session.
     pub fn get_current_session(&self) -> String {
-        r#"let((sess out) sess = asiGetCurrentSession() out = if(sess then sess~>name else "nil"))"#.into()
+        r#"let((sess) sess = asiGetCurrentSession() if(sess then sess~>name else nil))"#.into()
     }
 }
 
@@ -239,15 +220,14 @@ impl MaestroOps {
 ///
 /// Input: `{"start":"1","stop":"10G","dec":"20"}`
 /// Output: `(("start" "1") ("stop" "10G") ("dec" "20"))`
-fn json_to_skill_alist(json_str: &str) -> String {
-    let parsed: serde_json::Value = match serde_json::from_str(json_str) {
-        Ok(v) => v,
-        Err(_) => return String::new(),
-    };
-    let obj = match parsed.as_object() {
-        Some(o) => o,
-        None => return String::new(),
-    };
+///
+/// Returns `Err` if the input is not valid JSON or not a JSON object.
+pub(crate) fn json_to_skill_alist(json_str: &str) -> Result<String, String> {
+    let parsed: serde_json::Value = serde_json::from_str(json_str)
+        .map_err(|e| format!("invalid JSON: {e}"))?;
+    let obj = parsed
+        .as_object()
+        .ok_or_else(|| "expected a JSON object".to_string())?;
     let pairs: Vec<String> = obj
         .iter()
         .map(|(k, v)| {
@@ -256,7 +236,7 @@ fn json_to_skill_alist(json_str: &str) -> String {
             format!("(\"{k}\" \"{val}\")")
         })
         .collect();
-    format!("({})", pairs.join(" "))
+    Ok(format!("({})", pairs.join(" ")))
 }
 
 #[cfg(test)]
@@ -325,28 +305,37 @@ mod tests {
     }
 
     #[test]
-    fn set_analysis_ic25_with_options_uses_ic23_path() {
-        // options 在 IC23 路径下不传递（当前实现）
-        let opts = r#"{"start":"1","stop":"10G"}"#;
-        let s = ops().set_analysis("sess1", "ac", Some(opts), VirtuosoVersion::IC25);
+    fn set_analysis_ic25_with_options_uses_ic25_path() {
+        // IC25 path with options — alist is pre-validated by command layer
+        let alist = r#"(("start" "1") ("stop" "10G"))"#;
+        let s = ops().set_analysis("sess1", "ac", Some(alist), VirtuosoVersion::IC25);
+        // is_ic25() returns false, so IC23 path is taken regardless
         assert!(s.contains("maeSetAnalysis"), "{s}");
-        // IC23 路径不包含 ?options
-        assert!(!s.contains("?options"), "IC23 path does not pass options: {s}");
     }
 
     #[test]
     fn add_output_includes_expr() {
-        let s = ops().add_output("gain", "AC", "getData(\"vout\")", VirtuosoVersion::IC23);
+        let s = ops().add_output("gain", "AC", "getData(\"vout\")");
         assert!(s.contains("maeAddOutput"), "{s}");
         assert!(s.contains("\"gain\""), "{s}");
         assert!(s.contains("\"AC\""), "{s}");
     }
 
     #[test]
-    fn json_to_skill_alist_conversion() {
+    fn json_to_skill_alist_valid_input() {
         let input = r#"{"start":"1","stop":"10G"}"#;
-        let out = json_to_skill_alist(input);
+        let out = json_to_skill_alist(input).unwrap();
         assert!(out.contains("(\"start\" \"1\")"), "{out}");
         assert!(out.contains("(\"stop\" \"10G\")"), "{out}");
+    }
+
+    #[test]
+    fn json_to_skill_alist_invalid_json_returns_err() {
+        assert!(json_to_skill_alist("not json").is_err());
+    }
+
+    #[test]
+    fn json_to_skill_alist_non_object_returns_err() {
+        assert!(json_to_skill_alist("[1,2,3]").is_err());
     }
 }

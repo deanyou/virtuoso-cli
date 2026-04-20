@@ -92,10 +92,15 @@ pub fn get_analyses(session: &str) -> Result<Value> {
     let version = client.version()?;
     let skill = client.maestro.get_analyses(session, version);
     let r = client.execute_skill(&skill, None)?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "Failed to get analyses for session '{}': {}",
+            session, r.output
+        )));
+    }
     Ok(json!({
         "session": session,
         "analyses": r.output.trim_matches('"'),
-        "raw": r.output,
     }))
 }
 
@@ -106,7 +111,25 @@ pub fn set_analysis(
 ) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let version = client.version()?;
-    let skill = client.maestro.set_analysis(session, analysis_type, options, version);
+
+    // Validate --options JSON and convert to SKILL alist; warn if IC23 path ignores it.
+    let options_alist: Option<String> = match options {
+        None => None,
+        Some(opts) => {
+            let alist = crate::client::maestro_ops::json_to_skill_alist(opts)
+                .map_err(|e| VirtuosoError::Execution(format!("--options: {e}")))?;
+            if !version.is_ic25() {
+                eprintln!(
+                    "warning: --options is only supported on IC25; ignoring on IC23 path"
+                );
+                None
+            } else {
+                Some(alist)
+            }
+        }
+    };
+
+    let skill = client.maestro.set_analysis(session, analysis_type, options_alist.as_deref(), version);
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
@@ -128,8 +151,7 @@ pub fn run(session: &str) -> Result<Value> {
 
 pub fn add_output(output_name: &str, test_name: &str, expr: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let version = client.version()?;
-    let skill = client.maestro.add_output(output_name, test_name, expr, version);
+    let skill = client.maestro.add_output(output_name, test_name, expr);
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },

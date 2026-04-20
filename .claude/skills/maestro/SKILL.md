@@ -120,19 +120,6 @@ sudo apt install -y xvfb
 export CDS_XVFB_PATH=/path/to/dir/containing/Xvfb
 ```
 
-### Xvfb 未安装 (EXPLORER-9512)
-
-```bash
-# Rocky Linux / RHEL / CentOS
-sudo dnf install -y xorg-x11-server-Xvfb
-
-# Ubuntu / Debian
-sudo apt install -y xvfb
-
-# 或设置环境变量指向已有 Xvfb
-export CDS_XVFB_PATH=/path/to/dir/containing/Xvfb
-```
-
 ### 没有 analysis (EXPLORER-9059)
 
 ```bash
