@@ -21,7 +21,7 @@ impl MaestroOps {
 
     /// List all active maestro sessions.
     pub fn list_sessions(&self) -> String {
-        r#"let((sessions out sep) sessions = maeGetSessions() out = "[" sep = "" foreach(s sessions out = strcat(out sep sprintf(nil "\"%s\"" s)) sep = ",") strcat(out "]"))"#.into()
+        skill_strings_to_json("maeGetSessions()")
     }
 
     /// Set a design variable value.
@@ -38,25 +38,25 @@ impl MaestroOps {
         format!(r#"maeGetVar("{name}")"#)
     }
 
-    /// List all design variables. Returns JSON via sprintf.
+    /// List all design variables. Returns JSON array of {name, value} objects.
     pub fn list_vars(&self) -> String {
         r#"let((vars out sep) vars = asiGetDesignVarList(asiGetCurrentSession()) out = "[" sep = "" foreach(v vars out = strcat(out sep sprintf(nil "{\"name\":\"%s\",\"value\":\"%s\"}" car(v) cadr(v))) sep = ",") strcat(out "]"))"#.into()
     }
 
-    /// Get enabled analyses — version-aware. Returns JSON array; empty list when none enabled.
+    /// Get enabled analyses — version-aware. Always returns a JSON string array.
     ///
-    /// IC23: `maeGetEnabledAnalysis(setupName)` — needs car(maeGetSetup(...)) first.
+    /// IC23: `maeGetEnabledAnalysis(setupName)` — resolves setup via maeGetSetup first.
     /// IC25: `maeGetEnabledAnalysis(?session sessionName)` — direct keyword.
-    /// maeGetEnabledAnalysis returns nil (not empty list) when no analyses are enabled;
-    /// we wrap it to always produce a JSON array so skill_ok() is not misleadingly false.
+    /// maeGetEnabledAnalysis returns SKILL nil when no analyses are enabled (not an error);
+    /// skill_strings_to_json wraps it so the output is always a valid JSON array.
     pub fn get_analyses(&self, session: &str, version: VirtuosoVersion) -> String {
         let session = escape_skill_string(session);
-        let inner = if version.is_ic25() {
+        let list_expr = if version.is_ic25() {
             format!(r#"maeGetEnabledAnalysis(?session "{session}")"#)
         } else {
             format!(r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeGetEnabledAnalysis(setup))"#)
         };
-        format!(r#"let((result out sep) result = {inner} out = "[" sep = "" foreach(a result out = strcat(out sep sprintf(nil "\"%s\"" a)) sep = ",") strcat(out "]"))"#)
+        skill_strings_to_json(&list_expr)
     }
 
     /// Enable an analysis type — version-aware.
@@ -64,7 +64,7 @@ impl MaestroOps {
     /// IC23: `maeSetAnalysis(setupName analysisType)`.
     /// IC25: `maeSetAnalysis(analysisType ?session s ?enable t ?options \`(...))`.
     ///
-    /// `options_json` is validated at the command layer before this is called.
+    /// `options_skill_alist` is validated and converted at the command layer before this is called.
     pub fn set_analysis(
         &self,
         session: &str,
@@ -176,13 +176,15 @@ impl MaestroOps {
 
     /// List all test names that have results in the current history.
     pub fn get_result_tests(&self) -> String {
-        r#"let((tests out sep) tests = maeGetResultTests() out = "[" sep = "" foreach(t tests out = strcat(out sep sprintf(nil "\"%s\"" t)) sep = ",") strcat(out "]"))"#.into()
+        skill_strings_to_json("maeGetResultTests()")
     }
 
     /// List all output names available for a given test in the current history.
     pub fn get_result_outputs(&self, test_name: &str) -> String {
         let test_name = escape_skill_string(test_name);
-        format!(r#"let((outs out sep) outs = maeGetResultOutputs(?testName "{test_name}") out = "[" sep = "" foreach(o outs out = strcat(out sep sprintf(nil "\"%s\"" o)) sep = ",") strcat(out "]"))"#)
+        skill_strings_to_json(&format!(
+            r#"maeGetResultOutputs(?testName "{test_name}")"#
+        ))
     }
 
     /// Get the value of a specific output for a specific test and corner.
@@ -207,10 +209,10 @@ impl MaestroOps {
 
     /// List available history runs for a Maestro session.
     /// Uses maeGetAllExplorerHistoryNames(sessionName) — IC23.1 documented API.
-    /// Caller must pass the Maestro session name (from maeGetSessions()), not the Ocean session.
+    /// Pass the Maestro session name from maeGetSessions(), not the Ocean session.
     pub fn get_history_list(&self, session: &str) -> String {
         let session = escape_skill_string(session);
-        format!(r#"let((tests out sep) tests = maeGetAllExplorerHistoryNames("{session}") out = "[" sep = "" foreach(t tests out = strcat(out sep sprintf(nil "\"%s\"" t)) sep = ",") strcat(out "]"))"#)
+        skill_strings_to_json(&format!(r#"maeGetAllExplorerHistoryNames("{session}")"#))
     }
 
     /// Get the Maestro session ID for the current session. Returns nil if no active session.
@@ -219,9 +221,17 @@ impl MaestroOps {
     }
 }
 
+/// Wrap a SKILL expression that returns a list-of-strings into a JSON array string.
+///
+/// If `list_expr` returns nil (empty), the output is `"[]"`.
+/// This ensures list-returning ops never produce SKILL nil — callers use r.ok() not r.skill_ok().
+fn skill_strings_to_json(list_expr: &str) -> String {
+    format!(r#"let((xs out sep) xs = {list_expr} out = "[" sep = "" foreach(x xs out = strcat(out sep sprintf(nil "\"%s\"" x)) sep = ",") strcat(out "]"))"#)
+}
+
 /// Convert a JSON object string to a SKILL association list.
 ///
-/// Input: `{"start":"1","stop":"10G","dec":"20"}`
+/// Input:  `{"start":"1","stop":"10G","dec":"20"}`
 /// Output: `(("start" "1") ("stop" "10G") ("dec" "20"))`
 ///
 /// Returns `Err` if the input is not valid JSON or not a JSON object.
@@ -276,19 +286,42 @@ mod tests {
     }
 
     #[test]
+    fn list_sessions_uses_helper() {
+        let s = ops().list_sessions();
+        assert!(s.contains("maeGetSessions()"), "{s}");
+        assert!(s.contains("foreach"), "{s}");
+        assert!(s.contains(r#"strcat(out "]")"#), "{s}");
+    }
+
+    #[test]
     fn get_analyses_ic23_resolves_setup() {
         let s = ops().get_analyses("sess1", VirtuosoVersion::IC23);
         assert!(s.contains("maeGetSetup"), "IC23 must resolve setup: {s}");
         assert!(s.contains("maeGetEnabledAnalysis"), "{s}");
+        assert!(s.contains("foreach"), "must produce JSON array: {s}");
     }
 
     #[test]
     fn get_analyses_ic25_uses_ic23_path() {
-        // IC25.1 ISR4 实测：maeGetSetup 仍返回 list，car() 有效
-        // is_ic25() 返回 false，所以 IC25 版本走 IC23 路径
+        // IC25.1 ISR4 实测：is_ic25() 返回 false，走 IC23 路径
         let s = ops().get_analyses("sess1", VirtuosoVersion::IC25);
         assert!(s.contains("maeGetSetup"), "IC25 currently uses IC23 path: {s}");
         assert!(s.contains("maeGetEnabledAnalysis"), "{s}");
+    }
+
+    #[test]
+    fn get_result_tests_uses_helper() {
+        let s = ops().get_result_tests();
+        assert!(s.contains("maeGetResultTests()"), "{s}");
+        assert!(s.contains("foreach"), "{s}");
+    }
+
+    #[test]
+    fn get_history_list_uses_helper() {
+        let s = ops().get_history_list("fnxSession0");
+        assert!(s.contains("maeGetAllExplorerHistoryNames"), "{s}");
+        assert!(s.contains("fnxSession0"), "{s}");
+        assert!(s.contains("foreach"), "{s}");
     }
 
     #[test]
@@ -301,18 +334,8 @@ mod tests {
 
     #[test]
     fn set_analysis_ic25_uses_ic23_path() {
-        // IC25.1 ISR4 实测：maeSetAnalysis 仍为 positional (setupName type)
         let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC25);
         assert!(s.contains("maeGetSetup"), "IC25 currently uses IC23 path: {s}");
-        assert!(s.contains("maeSetAnalysis"), "{s}");
-    }
-
-    #[test]
-    fn set_analysis_ic25_with_options_uses_ic25_path() {
-        // IC25 path with options — alist is pre-validated by command layer
-        let alist = r#"(("start" "1") ("stop" "10G"))"#;
-        let s = ops().set_analysis("sess1", "ac", Some(alist), VirtuosoVersion::IC25);
-        // is_ic25() returns false, so IC23 path is taken regardless
         assert!(s.contains("maeSetAnalysis"), "{s}");
     }
 

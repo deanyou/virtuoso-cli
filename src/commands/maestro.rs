@@ -37,7 +37,7 @@ pub fn list_sessions() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.list_sessions();
     let r = client.execute_skill(&skill, None)?;
-    if !r.skill_ok() {
+    if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to list sessions: {}",
             r.output
@@ -78,7 +78,7 @@ pub fn list_vars() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.list_vars();
     let r = client.execute_skill(&skill, None)?;
-    if !r.skill_ok() {
+    if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to list variables: {}",
             r.output
@@ -307,7 +307,7 @@ pub fn get_result_tests() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.get_result_tests();
     let r = client.execute_skill(&skill, None)?;
-    if !r.skill_ok() {
+    if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to get result tests: {}",
             r.output
@@ -321,7 +321,7 @@ pub fn get_result_outputs(test_name: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.get_result_outputs(test_name);
     let r = client.execute_skill(&skill, None)?;
-    if !r.skill_ok() {
+    if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to get result outputs: {}",
             r.output
