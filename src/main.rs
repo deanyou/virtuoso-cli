@@ -688,7 +688,6 @@ enum MaestroCmd {
     },
 
     // --- Result Reading Commands ---
-
     /// Open a history run for programmatic result access
     OpenResults {
         /// History run name (e.g. "Interactive.1")

@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: CMOP sim retrospective: CMI-2116 standalone flow, dbOpenCellViewByType write-mode danger, standalone PSF reading
+- Last Note: maestro session types, ADE window title format, defer version branches, skill_strings_to_json list pattern
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`

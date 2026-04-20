@@ -107,32 +107,6 @@ vcli maestro set-analysis --session fnxSession0 --analysis ac --options '{"start
 IC23.1 实际只接受 positional `(setupName)`，IC25 使用 `?session` keyword。
 vcli 自动按版本选择正确的签名，无需手动干预。
 
-### Xvfb 未安装 (EXPLORER-9512)
-
-```bash
-# Rocky Linux / RHEL / CentOS
-sudo dnf install -y xorg-x11-server-Xvfb
-
-# Ubuntu / Debian
-sudo apt install -y xvfb
-
-# 或设置环境变量指向已有 Xvfb
-export CDS_XVFB_PATH=/path/to/dir/containing/Xvfb
-```
-
-### Xvfb 未安装 (EXPLORER-9512)
-
-```bash
-# Rocky Linux / RHEL / CentOS
-sudo dnf install -y xorg-x11-server-Xvfb
-
-# Ubuntu / Debian
-sudo apt install -y xvfb
-
-# 或设置环境变量指向已有 Xvfb
-export CDS_XVFB_PATH=/path/to/dir/containing/Xvfb
-```
-
 ### 没有 analysis (EXPLORER-9059)
 
 ```bash

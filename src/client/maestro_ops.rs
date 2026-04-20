@@ -4,8 +4,7 @@ use crate::version::VirtuosoVersion;
 pub struct MaestroOps;
 
 impl MaestroOps {
-    /// Open maestro session in background (non-GUI) mode.
-    /// Returns session string like "fnxSession4".
+    /// Returns session handle like `"fnxSession4"`.
     pub fn open_session(&self, lib: &str, cell: &str, view: &str) -> String {
         let lib = escape_skill_string(lib);
         let cell = escape_skill_string(cell);
@@ -13,15 +12,14 @@ impl MaestroOps {
         format!(r#"maeOpenSetup("{lib}" "{cell}" "{view}")"#)
     }
 
-    /// Close a maestro session, force-cancelling any in-flight simulation.
+    /// Force-closes the session, cancels any in-flight simulation.
     pub fn close_session(&self, session: &str) -> String {
         let session = escape_skill_string(session);
         format!(r#"maeCloseSession("{session}" ?forceClose t)"#)
     }
 
-    /// List all active maestro sessions.
     pub fn list_sessions(&self) -> String {
-        r#"let((sessions out sep) sessions = maeGetSessions() out = "[" sep = "" foreach(s sessions out = strcat(out sep sprintf(nil "\"%s\"" s)) sep = ",") strcat(out "]"))"#.into()
+        skill_strings_to_json("maeGetSessions()")
     }
 
     /// Set a design variable value.
@@ -32,7 +30,6 @@ impl MaestroOps {
         format!(r#"maeSetVar("{name}" "{value}")"#)
     }
 
-    /// Get a design variable value.
     pub fn get_var(&self, name: &str) -> String {
         let name = escape_skill_string(name);
         format!(r#"maeGetVar("{name}")"#)
@@ -62,27 +59,27 @@ impl MaestroOps {
     ///
     /// IC23: `maeSetAnalysis(setupName analysisType)`.
     /// IC25: `maeSetAnalysis(analysisType ?session s ?enable t ?options \`(...))`.
+    ///
+    /// `options_skill_alist` is validated and converted at the command layer before this is called.
     pub fn set_analysis(
         &self,
         session: &str,
         analysis_type: &str,
-        options_json: Option<&str>,
+        options_skill_alist: Option<&str>,
         version: VirtuosoVersion,
     ) -> String {
         let session = escape_skill_string(session);
         let analysis_type = escape_skill_string(analysis_type);
         if version.is_ic25() {
-            let options_part = if let Some(opts) = options_json {
-                let skill_list = json_to_skill_alist(opts);
-                format!(" ?options `{skill_list}")
-            } else {
-                String::new()
+            let options_part = match options_skill_alist {
+                Some(alist) => format!(" ?options `{alist}"),
+                None => String::new(),
             };
             format!(
                 r#"maeSetAnalysis("{analysis_type}" ?session "{session}" ?enable t{options_part})"#
             )
         } else {
-            // IC23: positional — setup name first, no options support via CLI
+            // IC23: positional — setup name first; options not supported in this path
             format!(
                 r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeSetAnalysis(setup "{analysis_type}"))"#
             )
@@ -131,7 +128,6 @@ impl MaestroOps {
         }
     }
 
-    /// Set the design target for a test.
     pub fn set_design(&self, session: &str, lib: &str, cell: &str, view: &str) -> String {
         let session = escape_skill_string(session);
         let lib = escape_skill_string(lib);
@@ -142,25 +138,29 @@ impl MaestroOps {
         )
     }
 
-    /// Save maestro setup to disk.
     pub fn save_setup(&self, session: &str) -> String {
         let session = escape_skill_string(session);
         format!(r#"maeSaveSetup(?session "{session}")"#)
     }
 
-    /// Get simulation messages (errors/warnings from last run).
     pub fn get_sim_messages(&self, session: &str) -> String {
         let session = escape_skill_string(session);
         format!(r#"maeGetSimulationMessages(?session "{session}")"#)
     }
 
-    /// Get focused ADE window name, all window names, and active sessions.
-    /// Returns a SKILL list: (focused_window_name (all_names...) (sessions...))
+    /// Get focused ADE window name, davSession, all window names, sessions, and run_dir in one RTT.
+    ///
+    /// Returns a 5-element SKILL list:
+    ///   (title davSession (all_titles...) (sessions...) run_dir_or_nil)
+    ///
+    /// `davSession` is `cw->davSession` — the Maestro session name bound to the ADE window.
+    /// `run_dir_or_nil` is bundled so callers need only 1 RTT when the focused window has a session.
     pub fn focused_window_skill(&self) -> String {
-        r#"let((cw) cw=hiGetCurrentWindow() list(if(cw hiGetWindowName(cw) nil) mapcar(lambda((w) hiGetWindowName(w)) hiGetWindowList()) maeGetSessions()))"#.into()
+        r#"let((cw sess) cw=hiGetCurrentWindow() sess=if(cw cw->davSession nil) list(if(cw hiGetWindowName(cw) nil) sess mapcar(lambda((w) hiGetWindowName(w)) hiGetWindowList()) maeGetSessions() if(sess let((s) s=asiGetSession(sess) if(s asiGetAnalogRunDir(s) nil)) nil)))"#.into()
     }
 
     /// Get simulation run directory for a maestro session via asiGetAnalogRunDir.
+    /// Used when the caller provides a different session than the focused window's davSession.
     pub fn run_dir_skill(&self, session: &str) -> String {
         let session = escape_skill_string(session);
         format!(
@@ -235,19 +235,28 @@ impl MaestroOps {
     }
 }
 
+/// Wrap a SKILL expression that returns a list-of-strings into a JSON array string.
+///
+/// If `list_expr` returns nil (empty), the output is `"[]"`.
+/// This ensures list-returning ops never produce SKILL nil — callers use r.ok() not r.skill_ok().
+fn skill_strings_to_json(list_expr: &str) -> String {
+    format!(
+        r#"let((xs out sep) xs = {list_expr} out = "[" sep = "" foreach(x xs out = strcat(out sep sprintf(nil "\"%s\"" x)) sep = ",") strcat(out "]"))"#
+    )
+}
+
 /// Convert a JSON object string to a SKILL association list.
 ///
 /// Input: `{"start":"1","stop":"10G","dec":"20"}`
 /// Output: `(("start" "1") ("stop" "10G") ("dec" "20"))`
-fn json_to_skill_alist(json_str: &str) -> String {
-    let parsed: serde_json::Value = match serde_json::from_str(json_str) {
-        Ok(v) => v,
-        Err(_) => return String::new(),
-    };
-    let obj = match parsed.as_object() {
-        Some(o) => o,
-        None => return String::new(),
-    };
+///
+/// Returns `Err` if the input is not valid JSON or not a JSON object.
+pub(crate) fn json_to_skill_alist(json_str: &str) -> Result<String, String> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(json_str).map_err(|e| format!("invalid JSON: {e}"))?;
+    let obj = parsed
+        .as_object()
+        .ok_or_else(|| "expected a JSON object".to_string())?;
     let pairs: Vec<String> = obj
         .iter()
         .map(|(k, v)| {
@@ -256,7 +265,7 @@ fn json_to_skill_alist(json_str: &str) -> String {
             format!("(\"{k}\" \"{val}\")")
         })
         .collect();
-    format!("({})", pairs.join(" "))
+    Ok(format!("({})", pairs.join(" ")))
 }
 
 #[cfg(test)]
@@ -309,11 +318,42 @@ mod tests {
     }
 
     #[test]
+    fn list_sessions_uses_helper() {
+        let s = ops().list_sessions();
+        assert!(s.contains("maeGetSessions()"), "{s}");
+        assert!(s.contains("foreach"), "{s}");
+        assert!(s.contains(r#"strcat(out "]")"#), "{s}");
+    }
+
+    #[test]
+    fn get_result_tests_uses_helper() {
+        let s = ops().get_result_tests();
+        assert!(s.contains("maeGetResultTests()"), "{s}");
+        assert!(s.contains("foreach"), "{s}");
+    }
+
+    #[test]
+    fn get_history_list_uses_helper() {
+        let s = ops().get_history_list();
+        assert!(s.contains("asiGetResultsDir"), "{s}");
+        assert!(s.contains("foreach"), "{s}");
+    }
+
+    #[test]
     fn set_analysis_ic23_positional() {
         let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC23);
         assert!(s.contains("maeGetSetup"), "IC23 must resolve setup: {s}");
         assert!(s.contains("maeSetAnalysis"), "{s}");
         assert!(s.contains("\"ac\""), "{s}");
+    }
+
+    #[test]
+    fn set_analysis_ic23_no_options() {
+        let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC23);
+        assert!(
+            !s.contains("?options"),
+            "IC23 path must not inject options: {s}"
+        );
     }
 
     #[test]
@@ -325,16 +365,6 @@ mod tests {
     }
 
     #[test]
-    fn set_analysis_ic25_with_options_uses_ic23_path() {
-        // options 在 IC23 路径下不传递（当前实现）
-        let opts = r#"{"start":"1","stop":"10G"}"#;
-        let s = ops().set_analysis("sess1", "ac", Some(opts), VirtuosoVersion::IC25);
-        assert!(s.contains("maeSetAnalysis"), "{s}");
-        // IC23 路径不包含 ?options
-        assert!(!s.contains("?options"), "IC23 path does not pass options: {s}");
-    }
-
-    #[test]
     fn add_output_includes_expr() {
         let s = ops().add_output("gain", "AC", "getData(\"vout\")", VirtuosoVersion::IC23);
         assert!(s.contains("maeAddOutput"), "{s}");
@@ -343,10 +373,20 @@ mod tests {
     }
 
     #[test]
-    fn json_to_skill_alist_conversion() {
+    fn json_to_skill_alist_valid_input() {
         let input = r#"{"start":"1","stop":"10G"}"#;
-        let out = json_to_skill_alist(input);
+        let out = json_to_skill_alist(input).unwrap();
         assert!(out.contains("(\"start\" \"1\")"), "{out}");
         assert!(out.contains("(\"stop\" \"10G\")"), "{out}");
+    }
+
+    #[test]
+    fn json_to_skill_alist_invalid_json_returns_err() {
+        assert!(json_to_skill_alist("not json").is_err());
+    }
+
+    #[test]
+    fn json_to_skill_alist_non_object_returns_err() {
+        assert!(json_to_skill_alist("[1,2,3]").is_err());
     }
 }
