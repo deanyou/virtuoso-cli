@@ -89,6 +89,16 @@ load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
 vcli()
 ```
 
+**Reload after updating vcli (in Virtuoso CIW):**
+
+```skill
+load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
+RBStop()
+RBPython = ""
+RBDPath = "~/.cargo/bin/virtuoso-daemon"
+RBStart()
+```
+
 **2. Connect from terminal:**
 
 ```bash
@@ -295,6 +305,16 @@ vcli()
 ```skill
 load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
 vcli()
+```
+
+**更新 vcli 后重新加载 Bridge（在 Virtuoso CIW 中执行）：**
+
+```skill
+load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
+RBStop()
+RBPython = ""
+RBDPath = "~/.cargo/bin/virtuoso-daemon"
+RBStart()
 ```
 
 **第二步：从终端连接：**
