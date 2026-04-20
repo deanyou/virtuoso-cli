@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: maestro session types, ADE window title format, defer version branches, skill_strings_to_json list pattern
+- Last Note: Maestro API全部阻塞IC23.1; n12/p12 Maestro netlist standalone workflow; session-info 1-RTT实现
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`

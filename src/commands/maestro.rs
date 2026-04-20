@@ -183,8 +183,6 @@ pub fn export(session: &str, path: &str) -> Result<Value> {
 
 /// Inspect the focused ADE window and return session metadata.
 ///
-/// Inspect the focused ADE window and return session metadata.
-///
 /// Always makes one SKILL call. A second call is made only when `session` is explicitly
 /// provided AND it differs from the davSession bound to the focused window.
 pub fn session_info(session: Option<&str>) -> Result<Value> {
@@ -204,21 +202,13 @@ pub fn session_info(session: Option<&str>) -> Result<Value> {
     // Resolve effective session: explicit arg → davSession from window → None
     let effective_session = session.map(str::to_owned).or_else(|| dav_session.clone());
 
-    let run_dir = match (session, &dav_session) {
-        // Explicit session matches the window's bound session — use bundled run_dir (0 extra RTT)
-        (Some(s), Some(dav)) if s == dav => bundled_run_dir,
-        // Explicit session differs (or no dav) — need a separate call
-        (Some(s), _) => {
-            let skill2 = client.maestro.run_dir_skill(s);
-            let r2 = client.execute_skill(&skill2, None)?;
-            if r2.skill_ok() {
-                Some(r2.output.trim_matches('"').to_string())
-            } else {
-                None
-            }
-        }
-        // No explicit session — use bundled run_dir for focused window's session
-        (None, _) => bundled_run_dir,
+    // Second RTT only when session explicitly differs from focused window's davSession
+    let run_dir = if let Some(s) = session.filter(|s| Some(*s) != dav_session.as_deref()) {
+        let skill2 = client.maestro.run_dir_skill(s);
+        let r2 = client.execute_skill(&skill2, None)?;
+        if r2.skill_ok() { Some(r2.output.trim_matches('"').to_string()) } else { None }
+    } else {
+        bundled_run_dir
     };
 
     Ok(json!({

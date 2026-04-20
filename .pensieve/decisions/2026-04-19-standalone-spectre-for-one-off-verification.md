@@ -9,6 +9,7 @@
 - Based on: [[smic-mosfet-terminal-order]]
 - Based on: [[spectre-ade-model-path]]
 - Related: [[cadence-ic23-dbopencellviewbytype]]
+- Related: [[maestro-netlist-standalone-workflow]] — n12/p12 快捷路径（无需 SKILL 提取）
 
 ## Context
 
@@ -58,6 +59,7 @@ Build a topology-complete standalone `input.scs`:
 
 - **What to ask less next time**: "Can the ADE token approach work standalone?" → No.
   CMI-2116 on ADE netlist = go straight to SKILL topology extraction.
+  **For n12/p12 cells**: Maestro netlist 端口完整，不需要 SKILL 提取 → 走 [[maestro-netlist-standalone-workflow]]。
 - **What to look up less next time**: CDF terminal order for n33/p33 → already in
   [[smic-mosfet-terminal-order]]; SKILL extraction snippet → in [[spectre-cmi-2116-ade-netlist]].
 - **Invalidation condition**: If Cadence adds a public API to export topology-complete
