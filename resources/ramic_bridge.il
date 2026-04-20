@@ -34,6 +34,7 @@ unless(boundp('RBLocal)      RBLocal      = nil)
 unless(boundp('RBEcho)       RBEcho       = nil)
 unless(boundp('RBDLog)       RBDLog       = nil)
 unless(boundp('RBShowBanner) RBShowBanner = nil) ; t = print banner when next PORT: arrives
+unless(boundp('RBDVersion)   RBDVersion   = "")  ; set from VERSION: line before PORT:
 
 ; IPC process handle — must survive reload so we don't spawn a second daemon.
 unless(boundp('RBIpc) RBIpc = 'unbound)
@@ -76,8 +77,12 @@ procedure(RBIpcDataHandler(ipcId data)
 )
 
 procedure(RBIpcErrHandler(ipcId data)
-    ; Parse "PORT:XXXXX" line emitted by daemon on startup to capture actual bound port.
-    ; The daemon prints this to stderr before accepting connections.
+    ; Parse VERSION:x.x.x and PORT:XXXXX lines emitted by daemon on startup.
+    ; VERSION arrives first so it is stored before the banner fires on PORT.
+    rexCompile("VERSION:\\([^ \n]*\\)")
+    when(rexExecute(data)
+        RBDVersion = rexSubstitute("\\1")
+    )
     rexCompile("PORT:\\([0-9][0-9]*\\)")
     when(rexExecute(data)
         let((actualPort)
@@ -376,17 +381,28 @@ procedure(RBPrintEmptyLines()
 ; ============================================================================
 
 procedure(RBPrintBanner()
-    printf("\n")
-    printf("┌─────────────────────────────────────────┐\n")
-    printf("│  vcli (Virtuoso CLI Bridge) — Ready     │\n")
-    printf("├─────────────────────────────────────────┤\n")
-    printf("│  Session : %-29s │\n" RBSessionId)
-    printf("│  Port    : %-29d │\n" RBPort)
-    printf("├─────────────────────────────────────────┤\n")
-    printf("│  Terminal: vcli skill exec 'version()'  │\n")
-    printf("│  Sessions: vcli session list            │\n")
-    printf("└─────────────────────────────────────────┘\n")
-    printf("\n")
+    let((home daemonDisp ver)
+        home = getShellEnvVar("HOME")
+        ; Replace $HOME prefix with ~ for a compact path display
+        daemonDisp = RBDPath
+        when(strncmp(daemonDisp home strlen(home)) == 0
+            daemonDisp = strcat("~" substring(daemonDisp strlen(home) + 1))
+        )
+        ver = if(RBDVersion != "" then RBDVersion else "?")
+        printf("\n")
+        printf("┌─────────────────────────────────────────┐\n")
+        printf("│  vcli (Virtuoso CLI Bridge) — Ready     │\n")
+        printf("├─────────────────────────────────────────┤\n")
+        printf("│  Session : %-29s │\n" RBSessionId)
+        printf("│  Port    : %-29d │\n" RBPort)
+        printf("│  Version : %-29s │\n" ver)
+        printf("│  Daemon  : %-29s │\n" daemonDisp)
+        printf("├─────────────────────────────────────────┤\n")
+        printf("│  Terminal: vcli skill exec 'version()'  │\n")
+        printf("│  Sessions: vcli session list            │\n")
+        printf("└─────────────────────────────────────────┘\n")
+        printf("\n")
+    )
 )
 
 ; ============================================================================

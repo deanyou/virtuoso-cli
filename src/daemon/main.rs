@@ -25,7 +25,9 @@ fn main() {
     });
 
     let actual_port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
-    // Print actual port so bridge.il can read it (important when port=0 was passed)
+    // Print version and port to stderr so ramic_bridge.il can read them.
+    // VERSION must come before PORT so it is stored before the banner fires.
+    eprintln!("VERSION:{}", env!("CARGO_PKG_VERSION"));
     eprintln!("PORT:{actual_port}");
     eprintln!("[virtuoso-daemon] listening on {host}:{actual_port}");
 
