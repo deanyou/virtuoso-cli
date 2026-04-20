@@ -1,7 +1,17 @@
 use crate::client::bridge::VirtuosoClient;
 use crate::commands::schematic::parse_skill_json;
 use crate::error::{Result, VirtuosoError};
+use crate::models::VirtuosoResult;
 use serde_json::{json, Value};
+
+/// Extract a scalar string value from a SKILL result: strips quotes on success, returns raw on error.
+fn skill_str(r: &VirtuosoResult) -> String {
+    if r.skill_ok() {
+        r.output.trim_matches('"').to_string()
+    } else {
+        r.output.clone()
+    }
+}
 
 pub fn open(lib: &str, cell: &str, view: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
@@ -62,15 +72,10 @@ pub fn get_var(name: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.get_var(name);
     let r = client.execute_skill(&skill, None)?;
-    let value = if r.skill_ok() {
-        r.output.trim_matches('"').to_string()
-    } else {
-        r.output.clone()
-    };
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
         "variable": name,
-        "value": value,
+        "value": skill_str(&r),
     }))
 }
 
@@ -89,8 +94,7 @@ pub fn list_vars() -> Result<Value> {
 
 pub fn get_analyses(session: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let version = client.version()?;
-    let skill = client.maestro.get_analyses(session, version);
+    let skill = client.maestro.get_analyses(session);
     let r = client.execute_skill(&skill, None)?;
     if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
@@ -107,21 +111,18 @@ pub fn set_analysis(
     options: Option<&str>,
 ) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let version = client.version()?;
 
-    // Validate --options JSON and convert to SKILL alist; warn if IC23 path ignores it.
-    let options_alist: Option<String> = match options {
-        None => None,
+    let (options_alist, version) = match options {
+        None => (None, crate::version::VirtuosoVersion::IC23),
         Some(opts) => {
             let alist = crate::client::maestro_ops::json_to_skill_alist(opts)
                 .map_err(|e| VirtuosoError::Execution(format!("--options: {e}")))?;
-            if !version.is_ic25() {
-                eprintln!(
-                    "warning: --options is only supported on IC25; ignoring on IC23 path"
-                );
-                None
+            let ver = client.version()?;
+            if !ver.is_ic25() {
+                eprintln!("warning: --options is only supported on IC25; ignoring on IC23 path");
+                (None, ver)
             } else {
-                Some(alist)
+                (Some(alist), ver)
             }
         }
     };
@@ -336,17 +337,12 @@ pub fn get_output_value(name: &str, test_name: &str, corner: Option<&str>) -> Re
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.get_output_value(name, test_name, corner);
     let r = client.execute_skill(&skill, None)?;
-    let value = if r.skill_ok() {
-        r.output.trim_matches('"').to_string()
-    } else {
-        r.output.clone()
-    };
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
         "output_name": name,
         "test_name": test_name,
         "corner": corner,
-        "value": value,
+        "value": skill_str(&r),
     }))
 }
 
@@ -355,16 +351,11 @@ pub fn get_spec_status(name: &str, test_name: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.get_spec_status(name, test_name);
     let r = client.execute_skill(&skill, None)?;
-    let status = if r.skill_ok() {
-        r.output.trim_matches('"').to_string()
-    } else {
-        r.output.clone()
-    };
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
         "output_name": name,
         "test_name": test_name,
-        "spec_status": status,
+        "spec_status": skill_str(&r),
     }))
 }
 
