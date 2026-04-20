@@ -92,16 +92,13 @@ pub fn get_analyses(session: &str) -> Result<Value> {
     let version = client.version()?;
     let skill = client.maestro.get_analyses(session, version);
     let r = client.execute_skill(&skill, None)?;
-    if !r.skill_ok() {
+    if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to get analyses for session '{}': {}",
             session, r.output
         )));
     }
-    Ok(json!({
-        "session": session,
-        "analyses": r.output.trim_matches('"'),
-    }))
+    parse_skill_json(&r.output)
 }
 
 pub fn set_analysis(
@@ -382,12 +379,12 @@ pub fn get_sim_messages(session: &str) -> Result<Value> {
     }))
 }
 
-/// List available history runs for the current Maestro session.
-pub fn get_history_list() -> Result<Value> {
+/// List available history runs for a Maestro session.
+pub fn get_history_list(session: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let skill = client.maestro.get_history_list();
+    let skill = client.maestro.get_history_list(session);
     let r = client.execute_skill(&skill, None)?;
-    if !r.skill_ok() {
+    if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to get history list: {}",
             r.output

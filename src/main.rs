@@ -733,8 +733,11 @@ enum MaestroCmd {
         session: String,
     },
 
-    /// List available history runs for the current Maestro session
-    HistoryList,
+    /// List available history runs for a Maestro session
+    HistoryList {
+        #[arg(long)]
+        session: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1116,7 +1119,7 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
             commands::maestro::get_spec_status(&name, &test_name)
         }
         MaestroCmd::SimMessages { session } => commands::maestro::get_sim_messages(&session),
-        MaestroCmd::HistoryList => commands::maestro::get_history_list(),
+        MaestroCmd::HistoryList { session } => commands::maestro::get_history_list(&session),
     }
 }
 

@@ -43,19 +43,20 @@ impl MaestroOps {
         r#"let((vars out sep) vars = asiGetDesignVarList(asiGetCurrentSession()) out = "[" sep = "" foreach(v vars out = strcat(out sep sprintf(nil "{\"name\":\"%s\",\"value\":\"%s\"}" car(v) cadr(v))) sep = ",") strcat(out "]"))"#.into()
     }
 
-    /// Get enabled analyses — version-aware.
+    /// Get enabled analyses — version-aware. Returns JSON array; empty list when none enabled.
     ///
     /// IC23: `maeGetEnabledAnalysis(setupName)` — needs car(maeGetSetup(...)) first.
     /// IC25: `maeGetEnabledAnalysis(?session sessionName)` — direct keyword.
+    /// maeGetEnabledAnalysis returns nil (not empty list) when no analyses are enabled;
+    /// we wrap it to always produce a JSON array so skill_ok() is not misleadingly false.
     pub fn get_analyses(&self, session: &str, version: VirtuosoVersion) -> String {
         let session = escape_skill_string(session);
-        if version.is_ic25() {
+        let inner = if version.is_ic25() {
             format!(r#"maeGetEnabledAnalysis(?session "{session}")"#)
         } else {
-            format!(
-                r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeGetEnabledAnalysis(setup))"#
-            )
-        }
+            format!(r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeGetEnabledAnalysis(setup))"#)
+        };
+        format!(r#"let((result out sep) result = {inner} out = "[" sep = "" foreach(a result out = strcat(out sep sprintf(nil "\"%s\"" a)) sep = ",") strcat(out "]"))"#)
     }
 
     /// Enable an analysis type — version-aware.
@@ -204,10 +205,12 @@ impl MaestroOps {
         format!(r#"maeGetSpecStatus("{name}" "{test_name}")"#)
     }
 
-    /// List available history runs for the current Maestro session.
+    /// List available history runs for a Maestro session.
     /// Uses maeGetAllExplorerHistoryNames(sessionName) — IC23.1 documented API.
-    pub fn get_history_list(&self) -> String {
-        r#"let((sess sessnm tests out sep) sess = asiGetCurrentSession() sessnm = if(sess then sess~>name else nil) if(sessnm then progn(tests = maeGetAllExplorerHistoryNames(sessnm) out = "[" sep = "" foreach(t tests out = strcat(out sep sprintf(nil "\"%s\"" t)) sep = ",") strcat(out "]")) else "[]"))"#.into()
+    /// Caller must pass the Maestro session name (from maeGetSessions()), not the Ocean session.
+    pub fn get_history_list(&self, session: &str) -> String {
+        let session = escape_skill_string(session);
+        format!(r#"let((tests out sep) tests = maeGetAllExplorerHistoryNames("{session}") out = "[" sep = "" foreach(t tests out = strcat(out sep sprintf(nil "\"%s\"" t)) sep = ",") strcat(out "]"))"#)
     }
 
     /// Get the Maestro session ID for the current session. Returns nil if no active session.
