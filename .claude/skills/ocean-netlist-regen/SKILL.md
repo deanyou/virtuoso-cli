@@ -11,8 +11,8 @@ description: |
   stale error, stale netlists, sim setup disrupting sessions, direct spectre
   invocation as bypass, library-not-registered diagnosis, and PSF signal naming.
 author: Claude Code
-version: 2.2.0
-date: 2026-04-17
+version: 2.3.0
+date: 2026-04-20
 ---
 
 # Ocean run() Reliability & Netlist Regeneration
@@ -77,6 +77,31 @@ the Ocean session state. After this, `run()` returns nil.
 virtuoso skill exec 'asiGetSession(hiGetCurrentWindow())'
 # → stdobj@0x... means session is alive
 ```
+
+---
+
+## Root Cause 2b: design() Not Called — evalstring() First-Expression Bug
+
+**Symptom**: `vcli sim netlist` fails even on a registered library. `si.foregnd.log` has NO new
+entry (last entry is days old). `design()` from bridge returns nil.
+
+**Root cause**: `evalstring()` in SKILL evaluates only the FIRST top-level expression in the string.
+The old `setup_skill` sent three newline-separated expressions:
+```skill
+unless(simulator()=='spectre ...)   ; ← evalstring stops here
+design("lib" "cell" "view")         ; ← silently ignored!
+resultsDir()                        ; ← silently ignored!
+```
+Result: `design()` was never called; `createNetlist` returned nil immediately (no ADE context).
+
+**Fix** (v0.3.1+): `setup_skill` wraps everything in `progn()`:
+```skill
+progn(unless(simulator()==... ...) design("lib" "cell" "view") resultsDir())
+```
+One top-level expression → `evalstring` evaluates all three.
+
+**Diagnosis**: Run `vcli skill exec 'design()'` — if output is `nil`, design context is missing.
+Manually run `vcli skill exec 'design("LIB" "CELL" "schematic")'` to set it.
 
 ---
 
