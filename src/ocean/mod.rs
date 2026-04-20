@@ -8,9 +8,11 @@ pub fn setup_skill(lib: &str, cell: &str, view: &str, simulator: &str) -> String
     let lib = escape_skill_string(lib);
     let cell = escape_skill_string(cell);
     let view = escape_skill_string(view);
-    // Only call simulator() if not already set to avoid resetting session state (modelFile etc.)
+    // progn() wraps three expressions into one — evalstring() only evaluates the
+    // first top-level expression in a string, so newline-separated calls are silently
+    // ignored.  Unless simulator is already set to avoid resetting modelFile etc.
     format!(
-        "unless(simulator() == '{simulator} simulator('{simulator}))\ndesign(\"{lib}\" \"{cell}\" \"{view}\")\nresultsDir()"
+        r#"progn(unless(simulator()=='{simulator} simulator('{simulator})) design("{lib}" "{cell}" "{view}") resultsDir())"#
     )
 }
 
@@ -271,12 +273,14 @@ mod tests {
     #[test]
     fn setup_skill_format() {
         let s = setup_skill("myLib", "myCell", "schematic", "spectre");
+        // Must be a single top-level expression so evalstring() evaluates all parts.
+        assert!(s.starts_with("progn("), "{s}");
         assert!(
             s.contains("design(\"myLib\" \"myCell\" \"schematic\")"),
             "{s}"
         );
         assert!(s.contains("spectre"), "{s}");
-        assert!(s.ends_with("resultsDir()"), "{s}");
+        assert!(s.contains("resultsDir()"), "{s}");
     }
 
     #[test]
