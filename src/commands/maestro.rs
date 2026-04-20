@@ -206,7 +206,11 @@ pub fn session_info(session: Option<&str>) -> Result<Value> {
     let run_dir = if let Some(s) = session.filter(|s| Some(*s) != dav_session.as_deref()) {
         let skill2 = client.maestro.run_dir_skill(s);
         let r2 = client.execute_skill(&skill2, None)?;
-        if r2.skill_ok() { Some(r2.output.trim_matches('"').to_string()) } else { None }
+        if r2.skill_ok() {
+            Some(r2.output.trim_matches('"').to_string())
+        } else {
+            None
+        }
     } else {
         bundled_run_dir
     };
