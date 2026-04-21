@@ -174,15 +174,28 @@ virtuoso skill exec 'option(quote(spectre) quote(gmin) 1e-14)'
 cat > /tmp/model.va << 'EOF'
 `include "constants.vams"
 `include "disciplines.vams"
-// ... module code ...
+module beh_comp(inp, inn, out, vdd, vss);
+  inout inp, inn, out, vdd, vss;  electrical inp, inn, out, vdd, vss;
+  parameter real gain = 1e4; parameter real td = 1e-9; parameter real tr = 200e-12;
+  real vd;
+  analog begin
+    vd = V(inp, inn);
+    V(out, vss) <+ transition((tanh(gain*vd/V(vdd,vss))+1)/2*V(vdd,vss)+V(vss), td, tr, tr);
+    bound_step(tr / 5);
+  end
+endmodule
 EOF
 
 cat > /tmp/tb.scs << 'EOF'
 simulator lang=spectre
-ahdl_include "/tmp/model.va"   // Spectre compiles .va directly
-// ... netlist ...
+ahdl_include "/tmp/model.va"
+parameters vdd=1.2 vcm=0.6 vdiff=10m
+Vvdd (vdd 0) vsource dc=vdd
+Vcm  (inp 0) vsource dc=vcm
+Vd   (inp inn) vsource dc=vdiff ac=1
+xcomp (inp inn out vdd 0) beh_comp
 dcop dc
-tran1 tran stop=100n
+ac1  ac start=1 stop=1G dec=20
 EOF
 
 spectre /tmp/tb.scs -format psfascii -raw /tmp/psf +mt
