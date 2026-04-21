@@ -14,6 +14,8 @@ description: |
 author: Claude Code
 version: 1.0.0
 date: 2026-04-07
+argument-hint: [error or symptom, e.g. "SFE-30" or "noise in megavolts"]
+allowed-tools: Bash(spectre *) Read Write
 ---
 
 # Spectre Netlist-Mode Gotchas

@@ -5,6 +5,8 @@ description: |
   Use when: (1) user wants to draw/create a schematic in Virtuoso, (2) user says
   "draw the OTA" or "create the schematic", (3) after sizing is complete and ready
   to build the circuit, (4) user provides a topology and wants it instantiated.
+argument-hint: [topology, e.g. "5T OTA" or "cascode current mirror"]
+allowed-tools: Bash(vcli *) Read Write Edit
 ---
 
 # Schematic Generation

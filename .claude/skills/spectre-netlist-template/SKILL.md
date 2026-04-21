@@ -13,6 +13,8 @@ version: 1.0.0
 date: 2026-04-19
 source: /opt/cadence/IC231/doc/spectremod/Chap1.html (vsource/isource/port syntax)
         /opt/cadence/IC231/doc/spectreref/chap3.html (analysis statements)
+argument-hint: [circuit type, e.g. "OTA" or "LDO" or "bandgap" or "VCO"]
+allowed-tools: Bash(python *) Bash(spectre *) Read Write
 ---
 
 # Spectre Netlist Template — Stimulus & Analysis
@@ -494,17 +496,4 @@ The script requires no third-party libraries (stdlib only).
 After generation, review and adjust parameter values (VDD, CL, temperatures, etc.)
 to match the target PDK and operating conditions.
 
----
-
-## Common Mistakes (see also spectre-netlist-gotchas)
-
-| Mistake | Symptom | Fix |
-|---------|---------|-----|
-| `ac=1` on vsource | SFE-30 | Use `mag=1` |
-| No `mag=` on AC source | AC output all zeros | Add `mag=1` (or `mag=0.5`) |
-| Series resistor as oprobe | Noise result millions × too high | Use 1TΩ parallel Rprobe |
-| node name as oprobe/iprobe | SFE-1997 | Use element name, not node |
-| `outputport=` / `inputport=` in noise | SFE-106 "invalid parameter" | Standalone spectre uses `oprobe=` / `iprobe=` |
-| `val0`/`val1` wrong units | Pulse has wrong swing | Check V vs A (vsource vs isource) |
-| Missing `global 0` | Ground not connected | Add `global 0` at top |
-| Wrong port order in XDUT | Circuit biased wrong | Match port order to subckt declaration |
+**Common mistakes**: see `/spectre-netlist-gotchas` for SFE-30 (`ac=1` → `mag=1`), SFE-1997, oprobe wiring, `global 0`, port order, and noise parameter errors.

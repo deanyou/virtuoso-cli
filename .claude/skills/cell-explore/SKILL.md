@@ -1,7 +1,8 @@
 ---
 name: cell-explore
 description: Explore Virtuoso cellviews - list libraries, cells, instances, nets, layers, and hierarchy. Use when browsing a design, understanding circuit topology, or inspecting layout/schematic contents.
-allowed-tools: Bash(*/virtuoso *)
+argument-hint: [library or cell path, e.g. "myLib" or "myLib/myCell"]
+allowed-tools: Bash(virtuoso *)
 ---
 
 # Explore Virtuoso Cellviews

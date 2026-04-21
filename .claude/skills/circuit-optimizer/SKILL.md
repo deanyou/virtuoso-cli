@@ -1,7 +1,8 @@
 ---
 name: circuit-optimizer
 description: Bayesian optimization for circuit auto-tuning — closed-loop optimizer where Claude acts as the BO engine. Sweeps gm/Id + L parameters, runs Spectre, scores against specs, and iterates. Supports progressive PVT corners. Use when optimizing circuit sizing, auto-tuning amplifier parameters, or running design-space exploration. Triggers on "optimize", "auto-tune", "bayesian", "find best sizing".
-allowed-tools: Bash(*/virtuoso *) Read Write
+argument-hint: [optimization goal, e.g. "maximize GBW subject to PM>60deg"]
+allowed-tools: Bash(virtuoso *) Read Write
 ---
 
 # Circuit Optimizer (Bayesian)
