@@ -2,7 +2,7 @@
 name: skill-review
 description: Audit a Claude Code skill file against the official skills specification. Use when the user asks to review, audit, or check a skill for spec compliance, or when a skill file may be too long, have wrong frontmatter, or needs structural improvement.
 argument-hint: [path to skill file or skill name, e.g. "veriloga" or ".claude/skills/veriloga/SKILL.md"]
-allowed-tools: Read Bash(wc *) Bash(find *) Bash(wc *) Bash(ls *)
+allowed-tools: Read Bash(wc *) Bash(find *) Bash(ls *)
 ---
 
 # Claude Code Skill Spec Auditor
@@ -73,7 +73,7 @@ Bash                 ← no glob = allows ALL bash commands (too broad)
 |-------|-------------|
 | `$ARGUMENTS` referenced | Skill should route based on user-provided argument |
 | `${CLAUDE_SKILL_DIR}` used for file refs | Use instead of hardcoded paths to companion files |
-| Dynamic blocks `` !`cmd` `` | Used for content that should be computed fresh (git branch, env vars, dates) |
+| Dynamic execution blocks | Inline shell results (git branch, date, env vars) injected before skill loads |
 | No hardcoded absolute paths | Use `${CLAUDE_SKILL_DIR}` or relative refs |
 
 ### D. Content quality
