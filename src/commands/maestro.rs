@@ -169,15 +169,22 @@ pub fn save(session: &str) -> Result<Value> {
     }))
 }
 
-pub fn export(session: &str, path: &str) -> Result<Value> {
+pub fn export(
+    session: &str,
+    path: &str,
+    test_name: Option<&str>,
+    history: Option<&str>,
+) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let skill = client.maestro.export_results(session, path);
+    let skill = client.maestro.export_results(session, path, test_name, history);
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
         "session": session,
         "path": path,
-        "output": r.output,
+        "test_name": test_name,
+        "history": history,
+        "export_path": skill_str(&r),
     }))
 }
 

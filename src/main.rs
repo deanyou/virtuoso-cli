@@ -671,13 +671,19 @@ enum MaestroCmd {
         session: String,
     },
 
-    /// Export results to CSV
+    /// Export results to CSV via maeExportOutputView
     Export {
         #[arg(long)]
         session: String,
         /// Output CSV file path
         #[arg(long)]
         path: String,
+        /// Test name to export (optional; API uses default when omitted)
+        #[arg(long)]
+        test_name: Option<String>,
+        /// History run name, e.g. ExplorerRun.0 (optional; API uses default when omitted)
+        #[arg(long)]
+        history: Option<String>,
     },
 
     /// Inspect focused ADE window and return session metadata
@@ -1101,7 +1107,12 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
         } => commands::maestro::add_output(&output_name, &test_name, &expr),
         MaestroCmd::Run { session } => commands::maestro::run(&session),
         MaestroCmd::Save { session } => commands::maestro::save(&session),
-        MaestroCmd::Export { session, path } => commands::maestro::export(&session, &path),
+        MaestroCmd::Export {
+            session,
+            path,
+            test_name,
+            history,
+        } => commands::maestro::export(&session, &path, test_name.as_deref(), history.as_deref()),
         MaestroCmd::SessionInfo { session } => commands::maestro::session_info(session.as_deref()),
         MaestroCmd::OpenResults { history } => commands::maestro::open_results(&history),
         MaestroCmd::CloseResults => commands::maestro::close_results(),

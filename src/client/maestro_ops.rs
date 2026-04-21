@@ -137,12 +137,26 @@ impl MaestroOps {
         )
     }
 
-    /// Export results to CSV.
-    pub fn export_results(&self, session: &str, file_path: &str) -> String {
+    /// Export results to CSV via maeExportOutputView.
+    pub fn export_results(
+        &self,
+        session: &str,
+        file_path: &str,
+        test_name: Option<&str>,
+        history: Option<&str>,
+    ) -> String {
         let session = escape_skill_string(session);
         let file_path = escape_skill_string(file_path);
+        let test_name_part = match test_name {
+            Some(t) => format!(r#" ?testName "{}""#, escape_skill_string(t)),
+            None => String::new(),
+        };
+        let history_part = match history {
+            Some(h) => format!(r#" ?historyName "{}""#, escape_skill_string(h)),
+            None => String::new(),
+        };
         format!(
-            r#"maeExportOutputView(?session "{session}" ?fileName "{file_path}" ?view "Detail")"#
+            r#"maeExportOutputView(?session "{session}"{test_name_part}{history_part} ?view "Detail" ?fileName "{file_path}")"#
         )
     }
 
@@ -295,6 +309,24 @@ mod tests {
         assert!(s.contains("maeGetAllExplorerHistoryNames"), "{s}");
         assert!(s.contains("fnxSession0"), "{s}");
         assert!(s.contains("foreach"), "{s}");
+    }
+
+    #[test]
+    fn export_results_minimal() {
+        let s = ops().export_results("sess1", "/tmp/out.csv", None, None);
+        assert!(s.contains("maeExportOutputView"), "{s}");
+        assert!(s.contains(r#"?session "sess1""#), "{s}");
+        assert!(s.contains(r#"?fileName "/tmp/out.csv""#), "{s}");
+        assert!(s.contains(r#"?view "Detail""#), "{s}");
+        assert!(!s.contains("?testName"), "should be absent when None: {s}");
+        assert!(!s.contains("?historyName"), "should be absent when None: {s}");
+    }
+
+    #[test]
+    fn export_results_with_all_params() {
+        let s = ops().export_results("sess1", "/tmp/out.csv", Some("AC"), Some("ExplorerRun.0"));
+        assert!(s.contains(r#"?testName "AC""#), "{s}");
+        assert!(s.contains(r#"?historyName "ExplorerRun.0""#), "{s}");
     }
 
     #[test]
