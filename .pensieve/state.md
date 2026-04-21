@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: Maestro API全部阻塞IC23.1; n12/p12 Maestro netlist standalone workflow; session-info 1-RTT实现
+- Last Note: bound_step VACOMP-2259 in SPECTRE231; skill variable expansion gotcha in SKILL.md body
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`
