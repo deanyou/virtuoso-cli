@@ -52,8 +52,8 @@ impl SSHRunner {
     }
 
     pub fn test_connection(&self, timeout: Option<u64>) -> Result<bool> {
-        let _timeout = timeout.unwrap_or(self.connect_timeout);
-        let mut cmd = self.build_ssh_cmd();
+        let effective_timeout = timeout.unwrap_or(self.connect_timeout);
+        let mut cmd = self.build_ssh_cmd_with_timeout(effective_timeout);
         cmd.arg("exit").arg("0");
 
         let output = cmd
@@ -255,6 +255,10 @@ impl SSHRunner {
     }
 
     pub(crate) fn build_ssh_cmd(&self) -> Command {
+        self.build_ssh_cmd_with_timeout(self.connect_timeout)
+    }
+
+    fn build_ssh_cmd_with_timeout(&self, connect_timeout: u64) -> Command {
         let mut cmd = Command::new("ssh");
         cmd.args([
             "-o",
@@ -262,7 +266,7 @@ impl SSHRunner {
             "-o",
             "StrictHostKeyChecking=accept-new",
             "-o",
-            &format!("ConnectTimeout={}", self.connect_timeout),
+            &format!("ConnectTimeout={connect_timeout}"),
         ]);
 
         // ControlMaster: reuse SSH connections to avoid repeated handshakes
