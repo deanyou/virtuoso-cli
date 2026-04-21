@@ -319,7 +319,10 @@ mod tests {
         assert!(s.contains(r#"?fileName "/tmp/out.csv""#), "{s}");
         assert!(s.contains(r#"?view "Detail""#), "{s}");
         assert!(!s.contains("?testName"), "should be absent when None: {s}");
-        assert!(!s.contains("?historyName"), "should be absent when None: {s}");
+        assert!(
+            !s.contains("?historyName"),
+            "should be absent when None: {s}"
+        );
     }
 
     #[test]
