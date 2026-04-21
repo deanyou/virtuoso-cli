@@ -149,7 +149,7 @@ endmodule
 
 ## 6. Behavioral Comparator
 
-`tanh()` 替代 `if/else` — 连续可微，convergence 友好；`transition()` 控制输出边沿；`bound_step()` 确保 simulator 能分辨上升沿。
+`tanh()` 替代 `if/else` — 连续可微，convergence 友好；`transition()` 控制输出边沿。`bound_step()` IC23.1/SPECTRE231 不支持，勿使用。
 
 ```verilog
 `include "constants.vams"
@@ -170,7 +170,7 @@ module beh_comp(inp, inn, out, vdd, vss);
     vd = V(inp, inn) - vos;
     vout_ideal = (tanh(gain * vd / V(vdd, vss)) + 1) / 2 * V(vdd, vss) + V(vss);
     V(out, vss) <+ transition(vout_ideal, td, tr, tr);
-    bound_step(tr / 5);
+    // bound_step(tr / 5);  // IC25+ only; not supported in SPECTRE231
   end
 endmodule
 ```
@@ -327,7 +327,7 @@ module beh_pfd(ref_clk, fb_clk, up, dn, gnd);
     I(up, gnd) <+ V(up, gnd) * 1e-9;
     I(dn, gnd) <+ V(dn, gnd) * 1e-9;
 
-    bound_step(tr / 5);
+    // bound_step(tr / 5);  // IC25+ only; not supported in SPECTRE231
   end
 endmodule
 ```

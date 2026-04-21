@@ -61,7 +61,7 @@ tail -2 /tmp/psf/spectre.out   # confirm "0 errors"
 | `timer(t0, period)` | Timed event | `period=0` = single-shot |
 | `initial_step` | Event | First sim step — init variables |
 | `final_step` | Event | Last sim step — print results |
-| `bound_step(dt)` | Step limit | Force step ≤ dt |
+| `bound_step(dt)` | Step limit | Force step ≤ dt — **not supported in SPECTRE231 (IC23.1)** |
 | `$discontinuity(n)` | Notify discontinuity | `n=0` force reconvergence |
 | `$simparam("name", def)` | Read sim param | Get temperature, freq from Ocean |
 | `$strobe("fmt", args)` | Debug print | Per-step printf |
@@ -71,8 +71,8 @@ tail -2 /tmp/psf/spectre.out   # confirm "0 errors"
 @(cross(V(out) - 0.5*V(vdd), +1))
   $strobe("rising at t=%e", $abstime);
 
-// Force fine steps during fast edge
-bound_step(tr / 5);
+// Force fine steps during fast edge (IC25+ only; omit on IC23.1/SPECTRE231)
+// bound_step(tr / 5);
 
 // Read simulation temperature
 real tc;
