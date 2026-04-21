@@ -22,6 +22,7 @@ pub enum VirtuosoError {
     #[error("timeout after {0}s")]
     Timeout(u64),
 
+    #[allow(dead_code)]
     #[error("daemon not ready: {0}")]
     DaemonNotReady(String),
 

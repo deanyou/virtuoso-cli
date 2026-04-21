@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::error::{Result, VirtuosoError};
 use std::collections::HashMap;
 use std::io::Write;

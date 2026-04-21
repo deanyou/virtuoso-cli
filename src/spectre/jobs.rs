@@ -184,6 +184,7 @@ impl Job {
         self.save()
     }
 
+    #[allow(dead_code)]
     pub fn delete(id: &str) -> Result<()> {
         let path = Self::path(id);
         fs::remove_file(&path).map_err(|_| VirtuosoError::NotFound(format!("job '{id}' not found")))

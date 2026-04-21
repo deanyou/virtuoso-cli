@@ -45,23 +45,6 @@ pub fn analysis_skill_simple(typ: &str, params: &HashMap<String, String>) -> Str
     skill
 }
 
-pub fn run_skill() -> String {
-    "run()".into()
-}
-
-pub fn measure_skill(analysis_type: &str, exprs: &[String]) -> String {
-    if exprs.len() == 1 {
-        format!("selectResult('{analysis_type})\n{}", exprs[0])
-    } else {
-        let body = exprs
-            .iter()
-            .map(|e| format!("  {e}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        format!("selectResult('{analysis_type})\nlist(\n{body}\n)")
-    }
-}
-
 pub fn sweep_skill(
     var: &str,
     values: &[f64],

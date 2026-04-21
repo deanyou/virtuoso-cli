@@ -60,6 +60,7 @@ impl SchematicOps {
         )
     }
 
+    #[allow(dead_code)]
     pub fn create_wire_between_terms(
         &self,
         inst1: &str,

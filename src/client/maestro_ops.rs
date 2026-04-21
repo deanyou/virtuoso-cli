@@ -82,6 +82,7 @@ impl MaestroOps {
         format!(r#"maeRunSimulation(?session "{session}")"#)
     }
 
+    #[allow(dead_code)]
     /// IC23.1: `maeGetTestOutputs` returns list-of-lists; elements accessed via car/cadr/caddr.
     pub fn get_outputs(&self, test_name: &str) -> String {
         let test_name = escape_skill_string(test_name);
@@ -97,6 +98,7 @@ impl MaestroOps {
         format!(r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#)
     }
 
+    #[allow(dead_code)]
     pub fn set_design(&self, session: &str, lib: &str, cell: &str, view: &str) -> String {
         let session = escape_skill_string(session);
         let lib = escape_skill_string(lib);
@@ -209,6 +211,7 @@ impl MaestroOps {
         skill_strings_to_json(&format!(r#"maeGetAllExplorerHistoryNames("{session}")"#))
     }
 
+    #[allow(dead_code)]
     pub fn get_current_session(&self) -> String {
         r#"let((sess) sess = asiGetCurrentSession() if(sess then sess~>name else nil))"#.into()
     }

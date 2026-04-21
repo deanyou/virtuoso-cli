@@ -71,6 +71,7 @@ pub struct ConfigField {
 
 pub struct App {
     pub tab: Tab,
+    #[allow(dead_code)]
     pub focus: Focus,
     pub overlay: Overlay,
 

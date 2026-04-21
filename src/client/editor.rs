@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::client::bridge::VirtuosoClient;
 use crate::client::layout_ops::LayoutOps;
 use crate::client::schematic_ops::SchematicOps;

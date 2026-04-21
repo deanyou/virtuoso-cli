@@ -138,7 +138,7 @@ pub fn diagnose() -> Result<Value> {
 
     // Daemon responsiveness + latency
     let (daemon_ok, latency_ms, virtuoso_version) = if tcp_ok {
-        let vc = crate::client::bridge::VirtuosoClient::local("127.0.0.1", port, cfg.timeout);
+        let vc = crate::client::bridge::VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         let start = std::time::Instant::now();
         match vc.test_connection(Some(5)) {
             Ok(true) => {
@@ -161,7 +161,7 @@ pub fn diagnose() -> Result<Value> {
 
     // SKILL eval test
     let skill_ok = if daemon_ok {
-        let vc = crate::client::bridge::VirtuosoClient::local("127.0.0.1", port, cfg.timeout);
+        let vc = crate::client::bridge::VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         vc.execute_skill("1+1", None)
             .map(|r| r.output.trim() == "2")
             .unwrap_or(false)
@@ -221,7 +221,7 @@ pub fn status(format: OutputFormat) -> Result<Value> {
     let port = TunnelState::load()?.map(|s| s.port).unwrap_or(cfg.port);
 
     let daemon_info = if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
-        let vc = crate::client::bridge::VirtuosoClient::local("127.0.0.1", port, cfg.timeout);
+        let vc = crate::client::bridge::VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         match vc.test_connection(Some(5)) {
             Ok(true) => json!({ "responsive": true }),
             Ok(false) => json!({ "responsive": false, "detail": "unexpected response" }),

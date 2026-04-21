@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use tracing_subscriber::EnvFilter;
 
 mod client;
@@ -959,26 +957,18 @@ fn dispatch_sim(cmd: SimCmd) -> error::Result<serde_json::Value> {
             timeout,
         } => {
             let mut params: std::collections::HashMap<String, String> = param.into_iter().collect();
-            if let Some(v) = stop {
-                params.insert("stop".into(), v);
-            }
-            if let Some(v) = start {
-                params.insert("start".into(), v);
-            }
-            if let Some(v) = from {
-                params.insert("from".into(), v);
-            }
-            if let Some(v) = to {
-                params.insert("to".into(), v);
-            }
-            if let Some(v) = step {
-                params.insert("step".into(), v);
-            }
-            if let Some(v) = dec {
-                params.insert("dec".into(), v);
-            }
-            if let Some(v) = errpreset {
-                params.insert("errpreset".into(), v);
+            for (key, val) in [
+                ("stop", stop),
+                ("start", start),
+                ("from", from),
+                ("to", to),
+                ("step", step),
+                ("dec", dec),
+                ("errpreset", errpreset),
+            ] {
+                if let Some(v) = val {
+                    params.insert(key.into(), v);
+                }
             }
             commands::sim::run(&analysis, &params, timeout)
         }
@@ -1226,27 +1216,6 @@ fn main() {
 
     let is_status_cmd = matches!(&cli.command, Commands::Tunnel(TunnelCmd::Status));
 
-    // Early-exit commands that manage their own output
-    match &cli.command {
-        Commands::Schema { all, noun, verb } => {
-            let schema = if *all || noun.is_none() {
-                commands::schema::show(None, None)
-            } else {
-                commands::schema::show(noun.as_deref(), verb.as_deref())
-            };
-            print_json(&schema);
-            return;
-        }
-        Commands::Tui => {
-            if let Err(e) = tui::run_tui() {
-                eprintln!("TUI error: {e}");
-                std::process::exit(1);
-            }
-            return;
-        }
-        _ => {}
-    }
-
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
         Commands::Tunnel(cmd) => dispatch_tunnel(cmd, format),
@@ -1262,8 +1231,22 @@ fn main() {
             SessionCmd::Show { id } => commands::session::show(&id, format),
         },
         Commands::Window(cmd) => dispatch_window(cmd),
-        // Already handled above; unreachable but required for exhaustive match
-        Commands::Schema { .. } | Commands::Tui => unreachable!(),
+        Commands::Schema { all, noun, verb } => {
+            let schema = if all || noun.is_none() {
+                commands::schema::show(None, None)
+            } else {
+                commands::schema::show(noun.as_deref(), verb.as_deref())
+            };
+            print_json(&schema);
+            std::process::exit(0);
+        }
+        Commands::Tui => {
+            if let Err(e) = tui::run_tui() {
+                eprintln!("TUI error: {e}");
+                std::process::exit(1);
+            }
+            std::process::exit(0);
+        }
     };
 
     match result {

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::error::{Result, VirtuosoError};
 use crate::models::{ExecutionStatus, SimulationResult};
 use crate::spectre::jobs::{Job, JobStatus};

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
 use crate::models::TunnelState;
