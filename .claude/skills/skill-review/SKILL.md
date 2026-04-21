@@ -1,118 +1,94 @@
 ---
 name: skill-review
 description: Audit a Claude Code skill file against the official skills specification. Use when the user asks to review, audit, or check a skill for spec compliance, or when a skill file may be too long, have wrong frontmatter, or needs structural improvement.
-argument-hint: [path to skill file or skill name, e.g. "veriloga" or ".claude/skills/veriloga/SKILL.md"]
+argument-hint: [skill name or path, e.g. "veriloga" or ".claude/skills/veriloga/SKILL.md"]
 allowed-tools: Read Bash(wc *) Bash(find *) Bash(ls *)
 ---
 
 # Claude Code Skill Spec Auditor
 
-Audit a skill at `$ARGUMENTS`. If no path given, ask the user which skill to review.
+Audit the skill named "$ARGUMENTS". If no argument was given, ask the user which skill to review.
 
 ## Step 1 — Locate the skill file
 
 ```bash
-# If $ARGUMENTS is a skill name, find it:
-find .claude/skills/ -name "SKILL.md" | grep -i "$ARGUMENTS"
-# Or check global skills:
-find ~/.claude/skills/ -name "SKILL.md" | grep -i "$ARGUMENTS"
-```
-
-Read the SKILL.md file. Then count lines:
-
-```bash
+find .claude/skills ~/.claude/skills -name "SKILL.md" 2>/dev/null | head -30
 wc -l <path/to/SKILL.md>
+ls -la <skill-dir>/
 ```
 
-Also list companion files:
+Read the SKILL.md file in full.
 
-```bash
-ls -la $(dirname <path/to/SKILL.md>)/
-```
-
-## Step 2 — Run the checklist
-
-Score each item PASS / WARN / FAIL with a one-line reason.
+## Step 2 — Checklist (score PASS / WARN / FAIL)
 
 ### A. File size
 
 | Check | Limit | Notes |
 |-------|-------|-------|
-| `SKILL.md` line count | ≤ 500 lines | Excess goes to `reference.md` in same dir |
-| `reference.md` exists if needed | — | Required when SKILL.md overflows |
+| SKILL.md line count | ≤ 500 lines | Excess is silently truncated before Claude sees it |
+| reference.md exists when needed | — | Required if SKILL.md would overflow |
 
-**Rule**: Content past line 500 is truncated before Claude sees it. Module templates, long examples, and reference tables belong in `reference.md`.
+Module templates, long examples, and reference tables belong in `reference.md`, not the main file.
 
 ### B. Frontmatter fields
 
-Required fields and constraints:
-
 | Field | Required | Constraint |
 |-------|----------|------------|
-| `name` | Yes | Matches the slash-command name exactly |
-| `description` | Yes | ≤ 1,536 chars combined with `when_to_use`; drives auto-trigger matching |
-| `allowed-tools` | Recommended | Syntax: `ToolName` or `ToolName(glob_pattern)`; glob uses `*` not `*/prefix/` |
-| `argument-hint` | Recommended | Short hint shown in autocomplete UI (e.g. `[module type or error message]`) |
+| `name` | Yes | Must match the slash-command name exactly |
+| `description` | Yes | ≤ 1,536 chars; drives auto-trigger matching |
+| `allowed-tools` | Recommended | `ToolName` or `ToolName(glob)`; glob uses bare `*`, not `*/prefix/` |
+| `argument-hint` | Recommended | Short hint shown in autocomplete UI |
 
-**`allowed-tools` patterns — correct vs wrong**:
+**`allowed-tools` patterns**:
 ```
-# CORRECT
-Bash(virtuoso *)     ← bare command glob
-Bash(vcli *)
-Read
-Write
-
-# WRONG
-Bash(*/virtuoso *)   ← leading */ has unclear semantics, avoid
-Bash                 ← no glob = allows ALL bash commands (too broad)
+CORRECT: Bash(virtuoso *)   Bash(vcli *)   Read   Write
+WRONG:   Bash(*/virtuoso *) — leading */ has unclear glob semantics
+WRONG:   Bash               — no glob = allows ALL bash commands (too broad)
 ```
 
 ### C. Skill body
 
-| Check | Requirement |
-|-------|-------------|
-| `$ARGUMENTS` referenced | Skill should route based on user-provided argument |
-| `${CLAUDE_SKILL_DIR}` used for file refs | Use instead of hardcoded paths to companion files |
-| Dynamic execution blocks | Inline shell results (git branch, date, env vars) injected before skill loads |
-| No hardcoded absolute paths | Use `${CLAUDE_SKILL_DIR}` or relative refs |
+| Check | What to look for |
+|-------|-----------------|
+| Arguments routing | Body references the ARGUMENTS variable to route on user input |
+| Skill-dir-relative paths | Companion files use the CLAUDE_SKILL_DIR variable, not hardcoded absolute paths |
+| Dynamic blocks | Time-sensitive content (git branch, date, env vars) injected at load time |
+| No hardcoded paths | Absolute paths to project dirs should not appear in skill body |
 
 ### D. Content quality
 
 | Check | Guidance |
 |-------|----------|
-| Templates in body vs reference.md | Long code blocks (>30 lines each, multiple templates) → reference.md |
+| Templates vs reference.md | Multiple long code blocks (>30 lines each) → extract to `reference.md` |
 | No commented-out code | Clean, actionable content only |
-| Examples are complete and runnable | Snippets should work as-is or with minimal substitution |
+| Runnable examples | Snippets work as-is or with minimal substitution |
 
-## Step 3 — Report findings
+## Step 3 — Report
 
-Format as a table:
+Produce a findings table:
 
 ```
-| # | Check | Status | Finding |
-|---|-------|--------|---------|
-| 1 | File size | FAIL | 792 lines (limit 500) — move templates to reference.md |
-| 2 | allowed-tools glob | WARN | Bash(*/vcli *) — remove leading */ |
-| 3 | argument-hint | FAIL | Missing — add argument-hint to frontmatter |
-| 4 | $ARGUMENTS routing | WARN | Not referenced in body — skill ignores user arguments |
+| # | Check             | Status | Finding                                           |
+|---|-------------------|--------|---------------------------------------------------|
+| 1 | File size         | FAIL   | 792 lines — move templates to reference.md        |
+| 2 | allowed-tools     | WARN   | Bash(*/vcli *) — remove leading */                |
+| 3 | argument-hint     | FAIL   | Missing from frontmatter                          |
+| 4 | Arguments routing | WARN   | ARGUMENTS variable not used — skill ignores input |
 ```
 
-Then list **recommended fixes** in priority order (FAIL first, then WARN).
+List recommended fixes in priority order (FAIL first, then WARN).
 
 ## Step 4 — Offer to fix
 
-Ask: "Apply all fixes now?" If yes, implement them:
-1. Create/update `reference.md` for overflow content
-2. Edit frontmatter in `SKILL.md`
-3. Add `$ARGUMENTS` routing block and `${CLAUDE_SKILL_DIR}/reference.md` load instruction
+Ask: "Apply all fixes now?" If yes:
+1. Extract overflow content to `reference.md` in the same directory
+2. Fix frontmatter: `allowed-tools`, `argument-hint`, `name`
+3. Add arguments routing block and a load instruction pointing to `reference.md`
 
-## Official spec reference
+## Spec reference (invariants)
 
-The full Claude Code skills specification is in the Claude Code documentation.
-Key invariants:
-- Skills are loaded into context as plain text before Claude responds
-- `SKILL.md` > 500 lines → content after line 500 is silently dropped
-- `description` is used for semantic matching when user types a slash command — keep it focused
-- `allowed-tools` controls which tools Claude can call while executing the skill
-- `$ARGUMENTS` = everything the user typed after the slash command name
-- `${CLAUDE_SKILL_DIR}` = absolute path to the directory containing the skill's SKILL.md
+- SKILL.md > 500 lines: content past line 500 is dropped silently
+- `description` is used for semantic matching — keep it focused, under ~1,000 chars
+- `allowed-tools` controls which tools Claude may call during skill execution
+- The ARGUMENTS variable = everything the user typed after the slash command name
+- The CLAUDE_SKILL_DIR variable = absolute path to the skill's directory (currently: ${CLAUDE_SKILL_DIR})
