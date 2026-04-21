@@ -323,18 +323,16 @@ fn parse_ade_title(title: &str) -> Option<AdeWindowInfo> {
 
     let (app, rest) = if let Some(r) = rest.strip_prefix("Assembler ") {
         ("assembler", r)
-    } else if let Some(r) = rest.strip_prefix("Explorer ") {
-        ("explorer", r)
     } else {
-        return None;
+        let r = rest.strip_prefix("Explorer ")?;
+        ("explorer", r)
     };
 
     let (editable, rest) = if let Some(r) = rest.strip_prefix("Editing: ") {
         (true, r)
-    } else if let Some(r) = rest.strip_prefix("Reading: ") {
-        (false, r)
     } else {
-        return None;
+        let r = rest.strip_prefix("Reading: ")?;
+        (false, r)
     };
 
     let mut parts = rest.split_whitespace();
