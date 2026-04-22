@@ -35,10 +35,9 @@ PSF_TOOL_CANDIDATES = [
 
 def parse_sdb(path):
     """Parse a Cadence .sdb XML file. Returns the root Element."""
-    # Cadence sdb files have a text node after the root tag's opening tag
-    # (e.g., "<setupdb version="7">maestro\n<active>...") that is not
-    # standard XML. We strip those bare text tokens before parsing.
     text = Path(path).read_text(errors="replace")
+    if not text.strip():
+        return ET.fromstring('<empty/>')
     # Remove bare text immediately after opening tags (the "section name" tokens)
     text = re.sub(r'(<(?:setupdb|statedb)[^>]*>)\s*\w[\w\s]*\n', r'\1\n', text)
     text = re.sub(r'(<(?:active|history|Test|component|partition)(?:\s[^>]*)?>)\s*\w[\w .]+\n', r'\1\n', text)
