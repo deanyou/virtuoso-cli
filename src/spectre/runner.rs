@@ -71,18 +71,12 @@ impl SpectreSimulator {
 
     pub fn check_license(&self) -> Result<String> {
         if let Some(ref runner) = self.ssh_runner {
-            let cmds = vec![
-                "which spectre 2>/dev/null || echo 'not found'",
-                "spectre -W 2>/dev/null | head -1 || echo 'unknown'",
-                "lmstat -a 2>/dev/null | grep -i spectre | head -5 || echo 'lmstat not available'",
-            ];
-
-            let mut results = Vec::new();
-            for cmd in cmds {
-                let result = runner.run_command(cmd, None)?;
-                results.push(result.stdout.trim().to_string());
-            }
-            Ok(results.join("\n"))
+            // Combine into one SSH round-trip to avoid repeated handshakes.
+            let cmd = "which spectre 2>/dev/null || echo 'not found'; \
+                       spectre -W 2>/dev/null | head -1 || echo 'unknown'; \
+                       lmstat -a 2>/dev/null | grep -i spectre | head -5 || echo 'lmstat not available'";
+            let result = runner.run_command(cmd, None)?;
+            Ok(result.stdout.trim().to_string())
         } else {
             let output = Command::new("sh")
                 .arg("-c")
