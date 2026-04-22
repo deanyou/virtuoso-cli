@@ -586,12 +586,20 @@ def main():
             print(json.dumps({'error': f"Run '{args.run}' not found", 'available': [r['name'] for r in runs]}))
             sys.exit(1)
     else:
-        # Use latest (last in history)
-        run = runs[-1] if runs else None
+        # Pick newest run by psf_base directory mtime (most reliable on shared
+        # servers: axlGetCurrentHistory can lag behind after Interactive sims).
+        # Fall back to history order if none of the directories exist on disk.
+        def _mtime(r):
+            p = Path(r['psf_base'])
+            try:
+                return p.stat().st_mtime if p.exists() else 0.0
+            except OSError:
+                return 0.0
+
+        run = max(runs, key=_mtime) if runs else None
         if not run:
             # Fall back to overwritehistoryname from maestro.sdb
             hist_name = sdb.get('overwrite_history_name', 'ExplorerRun.0')
-            # Reconstruct psf_base from maestro_dir convention
             sim_results = Path(maestro_dir) / 'results' / 'maestro' / hist_name
             run = {'name': hist_name, 'psf_base': str(sim_results), 'timestamp': ''}
 
