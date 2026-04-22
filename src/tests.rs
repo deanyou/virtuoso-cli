@@ -255,6 +255,23 @@ mod ssh_runner_tests {
         let parts: Vec<_> = msg.split(';').collect();
         assert!(parts.len() <= 3, "should only take first 3 lines: {msg}");
     }
+
+    /// Integration test: requires sshd running on localhost:2222.
+    /// Start with: sudo /usr/sbin/sshd -p 2222
+    #[test]
+    #[ignore]
+    fn integration_localhost_roundtrip() {
+        let mut r = SSHRunner::new("localhost");
+        r.ssh_port = Some(2222);
+        r.connect_timeout = 5;
+
+        let ok = r.test_connection(None).expect("test_connection failed");
+        assert!(ok, "SSH connection to localhost:2222 failed");
+
+        let result = r.run_command("echo PONG", None).expect("run_command failed");
+        assert!(result.success, "command failed: {:?}", result.stderr);
+        assert_eq!(result.stdout.trim(), "PONG");
+    }
 }
 
 #[cfg(test)]
