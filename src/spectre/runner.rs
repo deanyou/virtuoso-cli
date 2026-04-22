@@ -89,7 +89,7 @@ impl SpectreSimulator {
                 .arg("which spectre 2>/dev/null && spectre -W 2>/dev/null | head -1")
                 .output()
                 .map_err(|e| VirtuosoError::Execution(e.to_string()))?;
-            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
         }
     }
 

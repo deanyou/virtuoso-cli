@@ -93,8 +93,13 @@ impl SSHRunner {
             .map_err(|e| VirtuosoError::Ssh(format!("ssh failed: {e}")))?;
 
         let elapsed = start.elapsed().as_secs_f64();
-        let _stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        let error = if output.status.success() {
+            None
+        } else {
+            Some(self.summarize_error(&stderr))
+        };
 
         let mut timings = HashMap::new();
         timings.insert("total".into(), elapsed);
@@ -102,14 +107,10 @@ impl SSHRunner {
         Ok(RemoteTaskResult {
             success: output.status.success(),
             returncode: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: stderr_str.clone(),
+            stdout,
+            stderr,
             remote_dir: None,
-            error: if output.status.success() {
-                None
-            } else {
-                Some(self.summarize_error(&stderr_str))
-            },
+            error,
             timings,
         })
     }
