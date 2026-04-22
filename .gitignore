@@ -20,4 +20,5 @@ spectre.dc
 __pycache__/
 test_tb.ahdlSimDB/
 test_tb.log
-^0$
+
+/0
