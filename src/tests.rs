@@ -191,7 +191,10 @@ mod ssh_runner_tests {
             .get_args()
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
-        assert!(args.contains(&"BatchMode=yes".to_string()), "args: {args:?}");
+        assert!(
+            args.contains(&"BatchMode=yes".to_string()),
+            "args: {args:?}"
+        );
         assert!(
             args.contains(&"GSSAPIAuthentication=no".to_string()),
             "args: {args:?}"
@@ -268,7 +271,9 @@ mod ssh_runner_tests {
         let ok = r.test_connection(None).expect("test_connection failed");
         assert!(ok, "SSH connection to localhost:2222 failed");
 
-        let result = r.run_command("echo PONG", None).expect("run_command failed");
+        let result = r
+            .run_command("echo PONG", None)
+            .expect("run_command failed");
         assert!(result.success, "command failed: {:?}", result.stderr);
         assert_eq!(result.stdout.trim(), "PONG");
     }
