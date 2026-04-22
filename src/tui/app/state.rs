@@ -3,7 +3,6 @@ use crate::spectre::jobs::Job;
 use crate::tui::app::overlay::Overlay;
 use std::time::Instant;
 
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Sessions,
