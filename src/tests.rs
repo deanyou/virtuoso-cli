@@ -191,8 +191,13 @@ mod ssh_runner_tests {
             .get_args()
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
+        assert!(args.contains(&"BatchMode=yes".to_string()), "args: {args:?}");
         assert!(
-            args.contains(&"BatchMode=yes".to_string()),
+            args.contains(&"GSSAPIAuthentication=no".to_string()),
+            "args: {args:?}"
+        );
+        assert!(
+            args.contains(&"HostbasedAuthentication=no".to_string()),
             "args: {args:?}"
         );
     }
