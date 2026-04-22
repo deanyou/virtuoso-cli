@@ -14,9 +14,29 @@ description: |
   - Any request involving Maestro output expressions, PSF files, or ADE results without GUI
 allowed-tools:
   - Bash(python3 *)
+  - Bash(find *)
+  - Bash(grep *)
   - Read
 argument-hint: "[maestro_dir] [--run <run_name>] [--test <test_name>] [--list]"
 ---
+
+## Arguments routing
+
+ARGUMENTS = everything the user typed after `/maestro-read-results`.
+
+| Pattern | Action |
+|---------|--------|
+| `<path> [--list]` | Run script with provided path and flags directly |
+| `<path>` only | Run script, read all outputs for latest run |
+| Empty / vague | Search for `maestro.sdb` files, let user pick |
+
+```bash
+# If ARGUMENTS contains a path, use it directly:
+python3 ${CLAUDE_SKILL_DIR}/scripts/read_results.py $ARGUMENTS
+
+# If no path given, discover candidates first:
+find ~/projects -name "maestro.sdb" -size +0c -maxdepth 10 2>/dev/null | head -20
+```
 
 ## Overview
 
