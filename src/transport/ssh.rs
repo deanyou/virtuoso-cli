@@ -270,6 +270,12 @@ impl SSHRunner {
             "StrictHostKeyChecking=accept-new",
             "-o",
             &format!("ConnectTimeout={connect_timeout}"),
+            // EDA lab KDC stalls masquerade as banner-exchange timeouts;
+            // disable both auth methods we never use.
+            "-o",
+            "GSSAPIAuthentication=no",
+            "-o",
+            "HostbasedAuthentication=no",
         ]);
 
         // ControlMaster: reuse SSH connections to avoid repeated handshakes
