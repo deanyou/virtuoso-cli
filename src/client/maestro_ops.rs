@@ -96,6 +96,7 @@ impl MaestroOps {
     ///
     /// IC23/IC25: maeGetTestOutputs(testName) — both use positional.
     /// IC25 additionally supports ?session keyword.
+    #[allow(dead_code)]
     pub fn get_outputs(&self, test_name: &str) -> String {
         let test_name = escape_skill_string(test_name);
         format!(
@@ -245,6 +246,7 @@ impl MaestroOps {
     }
 
     /// Get the Maestro session ID for the current session.
+    #[allow(dead_code)]
     pub fn get_current_session(&self) -> String {
         r#"let((sess out) sess = asiGetCurrentSession() out = if(sess then sess~>name else "nil"))"#
             .into()
