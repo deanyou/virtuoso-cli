@@ -329,6 +329,27 @@ impl SSHRunner {
         }
     }
 
+    /// Build a minimal SSH command string for manual connectivity verification.
+    /// Useful for error messages when the tunnel cannot be established.
+    pub fn verify_cmd_hint(&self) -> String {
+        let mut parts = vec!["ssh".to_string()];
+        if let Some(ref jump) = self.jump_host {
+            let jump_target = match &self.jump_user {
+                Some(u) => format!("{u}@{jump}"),
+                None => jump.clone(),
+            };
+            parts.push(format!("-J {jump_target}"));
+        }
+        if let Some(port) = self.ssh_port {
+            parts.push(format!("-p {port}"));
+        }
+        if let Some(ref key) = self.ssh_key_path {
+            parts.push(format!("-i {key}"));
+        }
+        parts.push(self.remote_target());
+        parts.join(" ")
+    }
+
     pub(crate) fn summarize_error(&self, stderr: &str) -> String {
         let lower = stderr.to_lowercase();
         if lower.contains("connection refused") {

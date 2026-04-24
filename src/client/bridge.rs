@@ -7,6 +7,7 @@ use crate::models::{ExecutionStatus, VirtuosoResult};
 use crate::transport::tunnel::SSHClient;
 use crate::version::VirtuosoVersion;
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Instant;
@@ -224,6 +225,50 @@ impl VirtuosoClient {
         ))
     }
 
+    /// Batch-fetch object slots from a SKILL list expression in a single RTT.
+    ///
+    /// `list_expr` evaluates to a SKILL list of objects; `fields` names the `~>slot`
+    /// accessors to extract from each object. Returns one `HashMap` per object.
+    ///
+    /// Nil-valued slots are returned as empty strings. Example:
+    /// ```rust,ignore
+    /// client.execute_skill_fetch("maeGetSessions()", &["name", "status"])
+    /// // → [{"name": "fnxSession0", "status": "idle"}, ...]
+    /// ```
+    #[allow(dead_code)]
+    pub fn execute_skill_fetch(
+        &self,
+        list_expr: &str,
+        fields: &[&str],
+    ) -> Result<Vec<HashMap<String, String>>> {
+        if fields.is_empty() {
+            return Ok(Vec::new());
+        }
+        let skill = build_fetch_skill(list_expr, fields);
+        let r = self.execute_skill(&skill, None)?;
+        if !r.ok() {
+            return Err(VirtuosoError::Execution(format!(
+                "execute_skill_fetch failed: {}",
+                r.errors.first().cloned().unwrap_or_default()
+            )));
+        }
+        let json: serde_json::Value = serde_json::from_str(&r.output)
+            .map_err(|e| VirtuosoError::Execution(format!("failed to parse fetch result: {e}")))?;
+        let arr = json
+            .as_array()
+            .ok_or_else(|| VirtuosoError::Execution("expected JSON array from fetch".into()))?;
+        Ok(arr
+            .iter()
+            .filter_map(|v| {
+                v.as_object().map(|obj| {
+                    obj.iter()
+                        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                        .collect()
+                })
+            })
+            .collect())
+    }
+
     pub fn test_connection(&self, timeout: Option<u64>) -> Result<bool> {
         let result = self.execute_skill("1+1", timeout)?;
         Ok(result.output.trim() == "2")
@@ -376,4 +421,73 @@ pub fn escape_skill_string(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('\n', "\\n")
+}
+
+/// Build a SKILL expression that iterates `list_expr` and serialises the given
+/// `~>slot` fields from each object into a JSON array, in a single SKILL RTT.
+///
+/// Generated form (for fields ["name", "value"]):
+/// ```text
+/// let((out_ sep_) out_="[" sep_=""
+///   foreach(o <list_expr>
+///     out_=strcat(out_ sep_ sprintf(nil "{\"name\":\"%s\",\"value\":\"%s\"}"
+///       if(o~>name then sprintf(nil "%s" o~>name) else "")
+///       if(o~>value then sprintf(nil "%s" o~>value) else "")
+///     )) sep_=","
+///   ) strcat(out_ "]"))
+/// ```
+#[allow(dead_code)]
+fn build_fetch_skill(list_expr: &str, fields: &[&str]) -> String {
+    // Build SKILL-escaped JSON format string: {\"f1\":\"%s\",\"f2\":\"%s\"}
+    let pairs: Vec<String> = fields
+        .iter()
+        .map(|f| format!("\\\"{}\\\":\\\"%s\\\"", f))
+        .collect();
+    let fmt = format!("{{{}}}", pairs.join(","));
+
+    // Per-field nil-safe extraction
+    let args: Vec<String> = fields
+        .iter()
+        .map(|f| format!("if(o~>{f} then sprintf(nil \"%s\" o~>{f}) else \"\")"))
+        .collect();
+    let args_str = args.join(" ");
+
+    format!(
+        "let((out_ sep_) out_=\"[\" sep_=\"\" foreach(o {list_expr} \
+         out_=strcat(out_ sep_ sprintf(nil \"{fmt}\" {args_str})) sep_=\",\") \
+         strcat(out_ \"]\"))"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fetch_skill_single_field() {
+        let s = build_fetch_skill("maeGetSessions()", &["name"]);
+        assert!(s.starts_with("let((out_ sep_)"), "{s}");
+        assert!(s.contains("foreach(o maeGetSessions()"), "{s}");
+        assert!(s.contains(r#"\"name\":\"%s\""#), "{s}");
+        assert!(s.contains("if(o~>name then sprintf"), "{s}");
+        assert!(s.contains("else \"\""), "{s}");
+        assert!(s.contains(r#"strcat(out_ "]")"#), "{s}");
+    }
+
+    #[test]
+    fn fetch_skill_multiple_fields() {
+        let s = build_fetch_skill("myList()", &["name", "value"]);
+        assert!(s.contains(r#"\"name\":\"%s\",\"value\":\"%s\""#), "{s}");
+        assert!(s.contains("o~>name"), "{s}");
+        assert!(s.contains("o~>value"), "{s}");
+    }
+
+    #[test]
+    fn fetch_skill_nil_safe_per_field() {
+        let s = build_fetch_skill("myList()", &["status"]);
+        assert!(
+            s.contains("if(o~>status then sprintf(nil \"%s\" o~>status) else \"\")"),
+            "{s}"
+        );
+    }
 }

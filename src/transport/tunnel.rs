@@ -169,9 +169,10 @@ impl SSHClient {
                 return Ok(());
             }
         }
-        Err(VirtuosoError::Ssh(
-            "failed to establish tunnel on any port".into(),
-        ))
+        Err(VirtuosoError::Ssh(format!(
+            "failed to establish tunnel on any port; verify SSH: `{}`",
+            self.runner.verify_cmd_hint()
+        )))
     }
 
     fn try_ssh_tunnel(&mut self, port: u16) -> Result<()> {
