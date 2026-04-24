@@ -100,7 +100,6 @@ pub fn get_analyses(session: &str) -> Result<Value> {
     Ok(json!({
         "session": session,
         "analyses": r.output.trim_matches('"'),
-        "raw": r.output,
     }))
 }
 
@@ -147,10 +146,7 @@ pub fn run(session: &str) -> Result<Value> {
 
 pub fn add_output(output_name: &str, test_name: &str, expr: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let version = client.version()?;
-    let skill = client
-        .maestro
-        .add_output(output_name, test_name, expr, version);
+    let skill = client.maestro.add_output(output_name, test_name, expr);
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },

@@ -104,27 +104,11 @@ impl MaestroOps {
         )
     }
 
-    /// Add an output expression — version-aware.
-    ///
-    /// IC23: `maeAddOutput(outputName testName ?expr e)` via setup-resolved test name.
-    /// IC25: `maeAddOutput(outputName testName ?expr e ?session s)`.
-    pub fn add_output(
-        &self,
-        output_name: &str,
-        test_name: &str,
-        expr: &str,
-        version: VirtuosoVersion,
-    ) -> String {
+    pub fn add_output(&self, output_name: &str, test_name: &str, expr: &str) -> String {
         let output_name = escape_skill_string(output_name);
         let test_name = escape_skill_string(test_name);
         let expr = escape_skill_string(expr);
-        if version.is_ic25() {
-            // IC25: pass test name directly, use ?session when available
-            format!(r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#)
-        } else {
-            // IC23: same positional form
-            format!(r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#)
-        }
+        format!(r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#)
     }
 
     #[allow(dead_code)]
@@ -411,7 +395,7 @@ mod tests {
 
     #[test]
     fn add_output_includes_expr() {
-        let s = ops().add_output("gain", "AC", "getData(\"vout\")", VirtuosoVersion::IC23);
+        let s = ops().add_output("gain", "AC", "getData(\"vout\")");
         assert!(s.contains("maeAddOutput"), "{s}");
         assert!(s.contains("\"gain\""), "{s}");
         assert!(s.contains("\"AC\""), "{s}");
