@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::client::bridge::escape_skill_string;
 
 #[cfg(test)]

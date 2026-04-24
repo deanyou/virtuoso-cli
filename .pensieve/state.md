@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: maestro session types, ADE window title format, defer version branches, skill_strings_to_json list pattern
+- Last Note: bound_step VACOMP-2259 in SPECTRE231; skill variable expansion gotcha in SKILL.md body
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`

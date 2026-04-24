@@ -19,8 +19,12 @@ pub fn size(
     // Interpolate at gmid_target
     let point = interpolate_gmid(&l_data, gmid_target)?;
 
-    let id_sim = point["id"].as_f64().unwrap();
-    let gain = point["gain"].as_f64().unwrap();
+    let id_sim = point["id"]
+        .as_f64()
+        .ok_or_else(|| VirtuosoError::Config("lookup point missing 'id'".into()))?;
+    let gain = point["gain"]
+        .as_f64()
+        .ok_or_else(|| VirtuosoError::Config("lookup point missing 'gain'".into()))?;
     let ft = point["ft"].as_f64().unwrap_or(0.0);
     let vov = point["vov"].as_f64().unwrap_or(0.0);
     let vth = point["vth"].as_f64().unwrap_or(0.0);
@@ -83,8 +87,11 @@ pub fn explore(pdk: &str, device_type: &str, format: OutputFormat) -> Result<Val
         println!("  gm/Id Design Space: {pdk} / {device_type}");
         println!();
 
-        for l_entry in lookup["data"].as_array().unwrap() {
-            let l = l_entry["l"].as_f64().unwrap();
+        let data = lookup["data"]
+            .as_array()
+            .ok_or_else(|| VirtuosoError::Config("lookup has no data array".into()))?;
+        for l_entry in data {
+            let l = l_entry["l"].as_f64().unwrap_or(0.0);
             let l_label = if l < 1e-6 {
                 format!("{}n", l * 1e9)
             } else {
@@ -100,10 +107,13 @@ pub fn explore(pdk: &str, device_type: &str, format: OutputFormat) -> Result<Val
                 "─────", "─────", "──────", "────────", "──────", "──────"
             );
 
-            for pt in l_entry["points"].as_array().unwrap() {
-                let gmid = pt["gmid"].as_f64().unwrap();
-                let gain = pt["gain"].as_f64().unwrap();
-                let id = pt["id"].as_f64().unwrap();
+            let points = l_entry["points"]
+                .as_array()
+                .ok_or_else(|| VirtuosoError::Config("lookup entry missing 'points'".into()))?;
+            for pt in points {
+                let gmid = pt["gmid"].as_f64().unwrap_or(0.0);
+                let gain = pt["gain"].as_f64().unwrap_or(0.0);
+                let id = pt["id"].as_f64().unwrap_or(0.0);
                 let vov = pt["vov"].as_f64().unwrap_or(0.0);
                 let ft = pt["ft"].as_f64().unwrap_or(0.0);
 
@@ -143,22 +153,25 @@ fn find_closest_l(lookup: &Value, l_target: f64) -> Result<Vec<Value>> {
     let entry = data
         .iter()
         .min_by(|a, b| {
-            let la = (a["l"].as_f64().unwrap() - l_target).abs();
-            let lb = (b["l"].as_f64().unwrap() - l_target).abs();
-            la.partial_cmp(&lb).unwrap()
+            let la = (a["l"].as_f64().unwrap_or(f64::MAX) - l_target).abs();
+            let lb = (b["l"].as_f64().unwrap_or(f64::MAX) - l_target).abs();
+            la.partial_cmp(&lb).unwrap_or(std::cmp::Ordering::Equal)
         })
         .ok_or_else(|| VirtuosoError::NotFound("no L data in lookup".into()))?;
 
-    Ok(entry["points"].as_array().unwrap().clone())
+    entry["points"]
+        .as_array()
+        .ok_or_else(|| VirtuosoError::Config("lookup entry missing 'points'".into()))
+        .cloned()
 }
 
 fn interpolate_gmid(points: &[Value], gmid_target: f64) -> Result<Value> {
     // Find two closest points for linear interpolation
     let mut sorted: Vec<&Value> = points.iter().collect();
     sorted.sort_by(|a, b| {
-        let da = (a["gmid"].as_f64().unwrap() - gmid_target).abs();
-        let db = (b["gmid"].as_f64().unwrap() - gmid_target).abs();
-        da.partial_cmp(&db).unwrap()
+        let da = (a["gmid"].as_f64().unwrap_or(f64::MAX) - gmid_target).abs();
+        let db = (b["gmid"].as_f64().unwrap_or(f64::MAX) - gmid_target).abs();
+        da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
     });
 
     if sorted.is_empty() {

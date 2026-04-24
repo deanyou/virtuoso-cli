@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::error::{Result, VirtuosoError};
 use std::collections::HashMap;
 use std::io::Write;
@@ -52,8 +54,8 @@ impl SSHRunner {
     }
 
     pub fn test_connection(&self, timeout: Option<u64>) -> Result<bool> {
-        let _timeout = timeout.unwrap_or(self.connect_timeout);
-        let mut cmd = self.build_ssh_cmd();
+        let effective_timeout = timeout.unwrap_or(self.connect_timeout);
+        let mut cmd = self.build_ssh_cmd_with_timeout(effective_timeout);
         cmd.arg("exit").arg("0");
 
         let output = cmd
@@ -91,8 +93,13 @@ impl SSHRunner {
             .map_err(|e| VirtuosoError::Ssh(format!("ssh failed: {e}")))?;
 
         let elapsed = start.elapsed().as_secs_f64();
-        let _stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        let error = if output.status.success() {
+            None
+        } else {
+            Some(self.summarize_error(&stderr))
+        };
 
         let mut timings = HashMap::new();
         timings.insert("total".into(), elapsed);
@@ -100,14 +107,10 @@ impl SSHRunner {
         Ok(RemoteTaskResult {
             success: output.status.success(),
             returncode: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: stderr_str.clone(),
+            stdout,
+            stderr,
             remote_dir: None,
-            error: if output.status.success() {
-                None
-            } else {
-                Some(self.summarize_error(&stderr_str))
-            },
+            error,
             timings,
         })
     }
@@ -259,6 +262,10 @@ impl SSHRunner {
     }
 
     pub(crate) fn build_ssh_cmd(&self) -> Command {
+        self.build_ssh_cmd_with_timeout(self.connect_timeout)
+    }
+
+    fn build_ssh_cmd_with_timeout(&self, connect_timeout: u64) -> Command {
         let mut cmd = Command::new("ssh");
         cmd.args([
             "-o",
@@ -266,7 +273,13 @@ impl SSHRunner {
             "-o",
             "StrictHostKeyChecking=accept-new",
             "-o",
-            &format!("ConnectTimeout={}", self.connect_timeout),
+            &format!("ConnectTimeout={connect_timeout}"),
+            // EDA lab KDC stalls masquerade as banner-exchange timeouts;
+            // disable both auth methods we never use.
+            "-o",
+            "GSSAPIAuthentication=no",
+            "-o",
+            "HostbasedAuthentication=no",
         ]);
 
         // ControlMaster: reuse SSH connections to avoid repeated handshakes

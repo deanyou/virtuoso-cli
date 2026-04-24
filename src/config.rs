@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    #[allow(dead_code)]
     pub profile: Option<String>,
     pub remote_host: Option<String>,
     pub remote_user: Option<String>,
@@ -93,6 +94,7 @@ impl Config {
         self.remote_host.is_some()
     }
 
+    #[allow(dead_code)]
     pub fn ssh_target(&self) -> String {
         let host = self.remote_host.as_deref().unwrap_or("");
         match &self.remote_user {
@@ -101,6 +103,7 @@ impl Config {
         }
     }
 
+    #[allow(dead_code)]
     pub fn ssh_jump(&self) -> Option<String> {
         match (&self.jump_host, &self.jump_user) {
             (Some(host), Some(user)) => Some(format!("{user}@{host}")),
@@ -110,6 +113,7 @@ impl Config {
     }
 }
 
+#[allow(dead_code)]
 pub fn find_project_root() -> Option<PathBuf> {
     let mut current = std::env::current_dir().ok()?;
     loop {

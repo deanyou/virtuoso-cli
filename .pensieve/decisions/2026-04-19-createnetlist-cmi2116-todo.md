@@ -33,3 +33,12 @@ SKILL 拓扑提取：`dbOpenCellViewByType` + `instTerms` → 手动写端口连
 2. **`spectre -odb` 或 OA 直出端口**：调查 Spectre 是否有其他标志可从 OA 直接导出完整 netlist（不依赖 ADE session token）。
 3. **PDK netlister 配置**：检查 SMIC PDK 的 `nlFormatterClass` / CDF `simInfo` 是否有选项强制写入端口连接。
 4. **`vcli sim netlist` 改为调用 `asiCreateNetlist`**：目前调用 Ocean `createNetlist()`；改为 Maestro API 后至少能生成完整 model include 和 cell 骨架，再由 SKILL 提取补充端口。
+
+## 补充：IC23.1 Maestro API 全部阻塞 bridge（2026-04-20）
+
+`maeRunSimulation`、`maeCreateNetlist`、`asiCreateNetlist` 在 IC23.1 ADE Explorer 中均阻塞 SKILL bridge（触发 GUI 进度 modal）。无可用的非阻塞 run API。
+
+**结论**：Maestro API 不可用于 vcli 自动化 run。
+
+**唯一可靠自动化路径**：独立 spectre + Maestro netlist（已验证，n12/p12 正常，0 error）。
+

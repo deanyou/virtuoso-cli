@@ -45,6 +45,7 @@ impl VirtuosoResult {
         }
     }
 
+    #[allow(dead_code)]
     pub fn error(errors: Vec<String>) -> Self {
         Self {
             status: ExecutionStatus::Error,
@@ -56,6 +57,7 @@ impl VirtuosoResult {
         }
     }
 
+    #[allow(dead_code)]
     pub fn save_json(&self, path: &std::path::Path) -> std::io::Result<()> {
         let json =
             serde_json::to_string_pretty(self).map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -73,6 +75,7 @@ pub struct SimulationResult {
     pub metadata: HashMap<String, String>,
 }
 
+#[allow(dead_code)]
 impl SimulationResult {
     pub fn ok(&self) -> bool {
         self.status == ExecutionStatus::Success
@@ -94,14 +97,6 @@ pub struct RemoteTaskResult {
     pub remote_dir: Option<String>,
     pub error: Option<String>,
     pub timings: HashMap<String, f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoteSshEnv {
-    pub remote_host: String,
-    pub remote_user: Option<String>,
-    pub jump_host: Option<String>,
-    pub jump_user: Option<String>,
 }
 
 fn default_version() -> u32 {

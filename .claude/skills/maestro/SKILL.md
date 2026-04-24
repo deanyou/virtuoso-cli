@@ -1,7 +1,8 @@
 ---
 name: maestro
 description: Maestro (ADE Assembler) session management and simulation. Use when: running simulations via Maestro, configuring tests/analyses/outputs, reading results. Detailed API docs see `references/maestro-skill-api.md`.
-allowed-tools: Bash(*/virtuoso *)
+argument-hint: [action, e.g. "run AC on fnxSession0" or "list sessions"]
+allowed-tools: Bash(virtuoso *)
 ---
 
 # Maestro (ADE Assembler) — Quick Reference

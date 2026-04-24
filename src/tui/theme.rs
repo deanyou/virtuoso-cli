@@ -8,10 +8,12 @@ pub struct Theme {
     pub accent: Color,
     pub success: Color,
     pub error: Color,
+    #[allow(dead_code)]
     pub warning: Color,
     pub text: Color,
     pub text_dim: Color,
     pub border: Color,
+    #[allow(dead_code)]
     pub bg: Color,
     pub bg_selected: Color,
     pub surface: Color,
@@ -46,6 +48,7 @@ impl Theme {
         }
     }
 
+    #[allow(dead_code)]
     /// Force no_color on or off (from `--no-color` CLI flag).
     pub fn with_no_color(mut self, no_color: bool) -> Self {
         self.no_color = self.no_color || no_color;

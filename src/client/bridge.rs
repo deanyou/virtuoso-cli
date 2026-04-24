@@ -6,9 +6,9 @@ use crate::error::{Result, VirtuosoError};
 use crate::models::{ExecutionStatus, VirtuosoResult};
 use crate::transport::tunnel::SSHClient;
 use crate::version::VirtuosoVersion;
+use std::cell::Cell;
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 const STX: u8 = 0x02;
@@ -20,11 +20,12 @@ pub struct VirtuosoClient {
     port: u16,
     timeout: u64,
     tunnel: Option<SSHClient>,
+    #[allow(dead_code)]
     pub layout: LayoutOps,
     pub maestro: MaestroOps,
     pub schematic: SchematicOps,
     pub window: WindowOps,
-    cached_version: Arc<Mutex<Option<VirtuosoVersion>>>,
+    cached_version: Cell<Option<VirtuosoVersion>>,
 }
 
 impl VirtuosoClient {
@@ -38,7 +39,7 @@ impl VirtuosoClient {
             maestro: MaestroOps,
             schematic: SchematicOps::new(),
             window: WindowOps,
-            cached_version: Arc::new(Mutex::new(None)),
+            cached_version: Cell::new(None),
         }
     }
 
@@ -113,12 +114,8 @@ impl VirtuosoClient {
             maestro: MaestroOps,
             schematic: SchematicOps::new(),
             window: WindowOps,
-            cached_version: Arc::new(Mutex::new(None)),
+            cached_version: Cell::new(None),
         })
-    }
-
-    pub fn local(host: &str, port: u16, timeout: u64) -> Self {
-        Self::new(host, port, timeout)
     }
 
     pub fn execute_skill(&self, skill_code: &str, timeout: Option<u64>) -> Result<VirtuosoResult> {
@@ -138,7 +135,7 @@ impl VirtuosoClient {
 
         // Drain loop: a new session may find stale "sync_N" responses queued in the
         // daemon from a previous client. Detect and transparently discard up to 10.
-        for drain in 0..=10u8 {
+        for _ in 0..10u8 {
             let mut stream =
                 TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(timeout))
                     .map_err(|e| VirtuosoError::Connection(e.to_string()))?;
@@ -180,18 +177,12 @@ impl VirtuosoClient {
             }
 
             let status_byte = data[0];
-            let payload = String::from_utf8_lossy(&data[1..]).to_string();
+            let payload = String::from_utf8_lossy(&data[1..]).into_owned();
 
             // Stale sync_N: queued response from a previous session's command.
             // Discard and retry with the same command on a fresh connection.
             if status_byte == STX && is_stale_sync(&payload) {
                 continue;
-            }
-
-            if drain == 10 {
-                return Err(VirtuosoError::Execution(
-                    "bridge queue misaligned: 10 consecutive sync_N responses drained".into(),
-                ));
             }
 
             let elapsed = start.elapsed().as_secs_f64();
@@ -214,11 +205,10 @@ impl VirtuosoClient {
                 result.status = ExecutionStatus::Error;
                 result.errors.push(payload);
             } else {
-                result.output = String::from_utf8_lossy(&data).to_string();
+                result.output = String::from_utf8_lossy(&data).into_owned();
                 result.warnings.push("non-standard response marker".into());
             }
 
-            // Log command execution
             let truncated = if skill_code.len() > 200 {
                 format!("{}...", &skill_code[..200])
             } else {
@@ -229,8 +219,9 @@ impl VirtuosoClient {
             return Ok(result);
         }
 
-        // Unreachable: the loop always returns or continues; drain == 10 returns Err above.
-        unreachable!()
+        Err(VirtuosoError::Execution(
+            "bridge queue misaligned: 10 consecutive sync_N responses drained".into(),
+        ))
     }
 
     pub fn test_connection(&self, timeout: Option<u64>) -> Result<bool> {
@@ -281,12 +272,11 @@ impl VirtuosoClient {
     }
 
     pub fn load_il(&self, local_path: &str) -> Result<VirtuosoResult> {
-        let remote_path = format!("/tmp/virtuoso_bridge/{}", {
-            std::path::Path::new(local_path)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-        });
+        let filename = std::path::Path::new(local_path)
+            .file_name()
+            .ok_or_else(|| VirtuosoError::Config(format!("invalid path: {local_path}")))?
+            .to_string_lossy();
+        let remote_path = format!("/tmp/virtuoso_bridge/{filename}");
 
         self.upload_file(local_path, &remote_path)?;
 
@@ -305,6 +295,7 @@ impl VirtuosoClient {
         }
     }
 
+    #[allow(dead_code)]
     pub fn download_file(&self, remote: &str, local: &str) -> Result<()> {
         if let Some(ref tunnel) = self.tunnel {
             tunnel.download_file(remote, local)
@@ -324,6 +315,7 @@ impl VirtuosoClient {
         self.execute_skill(&skill, None)
     }
 
+    #[allow(dead_code)]
     pub fn ciw_print(&self, message: &str) -> Result<VirtuosoResult> {
         let skill = format!(
             r#"printf("[virtuoso-cli] {}\n")"#,
@@ -332,12 +324,14 @@ impl VirtuosoClient {
         self.execute_skill(&skill, None)
     }
 
+    #[allow(dead_code)]
     pub fn run_shell_command(&self, cmd: &str) -> Result<VirtuosoResult> {
         let cmd = escape_skill_string(cmd);
         let skill = format!(r#"(csh "{cmd}")"#);
         self.execute_skill(&skill, None)
     }
 
+    #[allow(dead_code)]
     pub fn tunnel(&self) -> Option<&SSHClient> {
         self.tunnel.as_ref()
     }
@@ -345,14 +339,11 @@ impl VirtuosoClient {
     /// Detect and cache the Virtuoso IC version.
     /// First call queries the daemon; subsequent calls return the cached result.
     pub fn version(&self) -> Result<VirtuosoVersion> {
-        {
-            let cache = self.cached_version.lock().unwrap();
-            if let Some(v) = *cache {
-                return Ok(v);
-            }
+        if let Some(v) = self.cached_version.get() {
+            return Ok(v);
         }
         let v = crate::version::detect_version(self)?;
-        *self.cached_version.lock().unwrap() = Some(v);
+        self.cached_version.set(Some(v));
         Ok(v)
     }
 }

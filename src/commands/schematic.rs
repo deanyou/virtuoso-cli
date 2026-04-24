@@ -225,6 +225,7 @@ pub struct SpecPin {
     #[serde(rename = "type")]
     pub pin_type: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub connect: Option<String>, // "M2:G"
     #[serde(default)]
     pub x: i64,

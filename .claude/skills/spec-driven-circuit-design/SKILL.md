@@ -1,7 +1,8 @@
 ---
 name: spec-driven-circuit-design
 description: Spec-driven analog circuit design — decompose system specs into block/transistor-level requirements, validate feasibility via simulation, and iterate. Use when defining amplifier specs, checking if specs are achievable, decomposing system requirements to circuit blocks, or when the user says "design spec", "spec review", "is this spec feasible", or "spec breakdown".
-allowed-tools: Bash(*/virtuoso *) Read Write Edit
+argument-hint: [circuit type and specs, e.g. "LDO 3.3V→1.2V 100mA"]
+allowed-tools: Bash(virtuoso *) Read Write Edit
 ---
 
 # Spec-Driven Circuit Design

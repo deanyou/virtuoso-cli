@@ -18,3 +18,7 @@ input.ahdlSimDB/
 spectre.dc
 *.pyc
 __pycache__/
+test_tb.ahdlSimDB/
+test_tb.log
+
+/0

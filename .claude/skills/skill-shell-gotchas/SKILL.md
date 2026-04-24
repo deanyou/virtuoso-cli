@@ -9,6 +9,8 @@ description: |
 author: Claude Code
 version: 1.0.0
 date: 2026-04-06
+argument-hint: [symptom, e.g. "sh() returns t" or "ipcBeginProcess 127"]
+allowed-tools: Read
 ---
 
 # SKILL Shell & IPC Gotchas

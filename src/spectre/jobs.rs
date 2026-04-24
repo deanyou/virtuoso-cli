@@ -137,7 +137,7 @@ impl Job {
                     .arg(format!("cat {rdir}/spectre.out 2>/dev/null"))
                     .output()
                     .ok();
-                out.map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
                     .unwrap_or_default()
             } else if log.exists() {
                 fs::read_to_string(&log).unwrap_or_default()
@@ -164,7 +164,7 @@ impl Job {
 
     pub fn cancel(&mut self) -> Result<()> {
         if self.status != JobStatus::Running {
-            return Err(VirtuosoError::Config(format!(
+            return Err(VirtuosoError::Execution(format!(
                 "job '{}' is not running (status: {:?})",
                 self.id, self.status
             )));
@@ -184,6 +184,7 @@ impl Job {
         self.save()
     }
 
+    #[allow(dead_code)]
     pub fn delete(id: &str) -> Result<()> {
         let path = Self::path(id);
         fs::remove_file(&path).map_err(|_| VirtuosoError::NotFound(format!("job '{id}' not found")))

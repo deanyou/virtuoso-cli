@@ -98,7 +98,9 @@ impl MaestroOps {
     /// IC25 additionally supports ?session keyword.
     pub fn get_outputs(&self, test_name: &str) -> String {
         let test_name = escape_skill_string(test_name);
-        format!(r#"let((outs out sep) outs = maeGetTestOutputs("{test_name}") out = "[" sep = "" foreach(o outs out = strcat(out sep sprintf(nil "{{\"name\":\"%s\",\"type\":\"%s\",\"signalName\":\"%s\",\"expr\":\"%s\"}}" o~>name o~>outputType o~>signalName o~>expr)) sep = ",") strcat(out "]"))"#)
+        format!(
+            r#"let((outs out sep) outs = maeGetTestOutputs("{test_name}") out = "[" sep = "" foreach(o outs out = strcat(out sep sprintf(nil "{{\"name\":\"%s\",\"type\":\"%s\",\"signalName\":\"%s\",\"expr\":\"%s\"}}" o~>name o~>outputType o~>signalName o~>expr)) sep = ",") strcat(out "]"))"#
+        )
     }
 
     /// Add an output expression — version-aware.
@@ -117,17 +119,14 @@ impl MaestroOps {
         let expr = escape_skill_string(expr);
         if version.is_ic25() {
             // IC25: pass test name directly, use ?session when available
-            format!(
-                r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#
-            )
+            format!(r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#)
         } else {
             // IC23: same positional form
-            format!(
-                r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#
-            )
+            format!(r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#)
         }
     }
 
+    #[allow(dead_code)]
     pub fn set_design(&self, session: &str, lib: &str, cell: &str, view: &str) -> String {
         let session = escape_skill_string(session);
         let lib = escape_skill_string(lib);
@@ -168,12 +167,26 @@ impl MaestroOps {
         )
     }
 
-    /// Export results to CSV.
-    pub fn export_results(&self, session: &str, file_path: &str) -> String {
+    /// Export results to CSV via maeExportOutputView.
+    pub fn export_results(
+        &self,
+        session: &str,
+        file_path: &str,
+        test_name: Option<&str>,
+        history: Option<&str>,
+    ) -> String {
         let session = escape_skill_string(session);
         let file_path = escape_skill_string(file_path);
+        let test_name_part = match test_name {
+            Some(t) => format!(r#" ?testName "{}""#, escape_skill_string(t)),
+            None => String::new(),
+        };
+        let history_part = match history {
+            Some(h) => format!(r#" ?historyName "{}""#, escape_skill_string(h)),
+            None => String::new(),
+        };
         format!(
-            r#"maeExportOutputView(?session "{session}" ?fileName "{file_path}" ?view "Detail")"#
+            r#"maeExportOutputView(?session "{session}"{test_name_part}{history_part} ?view "Detail" ?fileName "{file_path}")"#
         )
     }
 
@@ -200,7 +213,9 @@ impl MaestroOps {
     /// List all output names available for a given test in the current history.
     pub fn get_result_outputs(&self, test_name: &str) -> String {
         let test_name = escape_skill_string(test_name);
-        format!(r#"let((outs out sep) outs = maeGetResultOutputs(?testName "{test_name}") out = "[" sep = "" foreach(o outs out = strcat(out sep sprintf(nil "\"%s\"" o)) sep = ",") strcat(out "]"))"#)
+        format!(
+            r#"let((outs out sep) outs = maeGetResultOutputs(?testName "{test_name}") out = "[" sep = "" foreach(o outs out = strcat(out sep sprintf(nil "\"%s\"" o)) sep = ",") strcat(out "]"))"#
+        )
     }
 
     /// Get the value of a specific output for a specific test and corner.
@@ -231,7 +246,8 @@ impl MaestroOps {
 
     /// Get the Maestro session ID for the current session.
     pub fn get_current_session(&self) -> String {
-        r#"let((sess out) sess = asiGetCurrentSession() out = if(sess then sess~>name else "nil"))"#.into()
+        r#"let((sess out) sess = asiGetCurrentSession() out = if(sess then sess~>name else "nil"))"#
+            .into()
     }
 }
 
@@ -313,7 +329,10 @@ mod tests {
         // IC25.1 ISR4 实测：maeGetSetup 仍返回 list，car() 有效
         // is_ic25() 返回 false，所以 IC25 版本走 IC23 路径
         let s = ops().get_analyses("sess1", VirtuosoVersion::IC25);
-        assert!(s.contains("maeGetSetup"), "IC25 currently uses IC23 path: {s}");
+        assert!(
+            s.contains("maeGetSetup"),
+            "IC25 currently uses IC23 path: {s}"
+        );
         assert!(s.contains("maeGetEnabledAnalysis"), "{s}");
     }
 
@@ -340,6 +359,27 @@ mod tests {
     }
 
     #[test]
+    fn export_results_minimal() {
+        let s = ops().export_results("sess1", "/tmp/out.csv", None, None);
+        assert!(s.contains("maeExportOutputView"), "{s}");
+        assert!(s.contains(r#"?session "sess1""#), "{s}");
+        assert!(s.contains(r#"?fileName "/tmp/out.csv""#), "{s}");
+        assert!(s.contains(r#"?view "Detail""#), "{s}");
+        assert!(!s.contains("?testName"), "should be absent when None: {s}");
+        assert!(
+            !s.contains("?historyName"),
+            "should be absent when None: {s}"
+        );
+    }
+
+    #[test]
+    fn export_results_with_all_params() {
+        let s = ops().export_results("sess1", "/tmp/out.csv", Some("AC"), Some("ExplorerRun.0"));
+        assert!(s.contains(r#"?testName "AC""#), "{s}");
+        assert!(s.contains(r#"?historyName "ExplorerRun.0""#), "{s}");
+    }
+
+    #[test]
     fn set_analysis_ic23_positional() {
         let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC23);
         assert!(s.contains("maeGetSetup"), "IC23 must resolve setup: {s}");
@@ -360,7 +400,10 @@ mod tests {
     fn set_analysis_ic25_uses_ic23_path() {
         // IC25.1 ISR4 实测：maeSetAnalysis 仍为 positional (setupName type)
         let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC25);
-        assert!(s.contains("maeGetSetup"), "IC25 currently uses IC23 path: {s}");
+        assert!(
+            s.contains("maeGetSetup"),
+            "IC25 currently uses IC23 path: {s}"
+        );
         assert!(s.contains("maeSetAnalysis"), "{s}");
     }
 

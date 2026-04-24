@@ -173,15 +173,24 @@ pub fn save(session: &str) -> Result<Value> {
     }))
 }
 
-pub fn export(session: &str, path: &str) -> Result<Value> {
+pub fn export(
+    session: &str,
+    path: &str,
+    test_name: Option<&str>,
+    history: Option<&str>,
+) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let skill = client.maestro.export_results(session, path);
+    let skill = client
+        .maestro
+        .export_results(session, path, test_name, history);
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
         "session": session,
         "path": path,
-        "output": r.output,
+        "test_name": test_name,
+        "history": history,
+        "export_path": skill_str(&r),
     }))
 }
 
@@ -206,21 +215,17 @@ pub fn session_info(session: Option<&str>) -> Result<Value> {
     // Resolve effective session: explicit arg → davSession from window → None
     let effective_session = session.map(str::to_owned).or_else(|| dav_session.clone());
 
-    let run_dir = match (session, &dav_session) {
-        // Explicit session matches the window's bound session — use bundled run_dir (0 extra RTT)
-        (Some(s), Some(dav)) if s == dav => bundled_run_dir,
-        // Explicit session differs (or no dav) — need a separate call
-        (Some(s), _) => {
-            let skill2 = client.maestro.run_dir_skill(s);
-            let r2 = client.execute_skill(&skill2, None)?;
-            if r2.skill_ok() {
-                Some(r2.output.trim_matches('"').to_string())
-            } else {
-                None
-            }
+    // Second RTT only when session explicitly differs from focused window's davSession
+    let run_dir = if let Some(s) = session.filter(|s| Some(*s) != dav_session.as_deref()) {
+        let skill2 = client.maestro.run_dir_skill(s);
+        let r2 = client.execute_skill(&skill2, None)?;
+        if r2.skill_ok() {
+            Some(r2.output.trim_matches('"').to_string())
+        } else {
+            None
         }
-        // No explicit session — use bundled run_dir for focused window's session
-        (None, _) => bundled_run_dir,
+    } else {
+        bundled_run_dir
     };
 
     Ok(json!({
@@ -322,18 +327,16 @@ fn parse_ade_title(title: &str) -> Option<AdeWindowInfo> {
 
     let (app, rest) = if let Some(r) = rest.strip_prefix("Assembler ") {
         ("assembler", r)
-    } else if let Some(r) = rest.strip_prefix("Explorer ") {
-        ("explorer", r)
     } else {
-        return None;
+        let r = rest.strip_prefix("Explorer ")?;
+        ("explorer", r)
     };
 
     let (editable, rest) = if let Some(r) = rest.strip_prefix("Editing: ") {
         (true, r)
-    } else if let Some(r) = rest.strip_prefix("Reading: ") {
-        (false, r)
     } else {
-        return None;
+        let r = rest.strip_prefix("Reading: ")?;
+        (false, r)
     };
 
     let mut parts = rest.split_whitespace();

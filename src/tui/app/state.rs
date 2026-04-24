@@ -40,14 +40,6 @@ impl Tab {
     }
 }
 
-/// Pane focus. Currently the nav chips are always active via Tab, so Content
-/// is the default — kept as an enum so we can add a Nav-focused picker later
-/// without another state refactor.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Focus {
-    Content,
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum StatusKind {
     Info,
@@ -71,7 +63,6 @@ pub struct ConfigField {
 
 pub struct App {
     pub tab: Tab,
-    pub focus: Focus,
     pub overlay: Overlay,
 
     pub sessions: Vec<SessionInfo>,
@@ -92,7 +83,6 @@ impl App {
     pub fn new() -> Self {
         let mut app = Self {
             tab: Tab::Sessions,
-            focus: Focus::Content,
             overlay: Overlay::None,
             sessions: Vec::new(),
             jobs: Vec::new(),

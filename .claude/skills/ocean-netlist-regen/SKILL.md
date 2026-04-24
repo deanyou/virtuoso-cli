@@ -13,6 +13,8 @@ description: |
 author: Claude Code
 version: 2.3.0
 date: 2026-04-20
+argument-hint: [symptom, e.g. "run() returns nil" or "OSSHNL-109"]
+allowed-tools: Bash(virtuoso *) Bash(vcli *) Bash(spectre *) Read Write
 ---
 
 # Ocean run() Reliability & Netlist Regeneration

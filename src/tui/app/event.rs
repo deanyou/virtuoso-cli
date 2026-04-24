@@ -198,6 +198,19 @@ fn form_overlay_key(app: &mut App, key: KeyEvent) -> Action {
             form.value.end();
             Action::None
         }
+        KeyCode::Char('a') if key.modifiers == KeyModifiers::CONTROL => {
+            form.value.home();
+            Action::None
+        }
+        KeyCode::Char('e') if key.modifiers == KeyModifiers::CONTROL => {
+            form.value.end();
+            Action::None
+        }
+        KeyCode::Char('u') if key.modifiers == KeyModifiers::CONTROL => {
+            form.value.value.drain(..form.value.cursor);
+            form.value.cursor = 0;
+            Action::None
+        }
         KeyCode::Char(c) => {
             form.value.insert_char(c);
             Action::None
