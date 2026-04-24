@@ -104,11 +104,7 @@ pub fn get_analyses(session: &str) -> Result<Value> {
     }))
 }
 
-pub fn set_analysis(
-    session: &str,
-    analysis_type: &str,
-    options: Option<&str>,
-) -> Result<Value> {
+pub fn set_analysis(session: &str, analysis_type: &str, options: Option<&str>) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
     let (options_alist, version) = match options {
@@ -152,7 +148,9 @@ pub fn run(session: &str) -> Result<Value> {
 pub fn add_output(output_name: &str, test_name: &str, expr: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let version = client.version()?;
-    let skill = client.maestro.add_output(output_name, test_name, expr, version);
+    let skill = client
+        .maestro
+        .add_output(output_name, test_name, expr, version);
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },

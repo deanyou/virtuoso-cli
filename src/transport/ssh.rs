@@ -183,7 +183,10 @@ impl SSHRunner {
         // Must pass "sh -c 'command'" as a single argument to SSH,
         // otherwise "sh", "-c", "command" are concatenated without quotes,
         // breaking commands with &&.
-        cmd.arg(format!("sh -c {}", shell_quote(&format!("cat > {quoted_remote}"))));
+        cmd.arg(format!(
+            "sh -c {}",
+            shell_quote(&format!("cat > {quoted_remote}"))
+        ));
 
         let output = cmd
             .stdin(Stdio::piped())

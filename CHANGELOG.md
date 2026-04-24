@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.5] - 2026-04-24
+
+### Fixed
+- **SSH `sh -c` argument passing** — `upload()` and `upload_text()` now pass `"sh -c 'command'"` as a single SSH argument, fixing `&&`-chained commands that were silently broken
+- **`maestro history-list`** — no longer requires `--session` arg; uses `asiGetResultsDir` to discover runs from the current session
+- **`get_current_session`** — returns `"nil"` string instead of SKILL nil on no-session, avoiding `skill_ok()` false negative
+
+### Added
+- **SSH port in RAMIC Bridge banner** — `ramic_bridge.il` displays `SSH: <port>` in the ready banner for quick tunnel setup
+- **`tunnel-connect` skill** — Quick Connect section: extract Session/Port/SSH directly from the banner
+- **`maestro get-analyses`** — version-aware IC23/IC25 dispatch via `VirtuosoVersion`
+- **`maestro add-output`** — takes `VirtuosoVersion` parameter for future IC25 divergence
+- **`maestro get-outputs`** — uses struct accessors (`~>name`, `~>outputType`, `~>signalName`, `~>expr`) matching IC23.1/IC25.1 actual return type
+
+### Changed
+- **`maestro get-result-tests`** — inline JSON serialization replacing `skill_strings_to_json` helper (avoids double-wrapping)
+- **`maestro get-result-outputs`** — same inline serialization fix
+
 ## [0.3.4] - 2026-04-24
 
 ### Fixed
