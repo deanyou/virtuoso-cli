@@ -82,10 +82,20 @@ pub fn get_analyses(session: &str) -> Result<Value> {
     let r = client
         .execute_skill(&skill, None)?
         .ok_or_exec("get analyses")?;
+
+    // maeGetEnabledAnalysis returns a SKILL list e.g. ("ac" "dc") — parse to JSON array.
+    use crate::client::skill_sexp::{parse_sexp, SexpVal};
+    let analyses: Value = match parse_sexp(r.output_unquoted()) {
+        Ok(SexpVal::List(items)) => {
+            json!(items.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+        }
+        _ => json!(r.output_unquoted()),
+    };
+
     Ok(json!({
         "status": "success",
         "session": session,
-        "analyses": r.output_unquoted(),
+        "analyses": analyses,
     }))
 }
 
@@ -422,7 +432,7 @@ pub fn get_sim_messages(session: &str) -> Result<Value> {
     let r = client
         .execute_skill(&skill, None)?
         .ok_or_exec("get sim messages")?;
-    Ok(json!({"status": "success", "session": session, "messages": r.output}))
+    Ok(json!({"status": "success", "session": session, "messages": r.output_unquoted()}))
 }
 
 /// List available history runs for the current Maestro session.

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.10] - 2026-04-26
+
+### Fixed
+- **`maestro get-analyses`** — `analyses` field is now a JSON array `["ac","dc"]` instead of a raw SKILL sexp string `"(\"ac\" \"dc\")"`; parsed with `parse_sexp` at the command layer
+- **`maestro sim-messages`** — `messages` field now strips surrounding SKILL quotes; was returning `"\"\""` for empty messages instead of `""`
+
 ## [0.3.9] - 2026-04-26
 
 ### Refactored
