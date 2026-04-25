@@ -1,17 +1,7 @@
 use crate::client::bridge::VirtuosoClient;
 use crate::commands::schematic::parse_skill_json;
 use crate::error::{Result, VirtuosoError};
-use crate::models::VirtuosoResult;
 use serde_json::{json, Value};
-
-/// Extract a scalar string value from a SKILL result: strips quotes on success, returns raw on error.
-fn skill_str(r: &VirtuosoResult) -> String {
-    if r.skill_ok() {
-        r.output.trim_matches('"').to_string()
-    } else {
-        r.output.clone()
-    }
-}
 
 pub fn open(lib: &str, cell: &str, view: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
@@ -19,7 +9,7 @@ pub fn open(lib: &str, cell: &str, view: &str) -> Result<Value> {
     let r = client.execute_skill(&skill, None)?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
-            "Failed to open maestro session: {}",
+            "open session failed: {}",
             r.output
         )));
     }
@@ -51,7 +41,7 @@ pub fn list_sessions() -> Result<Value> {
     let r = client.execute_skill(&skill, None)?;
     if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
-            "Failed to list sessions: {}",
+            "list sessions failed: {}",
             r.output
         )));
     }
@@ -75,10 +65,16 @@ pub fn get_var(name: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.get_var(name);
     let r = client.execute_skill(&skill, None)?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "get var '{}' failed: {}",
+            name, r.output
+        )));
+    }
     Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
+        "status": "success",
         "variable": name,
-        "value": skill_str(&r),
+        "value": r.output.trim_matches('"'),
     }))
 }
 
@@ -88,7 +84,7 @@ pub fn list_vars() -> Result<Value> {
     let r = client.execute_skill(&skill, None)?;
     if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
-            "Failed to list variables: {}",
+            "list vars failed: {}",
             r.output
         )));
     }
@@ -100,8 +96,14 @@ pub fn get_analyses(session: &str) -> Result<Value> {
     let version = client.version()?;
     let skill = client.maestro.get_analyses(session, version);
     let r = client.execute_skill(&skill, None)?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "get analyses failed: {}",
+            r.output
+        )));
+    }
     Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
+        "status": "success",
         "session": session,
         "analyses": r.output.trim_matches('"'),
     }))
@@ -130,34 +132,43 @@ pub fn set_analysis(session: &str, analysis_type: &str, options: Option<&str>) -
             .maestro
             .set_analysis(session, analysis_type, options_alist.as_deref(), version);
     let r = client.execute_skill(&skill, None)?;
-    Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
-        "session": session,
-        "analysis": analysis_type,
-    }))
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "set analysis failed: {}",
+            r.output
+        )));
+    }
+    Ok(json!({"status": "success", "session": session, "analysis": analysis_type}))
 }
 
 pub fn run(session: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.run_simulation(session);
     let r = client.execute_skill(&skill, None)?;
-    Ok(json!({
-        "status": if r.skill_ok() { "launched" } else { "error" },
-        "session": session,
-        "output": r.output.trim_matches('"'),
-    }))
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "run simulation failed: {}",
+            r.output
+        )));
+    }
+    Ok(json!({"status": "launched", "session": session}))
 }
 
 pub fn add_output(output_name: &str, test_name: &str, expr: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.add_output(output_name, test_name, expr);
     let r = client.execute_skill(&skill, None)?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "add output failed: {}",
+            r.output
+        )));
+    }
     Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
+        "status": "success",
         "output_name": output_name,
         "test_name": test_name,
         "expression": expr,
-        "output": r.output,
     }))
 }
 
@@ -165,10 +176,13 @@ pub fn save(session: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.save_setup(session);
     let r = client.execute_skill(&skill, None)?;
-    Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
-        "session": session,
-    }))
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "save session failed: {}",
+            r.output
+        )));
+    }
+    Ok(json!({"status": "success", "session": session}))
 }
 
 pub fn export(
@@ -182,13 +196,19 @@ pub fn export(
         .maestro
         .export_results(session, path, test_name, history);
     let r = client.execute_skill(&skill, None)?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "export failed: {}",
+            r.output
+        )));
+    }
     Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
+        "status": "success",
         "session": session,
         "path": path,
         "test_name": test_name,
         "history": history,
-        "export_path": skill_str(&r),
+        "export_path": r.output.trim_matches('"'),
     }))
 }
 
@@ -363,11 +383,13 @@ pub fn open_results(history: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.open_results(history);
     let r = client.execute_skill(&skill, None)?;
-    Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
-        "history": history,
-        "output": r.output,
-    }))
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "open results failed: {}",
+            r.output
+        )));
+    }
+    Ok(json!({"status": "success", "history": history}))
 }
 
 /// Close the currently open results.
@@ -375,9 +397,13 @@ pub fn close_results() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.close_results();
     let r = client.execute_skill(&skill, None)?;
-    Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
-    }))
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "close results failed: {}",
+            r.output
+        )));
+    }
+    Ok(json!({"status": "success"}))
 }
 
 /// List all test names that have results in the current history.
@@ -387,7 +413,7 @@ pub fn get_result_tests() -> Result<Value> {
     let r = client.execute_skill(&skill, None)?;
     if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
-            "Failed to get result tests: {}",
+            "get result tests failed: {}",
             r.output
         )));
     }
@@ -401,7 +427,7 @@ pub fn get_result_outputs(test_name: &str) -> Result<Value> {
     let r = client.execute_skill(&skill, None)?;
     if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
-            "Failed to get result outputs: {}",
+            "get result outputs failed: {}",
             r.output
         )));
     }
@@ -413,12 +439,18 @@ pub fn get_output_value(name: &str, test_name: &str, corner: Option<&str>) -> Re
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.get_output_value(name, test_name, corner);
     let r = client.execute_skill(&skill, None)?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "get output '{}' failed: {}",
+            name, r.output
+        )));
+    }
     Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
+        "status": "success",
         "output_name": name,
         "test_name": test_name,
         "corner": corner,
-        "value": skill_str(&r),
+        "value": r.output.trim_matches('"'),
     }))
 }
 
@@ -427,11 +459,17 @@ pub fn get_spec_status(name: &str, test_name: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.get_spec_status(name, test_name);
     let r = client.execute_skill(&skill, None)?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "get spec status '{}' failed: {}",
+            name, r.output
+        )));
+    }
     Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
+        "status": "success",
         "output_name": name,
         "test_name": test_name,
-        "spec_status": skill_str(&r),
+        "spec_status": r.output.trim_matches('"'),
     }))
 }
 
@@ -440,11 +478,13 @@ pub fn get_sim_messages(session: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.get_sim_messages(session);
     let r = client.execute_skill(&skill, None)?;
-    Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
-        "session": session,
-        "messages": r.output,
-    }))
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "get sim messages failed: {}",
+            r.output
+        )));
+    }
+    Ok(json!({"status": "success", "session": session, "messages": r.output}))
 }
 
 /// List available history runs for the current Maestro session.
@@ -454,7 +494,7 @@ pub fn get_history_list() -> Result<Value> {
     let r = client.execute_skill(&skill, None)?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
-            "Failed to get history list: {}",
+            "get history list failed: {}",
             r.output
         )));
     }
