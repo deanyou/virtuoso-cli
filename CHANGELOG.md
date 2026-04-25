@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.7] - 2026-04-25
+
+### Added
+- **`src/client/skill_sexp.rs`** — SKILL s-expression parser (`SexpVal` enum + `parse_sexp` + `sexp_to_str_list`); replaces the `sprintf`-JSON approach in `execute_skill_fetch` that silently corrupted field values containing `"` or `\n`
+- **`SSHRunner::is_cm_failure()`** — detects ControlMaster failure patterns (`mux_client_request_session`, `could not create named pipe`, `ControlPath`, etc.)
+- **`VB_SSH_CONFIG`** env var — path to a custom SSH config file, passed as `-F` to all SSH invocations
+- **`VB_DISABLE_CONTROL_MASTER`** env var — pre-emptively disable CM (useful on WSL2/Windows where socket paths contain non-ASCII chars)
+- Debug logging for `.env` load path and session directory on startup
+
+### Changed
+- **`build_fetch_skill`** — now emits `mapcar(lambda((o) list(o~>f1 ...)) expr)` (native SKILL list-of-lists) instead of `sprintf`-JSON; parsed with the new sexp parser
+- **`SSHRunner`** — added `use_control_master: Cell<bool>`; `run_command` and `test_connection` automatically retry without CM on failure, persisting the disabled state
+- **`try_ssh_tunnel`** — respects `use_control_master` flag and forwards `ssh_config_path`
+
 ## [0.3.6] - 2026-04-25
 
 ### Added
