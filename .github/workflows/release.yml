@@ -59,10 +59,10 @@ jobs:
             echo "CARGO_REGISTRY_TOKEN not set — skipping crates.io publish"
             exit 0
           fi
-          output=$(cargo publish 2>&1); rc=$?
-          echo "$output"
-          if [ $rc -ne 0 ] && echo "$output" | grep -q "already exists"; then
+          if cargo publish 2>&1 | tee /tmp/pub_out.txt; then
+            echo "Published successfully"
+          elif grep -q "already exists" /tmp/pub_out.txt; then
             echo "Version already published — skipping"
-            exit 0
+          else
+            exit 1
           fi
-          exit $rc
