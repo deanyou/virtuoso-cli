@@ -1,6 +1,6 @@
 ---
 name: maestro
-description: Maestro (ADE Assembler) session management and simulation. Use when: running simulations via Maestro, configuring tests/analyses/outputs, reading results. Detailed API docs see `references/maestro-skill-api.md`.
+description: Maestro (ADE Assembler) session management and simulation. Use when: running simulations via Maestro, configuring tests/analyses/outputs, updating design variables, reading results.
 argument-hint: [action, e.g. "run AC on fnxSession0" or "list sessions"]
 allowed-tools: Bash(virtuoso *)
 ---
@@ -100,6 +100,38 @@ CLI 的 `set-analysis` 命令在 IC25 下支持 `--options` 参数：
 ```bash
 vcli maestro set-analysis --session fnxSession0 --analysis ac --options '{"start":"1","stop":"10G","dec":"20"}'
 ```
+
+## 设计变量更新（IC23 关键陷阱）
+
+IC23 中存在**两层变量命名空间**，必须分清：
+
+| API | 写入位置 | 是否流入 netlist |
+|-----|---------|----------------|
+| `maeSetVar("W34" "16u")` | Maestro 内部 varList | ❌ 不影响 input.scs |
+| `asiSetDesignVarList(sess newList)` | asi session 层 | ✅ 写入 `parameters ...` |
+
+`maeSetVar` 会返回 `t`，`maeGetVar` 也能读回新值——但仿真仍然用旧值。只有 `asiSetDesignVarList` 才真正改变 netlist。
+
+**IC23 正确 pattern：**
+
+```skill
+vcli skill exec 'let((sess vl)
+  sess=asiGetCurrentSession()
+  vl=asiGetDesignVarList(sess)
+  vl=cons(list("W34" "16u") remove(assoc("W34" vl) vl))
+  asiSetDesignVarList(sess vl))'
+```
+
+- `cons(newEntry removeOldEntry)` — 替换已有变量（assoc 定位旧项，remove 删除，cons 前插新项）
+- 更新多个变量时重复 `cons(...)` 链即可
+- 更新后用 `vcli maestro save --session <name>` 持久化
+
+**IC23.1 下以下函数未定义，勿用：**
+- `asiSetDesVar` → `*Error* eval: undefined function`
+- `asiSetDesignVar` → 同上
+- `desVar("name" val)` → 通过 bridge 调用返回 nil（缺少 ADE session 上下文）
+
+验证变量已写入 netlist：检查最新 `input.scs` 的 `parameters ...` 行，而非相信 `maeGetVar` 的返回值。
 
 ## 常见问题
 

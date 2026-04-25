@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: bound_step VACOMP-2259 in SPECTRE231; skill variable expansion gotcha in SKILL.md body
+- Last Note: IC23 two-layer design variable namespaces: maeSetVar vs asiSetDesignVarList; CMI-2441 root cause
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`
