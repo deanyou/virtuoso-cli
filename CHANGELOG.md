@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.8] - 2026-04-25
+
+### Changed
+- **All maestro commands** — SKILL failures now return `Err(VirtuosoError::Execution)` (exit 1) instead of `Ok({status:"error"})` (exit 0); LLM tool callers can now rely on exit code alone
+- **`get_current_design()`** — replaced `split_whitespace` with `parse_sexp`; cellview names containing spaces no longer cause parse failures
+- **`get_analyses()`** — added missing `status` field for consistency with all other commands
+- **Success responses** — removed raw SKILL `output` fields from `close`, `set_var`, `add_output`, `open_results`, `run`; success paths only contain structured data
+- **`run()`** — error path now returns `Err()` (exit 1); success still returns `{"status":"launched"}` to indicate async dispatch
+
+### Added
+- **`error::suggestion()`** — hints for `Execution` errors containing `nil`/`unbound` and for `NotFound` errors
+
+### Removed
+- **`DaemonNotReady`** error variant — never instantiated; removed from all match arms
+- **`print_table` / `print_section`** in `output.rs` — never called
+- **`skill_str()` helper** in `maestro.rs` — inlined into call sites after error-path removal
+
 ## [0.3.7] - 2026-04-25
 
 ### Added
