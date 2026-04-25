@@ -313,11 +313,10 @@ impl VirtuosoClient {
             None,
         )?;
         use crate::client::skill_sexp::{parse_sexp, SexpVal};
-        let extract = |v: &SexpVal| match v {
-            SexpVal::Str(s) | SexpVal::Atom(s) => Ok(s.clone()),
-            _ => Err(VirtuosoError::Execution(
-                "unexpected token in cellview list".into(),
-            )),
+        let extract = |v: &SexpVal| {
+            v.as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| VirtuosoError::Execution("unexpected token in cellview list".into()))
         };
         match parse_sexp(result.output.trim())? {
             SexpVal::List(items) if items.len() >= 3 => Ok((

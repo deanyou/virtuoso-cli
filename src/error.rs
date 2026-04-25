@@ -71,7 +71,7 @@ impl VirtuosoError {
             Self::Ssh(msg) if msg.contains("authentication") => {
                 Some("Check SSH keys: ssh-add -l".into())
             }
-            Self::Execution(msg) if msg.contains("nil") || msg.contains("unbound") => {
+            Self::Execution(msg) if msg.ends_with(": nil") || msg.contains("unbound") => {
                 Some("SKILL returned nil — check if a cellview/session is open".into())
             }
             Self::NotFound(_) => Some("Use 'vcli session list' to see active sessions".into()),

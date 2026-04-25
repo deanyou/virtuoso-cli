@@ -10,6 +10,16 @@ pub enum SexpVal {
     List(Vec<SexpVal>),
 }
 
+impl SexpVal {
+    /// Return the string content for `Str` and `Atom` variants; `None` for all others.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::Str(s) | Self::Atom(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+}
+
 /// Parse a SKILL s-expression from `input`.
 pub fn parse_sexp(input: &str) -> Result<SexpVal> {
     let mut p = Parser::new(input.trim());

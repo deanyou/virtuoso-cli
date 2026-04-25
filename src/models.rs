@@ -1,3 +1,4 @@
+use crate::error::{Result, VirtuosoError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -32,6 +33,24 @@ impl VirtuosoResult {
     /// (e.g. design(), dbOpenCellViewByType(), getData()).
     pub fn skill_ok(&self) -> bool {
         self.status == ExecutionStatus::Success && self.output.trim() != "nil"
+    }
+
+    /// Propagate a SKILL-level failure as `Err(VirtuosoError::Execution)`.
+    /// `context` is the operation name; the error message becomes `"{context} failed: {output}"`.
+    pub fn ok_or_exec(self, context: &str) -> Result<Self> {
+        if self.skill_ok() {
+            Ok(self)
+        } else {
+            Err(VirtuosoError::Execution(format!(
+                "{context} failed: {}",
+                self.output
+            )))
+        }
+    }
+
+    /// Return the output string with surrounding SKILL double-quotes stripped.
+    pub fn output_unquoted(&self) -> &str {
+        self.output.trim_matches('"')
     }
 
     pub fn success(output: impl Into<String>) -> Self {
