@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.9] - 2026-04-26
+
+### Refactored
+- **`VirtuosoResult::ok_or_exec(context)`** — collapses the 16 repetitive `if !r.skill_ok() { return Err(...) }` blocks in `maestro.rs` into a single chained method call; error message format unchanged
+- **`VirtuosoResult::output_unquoted()`** — replaces 7 inline `trim_matches('"')` sites
+- **`SexpVal::as_str()`** — simplifies the `get_current_design()` closure in `bridge.rs`
+- **`error.rs` nil suggestion** — narrowed `contains("nil")` to `ends_with(": nil")` to avoid false hints on unrelated error messages containing "nil" as a substring
+
 ## [0.3.8] - 2026-04-25
 
 ### Changed
