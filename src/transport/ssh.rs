@@ -100,10 +100,7 @@ impl SSHRunner {
 
     pub fn run_command(&self, command: &str, timeout: Option<u64>) -> Result<RemoteTaskResult> {
         let result = self.run_command_inner(command, timeout)?;
-        if !result.success
-            && Self::is_cm_failure(&result.stderr)
-            && self.use_control_master.get()
-        {
+        if !result.success && Self::is_cm_failure(&result.stderr) && self.use_control_master.get() {
             tracing::warn!(
                 "ControlMaster failure detected, retrying without CM: {}",
                 result.stderr.lines().next().unwrap_or("")

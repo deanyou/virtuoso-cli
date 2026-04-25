@@ -419,10 +419,7 @@ mod sexp_tests {
     #[test]
     fn whitespace_is_ignored() {
         let val = parse_sexp("  (  nil   t  )  ").unwrap();
-        assert_eq!(
-            val,
-            SexpVal::List(vec![SexpVal::Nil, SexpVal::Bool(true)])
-        );
+        assert_eq!(val, SexpVal::List(vec![SexpVal::Nil, SexpVal::Bool(true)]));
     }
 
     #[test]

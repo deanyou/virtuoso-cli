@@ -68,7 +68,9 @@ impl<'a> Parser<'a> {
     fn parse_value(&mut self) -> Result<SexpVal> {
         self.skip_ws();
         match self.peek() {
-            None => Err(VirtuosoError::Execution("unexpected end of sexp input".into())),
+            None => Err(VirtuosoError::Execution(
+                "unexpected end of sexp input".into(),
+            )),
             Some(b'(') => {
                 self.pos += 1;
                 self.parse_list()
@@ -126,8 +128,7 @@ impl<'a> Parser<'a> {
             }
             self.pos += 1;
         }
-        let atom = std::str::from_utf8(&self.input[start..self.pos])
-            .unwrap_or("");
+        let atom = std::str::from_utf8(&self.input[start..self.pos]).unwrap_or("");
         Ok(match atom {
             "nil" => SexpVal::Nil,
             "t" => SexpVal::Bool(true),
@@ -208,10 +209,7 @@ mod tests {
                     SexpVal::Str("fnxSession0".into()),
                     SexpVal::Str("idle".into()),
                 ]),
-                SexpVal::List(vec![
-                    SexpVal::Str("fnxSession1".into()),
-                    SexpVal::Nil,
-                ]),
+                SexpVal::List(vec![SexpVal::Str("fnxSession1".into()), SexpVal::Nil,]),
             ])
         );
     }
@@ -232,11 +230,14 @@ mod tests {
             SexpVal::Str("idle".into()),
         ]);
         let result = sexp_to_str_list(&val).unwrap();
-        assert_eq!(result, vec![
-            Some("fnxSession0".to_string()),
-            None,
-            Some("idle".to_string()),
-        ]);
+        assert_eq!(
+            result,
+            vec![
+                Some("fnxSession0".to_string()),
+                None,
+                Some("idle".to_string()),
+            ]
+        );
     }
 
     #[test]

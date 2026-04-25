@@ -255,24 +255,22 @@ impl VirtuosoClient {
         let sexp = crate::client::skill_sexp::parse_sexp(&r.output)?;
         match sexp {
             crate::client::skill_sexp::SexpVal::Nil => Ok(Vec::new()),
-            crate::client::skill_sexp::SexpVal::List(items) => {
-                Ok(items
-                    .iter()
-                    .filter_map(|item| {
-                        let vals = crate::client::skill_sexp::sexp_to_str_list(item)?;
-                        if vals.len() != fields.len() {
-                            return None;
-                        }
-                        Some(
-                            fields
-                                .iter()
-                                .zip(vals.iter())
-                                .map(|(k, v)| (k.to_string(), v.clone().unwrap_or_default()))
-                                .collect(),
-                        )
-                    })
-                    .collect())
-            }
+            crate::client::skill_sexp::SexpVal::List(items) => Ok(items
+                .iter()
+                .filter_map(|item| {
+                    let vals = crate::client::skill_sexp::sexp_to_str_list(item)?;
+                    if vals.len() != fields.len() {
+                        return None;
+                    }
+                    Some(
+                        fields
+                            .iter()
+                            .zip(vals.iter())
+                            .map(|(k, v)| (k.to_string(), v.clone().unwrap_or_default()))
+                            .collect(),
+                    )
+                })
+                .collect()),
             _ => Err(VirtuosoError::Execution(
                 "execute_skill_fetch: expected list from SKILL".into(),
             )),
