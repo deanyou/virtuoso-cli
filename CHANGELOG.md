@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.11] - 2026-04-26
+
+### Fixed
+- **`maestro session-info`** — when the focused window is not an ADE window (e.g. waveform viewer or file browser), auto-selects if exactly one Maestro session exists; previously all fields were null in this case
+- **`VirtuosoResult::ok_or_exec()`** — error message now includes the daemon error text for NAK responses; previously showed an empty message when SKILL threw an exception (as opposed to returning nil)
+
 ## [0.3.10] - 2026-04-26
 
 ### Fixed

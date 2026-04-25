@@ -36,15 +36,18 @@ impl VirtuosoResult {
     }
 
     /// Propagate a SKILL-level failure as `Err(VirtuosoError::Execution)`.
-    /// `context` is the operation name; the error message becomes `"{context} failed: {output}"`.
+    /// `context` is the operation name; the error message becomes `"{context} failed: {detail}"`.
+    /// When output is empty (NAK transport error), falls back to the first error in `errors`.
     pub fn ok_or_exec(self, context: &str) -> Result<Self> {
         if self.skill_ok() {
             Ok(self)
         } else {
-            Err(VirtuosoError::Execution(format!(
-                "{context} failed: {}",
-                self.output
-            )))
+            let detail = if self.output.is_empty() {
+                self.errors.first().cloned().unwrap_or_default()
+            } else {
+                self.output.clone()
+            };
+            Err(VirtuosoError::Execution(format!("{context} failed: {detail}")))
         }
     }
 

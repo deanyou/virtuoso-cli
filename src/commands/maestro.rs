@@ -182,8 +182,12 @@ pub fn export(
 
 /// Inspect the focused ADE window and return session metadata.
 ///
-/// Always makes one SKILL call. A second call is made only when `session` is explicitly
-/// provided AND it differs from the davSession bound to the focused window.
+/// Makes one SKILL call that returns the focused window title, its davSession,
+/// all window names, all Maestro session names, and the run directory.
+///
+/// When the focused window is not an ADE window (e.g. waveform viewer), falls back to
+/// auto-selecting if exactly one Maestro session exists. A second RTT is made only for
+/// run_dir when the session comes from auto-select or an explicit arg != focused davSession.
 pub fn session_info(session: Option<&str>) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
@@ -196,23 +200,47 @@ pub fn session_info(session: Option<&str>) -> Result<Value> {
     let dav_session = tokens.get(1).and_then(|t| extract_skill_string_token(t));
     let bundled_run_dir = tokens.get(4).and_then(|t| extract_skill_string_token(t));
 
+    // Parse all available Maestro sessions from token[3] = maeGetSessions()
+    let available_sessions: Vec<String> = tokens
+        .get(3)
+        .map(|t| {
+            parse_skill_list_top_level(t)
+                .into_iter()
+                .filter_map(|s| extract_skill_string_token(&s))
+                .collect()
+        })
+        .unwrap_or_default();
+
     let parsed = focused.as_deref().and_then(parse_ade_title);
 
-    // Resolve effective session: explicit arg → davSession from window → None
-    let effective_session = session.map(str::to_owned).or_else(|| dav_session.clone());
-
-    // Second RTT only when session explicitly differs from focused window's davSession
-    let run_dir = if let Some(s) = session.filter(|s| Some(*s) != dav_session.as_deref()) {
-        let skill2 = client.maestro.run_dir_skill(s);
-        let r2 = client.execute_skill(&skill2, None)?;
-        if r2.skill_ok() {
-            Some(r2.output_unquoted().to_string())
-        } else {
-            None
-        }
+    // Auto-select when focused window has no ADE info and exactly one session exists
+    let auto_session = if parsed.is_none() && dav_session.is_none() && available_sessions.len() == 1
+    {
+        Some(available_sessions[0].clone())
     } else {
-        bundled_run_dir
+        None
     };
+
+    // Resolve effective session: explicit arg → davSession from window → auto-select
+    let effective_session = session
+        .map(str::to_owned)
+        .or_else(|| dav_session.clone())
+        .or_else(|| auto_session.clone());
+
+    // run_dir: bundled covers the focused-window case; second RTT for explicit/auto sessions
+    let run_dir =
+        if let Some(s) = session.filter(|s| Some(*s) != dav_session.as_deref()) {
+            let skill2 = client.maestro.run_dir_skill(s);
+            let r2 = client.execute_skill(&skill2, None)?;
+            if r2.skill_ok() { Some(r2.output_unquoted().to_string()) } else { None }
+        } else if auto_session.is_some() {
+            let s = auto_session.as_deref().unwrap();
+            let skill2 = client.maestro.run_dir_skill(s);
+            let r2 = client.execute_skill(&skill2, None)?;
+            if r2.skill_ok() { Some(r2.output_unquoted().to_string()) } else { None }
+        } else {
+            bundled_run_dir
+        };
 
     Ok(json!({
         "status": "success",
