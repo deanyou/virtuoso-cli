@@ -53,6 +53,10 @@ impl SSHClient {
         }
         runner.ssh_port = cfg.ssh_port;
         runner.ssh_key_path = cfg.ssh_key.clone();
+        runner.ssh_config_path = cfg.ssh_config.clone();
+        if cfg.disable_control_master {
+            runner.use_control_master.set(false);
+        }
 
         Ok(Self {
             runner,
@@ -191,24 +195,26 @@ impl SSHClient {
             "-N",
             "-L",
             &format!("127.0.0.1:{port}:127.0.0.1:{port}"),
-            &target,
         ]);
 
-        // ControlMaster: share tunnel SSH connection with command sessions
-        let control_dir = dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("virtuoso_bridge")
-            .join("ssh");
-        let _ = std::fs::create_dir_all(&control_dir);
-        let control_path = control_dir.join("%h-%p-%r");
-        cmd.args([
-            "-o",
-            "ControlMaster=auto",
-            "-o",
-            &format!("ControlPath={}", control_path.display()),
-            "-o",
-            "ControlPersist=600",
-        ]);
+        // Conditionally add ControlMaster options — disabled when CM has been
+        // found to fail at runtime (WSL2/Windows named pipe issues).
+        if self.runner.use_control_master.get() {
+            let control_dir = dirs::cache_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                .join("virtuoso_bridge")
+                .join("ssh");
+            let _ = std::fs::create_dir_all(&control_dir);
+            let control_path = control_dir.join("%h-%p-%r");
+            cmd.args([
+                "-o",
+                "ControlMaster=auto",
+                "-o",
+                &format!("ControlPath={}", control_path.display()),
+                "-o",
+                "ControlPersist=600",
+            ]);
+        }
 
         if let Some(p) = self.runner.ssh_port {
             cmd.arg("-p").arg(p.to_string());
@@ -216,9 +222,13 @@ impl SSHClient {
         if let Some(ref key) = self.runner.ssh_key_path {
             cmd.arg("-i").arg(key);
         }
+        if let Some(ref config) = self.runner.ssh_config_path {
+            cmd.arg("-F").arg(config);
+        }
         if let Some(ref jump) = self.runner.jump_host {
             cmd.arg("-J").arg(jump);
         }
+        cmd.arg(&target);
 
         let output = cmd
             .stdout(Stdio::null())

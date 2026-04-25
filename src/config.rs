@@ -14,6 +14,11 @@ pub struct Config {
     pub jump_user: Option<String>,
     pub ssh_port: Option<u16>,
     pub ssh_key: Option<String>,
+    /// Path to a custom SSH config file (VB_SSH_CONFIG). Passed as `-F` to ssh.
+    pub ssh_config: Option<String>,
+    /// Disable SSH ControlMaster multiplexing (VB_DISABLE_CONTROL_MASTER=1).
+    /// Set this on WSL2/Windows when the CM socket path contains non-ASCII chars.
+    pub disable_control_master: bool,
     pub timeout: u64,
     pub keep_remote_files: bool,
     pub spectre_cmd: String,
@@ -39,10 +44,10 @@ impl Config {
     }
 
     pub fn from_env_with_profile(profile: Option<&str>) -> Result<Self> {
-        if let Err(e) = dotenv() {
-            if !e.not_found() {
-                tracing::warn!("failed to load .env: {e}");
-            }
+        match dotenv() {
+            Ok(path) => tracing::debug!("loaded .env from {}", path.display()),
+            Err(e) if e.not_found() => {}
+            Err(e) => tracing::warn!("failed to load .env: {e}"),
         }
 
         let remote_host = Self::env_with_profile("VB_REMOTE_HOST", profile);
@@ -57,6 +62,12 @@ impl Config {
             ));
         }
 
+        let sessions_dir = dirs::cache_dir()
+            .map(|d| d.join("virtuoso_bridge").join("sessions"));
+        if let Some(ref d) = sessions_dir {
+            tracing::debug!("session dir: {}", d.display());
+        }
+
         Ok(Self {
             profile: profile.map(|s| s.to_string()),
             remote_host,
@@ -66,6 +77,10 @@ impl Config {
             jump_user: Self::env_with_profile("VB_JUMP_USER", profile),
             ssh_port: Self::env_with_profile("VB_SSH_PORT", profile).and_then(|v| v.parse().ok()),
             ssh_key: Self::env_with_profile("VB_SSH_KEY", profile),
+            ssh_config: Self::env_with_profile("VB_SSH_CONFIG", profile),
+            disable_control_master: Self::env_with_profile("VB_DISABLE_CONTROL_MASTER", profile)
+                .map(|v| v == "1" || v.to_lowercase() == "true")
+                .unwrap_or(false),
             timeout: Self::env_with_profile("VB_TIMEOUT", profile)
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(30),

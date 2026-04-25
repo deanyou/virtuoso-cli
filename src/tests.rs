@@ -28,6 +28,8 @@ mod config_tests {
             jump_user: jump_user.map(String::from),
             ssh_port: None,
             ssh_key: None,
+            ssh_config: None,
+            disable_control_master: false,
             timeout: 30,
             keep_remote_files: false,
             spectre_cmd: "spectre".into(),
@@ -88,6 +90,8 @@ mod config_tests {
         env::remove_var("VB_PORT");
         env::remove_var("VB_REMOTE_HOST");
         env::remove_var("VB_PROFILE");
+        env::remove_var("VB_SSH_CONFIG");
+        env::remove_var("VB_DISABLE_CONTROL_MASTER");
     }
 
     #[test]
@@ -360,5 +364,227 @@ mod session_info_tests {
         // Cleanup
         fs::remove_file(dir.join("zzz-sort-test-1.json")).ok();
         fs::remove_file(dir.join("aaa-sort-test-2.json")).ok();
+    }
+}
+
+#[cfg(test)]
+mod sexp_tests {
+    use crate::client::skill_sexp::{parse_sexp, sexp_to_str_list, SexpVal};
+
+    #[test]
+    fn roundtrip_empty_list() {
+        assert_eq!(parse_sexp("()").unwrap(), SexpVal::List(vec![]));
+    }
+
+    #[test]
+    fn nested_list_of_lists() {
+        let input = r#"(("fnxSession0" "idle") ("fnxSession1" nil))"#;
+        let val = parse_sexp(input).unwrap();
+        let outer = match val {
+            SexpVal::List(v) => v,
+            other => panic!("expected List, got {other:?}"),
+        };
+        assert_eq!(outer.len(), 2);
+
+        let row0 = sexp_to_str_list(&outer[0]).unwrap();
+        assert_eq!(row0, vec![Some("fnxSession0".into()), Some("idle".into())]);
+
+        let row1 = sexp_to_str_list(&outer[1]).unwrap();
+        assert_eq!(row1, vec![Some("fnxSession1".into()), None]);
+    }
+
+    #[test]
+    fn string_with_embedded_quotes() {
+        let val = parse_sexp(r#""say \"hello\"""#).unwrap();
+        assert_eq!(val, SexpVal::Str(r#"say "hello""#.into()));
+    }
+
+    #[test]
+    fn nil_top_level() {
+        assert_eq!(parse_sexp("nil").unwrap(), SexpVal::Nil);
+    }
+
+    #[test]
+    fn bool_true_top_level() {
+        assert_eq!(parse_sexp("t").unwrap(), SexpVal::Bool(true));
+    }
+
+    #[test]
+    fn sexp_to_str_list_on_non_list_returns_none() {
+        assert!(sexp_to_str_list(&SexpVal::Nil).is_none());
+        assert!(sexp_to_str_list(&SexpVal::Bool(true)).is_none());
+        assert!(sexp_to_str_list(&SexpVal::Str("x".into())).is_none());
+    }
+
+    #[test]
+    fn whitespace_is_ignored() {
+        let val = parse_sexp("  (  nil   t  )  ").unwrap();
+        assert_eq!(
+            val,
+            SexpVal::List(vec![SexpVal::Nil, SexpVal::Bool(true)])
+        );
+    }
+
+    #[test]
+    fn atom_preserved_as_is() {
+        assert_eq!(
+            parse_sexp("fnxSession3").unwrap(),
+            SexpVal::Atom("fnxSession3".into())
+        );
+    }
+}
+
+#[cfg(test)]
+mod cm_tests {
+    use crate::transport::ssh::SSHRunner;
+
+    #[test]
+    fn cm_failure_mux_client() {
+        assert!(SSHRunner::is_cm_failure(
+            "mux_client_request_session: send fds failed"
+        ));
+    }
+
+    #[test]
+    fn cm_failure_named_pipe() {
+        assert!(SSHRunner::is_cm_failure(
+            "ssh_mux_client_open: could not create named pipe"
+        ));
+    }
+
+    #[test]
+    fn cm_failure_control_path() {
+        assert!(SSHRunner::is_cm_failure(
+            "ControlPath too long for socket: /home/用户/.cache/..."
+        ));
+    }
+
+    #[test]
+    fn cm_failure_control_socket() {
+        assert!(SSHRunner::is_cm_failure(
+            "Control socket connect(/tmp/...): No such file or directory"
+        ));
+    }
+
+    #[test]
+    fn connection_refused_is_not_cm_failure() {
+        assert!(!SSHRunner::is_cm_failure(
+            "ssh: connect to host eda port 22: Connection refused"
+        ));
+    }
+
+    #[test]
+    fn auth_failure_is_not_cm_failure() {
+        assert!(!SSHRunner::is_cm_failure("Permission denied (publickey)."));
+    }
+
+    #[test]
+    fn cm_disabled_by_default_is_true() {
+        let r = SSHRunner::new("eda");
+        assert!(r.use_control_master.get());
+    }
+
+    #[test]
+    fn cm_can_be_disabled() {
+        let r = SSHRunner::new("eda");
+        r.use_control_master.set(false);
+        assert!(!r.use_control_master.get());
+
+        // Verify SSH command no longer contains ControlMaster options
+        let cmd = r.build_ssh_cmd();
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !args.iter().any(|a| a.contains("ControlMaster")),
+            "ControlMaster should be absent when disabled: {args:?}"
+        );
+        assert!(
+            !args.iter().any(|a| a.contains("ControlPath")),
+            "ControlPath should be absent when disabled: {args:?}"
+        );
+    }
+
+    #[test]
+    fn cm_enabled_adds_control_master_args() {
+        let r = SSHRunner::new("eda");
+        // CM is enabled by default
+        let cmd = r.build_ssh_cmd();
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.iter().any(|a| a.contains("ControlMaster")),
+            "ControlMaster should be present when enabled: {args:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod config_tests_ext {
+    use crate::config::Config;
+    use std::env;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn clean_ext_env() {
+        env::remove_var("VB_PORT");
+        env::remove_var("VB_REMOTE_HOST");
+        env::remove_var("VB_SSH_CONFIG");
+        env::remove_var("VB_DISABLE_CONTROL_MASTER");
+    }
+
+    #[test]
+    fn vb_ssh_config_sets_field() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_ext_env();
+        env::set_var("VB_SSH_CONFIG", "/home/meow/.ssh/custom_config");
+        let cfg = Config::from_env().unwrap();
+        clean_ext_env();
+        assert_eq!(
+            cfg.ssh_config.as_deref(),
+            Some("/home/meow/.ssh/custom_config")
+        );
+    }
+
+    #[test]
+    fn vb_ssh_config_unset_is_none() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_ext_env();
+        let cfg = Config::from_env().unwrap();
+        clean_ext_env();
+        assert!(cfg.ssh_config.is_none());
+    }
+
+    #[test]
+    fn vb_disable_control_master_one() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_ext_env();
+        env::set_var("VB_DISABLE_CONTROL_MASTER", "1");
+        let cfg = Config::from_env().unwrap();
+        clean_ext_env();
+        assert!(cfg.disable_control_master);
+    }
+
+    #[test]
+    fn vb_disable_control_master_true() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_ext_env();
+        env::set_var("VB_DISABLE_CONTROL_MASTER", "true");
+        let cfg = Config::from_env().unwrap();
+        clean_ext_env();
+        assert!(cfg.disable_control_master);
+    }
+
+    #[test]
+    fn vb_disable_control_master_default_false() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_ext_env();
+        let cfg = Config::from_env().unwrap();
+        clean_ext_env();
+        assert!(!cfg.disable_control_master);
     }
 }
