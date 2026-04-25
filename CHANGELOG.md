@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.6] - 2026-04-25
+
+### Added
+- **`execute_skill_fetch()`** — batch-fetch multiple `~>slot` fields from a SKILL list in a single bridge RTT; returns `Vec<HashMap<String, String>>`
+
+### Fixed
+- **`#[allow(dead_code)]`** — suppress clippy warnings on `get_outputs` and `get_current_session` APIs reserved for future use
+
+### Changed
+- **`add_output` version branch** — removed dead IC25 branch and redundant `raw` field; IC23/IC25 dispatch unified
+
 ## [0.3.5] - 2026-04-24
 
 ### Fixed
