@@ -10,8 +10,9 @@ mod config_tests {
     use std::env;
     use std::sync::Mutex;
 
-    // Serialize env-var tests to prevent races (env is global process state)
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    // Serialize env-var tests to prevent races (env is global process state).
+    // Shared with config_tests_ext — both modules must hold this lock when touching env vars.
+    pub(super) static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn make_config(
         remote_host: Option<&str>,
@@ -522,10 +523,8 @@ mod cm_tests {
 #[cfg(test)]
 mod config_tests_ext {
     use crate::config::Config;
+    use crate::tests::config_tests::ENV_LOCK;
     use std::env;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn clean_ext_env() {
         env::remove_var("VB_PORT");

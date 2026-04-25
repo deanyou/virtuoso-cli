@@ -60,15 +60,6 @@ pub fn print_json(value: &Value) {
     let _ = writeln!(out);
 }
 
-#[allow(dead_code)]
-pub fn print_table(rows: &[(&str, &str)]) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    for (key, value) in rows {
-        let _ = writeln!(out, "  {key}: {value}");
-    }
-}
-
 pub fn print_value(value: &Value, format: OutputFormat) {
     match format {
         OutputFormat::Json => print_json(value),
@@ -85,18 +76,6 @@ pub fn print_value(value: &Value, format: OutputFormat) {
             } else {
                 println!("{}", value);
             }
-        }
-    }
-}
-
-#[allow(dead_code)]
-pub fn print_section(title: &str, value: &Value, format: OutputFormat) {
-    match format {
-        OutputFormat::Json => {} // JSON mode: caller aggregates into single object
-        OutputFormat::Table => {
-            println!("{title}:");
-            print_value(value, format);
-            println!();
         }
     }
 }

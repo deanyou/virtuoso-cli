@@ -36,11 +36,13 @@ pub fn close(session: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.close_session(session);
     let r = client.execute_skill(&skill, None)?;
-    Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
-        "session": session,
-        "output": r.output,
-    }))
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "close session failed: {}",
+            r.output
+        )));
+    }
+    Ok(json!({"status": "success", "session": session}))
 }
 
 pub fn list_sessions() -> Result<Value> {
@@ -60,12 +62,13 @@ pub fn set_var(name: &str, value: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.set_var(name, value);
     let r = client.execute_skill(&skill, None)?;
-    Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
-        "variable": name,
-        "value": value,
-        "output": r.output,
-    }))
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "set var '{}' failed: {}",
+            name, r.output
+        )));
+    }
+    Ok(json!({"status": "success", "variable": name, "value": value}))
 }
 
 pub fn get_var(name: &str) -> Result<Value> {
@@ -98,6 +101,7 @@ pub fn get_analyses(session: &str) -> Result<Value> {
     let skill = client.maestro.get_analyses(session, version);
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
+        "status": if r.skill_ok() { "success" } else { "error" },
         "session": session,
         "analyses": r.output.trim_matches('"'),
     }))

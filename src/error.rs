@@ -22,10 +22,6 @@ pub enum VirtuosoError {
     #[error("timeout after {0}s")]
     Timeout(u64),
 
-    #[allow(dead_code)]
-    #[error("daemon not ready: {0}")]
-    DaemonNotReady(String),
-
     #[error("config error: {0}")]
     Config(String),
 
@@ -42,9 +38,7 @@ impl VirtuosoError {
             Self::Config(_) => exit_codes::USAGE_ERROR,
             Self::NotFound(_) => exit_codes::NOT_FOUND,
             Self::Conflict(_) => exit_codes::CONFLICT,
-            Self::Connection(_) | Self::Ssh(_) | Self::Timeout(_) | Self::DaemonNotReady(_) => {
-                exit_codes::GENERAL_ERROR
-            }
+            Self::Connection(_) | Self::Ssh(_) | Self::Timeout(_) => exit_codes::GENERAL_ERROR,
             Self::Execution(_) | Self::Io(_) | Self::Json(_) => exit_codes::GENERAL_ERROR,
         }
     }
@@ -57,7 +51,6 @@ impl VirtuosoError {
             Self::Io(_) => "io_error",
             Self::Json(_) => "json_error",
             Self::Timeout(_) => "timeout",
-            Self::DaemonNotReady(_) => "daemon_not_ready",
             Self::Config(_) => "config_error",
             Self::NotFound(_) => "not_found",
             Self::Conflict(_) => "conflict",
@@ -65,10 +58,7 @@ impl VirtuosoError {
     }
 
     pub fn retryable(&self) -> bool {
-        matches!(
-            self,
-            Self::Connection(_) | Self::Timeout(_) | Self::DaemonNotReady(_)
-        )
+        matches!(self, Self::Connection(_) | Self::Timeout(_))
     }
 
     pub fn suggestion(&self) -> Option<String> {
@@ -76,13 +66,15 @@ impl VirtuosoError {
             Self::Config(msg) if msg.contains("VB_REMOTE_HOST") => {
                 Some("Run: virtuoso init".into())
             }
-            Self::DaemonNotReady(_) | Self::Connection(_) => {
-                Some("Run: virtuoso tunnel start".into())
-            }
+            Self::Connection(_) => Some("Run: virtuoso tunnel start".into()),
             Self::Timeout(secs) => Some(format!("Retry with --timeout {}", secs * 2)),
             Self::Ssh(msg) if msg.contains("authentication") => {
                 Some("Check SSH keys: ssh-add -l".into())
             }
+            Self::Execution(msg) if msg.contains("nil") || msg.contains("unbound") => {
+                Some("SKILL returned nil — check if a cellview/session is open".into())
+            }
+            Self::NotFound(_) => Some("Use 'vcli session list' to see active sessions".into()),
             _ => None,
         }
     }

@@ -312,15 +312,22 @@ impl VirtuosoClient {
             r#"let((cv) cv = geGetEditCellView() list(cv~>libName cv~>cellName cv~>viewName))"#,
             None,
         )?;
-        let cleaned = result.output.trim().trim_matches(|c| c == '(' || c == ')');
-        let parts: Vec<&str> = cleaned.split_whitespace().collect();
-        if parts.len() >= 3 {
-            let strip = |s: &str| s.trim_matches('"').to_string();
-            Ok((strip(parts[0]), strip(parts[1]), strip(parts[2])))
-        } else {
-            Err(VirtuosoError::Execution(
+        use crate::client::skill_sexp::{parse_sexp, SexpVal};
+        let extract = |v: &SexpVal| match v {
+            SexpVal::Str(s) | SexpVal::Atom(s) => Ok(s.clone()),
+            _ => Err(VirtuosoError::Execution(
+                "unexpected token in cellview list".into(),
+            )),
+        };
+        match parse_sexp(result.output.trim())? {
+            SexpVal::List(items) if items.len() >= 3 => Ok((
+                extract(&items[0])?,
+                extract(&items[1])?,
+                extract(&items[2])?,
+            )),
+            _ => Err(VirtuosoError::Execution(
                 "failed to get current design".into(),
-            ))
+            )),
         }
     }
 
