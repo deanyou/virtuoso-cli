@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.12] - 2026-04-27
+
+### Changed
+- **`.env` upward discovery** — `Config::from_env()` now walks from the current directory up to the filesystem root looking for a `.env` file; previously only the working directory was checked, causing config to silently disappear when `cd`-ing into a project subdirectory
+
 ## [0.3.11] - 2026-04-26
 
 ### Fixed

@@ -1,5 +1,4 @@
 use crate::error::{Result, VirtuosoError};
-use dotenvy::dotenv;
 use std::env;
 use std::path::PathBuf;
 
@@ -44,11 +43,8 @@ impl Config {
     }
 
     pub fn from_env_with_profile(profile: Option<&str>) -> Result<Self> {
-        match dotenv() {
-            Ok(path) => tracing::debug!("loaded .env from {}", path.display()),
-            Err(e) if e.not_found() => {}
-            Err(e) => tracing::warn!("failed to load .env: {e}"),
-        }
+        load_dotenv_upward();
+
 
         let remote_host = Self::env_with_profile("VB_REMOTE_HOST", profile);
 
@@ -123,6 +119,27 @@ impl Config {
             (Some(host), Some(user)) => Some(format!("{user}@{host}")),
             (Some(host), None) => Some(host.clone()),
             _ => None,
+        }
+    }
+}
+
+/// Walk cwd → parent → … until a `.env` is found, then load it.
+/// Stops at filesystem root if no `.env` exists anywhere.
+fn load_dotenv_upward() {
+    let Ok(start) = std::env::current_dir() else { return };
+    let mut dir = start.as_path();
+    loop {
+        let candidate = dir.join(".env");
+        if candidate.exists() {
+            match dotenvy::from_path(&candidate) {
+                Ok(()) => tracing::debug!("loaded .env from {}", candidate.display()),
+                Err(e) => tracing::warn!("failed to load .env from {}: {e}", candidate.display()),
+            }
+            return;
+        }
+        match dir.parent() {
+            Some(p) => dir = p,
+            None => return,
         }
     }
 }
