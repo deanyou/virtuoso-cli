@@ -414,6 +414,38 @@ repair-only:
 }
 ```
 
+### Artifact Capture Whitelist
+
+批量 sweep 每个点都会产生大量 PSF 文件（`dc/`、`ac/`、`tran/`、`oppoint/`…），
+默认全部保留会导致磁盘爆炸，debug 也难找。用 YAML `artifacts` 字段声明只保留哪些分析目录：
+
+```yaml
+# 在 spec YAML 里加 artifacts 节
+artifacts:
+  keep:
+    - "ac"        # 只保留 ac/ 目录下的 PSF
+    - "dcOpInfo"  # DC operating point
+  # 其他目录（tran/, noise/ …）在 sweep 结束后自动删除
+```
+
+`run_bandgap_sweep.py` 在每个点仿完后根据 `artifacts.keep` 清理：
+
+```python
+# scripts/run_bandgap_sweep.py 内部逻辑（伪代码）
+for dir in psf_root.iterdir():
+    if dir.name not in spec.get("artifacts", {}).get("keep", [...all...]):
+        shutil.rmtree(dir)
+```
+
+**使用原则：**
+
+- 只测 DC 工作点 → `keep: ["dcOpInfo"]`
+- 只测 AC 性能 → `keep: ["ac", "dcOpInfo"]`（dcOpInfo 通常很小，建议一起留）
+- 完整 PVT → `keep: ["ac", "dcOpInfo", "tran"]`，noise 很大可以不留
+- 调试单个失败点时，临时去掉 `artifacts` 字段，保留全部
+
+白名单 **只影响磁盘**，不影响测量——`vcli sim measure` 从内存/活跃 PSF 读取，仿真期间 PSF 仍完整，清理在读完结果之后进行。
+
 ### When to Use Script vs Manual Loop
 
 | Scenario | Use |
