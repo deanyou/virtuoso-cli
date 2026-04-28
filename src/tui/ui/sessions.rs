@@ -1,3 +1,4 @@
+use crate::models::DaemonStats;
 use crate::tui::app::state::App;
 use crate::tui::theme::Theme;
 use crate::tui::ui::shared::{kv_line, pane_border_style, selection_style};
@@ -70,13 +71,25 @@ pub fn render_detail(frame: &mut Frame, app: &App, theme: &Theme, area: Rect) {
         return;
     };
 
-    let lines = vec![
+    let mut lines = vec![
         kv_line("  Session: ", &s.id, theme, Some(theme.primary)),
         kv_line("  Port:    ", &s.port.to_string(), theme, None),
         kv_line("  PID:     ", &s.pid.to_string(), theme, None),
         kv_line("  Host:    ", &s.host, theme, None),
         kv_line("  Created: ", &s.created, theme, None),
     ];
+    if let Some(stats) = DaemonStats::load(s.port) {
+        let uptime = if stats.uptime_secs < 60 {
+            format!("{}s", stats.uptime_secs)
+        } else if stats.uptime_secs < 3600 {
+            format!("{}m{}s", stats.uptime_secs / 60, stats.uptime_secs % 60)
+        } else {
+            format!("{}h{}m", stats.uptime_secs / 3600, (stats.uptime_secs % 3600) / 60)
+        };
+        lines.push(kv_line("  Calls:   ", &stats.calls.to_string(), theme, None));
+        lines.push(kv_line("  Errors:  ", &stats.errors.to_string(), theme, None));
+        lines.push(kv_line("  Uptime:  ", &uptime, theme, None));
+    }
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 

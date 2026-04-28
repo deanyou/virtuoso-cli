@@ -116,7 +116,9 @@ impl SSHRunner {
         let start = Instant::now();
 
         let mut cmd = self.build_ssh_cmd();
-        cmd.arg("sh").arg("-s");
+        // -l: login shell — sources /etc/profile and ~/.profile so PATH is
+        // populated correctly on EDA hosts where the login shell is csh/tcsh.
+        cmd.arg("sh").arg("-l").arg("-s");
 
         let output = cmd
             .stdin(Stdio::piped())

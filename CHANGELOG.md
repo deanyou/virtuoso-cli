@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.13] - 2026-04-29
+
+### Added
+- **SSH login shell hardening** — `run_command_inner()` now invokes `sh -l -s` instead of `sh -s`; sources `/etc/profile` and `~/.profile` on EDA hosts where the login shell is csh/tcsh, ensuring PATH is populated correctly
+- **Daemon runtime metrics** — `virtuoso-daemon` tracks total calls, error count, and uptime using `AtomicU64` + `OnceLock<Instant>`; writes `{"calls":N,"errors":N,"uptime_secs":N}` to `/tmp/.ramic_stats_{port}` after each request
+- **`DaemonStats::load(port)`** — reads the stats file from a running daemon; returns `None` if the daemon has never written stats (e.g. pre-0.3.13 or not yet started)
+- **vtui Sessions detail pane** — shows Calls / Errors / Uptime rows when a daemon stats file is available for the selected session's port
+
 ## [0.3.12] - 2026-04-27
 
 ### Changed

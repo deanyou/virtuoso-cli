@@ -2,9 +2,15 @@ use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process;
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const NAK: u8 = 0x15;
 const RS: u8 = 0x1e;
+
+static CALLS: AtomicU64 = AtomicU64::new(0);
+static ERRORS: AtomicU64 = AtomicU64::new(0);
+static START: OnceLock<std::time::Instant> = OnceLock::new();
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -35,10 +41,12 @@ fn main() {
     // Must use actual_port, not the argv port (which may be 0 for OS-assigned).
     let cb_port = actual_port + 1;
 
+    START.get_or_init(std::time::Instant::now);
+
     for stream in listener.incoming() {
         match stream {
             Ok(conn) => {
-                if let Err(e) = handle_connection(conn, cb_port) {
+                if let Err(e) = handle_connection(conn, cb_port, actual_port) {
                     eprintln!("[virtuoso-daemon] error: {e}");
                 }
             }
@@ -49,7 +57,9 @@ fn main() {
     }
 }
 
-fn handle_connection(mut conn: TcpStream, cb_port: u16) -> io::Result<()> {
+fn handle_connection(mut conn: TcpStream, cb_port: u16, actual_port: u16) -> io::Result<()> {
+    CALLS.fetch_add(1, Ordering::Relaxed);
+
     let mut req_bytes = Vec::new();
     conn.read_to_end(&mut req_bytes)?;
 
@@ -70,10 +80,26 @@ fn handle_connection(mut conn: TcpStream, cb_port: u16) -> io::Result<()> {
 
     let result = read_callback_file(cb_port, timeout)?;
 
+    if result.first() == Some(&NAK) {
+        ERRORS.fetch_add(1, Ordering::Relaxed);
+    }
+    write_stats(actual_port);
+
     conn.write_all(&result)?;
     let _ = conn.shutdown(std::net::Shutdown::Both);
 
     Ok(())
+}
+
+fn write_stats(port: u16) {
+    let uptime = START.get().map(|t| t.elapsed().as_secs()).unwrap_or(0);
+    let json = format!(
+        r#"{{"calls":{},"errors":{},"uptime_secs":{}}}"#,
+        CALLS.load(Ordering::Relaxed),
+        ERRORS.load(Ordering::Relaxed),
+        uptime
+    );
+    let _ = std::fs::write(format!("/tmp/.ramic_stats_{port}"), json);
 }
 
 fn callback_files(cb_port: u16) -> (String, String) {

@@ -125,6 +125,22 @@ fn default_version() -> u32 {
     1
 }
 
+/// Runtime metrics written by the daemon to `/tmp/.ramic_stats_{port}` after each request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonStats {
+    pub calls: u64,
+    pub errors: u64,
+    pub uptime_secs: u64,
+}
+
+impl DaemonStats {
+    pub fn load(port: u16) -> Option<Self> {
+        let path = format!("/tmp/.ramic_stats_{port}");
+        let json = std::fs::read_to_string(path).ok()?;
+        serde_json::from_str(&json).ok()
+    }
+}
+
 /// Registration record written by bridge.il when a Virtuoso session starts.
 /// Lives at ~/.cache/virtuoso_bridge/sessions/<id>.json
 #[derive(Debug, Clone, Serialize, Deserialize)]
