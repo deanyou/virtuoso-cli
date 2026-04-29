@@ -14,6 +14,10 @@ static START: OnceLock<std::time::Instant> = OnceLock::new();
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(|s| s.as_str()) == Some("--version") {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     if args.len() < 3 {
         eprintln!("usage: virtuoso-daemon <host> <port>");
         process::exit(1);
