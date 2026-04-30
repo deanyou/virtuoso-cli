@@ -134,9 +134,12 @@ pub struct DaemonStats {
 }
 
 impl DaemonStats {
+    pub fn path(port: u16) -> String {
+        format!("/tmp/.ramic_stats_{port}")
+    }
+
     pub fn load(port: u16) -> Option<Self> {
-        let path = format!("/tmp/.ramic_stats_{port}");
-        let json = std::fs::read_to_string(path).ok()?;
+        let json = std::fs::read_to_string(Self::path(port)).ok()?;
         serde_json::from_str(&json).ok()
     }
 }

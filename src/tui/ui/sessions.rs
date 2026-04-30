@@ -1,4 +1,3 @@
-use crate::models::DaemonStats;
 use crate::tui::app::state::App;
 use crate::tui::theme::Theme;
 use crate::tui::ui::shared::{kv_line, pane_border_style, selection_style};
@@ -78,7 +77,7 @@ pub fn render_detail(frame: &mut Frame, app: &App, theme: &Theme, area: Rect) {
         kv_line("  Host:    ", &s.host, theme, None),
         kv_line("  Created: ", &s.created, theme, None),
     ];
-    if let Some(stats) = DaemonStats::load(s.port) {
+    if let Some(stats) = app.daemon_stats.get(&s.port) {
         let uptime = if stats.uptime_secs < 60 {
             format!("{}s", stats.uptime_secs)
         } else if stats.uptime_secs < 3600 {

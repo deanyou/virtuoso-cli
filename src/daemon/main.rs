@@ -95,6 +95,10 @@ fn handle_connection(mut conn: TcpStream, cb_port: u16, actual_port: u16) -> io:
     Ok(())
 }
 
+fn stats_path(port: u16) -> String {
+    format!("/tmp/.ramic_stats_{port}")
+}
+
 fn write_stats(port: u16) {
     let uptime = START.get().map(|t| t.elapsed().as_secs()).unwrap_or(0);
     let json = format!(
@@ -103,7 +107,7 @@ fn write_stats(port: u16) {
         ERRORS.load(Ordering::Relaxed),
         uptime
     );
-    let _ = std::fs::write(format!("/tmp/.ramic_stats_{port}"), json);
+    let _ = std::fs::write(stats_path(port), json);
 }
 
 fn callback_files(cb_port: u16) -> (String, String) {

@@ -57,6 +57,7 @@ fn run_loop(
         if !event::poll(Duration::from_millis(500)).map_err(err)? {
             app.spinner_frame = app.spinner_frame.wrapping_add(1);
             app.clear_expired_status();
+            app.refresh_daemon_stats();
             continue;
         }
 

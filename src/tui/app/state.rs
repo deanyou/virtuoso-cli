@@ -1,6 +1,7 @@
-use crate::models::{SessionInfo, TunnelState};
+use crate::models::{DaemonStats, SessionInfo, TunnelState};
 use crate::spectre::jobs::Job;
 use crate::tui::app::overlay::Overlay;
+use std::collections::HashMap;
 use std::time::Instant;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -69,6 +70,7 @@ pub struct App {
     pub jobs: Vec<Job>,
     pub tunnel_state: Option<TunnelState>,
     pub config_fields: Vec<ConfigField>,
+    pub daemon_stats: HashMap<u16, DaemonStats>,
 
     pub selected_session: usize,
     pub selected_job: usize,
@@ -88,6 +90,7 @@ impl App {
             jobs: Vec::new(),
             tunnel_state: None,
             config_fields: Vec::new(),
+            daemon_stats: HashMap::new(),
             selected_session: 0,
             selected_job: 0,
             selected_config: 0,
@@ -105,6 +108,14 @@ impl App {
             kind,
             at: Instant::now(),
         });
+    }
+
+    pub fn refresh_daemon_stats(&mut self) {
+        for s in &self.sessions {
+            if let Some(stats) = DaemonStats::load(s.port) {
+                self.daemon_stats.insert(s.port, stats);
+            }
+        }
     }
 
     pub fn clear_expired_status(&mut self) {
