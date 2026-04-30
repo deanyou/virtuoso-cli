@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.14] - 2026-04-30
+
+### Added
+- **`virtuoso-daemon --version`** — prints the semver and exits; previously the only way to check the daemon version was `strings(1)` on the binary
+
+### Changed
+- **vtui daemon stats caching** — `DaemonStats` is now refreshed on the 500ms tick and cached in `App::daemon_stats`; previously loaded from disk on every render frame, causing unnecessary I/O
+- **`DaemonStats::path(port)`** — centralizes the stats file path; `render_detail` and `write_stats` both derive the path from this single source
+
 ## [0.3.13] - 2026-04-29
 
 ### Added
