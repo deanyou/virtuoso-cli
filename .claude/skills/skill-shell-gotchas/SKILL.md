@@ -139,6 +139,119 @@ RBDPath = let((fromEnv cargoPath)
 
 ---
 
+## Problem 6: Multi-Expression SKILL String Without `progn` Silently Fails
+
+### Symptom
+A SKILL string with two side-effectful calls (e.g. `maeCloseSession(...) printf(...)`) appears to succeed but only the second call runs; the first is silently skipped.
+
+### Root Cause
+Inside a lambda body, `mapcar`, or certain callback contexts, SKILL parses
+`f1() f2()` as "apply the return value of `f1()` to the arguments of `f2()`"
+rather than two sequential calls.  This is **not** an issue at the top level of
+`evalstring`, but it **is** an issue inside any expression context.
+
+### Fix
+Wrap multiple expressions in `progn(...)`:
+
+```skill
+; WRONG — close silently skipped; skill_ok() still returns t (printf returns t)
+maeCloseSession("sess1" ?forceClose t) printf("done\n")
+
+; CORRECT
+progn(
+    maeCloseSession("sess1" ?forceClose t)
+    printf("done\n")
+)
+```
+
+`let((...) ...)` is a safe alternative — its body accepts multiple forms and
+evaluates them in sequence:
+
+```skill
+let((result)
+    result = maeCloseSession("sess1" ?forceClose t)
+    printf("done\n")
+    result
+)
+```
+
+---
+
+## Problem 7: `sprintf` `%L` Adds an Extra Quote Layer to Paths
+
+### Symptom
+A path returned through the bridge has extra backslash-quotes: `\"path\"` instead of `path`.
+
+### Root Cause
+`sprintf(nil "%L" someStringVar)` in SKILL adds SKILL-style escaping to the
+string, turning `"/home/user/run"` into `"\"/home/user/run\""`.  When this
+value is returned through the bridge and passed to `output_unquoted()`, one
+layer of quotes is stripped, but the inner `\"` escapes remain.
+
+### Fix
+Use `%s` instead of `%L` when embedding a string variable in a sprintf result
+that will be read back in Rust:
+
+```skill
+; WRONG — produces extra quote layer
+path = sprintf(nil "%L" getWorkingDir())
+
+; CORRECT
+path = sprintf(nil "%s" getWorkingDir())
+; or just
+path = getWorkingDir()
+```
+
+If receiving a `%L`-escaped value, strip both outer quotes **and** unescape
+inner `\"` pairs before using the path.
+
+---
+
+## Problem 8: `hiCreateAppForm` / `hiInsertBannerMenu` IC23 Reload Traps
+
+### Symptom A — `Cannot delete a form that is mapped`
+Calling `hiCreateAppForm` with the same `?name` while that form is already
+open (visible on screen) throws an error and the reload fails.
+
+### Fix A
+Guard the entire form-creation block with a `boundp` check so it only runs
+**once per session**.  Separate the form guard from the menu guard so they can
+be managed independently:
+
+```skill
+; Form: created once per session
+unless(boundp('RBMonInstalled)
+    progn(
+        hiCreateAppForm(?name 'RBMonitor ...)
+        RBMonInstalled = t
+    )
+)
+
+; Menu: also one-shot, but separate flag so the form guard doesn't conflate them
+unless(boundp('RBMenuInstalled)
+    progn(
+        hiInsertBannerMenu(window(1) myMenu 3)
+        RBMenuInstalled = t
+    )
+)
+```
+
+### Symptom B — `?buttonLayout 'Apply` causes an error
+`'Apply` is **not** a valid `?buttonLayout` enum value in IC23.  The complete
+valid set is: `'Empty`, `'OK`, `'Close`, `'OKCancel`, `'OKCancelApply`.
+
+### Fix B
+Use `'OKCancelApply` (or `'Empty` + manual `hiCreateButton`) instead of `'Apply`.
+
+### Symptom C — `hiInsertBannerMenu` is one-shot
+Calling `hiInsertBannerMenu` a second time (on bridge reload) inserts a
+duplicate menu entry and cannot be undone without restarting Virtuoso.
+
+### Fix C
+Always guard with a separate `boundp` flag (see Fix A above).
+
+---
+
 ## Summary Table
 
 | What you want to do | WRONG approach | CORRECT approach |
@@ -148,3 +261,8 @@ RBDPath = let((fromEnv cargoPath)
 | Get current PID | `getpid()` → undefined | Store 0; use TCP probe for liveness |
 | Protect init across reload | `unless(boundp('V))` | `when(!boundp ... || !isFile(V))` |
 | Run binary via ipc | bare name `"foo"` | absolute path `"/home/user/.cargo/bin/foo"` |
+| Multiple calls in expr context | `f1() f2()` → only f2 runs | `progn(f1() f2())` or `let` body |
+| Embed string path in sprintf | `%L` → extra quote layer | `%s` or return value directly |
+| Rebuild form on reload | `hiCreateAppForm` same name → error if mapped | `unless(boundp('Flag))` guard |
+| `?buttonLayout` with Apply | `'Apply` → IC23 error | `'OKCancelApply` or `'Empty` |
+| Insert banner menu | call each reload → duplicate entries | `unless(boundp('MenuFlag))` guard |
