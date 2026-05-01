@@ -734,3 +734,358 @@ mod suggestion_tests {
         assert!(e.suggestion().is_none());
     }
 }
+
+#[cfg(test)]
+mod error_meta_tests {
+    use crate::error::VirtuosoError;
+    use crate::exit_codes;
+
+    // ── exit_code ─────────────────────────────────────────────────
+
+    #[test]
+    fn exit_code_config_is_usage_error() {
+        assert_eq!(
+            VirtuosoError::Config("bad".into()).exit_code(),
+            exit_codes::USAGE_ERROR
+        );
+    }
+
+    #[test]
+    fn exit_code_not_found() {
+        assert_eq!(
+            VirtuosoError::NotFound("x".into()).exit_code(),
+            exit_codes::NOT_FOUND
+        );
+    }
+
+    #[test]
+    fn exit_code_conflict() {
+        assert_eq!(
+            VirtuosoError::Conflict("x".into()).exit_code(),
+            exit_codes::CONFLICT
+        );
+    }
+
+    #[test]
+    fn exit_code_connection_and_ssh_and_timeout_are_general() {
+        assert_eq!(
+            VirtuosoError::Connection("x".into()).exit_code(),
+            exit_codes::GENERAL_ERROR
+        );
+        assert_eq!(
+            VirtuosoError::Ssh("x".into()).exit_code(),
+            exit_codes::GENERAL_ERROR
+        );
+        assert_eq!(
+            VirtuosoError::Timeout(10).exit_code(),
+            exit_codes::GENERAL_ERROR
+        );
+    }
+
+    // ── error_type ────────────────────────────────────────────────
+
+    #[test]
+    fn error_type_strings() {
+        assert_eq!(VirtuosoError::Connection("".into()).error_type(), "connection_failed");
+        assert_eq!(VirtuosoError::Execution("".into()).error_type(), "execution_failed");
+        assert_eq!(VirtuosoError::Ssh("".into()).error_type(), "ssh_error");
+        assert_eq!(VirtuosoError::Timeout(5).error_type(), "timeout");
+        assert_eq!(VirtuosoError::Config("".into()).error_type(), "config_error");
+        assert_eq!(VirtuosoError::NotFound("".into()).error_type(), "not_found");
+        assert_eq!(VirtuosoError::Conflict("".into()).error_type(), "conflict");
+    }
+
+    // ── retryable ─────────────────────────────────────────────────
+
+    #[test]
+    fn retryable_only_connection_and_timeout() {
+        assert!(VirtuosoError::Connection("x".into()).retryable());
+        assert!(VirtuosoError::Timeout(5).retryable());
+        assert!(!VirtuosoError::Execution("x".into()).retryable());
+        assert!(!VirtuosoError::Ssh("x".into()).retryable());
+        assert!(!VirtuosoError::Config("x".into()).retryable());
+        assert!(!VirtuosoError::NotFound("x".into()).retryable());
+        assert!(!VirtuosoError::Conflict("x".into()).retryable());
+    }
+
+    // ── to_cli_error ──────────────────────────────────────────────
+
+    #[test]
+    fn to_cli_error_maps_all_fields() {
+        let e = VirtuosoError::Connection("refused".into());
+        let ce = e.to_cli_error();
+        assert_eq!(ce.error, "connection_failed");
+        assert!(ce.message.contains("refused"), "{}", ce.message);
+        assert!(ce.suggestion.is_some());
+        assert!(ce.retryable);
+    }
+
+    #[test]
+    fn to_cli_error_not_found_has_suggestion_and_not_retryable() {
+        let e = VirtuosoError::NotFound("sess-x".into());
+        let ce = e.to_cli_error();
+        assert_eq!(ce.error, "not_found");
+        assert!(ce.suggestion.is_some());
+        assert!(!ce.retryable);
+    }
+}
+
+#[cfg(test)]
+mod virtuoso_result_tests {
+    use crate::models::{ExecutionStatus, VirtuosoResult};
+
+    fn make_success(output: &str) -> VirtuosoResult {
+        VirtuosoResult::success(output)
+    }
+
+    fn make_error(errors: Vec<String>) -> VirtuosoResult {
+        VirtuosoResult::error(errors)
+    }
+
+    // ── ok() / skill_ok() ─────────────────────────────────────────
+
+    #[test]
+    fn ok_true_for_success_status() {
+        assert!(make_success("result").ok());
+    }
+
+    #[test]
+    fn ok_false_for_error_status() {
+        assert!(!make_error(vec![]).ok());
+    }
+
+    #[test]
+    fn skill_ok_false_when_output_is_nil() {
+        assert!(!make_success("nil").skill_ok());
+        assert!(!make_success("  nil  ").skill_ok());
+    }
+
+    #[test]
+    fn skill_ok_true_for_non_nil_success() {
+        assert!(make_success("t").skill_ok());
+        assert!(make_success("\"some result\"").skill_ok());
+        assert!(make_success("42").skill_ok());
+    }
+
+    #[test]
+    fn skill_ok_false_when_status_error_even_if_non_nil_output() {
+        let mut r = make_error(vec![]);
+        r.output = "42".into();
+        assert!(!r.skill_ok());
+    }
+
+    // ── ok_or_exec ────────────────────────────────────────────────
+
+    #[test]
+    fn ok_or_exec_passes_through_on_success() {
+        let r = make_success("42");
+        assert!(r.ok_or_exec("op").is_ok());
+    }
+
+    #[test]
+    fn ok_or_exec_returns_err_on_nil() {
+        let r = make_success("nil");
+        let e = r.ok_or_exec("myop").unwrap_err();
+        assert!(e.to_string().contains("myop"), "{e}");
+    }
+
+    #[test]
+    fn ok_or_exec_includes_nak_error_detail() {
+        let mut r = make_error(vec!["*Error* eval: undefined".into()]);
+        r.output = String::new();
+        let e = r.ok_or_exec("fetch").unwrap_err();
+        assert!(e.to_string().contains("*Error*"), "{e}");
+    }
+
+    // ── output_unquoted ───────────────────────────────────────────
+
+    #[test]
+    fn output_unquoted_strips_surrounding_quotes() {
+        let r = make_success("\"hello\"");
+        assert_eq!(r.output_unquoted(), "hello");
+    }
+
+    #[test]
+    fn output_unquoted_no_quotes_unchanged() {
+        let r = make_success("hello");
+        assert_eq!(r.output_unquoted(), "hello");
+    }
+
+    #[test]
+    fn output_unquoted_empty_quoted_string() {
+        let r = make_success("\"\"");
+        assert_eq!(r.output_unquoted(), "");
+    }
+
+    // ── constructors ─────────────────────────────────────────────
+
+    #[test]
+    fn success_constructor_sets_status() {
+        let r = make_success("ok");
+        assert_eq!(r.status, ExecutionStatus::Success);
+        assert_eq!(r.output, "ok");
+        assert!(r.errors.is_empty());
+    }
+
+    #[test]
+    fn error_constructor_sets_status_and_errors() {
+        let r = make_error(vec!["oops".into()]);
+        assert_eq!(r.status, ExecutionStatus::Error);
+        assert_eq!(r.errors, vec!["oops"]);
+    }
+}
+
+#[cfg(test)]
+mod schematic_tests {
+    use crate::commands::schematic::{parse_skill_json, Orient};
+
+    // ── Orient::as_str ────────────────────────────────────────────
+
+    #[test]
+    fn orient_as_str_all_variants() {
+        assert_eq!(Orient::R0.as_str(), "R0");
+        assert_eq!(Orient::R90.as_str(), "R90");
+        assert_eq!(Orient::R180.as_str(), "R180");
+        assert_eq!(Orient::R270.as_str(), "R270");
+        assert_eq!(Orient::MX.as_str(), "MX");
+        assert_eq!(Orient::MY.as_str(), "MY");
+        assert_eq!(Orient::MXR90.as_str(), "MXR90");
+        assert_eq!(Orient::MYR90.as_str(), "MYR90");
+    }
+
+    // ── parse_skill_json ──────────────────────────────────────────
+
+    #[test]
+    fn parse_plain_json_array() {
+        let v = parse_skill_json(r#"[{"name":"M1"}]"#).unwrap();
+        assert_eq!(v[0]["name"], "M1");
+    }
+
+    #[test]
+    fn parse_skill_quoted_json() {
+        // SKILL returns the JSON as a quoted string: "\"[{...}]\""
+        let v = parse_skill_json(r#""[{\"name\":\"M1\"}]""#).unwrap();
+        assert_eq!(v[0]["name"], "M1");
+    }
+
+    #[test]
+    fn parse_skill_double_escaped_json() {
+        // Double-escaped form: "\"[{\\\"name\\\":\\\"M1\\\"}]\""
+        let raw = r#""[{\"name\":\"M1\"}]""#;
+        let v = parse_skill_json(raw).unwrap();
+        assert_eq!(v[0]["name"], "M1");
+    }
+
+    #[test]
+    fn parse_malformed_returns_err() {
+        assert!(parse_skill_json("not json {{{{").is_err());
+    }
+
+    #[test]
+    fn parse_empty_array() {
+        let v = parse_skill_json("[]").unwrap();
+        assert!(v.as_array().unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod config_extra_tests {
+    use crate::config::Config;
+    use crate::tests::config_tests::ENV_LOCK;
+    use std::env;
+
+    fn clean() {
+        env::remove_var("VB_PORT");
+        env::remove_var("VB_REMOTE_HOST");
+        env::remove_var("VB_REMOTE_HOST_prod");
+        env::remove_var("VB_PROFILE");
+        env::remove_var("USER");
+    }
+
+    #[test]
+    fn default_port_in_expected_range() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean();
+        env::remove_var("VB_PORT");
+        let cfg = Config::from_env().unwrap();
+        clean();
+        assert!(cfg.port >= 65000 && cfg.port < 65500, "port: {}", cfg.port);
+    }
+
+    #[test]
+    fn default_port_deterministic_for_same_user() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean();
+        env::set_var("USER", "testuser");
+        env::remove_var("VB_PORT");
+        let cfg1 = Config::from_env().unwrap();
+        let cfg2 = Config::from_env().unwrap();
+        clean();
+        assert_eq!(cfg1.port, cfg2.port);
+    }
+
+    #[test]
+    fn env_with_profile_prefers_profile_key() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean();
+        env::set_var("VB_REMOTE_HOST", "generic-host");
+        env::set_var("VB_REMOTE_HOST_prod", "prod-host");
+        let cfg = Config::from_env_with_profile(Some("prod")).unwrap();
+        clean();
+        assert_eq!(cfg.remote_host.as_deref(), Some("prod-host"));
+    }
+
+    #[test]
+    fn env_with_profile_falls_back_to_base_key() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean();
+        env::set_var("VB_REMOTE_HOST", "generic-host");
+        let cfg = Config::from_env_with_profile(Some("staging")).unwrap();
+        clean();
+        assert_eq!(cfg.remote_host.as_deref(), Some("generic-host"));
+    }
+
+    #[test]
+    fn env_with_profile_empty_value_treated_as_unset() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean();
+        env::set_var("VB_REMOTE_HOST_prod", "");
+        env::set_var("VB_REMOTE_HOST", "generic-host");
+        let cfg = Config::from_env_with_profile(Some("prod")).unwrap();
+        clean();
+        // empty profile-specific value → fall back to base
+        assert_eq!(cfg.remote_host.as_deref(), Some("generic-host"));
+    }
+}
+
+#[cfg(test)]
+mod maestro_ops_extra_tests {
+    use crate::client::maestro_ops::MaestroOps;
+
+    fn ops() -> MaestroOps {
+        MaestroOps
+    }
+
+    #[test]
+    fn focused_window_skill_contains_required_calls() {
+        let s = ops().focused_window_skill();
+        assert!(s.contains("hiGetCurrentWindow()"), "{s}");
+        assert!(s.contains("davSession"), "{s}");
+        assert!(s.contains("maeGetSessions()"), "{s}");
+        assert!(s.contains("asiGetAnalogRunDir"), "{s}");
+    }
+
+    #[test]
+    fn run_dir_skill_escapes_session_name() {
+        let s = ops().run_dir_skill(r#"sess"x"#);
+        assert!(s.contains(r#"sess\"x"#), "{s}");
+        assert!(s.contains("asiGetAnalogRunDir"), "{s}");
+    }
+
+    #[test]
+    fn run_dir_skill_wraps_in_let() {
+        let s = ops().run_dir_skill("sess1");
+        assert!(s.starts_with("let("), "{s}");
+        assert!(s.contains("\"sess1\""), "{s}");
+    }
+}

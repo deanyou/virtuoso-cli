@@ -480,4 +480,85 @@ mod tests {
         assert!(s.contains("o~>status"), "{s}");
         assert!(s.starts_with("mapcar(lambda((o) list("), "{s}");
     }
+
+    // ── escape_skill_string ───────────────────────────────────────
+
+    #[test]
+    fn escape_backslash() {
+        assert_eq!(escape_skill_string("a\\b"), "a\\\\b");
+    }
+
+    #[test]
+    fn escape_double_quote() {
+        assert_eq!(escape_skill_string(r#"say "hi""#), r#"say \"hi\""#);
+    }
+
+    #[test]
+    fn escape_newline() {
+        assert_eq!(escape_skill_string("line1\nline2"), "line1\\nline2");
+    }
+
+    #[test]
+    fn escape_combined() {
+        assert_eq!(escape_skill_string("a\"b\\c\nd"), r#"a\"b\\c\nd"#);
+    }
+
+    #[test]
+    fn escape_empty_string() {
+        assert_eq!(escape_skill_string(""), "");
+    }
+
+    #[test]
+    fn escape_plain_string_unchanged() {
+        assert_eq!(escape_skill_string("hello world"), "hello world");
+    }
+
+    // ── is_stale_sync ─────────────────────────────────────────────
+
+    #[test]
+    fn stale_sync_numeric() {
+        assert!(is_stale_sync("sync_123"));
+        assert!(is_stale_sync("\"sync_0\""));
+    }
+
+    #[test]
+    fn stale_sync_non_numeric_suffix_is_false() {
+        assert!(!is_stale_sync("sync_abc"));
+        assert!(!is_stale_sync("sync_"));
+    }
+
+    #[test]
+    fn stale_sync_no_prefix_is_false() {
+        assert!(!is_stale_sync("123"));
+        assert!(!is_stale_sync("result_1"));
+    }
+
+    // ── check_blocking_skill ──────────────────────────────────────
+
+    #[test]
+    fn blocking_skill_find_root_is_blocked() {
+        assert!(check_blocking_skill("system(\"find /\")").is_some());
+        assert!(check_blocking_skill("sh(\"find /\")").is_some());
+    }
+
+    #[test]
+    fn blocking_skill_find_absolute_path_blocked() {
+        // Any system()/sh() with "find /" (absolute path) is blocked, not just root
+        assert!(check_blocking_skill("system(\"find /home/meow\")").is_some());
+        assert!(check_blocking_skill("system(\"find /tmp\")").is_some());
+    }
+
+    #[test]
+    fn blocking_skill_find_relative_path_allowed() {
+        // Relative paths without "/" don't match "find /"
+        assert!(check_blocking_skill("system(\"find . -name foo\")").is_none());
+        assert!(check_blocking_skill("system(\"find sim -name *.psf\")").is_none());
+    }
+
+    #[test]
+    fn blocking_skill_no_system_call_is_allowed() {
+        assert!(check_blocking_skill("1 + 1").is_none());
+        assert!(check_blocking_skill("getVersion()").is_none());
+        assert!(check_blocking_skill("maeGetSessions()").is_none());
+    }
 }
