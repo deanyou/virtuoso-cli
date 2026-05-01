@@ -76,7 +76,7 @@ procedure(RBIpcDataHandler(ipcId data)
   ; We call hiFlush() after every evalstring to force CIW UI refresh.
   let((result resultStr)
     when(RBEcho printf("[RAMIC Bridge (%L)] receive:%L\n" ipcId data))
-    if(errset(result=evalstring(data)) then
+    if(errset(result=evalstring(strcat("(progn " data ")"))) then
         resultStr = sprintf(nil "%c%L%c" intToChar(2) result intToChar(30))
         when(RBEcho printf("[RAMIC Bridge (%L)] return:%L\n" ipcId result))
     else

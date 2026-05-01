@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.15] - 2026-05-01
+
+### Fixed
+- **`ramic_bridge.il` multi-statement SKILL truncation** — `evalstring(data)` replaced with `evalstring(strcat("(progn " data ")"))` so that SKILL payloads containing multiple expressions (e.g. `let(...)` blocks) execute fully; previously only the first top-level form was evaluated and the rest were silently discarded
+
 ## [0.3.14] - 2026-04-30
 
 ### Added
