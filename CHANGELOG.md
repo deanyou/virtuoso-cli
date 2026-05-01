@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.16] - 2026-05-01
+
+### Fixed
+- **Multi-Virtuoso session collision** — `ramic_bridge.il` now uses the OS-assigned port as the session ID suffix (`hostname-user-<port>`) instead of a per-process sequence counter (`hostname-user-1`); when two Virtuoso instances ran concurrently, both generated `hostname-user-1` and the second `RBWriteSession` silently overwrote the first session file, making the original session invisible to `vcli`
+- Removed the now-dead `RBSessionSeq` global (was only used as a placeholder immediately overwritten by the port-based ID)
+
+### Added
+- **Session coexistence tests** — `session_info_tests` covers: two port-based sessions coexist without collision, session ID suffix equals port field, port survives JSON round-trip, all sessions visible for `--session` disambiguation
+
 ## [0.3.15] - 2026-05-01
 
 ### Fixed
