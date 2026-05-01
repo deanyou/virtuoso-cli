@@ -111,14 +111,19 @@ impl SSHRunner {
         Ok(result)
     }
 
+    /// Base SSH command with login shell args (`sh -l -s`) appended.
+    /// Extracted so the login-shell flag is testable without spawning a process.
+    pub(crate) fn build_run_cmd(&self) -> Command {
+        let mut cmd = self.build_ssh_cmd();
+        cmd.arg("sh").arg("-l").arg("-s");
+        cmd
+    }
+
     fn run_command_inner(&self, command: &str, timeout: Option<u64>) -> Result<RemoteTaskResult> {
         let _timeout = timeout.unwrap_or(self.timeout);
         let start = Instant::now();
 
-        let mut cmd = self.build_ssh_cmd();
-        // -l: login shell — sources /etc/profile and ~/.profile so PATH is
-        // populated correctly on EDA hosts where the login shell is csh/tcsh.
-        cmd.arg("sh").arg("-l").arg("-s");
+        let mut cmd = self.build_run_cmd();
 
         let output = cmd
             .stdin(Stdio::piped())

@@ -584,3 +584,153 @@ mod config_tests_ext {
         assert!(!cfg.disable_control_master);
     }
 }
+
+#[cfg(test)]
+mod ssh_login_shell_tests {
+    use crate::transport::ssh::SSHRunner;
+
+    #[test]
+    fn build_run_cmd_includes_login_flag() {
+        let r = SSHRunner::new("eda");
+        let cmd = r.build_run_cmd();
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(args.contains(&"sh".to_string()), "sh missing: {args:?}");
+        assert!(
+            args.contains(&"-l".to_string()),
+            "login flag -l missing: {args:?}"
+        );
+        assert!(
+            args.contains(&"-s".to_string()),
+            "stdin flag -s missing: {args:?}"
+        );
+    }
+
+    #[test]
+    fn build_run_cmd_login_flag_after_host() {
+        // sh -l -s must come after the SSH host argument, not before
+        let r = SSHRunner::new("eda-server").with_user("meow");
+        let cmd = r.build_run_cmd();
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let host_idx = args
+            .iter()
+            .position(|a| a == "meow@eda-server")
+            .expect("host arg missing");
+        let sh_idx = args.iter().position(|a| a == "sh").expect("sh missing");
+        assert!(sh_idx > host_idx, "sh must come after SSH host");
+    }
+}
+
+#[cfg(test)]
+mod daemon_stats_tests {
+    use crate::models::DaemonStats;
+    use std::fs;
+
+    #[test]
+    fn path_format() {
+        assert_eq!(DaemonStats::path(41357), "/tmp/.ramic_stats_41357");
+        assert_eq!(DaemonStats::path(0), "/tmp/.ramic_stats_0");
+        assert_eq!(DaemonStats::path(65535), "/tmp/.ramic_stats_65535");
+    }
+
+    #[test]
+    fn load_missing_file_returns_none() {
+        // Use an unlikely port to avoid collision with a real daemon
+        assert!(DaemonStats::load(1).is_none());
+    }
+
+    #[test]
+    fn load_valid_json() {
+        let port: u16 = 59991;
+        let path = DaemonStats::path(port);
+        fs::write(&path, r#"{"calls":42,"errors":3,"uptime_secs":120}"#).unwrap();
+        let stats = DaemonStats::load(port).expect("should load");
+        let _ = fs::remove_file(&path);
+        assert_eq!(stats.calls, 42);
+        assert_eq!(stats.errors, 3);
+        assert_eq!(stats.uptime_secs, 120);
+    }
+
+    #[test]
+    fn load_malformed_json_returns_none() {
+        let port: u16 = 59992;
+        let path = DaemonStats::path(port);
+        fs::write(&path, "not json {{{{").unwrap();
+        let result = DaemonStats::load(port);
+        let _ = fs::remove_file(&path);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn json_round_trip() {
+        let stats = DaemonStats {
+            calls: 100,
+            errors: 5,
+            uptime_secs: 3661,
+        };
+        let json = serde_json::to_string(&stats).unwrap();
+        let stats2: DaemonStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(stats2.calls, 100);
+        assert_eq!(stats2.errors, 5);
+        assert_eq!(stats2.uptime_secs, 3661);
+    }
+}
+
+#[cfg(test)]
+mod suggestion_tests {
+    use crate::error::VirtuosoError;
+
+    #[test]
+    fn execution_ending_with_nil_has_suggestion() {
+        let e = VirtuosoError::Execution("close session failed: nil".into());
+        let s = e.suggestion().expect("should have suggestion");
+        assert!(s.contains("nil"), "got: {s}");
+    }
+
+    #[test]
+    fn execution_containing_unbound_has_suggestion() {
+        let e = VirtuosoError::Execution("*Error* eval: unbound variable foo".into());
+        let s = e.suggestion().expect("should have suggestion");
+        assert!(s.contains("nil") || s.contains("cellview"), "got: {s}");
+    }
+
+    #[test]
+    fn execution_nil_substring_no_false_positive() {
+        // "nil" appearing mid-word or mid-string must not trigger the suggestion
+        // (only ": nil" suffix or "unbound" should match)
+        let e = VirtuosoError::Execution("failed for client-nil-session".into());
+        assert!(e.suggestion().is_none(), "false positive on embedded nil");
+    }
+
+    #[test]
+    fn not_found_suggests_session_list() {
+        let e = VirtuosoError::NotFound("meowu-meow-99".into());
+        let s = e.suggestion().expect("NotFound should have suggestion");
+        assert!(s.contains("session list") || s.contains("session"), "got: {s}");
+    }
+
+    #[test]
+    fn connection_error_suggests_tunnel() {
+        let e = VirtuosoError::Connection("refused".into());
+        let s = e.suggestion().expect("Connection should have suggestion");
+        assert!(s.contains("tunnel"), "got: {s}");
+    }
+
+    #[test]
+    fn timeout_suggestion_doubles_seconds() {
+        let e = VirtuosoError::Timeout(30);
+        let s = e.suggestion().expect("Timeout should have suggestion");
+        assert!(s.contains("60"), "doubled timeout missing from suggestion: {s}");
+    }
+
+    #[test]
+    fn unrelated_execution_error_has_no_suggestion() {
+        let e = VirtuosoError::Execution("some completely unrelated failure".into());
+        assert!(e.suggestion().is_none());
+    }
+}
