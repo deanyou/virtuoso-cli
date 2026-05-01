@@ -362,6 +362,90 @@ mod session_info_tests {
         fs::remove_file(dir.join("zzz-sort-test-1.json")).ok();
         fs::remove_file(dir.join("aaa-sort-test-2.json")).ok();
     }
+
+    #[test]
+    fn two_port_based_sessions_coexist() {
+        // Regression: before the fix every Virtuoso instance generated "host-user-1"
+        // (RBSessionSeq resets to 0 per process, increments to 1) and the second
+        // RBWriteSession call silently overwrote the first session file.
+        // After the fix RBIpcErrHandler uses the OS-assigned port as suffix, so each
+        // bridge instance writes a distinct file. Verify both survive.
+        let dir = SessionInfo::sessions_dir();
+        fs::create_dir_all(&dir).unwrap();
+
+        let id1 = "rt-test-session-41357";
+        let id2 = "rt-test-session-45715";
+        fs::remove_file(dir.join(format!("{id1}.json"))).ok();
+        fs::remove_file(dir.join(format!("{id2}.json"))).ok();
+
+        write_session(&dir, &make_session(id1, 41357));
+        write_session(&dir, &make_session(id2, 45715));
+
+        let sessions = SessionInfo::list().unwrap();
+        let found1 = sessions.iter().any(|s| s.id == id1);
+        let found2 = sessions.iter().any(|s| s.id == id2);
+
+        fs::remove_file(dir.join(format!("{id1}.json"))).ok();
+        fs::remove_file(dir.join(format!("{id2}.json"))).ok();
+
+        assert!(found1, "first session must survive second session registration");
+        assert!(found2, "second session must be registered independently");
+    }
+
+    #[test]
+    fn session_id_suffix_equals_port() {
+        // Contract set by RBIpcErrHandler in ramic_bridge.il:
+        //   RBSessionId = sprintf(nil "%s-%d" RBSessionBase RBPort)
+        // The trailing decimal in the ID is the port, so tooling can parse either field.
+        let port: u16 = 54321;
+        let s = make_session("meowu-meow-54321", port);
+        let suffix: u16 = s.id.rsplit('-').next().unwrap().parse().unwrap();
+        assert_eq!(suffix, port);
+    }
+
+    #[test]
+    fn session_port_survives_round_trip() {
+        // Write a port-based session file, read it back via load(), confirm the
+        // port field still matches the ID suffix after JSON round-trip.
+        let dir = SessionInfo::sessions_dir();
+        fs::create_dir_all(&dir).unwrap();
+
+        let id = "rt-test-port-match-62000";
+        fs::remove_file(dir.join(format!("{id}.json"))).ok();
+        write_session(&dir, &make_session(id, 62000));
+
+        let loaded = SessionInfo::load(id).unwrap();
+        fs::remove_file(dir.join(format!("{id}.json"))).ok();
+
+        let suffix: u16 = loaded.id.rsplit('-').next().unwrap().parse().unwrap();
+        assert_eq!(suffix, loaded.port, "port field must match ID suffix after load");
+    }
+
+    #[test]
+    fn multiple_sessions_all_visible() {
+        // When N Virtuoso instances are running, SessionInfo::list() must return all N
+        // so VirtuosoClient::from_env() can present the full "--session <id>" list.
+        let dir = SessionInfo::sessions_dir();
+        fs::create_dir_all(&dir).unwrap();
+
+        let id1 = "rt-test-multi-63001";
+        let id2 = "rt-test-multi-63002";
+        fs::remove_file(dir.join(format!("{id1}.json"))).ok();
+        fs::remove_file(dir.join(format!("{id2}.json"))).ok();
+
+        write_session(&dir, &make_session(id1, 63001));
+        write_session(&dir, &make_session(id2, 63002));
+
+        let sessions = SessionInfo::list().unwrap();
+        let found1 = sessions.iter().any(|s| s.id == id1);
+        let found2 = sessions.iter().any(|s| s.id == id2);
+
+        fs::remove_file(dir.join(format!("{id1}.json"))).ok();
+        fs::remove_file(dir.join(format!("{id2}.json"))).ok();
+
+        assert!(found1, "first Virtuoso's session must appear in list");
+        assert!(found2, "second Virtuoso's session must appear in list");
+    }
 }
 
 #[cfg(test)]
