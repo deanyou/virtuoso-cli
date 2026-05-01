@@ -481,8 +481,6 @@ mod tests {
         assert!(s.starts_with("mapcar(lambda((o) list("), "{s}");
     }
 
-    // ── escape_skill_string ───────────────────────────────────────
-
     #[test]
     fn escape_backslash() {
         assert_eq!(escape_skill_string("a\\b"), "a\\\\b");
@@ -513,8 +511,6 @@ mod tests {
         assert_eq!(escape_skill_string("hello world"), "hello world");
     }
 
-    // ── is_stale_sync ─────────────────────────────────────────────
-
     #[test]
     fn stale_sync_numeric() {
         assert!(is_stale_sync("sync_123"));
@@ -532,8 +528,6 @@ mod tests {
         assert!(!is_stale_sync("123"));
         assert!(!is_stale_sync("result_1"));
     }
-
-    // ── check_blocking_skill ──────────────────────────────────────
 
     #[test]
     fn blocking_skill_find_root_is_blocked() {

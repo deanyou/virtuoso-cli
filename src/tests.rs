@@ -4,6 +4,13 @@
 ///   - SSHRunner: remote_target, jump host args, summarize_error, build_ssh_cmd args
 ///   - Config: ssh_target, ssh_jump, is_remote, env parsing, VB_PORT validation
 ///   - SessionInfo: JSON round-trip, list dedup/sort, missing session error
+
+fn cmd_args(cmd: &std::process::Command) -> Vec<String> {
+    cmd.get_args()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect()
+}
+
 #[cfg(test)]
 mod config_tests {
     use crate::config::Config;
@@ -154,6 +161,7 @@ mod config_tests {
 
 #[cfg(test)]
 mod ssh_runner_tests {
+    use super::cmd_args;
     use crate::transport::ssh::SSHRunner;
 
     #[test]
@@ -177,11 +185,7 @@ mod ssh_runner_tests {
     #[test]
     fn build_ssh_cmd_contains_host() {
         let r = SSHRunner::new("my-eda-host").with_user("meow");
-        let cmd = r.build_ssh_cmd();
-        let args: Vec<_> = cmd
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
+        let args = cmd_args(&r.build_ssh_cmd());
         assert!(
             args.contains(&"meow@my-eda-host".to_string()),
             "args: {args:?}"
@@ -191,11 +195,7 @@ mod ssh_runner_tests {
     #[test]
     fn build_ssh_cmd_includes_batchmode() {
         let r = SSHRunner::new("eda");
-        let cmd = r.build_ssh_cmd();
-        let args: Vec<_> = cmd
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
+        let args = cmd_args(&r.build_ssh_cmd());
         assert!(
             args.contains(&"BatchMode=yes".to_string()),
             "args: {args:?}"
@@ -215,11 +215,7 @@ mod ssh_runner_tests {
         let mut r = SSHRunner::new("eda");
         r.jump_host = Some("bastion.corp.com".into());
         r.jump_user = Some("admin".into());
-        let cmd = r.build_ssh_cmd();
-        let args: Vec<_> = cmd
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
+        let args = cmd_args(&r.build_ssh_cmd());
         let j_idx = args
             .iter()
             .position(|a| a == "-J")
@@ -434,6 +430,7 @@ mod sexp_tests {
 
 #[cfg(test)]
 mod cm_tests {
+    use super::cmd_args;
     use crate::transport::ssh::SSHRunner;
 
     #[test]
@@ -489,11 +486,7 @@ mod cm_tests {
         assert!(!r.use_control_master.get());
 
         // Verify SSH command no longer contains ControlMaster options
-        let cmd = r.build_ssh_cmd();
-        let args: Vec<_> = cmd
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
+        let args = cmd_args(&r.build_ssh_cmd());
         assert!(
             !args.iter().any(|a| a.contains("ControlMaster")),
             "ControlMaster should be absent when disabled: {args:?}"
@@ -507,12 +500,7 @@ mod cm_tests {
     #[test]
     fn cm_enabled_adds_control_master_args() {
         let r = SSHRunner::new("eda");
-        // CM is enabled by default
-        let cmd = r.build_ssh_cmd();
-        let args: Vec<_> = cmd
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
+        let args = cmd_args(&r.build_ssh_cmd());
         assert!(
             args.iter().any(|a| a.contains("ControlMaster")),
             "ControlMaster should be present when enabled: {args:?}"
@@ -587,16 +575,13 @@ mod config_tests_ext {
 
 #[cfg(test)]
 mod ssh_login_shell_tests {
+    use super::cmd_args;
     use crate::transport::ssh::SSHRunner;
 
     #[test]
     fn build_run_cmd_includes_login_flag() {
         let r = SSHRunner::new("eda");
-        let cmd = r.build_run_cmd();
-        let args: Vec<_> = cmd
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
+        let args = cmd_args(&r.build_run_cmd());
         assert!(args.contains(&"sh".to_string()), "sh missing: {args:?}");
         assert!(
             args.contains(&"-l".to_string()),
@@ -612,11 +597,7 @@ mod ssh_login_shell_tests {
     fn build_run_cmd_login_flag_after_host() {
         // sh -l -s must come after the SSH host argument, not before
         let r = SSHRunner::new("eda-server").with_user("meow");
-        let cmd = r.build_run_cmd();
-        let args: Vec<_> = cmd
-            .get_args()
-            .map(|a| a.to_string_lossy().into_owned())
-            .collect();
+        let args = cmd_args(&r.build_run_cmd());
         let host_idx = args
             .iter()
             .position(|a| a == "meow@eda-server")
@@ -740,8 +721,6 @@ mod error_meta_tests {
     use crate::error::VirtuosoError;
     use crate::exit_codes;
 
-    // ── exit_code ─────────────────────────────────────────────────
-
     #[test]
     fn exit_code_config_is_usage_error() {
         assert_eq!(
@@ -782,8 +761,6 @@ mod error_meta_tests {
         );
     }
 
-    // ── error_type ────────────────────────────────────────────────
-
     #[test]
     fn error_type_strings() {
         assert_eq!(VirtuosoError::Connection("".into()).error_type(), "connection_failed");
@@ -795,8 +772,6 @@ mod error_meta_tests {
         assert_eq!(VirtuosoError::Conflict("".into()).error_type(), "conflict");
     }
 
-    // ── retryable ─────────────────────────────────────────────────
-
     #[test]
     fn retryable_only_connection_and_timeout() {
         assert!(VirtuosoError::Connection("x".into()).retryable());
@@ -807,8 +782,6 @@ mod error_meta_tests {
         assert!(!VirtuosoError::NotFound("x".into()).retryable());
         assert!(!VirtuosoError::Conflict("x".into()).retryable());
     }
-
-    // ── to_cli_error ──────────────────────────────────────────────
 
     #[test]
     fn to_cli_error_maps_all_fields() {
@@ -842,8 +815,6 @@ mod virtuoso_result_tests {
         VirtuosoResult::error(errors)
     }
 
-    // ── ok() / skill_ok() ─────────────────────────────────────────
-
     #[test]
     fn ok_true_for_success_status() {
         assert!(make_success("result").ok());
@@ -874,8 +845,6 @@ mod virtuoso_result_tests {
         assert!(!r.skill_ok());
     }
 
-    // ── ok_or_exec ────────────────────────────────────────────────
-
     #[test]
     fn ok_or_exec_passes_through_on_success() {
         let r = make_success("42");
@@ -897,8 +866,6 @@ mod virtuoso_result_tests {
         assert!(e.to_string().contains("*Error*"), "{e}");
     }
 
-    // ── output_unquoted ───────────────────────────────────────────
-
     #[test]
     fn output_unquoted_strips_surrounding_quotes() {
         let r = make_success("\"hello\"");
@@ -916,8 +883,6 @@ mod virtuoso_result_tests {
         let r = make_success("\"\"");
         assert_eq!(r.output_unquoted(), "");
     }
-
-    // ── constructors ─────────────────────────────────────────────
 
     #[test]
     fn success_constructor_sets_status() {
@@ -939,8 +904,6 @@ mod virtuoso_result_tests {
 mod schematic_tests {
     use crate::commands::schematic::{parse_skill_json, Orient};
 
-    // ── Orient::as_str ────────────────────────────────────────────
-
     #[test]
     fn orient_as_str_all_variants() {
         assert_eq!(Orient::R0.as_str(), "R0");
@@ -953,8 +916,6 @@ mod schematic_tests {
         assert_eq!(Orient::MYR90.as_str(), "MYR90");
     }
 
-    // ── parse_skill_json ──────────────────────────────────────────
-
     #[test]
     fn parse_plain_json_array() {
         let v = parse_skill_json(r#"[{"name":"M1"}]"#).unwrap();
@@ -965,14 +926,6 @@ mod schematic_tests {
     fn parse_skill_quoted_json() {
         // SKILL returns the JSON as a quoted string: "\"[{...}]\""
         let v = parse_skill_json(r#""[{\"name\":\"M1\"}]""#).unwrap();
-        assert_eq!(v[0]["name"], "M1");
-    }
-
-    #[test]
-    fn parse_skill_double_escaped_json() {
-        // Double-escaped form: "\"[{\\\"name\\\":\\\"M1\\\"}]\""
-        let raw = r#""[{\"name\":\"M1\"}]""#;
-        let v = parse_skill_json(raw).unwrap();
         assert_eq!(v[0]["name"], "M1");
     }
 
@@ -1006,7 +959,6 @@ mod config_extra_tests {
     fn default_port_in_expected_range() {
         let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean();
-        env::remove_var("VB_PORT");
         let cfg = Config::from_env().unwrap();
         clean();
         assert!(cfg.port >= 65000 && cfg.port < 65500, "port: {}", cfg.port);
@@ -1094,8 +1046,6 @@ mod maestro_ops_extra_tests {
 mod output_format_tests {
     use crate::output::{CliError, OutputFormat};
 
-    // ── OutputFormat::resolve (explicit only — None depends on TTY) ──
-
     #[test]
     fn resolve_json_explicit() {
         assert_eq!(OutputFormat::resolve(Some("json")), OutputFormat::Json);
@@ -1117,8 +1067,6 @@ mod output_format_tests {
         // Test processes run without a TTY, so None → Json
         assert_eq!(OutputFormat::resolve(None), OutputFormat::Json);
     }
-
-    // ── CliError serde ────────────────────────────────────────────
 
     #[test]
     fn cli_error_json_with_suggestion() {
@@ -1181,8 +1129,6 @@ mod job_tests {
         }
     }
 
-    // ── JobStatus serde ───────────────────────────────────────────
-
     #[test]
     fn job_status_serializes_lowercase() {
         assert_eq!(
@@ -1209,8 +1155,6 @@ mod job_tests {
         assert_eq!(s, JobStatus::Running);
     }
 
-    // ── Job serde round-trip ──────────────────────────────────────
-
     #[test]
     fn job_json_round_trip() {
         let job = make_job("rt-test-roundtrip");
@@ -1221,8 +1165,6 @@ mod job_tests {
         assert_eq!(job2.netlist_path, job.netlist_path);
         assert_eq!(job2.pid, job.pid);
     }
-
-    // ── Job::save / load ──────────────────────────────────────────
 
     #[test]
     fn job_save_and_load_round_trip() {
@@ -1244,28 +1186,15 @@ mod job_tests {
         assert!(err.to_string().contains("not found"), "{err}");
     }
 
-    // ── Job::cancel on non-running job ────────────────────────────
-
     #[test]
-    fn cancel_completed_job_returns_error() {
-        let mut job = make_job("rt-test-cancel-completed");
-        job.status = JobStatus::Completed;
-        let err = job.cancel().unwrap_err();
-        assert!(
-            err.to_string().contains("not running"),
-            "should mention not running: {err}"
-        );
+    fn cancel_non_running_job_returns_error() {
+        for status in [JobStatus::Completed, JobStatus::Failed] {
+            let mut job = make_job("rt-test-cancel-non-running");
+            job.status = status;
+            let err = job.cancel().unwrap_err();
+            assert!(err.to_string().contains("not running"), "{err}");
+        }
     }
-
-    #[test]
-    fn cancel_failed_job_returns_error() {
-        let mut job = make_job("rt-test-cancel-failed");
-        job.status = JobStatus::Failed;
-        let err = job.cancel().unwrap_err();
-        assert!(err.to_string().contains("not running"), "{err}");
-    }
-
-    // ── Job::list_all ─────────────────────────────────────────────
 
     #[test]
     fn list_all_includes_saved_job() {
