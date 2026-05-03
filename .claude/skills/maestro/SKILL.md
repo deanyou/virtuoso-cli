@@ -133,6 +133,75 @@ vcli skill exec 'let((sess vl)
 
 验证变量已写入 netlist：检查最新 `input.scs` 的 `parameters ...` 行，而非相信 `maeGetVar` 的返回值。
 
+## 全新 cell 的前置步骤（ensure_maestro_view）
+
+> ⚠️ **Gotcha**: `vcli maestro open` / `deOpenCellView("a")` 假设 maestro view **已经存在磁盘上**。
+> 对于从未在 Maestro 中打开过的全新 cell，该目录不存在，`deOpenCellView` 返回 nil 并弹出
+> **"Data file does not exist"** GUI dialog，阻塞 SKILL channel。
+
+bootstrap 模式（两步，idempotent — 已存在时 no-op）：
+
+```bash
+# 步骤 1：在内存中创建 maestro view 并写入磁盘
+vcli skill exec 'let((sess)
+  sess=maeOpenSetup("LIB" "CELL" "maestro")
+  maeSaveSetup(?session sess)
+  close_session(sess))'
+
+# 或者拆开更清楚：
+vcli skill exec 'maeOpenSetup("LIB" "CELL" "maestro")'
+# → "fnxSession12"（返回后台 session 名）
+vcli skill exec 'maeSaveSetup(?session "fnxSession12")'
+
+# 步骤 2：正常打开 GUI（现在 maestro/ 目录已存在）
+vcli maestro open --lib LIB --cell CELL
+```
+
+何时需要：新建 testbench cell 后第一次打开 Maestro 时。之后每次都不需要。
+
+---
+
+## Simulator Mode 切换（Spectre X / LX / APS）
+
+> ⚠️ **Gotcha**: `+lx` flag 和 command env option 中设置 `spectre +preset=lx` 会被**静默忽略**，
+> 仿真回退到 APS。正确 API 是 `asiSetHighPerformanceOptionVal`。
+
+```bash
+# 切换到 Spectre LX（mode ∈ LX / MX / AX / VX / CX / APS / FX）
+vcli skill exec 'let((th)
+  th=asiGetTest("TEST_NAME" "fnxSession0")
+  asiSetHighPerformanceOptionVal(th '"'"'uniMode "Spectre X")
+  asiSetHighPerformanceOptionVal(th '"'"'spectreXPreset "LX"))'
+
+# 切回 APS
+vcli skill exec 'let((th)
+  th=asiGetTest("TEST_NAME" "fnxSession0")
+  asiSetHighPerformanceOptionVal(th '"'"'uniMode "APS"))'
+
+# 验证（应在 netlist options 中看到 +preset=lx）
+vcli skill exec 'maeGetCurrentNetlistOptionsValues(?session "fnxSession0" ?test "TEST_NAME")'
+```
+
+| `uniMode` | `spectreXPreset` | 说明 |
+|-----------|-----------------|------|
+| `"Spectre"` | — | 标准 Spectre |
+| `"APS"` | — | APS（默认） |
+| `"Spectre X"` | `"LX"` / `"MX"` / `"AX"` / `"VX"` / `"CX"` | Spectre X 各精度档 |
+| `"Spectre FX"` | — | Fast X |
+
+---
+
+## VB_TIMEOUT 建议
+
+Maestro view 首次打开（`deOpenCellView`）P50 耗时 15-30s，在繁忙服务器上可能超过默认的 30s：
+
+```bash
+export VB_TIMEOUT=120   # 对所有 vcli 命令生效
+vcli maestro open --lib LIB --cell CELL
+```
+
+---
+
 ## 常见问题
 
 ### maeGetEnabledAnalysis 在 IC23.1 下签名与 IC25 文档不同

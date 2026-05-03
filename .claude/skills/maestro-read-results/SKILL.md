@@ -137,3 +137,23 @@ import read_results as r
 ```bash
 grep -o 'AXL_HISTORY_NAME[^"]*' /path/to/maestro/history.sdb | head -3
 ```
+
+**Parametric sweep subpoints — ASSEMBLER-2233**: `maeOpenResults(?history "Interactive.3/4")`
+fails with `(ASSEMBLER-2233) Could not Load Results` — Maestro's results loader does not
+accept the `N/M` sub-point notation. Bypass Maestro and use OCEAN directly with the absolute
+PSF path instead:
+
+```bash
+# Find the per-sweep-point PSF directories
+ls <sim_root>/<cell>/maestro/results/maestro/Interactive.3/
+# → 0/  1/  2/  ...  (one directory per sweep point)
+
+# Read one sweep point via OCEAN (bypasses maeOpenResults limitation)
+vcli skill exec 'let((data)
+  openResults("<sim_root>/cell/maestro/results/maestro/Interactive.3/4")
+  data=getData("/VOUT" ?result "tran")
+  ymax(data))'
+```
+
+This is the only reliable method for parametric sweep sub-point waveforms;
+`read_results.py` works the same way for offline reading.

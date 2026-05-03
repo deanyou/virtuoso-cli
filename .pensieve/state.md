@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: history-evolve first run: skill-exec binary name fix (vcli not virtuoso) + dead-session recovery pattern
+- Last Note: upstream sync: maestro ensure-view bootstrap + simulator mode API + sweep ASSEMBLER-2233 workaround
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`
