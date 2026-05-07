@@ -45,7 +45,10 @@ impl Job {
     pub fn save(&self) -> Result<()> {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| VirtuosoError::Execution(e.to_string()))?;
-        fs::write(Self::path(&self.id), json).map_err(|e| VirtuosoError::Execution(e.to_string()))
+        let path = Self::path(&self.id);
+        let tmp = path.with_extension("json.tmp");
+        fs::write(&tmp, json).map_err(|e| VirtuosoError::Execution(e.to_string()))?;
+        fs::rename(&tmp, &path).map_err(|e| VirtuosoError::Execution(e.to_string()))
     }
 
     pub fn load(id: &str) -> Result<Self> {
