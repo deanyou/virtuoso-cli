@@ -231,6 +231,24 @@ enum SkillCmd {
         /// Path to .il file
         file: String,
     },
+
+    /// Execute a SKILL expression across all live sessions concurrently
+    #[command(
+        long_about = "Run a SKILL expression on every live local session in parallel.\n\n\
+            Each session gets its own connection; results are collected into a JSON array.\n\
+            Exit code is non-zero only when every session fails.\n\n\
+            Examples:\n  \
+            virtuoso skill broadcast 'getVersion(t)'\n  \
+            virtuoso skill broadcast 'geGetEditCellView()~>cellName'"
+    )]
+    Broadcast {
+        /// SKILL expression to evaluate on all sessions
+        code: String,
+
+        /// Execution timeout in seconds (per session)
+        #[arg(long, short, default_value = "30")]
+        timeout: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -937,6 +955,7 @@ fn dispatch_skill(cmd: SkillCmd) -> error::Result<serde_json::Value> {
     match cmd {
         SkillCmd::Exec { code, timeout } => commands::skill::exec(&code, timeout),
         SkillCmd::Load { file } => commands::skill::load(&file),
+        SkillCmd::Broadcast { code, timeout } => commands::skill::broadcast(&code, timeout),
     }
 }
 
