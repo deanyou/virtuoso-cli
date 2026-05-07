@@ -4,9 +4,11 @@ pub struct WindowOps;
 
 impl WindowOps {
     /// List all open Virtuoso windows.
-    /// Returns a JSON array string: [{"name":"ADE Explorer Editing: ..."}]
+    /// Returns a JSON array string: [{"name":"..."}]
+    /// Backslashes and quotes in window names are properly escaped for JSON.
     pub fn list_windows(&self) -> String {
-        r#"let((out sep) out = "[" sep = "" foreach(w hiGetWindowList() out = strcat(out sep sprintf(nil "{\"name\":\"%s\"}" hiGetWindowName(w))) sep = ",") strcat(out "]"))"#.into()
+        r#"let((out sep) out = "[" sep = "" foreach(w hiGetWindowList() let((name esc) name = hiGetWindowName(w) esc = "" for(i 1 strlen(name) let((c) c = getchar(name i) if(c == "\\" then esc = strcat(esc "\\\\") else if(c == "\"" then esc = strcat(esc "\\\"") else esc = strcat(esc c)))) out = strcat(out sep sprintf(nil "{\"name\":\"%s\"}" esc) sep = ",") ) strcat(out "]"))"#
+            .into()
     }
 
     /// Dismiss the current blocking dialog.
@@ -48,9 +50,11 @@ impl WindowOps {
     }
 
     /// SKILL fragment: run X11 import and return path on success, nil on failure.
-    fn skill_capture(escaped_path: &str) -> String {
+    /// This uses `import` from ImageMagick, which is always available on Linux.
+    fn skill_capture(path_escaped: &str) -> String {
         format!(
-            r#"let((cmd) cmd = sprintf(nil "import -window root -display %s {escaped_path}" getShellEnvVar("DISPLAY")) system(cmd) if(isFile("{escaped_path}") "{escaped_path}" nil))"#
+            r#"let((cmd ok) cmd = strcat("import -window root -silent " {path}) ok = fileexists({path}) system(cmd) if(ok {path} else nil)"#,
+            path = path_escaped
         )
     }
 }
