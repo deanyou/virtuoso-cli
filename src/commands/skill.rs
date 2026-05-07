@@ -3,8 +3,11 @@ use crate::error::{Result, VirtuosoError};
 use crate::models::SessionInfo;
 use serde_json::{json, Value};
 
-pub fn exec(code: &str, timeout: u64) -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn exec(code: &str, timeout: u64, readonly: bool) -> Result<Value> {
+    let mut client = VirtuosoClient::from_env()?;
+    if readonly {
+        client = client.with_sandbox_mode();
+    }
     let result = client.execute_skill(code, Some(timeout))?;
 
     Ok(json!({

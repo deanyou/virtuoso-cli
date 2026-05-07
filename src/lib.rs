@@ -11,6 +11,9 @@ pub mod models;
 pub mod ocean;
 pub mod output;
 pub mod spectre;
+pub mod transaction;
 pub mod transport;
 pub mod tui;
 pub mod version;
+
+pub use transaction::{SchematicDiff, SchematicSnapshot, TransactionManager};

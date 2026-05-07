@@ -1,11 +1,15 @@
 use crate::client::layout_ops::LayoutOps;
 use crate::client::maestro_ops::MaestroOps;
 use crate::client::schematic_ops::SchematicOps;
+use crate::client::whitelist::EvalstringWhitelist;
 use crate::client::window_ops::WindowOps;
 use crate::error::{Result, VirtuosoError};
 use crate::models::{ExecutionStatus, VirtuosoResult};
 use crate::transport::tunnel::SSHClient;
 use crate::version::VirtuosoVersion;
+use crate::SchematicDiff;
+use crate::SchematicSnapshot;
+use crate::TransactionManager;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -28,6 +32,8 @@ pub struct VirtuosoClient {
     pub window: WindowOps,
     cached_version: Cell<Option<VirtuosoVersion>>,
     pub session_id: Option<String>,
+    whitelist: EvalstringWhitelist,
+    transactions: std::cell::RefCell<TransactionManager>,
 }
 
 impl VirtuosoClient {
@@ -43,7 +49,14 @@ impl VirtuosoClient {
             window: WindowOps,
             cached_version: Cell::new(None),
             session_id: None,
+            whitelist: EvalstringWhitelist::default(),
+            transactions: std::cell::RefCell::new(TransactionManager::new()),
         }
+    }
+
+    pub fn with_sandbox_mode(mut self) -> Self {
+        self.whitelist.enable_sandbox();
+        self
     }
 
     pub fn from_env() -> Result<Self> {
@@ -120,10 +133,16 @@ impl VirtuosoClient {
             window: WindowOps,
             cached_version: Cell::new(None),
             session_id: resolved_session_id,
+            whitelist: EvalstringWhitelist::default(),
+            transactions: std::cell::RefCell::new(TransactionManager::new()),
         })
     }
 
     pub fn execute_skill(&self, skill_code: &str, timeout: Option<u64>) -> Result<VirtuosoResult> {
+        // Phase 0: evalstring whitelist check
+        if let Some(warning) = self.whitelist.check(skill_code) {
+            return Err(VirtuosoError::Execution(warning));
+        }
         // Guard: block SKILL expressions that can hang the daemon
         if let Some(warning) = check_blocking_skill(skill_code) {
             return Err(VirtuosoError::Execution(warning));
@@ -412,6 +431,38 @@ impl VirtuosoClient {
         let v = crate::version::detect_version(self)?;
         self.cached_version.set(Some(v));
         Ok(v)
+    }
+
+    /// Begin a transaction — captures a snapshot of the current cellview.
+    pub fn tx_begin(&self, id: &str, lib: &str, cell: &str, view: &str) -> Result<()> {
+        self.transactions
+            .borrow_mut()
+            .begin(self, id.to_string(), lib, cell, view)
+    }
+
+    /// Commit the active transaction — deletes the snapshot file.
+    pub fn tx_commit(&self) -> Result<()> {
+        self.transactions.borrow_mut().commit()
+    }
+
+    /// Rollback — restore the cellview from the snapshot by re-creating instances.
+    pub fn tx_rollback(&self) -> Result<()> {
+        self.transactions.borrow().rollback(self)
+    }
+
+    /// Compute diff between snapshot and current cellview state.
+    pub fn tx_diff(&self) -> Result<SchematicDiff> {
+        self.transactions.borrow().diff(self)
+    }
+
+    /// Returns (tx_id, snapshot) if a transaction is active.
+    pub fn tx_status(&self) -> Option<(String, SchematicSnapshot)> {
+        self.transactions.borrow().status()
+    }
+
+    /// Alias for tx_status — returns (tx_id, snapshot) if active.
+    pub fn tx_snapshot(&self) -> Option<(String, SchematicSnapshot)> {
+        self.transactions.borrow().status()
     }
 }
 

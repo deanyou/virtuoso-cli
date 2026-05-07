@@ -13,9 +13,12 @@ mod output;
 mod spectre;
 #[cfg(test)]
 mod tests;
+mod transaction;
 mod transport;
 mod tui;
 mod version;
+
+pub use transaction::{SchematicDiff, SchematicSnapshot, TransactionManager};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use output::{print_json, OutputFormat};
@@ -121,6 +124,10 @@ enum Commands {
     #[command(subcommand)]
     Session(SessionCmd),
 
+    /// Transaction management — begin/commit/rollback/diff snapshots of schematic changes
+    #[command(subcommand)]
+    Tx(TxCmd),
+
     /// Show CLI command schema as JSON for agent introspection
     #[command(
         long_about = "Show the full command schema as JSON, useful for AI agent discovery.\n\n\
@@ -219,6 +226,10 @@ enum SkillCmd {
         /// Execution timeout in seconds
         #[arg(long, short, default_value = "30")]
         timeout: u64,
+
+        /// Sandbox/readonly mode — blocks system/sh/evalstring and other dangerous patterns
+        #[arg(long)]
+        readonly: bool,
     },
 
     /// Upload and load an IL script file into Virtuoso
@@ -907,6 +918,40 @@ enum SessionCmd {
 }
 
 #[derive(Subcommand)]
+enum TxCmd {
+    /// Begin a transaction — captures a snapshot of the currently open cellview
+    Begin {
+        /// Transaction ID (e.g. "my-design-tx")
+        #[arg(long)]
+        id: String,
+
+        /// Library name
+        #[arg(long)]
+        lib: String,
+
+        /// Cell name
+        #[arg(long)]
+        cell: String,
+
+        /// View name
+        #[arg(long, default_value = "schematic")]
+        view: String,
+    },
+
+    /// Commit the active transaction — discards snapshot
+    Commit,
+
+    /// Rollback — restore the cellview to the snapshot state
+    Rollback,
+
+    /// Show differences between snapshot and current cellview
+    Diff,
+
+    /// Show active transaction status (ID and timestamp)
+    Status,
+}
+
+#[derive(Subcommand)]
 enum WindowCmd {
     /// List all open Virtuoso windows with their names and derived mode
     List,
@@ -953,7 +998,11 @@ fn dispatch_tunnel(cmd: TunnelCmd, format: OutputFormat) -> error::Result<serde_
 
 fn dispatch_skill(cmd: SkillCmd) -> error::Result<serde_json::Value> {
     match cmd {
-        SkillCmd::Exec { code, timeout } => commands::skill::exec(&code, timeout),
+        SkillCmd::Exec {
+            code,
+            timeout,
+            readonly,
+        } => commands::skill::exec(&code, timeout, readonly),
         SkillCmd::Load { file } => commands::skill::load(&file),
         SkillCmd::Broadcast { code, timeout } => commands::skill::broadcast(&code, timeout),
     }
@@ -1209,6 +1258,21 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
     }
 }
 
+fn dispatch_tx(cmd: TxCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        TxCmd::Begin {
+            id,
+            lib,
+            cell,
+            view,
+        } => commands::transaction::begin(&id, &lib, &cell, &view),
+        TxCmd::Commit => commands::transaction::commit(),
+        TxCmd::Rollback => commands::transaction::rollback(),
+        TxCmd::Diff => commands::transaction::diff(),
+        TxCmd::Status => commands::transaction::status(),
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -1279,6 +1343,7 @@ fn main() {
                 limit,
             } => commands::session::history(&id, skill, cmd, limit),
         },
+        Commands::Tx(cmd) => dispatch_tx(cmd),
         Commands::Window(cmd) => dispatch_window(cmd),
         Commands::Schema { all, noun, verb } => {
             let schema = if all || noun.is_none() {

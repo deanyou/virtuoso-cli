@@ -11,9 +11,12 @@ mod models;
 mod ocean;
 mod output;
 mod spectre;
+mod transaction;
 mod transport;
 mod tui;
 mod version;
+
+pub use transaction::{SchematicDiff, SchematicSnapshot, TransactionManager};
 
 fn main() {
     if let Err(e) = tui::run_tui() {
