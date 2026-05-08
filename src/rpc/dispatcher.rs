@@ -77,10 +77,16 @@ impl RpcDispatcher {
             "maestro" => Self::dispatch_maestro(client, op, params),
             "window" => Self::dispatch_window(client, op, params),
             "cell" => Self::dispatch_cell(client, op, params),
-            _ => Err(VirtuosoError::Execution(format!(
-                "unknown domain '{}' in method '{}'",
-                domain, method
-            ))),
+            _ => {
+                // Try plugin registry for unknown domains
+                match crate::plugins::PluginRegistry::get_global() {
+                    Ok(registry) => registry.dispatch(domain, op, params, client),
+                    Err(_) => Err(VirtuosoError::Execution(format!(
+                        "unknown domain '{}' in method '{}'",
+                        domain, method
+                    ))),
+                }
+            }
         }
     }
 

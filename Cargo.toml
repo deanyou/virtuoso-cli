@@ -49,6 +49,7 @@ crossterm = "0.28"
 unicode-width = "0.2"
 tokio = { version = "1", features = ["full"] }
 regex = "1"
+toml = "0.8"
 num_cpus = "1"
 
 [profile.release]

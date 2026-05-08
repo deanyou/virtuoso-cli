@@ -14,6 +14,7 @@ mod mcp;
 mod models;
 mod ocean;
 mod output;
+mod plugins;
 mod rpc;
 mod spectre;
 mod streaming;

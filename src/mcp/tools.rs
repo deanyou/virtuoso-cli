@@ -12,7 +12,19 @@ pub struct McpTool {
     /// JSON Schema for tool input
     pub input_schema: Value,
     /// Corresponding RPC method (e.g. "schematic.open_cell_view")
-    pub rpc_method: &'static str,
+    pub rpc_method: String,
+}
+
+impl McpTool {
+    /// Create an MCP tool with owned strings (for plugin tools).
+    pub fn new(name: String, description: String, input_schema: Value, rpc_method: String) -> Self {
+        Self {
+            name,
+            description,
+            input_schema,
+            rpc_method,
+        }
+    }
 }
 
 /// Return all available MCP tools.
@@ -39,7 +51,7 @@ pub fn schematic_tools() -> Vec<McpTool> {
                 },
                 "required": ["lib", "cell"]
             }),
-            rpc_method: "schematic.open_cell_view",
+            rpc_method: String::from("schematic.open_cell_view"),
         },
         McpTool {
             name: "schematic_place".into(),
@@ -55,7 +67,7 @@ pub fn schematic_tools() -> Vec<McpTool> {
                 },
                 "required": ["master", "name"]
             }),
-            rpc_method: "schematic.place",
+            rpc_method: String::from("schematic.place"),
         },
         McpTool {
             name: "schematic_wire".into(),
@@ -68,7 +80,7 @@ pub fn schematic_tools() -> Vec<McpTool> {
                 },
                 "required": ["net", "points"]
             }),
-            rpc_method: "schematic.wire",
+            rpc_method: String::from("schematic.wire"),
         },
         McpTool {
             name: "schematic_save".into(),
@@ -77,7 +89,7 @@ pub fn schematic_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "schematic.save",
+            rpc_method: String::from("schematic.save"),
         },
         McpTool {
             name: "schematic_check".into(),
@@ -86,7 +98,7 @@ pub fn schematic_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "schematic.check",
+            rpc_method: String::from("schematic.check"),
         },
         McpTool {
             name: "schematic_list_instances".into(),
@@ -95,7 +107,7 @@ pub fn schematic_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "schematic.list_instances",
+            rpc_method: String::from("schematic.list_instances"),
         },
         McpTool {
             name: "schematic_list_nets".into(),
@@ -104,7 +116,7 @@ pub fn schematic_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "schematic.list_nets",
+            rpc_method: String::from("schematic.list_nets"),
         },
         McpTool {
             name: "schematic_list_pins".into(),
@@ -113,7 +125,7 @@ pub fn schematic_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "schematic.list_pins",
+            rpc_method: String::from("schematic.list_pins"),
         },
     ]
 }
@@ -132,7 +144,7 @@ pub fn maestro_tools() -> Vec<McpTool> {
                 },
                 "required": ["lib", "cell"]
             }),
-            rpc_method: "maestro.open_session",
+            rpc_method: String::from("maestro.open_session"),
         },
         McpTool {
             name: "maestro_close_session".into(),
@@ -144,7 +156,7 @@ pub fn maestro_tools() -> Vec<McpTool> {
                 },
                 "required": ["session"]
             }),
-            rpc_method: "maestro.close_session",
+            rpc_method: String::from("maestro.close_session"),
         },
         McpTool {
             name: "maestro_list_sessions".into(),
@@ -153,7 +165,7 @@ pub fn maestro_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "maestro.list_sessions",
+            rpc_method: String::from("maestro.list_sessions"),
         },
         McpTool {
             name: "maestro_set_var".into(),
@@ -166,7 +178,7 @@ pub fn maestro_tools() -> Vec<McpTool> {
                 },
                 "required": ["name", "value"]
             }),
-            rpc_method: "maestro.set_var",
+            rpc_method: String::from("maestro.set_var"),
         },
         McpTool {
             name: "maestro_get_var".into(),
@@ -178,7 +190,7 @@ pub fn maestro_tools() -> Vec<McpTool> {
                 },
                 "required": ["name"]
             }),
-            rpc_method: "maestro.get_var",
+            rpc_method: String::from("maestro.get_var"),
         },
         McpTool {
             name: "maestro_list_vars".into(),
@@ -187,7 +199,7 @@ pub fn maestro_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "maestro.list_vars",
+            rpc_method: String::from("maestro.list_vars"),
         },
         McpTool {
             name: "maestro_run".into(),
@@ -199,7 +211,7 @@ pub fn maestro_tools() -> Vec<McpTool> {
                 },
                 "required": ["session"]
             }),
-            rpc_method: "maestro.run",
+            rpc_method: String::from("maestro.run"),
         },
         McpTool {
             name: "maestro_save".into(),
@@ -211,7 +223,7 @@ pub fn maestro_tools() -> Vec<McpTool> {
                 },
                 "required": ["session"]
             }),
-            rpc_method: "maestro.save",
+            rpc_method: String::from("maestro.save"),
         },
         McpTool {
             name: "maestro_export".into(),
@@ -225,7 +237,7 @@ pub fn maestro_tools() -> Vec<McpTool> {
                 },
                 "required": ["session", "path"]
             }),
-            rpc_method: "maestro.export",
+            rpc_method: String::from("maestro.export"),
         },
     ]
 }
@@ -239,7 +251,7 @@ pub fn window_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "window.list",
+            rpc_method: String::from("window.list"),
         },
         McpTool {
             name: "window_screenshot".into(),
@@ -251,7 +263,7 @@ pub fn window_tools() -> Vec<McpTool> {
                 },
                 "required": ["path"]
             }),
-            rpc_method: "window.screenshot",
+            rpc_method: String::from("window.screenshot"),
         },
     ]
 }
@@ -271,7 +283,7 @@ pub fn cell_tools() -> Vec<McpTool> {
                 },
                 "required": ["lib", "cell"]
             }),
-            rpc_method: "cell.open",
+            rpc_method: String::from("cell.open"),
         },
         McpTool {
             name: "cell_save".into(),
@@ -280,7 +292,7 @@ pub fn cell_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "cell.save",
+            rpc_method: String::from("cell.save"),
         },
         McpTool {
             name: "cell_close".into(),
@@ -289,7 +301,7 @@ pub fn cell_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {}
             }),
-            rpc_method: "cell.close",
+            rpc_method: String::from("cell.close"),
         },
     ]
 }

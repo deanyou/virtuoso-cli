@@ -83,10 +83,12 @@ pub struct McpServer {
 
 impl McpServer {
     pub fn new(config: McpConfig) -> Self {
-        Self {
-            config,
-            tools: tools::all_tools(),
+        let mut tools = tools::all_tools();
+        // Merge in plugin tools if any
+        if let Ok(registry) = super::plugins::PluginRegistry::get_global() {
+            tools.extend(registry.mcp_tools());
         }
+        Self { config, tools }
     }
 
     /// Run the MCP stdio loop.

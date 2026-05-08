@@ -12,6 +12,7 @@ pub mod mcp;
 pub mod models;
 pub mod ocean;
 pub mod output;
+pub mod plugins;
 pub mod rpc;
 pub mod session;
 pub mod spectre;
