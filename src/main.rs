@@ -179,6 +179,8 @@ enum McpCmd {
 
 impl McpCmd {
     fn dispatch(&self) -> error::Result<serde_json::Value> {
+        // Initialize auth before serving (reads VCLI_API_KEY from env)
+        Auth::init();
         match self {
             McpCmd::Serve => crate::mcp::server::run().map(|_| serde_json::json!({})),
         }
