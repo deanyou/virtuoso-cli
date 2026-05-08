@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 use uuid::Uuid;
 
 pub struct SpectreSimulator {
@@ -270,34 +271,38 @@ impl SpectreSimulator {
         let log_path_for_thread = log_path.clone();
         let job_id_for_thread = run_id.clone();
 
-        // Spawn progress tracking thread
+        // Spawn progress tracking thread using tokio runtime
         let progress_thread = thread::spawn(move || {
-            let poll_interval = std::time::Duration::from_millis(500);
-            loop {
-                thread::sleep(poll_interval);
+            let rt = crate::async_runtime::runtime();
+            rt.block_on(async move {
+                let poll_interval = Duration::from_millis(500);
+                let mut interval = tokio::time::interval(poll_interval);
+                loop {
+                    interval.tick().await;
 
-                // Parse log for progress
-                if let Ok(content) = fs::read_to_string(&log_path_for_thread) {
-                    // Check if simulation is done
-                    if content.contains("Simulation completed")
-                        || content.contains("成就")
-                        || content.contains("Error:")
-                        || content.contains("Failed")
-                    {
-                        break;
-                    }
+                    // Parse log for progress
+                    if let Ok(content) = fs::read_to_string(&log_path_for_thread) {
+                        // Check if simulation is done
+                        if content.contains("Simulation completed")
+                            || content.contains("成就")
+                            || content.contains("Error:")
+                            || content.contains("Failed")
+                        {
+                            break;
+                        }
 
-                    if let Some((percent, message)) = parse_spectre_progress(&content) {
-                        sink.emit(JobEvent::Progress {
-                            job_id: job_id_for_thread.clone(),
-                            percent,
-                            message,
-                            iteration: None,
-                            time_point: None,
-                        });
+                        if let Some((percent, message)) = parse_spectre_progress(&content) {
+                            sink.emit(JobEvent::Progress {
+                                job_id: job_id_for_thread.clone(),
+                                percent,
+                                message,
+                                iteration: None,
+                                time_point: None,
+                            });
+                        }
                     }
                 }
-            }
+            });
         });
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(self.timeout);
