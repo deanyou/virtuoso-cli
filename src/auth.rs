@@ -3,6 +3,10 @@
 //! API key is loaded from VCLI_API_KEY env var. The key itself is a shared
 //! secret; validation is a simple constant-time comparison.
 //!
+//! Capabilities are loaded from VCLI_CAPABILITY env var (comma-separated list).
+//! When auth is enabled, the validated API key's associated capabilities are
+//! checked before each RPC call.
+//!
 //! Audit log is written to ~/.cache/virtuoso_bridge/logs/audit.log
 
 use std::fs::{self, OpenOptions};
@@ -10,13 +14,15 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
+use crate::capability::CapabilitySet;
 use crate::error::VirtuosoError;
 
 /// API key authentication state.
 #[derive(Debug)]
 pub struct Auth {
     api_key: Option<String>,
-    enabled: bool,
+    /// Capabilities granted to the authenticated caller.
+    capabilities: CapabilitySet,
     /// Rate limit state: number of failed auth attempts (clears on success)
     failed_attempts: std::sync::atomic::AtomicU32,
     /// Lockout until timestamp (seconds since epoch), set on too many failures
@@ -31,10 +37,12 @@ impl Auth {
     pub fn init() {
         let api_key = std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty());
         let enabled = api_key.is_some();
+        // Load capabilities from VCLI_CAPABILITY (loaded from env by CapabilitySet::from_env)
+        let capabilities = CapabilitySet::from_env();
 
         AUTH.get_or_init(|| Auth {
             api_key,
-            enabled,
+            capabilities,
             failed_attempts: std::sync::atomic::AtomicU32::new(0),
             lockout_until: std::sync::atomic::AtomicU64::new(0),
         });
@@ -43,7 +51,7 @@ impl Auth {
     /// Check if API key is valid (constant-time compare).
     /// Returns Ok(()) if valid, Err(VirtuosoError::Auth) otherwise.
     pub fn validate(&self, key: &str) -> Result<(), VirtuosoError> {
-        if !self.enabled {
+        if self.api_key.is_none() {
             return Ok(());
         }
 
@@ -89,7 +97,12 @@ impl Auth {
 
     /// Returns true if auth is enabled (API key was provided).
     pub fn is_enabled(&self) -> bool {
-        self.enabled
+        self.api_key.is_some()
+    }
+
+    /// Returns the capabilities granted to the authenticated caller.
+    pub fn capabilities(&self) -> &CapabilitySet {
+        &self.capabilities
     }
 }
 
@@ -166,19 +179,18 @@ pub fn log_rpc(method: &str, params: &serde_json::Value, result: &str, session_i
     entry.write();
 }
 
-/// Middleware for RPC dispatcher — checks API key and logs access.
-/// Returns Ok(()) if the request is authorized, Err otherwise.
-pub fn check_auth(api_key: Option<&str>) -> Result<(), VirtuosoError> {
-    let auth = AUTH
-        .get()
-        .ok_or_else(|| VirtuosoError::Auth("auth not initialized".into()))?;
+/// Middleware for RPC dispatcher — checks API key and returns capabilities.
+/// Returns Ok(CapabilitySet) if authorized, Err otherwise.
+pub fn check_auth(api_key: Option<&str>) -> Result<CapabilitySet, VirtuosoError> {
+    let auth = auth();
 
     if !auth.is_enabled() {
-        return Ok(());
+        return Ok(auth.capabilities().clone());
     }
 
     let key = api_key.ok_or_else(|| VirtuosoError::Auth("API key required".into()))?;
-    auth.validate(key)
+    auth.validate(key)?;
+    Ok(auth.capabilities().clone())
 }
 
 /// Get the global auth instance.

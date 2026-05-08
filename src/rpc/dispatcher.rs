@@ -48,7 +48,15 @@ impl RpcDispatcher {
         } = request;
 
         // Auth check (fails fast if invalid/missing key)
-        check_auth(api_key.as_deref())?;
+        let caps = check_auth(api_key.as_deref())?;
+
+        // Capability check — verify the method's domain is allowed
+        if !caps.permits_method(&method) {
+            return Err(VirtuosoError::Execution(format!(
+                "method '{}' not permitted: missing required capability",
+                method
+            )));
+        }
 
         let result = Self::dispatch_inner(client, &method, params.clone());
 
