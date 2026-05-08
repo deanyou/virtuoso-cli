@@ -5,9 +5,8 @@ pub struct WindowOps;
 impl WindowOps {
     /// List all open Virtuoso windows.
     /// Returns a JSON array string: [{"name":"..."}]
-    /// Backslashes and quotes in window names are properly escaped for JSON.
     pub fn list_windows(&self) -> String {
-        r#"let((out sep) out = "[" sep = "" foreach(w hiGetWindowList() let((name esc) name = hiGetWindowName(w) esc = "" for(i 1 strlen(name) let((c) c = getchar(name i) if(c == "\\" then esc = strcat(esc "\\\\") else if(c == "\"" then esc = strcat(esc "\\\"") else esc = strcat(esc c)))) out = strcat(out sep sprintf(nil "{\"name\":\"%s\"}" esc) sep = ",") ) strcat(out "]"))"#
+        r#"let((out sep) out = "[" sep = "" foreach(w hiGetWindowList() out = strcat(out sep sprintf(nil "{\"name\":\"%s\"}" hiGetWindowName(w))) sep = ",") strcat(out "]"))"#
             .into()
     }
 

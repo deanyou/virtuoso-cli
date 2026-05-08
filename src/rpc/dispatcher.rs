@@ -6,7 +6,24 @@
 use crate::auth::{check_auth, log_rpc};
 use crate::client::bridge::VirtuosoClient;
 use crate::error::{Result, VirtuosoError};
+use regex::Regex;
 use serde_json::Value;
+
+/// Fix SKILL's octal escape sequences (e.g., \256) to JSON unicode escapes (\u00AE).
+/// SKILL uses \NNN octal for non-ASCII chars, but JSON only supports \uXXXX unicode.
+fn fix_skill_octal_escapes(s: &str) -> String {
+    // Match \NNN where N is 0-7, up to 3 digits
+    let re = Regex::new(r"\\([0-7]{1,3})").unwrap();
+    re.replace_all(s, |caps: &regex::Captures| {
+        let octal = &caps[1];
+        if let Ok(code) = u8::from_str_radix(octal, 8) {
+            format!("\\u{:04X}", code)
+        } else {
+            caps[0].to_string()
+        }
+    })
+    .to_string()
+}
 
 /// JSON-RPC request.
 #[derive(Debug)]
@@ -247,7 +264,8 @@ impl RpcDispatcher {
             "list" => {
                 let skill = ops.list_windows();
                 let r = client.execute_skill_unchecked(&skill, None)?;
-                let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
+                let fixed = fix_skill_octal_escapes(&r.output);
+                let parsed: Value = serde_json::from_str(&fixed).map_err(VirtuosoError::Json)?;
                 Ok(parsed)
             }
             "screenshot" => {
