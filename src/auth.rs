@@ -188,8 +188,14 @@ pub fn check_auth(api_key: Option<&str>) -> Result<CapabilitySet, VirtuosoError>
         return Ok(auth.capabilities().clone());
     }
 
-    let key = api_key.ok_or_else(|| VirtuosoError::Auth("API key required".into()))?;
-    auth.validate(key)?;
+    // Fall back to VCLI_API_KEY env var if no API key provided in request.
+    // This allows MCP clients to rely solely on the env var without
+    // needing to pass it in every JSON-RPC request.
+    let key = api_key
+        .map(String::from)
+        .or_else(|| std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty()));
+    let key = key.ok_or_else(|| VirtuosoError::Auth("API key required".into()))?;
+    auth.validate(&key)?;
     Ok(auth.capabilities().clone())
 }
 

@@ -186,10 +186,11 @@ impl McpServer {
         arguments: serde_json::Value,
     ) -> Result<serde_json::Value> {
         let client = VirtuosoClient::from_env()?;
+        let api_key = std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty());
         let request = crate::rpc::dispatcher::RpcRequest {
             method: tool.rpc_method.to_string(),
             params: arguments,
-            api_key: None,
+            api_key,
         };
         crate::rpc::dispatcher::RpcDispatcher::dispatch(&client, request)
     }

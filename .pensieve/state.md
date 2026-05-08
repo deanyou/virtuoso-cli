@@ -2,7 +2,7 @@
 
 ## Lifecycle State
 - Last Event: self-improve
-- Last Note: upstream sync: maestro ensure-view bootstrap + simulator mode API + sweep ASSEMBLER-2233 workaround
+- Last Note: multi-session concurrency: broadcast + subagent patterns, async deferred to std::thread::scope
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`
