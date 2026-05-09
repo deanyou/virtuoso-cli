@@ -292,6 +292,10 @@ impl VirtuosoClient {
     /// Execute a SKILL expression (public API — checks capability + whitelist).
     /// External callers should use this; internal callers use `execute_skill_unchecked`.
     pub fn execute_skill(&self, skill_code: &str, timeout: Option<u64>) -> Result<VirtuosoResult> {
+        // Auth check — validate API key if auth is enabled
+        crate::auth::Auth::init();
+        crate::auth::check_auth(None)?;
+
         // Capability check — block raw SKILL exec unless Admin
         if let Some(warning) = self.check_capability(skill_code) {
             return Err(VirtuosoError::Execution(warning));

@@ -25,6 +25,25 @@ fn fix_skill_octal_escapes(s: &str) -> String {
     .to_string()
 }
 
+/// Parse SKILL JSON output: bridge returns `"\"[...]\""`  — strip outer quotes, unescape inner.
+/// Returns `Err` if the output cannot be parsed as JSON after unescaping.
+fn parse_skill_json(output: &str) -> Result<Value> {
+    // output is like: "\"[{\\\"name\\\":\\\"M1\\\"}]\""
+    // Step 1: strip outer quotes from SKILL string
+    let s = output.trim_matches('"');
+    // Step 2: try parsing directly (works if no extra escaping)
+    if let Ok(v) = serde_json::from_str(s) {
+        return Ok(v);
+    }
+    // Step 3: unescape \" → " and \\\\ → \ then retry
+    let unescaped = s.replace("\\\"", "\"").replace("\\\\", "\\");
+    serde_json::from_str(&unescaped).map_err(|e| {
+        VirtuosoError::Execution(format!(
+            "Failed to parse SKILL JSON output: {e}. Raw: {output}"
+        ))
+    })
+}
+
 /// JSON-RPC request.
 #[derive(Debug)]
 pub struct RpcRequest {
@@ -171,20 +190,17 @@ impl RpcDispatcher {
             "list_instances" => {
                 let skill = ops.list_instances();
                 let r = client.execute_skill_unchecked(&skill, None)?;
-                let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
-                Ok(parsed)
+                parse_skill_json(&r.output)
             }
             "list_nets" => {
                 let skill = ops.list_nets();
                 let r = client.execute_skill_unchecked(&skill, None)?;
-                let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
-                Ok(parsed)
+                parse_skill_json(&r.output)
             }
             "list_pins" => {
                 let skill = ops.list_pins();
                 let r = client.execute_skill_unchecked(&skill, None)?;
-                let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
-                Ok(parsed)
+                parse_skill_json(&r.output)
             }
             "get_params" => {
                 let inst = json_str(params.get("inst"), "inst")?;
@@ -193,7 +209,7 @@ impl RpcDispatcher {
                 if r.output.trim() == "null" {
                     Ok(serde_json::Value::Null)
                 } else {
-                    serde_json::from_str(&r.output).map_err(VirtuosoError::Json)
+                    parse_skill_json(&r.output)
                 }
             }
             _ => Err(VirtuosoError::Execution(format!(

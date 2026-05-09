@@ -36,7 +36,6 @@ impl Auth {
     /// Initialize auth from environment. Called once at startup.
     pub fn init() {
         let api_key = std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty());
-        let enabled = api_key.is_some();
         // Load capabilities from VCLI_CAPABILITY (loaded from env by CapabilitySet::from_env)
         let capabilities = CapabilitySet::from_env();
 
