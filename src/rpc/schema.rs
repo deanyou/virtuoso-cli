@@ -285,6 +285,12 @@ pub fn standard_schema() -> RpcSchema {
             params: vec![],
             returns: "null on success".into(),
         },
+        Method {
+            name: "cell.info".into(),
+            summary: "Get current cellview info (lib/cell/view)".into(),
+            params: vec![],
+            returns: "JSON object with lib, cell, view".into(),
+        },
         // ── Maestro ───────────────────────────────────────────────────
         Method {
             name: "maestro.open_session".into(),
@@ -410,6 +416,100 @@ pub fn standard_schema() -> RpcSchema {
                 },
             ],
             returns: "null on success".into(),
+        },
+        // ── Maestro Result Reading ──────────────────────────────────────
+        Method {
+            name: "maestro.open_results".into(),
+            summary: "Open simulation results for a history run".into(),
+            params: vec![Param {
+                name: "history".into(),
+                ptype: "string".into(),
+                description: "History name (e.g. ExplorerRun.0)".into(),
+                required: true,
+            }],
+            returns: "null on success".into(),
+        },
+        Method {
+            name: "maestro.close_results".into(),
+            summary: "Close the currently open simulation results".into(),
+            params: vec![],
+            returns: "null on success".into(),
+        },
+        Method {
+            name: "maestro.get_result_tests".into(),
+            summary: "List all test names with results".into(),
+            params: vec![],
+            returns: "JSON array of test names".into(),
+        },
+        Method {
+            name: "maestro.get_result_outputs".into(),
+            summary: "List all output names for a test".into(),
+            params: vec![Param {
+                name: "test".into(),
+                ptype: "string".into(),
+                description: "Test name".into(),
+                required: true,
+            }],
+            returns: "JSON array of output names".into(),
+        },
+        Method {
+            name: "maestro.get_output_value".into(),
+            summary: "Get the value of a simulation output".into(),
+            params: vec![
+                Param {
+                    name: "name".into(),
+                    ptype: "string".into(),
+                    description: "Output name".into(),
+                    required: true,
+                },
+                Param {
+                    name: "test".into(),
+                    ptype: "string".into(),
+                    description: "Test name".into(),
+                    required: true,
+                },
+                Param {
+                    name: "corner".into(),
+                    ptype: "string".into(),
+                    description: "Corner name (optional)".into(),
+                    required: false,
+                },
+            ],
+            returns: "value as string".into(),
+        },
+        Method {
+            name: "maestro.get_history_list".into(),
+            summary: "List available simulation history runs".into(),
+            params: vec![],
+            returns: "JSON array of history names".into(),
+        },
+        Method {
+            name: "maestro.get_analyses".into(),
+            summary: "Get enabled analysis types".into(),
+            params: vec![],
+            returns: "analysis types string".into(),
+        },
+        Method {
+            name: "maestro.get_outputs".into(),
+            summary: "List all outputs for a test".into(),
+            params: vec![Param {
+                name: "test".into(),
+                ptype: "string".into(),
+                description: "Test name".into(),
+                required: true,
+            }],
+            returns: "JSON array of output objects".into(),
+        },
+        Method {
+            name: "maestro.get_sim_messages".into(),
+            summary: "Get simulation log messages".into(),
+            params: vec![Param {
+                name: "session".into(),
+                ptype: "string".into(),
+                description: "Session ID".into(),
+                required: true,
+            }],
+            returns: "messages string".into(),
         },
     ])
 }

@@ -281,6 +281,59 @@ impl RpcDispatcher {
                 client.execute_skill_unchecked(&skill, None)?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
+            // ── Result Reading ────────────────────────────────────────
+            "open_results" => {
+                let history = json_str(params.get("history"), "history")?;
+                let skill = ops.open_results(&history);
+                client.execute_skill_unchecked(&skill, None)?;
+                Ok(serde_json::json!({ "status": "ok" }))
+            }
+            "close_results" => {
+                let skill = ops.close_results();
+                client.execute_skill_unchecked(&skill, None)?;
+                Ok(serde_json::json!({ "status": "ok" }))
+            }
+            "get_result_tests" => {
+                let skill = ops.get_result_tests();
+                let r = client.execute_skill_unchecked(&skill, None)?;
+                parse_skill_json(&r.output)
+            }
+            "get_result_outputs" => {
+                let test_name = json_str(params.get("test"), "test")?;
+                let skill = ops.get_result_outputs(&test_name);
+                let r = client.execute_skill_unchecked(&skill, None)?;
+                parse_skill_json(&r.output)
+            }
+            "get_output_value" => {
+                let name = json_str(params.get("name"), "name")?;
+                let test = json_str(params.get("test"), "test")?;
+                let corner = params.get("corner").and_then(|v| v.as_str());
+                let skill = ops.get_output_value(&name, &test, corner);
+                let r = client.execute_skill_unchecked(&skill, None)?;
+                Ok(serde_json::json!({ "value": r.output.trim() }))
+            }
+            "get_history_list" => {
+                let skill = ops.get_history_list();
+                let r = client.execute_skill_unchecked(&skill, None)?;
+                parse_skill_json(&r.output)
+            }
+            "get_analyses" => {
+                let skill = r#"maeGetEnabledAnalysis(car(maeGetSetup()))"#;
+                let r = client.execute_skill_unchecked(skill, None)?;
+                Ok(serde_json::json!({ "analyses": r.output.trim() }))
+            }
+            "get_outputs" => {
+                let test = json_str(params.get("test"), "test")?;
+                let skill = ops.get_outputs(&test);
+                let r = client.execute_skill_unchecked(&skill, None)?;
+                parse_skill_json(&r.output)
+            }
+            "get_sim_messages" => {
+                let session = json_str(params.get("session"), "session")?;
+                let skill = ops.get_sim_messages(&session);
+                let r = client.execute_skill_unchecked(&skill, None)?;
+                Ok(serde_json::json!({ "messages": r.output.trim() }))
+            }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown maestro method '{}'",
                 op
@@ -332,6 +385,14 @@ impl RpcDispatcher {
             "close" => {
                 let r = client.close_current_cellview()?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output }))
+            }
+            "info" => {
+                let (lib, cell, view) = client.get_current_design()?;
+                Ok(serde_json::json!({
+                    "lib": lib,
+                    "cell": cell,
+                    "view": view,
+                }))
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown cell method '{}'",
