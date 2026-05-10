@@ -86,7 +86,7 @@ pub struct McpServer {
 
 impl McpServer {
     pub fn new(config: McpConfig) -> Self {
-        let mut tools = tools::all_tools();
+        let mut tools = tools::all_tools(&config.capabilities);
         // Merge in plugin tools if any
         if let Ok(registry) = super::plugins::PluginRegistry::get_global() {
             tools.extend(registry.mcp_tools());

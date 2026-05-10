@@ -126,11 +126,13 @@ impl PluginRegistry {
         self.tools
             .iter()
             .map(|t| {
+                let domain = t.rpc_method().split('.').next().unwrap_or("").into();
                 McpTool::new(
                     t.mcp_name(),
                     t.description.clone(),
                     t.input_schema(),
                     t.rpc_method(),
+                    domain,
                 )
             })
             .collect()
