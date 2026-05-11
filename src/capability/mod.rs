@@ -270,6 +270,7 @@ mod tests {
         // skill methods should NOT be permitted without Admin
         assert!(!caps.permits_method("skill.exec"));
         assert!(!caps.permits_method("skill.load"));
+        assert!(!caps.permits_method("skill.eval"));
     }
 
     #[test]
@@ -283,6 +284,9 @@ mod tests {
         assert!(caps.permits_method("file.upload"));
         assert!(caps.permits_method("util.version"));
         assert!(caps.permits_method("skill.exec"));
+        assert!(caps.permits_method("skill.eval"));
+        assert!(caps.permits_method("maestro.snapshot"));
+        assert!(caps.permits_method("schematic.polish_label"));
     }
 
     #[test]

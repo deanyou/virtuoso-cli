@@ -569,5 +569,50 @@ pub fn skill_tools() -> Vec<McpTool> {
             rpc_method: String::from("skill.load"),
             domain: "skill".into(),
         },
+        McpTool {
+            name: "skill_eval".into(),
+            description: "Execute inline SKILL expressions (supports multi-statement)".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "code": { "type": "string", "description": "SKILL expression to evaluate" },
+                    "stdin": { "type": "boolean", "description": "Read expression from stdin" },
+                },
+            }),
+            rpc_method: String::from("skill.eval"),
+            domain: "skill".into(),
+        },
+        McpTool {
+            name: "maestro_snapshot".into(),
+            description: "Snapshot Maestro run artifacts to local directory (YAML-filtered)".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "output_dir": { "type": "string", "description": "Output directory path" },
+                    "session": { "type": "string", "description": "Maestro session name" },
+                    "history": { "type": "string", "description": "History run name" },
+                    "filter_path": { "type": "string", "description": "Custom filter YAML path" },
+                },
+                "required": ["output_dir"]
+            }),
+            rpc_method: String::from("maestro.snapshot"),
+            domain: "maestro".into(),
+        },
+        McpTool {
+            name: "schematic_polish_label".into(),
+            description: "Polish net labels with cosmetic presets, auto-rotation, or offset".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "net": { "type": "string", "description": "Net name" },
+                    "preset": { "type": "string", "description": "'readable' or 'compact'" },
+                    "auto_rotate": { "type": "boolean", "description": "Apply auto-rotation" },
+                    "offset": { "type": "string", "description": "'small', 'medium', or 'large'" },
+                },
+                "required": ["net"]
+            }),
+            rpc_method: String::from("schematic.polish_label"),
+            domain: "schematic".into(),
+        },
     ]
 }

@@ -850,5 +850,86 @@ pub fn standard_schema() -> RpcSchema {
             }],
             returns: "null on success".into(),
         },
+        Method {
+            name: "skill.eval".into(),
+            summary: "Execute inline SKILL expressions (supports multi-statement)".into(),
+            params: vec![
+                Param {
+                    name: "code".into(),
+                    ptype: "string".into(),
+                    description: "SKILL expression to evaluate (omit when using stdin)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "stdin".into(),
+                    ptype: "boolean".into(),
+                    description: "Read expression from stdin instead of code argument".into(),
+                    required: false,
+                },
+            ],
+            returns: "VirtuosoResult JSON".into(),
+        },
+        Method {
+            name: "maestro.snapshot".into(),
+            summary: "Snapshot Maestro run artifacts to local directory (YAML-filtered)".into(),
+            params: vec![
+                Param {
+                    name: "output_dir".into(),
+                    ptype: "string".into(),
+                    description: "Output directory path".into(),
+                    required: true,
+                },
+                Param {
+                    name: "session".into(),
+                    ptype: "string".into(),
+                    description: "Maestro session name (optional; auto-detects)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "history".into(),
+                    ptype: "string".into(),
+                    description: "History run name (optional; picks newest)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "filter_path".into(),
+                    ptype: "string".into(),
+                    description: "Custom filter YAML path (optional; uses built-in)".into(),
+                    required: false,
+                },
+            ],
+            returns: "Snapshot result with files_copied count".into(),
+        },
+        Method {
+            name: "schematic.polish_label".into(),
+            summary: "Polish net labels with cosmetic presets, auto-rotation, or offset".into(),
+            params: vec![
+                Param {
+                    name: "net".into(),
+                    ptype: "string".into(),
+                    description: "Net name whose labels to polish".into(),
+                    required: true,
+                },
+                Param {
+                    name: "preset".into(),
+                    ptype: "string".into(),
+                    description: "Preset: 'readable' (0.125 font) or 'compact' (0.0625)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "auto_rotate".into(),
+                    ptype: "boolean".into(),
+                    description: "Apply auto-rotation based on wire direction".into(),
+                    required: false,
+                },
+                Param {
+                    name: "offset".into(),
+                    ptype: "string".into(),
+                    description: "Offset: 'small' (+5), 'medium' (+10), 'large' (+20) DBU".into(),
+                    required: false,
+                },
+            ],
+            returns: "Number of labels updated".into(),
+        },
     ])
 }

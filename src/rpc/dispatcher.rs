@@ -5,6 +5,7 @@
 
 use crate::auth::{check_auth, log_rpc};
 use crate::client::bridge::{escape_skill_string, VirtuosoClient};
+use crate::commands;
 use crate::error::{Result, VirtuosoError};
 use regex::Regex;
 use serde_json::Value;
@@ -217,6 +218,14 @@ impl RpcDispatcher {
                     parse_skill_json(&r.output)
                 }
             }
+            "polish_label" => {
+                let net = json_str(params.get("net"), "net")?;
+                let preset = json_str_or(params.get("preset"), "readable")?;
+                let auto_rotate = params.get("auto_rotate").and_then(|v| v.as_bool()).unwrap_or(false);
+                let offset = params.get("offset").and_then(|v| v.as_str());
+                let r = commands::schematic::polish_label(&net, &preset, auto_rotate, offset)?;
+                Ok(r)
+            }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown schematic method '{}'",
                 op
@@ -391,6 +400,19 @@ impl RpcDispatcher {
                 let skill = ops.get_spec_status(&name, &test);
                 let r = client.execute_skill_unchecked(&skill, None)?;
                 Ok(serde_json::json!({ "status": r.output.trim() }))
+            }
+            "snapshot" => {
+                let output_dir = json_str(params.get("output_dir"), "output_dir")?;
+                let session = params.get("session").and_then(|v| v.as_str());
+                let history = params.get("history").and_then(|v| v.as_str());
+                let filter_path = params.get("filter_path").and_then(|v| v.as_str());
+                let r = commands::maestro::snapshot(
+                    &output_dir,
+                    session,
+                    history,
+                    filter_path,
+                )?;
+                Ok(r)
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown maestro method '{}'",
@@ -628,6 +650,12 @@ impl RpcDispatcher {
                 let path = json_str(params.get("path"), "path")?;
                 let r = client.load_il(&path)?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
+            }
+            "eval" => {
+                let code = params.get("code").and_then(|v| v.as_str().map(String::from));
+                let stdin = params.get("stdin").and_then(|v| v.as_bool()).unwrap_or(false);
+                let r = commands::skill::eval(code, stdin)?;
+                Ok(r)
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown skill method '{}'",
@@ -1035,8 +1063,8 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 58 methods total (52 + 6 new: 4 util + 2 skill)
-        assert_eq!(schema.methods.len(), 58, "should have exactly 58 methods");
+        // Should have 61 methods total (58 + 3 new: skill.eval, maestro.snapshot, schematic.polish_label)
+        assert_eq!(schema.methods.len(), 61, "should have exactly 61 methods");
     }
 
     #[test]
