@@ -221,7 +221,10 @@ impl RpcDispatcher {
             "polish_label" => {
                 let net = json_str(params.get("net"), "net")?;
                 let preset = json_str_or(params.get("preset"), "readable")?;
-                let auto_rotate = params.get("auto_rotate").and_then(|v| v.as_bool()).unwrap_or(false);
+                let auto_rotate = params
+                    .get("auto_rotate")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
                 let offset = params.get("offset").and_then(|v| v.as_str());
                 let r = commands::schematic::polish_label(&net, &preset, auto_rotate, offset)?;
                 Ok(r)
@@ -406,12 +409,7 @@ impl RpcDispatcher {
                 let session = params.get("session").and_then(|v| v.as_str());
                 let history = params.get("history").and_then(|v| v.as_str());
                 let filter_path = params.get("filter_path").and_then(|v| v.as_str());
-                let r = commands::maestro::snapshot(
-                    &output_dir,
-                    session,
-                    history,
-                    filter_path,
-                )?;
+                let r = commands::maestro::snapshot(&output_dir, session, history, filter_path)?;
                 Ok(r)
             }
             _ => Err(VirtuosoError::Execution(format!(
@@ -652,8 +650,13 @@ impl RpcDispatcher {
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
             }
             "eval" => {
-                let code = params.get("code").and_then(|v| v.as_str().map(String::from));
-                let stdin = params.get("stdin").and_then(|v| v.as_bool()).unwrap_or(false);
+                let code = params
+                    .get("code")
+                    .and_then(|v| v.as_str().map(String::from));
+                let stdin = params
+                    .get("stdin")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
                 let r = commands::skill::eval(code, stdin)?;
                 Ok(r)
             }
