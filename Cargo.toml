@@ -45,11 +45,12 @@ shlex = "1"
 uuid = { version = "1", features = ["v4"] }
 dirs = "5"
 chrono = { version = "0.4", features = ["serde"] }
+once_cell = "1"
 libc = "0.2"
 ratatui = "0.29"
 crossterm = "0.28"
 unicode-width = "0.2"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"] }
 regex = "1"
 toml = "0.8"
 num_cpus = "1"

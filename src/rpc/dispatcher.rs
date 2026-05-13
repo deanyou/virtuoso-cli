@@ -7,23 +7,26 @@ use crate::auth::{check_auth, log_rpc};
 use crate::client::bridge::{escape_skill_string, VirtuosoClient};
 use crate::commands;
 use crate::error::{Result, VirtuosoError};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::Value;
+
+/// Static regex for SKILL octal escape sequences (compiled once)
+static SKILL_OCTAL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\\([0-7]{1,3})").unwrap());
 
 /// Fix SKILL's octal escape sequences (e.g., \256) to JSON unicode escapes (\u00AE).
 /// SKILL uses \NNN octal for non-ASCII chars, but JSON only supports \uXXXX unicode.
 fn fix_skill_octal_escapes(s: &str) -> String {
-    // Match \NNN where N is 0-7, up to 3 digits
-    let re = Regex::new(r"\\([0-7]{1,3})").unwrap();
-    re.replace_all(s, |caps: &regex::Captures| {
-        let octal = &caps[1];
-        if let Ok(code) = u8::from_str_radix(octal, 8) {
-            format!("\\u{:04X}", code)
-        } else {
-            caps[0].to_string()
-        }
-    })
-    .to_string()
+    SKILL_OCTAL_RE
+        .replace_all(s, |caps: &regex::Captures| {
+            let octal = &caps[1];
+            if let Ok(code) = u8::from_str_radix(octal, 8) {
+                format!("\\u{:04X}", code)
+            } else {
+                caps[0].to_string()
+            }
+        })
+        .to_string()
 }
 
 /// Parse SKILL JSON output: bridge returns `"\"[...]\""`  — strip outer quotes, unescape inner.

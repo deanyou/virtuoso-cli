@@ -164,7 +164,7 @@ impl VirtuosoClient {
             cached_version: Cell::new(None),
             session_id: resolved_session_id,
             whitelist: EvalstringWhitelist::default(),
-            capabilities: CapabilitySet::default(),
+            capabilities: CapabilitySet::from_env(),
             transactions: std::cell::RefCell::new(TransactionManager::new()),
         })
     }

@@ -63,7 +63,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn list_windows_contains_hiGetWindowList() {
+    fn list_windows_contains_hi_get_window_list() {
         let ops = WindowOps;
         let skill = ops.list_windows();
         assert!(

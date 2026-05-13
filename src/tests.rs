@@ -4,7 +4,6 @@
 ///   - SSHRunner: remote_target, jump host args, summarize_error, build_ssh_cmd args
 ///   - Config: ssh_target, ssh_jump, is_remote, env parsing, VB_PORT validation
 ///   - SessionInfo: JSON round-trip, list dedup/sort, missing session error
-
 fn cmd_args(cmd: &std::process::Command) -> Vec<String> {
     cmd.get_args()
         .map(|a| a.to_string_lossy().into_owned())
@@ -1607,7 +1606,7 @@ mod history_tests {
         append_skill(id, "t", true, "t");
 
         let result = crate::commands::session::history(id, true, false, 50).unwrap();
-        assert!(result["skill"].as_array().unwrap().len() >= 1);
+        assert!(!result["skill"].as_array().unwrap().is_empty());
         assert_eq!(
             result["cmd"].as_array().unwrap().len(),
             0,
@@ -1628,6 +1627,6 @@ mod history_tests {
             0,
             "--cmd flag must return empty skill list"
         );
-        assert!(result["cmd"].as_array().unwrap().len() >= 1);
+        assert!(!result["cmd"].as_array().unwrap().is_empty());
     }
 }

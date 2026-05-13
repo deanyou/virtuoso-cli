@@ -498,7 +498,7 @@ mod tests {
 
     #[test]
     fn test_expiration() {
-        let mut plugin = CapabilityPlugin::new();
+        let plugin = CapabilityPlugin::new();
         plugin.set_expiration("temp", 1);
 
         assert!(!plugin.is_expired("temp"));

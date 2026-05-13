@@ -587,6 +587,34 @@ pub fn run_async(netlist_path: &str) -> Result<Value> {
     }))
 }
 
+pub fn job_status(id: &str) -> Result<Value> {
+    let mut job = Job::load(id)?;
+    job.refresh()?;
+    serde_json::to_value(&job).map_err(|e| VirtuosoError::Execution(e.to_string()))
+}
+
+pub fn job_list() -> Result<Value> {
+    let mut jobs = Job::list_all()?;
+    for job in &mut jobs {
+        let _ = job.refresh();
+    }
+    let jobs_value = serde_json::to_value(&jobs)
+        .map_err(|e| VirtuosoError::Execution(format!("Failed to serialize jobs: {e}")))?;
+    Ok(json!({
+        "count": jobs.len(),
+        "jobs": jobs_value,
+    }))
+}
+
+pub fn job_cancel(id: &str) -> Result<Value> {
+    let mut job = Job::load(id)?;
+    job.cancel()?;
+    Ok(json!({
+        "status": "cancelled",
+        "job_id": id,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{analysis_block, validate_measure_expr};
@@ -653,32 +681,4 @@ mod tests {
         assert!(analysis_block("xf").is_none());
         assert!(analysis_block("").is_none());
     }
-}
-
-pub fn job_status(id: &str) -> Result<Value> {
-    let mut job = Job::load(id)?;
-    job.refresh()?;
-    serde_json::to_value(&job).map_err(|e| VirtuosoError::Execution(e.to_string()))
-}
-
-pub fn job_list() -> Result<Value> {
-    let mut jobs = Job::list_all()?;
-    for job in &mut jobs {
-        let _ = job.refresh();
-    }
-    let jobs_value = serde_json::to_value(&jobs)
-        .map_err(|e| VirtuosoError::Execution(format!("Failed to serialize jobs: {e}")))?;
-    Ok(json!({
-        "count": jobs.len(),
-        "jobs": jobs_value,
-    }))
-}
-
-pub fn job_cancel(id: &str) -> Result<Value> {
-    let mut job = Job::load(id)?;
-    job.cancel()?;
-    Ok(json!({
-        "status": "cancelled",
-        "job_id": id,
-    }))
 }

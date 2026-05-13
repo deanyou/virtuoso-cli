@@ -28,6 +28,16 @@ pub struct SpectreSimulator {
     sink: Arc<dyn JobEventSink>,
 }
 
+/// Completion detection patterns (configurable for i18n).
+/// Default: English "Simulation completed" and Chinese "成就".
+fn is_simulation_complete(content: &str) -> bool {
+    content.contains("Simulation completed")
+        || content.contains("成就")
+        || std::env::var("VB_SPECTRE_COMPLETION_PATTERN")
+            .map(|p| content.contains(&p))
+            .unwrap_or(false)
+}
+
 impl SpectreSimulator {
     pub fn from_env() -> Result<Self> {
         let cfg = crate::config::Config::from_env()?;
@@ -286,8 +296,7 @@ impl SpectreSimulator {
                     // Parse log for progress
                     if let Ok(content) = fs::read_to_string(&log_path_for_thread) {
                         // Check if simulation is done
-                        if content.contains("Simulation completed")
-                            || content.contains("成就")
+                        if is_simulation_complete(&content)
                             || content.contains("Error:")
                             || content.contains("Failed")
                         {
@@ -512,7 +521,7 @@ fn parse_spectre_progress(log_content: &str) -> Option<(f32, String)> {
     }
 
     // Check for completion or error keywords
-    if log_content.contains("Simulation completed") || log_content.contains("成就") {
+    if is_simulation_complete(log_content) {
         return Some((100.0, "completed".to_string()));
     }
 
