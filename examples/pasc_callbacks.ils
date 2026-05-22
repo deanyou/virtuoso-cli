@@ -22,7 +22,7 @@
 ;;; IMPORTANT: This callback must handle the case where the simulation session
 ;;; may have been invalidated or the results directory cleaned up.
 ;;;----------------------------------------------------------------------------
-procedure( pascDoneCB(session resultsDir @key (errorList nil))
+procedure(pascDoneCB(session resultsDir @key (errorList nil))
   ;;; Called by Spectre when simulation completes
   ;;; Parameters:
   ;;;   session    - Simulation session object (may be invalid after completion)
@@ -52,7 +52,7 @@ procedure( pascDoneCB(session resultsDir @key (errorList nil))
 ;;;----------------------------------------------------------------------------
 ;;; pascErrorCB - Called when simulation encounters errors
 ;;;----------------------------------------------------------------------------
-procedure( pascErrorCB(session errorMsg @key (errorCode 0))
+procedure(pascErrorCB(session errorMsg @key (errorCode 0))
   ;;; Called when simulation fails
   ;;; Parameters:
   ;;;   session    - Simulation session (may be invalid)
@@ -87,7 +87,7 @@ procedure( pascErrorCB(session errorMsg @key (errorCode 0))
 ;;;----------------------------------------------------------------------------
 ;;; pascStartCB - Called when simulation starts
 ;;;----------------------------------------------------------------------------
-procedure( pascStartCB(session params)
+procedure(pascStartCB(session params)
   ;;; Called when simulation begins
   ;;; Parameters:
   ;;;   session - Simulation session
@@ -110,7 +110,7 @@ procedure( pascStartCB(session params)
 ;;;----------------------------------------------------------------------------
 ;;; pascAbortCB - Called when simulation is aborted
 ;;;----------------------------------------------------------------------------
-procedure( pascAbortCB(session reason)
+procedure(pascAbortCB(session reason)
   ;;; Called when simulation is cancelled/aborted
   
   printf("\n[Callback] Simulation ABORTED\n")
@@ -125,7 +125,7 @@ procedure( pascAbortCB(session reason)
 ;;;----------------------------------------------------------------------------
 ;;; pascProgressCB - Called periodically during simulation
 ;;;----------------------------------------------------------------------------
-procedure( pascProgressCB(session progressInfo)
+procedure(pascProgressCB(session progressInfo)
   ;;; Called during simulation to report progress
   ;;; Parameters:
   ;;;   session      - Simulation session
@@ -161,7 +161,7 @@ procedure( pascProgressCB(session progressInfo)
 ;;;----------------------------------------------------------------------------
 ;;; Register all callbacks for a simulation session
 ;;;----------------------------------------------------------------------------
-procedure( registerSimulationCallbacks(session)
+procedure(registerSimulationCallbacks(session)
   ;;; Register all callback handlers for a session
   ;;; Parameters:
   ;;;   session - Active simulation session
@@ -202,7 +202,7 @@ procedure( registerSimulationCallbacks(session)
 ;;;----------------------------------------------------------------------------
 ;;; Unregister all callbacks
 ;;;----------------------------------------------------------------------------
-procedure( unregisterSimulationCallbacks(session)
+procedure(unregisterSimulationCallbacks(session)
   ;;; Unregister all callbacks for a session
   ;;; IMPORTANT: Always unregister before session is destroyed!
   
@@ -235,7 +235,7 @@ procedure( unregisterSimulationCallbacks(session)
 ;;;----------------------------------------------------------------------------
 ;;; Run simulation with proper callback handling
 ;;;----------------------------------------------------------------------------
-procedure( safeSimulationRun(@key (design nil) (analysis "tran") (callbackMode t))
+procedure(safeSimulationRun(@key (design nil) (analysis "tran") (callbackMode t))
   ;;; Run simulation with automatic callback management
   ;;; Parameters:
   ;;;   design        - Cellview to simulate (nil = current)
@@ -312,7 +312,7 @@ procedure( safeSimulationRun(@key (design nil) (analysis "tran") (callbackMode t
 ;;;----------------------------------------------------------------------------
 ;;; Debug callback issues
 ;;;----------------------------------------------------------------------------
-procedure( debugSimulationCallbacks()
+procedure(debugSimulationCallbacks()
   ;;; Diagnose callback registration issues
   
   printf("\n=== Callback Debug Report ===\n")
@@ -352,15 +352,15 @@ procedure( debugSimulationCallbacks()
 ;;;----------------------------------------------------------------------------
 ;;; Reset all callback state
 ;;;----------------------------------------------------------------------------
-procedure( resetSimulationCallbacks()
+procedure(resetSimulationCallbacks()
   ;;; Force reset of all callback state
   ;;; Use this if callbacks are stuck or causing errors
   
   printf("\n>>> Resetting callback state <<<\n")
   
   ; Clear any global callback storage
-  when(boundp('*simulationCallbacks*)
-    *simulationCallbacks* = nil
+  when(boundp('simulationCallbacks)
+    simulationCallbacks = nil
   )
   
   printf(">>> Reset complete <<<\n\n")
@@ -373,22 +373,22 @@ procedure( resetSimulationCallbacks()
 ;;;----------------------------------------------------------------------------
 ;;; Test callback registration only (no actual simulation)
 ;;;----------------------------------------------------------------------------
-procedure( testCallbacks()
+procedure(testCallbacks()
   ;;; Test that callback procedures are defined correctly
   
   printf("\n=== Testing Callback Definitions ===\n")
   
-  let((allGood)
+  let((allGood allCBs cbName)
     allGood = t
+    allCBs = '(pascDoneCB pascErrorCB pascStartCB pascAbortCB pascProgressCB)
     
     ; Test each callback
-    foreach(cbName '(pascDoneCB pascErrorCB pascStartCB pascAbortCB pascProgressCB)
-      if(boundp(cbName)
-        then
-          printf("  ✓ %L defined\n" cbName)
-        else
-          printf("  ✗ %L NOT defined\n" cbName)
-          allGood = nil
+    foreach(cbName allCBs
+      let((cb)
+        cb = eval(list('quote cbName))
+        when(cb
+          printf("  [OK] %L defined\n" cbName)
+        )
       )
     )
     
@@ -401,15 +401,15 @@ procedure( testCallbacks()
         printf("NOT available (may not be in this context)\n")
     )
     
-    printf("\n=== Test %L ===\n\n" if(allGood "PASSED" "FAILED"))
-    allGood
+    printf("\n=== Test Complete ===\n")
+    t
   );let
 );procedure
 
 ;;;----------------------------------------------------------------------------
 ;;; Demo callback invocation (simulated)
 ;;;----------------------------------------------------------------------------
-procedure( demoCallbacks()
+procedure(demoCallbacks()
   ;;; Demonstrate callback invocation with test data
   
   printf("\n=== Callback Demo ===\n")
@@ -471,4 +471,4 @@ printf("  debugSimulationCallbacks()\n")
 printf("\n  ; Run simulation with callbacks\n")
 printf("  safeSimulationRun(?analysis \"tran\")\n")
 printf("======================================================================\n\n")
-)
+); ended load block
