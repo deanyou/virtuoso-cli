@@ -1,0 +1,365 @@
+;;;============================================================================
+;;; VTTYPE Parameter Update for NMOS/PMOS Transistors
+;;; 
+;;; Purpose: Update VTTYPE parameter when swapping NMOS/PMOS devices
+;;; Usage:   Load this file in Virtuoso IC and call:
+;;;           - swap_nmos_vttype("sensitive")  ; Replace with desired VT type
+;;;           - swap_pmos_vttype("sensitive")
+;;;============================================================================
+
+procedure( swap_nmos_vttype(@optional (newVT "sensitive")
+                              @key (libName "")
+                              (cellName "")
+                              (viewName "schematic")
+                              (quiet t)
+                              (testOnly nil)
+                              (dryRun t)
+                              )
+  ;;; Swap NMOS threshold voltage type
+  ;;; Parameters:
+  ;;;   newVT    - New VTTYPE value (e.g., "sensitive", "regular", "native")
+  ;;;   libName  - Library name (empty = current cellview)
+  ;;;   cellName - Cell name (empty = current cellview)
+  ;;;   testOnly - If t, only report what would change
+  ;;;   dryRun   - If t, don't make changes (deprecated, use testOnly)
+  ;;;   quiet    - Suppress progress messages
+  
+  let((cv objCount replacedCount lib cell view)
+    ; Get current cellview if not specified
+    unless(libName
+      when(boundp('geGetEditCellView)
+        cv = geGetEditCellView()
+        when(cv
+          libName  = car(cv~>libName)
+          cellName = car(cv~>cellName)
+        );when
+      );when
+    );unless
+    
+    unless(cellName
+      error("Please specify libName and cellName, or open a cellview for editing")
+    )
+    
+    ; Open the cellview
+    cv = dbOpenCellViewByType(libName cellName viewName "" "r")
+    unless(cv
+      error("Could not open cellview %L/%L/%L" libName cellName viewName)
+    )
+    
+    ; Find all NMOS instances
+    objCount = 0
+    replacedCount = 0
+    
+    foreach(inst cv~>instances
+      objCount = objCount + 1
+      
+      ; Check if it's an NMOS transistor
+      when(inst~>cellName
+        ; Common NMOS cell name patterns
+        when(or(
+          rexMatchp("nmos" inst~>cellName)
+          rexMatchp("n_.*mos" inst~>cellName)
+          rexMatchp("NMOS" inst~>cellName)
+          rexMatchp("NSVT" inst~>cellName)
+          rexMatchp("NLVT" inst~>cellName)
+          rexMatchp("NHVT" inst~>cellName)
+        )
+          ; Check for VTTYPE property
+          let((vttypeProp currentVT)
+            vttypeProp = assq('vttype inst~>prop)
+            currentVT = when(vttypeProp vttypeProp~>value)
+            
+            ; Only replace if VTTYPE exists and is different
+            when(vttypeProp
+              unless(quiet
+                printf("NMOS %L: VTTYPE = %L -> %L\n" 
+                  inst~>name currentVT newVT)
+              )
+              
+              unless(testOnly || dryRun
+                ; Use dbReplaceProp to update the parameter
+                dbReplaceProp(inst 'vttype newVT)
+              )
+              replacedCount = replacedCount + 1
+            );when
+            
+            ; If VTTYPE doesn't exist, create it
+            unless(vttypeProp
+              unless(quiet
+                printf("NMOS %L: Adding VTTYPE = %L\n" 
+                  inst~>name newVT)
+              )
+              
+              unless(testOnly || dryRun
+                dbAddProp(inst 'vttype newVT)
+              )
+              replacedCount = replacedCount + 1
+            )
+          );let
+        );when
+      );when
+    );foreach
+    
+    ; Summary
+    unless(quiet
+      printf("\n=== NMOS VTTYPE Update Summary ===\n")
+      printf("Total instances found: %d\n" objCount)
+      printf("VTTYPE values changed: %d\n" replacedCount)
+      if(testOnly
+        printf("(test mode - no changes made)\n")
+      )
+      printf("================================\n\n")
+    )
+    
+    ; Close cellview
+    dbClose(cv)
+    
+    ; Return counts for scripting
+    list(objCount replacedCount)
+  );let
+);procedure
+
+procedure( swap_pmos_vttype(@optional (newVT "sensitive")
+                          @key (libName "")
+                          (cellName "")
+                          (viewName "schematic")
+                          (quiet t)
+                          (testOnly nil)
+                          (dryRun t)
+                          )
+  ;;; Swap PMOS threshold voltage type
+  ;;; Same parameters as swap_nmos_vttype but for PMOS devices
+  
+  let((cv objCount replacedCount lib cell view)
+    ; Get current cellview if not specified
+    unless(libName
+      when(boundp('geGetEditCellView)
+        cv = geGetEditCellView()
+        when(cv
+          libName  = car(cv~>libName)
+          cellName = car(cv~>cellName)
+        );when
+      );when
+    );unless
+    
+    unless(cellName
+      error("Please specify libName and cellName, or open a cellview for editing")
+    )
+    
+    ; Open the cellview
+    cv = dbOpenCellViewByType(libName cellName viewName "" "r")
+    unless(cv
+      error("Could not open cellview %L/%L/%L" libName cellName viewName)
+    )
+    
+    ; Find all PMOS instances
+    objCount = 0
+    replacedCount = 0
+    
+    foreach(inst cv~>instances
+      objCount = objCount + 1
+      
+      ; Check if it's a PMOS transistor
+      when(inst~>cellName
+        ; Common PMOS cell name patterns
+        when(or(
+          rexMatchp("pmos" inst~>cellName)
+          rexMatchp("p_.*mos" inst~>cellName)
+          rexMatchp("PMOS" inst~>cellName)
+          rexMatchp("PSVT" inst~>cellName)
+          rexMatchp("PLVT" inst~>cellName)
+          rexMatchp("PHVT" inst~>cellName)
+        )
+          ; Check for VTTYPE property
+          let((vttypeProp currentVT)
+            vttypeProp = assq('vttype inst~>prop)
+            currentVT = when(vttypeProp vttypeProp~>value)
+            
+            ; Only replace if VTTYPE exists and is different
+            when(vttypeProp
+              unless(quiet
+                printf("PMOS %L: VTTYPE = %L -> %L\n" 
+                  inst~>name currentVT newVT)
+              )
+              
+              unless(testOnly || dryRun
+                dbReplaceProp(inst 'vttype newVT)
+              )
+              replacedCount = replacedCount + 1
+            );when
+            
+            ; If VTTYPE doesn't exist, create it
+            unless(vttypeProp
+              unless(quiet
+                printf("PMOS %L: Adding VTTYPE = %L\n" 
+                  inst~>name newVT)
+              )
+              
+              unless(testOnly || dryRun
+                dbAddProp(inst 'vttype newVT)
+              )
+              replacedCount = replacedCount + 1
+            )
+          );let
+        );when
+      );when
+    );foreach
+    
+    ; Summary
+    unless(quiet
+      printf("\n=== PMOS VTTYPE Update Summary ===\n")
+      printf("Total instances found: %d\n" objCount)
+      printf("VTTYPE values changed: %d\n" replacedCount)
+      if(testOnly
+        printf("(test mode - no changes made)\n")
+      )
+      printf("================================\n\n")
+    )
+    
+    ; Close cellview
+    dbClose(cv)
+    
+    ; Return counts for scripting
+    list(objCount replacedCount)
+  );let
+);procedure
+
+procedure( swap_all_vttype(@optional (newVT "sensitive")
+                          @key (libName "")
+                          (cellName "")
+                          (viewName "schematic")
+                          (quiet nil)
+                          (testOnly nil)
+                          )
+  ;;; Swap both NMOS and PMOS threshold voltage types
+  
+  let((nmosResult pmosResult)
+    printf("\n>>> Swapping ALL transistors to VTTYPE = %L <<<\n\n" newVT)
+    
+    nmosResult = swap_nmos_vttype(newVT
+      ?libName libName
+      ?cellName cellName
+      ?viewName viewName
+      ?quiet quiet
+      ?testOnly testOnly
+    )
+    
+    pmosResult = swap_pmos_vttype(newVT
+      ?libName libName
+      ?cellName cellName
+      ?viewName viewName
+      ?quiet quiet
+      ?testOnly testOnly
+    )
+    
+    unless(quiet
+      printf("\n>>> TOTAL: %L NMOS + %L PMOS = %L transistors updated <<<\n\n"
+        cadr(nmosResult)
+        cadr(pmosResult)
+        plus(cadr(nmosResult) cadr(pmosResult))
+      )
+    )
+    
+    ; Return combined result
+    list(nmosResult pmosResult)
+  );let
+);procedure
+
+procedure( report_vttype(@key (libName "") (cellName "") (viewName "schematic"))
+  ;;; Report current VTTYPE settings for all transistors
+  
+  let((cv)
+    unless(libName
+      when(boundp('geGetEditCellView)
+        cv = geGetEditCellView()
+        when(cv
+          libName  = car(cv~>libName)
+          cellName = car(cv~>cellName)
+        );when
+      );when
+    )
+    
+    unless(cellName
+      error("Please specify libName and cellName")
+    )
+    
+    cv = dbOpenCellViewByType(libName cellName viewName "" "r")
+    unless(cv
+      error("Could not open cellview %L/%L/%L" libName cellName viewName)
+    )
+    
+    printf("\n=== VTTYPE Report for %L/%L/%L ===\n" libName cellName viewName)
+    
+    foreach(inst cv~>instances
+      when(inst~>cellName
+        let((vttypeProp)
+          vttypeProp = assq('vttype inst~>prop)
+          printf("%-20L %-15L VTTYPE=%L\n" 
+            inst~>name 
+            inst~>cellName
+            when(vttypeProp vttypeProp~>value "N/A")
+          )
+        );let
+      );when
+    );foreach
+    
+    printf("================================\n\n")
+    
+    dbClose(cv)
+  );let
+);procedure
+
+;;;============================================================================
+;;; Helper procedure for common VTTYPE values
+;;;============================================================================
+
+procedure( set_rvt()
+  ;;; Set Regular VT (RVT) for all transistors
+  swap_all_vttype("regular" ?quiet nil)
+)
+
+procedure( set_lvt()
+  ;;; Set Low VT (LVT) for all transistors  
+  swap_all_vttype("low" ?quiet nil)
+)
+
+procedure( set_hvt()
+  ;;; Set High VT (HVT) for all transistors
+  swap_all_vttype("high" ?quiet nil)
+)
+
+procedure( set_svt()
+  ;;; Set Standard VT (SVT) for all transistors
+  swap_all_vttype("sensitive" ?quiet nil)
+)
+
+procedure( set_native()
+  ;;; Set Native VT for all transistors
+  swap_all_vttype("native" ?quiet nil)
+)
+
+;;;============================================================================
+;;; Load message
+;;;============================================================================
+printf("\n")
+printf("======================================================================\n")
+printf("  VTTYPE Update SKILL Loaded Successfully!\n")
+printf("======================================================================\n")
+printf("\nAvailable procedures:\n")
+printf("  swap_nmos_vttype(\"type\" ?libName \"lib\" ?cellName \"cell\")\n")
+printf("  swap_pmos_vttype(\"type\" ?libName \"lib\" ?cellName \"cell\")\n")
+printf("  swap_all_vttype(\"type\")  - Swap both NMOS and PMOS\n")
+printf("  report_vttype(?libName \"lib\" ?cellName \"cell\")\n")
+printf("\nShortcut procedures:\n")
+printf("  set_rvt()    - Set Regular VT\n")
+printf("  set_lvt()    - Set Low VT\n")
+printf("  set_hvt()    - Set High VT\n")
+printf("  set_svt()    - Set Standard/Sensitive VT\n")
+printf("  set_native() - Set Native VT\n")
+printf("\nExamples:\n")
+printf("  swap_all_vttype(\"sensitive\")\n")
+printf("  swap_nmos_vttype(\"regular\" ?libName \"myLib\" ?cellName \"amp\")\n")
+printf("  report_vttype(?libName \"myLib\" ?cellName \"amp\")\n")
+printf("\nUse ?testOnly t to preview changes before applying:\n")
+printf("  swap_all_vttype(\"low\" ?testOnly t)\n")
+printf("======================================================================\n\n")
