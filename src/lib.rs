@@ -13,6 +13,7 @@ pub mod models;
 pub mod ocean;
 pub mod output;
 pub mod plugins;
+pub mod profile;
 pub mod rpc;
 pub mod session;
 pub mod spectre;
@@ -24,4 +25,5 @@ pub mod version;
 
 pub use auth::{auth, check_auth, log_rpc, Auth};
 pub use capability::{Capability, CapabilitySet};
+pub use profile::{resolve_profile, resolve_profile_info, ProfileResolution};
 pub use transaction::{SchematicDiff, SchematicSnapshot, TransactionManager};

@@ -170,6 +170,33 @@ enum Commands {
     /// Start stdio-based MCP server for AI agent integration
     #[command(subcommand)]
     Mcp(McpCmd),
+
+    /// Show or edit connection profile bindings
+    #[command(subcommand)]
+    Profile(ProfileCmd),
+}
+
+#[derive(Subcommand)]
+enum ProfileCmd {
+    /// Show the resolved profile and its source
+    Show,
+
+    /// Bind the current virtualenv to a profile
+    Bind {
+        /// Profile name to bind
+        profile: String,
+
+        /// Bind to the current virtualenv (required)
+        #[arg(long)]
+        venv: bool,
+    },
+
+    /// Clear the virtualenv profile binding
+    Clear {
+        /// Clear from the current virtualenv (required)
+        #[arg(long)]
+        venv: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1431,6 +1458,48 @@ fn dispatch_rpc(cmd: RpcCmd) -> error::Result<serde_json::Value> {
     }
 }
 
+fn dispatch_profile(cmd: ProfileCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        ProfileCmd::Show => {
+            let info = virtuoso_cli::resolve_profile_info(None);
+            Ok(serde_json::json!({
+                "profile": info.profile,
+                "source": info.source,
+                "path": info.path.map(|p| p.to_string_lossy().to_string()),
+            }))
+        }
+        ProfileCmd::Bind { profile, venv } => {
+            if !venv {
+                return Err(error::VirtuosoError::Config(
+                    "profile bind requires --venv flag".to_string(),
+                ));
+            }
+            match virtuoso_cli::profile::bind_venv_profile(&profile) {
+                Ok(path) => Ok(serde_json::json!({
+                    "status": "bound",
+                    "profile": profile,
+                    "path": path.to_string_lossy().to_string(),
+                })),
+                Err(e) => Err(error::VirtuosoError::Config(e.to_string())),
+            }
+        }
+        ProfileCmd::Clear { venv } => {
+            if !venv {
+                return Err(error::VirtuosoError::Config(
+                    "profile clear requires --venv flag".to_string(),
+                ));
+            }
+            match virtuoso_cli::profile::clear_venv_profile() {
+                Ok(path) => Ok(serde_json::json!({
+                    "status": "cleared",
+                    "path": path.to_string_lossy().to_string(),
+                })),
+                Err(e) => Err(error::VirtuosoError::Config(e.to_string())),
+            }
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -1539,6 +1608,7 @@ fn main() {
             }
             std::process::exit(0);
         }
+        Commands::Profile(cmd) => dispatch_profile(cmd),
     };
 
     let exit_code = match &result {

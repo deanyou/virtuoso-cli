@@ -40,8 +40,60 @@ impl Config {
     }
 
     pub fn from_env() -> Result<Self> {
-        let profile = env::var("VB_PROFILE").ok();
+        // Use the hierarchical profile resolver:
+        // 1. VB_PROFILE env var
+        // 2. Virtualenv binding ($VIRTUAL_ENV/.vcli-profile)
+        // 3. User-level ~/.vcli/.env VB_PROFILE
+        let profile = Self::resolve_profile();
         Self::from_env_with_profile(profile.as_deref())
+    }
+
+    /// Resolve profile from env var, venv binding, or user-level config.
+    fn resolve_profile() -> Option<String> {
+        // 1. Process environment VB_PROFILE
+        if let Ok(v) = env::var("VB_PROFILE") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+
+        // 2. Virtualenv binding ($VIRTUAL_ENV/.vcli-profile)
+        if let Ok(venv) = env::var("VIRTUAL_ENV") {
+            if !venv.is_empty() {
+                let binding_path = std::path::PathBuf::from(&venv).join(".vcli-profile");
+                if let Ok(content) = std::fs::read_to_string(&binding_path) {
+                    for line in content.lines() {
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                            return Some(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. User-level ~/.vcli/.env VB_PROFILE
+        if let Some(home) = dirs::home_dir() {
+            let user_env = home.join(".vcli").join(".env");
+            if user_env.exists() {
+                if let Ok(content) = std::fs::read_to_string(&user_env) {
+                    for line in content.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.starts_with("VB_PROFILE=") {
+                            if let Some(value) = trimmed.strip_prefix("VB_PROFILE=") {
+                                let trimmed = value.trim();
+                                if !trimmed.is_empty() {
+                                    return Some(trimmed.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     pub fn from_env_with_profile(profile: Option<&str>) -> Result<Self> {

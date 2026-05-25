@@ -609,6 +609,121 @@ fn build_fetch_skill(list_expr: &str, fields: &[&str]) -> String {
     format!("mapcar(lambda((o) list({fields_str})) {list_expr})")
 }
 
+/// Read a file from the remote filesystem via SKILL's infile/gets channel.
+///
+/// This is the CORRECT way to read file contents in Virtuoso SKILL — NOT via
+/// `system("cat file")` or `run_shell_command`, which only return the system()
+/// status token ("t" for success) in the output, NOT the actual file content.
+///
+/// ## Why not `run_shell_command("tail file")`?
+///
+/// `run_shell_command` (SKILL `system()`) returns only the exit status in
+/// `.output`, not the stdout. On Unix, system() returns 0 for success, and
+/// the actual output goes to the parent process's stdout — invisible to the
+/// SKILL bridge.
+///
+/// ## The correct pattern
+///
+/// Use SKILL's `infile`/`gets` to read the file, which routes through the
+/// `execute_skill` return channel:
+///
+/// ```rust,ignore
+/// use virtuoso_cli::client::bridge::{skill_read_file, decode_skill_string};
+/// let skill = skill_read_file("/path/to/log.txt");
+/// let result = client.execute_skill(&skill, None)?;
+/// let content = decode_skill_string(&result.output);
+/// ```
+pub fn skill_read_file(path: &str) -> String {
+    let escaped = escape_skill_string(path);
+    format!(
+        r#"let((p line body)
+  p = infile("{escaped}")
+  body = ""
+  when(p
+    while(gets(line p) body = strcat(body line))
+    close(p))
+  body)"#
+    )
+}
+
+/// Decode a SKILL-returned string: strip outer quotes, unescape \\n and \\".
+///
+/// SKILL strings returned through execute_skill come wrapped in quotes with
+/// escaped characters (\\n for newline, \\" for quote, \\\\ for backslash).
+pub fn decode_skill_string(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
+        let inner = &trimmed[1..trimmed.len() - 1];
+        inner
+            .replace("\\n", "\n")
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\")
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Wait for a completion marker in a log file, polling until found or timeout.
+///
+/// This pattern is essential for operations that write files asynchronously
+/// (e.g., strmin GDS import) where the file exists from time 0 (stale content)
+/// and we must wait for the new content to be written.
+///
+/// ## Usage
+///
+/// ```rust,ignore
+/// use virtuoso_cli::client::bridge::poll_log_completion;
+/// let (fail_reason, completed) = poll_log_completion(
+///     client,
+///     "/path/to/strmIn.log",
+///     "XSTRM-234",  // completion marker
+///     600,          // timeout seconds
+///     3,            // poll interval seconds
+/// )?;
+/// if fail_reason.is_some() {
+///     // Handle error
+/// }
+/// if completed {
+///     // Safe to read bbox or verify results
+/// }
+/// ```
+#[allow(dead_code)]
+pub fn poll_log_completion(
+    client: &VirtuosoClient,
+    log_path: &str,
+    completion_marker: &str,
+    timeout_s: u64,
+    poll_interval_s: u64,
+) -> Result<(Option<String>, bool)> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_s);
+    let read_skill = skill_read_file(log_path);
+
+    loop {
+        let result = client.execute_skill_unchecked(&read_skill, None)?;
+        let content = decode_skill_string(&result.output);
+
+        // Check for failure markers
+        let fail_reason = if content.contains("ERROR") || content.contains("failed") {
+            Some("Log contains error indicators".to_string())
+        } else {
+            None
+        };
+
+        // Check for completion marker
+        let completed = content.contains(completion_marker);
+
+        if fail_reason.is_some() || completed {
+            return Ok((fail_reason, completed));
+        }
+
+        if std::time::Instant::now() >= deadline {
+            return Ok((Some("Timeout waiting for completion".to_string()), false));
+        }
+
+        std::thread::sleep(std::time::Duration::from_secs(poll_interval_s));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -708,5 +823,47 @@ mod tests {
         assert!(check_blocking_skill("1 + 1").is_none());
         assert!(check_blocking_skill("getVersion()").is_none());
         assert!(check_blocking_skill("maeGetSessions()").is_none());
+    }
+
+    #[test]
+    fn skill_read_file_generates_valid_skill() {
+        let skill = skill_read_file("/path/to/log.txt");
+        assert!(skill.contains("infile("));
+        assert!(skill.contains("gets(line p)"));
+        assert!(skill.contains("close(p)"));
+        // Path should be escaped (backslashes before /)
+        assert!(
+            skill.contains("\\/path\\/to\\/log.txt") || skill.contains("/path/to/log.txt"),
+            "Path should be escaped or present in skill: {}",
+            skill
+        );
+    }
+
+    #[test]
+    fn decode_skill_string_with_quotes() {
+        // SKILL returns strings wrapped in quotes
+        assert_eq!(decode_skill_string(r#""hello world""#), "hello world");
+    }
+
+    #[test]
+    fn decode_skill_string_with_escapes() {
+        assert_eq!(decode_skill_string(r#""line1\nline2""#), "line1\nline2");
+        assert_eq!(decode_skill_string(r#""say \"hi\"""#), "say \"hi\"");
+        assert_eq!(decode_skill_string(r#""path\\to\\file""#), "path\\to\\file");
+    }
+
+    #[test]
+    fn decode_skill_string_no_quotes() {
+        // Already unquoted
+        assert_eq!(decode_skill_string("plain text"), "plain text");
+    }
+
+    #[test]
+    fn decode_skill_string_mixed() {
+        // Multiple escape sequences
+        assert_eq!(
+            decode_skill_string(r#""first\nsecond\"third\\fourth""#),
+            "first\nsecond\"third\\fourth"
+        );
     }
 }
