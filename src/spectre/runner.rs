@@ -25,6 +25,9 @@ pub struct SpectreSimulator {
     pub remote_work_dir: Option<String>,
     pub keep_remote_files: bool,
     pub max_workers: u32,
+    /// Path to Cadence environment setup file (VB_CADENCE_CSHRC).
+    /// Source this before running spectre on remote SSH.
+    pub cadence_cshrc: Option<String>,
     sink: Arc<dyn JobEventSink>,
 }
 
@@ -109,6 +112,7 @@ impl SpectreSimulator {
             remote_work_dir: None,
             keep_remote_files: cfg.keep_remote_files,
             max_workers: cfg.spectre_max_workers,
+            cadence_cshrc: cfg.cadence_cshrc,
             sink: Arc::new(crate::streaming::NullSink),
         })
     }
@@ -116,6 +120,34 @@ impl SpectreSimulator {
     pub fn with_sink(mut self, sink: Arc<dyn JobEventSink>) -> Self {
         self.sink = sink;
         self
+    }
+
+    /// Build a command prefix that sources the Cadence environment.
+    /// Returns "" if no cshrc is configured, otherwise returns
+    /// "source /path/to/cshrc && " for csh or ". /path/to/cshrc && " for bash.
+    fn env_prefix(&self) -> String {
+        if let Some(ref cshrc) = self.cadence_cshrc {
+            // Try to detect shell type - default to csh for Cadence tools
+            if cshrc.ends_with(".csh") || cshrc.ends_with(".cshrc") {
+                format!("source {cshrc} && ")
+            } else {
+                format!(". {cshrc} && ")
+            }
+        } else {
+            String::new()
+        }
+    }
+
+    /// Run a command with Cadence environment sourced (for remote SSH).
+    fn run_with_env(
+        &self,
+        runner: &SSHRunner,
+        cmd: &str,
+        timeout: Option<u64>,
+    ) -> crate::error::Result<crate::models::RemoteTaskResult> {
+        let prefix = self.env_prefix();
+        let full_cmd = format!("{prefix}{cmd}");
+        runner.run_command(&full_cmd, timeout)
     }
 
     pub fn run_simulation(
@@ -132,11 +164,14 @@ impl SpectreSimulator {
 
     pub fn check_license(&self) -> Result<String> {
         if let Some(ref runner) = self.ssh_runner {
-            // Combine into one SSH round-trip to avoid repeated handshakes.
-            let cmd = "which spectre 2>/dev/null || echo 'not found'; \
+            // Build command with environment sourced
+            let check_cmd = "which spectre 2>/dev/null || echo 'not found'; \
                        spectre -W 2>/dev/null | head -1 || echo 'unknown'; \
                        lmstat -a 2>/dev/null | grep -i spectre | head -5 || echo 'lmstat not available'";
-            let result = runner.run_command(cmd, None)?;
+            // Use env_prefix for SSH commands to load Cadence environment
+            let prefix = self.env_prefix();
+            let full_cmd = format!("{prefix}{check_cmd}");
+            let result = runner.run_command(&full_cmd, None)?;
             Ok(result.stdout.trim().to_string())
         } else {
             let output = Command::new("sh")
@@ -224,18 +259,18 @@ impl SpectreSimulator {
         runner.run_command(&format!("mkdir -p {remote_dir}"), None)?;
         runner.upload_text(netlist, &format!("{remote_dir}/input.scs"))?;
 
-        // Build spectre command
+        // Build spectre command with Cadence environment sourced
         let extra = if self.spectre_args.is_empty() {
             String::new()
         } else {
             format!(" {}", self.spectre_args.join(" "))
         };
         // Source login profile for PATH + license env (non-interactive SSH lacks them).
-        // Covers bash (.bash_profile/.bashrc) and sh (.profile).
-        // Use VB_SPECTRE_CMD=<absolute path> if spectre is still not found.
+        // Use VB_CADENCE_CSHRC to source Cadence environment if configured.
+        let env_prefix = self.env_prefix();
         let spectre_cmd = format!(
             ". /etc/profile 2>/dev/null; . ~/.bash_profile 2>/dev/null; . ~/.bashrc 2>/dev/null; \
-             cd {remote_dir} && nohup {cmd} -64 input.scs +escchars +log spectre.out \
+             cd {remote_dir} && {env_prefix}nohup {cmd} -64 input.scs +escchars +log spectre.out \
              -format {fmt} -raw raw +lqtimeout 900 -maxw 5 -maxn {maxn} +logstatus{extra} \
              > /dev/null 2>&1 & echo $!",
             cmd = self.spectre_cmd,
@@ -488,7 +523,9 @@ impl SpectreSimulator {
             maxn = self.max_workers,
         );
 
-        let sim_cmd = format!("cd {remote_dir} && {spectre_cmd}");
+        // Build command with Cadence environment sourced for remote execution
+        let env_prefix = self.env_prefix();
+        let sim_cmd = format!("cd {remote_dir} && {env_prefix}{spectre_cmd}");
         let result = runner.run_command(&sim_cmd, Some(self.timeout * 2))?;
 
         // Check for read-in errors in remote output

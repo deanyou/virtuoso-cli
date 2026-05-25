@@ -445,6 +445,35 @@ pub fn get_output_value(name: &str, test_name: &str, corner: Option<&str>) -> Re
     }))
 }
 
+/// Get output value with results opened first (convenience method).
+///
+/// This combines open_results and get_output_value into a single SKILL call.
+/// Use this when reading output values from a specific history run.
+#[allow(dead_code)]
+pub fn get_output_value_from_history(
+    history: &str,
+    name: &str,
+    test_name: &str,
+    corner: Option<&str>,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+    // Use the combined method that opens results first
+    let skill = client
+        .maestro
+        .get_output_value_with_open(history, name, test_name, corner);
+    let r = client
+        .execute_skill(&skill, None)?
+        .ok_or_exec(&format!("get output '{name}' from history '{history}'"))?;
+    Ok(json!({
+        "status": "success",
+        "history": history,
+        "output_name": name,
+        "test_name": test_name,
+        "corner": corner,
+        "value": r.output_unquoted(),
+    }))
+}
+
 /// Get the spec pass/fail status for an output.
 pub fn get_spec_status(name: &str, test_name: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;

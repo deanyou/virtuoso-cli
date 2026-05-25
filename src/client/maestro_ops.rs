@@ -204,6 +204,14 @@ impl MaestroOps {
     }
 
     /// Get the value of a specific output for a specific test and corner.
+    ///
+    /// Note: This method does NOT call maeOpenResults first. You must call
+    /// open_results(history) before using this method to ensure the results
+    /// are accessible. Alternatively, use get_output_value_with_open() which
+    /// combines both operations.
+    ///
+    /// Similar to virtuoso-bridge-lite's fix for issue #81: maeGetOutputValue
+    /// should work directly without gating on maeExportOutputView return value.
     pub fn get_output_value(&self, name: &str, test_name: &str, corner: Option<&str>) -> String {
         let name = escape_skill_string(name);
         let test_name = escape_skill_string(test_name);
@@ -214,6 +222,39 @@ impl MaestroOps {
             }
             None => format!(r#"maeGetOutputValue("{name}" "{test_name}")"#),
         }
+    }
+
+    /// Get output value with results opened first.
+    ///
+    /// This is a convenience method that combines open_results and get_output_value.
+    /// Use this when you need to read output values from a specific history run.
+    ///
+    /// Returns a SKILL expression that:
+    /// 1. Opens the history results (ignores return value - virtuoso-bridge-lite #81 fix)
+    /// 2. Gets the output value
+    pub fn get_output_value_with_open(
+        &self,
+        history: &str,
+        name: &str,
+        test_name: &str,
+        corner: Option<&str>,
+    ) -> String {
+        let history = escape_skill_string(history);
+        let name = escape_skill_string(name);
+        let test_name = escape_skill_string(test_name);
+
+        // Build the get_output_value call
+        let get_value = match corner {
+            Some(c) => {
+                let c = escape_skill_string(c);
+                format!(r#"maeGetOutputValue("{name}" "{test_name}" ?cornerName "{c}")"#)
+            }
+            None => format!(r#"maeGetOutputValue("{name}" "{test_name}")"#),
+        };
+
+        // Combine: open results (ignore return), then get value
+        // Note: We don't gate on maeOpenResults return value (virtuoso-bridge-lite #81 fix)
+        format!(r#"(progn (maeOpenResults ?history "{history}") {get_value})"#)
     }
 
     /// Get the spec pass/fail status for an output.

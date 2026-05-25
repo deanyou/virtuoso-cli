@@ -24,6 +24,9 @@ pub struct Config {
     pub spectre_args: Vec<String>,
     /// Maximum parallel Spectre compute threads (VB_SPECTRE_MAX_WORKERS, default: 8)
     pub spectre_max_workers: u32,
+    /// Path to Cadence environment setup file (VB_CADENCE_CSHRC).
+    /// Used to load Spectre environment for remote SSH execution.
+    pub cadence_cshrc: Option<String>,
 }
 
 impl Config {
@@ -149,6 +152,7 @@ impl Config {
             spectre_max_workers: Self::env_with_profile("VB_SPECTRE_MAX_WORKERS", profile)
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(8),
+            cadence_cshrc: Self::env_with_profile("VB_CADENCE_CSHRC", profile),
         })
     }
 
