@@ -16,6 +16,7 @@ mod ocean;
 mod output;
 mod plugins;
 mod rpc;
+mod skill_finder;
 mod spectre;
 mod streaming;
 mod transaction;

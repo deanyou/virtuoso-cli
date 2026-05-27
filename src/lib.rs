@@ -16,6 +16,7 @@ pub mod plugins;
 pub mod profile;
 pub mod rpc;
 pub mod session;
+pub mod skill_finder;
 pub mod spectre;
 pub mod streaming;
 pub mod transaction;

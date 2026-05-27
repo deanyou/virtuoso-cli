@@ -16,6 +16,7 @@ mod ocean;
 mod output;
 mod plugins;
 mod rpc;
+mod skill_finder;
 mod spectre;
 mod streaming;
 #[cfg(test)]
@@ -344,6 +345,56 @@ enum SkillCmd {
         /// Read the SKILL expression from stdin instead of argv
         #[arg(long)]
         stdin: bool,
+    },
+
+    /// Search SKILL function names using Cadence SKILL Finder database
+    #[command(
+        long_about = "Search SKILL function names from the Cadence SKILL Finder database.\n\n\
+            The SKILL Finder database contains all public SKILL functions with their\n\
+            syntax signatures and one-line descriptions.\n\n\
+            Search modes:\n\
+            - fuzzy: Case-insensitive substring match (default)\n\
+            - prefix: Name starts with query\n\
+            - suffix: Name ends with query\n\
+            - exact: Exact name match\n\
+            - regex: Python regular expression match\n\n\
+            Examples:\n\
+            virtuoso skill find dbOpen\n\
+            virtuoso skill find dbOpen --mode prefix\n\
+            virtuoso skill find '^db.*' --mode regex --limit 20\n\n\
+            Data source: $IC/doc/finder/SKILL/*.fnd\n\
+            Set VB_SKILL_FINDER_DIR to override the default location.",
+        name = "find"
+    )]
+    Find {
+        /// Search string or pattern
+        query: String,
+
+        /// Search mode
+        #[arg(long, short, default_value = "fuzzy")]
+        mode: String,
+
+        /// Maximum number of results
+        #[arg(long, short, default_value = "50")]
+        limit: usize,
+    },
+
+    /// Get detailed More Info documentation for a SKILL function
+    #[command(
+        long_about = "Get detailed documentation for a specific SKILL function.\n\n\
+            Queries the Cadence More Info system via the Virtuoso bridge.\n\
+            Returns HTML content with full documentation including Description,\n\
+            Arguments, Returns, and Example sections.\n\n\
+            Examples:\n\
+            virtuoso skill info dbOpenCellView\n\
+            virtuoso skill info mfGetOption\n\n\
+            Note: Requires Virtuoso connection. The More Info system provides\n\
+            detailed HTML documentation indexed by function name.",
+        name = "info"
+    )]
+    Info {
+        /// SKILL function name
+        func: String,
     },
 }
 
@@ -1151,6 +1202,8 @@ fn dispatch_skill(cmd: SkillCmd) -> error::Result<serde_json::Value> {
         SkillCmd::Load { file } => commands::skill::load(&file),
         SkillCmd::Broadcast { code, timeout } => commands::skill::broadcast(&code, timeout),
         SkillCmd::Eval { code, stdin } => commands::skill::eval(code, stdin),
+        SkillCmd::Find { query, mode, limit } => commands::skill::find(&query, &mode, limit),
+        SkillCmd::Info { func } => commands::skill::info(&func),
     }
 }
 
