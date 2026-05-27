@@ -16,25 +16,28 @@
 //! }
 //! ```
 //!
-//! # Search Modes
+//! # Remote Cache
 //!
-//! - `Fuzzy`: Case-insensitive substring match (default)
-//! - `Prefix`: Name starts with query
-//! - `Suffix`: Name ends with query
-//! - `Exact`: Exact name match
-//! - `Regex`: Regular expression match
+//! For SSH remote scenarios, the SKILL Finder database is cached locally:
+//! - Cache path: `~/.cache/virtuoso_bridge/skill_finder/<host>/`
+//! - Use `sync_from_remote()` to download, or `load_or_sync()` for lazy sync
+//! - Use `--refresh` flag to force refresh the cache
+
+#![allow(dead_code)]
 
 mod parser;
 
-pub use parser::{parse_fnd_directory, parse_fnd_map, SkillEntry};
+pub use parser::{parse_fnd_directory, SkillEntry};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Search mode for SKILL Finder queries
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SearchMode {
     /// Case-insensitive substring match (default)
+    #[default]
     Fuzzy,
     /// Name starts with query
     Prefix,
@@ -44,12 +47,6 @@ pub enum SearchMode {
     Exact,
     /// Regular expression match
     Regex,
-}
-
-impl Default for SearchMode {
-    fn default() -> Self {
-        Self::Fuzzy
-    }
 }
 
 impl std::fmt::Display for SearchMode {
@@ -164,10 +161,7 @@ impl SKILLFinder {
     }
 
     fn exact_match(&self, query: &str) -> Vec<&SkillEntry> {
-        self.entries
-            .iter()
-            .filter(|e| e.name == query)
-            .collect()
+        self.entries.iter().filter(|e| e.name == query).collect()
     }
 
     fn prefix_match(&self, query: &str) -> Vec<&SkillEntry> {
@@ -209,10 +203,314 @@ impl SKILLFinder {
             return format!("No results for: {}", query);
         }
 
-        let header = format!("SKILL Finder — {} result(s) for '{}':\n", results.len(), query);
+        let header = format!(
+            "SKILL Finder — {} result(s) for '{}':\n",
+            results.len(),
+            query
+        );
         let lines: Vec<String> = results.iter().map(|e| e.format()).collect();
         header + &lines.join("\n")
     }
+}
+
+// =============================================================================
+// Cache Management
+// =============================================================================
+
+/// Get the cache directory for a host.
+/// Returns: `~/.cache/virtuoso_bridge/skill_finder/<host>/`
+pub fn cache_dir(host: &str) -> Option<PathBuf> {
+    dirs::cache_dir().map(|d| d.join("virtuoso_bridge").join("skill_finder").join(host))
+}
+
+/// Check if cache exists for a host
+pub fn cache_exists(host: &str) -> bool {
+    cache_dir(host)
+        .map(|d| d.exists() && d.is_dir())
+        .unwrap_or(false)
+}
+
+/// Get the number of cached files for a host
+pub fn cache_file_count(host: &str) -> usize {
+    cache_dir(host)
+        .and_then(|d| std::fs::read_dir(d).ok())
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().is_some_and(|ext| ext == "fnd"))
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+/// Sync SKILL Finder database from a remote server via SSH.
+///
+/// Downloads all `.fnd` files from the remote `doc/finder/SKILL/` directory
+/// to the local cache.
+///
+/// # Arguments
+///
+/// * `host` - Remote hostname
+/// * `ssh_target` - SSH target string (e.g., "user@host" or "host")
+/// * `cadence_cshrc` - Path to Cadence cshrc file (for loading environment)
+/// * `progress` - Optional callback for progress updates
+///
+/// # Returns
+///
+/// Number of files synced, or error
+pub fn sync_from_remote<F>(
+    host: &str,
+    ssh_target: &str,
+    cadence_cshrc: Option<&str>,
+    progress: Option<F>,
+) -> std::io::Result<usize>
+where
+    F: Fn(&str) + Copy,
+{
+    use std::process::Command;
+
+    let cache = cache_dir(host).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Could not determine cache directory",
+        )
+    })?;
+
+    // Create cache directory
+    std::fs::create_dir_all(&cache)?;
+
+    // Find remote SKILL Finder directory
+    let remote_dir = find_remote_skill_finder_dir(ssh_target, cadence_cshrc)?;
+
+    if let Some(p) = progress {
+        p(&format!("Found remote SKILL Finder at: {}", remote_dir));
+    }
+
+    // List remote .fnd files
+    let list_script = format!(
+        r#"find {} -name "*.fnd" -type f 2>/dev/null | head -200"#,
+        remote_dir
+    );
+
+    let output = Command::new("ssh")
+        .args(["-o", "BatchMode=yes"])
+        .args(["-o", "ConnectTimeout=30"])
+        .arg(ssh_target)
+        .arg(&list_script)
+        .output()
+        .map_err(|e| std::io::Error::other(format!("SSH failed: {}", e)))?;
+
+    if !output.status.success() {
+        return Err(std::io::Error::other(format!(
+            "Failed to list remote files: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    let files: Vec<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if let Some(p) = progress {
+        p(&format!("Found {} .fnd files on remote", files.len()));
+    }
+
+    // Download each file
+    let mut synced = 0;
+    for remote_file in &files {
+        let file_name = std::path::Path::new(remote_file)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown.fnd");
+
+        let local_path = cache.join(file_name);
+
+        // Build SCP command
+        let scp_result = Command::new("scp")
+            .args(["-o", "BatchMode=yes"])
+            .args(["-o", "ConnectTimeout=30"])
+            .arg(format!("{}:{}", ssh_target, remote_file))
+            .arg(&local_path)
+            .output();
+
+        match scp_result {
+            Ok(out) if out.status.success() => {
+                synced += 1;
+                if let Some(p) = progress {
+                    p(&format!("Downloaded: {}", file_name));
+                }
+            }
+            Ok(out) => {
+                tracing::warn!(
+                    "Failed to download {}: {}",
+                    file_name,
+                    String::from_utf8_lossy(&out.stderr)
+                );
+            }
+            Err(e) => {
+                tracing::warn!("SCP error for {}: {}", file_name, e);
+            }
+        }
+    }
+
+    if let Some(p) = progress {
+        p(&format!("Cache sync complete: {} files", synced));
+    }
+
+    Ok(synced)
+}
+
+/// Find the SKILL Finder directory on a remote server via SSH.
+fn find_remote_skill_finder_dir(
+    ssh_target: &str,
+    cadence_cshrc: Option<&str>,
+) -> std::io::Result<String> {
+    use std::process::Command;
+
+    // Build environment setup script
+    let env_setup = if let Some(cshrc) = cadence_cshrc {
+        let escaped = cshrc.replace('\'', "'\"'\"'\"'\"'");
+        format!(
+            r#"eval "$(csh -c 'source {}; env' 2>/dev/null | grep -E '^(PATH|LM_LICENSE_FILE|CDS)=' | sed 's/^/export /')" 2>/dev/null"#,
+            escaped
+        )
+    } else {
+        String::new()
+    };
+
+    // Find virtuoso binary
+    let find_virtuoso = format!(
+        r#"{}
+which spectre 2>/dev/null || which virtuoso 2>/dev/null || echo NOTFOUND"#,
+        env_setup
+    );
+
+    let output = Command::new("ssh")
+        .args(["-o", "BatchMode=yes"])
+        .args(["-o", "ConnectTimeout=30"])
+        .arg(ssh_target)
+        .arg(&find_virtuoso)
+        .output()
+        .map_err(|e| std::io::Error::other(format!("SSH failed: {}", e)))?;
+
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    if path.is_empty() || path == "NOTFOUND" {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Could not find virtuoso/spectre on remote server. Ensure Cadence is in PATH or set VB_CADENCE_CSHRC.",
+        ));
+    }
+
+    // Walk up from virtuoso to find doc/finder/SKILL
+    let walk_script = format!(
+        r#"p="{}"
+while [ -n "$p" ] && [ "$p" != "/" ]; do
+  if [ -d "$p/doc/finder/SKILL" ]; then echo "$p/doc/finder/SKILL"; exit 0; fi
+  p=$(dirname "$p")
+done
+exit 1"#,
+        path.replace('\'', "'\"'\"'\"'\"'")
+    );
+
+    let output2 = Command::new("ssh")
+        .args(["-o", "BatchMode=yes"])
+        .args(["-o", "ConnectTimeout=30"])
+        .arg(ssh_target)
+        .arg(&walk_script)
+        .output()
+        .map_err(|e| std::io::Error::other(format!("SSH failed: {}", e)))?;
+
+    let finder_path = String::from_utf8_lossy(&output2.stdout).trim().to_string();
+
+    if finder_path.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "SKILL Finder not found near {}. Is Cadence installed correctly?",
+                path
+            ),
+        ));
+    }
+
+    Ok(finder_path)
+}
+
+/// Load from cache, or sync if cache doesn't exist.
+///
+/// Returns the path that was loaded from.
+pub fn load_or_sync(
+    finder: &mut SKILLFinder,
+    host: &str,
+    ssh_target: &str,
+    cadence_cshrc: Option<&str>,
+) -> std::io::Result<PathBuf> {
+    // Try cache first
+    if let Some(cache) = cache_dir(host) {
+        if cache.exists() {
+            let count = cache_file_count(host);
+            if count > 0 {
+                finder.load(&cache)?;
+                return Ok(cache);
+            }
+        }
+    }
+
+    // Sync from remote with empty progress function
+    let _ = sync_from_remote(host, ssh_target, cadence_cshrc, Some(|_: &str| ()))?;
+
+    // Load from cache
+    let cache = cache_dir(host).ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "Cache directory not found")
+    })?;
+
+    finder.load(&cache)?;
+    Ok(cache)
+}
+
+/// Clear cache for a host
+pub fn clear_cache(host: &str) -> std::io::Result<()> {
+    if let Some(cache) = cache_dir(host) {
+        if cache.exists() {
+            std::fs::remove_dir_all(&cache)?;
+        }
+    }
+    Ok(())
+}
+
+/// Get cache info for a host
+pub fn cache_info(host: &str) -> Option<CacheInfo> {
+    let cache = cache_dir(host)?;
+    if !cache.exists() {
+        return None;
+    }
+
+    let file_count = std::fs::read_dir(&cache)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "fnd"))
+        .count();
+
+    let modified = std::fs::metadata(&cache).ok()?.modified().ok();
+
+    Some(CacheInfo {
+        path: cache,
+        file_count,
+        modified,
+    })
+}
+
+/// Information about a cached SKILL Finder database
+#[derive(Debug)]
+pub struct CacheInfo {
+    /// Path to cache directory
+    pub path: PathBuf,
+    /// Number of .fnd files
+    pub file_count: usize,
+    /// Last modified time
+    pub modified: Option<std::time::SystemTime>,
 }
 
 /// Search options for SKILL Finder
@@ -252,5 +550,25 @@ mod tests {
         let finder = SKILLFinder::new();
         assert!(!finder.is_loaded());
         assert!(finder.is_empty());
+    }
+
+    #[test]
+    fn test_cache_dir_contains_host() {
+        let cache = cache_dir("eda-server");
+        assert!(cache.is_some());
+        let path = cache.unwrap();
+        assert!(path.to_string_lossy().contains("eda-server"));
+        assert!(path.to_string_lossy().contains("skill_finder"));
+    }
+
+    #[test]
+    fn test_cache_exists_nonexistent() {
+        // Random host that doesn't exist should return false
+        assert!(!cache_exists("nonexistent-host-xyz-12345"));
+    }
+
+    #[test]
+    fn test_cache_info_nonexistent() {
+        assert!(cache_info("nonexistent-host-xyz-12345").is_none());
     }
 }

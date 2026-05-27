@@ -4,7 +4,6 @@
 //! Each entry has three fields: name, syntax, and description.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::Path;
 use tracing::{debug, warn};
 
@@ -26,7 +25,7 @@ impl SkillEntry {
     /// Format entry for human-readable CLI output
     pub fn format(&self) -> String {
         let desc = self.description.trim_matches('"').trim();
-        let syntax = collapse_whitespace(&self.syntax.trim_matches('"'));
+        let syntax = collapse_whitespace(self.syntax.trim_matches('"'));
         let source = self
             .source_file
             .as_ref()
@@ -58,7 +57,11 @@ fn parse_fnd_content(content: &str, source_file: &str) -> Vec<SkillEntry> {
         }
 
         // Remove empty lines within the block
-        let lines: Vec<&str> = lines.iter().map(|l| *l).filter(|l| !l.trim().is_empty()).collect();
+        let lines: Vec<&str> = lines
+            .iter()
+            .copied()
+            .filter(|l| !l.trim().is_empty())
+            .collect();
         if lines.len() < 3 {
             continue;
         }
@@ -110,7 +113,7 @@ pub fn parse_fnd_directory(dir: &Path) -> Vec<SkillEntry> {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().map_or(false, |ext| ext == "fnd") {
+        if path.extension().is_some_and(|ext| ext == "fnd") {
             match std::fs::read_to_string(&path) {
                 Ok(content) => {
                     let file_name = path
@@ -119,11 +122,7 @@ pub fn parse_fnd_directory(dir: &Path) -> Vec<SkillEntry> {
                         .unwrap_or("unknown")
                         .to_string();
                     let entries = parse_fnd_content(&content, &file_name);
-                    debug!(
-                        "Parsed {} entries from {}",
-                        entries.len(),
-                        path.display()
-                    );
+                    debug!("Parsed {} entries from {}", entries.len(), path.display());
                     all_entries.extend(entries);
                 }
                 Err(e) => {
@@ -134,16 +133,6 @@ pub fn parse_fnd_directory(dir: &Path) -> Vec<SkillEntry> {
     }
 
     all_entries
-}
-
-/// Alternative .fnd format: one entry per file with name@syntax@description
-/// Returns a map of name -> SkillEntry
-pub fn parse_fnd_map(dir: &Path) -> HashMap<String, SkillEntry> {
-    let entries = parse_fnd_directory(dir);
-    entries
-        .into_iter()
-        .map(|e| (e.name.clone(), e))
-        .collect()
 }
 
 #[cfg(test)]

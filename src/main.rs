@@ -396,6 +396,51 @@ enum SkillCmd {
         /// SKILL function name
         func: String,
     },
+
+    /// Sync SKILL Finder database from remote server to local cache
+    #[command(
+        long_about = "Download the SKILL Finder database from a remote server.\n\n\
+            Downloads all .fnd files from the remote `doc/finder/SKILL/` directory\n\
+            to the local cache for faster subsequent queries.\n\n\
+            Cache location: ~/.cache/virtuoso_bridge/skill_finder/<host>/\n\n\
+            Examples:\n\
+            virtuoso skill sync\n\
+            virtuoso skill sync --host eda-server\n\
+            virtuoso skill sync --host eda-server --cshrc /path/to/cshrc",
+        name = "sync"
+    )]
+    Sync {
+        /// Remote host (uses VB_HOST or profile remote_host if not specified)
+        #[arg(long)]
+        host: Option<String>,
+
+        /// Path to Cadence cshrc file (uses VB_CADENCE_CSHRC if not specified)
+        #[arg(long)]
+        cshrc: Option<String>,
+
+        /// Verbose output
+        #[arg(long, short)]
+        verbose: bool,
+    },
+
+    /// Show cache status for SKILL Finder
+    #[command(
+        long_about = "Show information about the local SKILL Finder cache.\n\n\
+            Displays cache location, number of cached files, and last modified time.\n\n\
+            Examples:\n\
+            virtuoso skill cache\n\
+            virtuoso skill cache --host eda-server",
+        name = "cache"
+    )]
+    Cache {
+        /// Remote host (uses VB_HOST or profile remote_host if not specified)
+        #[arg(long)]
+        host: Option<String>,
+
+        /// Clear the cache
+        #[arg(long, short)]
+        clear: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1202,8 +1247,14 @@ fn dispatch_skill(cmd: SkillCmd) -> error::Result<serde_json::Value> {
         SkillCmd::Load { file } => commands::skill::load(&file),
         SkillCmd::Broadcast { code, timeout } => commands::skill::broadcast(&code, timeout),
         SkillCmd::Eval { code, stdin } => commands::skill::eval(code, stdin),
-        SkillCmd::Find { query, mode, limit } => commands::skill::find(&query, &mode, limit),
+        SkillCmd::Find { query, mode, limit } => commands::skill::find(&query, &mode, limit, false),
         SkillCmd::Info { func } => commands::skill::info(&func),
+        SkillCmd::Sync {
+            host,
+            cshrc,
+            verbose,
+        } => commands::skill::sync_cache(host.as_deref(), cshrc.as_deref(), verbose),
+        SkillCmd::Cache { host, clear } => commands::skill::show_cache(host.as_deref(), clear),
     }
 }
 

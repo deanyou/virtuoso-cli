@@ -2,7 +2,7 @@ use crate::client::bridge::VirtuosoClient;
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
 use crate::models::SessionInfo;
-use crate::skill_finder::{SearchMode, SKILLFinder};
+use crate::skill_finder::{SKILLFinder, SearchMode};
 use serde_json::{json, Value};
 
 pub fn exec(code: &str, timeout: u64, readonly: bool) -> Result<Value> {
@@ -194,19 +194,32 @@ pub fn eval(code: Option<String>, stdin: bool) -> Result<Value> {
 /// * `query` - Search string
 /// * `mode` - Search mode: fuzzy (default), prefix, suffix, exact, regex
 /// * `limit` - Maximum results (default: 50)
-pub fn find(query: &str, mode: &str, limit: usize) -> Result<Value> {
+pub fn find(query: &str, mode: &str, limit: usize, refresh: bool) -> Result<Value> {
     let search_mode: SearchMode = mode.parse().unwrap_or(SearchMode::Fuzzy);
     let cfg = Config::from_env()?;
 
-    // Try to find the SKILL Finder directory
-    let finder_dir = find_skill_finder_dir(&cfg)?;
-
     let mut finder = SKILLFinder::new();
 
-    if let Some(dir) = finder_dir {
-        finder
-            .load(&dir)
-            .map_err(|e| VirtuosoError::Config(format!("failed to load SKILL Finder: {}", e)))?;
+    if cfg.is_remote() {
+        // Remote mode: use cache or sync
+        let host = cfg.remote_host.clone().unwrap_or_default();
+        let target = cfg.ssh_target();
+        let cshrc = cfg.cadence_cshrc.as_deref();
+
+        if refresh {
+            // Force refresh: clear cache first, then sync
+            let _ = crate::skill_finder::clear_cache(&host);
+        }
+
+        let _ = crate::skill_finder::load_or_sync(&mut finder, &host, &target, cshrc)?;
+    } else {
+        // Local mode: find from local Cadence installation
+        let finder_dir = find_skill_finder_dir(&cfg)?;
+        if let Some(dir) = finder_dir {
+            finder.load(&dir).map_err(|e| {
+                VirtuosoError::Config(format!("failed to load SKILL Finder: {}", e))
+            })?;
+        }
     }
 
     let results: Vec<_> = finder
@@ -235,9 +248,7 @@ pub fn find(query: &str, mode: &str, limit: usize) -> Result<Value> {
 /// This queries the Cadence More Info system via the Virtuoso bridge.
 pub fn info(func_name: &str) -> Result<Value> {
     if func_name.is_empty() {
-        return Err(VirtuosoError::Config(
-            "function name is required".into(),
-        ));
+        return Err(VirtuosoError::Config("function name is required".into()));
     }
 
     let client = VirtuosoClient::from_env()?;
@@ -250,8 +261,7 @@ pub fn info(func_name: &str) -> Result<Value> {
     if(result then result else nil)
   )
 )"#,
-        "$象牙/doc/api_more_info/api_more_info.html",
-        func_name
+        "$象牙/doc/api_more_info/api_more_info.html", func_name
     );
 
     let result = client.execute_skill(&skill_code, None)?;
@@ -296,11 +306,10 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
 
     // 2. For local, try to discover from spectre path
     if !cfg.is_remote() {
-        if let Ok(spectre_path) = std::process::Command::new("which")
-            .arg("spectre")
-            .output()
-        {
-            let path = String::from_utf8_lossy(&spectre_path.stdout).trim().to_string();
+        if let Ok(spectre_path) = std::process::Command::new("which").arg("spectre").output() {
+            let path = String::from_utf8_lossy(&spectre_path.stdout)
+                .trim()
+                .to_string();
             if !path.is_empty() && path != "spectre" {
                 let ic_dir = std::path::Path::new(&path)
                     .parent()
@@ -321,11 +330,9 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
     if cfg.is_remote() {
         // Try to find via SSH using the cadence cshrc
         if let Some(ref cshrc) = cfg.cadence_cshrc {
-            if let Ok(discovered) = discover_skill_finder_remote(&cfg.ssh_target(), cshrc) {
-                if let Some(path) = discovered {
-                    tracing::debug!("Discovered SKILL Finder on remote: {}", path.display());
-                    return Ok(Some(path));
-                }
+            if let Ok(Some(path)) = discover_skill_finder_remote(&cfg.ssh_target(), cshrc) {
+                tracing::debug!("Discovered SKILL Finder on remote: {}", path.display());
+                return Ok(Some(path));
             }
         }
     }
@@ -389,5 +396,90 @@ exit 1"#,
         Ok(None)
     } else {
         Ok(Some(std::path::PathBuf::from(stdout2)))
+    }
+}
+
+/// Sync SKILL Finder cache from remote server.
+pub fn sync_cache(host: Option<&str>, cshrc: Option<&str>, verbose: bool) -> Result<Value> {
+    let cfg = Config::from_env()?;
+    let target_host = host
+        .map(String::from)
+        .or(cfg.remote_host.clone())
+        .ok_or_else(|| VirtuosoError::Config("Remote host required for sync".into()))?;
+
+    let target = cfg.ssh_target();
+    let target_cshrc = cshrc.map(String::from).or(cfg.cadence_cshrc);
+    let target_cshrc_ref = target_cshrc.as_deref();
+
+    let old_count = crate::skill_finder::cache_file_count(&target_host);
+
+    // Sync with or without progress
+    let new_count = if verbose {
+        fn print_progress(msg: &str) {
+            eprintln!("{}", msg);
+        }
+        crate::skill_finder::sync_from_remote(
+            &target_host,
+            &target,
+            target_cshrc_ref,
+            Some(print_progress),
+        )
+        .map_err(|e| VirtuosoError::Config(e.to_string()))?
+    } else {
+        fn noop(_: &str) {}
+        crate::skill_finder::sync_from_remote(&target_host, &target, target_cshrc_ref, Some(noop))
+            .map_err(|e| VirtuosoError::Config(e.to_string()))?
+    };
+
+    let cache_path = crate::skill_finder::cache_dir(&target_host)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    Ok(json!({
+        "host": target_host,
+        "cache_path": cache_path,
+        "old_file_count": old_count,
+        "new_file_count": new_count,
+        "synced": new_count > 0,
+    }))
+}
+
+/// Show or clear SKILL Finder cache.
+pub fn show_cache(host: Option<&str>, clear: bool) -> Result<Value> {
+    let cfg = Config::from_env()?;
+    let target_host = host
+        .map(String::from)
+        .or(cfg.remote_host.clone())
+        .unwrap_or_else(|| "default".to_string());
+
+    if clear {
+        crate::skill_finder::clear_cache(&target_host)
+            .map_err(|e| VirtuosoError::Config(e.to_string()))?;
+        return Ok(json!({
+            "host": target_host,
+            "cleared": true,
+            "message": format!("Cache cleared for {}", target_host),
+        }));
+    }
+
+    // Show cache info
+    if let Some(info) = crate::skill_finder::cache_info(&target_host) {
+        Ok(json!({
+            "host": target_host,
+            "exists": true,
+            "path": info.path.to_string_lossy(),
+            "file_count": info.file_count,
+            "modified": info.modified.map(|t| {
+                chrono::DateTime::<chrono::Utc>::from(t)
+                    .format("%Y-%m-%d %H:%M:%S UTC")
+                    .to_string()
+            }),
+        }))
+    } else {
+        Ok(json!({
+            "host": target_host,
+            "exists": false,
+            "message": format!("No cache found for {}. Use 'vcli skill sync' to download.", target_host),
+        }))
     }
 }

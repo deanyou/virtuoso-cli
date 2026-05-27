@@ -145,9 +145,7 @@ impl SpectreSimulator {
     /// Get the effective Spectre command to execute.
     /// Prefers spectre_bin (absolute path) over spectre_cmd (command name).
     fn spectre_command(&self) -> &str {
-        self.spectre_bin
-            .as_deref()
-            .unwrap_or(&self.spectre_cmd)
+        self.spectre_bin.as_deref().unwrap_or(&self.spectre_cmd)
     }
 
     /// Run a command with Cadence environment sourced (for remote SSH).
@@ -190,7 +188,10 @@ impl SpectreSimulator {
             let result = runner.run_command(&full_cmd, None)?;
             Ok(result.stdout.trim().to_string())
         } else {
-            let cmd = format!("which {} 2>/dev/null && {} -W 2>/dev/null | head -1", spectre, spectre);
+            let cmd = format!(
+                "which {} 2>/dev/null && {} -W 2>/dev/null | head -1",
+                spectre, spectre
+            );
             let output = Command::new("sh")
                 .arg("-c")
                 .arg(&cmd)
