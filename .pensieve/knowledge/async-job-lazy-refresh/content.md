@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Async job status: lazy refresh, not monitor threads
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # Async job status: lazy refresh, not monitor threads
 
 ## Source

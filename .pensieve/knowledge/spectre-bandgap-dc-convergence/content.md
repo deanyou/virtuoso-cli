@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Spectre Bandgap DC Convergence: homotopy=all for Multi-Stable Circuits
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "spectre"]
+---
+
 # Spectre Bandgap DC Convergence: homotopy=all for Multi-Stable Circuits
 
 ## Source

@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: SMIC 0.13µm mmRF: CDF Terminal Order vs Spectre Order
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "spectre"]
+---
+
 # SMIC 0.13µm mmRF: CDF Terminal Order vs Spectre Order
 
 ## Source

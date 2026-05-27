@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: SMIC rhrpo_3t_ckt PCells: Missing Terminal Connections in Ocean-Generated Netlist
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "ocean"]
+---
+
 # SMIC rhrpo_3t_ckt PCells: Missing Terminal Connections in Ocean-Generated Netlist
 
 ## Source

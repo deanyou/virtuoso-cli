@@ -1,3 +1,13 @@
+---
+id: 2026-05-07-async-deferred
+type: decision
+title: Async Runtime Deferred — Use std::thread::scope for Concurrency
+status: active
+created: 2026-05-07
+updated: 2026-05-27
+tags: ["decision"]
+---
+
 # Async Runtime Deferred — Use std::thread::scope for Concurrency
 
 ## One-line Conclusion

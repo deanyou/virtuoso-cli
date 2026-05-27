@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Cadence Virtuoso: Library Not Registered in Session
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # Cadence Virtuoso: Library Not Registered in Session
 
 ## Source

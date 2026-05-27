@@ -1,3 +1,13 @@
+---
+id: 2026-04-20-defer-version-branches-until-api-diverges
+type: decision
+title: Defer version-specific code branches until API actually diverges
+status: active
+created: 2026-04-20
+updated: 2026-05-27
+tags: ["decision"]
+---
+
 # Defer version-specific code branches until API actually diverges
 
 ## One-line Conclusion

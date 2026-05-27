@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: virtuoso-daemon Requires `--features daemon` for cargo install
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # virtuoso-daemon Requires `--features daemon` for cargo install
 
 ## Source

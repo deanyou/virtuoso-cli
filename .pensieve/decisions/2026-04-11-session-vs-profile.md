@@ -1,3 +1,13 @@
+---
+id: 2026-04-11-session-vs-profile
+type: decision
+title: Session vs Profile: Two-Layer Connection Addressing
+status: active
+created: 2026-04-11
+updated: 2026-05-27
+tags: ["decision"]
+---
+
 # Session vs Profile: Two-Layer Connection Addressing
 
 ## Decision

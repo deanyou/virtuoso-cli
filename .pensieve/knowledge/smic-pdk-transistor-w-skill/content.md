@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: SMIC PDK Transistor Width via SKILL: CDF Chain & Working Path
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "skill"]
+---
+
 # SMIC PDK Transistor Width via SKILL: CDF Chain & Working Path
 
 ## Source

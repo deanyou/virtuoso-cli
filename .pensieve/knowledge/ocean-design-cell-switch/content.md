@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Ocean: Switching Target Cell Requires Explicit design() Call
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "ocean"]
+---
+
 # Ocean: Switching Target Cell Requires Explicit design() Call
 
 ## Source

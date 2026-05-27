@@ -1,3 +1,13 @@
+---
+id: 2026-04-19-llm-for-intermittent-netlist-repair
+type: decision
+title: LLM-Assisted Inline Repair for Intermittent Netlist Issues
+status: active
+created: 2026-04-19
+updated: 2026-05-27
+tags: ["decision"]
+---
+
 # LLM-Assisted Inline Repair for Intermittent Netlist Issues
 
 ## One-line Conclusion

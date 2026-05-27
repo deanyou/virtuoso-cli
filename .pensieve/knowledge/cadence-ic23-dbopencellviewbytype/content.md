@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Cadence IC23: dbOpenCellViewByType API and Open-Mode Behavior
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # Cadence IC23: dbOpenCellViewByType API and Open-Mode Behavior
 
 ## Source

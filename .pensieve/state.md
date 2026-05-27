@@ -1,8 +1,8 @@
 # Pensieve Project State
 
 ## Lifecycle State
-- Last Event: self-improve
-- Last Note: multi-session concurrency: broadcast + subagent patterns, async deferred to std::thread::scope
+- Last Event: doctor
+- Last Note: doctor summary: status=FAIL, must_fix=17, should_fix=2, info=50, next=self-improve
 
 ## Project Paths
 - Project Root: `/home/meow/git/virtuoso-cli`

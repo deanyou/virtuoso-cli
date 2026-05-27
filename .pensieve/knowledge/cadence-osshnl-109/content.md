@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Cadence OSSHNL-109: Schematic Modified Since Last Extraction
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # Cadence OSSHNL-109: Schematic Modified Since Last Extraction
 
 ## Source

@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Spectre CMI-2116: ADE Netlist MOSFET Terminals Missing
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "spectre"]
+---
+
 # Spectre CMI-2116: ADE Netlist MOSFET Terminals Missing
 
 ## Source

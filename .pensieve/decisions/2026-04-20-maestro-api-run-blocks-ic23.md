@@ -1,3 +1,13 @@
+---
+id: 2026-04-20-maestro-api-run-blocks-ic23
+type: decision
+title: Maestro 仿真触发 API 在 IC23.1 上阻塞 bridge
+status: active
+created: 2026-04-20
+updated: 2026-05-27
+tags: ["decision", "maestro"]
+---
+
 # Maestro 仿真触发 API 在 IC23.1 上阻塞 bridge
 
 ## One-line Conclusion

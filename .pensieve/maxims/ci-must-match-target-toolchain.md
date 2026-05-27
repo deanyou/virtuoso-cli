@@ -1,3 +1,13 @@
+---
+id: ci-must-match-target-toolchain
+type: maxim
+title: CI Must Match Target Toolchain
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["maxim"]
+---
+
 # CI Must Match Target Toolchain
 
 ## One-line Conclusion

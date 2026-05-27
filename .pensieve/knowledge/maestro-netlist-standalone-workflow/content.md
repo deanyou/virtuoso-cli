@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Maestro Netlist → Standalone Spectre Workflow（标准 CMOS n12/p12）
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "maestro", "spectre"]
+---
+
 # Maestro Netlist → Standalone Spectre Workflow（标准 CMOS n12/p12）
 
 ## Source

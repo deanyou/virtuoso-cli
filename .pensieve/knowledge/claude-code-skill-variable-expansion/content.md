@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Claude Code Skill Body: Variable Expansion is Global
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "skill"]
+---
+
 # Claude Code Skill Body: Variable Expansion is Global
 
 ## Source

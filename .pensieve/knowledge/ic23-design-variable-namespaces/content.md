@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: IC23 Design Variable Namespaces：两层架构
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # IC23 Design Variable Namespaces：两层架构
 
 ## Source

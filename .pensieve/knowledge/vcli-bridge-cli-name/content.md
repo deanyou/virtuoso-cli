@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: vcli is the Bridge CLI — `virtuoso` in PATH is Cadence's Application Binary
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # vcli is the Bridge CLI — `virtuoso` in PATH is Cadence's Application Binary
 
 ## Source

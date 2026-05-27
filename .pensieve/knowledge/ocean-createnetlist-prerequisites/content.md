@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Ocean: createNetlist Prerequisites for a Complete Netlist
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "ocean"]
+---
+
 # Ocean: createNetlist Prerequisites for a Complete Netlist
 
 ## Source

@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Spectre Model Path: ADE OA Indirection vs Direct Invocation
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "spectre"]
+---
+
 # Spectre Model Path: ADE OA Indirection vs Direct Invocation
 
 ## Source

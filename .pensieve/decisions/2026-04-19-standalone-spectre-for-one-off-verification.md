@@ -1,3 +1,13 @@
+---
+id: 2026-04-19-standalone-spectre-for-one-off-verification
+type: decision
+title: Standalone Spectre for One-Off Circuit Verification
+status: active
+created: 2026-04-19
+updated: 2026-05-27
+tags: ["decision", "spectre"]
+---
+
 # Standalone Spectre for One-Off Circuit Verification
 
 ## One-line Conclusion

@@ -1,3 +1,13 @@
+---
+id: test-with-ci-toolchain-before-push
+type: maxim
+title: Test With CI Toolchain Before Push
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["maxim"]
+---
+
 # Test With CI Toolchain Before Push
 
 ## One-line Conclusion

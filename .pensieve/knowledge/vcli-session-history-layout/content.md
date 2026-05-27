@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: vcli Session History — File Layout and Test Pollution
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # vcli Session History — File Layout and Test Pollution
 
 ## Source

@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Verilog-A `bound_step()` Unsupported in SPECTRE231 / IC23.1
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge", "spectre"]
+---
+
 # Verilog-A `bound_step()` Unsupported in SPECTRE231 / IC23.1
 
 ## Source

@@ -1,3 +1,13 @@
+---
+id: 2026-04-19-createnetlist-cmi2116-todo
+type: decision
+title: TODO: createNetlist 路径 CMI-2116 问题
+status: active
+created: 2026-04-19
+updated: 2026-05-27
+tags: ["decision"]
+---
+
 # TODO: createNetlist 路径 CMI-2116 问题
 
 ## 状态

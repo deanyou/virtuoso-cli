@@ -1,3 +1,13 @@
+---
+id: 2026-04-19-virtuoso-bridge-lite-adoption
+type: decision
+title: virtuoso-bridge-lite 借鉴范围决策
+status: active
+created: 2026-04-19
+updated: 2026-05-27
+tags: ["decision"]
+---
+
 # virtuoso-bridge-lite 借鉴范围决策
 
 ## One-line Conclusion

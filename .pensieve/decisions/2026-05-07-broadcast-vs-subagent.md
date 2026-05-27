@@ -1,3 +1,13 @@
+---
+id: 2026-05-07-broadcast-vs-subagent
+type: decision
+title: Broadcast vs Subagent for Multi-Session Operations
+status: active
+created: 2026-05-07
+updated: 2026-05-27
+tags: ["decision"]
+---
+
 # Broadcast vs Subagent for Multi-Session Operations
 
 ## One-line Conclusion

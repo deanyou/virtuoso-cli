@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: Rust: bin crate `#![allow]` is separate from lib crate
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # Rust: bin crate `#![allow]` is separate from lib crate
 
 ## Source
