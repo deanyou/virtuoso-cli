@@ -27,6 +27,10 @@ pub struct Config {
     /// Path to Cadence environment setup file (VB_CADENCE_CSHRC).
     /// Used to load Spectre environment for remote SSH execution.
     pub cadence_cshrc: Option<String>,
+    /// Absolute path to Spectre binary (VB_SPECTRE_BIN).
+    /// When set, this path is used directly instead of relying on PATH.
+    /// Useful when Spectre is not in PATH or multiple versions exist.
+    pub spectre_bin: Option<String>,
 }
 
 impl Config {
@@ -153,6 +157,7 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(8),
             cadence_cshrc: Self::env_with_profile("VB_CADENCE_CSHRC", profile),
+            spectre_bin: Self::env_with_profile("VB_SPECTRE_BIN", profile),
         })
     }
 

@@ -43,6 +43,7 @@ mod config_tests {
             spectre_args: vec![],
             spectre_max_workers: 8,
             cadence_cshrc: None,
+            spectre_bin: None,
         }
     }
 

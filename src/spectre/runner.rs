@@ -28,6 +28,9 @@ pub struct SpectreSimulator {
     /// Path to Cadence environment setup file (VB_CADENCE_CSHRC).
     /// Source this before running spectre on remote SSH.
     pub cadence_cshrc: Option<String>,
+    /// Absolute path to Spectre binary (VB_SPECTRE_BIN).
+    /// When set, this path is used directly instead of relying on PATH.
+    pub spectre_bin: Option<String>,
     sink: Arc<dyn JobEventSink>,
 }
 
@@ -113,6 +116,7 @@ impl SpectreSimulator {
             keep_remote_files: cfg.keep_remote_files,
             max_workers: cfg.spectre_max_workers,
             cadence_cshrc: cfg.cadence_cshrc,
+            spectre_bin: cfg.spectre_bin,
             sink: Arc::new(crate::streaming::NullSink),
         })
     }
@@ -136,6 +140,14 @@ impl SpectreSimulator {
         } else {
             String::new()
         }
+    }
+
+    /// Get the effective Spectre command to execute.
+    /// Prefers spectre_bin (absolute path) over spectre_cmd (command name).
+    fn spectre_command(&self) -> &str {
+        self.spectre_bin
+            .as_deref()
+            .unwrap_or(&self.spectre_cmd)
     }
 
     /// Run a command with Cadence environment sourced (for remote SSH).
@@ -163,20 +175,25 @@ impl SpectreSimulator {
     }
 
     pub fn check_license(&self) -> Result<String> {
+        let spectre = self.spectre_command();
         if let Some(ref runner) = self.ssh_runner {
             // Build command with environment sourced
-            let check_cmd = "which spectre 2>/dev/null || echo 'not found'; \
-                       spectre -W 2>/dev/null | head -1 || echo 'unknown'; \
-                       lmstat -a 2>/dev/null | grep -i spectre | head -5 || echo 'lmstat not available'";
+            let check_cmd = format!(
+                "which {} 2>/dev/null || echo 'not found'; \
+                 {} -W 2>/dev/null | head -1 || echo 'unknown'; \
+                 lmstat -a 2>/dev/null | grep -i spectre | head -5 || echo 'lmstat not available'",
+                spectre, spectre
+            );
             // Use env_prefix for SSH commands to load Cadence environment
             let prefix = self.env_prefix();
             let full_cmd = format!("{prefix}{check_cmd}");
             let result = runner.run_command(&full_cmd, None)?;
             Ok(result.stdout.trim().to_string())
         } else {
+            let cmd = format!("which {} 2>/dev/null && {} -W 2>/dev/null | head -1", spectre, spectre);
             let output = Command::new("sh")
                 .arg("-c")
-                .arg("which spectre 2>/dev/null && spectre -W 2>/dev/null | head -1")
+                .arg(&cmd)
                 .output()
                 .map_err(|e| VirtuosoError::Execution(e.to_string()))?;
             Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -202,7 +219,7 @@ impl SpectreSimulator {
 
         let log_path = run_dir.join("spectre.out");
 
-        let mut cmd = Command::new(&self.spectre_cmd);
+        let mut cmd = Command::new(self.spectre_command());
         cmd.arg("-64")
             .arg(&netlist_path)
             .arg("+escchars")
@@ -273,7 +290,7 @@ impl SpectreSimulator {
              cd {remote_dir} && {env_prefix}nohup {cmd} -64 input.scs +escchars +log spectre.out \
              -format {fmt} -raw raw +lqtimeout 900 -maxw 5 -maxn {maxn} +logstatus{extra} \
              > /dev/null 2>&1 & echo $!",
-            cmd = self.spectre_cmd,
+            cmd = self.spectre_command(),
             fmt = self.output_format,
             maxn = self.max_workers,
         );
@@ -319,7 +336,7 @@ impl SpectreSimulator {
 
         let log_path = run_dir.join("spectre.out");
 
-        let mut cmd = Command::new(&self.spectre_cmd);
+        let mut cmd = Command::new(self.spectre_command());
         cmd.arg("-64")
             .arg(&netlist_path)
             .arg("+escchars")
@@ -518,7 +535,7 @@ impl SpectreSimulator {
         };
         let spectre_cmd = format!(
             "{cmd} -64 input.scs +escchars +log spectre.out -format {fmt} -raw raw +lqtimeout 900 -maxw 5 -maxn {maxn} +logstatus{extra}",
-            cmd = self.spectre_cmd,
+            cmd = self.spectre_command(),
             fmt = self.output_format,
             maxn = self.max_workers,
         );
