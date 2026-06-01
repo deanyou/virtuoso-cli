@@ -377,6 +377,12 @@ enum SkillCmd {
         /// Maximum number of results
         #[arg(long, short, default_value = "50")]
         limit: usize,
+
+        /// Also search the description field, not just the function name.
+        /// Useful for "what function does X" questions where you only know
+        /// the use case, not the function name.
+        #[arg(long)]
+        include_desc: bool,
     },
 
     /// Get detailed More Info documentation for a SKILL function
@@ -1247,7 +1253,12 @@ fn dispatch_skill(cmd: SkillCmd) -> error::Result<serde_json::Value> {
         SkillCmd::Load { file } => commands::skill::load(&file),
         SkillCmd::Broadcast { code, timeout } => commands::skill::broadcast(&code, timeout),
         SkillCmd::Eval { code, stdin } => commands::skill::eval(code, stdin),
-        SkillCmd::Find { query, mode, limit } => commands::skill::find(&query, &mode, limit, false),
+        SkillCmd::Find {
+            query,
+            mode,
+            limit,
+            include_desc,
+        } => commands::skill::find(&query, &mode, limit, false, include_desc),
         SkillCmd::Info { func } => commands::skill::info(&func),
         SkillCmd::Sync {
             host,

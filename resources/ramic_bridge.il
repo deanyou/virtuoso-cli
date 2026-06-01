@@ -130,6 +130,12 @@ procedure(RBStart()
     ; writes the session registration file.
 	if(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) then
 		printf("[RAMIC Bridge (%L)] is already running\n", RBIpc)
+		printf("  bound port   : %d\n" RBPort)
+		printf("  session id   : %s\n" RBSessionId)
+		printf("  To switch profile/port, run in CIW:\n")
+		printf("    RBStop()\n")
+		printf("    load(\".../ramic_bridge.il\")\n")
+		printf("  If that does not clear it, use RBStopAll() before loading again.\n")
 	else
 		prog((host logpath hostname username)
 			; Determine host binding based on RBLocal setting

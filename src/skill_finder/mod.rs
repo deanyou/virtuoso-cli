@@ -102,6 +102,19 @@ impl SKILLFinder {
         }
     }
 
+    /// Create a SKILLFinder pre-loaded with the given entries.
+    ///
+    /// Visible to integration tests so they can exercise `search()` without
+    /// needing a real Cadence installation on the test host.
+    #[doc(hidden)]
+    pub fn for_test(entries: Vec<SkillEntry>) -> Self {
+        Self {
+            source_dir: None,
+            entries,
+            loaded: true,
+        }
+    }
+
     /// Load entries from a directory path
     pub fn load(&mut self, source_dir: impl Into<PathBuf>) -> std::io::Result<()> {
         let dir = source_dir.into();
@@ -139,17 +152,30 @@ impl SKILLFinder {
     /// * `query` - Search string
     /// * `mode` - Search mode (default: Fuzzy)
     /// * `limit` - Maximum number of results (default: 50)
-    pub fn search(&self, query: &str, mode: SearchMode, limit: usize) -> Vec<&SkillEntry> {
+    /// * `include_desc` - When `true`, also matches the description field.
+    ///   Useful for `dbOpen`-style queries where the user wants functions
+    ///   whose description mentions a keyword even if the function name does not.
+    pub fn search(
+        &self,
+        query: &str,
+        mode: SearchMode,
+        limit: usize,
+        include_desc: bool,
+    ) -> Vec<&SkillEntry> {
         if !self.loaded {
             return Vec::new();
         }
 
-        let results: Vec<&SkillEntry> = match mode {
-            SearchMode::Exact => self.exact_match(query),
-            SearchMode::Prefix => self.prefix_match(query),
-            SearchMode::Suffix => self.suffix_match(query),
-            SearchMode::Regex => self.regex_match(query),
-            SearchMode::Fuzzy => self.fuzzy_match(query),
+        let results: Vec<&SkillEntry> = if include_desc {
+            self.search_with_description(query, mode)
+        } else {
+            match mode {
+                SearchMode::Exact => self.exact_match(query),
+                SearchMode::Prefix => self.prefix_match(query),
+                SearchMode::Suffix => self.suffix_match(query),
+                SearchMode::Regex => self.regex_match(query),
+                SearchMode::Fuzzy => self.fuzzy_match(query),
+            }
         };
 
         // Sort by name
@@ -158,6 +184,46 @@ impl SKILLFinder {
 
         // Apply limit
         sorted.into_iter().take(limit).collect()
+    }
+
+    /// Name OR description match. Used when `include_desc` is true.
+    /// For non-fuzzy modes we fall back to the same name-only matcher so
+    /// users don't get surprising description-only hits for `prefix:`/`suffix:`
+    /// (which are name-shape filters by definition).
+    fn search_with_description(&self, query: &str, mode: SearchMode) -> Vec<&SkillEntry> {
+        let q = query.to_lowercase();
+        match mode {
+            SearchMode::Exact => self.exact_match(query),
+            SearchMode::Prefix => self
+                .entries
+                .iter()
+                .filter(|e| e.name.to_lowercase().starts_with(&q))
+                .collect(),
+            SearchMode::Suffix => self
+                .entries
+                .iter()
+                .filter(|e| e.name.to_lowercase().ends_with(&q))
+                .collect(),
+            SearchMode::Regex => {
+                let pattern = match regex::Regex::new(&format!("(?i){query}")) {
+                    Ok(p) => p,
+                    Err(_) => return Vec::new(),
+                };
+                self.entries
+                    .iter()
+                    .filter(|e| pattern.is_match(&e.name) || pattern.is_match(&e.description))
+                    .collect()
+            }
+            SearchMode::Fuzzy => self
+                .entries
+                .iter()
+                .filter(|e| {
+                    let name = e.name.to_lowercase();
+                    let desc = e.description.to_lowercase();
+                    name.contains(&q) || desc.contains(&q)
+                })
+                .collect(),
+        }
     }
 
     fn exact_match(&self, query: &str) -> Vec<&SkillEntry> {
@@ -570,5 +636,148 @@ mod tests {
     #[test]
     fn test_cache_info_nonexistent() {
         assert!(cache_info("nonexistent-host-xyz-12345").is_none());
+    }
+
+    // ========================================================================
+    // include_desc tests
+    // ========================================================================
+
+    fn finder_with_corpus() -> SKILLFinder {
+        let mut f = SKILLFinder::new();
+        f.entries = vec![
+            SkillEntry {
+                name: "dbOpenCellView".into(),
+                syntax: "dbOpenCellView(lib cell view)".into(),
+                description: "Opens a cellView in the database".into(),
+                source_file: Some("db.fnd".into()),
+            },
+            SkillEntry {
+                name: "rodCreateRect".into(),
+                syntax: "rodCreateRect(...)".into(),
+                description: "Create a rectangle in the layout editor".into(),
+                source_file: Some("rod.fnd".into()),
+            },
+            SkillEntry {
+                name: "schOpen".into(),
+                syntax: "schOpen()".into(),
+                description: "Opens a cellView in the schematic".into(),
+                source_file: Some("sch.fnd".into()),
+            },
+        ];
+        f.loaded = true;
+        f
+    }
+
+    #[test]
+    fn search_fuzzy_default_does_not_match_description_only() {
+        let f = finder_with_corpus();
+        // "rectangle" appears in rodCreateRect's description but not its name
+        let r = f.search("rectangle", SearchMode::Fuzzy, 50, false);
+        assert!(
+            r.is_empty(),
+            "default search should miss description-only matches, got {:?}",
+            r.iter().map(|e| &e.name).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn search_fuzzy_with_desc_matches_description() {
+        let f = finder_with_corpus();
+        let r = f.search("rectangle", SearchMode::Fuzzy, 50, true);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].name, "rodCreateRect");
+    }
+
+    #[test]
+    fn search_fuzzy_with_desc_still_matches_name() {
+        let f = finder_with_corpus();
+        // "dbOpen" is in dbOpenCellView's NAME; should also be found with desc
+        let r = f.search("dbOpen", SearchMode::Fuzzy, 50, true);
+        assert!(r.iter().any(|e| e.name == "dbOpenCellView"));
+    }
+
+    #[test]
+    fn search_fuzzy_with_desc_case_insensitive() {
+        let f = finder_with_corpus();
+        let r = f.search("LAYOUT", SearchMode::Fuzzy, 50, true);
+        // matches "layout" in rodCreateRect's description
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].name, "rodCreateRect");
+    }
+
+    #[test]
+    fn search_prefix_with_desc_still_uses_name_shape() {
+        let f = finder_with_corpus();
+        // "db" prefix on names → should match dbOpenCellView even with include_desc
+        let r = f.search("db", SearchMode::Prefix, 50, true);
+        assert!(r.iter().any(|e| e.name == "dbOpenCellView"));
+
+        // "rectangle" is NOT a name prefix anywhere; should return empty for prefix
+        let r = f.search("rectangle", SearchMode::Prefix, 50, true);
+        assert!(
+            r.is_empty(),
+            "prefix mode with include_desc should still only match name prefixes, got {:?}",
+            r.iter().map(|e| &e.name).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn search_suffix_with_desc_still_uses_name_shape() {
+        let f = finder_with_corpus();
+        // "CellView" is a suffix of dbOpenCellView
+        let r = f.search("CellView", SearchMode::Suffix, 50, true);
+        let names: Vec<&str> = r.iter().map(|e| e.name.as_str()).collect();
+        assert!(
+            names.contains(&"dbOpenCellView"),
+            "dbOpenCellView ends with CellView"
+        );
+        assert!(!names.contains(&"schOpen"));
+        assert!(!names.contains(&"rodCreateRect"));
+
+        // "Open" is a suffix of schOpen only
+        let r = f.search("Open", SearchMode::Suffix, 50, true);
+        let names: Vec<&str> = r.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"schOpen"), "schOpen ends with Open");
+        assert!(
+            !names.contains(&"dbOpenCellView"),
+            "dbOpenCellView ends with View, not Open"
+        );
+    }
+
+    #[test]
+    fn search_exact_with_desc_still_uses_name_exact() {
+        let f = finder_with_corpus();
+        let r = f.search("dbOpenCellView", SearchMode::Exact, 50, true);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].name, "dbOpenCellView");
+
+        // "Opens" is the first word in dbOpenCellView's description; not a name
+        let r = f.search("Opens", SearchMode::Exact, 50, true);
+        assert!(r.is_empty());
+    }
+
+    #[test]
+    fn search_regex_with_desc_matches_description() {
+        let f = finder_with_corpus();
+        // regex matching the description "layout editor"
+        let r = f.search("layout.*editor", SearchMode::Regex, 50, true);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].name, "rodCreateRect");
+    }
+
+    #[test]
+    fn search_with_desc_respects_limit() {
+        // Limit=1 should return exactly one result even when many match
+        let f = finder_with_corpus();
+        let r = f.search("cellView", SearchMode::Fuzzy, 1, true);
+        assert_eq!(r.len(), 1, "limit=1 must be respected");
+    }
+
+    #[test]
+    fn search_unloaded_finder_returns_empty_regardless_of_desc() {
+        let f = SKILLFinder::new();
+        assert!(!f.loaded);
+        let r = f.search("anything", SearchMode::Fuzzy, 50, true);
+        assert!(r.is_empty());
     }
 }

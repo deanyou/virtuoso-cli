@@ -194,7 +194,16 @@ pub fn eval(code: Option<String>, stdin: bool) -> Result<Value> {
 /// * `query` - Search string
 /// * `mode` - Search mode: fuzzy (default), prefix, suffix, exact, regex
 /// * `limit` - Maximum results (default: 50)
-pub fn find(query: &str, mode: &str, limit: usize, refresh: bool) -> Result<Value> {
+/// * `refresh` - Force a fresh cache sync (remote mode only)
+/// * `include_desc` - When `true`, also match against the description field,
+///   not just the function name. Useful for "what function does X" queries.
+pub fn find(
+    query: &str,
+    mode: &str,
+    limit: usize,
+    refresh: bool,
+    include_desc: bool,
+) -> Result<Value> {
     let search_mode: SearchMode = mode.parse().unwrap_or(SearchMode::Fuzzy);
     let cfg = Config::from_env()?;
 
@@ -223,7 +232,7 @@ pub fn find(query: &str, mode: &str, limit: usize, refresh: bool) -> Result<Valu
     }
 
     let results: Vec<_> = finder
-        .search(query, search_mode, limit)
+        .search(query, search_mode, limit, include_desc)
         .into_iter()
         .map(|e| {
             json!({
@@ -238,6 +247,7 @@ pub fn find(query: &str, mode: &str, limit: usize, refresh: bool) -> Result<Valu
     Ok(json!({
         "query": query,
         "mode": search_mode.to_string(),
+        "include_desc": include_desc,
         "count": results.len(),
         "entries": results,
     }))

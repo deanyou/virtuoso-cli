@@ -404,12 +404,63 @@ impl VirtuosoClient {
         }
     }
 
+    /// Query the daemon's Unix `$USER` via `getShellEnvVar`.
+    ///
+    /// Best-effort identity check used to detect SSH-tunnel-to-wrong-user
+    /// misconfigurations (see `daemon_user_check`).
+    /// Uses `execute_skill_unchecked` so the check works without the
+    /// Admin capability — the SKILL payload is a fixed literal.
+    ///
+    /// Returns:
+    /// - `Ok(Some(user))` when the daemon returned a non-nil string
+    /// - `Ok(None)` when the daemon returned `nil` or empty (no user set)
+    /// - `Err(_)` on transport failure (caller decides whether to surface)
+    pub fn get_daemon_user(&self) -> Result<Option<String>> {
+        const SKILL: &str =
+            r#"let((u) u = getShellEnvVar("USER") if(u && u != "" then u else nil))"#;
+        let r = self.execute_skill_unchecked(SKILL, Some(5))?;
+        if !r.skill_ok() {
+            // nil/empty = no USER env var on daemon — treat as unknown, not error
+            return Ok(None);
+        }
+        // output is already unquoted by SKILL when string returned
+        let user = r.output.trim().trim_matches('"').to_string();
+        if user.is_empty() || user == "nil" {
+            Ok(None)
+        } else {
+            Ok(Some(user))
+        }
+    }
+
+    /// Probe the daemon with a short SKILL expression. Returns true if the
+    /// daemon answered (STX) AND the response was non-nil. Used to detect
+    /// "port-open-but-daemon-stuck" states that the plain TCP liveness check
+    /// misses.
+    ///
+    /// Uses a no-op `(+ 1 1)` instead of `ipcIsProcessRunning()` because the
+    /// latter requires a specific process-handle argument and returns nil
+    /// (falsy) when called without one.
+    pub fn daemon_alive(&self) -> bool {
+        const SKILL: &str = r#"plus(1 1)"#;
+        match self.execute_skill_unchecked(SKILL, Some(3)) {
+            Ok(r) => r.skill_ok(),
+            Err(_) => false,
+        }
+    }
+
     pub fn load_il(&self, local_path: &str) -> Result<VirtuosoResult> {
         let filename = std::path::Path::new(local_path)
             .file_name()
             .ok_or_else(|| VirtuosoError::Config(format!("invalid path: {local_path}")))?
             .to_string_lossy();
-        let remote_path = format!("/tmp/virtuoso_bridge/{filename}");
+        // Scope remote scratch by client_id to avoid name collisions when
+        // multiple local machines share one remote Unix account.
+        let client_id = resolve_client_id();
+        let remote_path = format!("/tmp/virtuoso_bridge/{client_id}/{filename}");
+
+        // Best-effort: ensure the per-client dir exists on the remote host
+        // (no-op for local mode since upload_file uses std::fs::copy).
+        self.ensure_remote_dir(&format!("/tmp/virtuoso_bridge/{client_id}"))?;
 
         self.upload_file(local_path, &remote_path)?;
 
@@ -426,6 +477,19 @@ impl VirtuosoClient {
                 .map(|_| ())
                 .map_err(VirtuosoError::Io)
         }
+    }
+
+    /// Best-effort mkdir of a remote directory. In local mode the std::fs::copy
+    /// in `upload_file` will create the parent implicitly; this just no-ops.
+    /// Over SSH it issues a `mkdir -p` via the tunnel's SSH runner.
+    pub fn ensure_remote_dir(&self, dir: &str) -> Result<()> {
+        if let Some(ref tunnel) = self.tunnel {
+            let runner = &tunnel.runner;
+            runner
+                .run_command(&format!("mkdir -p {dir}"), None)
+                .map_err(|e| VirtuosoError::Connection(format!("mkdir {dir}: {e}")))?;
+        }
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -865,5 +929,154 @@ mod tests {
             decode_skill_string(r#""first\nsecond\"third\\fourth""#),
             "first\nsecond\"third\\fourth"
         );
+    }
+}
+
+// =============================================================================
+// Client identity (used to scope remote scratch paths)
+// =============================================================================
+
+/// Resolve a stable per-client identifier used to scope the remote
+/// `/tmp/virtuoso_bridge/{client_id}/` scratch directory. Avoids collisions
+/// when multiple local machines share one remote Unix account.
+///
+/// Priority:
+/// 1. `VB_CLIENT_ID` env var (explicit override)
+/// 2. Profile name from `VB_PROFILE` (set by `--profile` flag)
+/// 3. Local hostname (via `gethostname()`) — last-resort, still unique
+#[doc(hidden)]
+pub fn resolve_client_id() -> String {
+    if let Ok(id) = std::env::var("VB_CLIENT_ID") {
+        let id = id.trim();
+        if !id.is_empty() {
+            return sanitize_client_id(id);
+        }
+    }
+    if let Ok(profile) = std::env::var("VB_PROFILE") {
+        let p = profile.trim();
+        if !p.is_empty() {
+            return sanitize_client_id(p);
+        }
+    }
+    // Fallback: hostname (or "default" if even that fails).
+    let host = std::env::var("HOSTNAME")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| {
+            // Use libc gethostname when available without pulling a crate.
+            let mut buf = [0u8; 256];
+            #[cfg(unix)]
+            unsafe {
+                let ret = libc_gethostname(buf.as_mut_ptr() as *mut _, buf.len());
+                if ret == 0 {
+                    let nul = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+                    return std::str::from_utf8(&buf[..nul]).ok().map(String::from);
+                }
+            }
+            None
+        })
+        .unwrap_or_else(|| "default".to_string());
+    sanitize_client_id(&host)
+}
+
+/// Strip filesystem-unsafe characters from a client id. Conservative: keep
+/// alphanumerics, dash, underscore, dot; replace everything else with `_`.
+#[doc(hidden)]
+pub fn sanitize_client_id(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+#[cfg(unix)]
+extern "C" {
+    fn gethostname(buf: *mut std::ffi::c_char, len: usize) -> i32;
+}
+
+#[cfg(unix)]
+unsafe fn libc_gethostname(buf: *mut std::ffi::c_char, len: usize) -> i32 {
+    gethostname(buf, len)
+}
+
+/// Return the canonical remote scratch root for this client.
+///
+/// Public so tests and other code can construct the same path the bridge uses.
+#[allow(dead_code)]
+pub fn remote_scratch_root() -> String {
+    format!("/tmp/virtuoso_bridge/{}", resolve_client_id())
+}
+
+#[cfg(test)]
+mod client_id_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // `std::env::set_var` is process-wide; serialize these tests with a
+    // global mutex so they don't race with each other when cargo runs them
+    // in parallel.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn clear_env() {
+        std::env::remove_var("VB_CLIENT_ID");
+        std::env::remove_var("VB_PROFILE");
+        std::env::remove_var("HOSTNAME");
+    }
+
+    #[test]
+    fn sanitize_keeps_safe_chars() {
+        assert_eq!(sanitize_client_id("abc-DEF_1.2"), "abc-DEF_1.2");
+    }
+
+    #[test]
+    fn sanitize_replaces_path_separators() {
+        assert_eq!(sanitize_client_id("a/b\\c:d"), "a_b_c_d");
+    }
+
+    #[test]
+    fn sanitize_drops_unicode_replaces_with_underscore() {
+        // We only preserve ASCII alphanumeric; non-ASCII chars (including
+        // CJK ideographs) get replaced with '_'. The 2-byte UTF-8 sequence
+        // for '主' is 3 bytes, so "主机" (2 chars) yields 2 underscores.
+        assert_eq!(sanitize_client_id("meow-主机"), "meow-__");
+    }
+
+    #[test]
+    fn remote_scratch_root_format() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("VB_CLIENT_ID", "test-client");
+        let root = remote_scratch_root();
+        assert_eq!(root, "/tmp/virtuoso_bridge/test-client");
+        clear_env();
+    }
+
+    #[test]
+    fn resolve_client_id_precedence() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("VB_PROFILE", "myprofile");
+        // No VB_CLIENT_ID, has VB_PROFILE → use profile
+        assert_eq!(resolve_client_id(), "myprofile");
+        std::env::set_var("VB_CLIENT_ID", "explicit");
+        // VB_CLIENT_ID wins over VB_PROFILE
+        assert_eq!(resolve_client_id(), "explicit");
+        clear_env();
+    }
+
+    #[test]
+    fn resolve_client_id_empty_falls_through() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var("VB_CLIENT_ID", "  ");
+        std::env::set_var("VB_PROFILE", "fallback-prof");
+        // Empty VB_CLIENT_ID falls through to VB_PROFILE
+        assert_eq!(resolve_client_id(), "fallback-prof");
+        clear_env();
     }
 }

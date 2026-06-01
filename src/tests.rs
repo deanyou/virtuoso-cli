@@ -296,6 +296,7 @@ mod session_info_tests {
             host: "eda-server".into(),
             user: "meow".into(),
             created: "Apr  6 12:00:00 2026".into(),
+            daemon_user: None,
         }
     }
 

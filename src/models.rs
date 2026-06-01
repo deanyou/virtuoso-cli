@@ -167,6 +167,12 @@ pub struct SessionInfo {
     pub host: String,
     pub user: String,
     pub created: String,
+    /// Daemon-side Unix `$USER`, populated lazily by `vcli session show`
+    /// (queries the daemon, NOT read from JSON — bridges written by older
+    /// ramic_bridge.il won't have this). `None` means "not yet queried"
+    /// OR "query failed / returned nil".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daemon_user: Option<String>,
 }
 
 impl SessionInfo {
