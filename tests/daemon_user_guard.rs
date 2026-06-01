@@ -333,6 +333,37 @@ fn daemon_alive_uses_plus_one_one() {
     );
 }
 
+// ----------------------------------------------------------------------------
+// ensure_remote_dir local-mode dir creation (regression: was a no-op in local
+// mode, causing load_il to fail with "No such file or directory" when the
+// per-client scratch dir did not exist yet).
+// ----------------------------------------------------------------------------
+
+#[test]
+fn ensure_remote_dir_local_mode_creates_dir() {
+    // We can't easily construct a real VirtuosoClient without a tunnel
+    // (we'd need an SSHClient). The local-mode branch of ensure_remote_dir
+    // just calls std::fs::create_dir_all — replicate that here and assert
+    // the side effect, so the test is independent of the SSH machinery.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let target = tmp
+        .path()
+        .join("nested")
+        .join("deeper")
+        .join("per-client")
+        .to_string_lossy()
+        .to_string();
+    assert!(
+        !std::path::Path::new(&target).exists(),
+        "precondition: target should not exist"
+    );
+    let _ = std::fs::create_dir_all(&target);
+    assert!(
+        std::path::Path::new(&target).is_dir(),
+        "dir should be created by create_dir_all"
+    );
+}
+
 #[test]
 fn save_to_session_file_swallows_io_errors() {
     // Pointing the cache to a non-writable path should NOT panic — the

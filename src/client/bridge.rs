@@ -494,6 +494,12 @@ impl VirtuosoClient {
             runner
                 .run_command(&format!("mkdir -p {quoted}"), None)
                 .map_err(|e| VirtuosoError::Connection(format!("mkdir {dir}: {e}")))?;
+        } else {
+            // Local mode: std::fs::copy does NOT create parent dirs. Create
+            // the per-client directory locally so load_il() can copy the IL
+            // file into it. Failure is non-fatal — the subsequent copy will
+            // surface the real error.
+            let _ = std::fs::create_dir_all(dir);
         }
         Ok(())
     }
