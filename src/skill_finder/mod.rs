@@ -104,8 +104,9 @@ impl SKILLFinder {
 
     /// Create a SKILLFinder pre-loaded with the given entries.
     ///
-    /// Visible to integration tests so they can exercise `search()` without
-    /// needing a real Cadence installation on the test host.
+    /// Available to integration tests in `tests/` (via the public re-export)
+    /// and to in-source `#[cfg(test)]` unit tests (via `pub(crate)`). The
+    /// `#[doc(hidden)]` keeps it from appearing in the public API docs.
     #[doc(hidden)]
     pub fn for_test(entries: Vec<SkillEntry>) -> Self {
         Self {
@@ -643,8 +644,7 @@ mod tests {
     // ========================================================================
 
     fn finder_with_corpus() -> SKILLFinder {
-        let mut f = SKILLFinder::new();
-        f.entries = vec![
+        SKILLFinder::for_test(vec![
             SkillEntry {
                 name: "dbOpenCellView".into(),
                 syntax: "dbOpenCellView(lib cell view)".into(),
@@ -663,9 +663,7 @@ mod tests {
                 description: "Opens a cellView in the schematic".into(),
                 source_file: Some("sch.fnd".into()),
             },
-        ];
-        f.loaded = true;
-        f
+        ])
     }
 
     #[test]
@@ -767,10 +765,16 @@ mod tests {
 
     #[test]
     fn search_with_desc_respects_limit() {
-        // Limit=1 should return exactly one result even when many match
+        // The corpus has 2 entries whose name/description contains "cellView"
+        // (dbOpenCellView, schOpen). limit=1 must return exactly one,
+        // proving the cap is applied AFTER sort, not before filtering.
         let f = finder_with_corpus();
         let r = f.search("cellView", SearchMode::Fuzzy, 1, true);
         assert_eq!(r.len(), 1, "limit=1 must be respected");
+
+        // limit=2 returns both — verifies the cap is not stuck at 1.
+        let r = f.search("cellView", SearchMode::Fuzzy, 2, true);
+        assert_eq!(r.len(), 2, "limit=2 must allow both matches");
     }
 
     #[test]

@@ -10,7 +10,10 @@ use std::time::{Duration, Instant};
 
 use crate::models::RemoteTaskResult;
 
-fn shell_quote(s: &str) -> String {
+/// POSIX-shell single-quote a string. Wraps in `'…'` and escapes embedded
+/// `'` as `'\''`. Used whenever an arbitrary string is interpolated into a
+/// command run via the remote shell.
+pub(crate) fn shell_quote(s: &str) -> String {
     shlex::try_quote(s)
         .unwrap_or(std::borrow::Cow::Borrowed(s))
         .into_owned()

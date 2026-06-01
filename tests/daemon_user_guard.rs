@@ -203,6 +203,163 @@ fn session_info_deserializes_new_json_with_daemon_user() {
 }
 
 // ----------------------------------------------------------------------------
+// save_to_session_file (M3: Rust-side write-back of daemon_user)
+// ----------------------------------------------------------------------------
+
+#[test]
+fn save_to_session_file_writes_to_sessions_dir() {
+    use std::env;
+
+    // Save and restore the env var that save() uses for cache_dir resolution
+    let original_xdg = env::var_os("XDG_CACHE_HOME").and_then(|s| s.into_string().ok());
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    env::set_var("XDG_CACHE_HOME", tmp.path());
+
+    let mut s = SessionInfo {
+        id: format!("test-save-{}", std::process::id()),
+        port: 12345,
+        pid: 0,
+        host: "test-host".into(),
+        user: "tester".into(),
+        created: "2026-06-01T00:00:00Z".into(),
+        daemon_user: None,
+    };
+    s.daemon_user = Some("alice".into());
+    s.save_to_session_file();
+
+    // File should exist at <XDG_CACHE_HOME>/virtuoso_bridge/sessions/<id>.json
+    let path = tmp
+        .path()
+        .join("virtuoso_bridge")
+        .join("sessions")
+        .join(format!("{}.json", s.id));
+    assert!(path.exists(), "save_to_session_file should create {path:?}");
+
+    // Reload and verify round-trip
+    let loaded = SessionInfo::load(&s.id).expect("load should succeed");
+    assert_eq!(loaded.daemon_user.as_deref(), Some("alice"));
+    assert_eq!(loaded.id, s.id);
+    assert_eq!(loaded.port, s.port);
+
+    // Cleanup
+    if let Some(v) = original_xdg {
+        env::set_var("XDG_CACHE_HOME", v);
+    } else {
+        env::remove_var("XDG_CACHE_HOME");
+    }
+}
+
+// ----------------------------------------------------------------------------
+// ipcIsProcessRunning() no-arg regression (M1)
+// ----------------------------------------------------------------------------
+//
+// Background: ipcIsProcessRunning() with no process-handle argument returns
+// nil on a live daemon, which caused vcli ping / util.ping to spuriously
+// fail. We switched the liveness probe to `plus(1 1)` (a no-op SKILL
+// expression that always returns a non-nil integer on a responsive daemon).
+//
+// These tests pin the implementation so a future refactor can't silently
+// reintroduce the broken call.
+
+#[test]
+fn bridge_ping_uses_plus_one_one_not_ipcIsProcessRunning() {
+    let src = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/client/bridge.rs"),
+    )
+    .expect("read bridge.rs");
+
+    // Find the `pub fn ping` block and check its body uses plus(1 1).
+    let ping_start = src
+        .find("pub fn ping")
+        .expect("bridge.rs should have pub fn ping");
+    // Look ahead ~600 chars for the skill literal
+    let window = &src[ping_start..ping_start.saturating_add(600)];
+    assert!(
+        window.contains("plus(1 1)"),
+        "bridge::ping should use plus(1 1) — verified live on daemon: ipcIsProcessRunning() without a process handle returns nil"
+    );
+    // Ensure the broken call is NOT present in the ping body
+    assert!(
+        !window.contains("ipcIsProcessRunning"),
+        "bridge::ping should not call ipcIsProcessRunning() — the no-arg form returns nil on live daemons"
+    );
+}
+
+#[test]
+fn dispatcher_ping_uses_plus_one_one_not_ipcIsProcessRunning() {
+    let src = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/rpc/dispatcher.rs"),
+    )
+    .expect("read dispatcher.rs");
+
+    // Find the `"ping"` arm
+    let arm_start = src
+        .find("\"ping\" =>")
+        .expect("dispatcher.rs should have a ping arm");
+    let window = &src[arm_start..arm_start.saturating_add(700)];
+
+    // The actual SKILL payload passed to execute_skill_unchecked must be
+    // plus(1 1). We pin this by looking for the exact call form, not
+    // just any occurrence of "plus(1 1)" (which would also match comments).
+    assert!(
+        window.contains("execute_skill_unchecked(\"plus(1 1)\""),
+        "dispatcher::ping should pass the SKILL payload plus(1 1) to execute_skill_unchecked — got: {window}"
+    );
+
+    // Negative check: the actual SKILL payload must NOT be the broken call.
+    // We allow the comment to mention ipcIsProcessRunning (for context) but
+    // the payload itself must not be that string.
+    assert!(
+        !window.contains("execute_skill_unchecked(\"ipcIsProcessRunning"),
+        "dispatcher::ping must not pass ipcIsProcessRunning to execute_skill_unchecked (it returns nil without a process handle)"
+    );
+}
+
+#[test]
+fn daemon_alive_uses_plus_one_one() {
+    let src = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/client/bridge.rs"),
+    )
+    .expect("read bridge.rs");
+
+    let fn_start = src
+        .find("pub fn daemon_alive")
+        .expect("bridge.rs should have pub fn daemon_alive");
+    let window = &src[fn_start..fn_start.saturating_add(500)];
+    assert!(
+        window.contains("plus(1 1)"),
+        "daemon_alive should use plus(1 1) as a no-op liveness probe"
+    );
+}
+
+#[test]
+fn save_to_session_file_swallows_io_errors() {
+    // Pointing the cache to a non-writable path should NOT panic — the
+    // contract is "best-effort, errors silently ignored".
+    let original_xdg = std::env::var_os("XDG_CACHE_HOME").and_then(|s| s.into_string().ok());
+    std::env::set_var("XDG_CACHE_HOME", "/nonexistent-readonly-path/abc/def");
+
+    let s = SessionInfo {
+        id: "any-id".into(),
+        port: 12345,
+        pid: 0,
+        host: "h".into(),
+        user: "u".into(),
+        created: "now".into(),
+        daemon_user: Some("bob".into()),
+    };
+    // Should not panic
+    s.save_to_session_file();
+
+    if let Some(v) = original_xdg {
+        std::env::set_var("XDG_CACHE_HOME", v);
+    } else {
+        std::env::remove_var("XDG_CACHE_HOME");
+    }
+}
+
+// ----------------------------------------------------------------------------
 // ramic_bridge.il recovery-hint strings (regression check)
 // ----------------------------------------------------------------------------
 

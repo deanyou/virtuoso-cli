@@ -610,8 +610,14 @@ impl RpcDispatcher {
                 }))
             }
             "ping" => {
-                // Use execute_skill_unchecked to avoid auth check for internal operations
-                let r = client.execute_skill_unchecked("ipcIsProcessRunning()", Some(5000))?;
+                // Use execute_skill_unchecked to avoid auth check for internal
+                // operations. The probe is `plus(1 1)`: a no-op SKILL
+                // expression that returns a non-nil integer on any responsive
+                // daemon. `ipcIsProcessRunning()` (previously used here)
+                // requires a specific process-handle argument and returns nil
+                // when called without one, making the ping spuriously fail on
+                // live daemons.
+                let r = client.execute_skill_unchecked("plus(1 1)", Some(5000))?;
                 if r.skill_ok() {
                     Ok(serde_json::json!({ "status": "ok" }))
                 } else {

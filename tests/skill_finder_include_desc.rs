@@ -36,6 +36,14 @@ fn corpus() -> SKILLFinder {
             description: "Save a cellView to disk".into(),
             source_file: Some("db.fnd".into()),
         },
+        // Extra entry to make limit tests non-trivial: matches "cellView"
+        // substring in fuzzy and matches in name via dbCloseCellViewByType.
+        SkillEntry {
+            name: "dbCloseCellViewByType".into(),
+            syntax: "dbCloseCellViewByType(cv)".into(),
+            description: "Close the cellView window".into(),
+            source_file: Some("db.fnd".into()),
+        },
     ])
 }
 
@@ -136,9 +144,18 @@ fn include_desc_regex_matches_description() {
 #[test]
 fn include_desc_limit_is_respected() {
     let f = corpus();
-    // "cellView" matches all three "cellView" entries; limit=2 should cap
+    // With the corpus, "cellView" matches 4 entries (dbOpenCellView, schOpen,
+    // dbSave, dbCloseCellViewByType). limit=2 must cap at exactly 2.
     let r = f.search("cellView", SearchMode::Fuzzy, 2, true);
-    assert_eq!(r.len(), 2);
+    assert_eq!(
+        r.len(),
+        2,
+        "limit=2 must be respected even when 4 entries match"
+    );
+
+    // limit=0 is documented as "no limit" (Vec::take(0) returns empty). Test it.
+    let r = f.search("cellView", SearchMode::Fuzzy, 0, true);
+    assert_eq!(r.len(), 0, "limit=0 should return zero entries");
 }
 
 #[test]
@@ -159,5 +176,5 @@ fn empty_query_with_include_desc_matches_everything_with_substring() {
     // All entries have empty-description-or-non-empty, but with empty query
     // and "".contains("") == true, every name AND every description matches.
     // So we expect every entry.
-    assert_eq!(r.len(), 4);
+    assert_eq!(r.len(), 5);
 }

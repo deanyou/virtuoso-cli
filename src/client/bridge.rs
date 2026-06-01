@@ -482,11 +482,17 @@ impl VirtuosoClient {
     /// Best-effort mkdir of a remote directory. In local mode the std::fs::copy
     /// in `upload_file` will create the parent implicitly; this just no-ops.
     /// Over SSH it issues a `mkdir -p` via the tunnel's SSH runner.
+    ///
+    /// The `dir` argument is shell-quoted defensively even though current
+    /// callers only ever pass a `sanitize_client_id()`-output path
+    /// (which is already alnum + `-_.`). If a future caller passes a
+    /// user-controlled path, the quoting still prevents shell injection.
     pub fn ensure_remote_dir(&self, dir: &str) -> Result<()> {
         if let Some(ref tunnel) = self.tunnel {
             let runner = &tunnel.runner;
+            let quoted = crate::transport::ssh::shell_quote(dir);
             runner
-                .run_command(&format!("mkdir -p {dir}"), None)
+                .run_command(&format!("mkdir -p {quoted}"), None)
                 .map_err(|e| VirtuosoError::Connection(format!("mkdir {dir}: {e}")))?;
         }
         Ok(())
@@ -565,8 +571,13 @@ impl VirtuosoClient {
 
     /// Ping the Virtuoso session — returns Ok(()) if alive, Err if unreachable.
     /// Used by heartbeat to detect stale sessions.
+    ///
+    /// Uses `plus(1 1)` as a no-op probe because `ipcIsProcessRunning()` (the
+    /// previously-used probe) requires a specific process-handle argument and
+    /// returns nil/empty when called without one — causing every ping to
+    /// fail on a live daemon. See `daemon_alive()` for the same pattern.
     pub fn ping(&self) -> Result<()> {
-        let skill = "ipcIsProcessRunning()";
+        let skill = "plus(1 1)";
         let result = self.execute_skill_unchecked(skill, Some(5000))?;
         if result.skill_ok() {
             Ok(())

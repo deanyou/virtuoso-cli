@@ -167,10 +167,16 @@ pub struct SessionInfo {
     pub host: String,
     pub user: String,
     pub created: String,
-    /// Daemon-side Unix `$USER`, populated lazily by `vcli session show`
-    /// (queries the daemon, NOT read from JSON — bridges written by older
-    /// ramic_bridge.il won't have this). `None` means "not yet queried"
-    /// OR "query failed / returned nil".
+    /// Backward-compat field for the daemon-side Unix `$USER`.
+    ///
+    /// Populated lazily by `vcli session show` (which queries the daemon via
+    /// `getShellEnvVar("USER")` and writes the result back to the session
+    /// file). When `None`, either the user has not yet run `session show`
+    /// OR the query failed/returned nil.
+    ///
+    /// Older ramic_bridge.il versions never write this key, so the field is
+    /// `#[serde(default, skip_serializing_if = "Option::is_none")]` for
+    /// backward compatibility with legacy session files.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub daemon_user: Option<String>,
 }
@@ -268,6 +274,25 @@ impl SessionInfo {
             .into_iter()
             .filter(|s| s.is_alive())
             .collect()
+    }
+
+    /// Best-effort write-back of an augmented session record to the per-session
+    /// JSON file (the same path `load(id)` reads from). Used to persist
+    /// Rust-only metadata (e.g. `daemon_user`) that the SKILL side never writes.
+    ///
+    /// Creates the parent directory if it does not exist (the SKILL side
+    /// normally creates it on first session start, but Rust-only callers
+    /// like a cold `vcli session show` may need to create it themselves).
+    ///
+    /// Errors are swallowed because the caller (e.g. `vcli session show`)
+    /// prefers to still display fresh data over aborting on a disk failure.
+    pub fn save_to_session_file(&self) {
+        let dir = Self::sessions_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join(format!("{}.json", self.id));
+        if let Ok(json) = serde_json::to_string_pretty(self) {
+            let _ = std::fs::write(path, json);
+        }
     }
 }
 

@@ -149,8 +149,10 @@ pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
     // Best-effort liveness + identity probes.
     //   - `is_alive()` is just a TCP-connect probe; cheap and tells us
     //     whether the daemon port is bound.
-    //   - `daemon_alive()` is a SKILL-level probe (ipcIsProcessRunning);
-    //     catches "port bound but daemon is wedged" cases.
+    //   - `daemon_alive()` is a SKILL-level probe (no-op `plus(1 1)`);
+    //     catches "port bound but daemon is wedged" cases. Replaces a
+    //     broken `ipcIsProcessRunning()` probe (which needs a process
+    //     handle argument and returns nil when called without one).
     //   - `get_daemon_user()` queries the daemon's Unix $USER so we can
     //     warn about SSH-tunnel-to-wrong-user misconfigurations.
     let port_open = s.is_alive();
@@ -178,14 +180,24 @@ pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
         Some(
             "CIW daemon port is bound but the daemon is not responding to SKILL.\n\
              In the Virtuoso CIW, run:\n\
-             \x20 RBStop()\n\
-             \x20 (load \"<path-to>/ramic_bridge.il\")\n\
+               RBStop()\n\
+               (load \"/absolute/path/to/ramic_bridge.il\")\n\
              If that does not clear it, use RBStopAll() before loading again."
                 .to_string(),
         )
     } else {
         None
     };
+
+    // Cache daemon_user back into the session file so subsequent `session show`
+    // invocations and `session list` rows can surface it without re-querying.
+    // The write is best-effort; failure is silently ignored (we already have
+    // fresh data in the JSON response).
+    if let Some(user) = daemon_user.as_ref() {
+        let mut s_mut = s.clone();
+        s_mut.daemon_user = Some(user.clone());
+        s_mut.save_to_session_file();
+    }
 
     Ok(json!({
         "status": if cross_user_warning.is_some() { "warning" } else { "success" },
