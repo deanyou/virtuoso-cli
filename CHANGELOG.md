@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0-alpha.7] - 2026-06-02
+
+### Fixed
+- **`vcli skill find` end-to-end** — the .fnd parser in
+  `src/skill_finder/parser.rs` expected a fictional 3-line-per-entry
+  format that does not exist in Cadence's SKILL Finder database.
+  The real format is a SKILL list literal:
+  `("name" "syntax" "description")` per entry, with newlines
+  preserved inside the strings. The parser was rewritten as a small
+  state machine that correctly handles:
+    - 3-string entries (the common case, ~9808 of 9812 entries)
+    - 4-string entries with empty placeholder (4 entries in
+      `maeSKILLref.fnd`)
+    - Multi-line syntax and description strings
+    - Embedded `(` and `)` inside description text
+      (e.g. `deselected.)` at the end of a sentence)
+    - `;`-prefixed comments and blank lines between entries
+  The old parser returned 0 results for every search because
+  the first line of each entry was `("name"` (with the open paren)
+  which it then stored as the function name. `vcli skill find` now
+  returns real results for all 5 search modes (fuzzy, prefix,
+  suffix, exact, regex) and `--include-desc` matches against the
+  description field as designed.
+
+### Tests
+- 7 new parser unit tests, including verbatim samples from
+  `abstract.fnd` and `skdfref.fnd` plus a regression test that
+  reads `/opt/cadence/IC231/doc/finder/SKILL/SKILL/abstract.fnd`
+  directly and asserts > 50 well-formed entries (skips if the
+  fixture is absent).
+- Total: 1090 tests pass (was 1058).
+
 ## [0.4.0-alpha.6] - 2026-06-02
 
 ### Added
