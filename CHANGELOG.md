@@ -2,6 +2,79 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0-alpha.5] - 2026-06-01
+
+### Added
+- **Cross-user daemon guard** — `vcli session show` queries the daemon's Unix
+  `$USER` via `getShellEnvVar` and warns when it does not match the configured
+  `VB_REMOTE_USER[<profile>]`. Suppressed by `VB_ALLOW_CROSS_USER_DAEMON=1`.
+  Catches SSH-tunnel-to-wrong-user misconfigurations that previously failed
+  silently with confusing SKILL output.
+- **Stale-daemon recovery hint** — `vcli session show` now prints a recovery
+  procedure (RBStop / RBStopAll / re-load) when the daemon port is bound but
+  the daemon is not responding to SKILL. Mirrors the new hint added to
+  `ramic_bridge.il` `RBStart()` "already running" branch.
+- **`VirtuosoClient::get_daemon_user()`** and **`daemon_alive()`** — narrow
+  internal API used by the session show probes. Both use fixed-literal SKILL
+  payloads so they require no SKILL capability.
+- **Per-client remote scratch scoping** — `load_il` now uses
+  `/tmp/virtuoso_bridge/{client_id}/{filename}` instead of the unscoped
+  `/tmp/virtuoso_bridge/{filename}`. Resolution order:
+  `VB_CLIENT_ID` > `VB_PROFILE` > `gethostname()`. Prevents name collisions
+  when multiple local machines share one remote Unix account.
+- **`SessionInfo.daemon_user`** — optional field, populated lazily by
+  `session show` and persisted to the per-session JSON file via the new
+  `save_to_session_file()` method. Backward-compatible with legacy session
+  files (older `ramic_bridge.il` versions never write this key).
+- **`--include-desc` flag for `vcli skill find`** — matches against the
+  description field, not just the function name. Prefix/suffix/exact
+  modes retain name-shape filtering; fuzzy and regex also check descriptions.
+- **SKILL Finder CLI** (`vcli skill find` / `vcli skill info`) with **remote
+  cache via SSH** — fetches `.fnd` corpus from the remote EDA host and caches
+  locally for offline search.
+- **New RPC methods** registered: `skill.eval`, `maestro.snapshot`,
+  `schematic.polish_label`, `spectre.max_workers`.
+- **Maestro CSV parser** with integration tests and helpers.
+- **Spectre pasc callback handler** (`08_set_simulator_mode.il`) plus
+  `VTTYPE` parameter update examples.
+- **Spectre sweep parser** enhancements and comprehensive test coverage.
+- **`VB_SPECTRE_BIN` env var** support for absolute spectre binary path.
+- **Pensieve frontmatter** added to 39 knowledge/decision/maxim files.
+
+### Fixed
+- **`ipcIsProcessRunning()` no-arg call returns nil** — all three call sites
+  (`bridge::ping`, `rpc::dispatcher::"ping"`, `VirtuosoClient::daemon_alive`)
+  replaced with the no-op SKILL probe `plus(1 1)`. The no-arg form of
+  `ipcIsProcessRunning()` was returning nil on every live daemon, causing
+  `vcli rpc call util.ping` to spuriously fail. **Live verified**:
+  `util.ping` now returns `{"status":"ok"}` on a clearly-alive daemon.
+- **`ensure_remote_dir` was a no-op in local mode** — `vcli skill load` in
+  local mode (no SSH tunnel) was returning "io error: No such file or
+  directory" for the per-client scratch dir. `ensure_remote_dir` now calls
+  `std::fs::create_dir_all` in local mode (mkdir -p via SSH in remote mode).
+- **`save_to_session_file` mkdir-p** — newly added method now creates the
+  parent directory if it doesn't exist, so cold callers (no prior SKILL
+  bridge init) work without manual setup.
+- **SKILL syntax errors in `pasc_callbacks.ils`** corrected.
+- **Addressed upstream `virtuoso-bridge-lite` issues #92 and #81**:
+  profile-aware `Skill` config init; ensure `RBStart()` is idempotent.
+- **`maestro.snapshot` 08_set_simulator_mode** made portable + verifiable.
+- **Clippy and fmt warnings** addressed across dispatcher and tests.
+
+### Security
+- **`ensure_remote_dir` now uses `shell_quote`** for defense-in-depth on the
+  SSH-side `mkdir -p` invocation. Current callers only pass sanitized
+  client_id (alnum + `-_.`), so no actual shell-injection surface, but
+  future callers passing user-controlled paths are protected.
+- **`shell_quote` promoted to `pub(crate)`** for cross-module reuse.
+
+### Tests
+- 1058+ passing tests, 0 failures (post-fix).
+- New integration tests: `tests/daemon_user_guard.rs` (18 tests),
+  `tests/skill_finder_include_desc.rs` (11 tests).
+- Regression tests pinning the `plus(1 1)` probe at all three call sites
+  and the `ipcIsProcessRunning()` ban.
+
 ## [0.3.18] - 2026-05-01
 
 ### Added
