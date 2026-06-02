@@ -404,6 +404,41 @@ impl VirtuosoClient {
         }
     }
 
+    /// Query the daemon-side version string (e.g. `"0.4.0-alpha.5"`).
+    ///
+    /// The daemon stores its version in the SKILL global `RBDVersion`, which
+    /// `RBIpcErrHandler` populates by parsing the `VERSION:x.x.x` line the
+    /// Rust daemon prints to stderr on startup. Used by `vcli session show`
+    /// to detect CLI/daemon version skew.
+    ///
+    /// Uses `execute_skill_unchecked` so the query works without the Admin
+    /// capability — the SKILL payload is a fixed literal reading a known
+    /// global.
+    ///
+    /// Returns:
+    /// - `Ok(Some(version))` when the daemon reported a non-empty version
+    /// - `Ok(None)` when the global is unbound, empty, or equal to `"?"`
+    ///   (the placeholder `ramic_bridge.il` uses when VERSION: line was
+    ///   not seen — see `RBDVersion = ""` default at the top of the .il)
+    /// - `Err(_)` on transport failure (caller decides whether to surface)
+    pub fn get_daemon_version(&self) -> Result<Option<String>> {
+        // SKILL: read the global RBDVersion. Defensive: boundp() guards
+        // against SKILL that has never set it (e.g. very old .il without
+        // the RBDVersion default initializer).
+        const SKILL: &str = r#"let((v) v = if(boundp('RBDVersion) then RBDVersion else nil) \
+            if(v && v != "" && v != "?" then v else nil))"#;
+        let r = self.execute_skill_unchecked(SKILL, Some(5))?;
+        if !r.skill_ok() {
+            return Ok(None);
+        }
+        let ver = r.output.trim().trim_matches('"').to_string();
+        if ver.is_empty() || ver == "nil" {
+            Ok(None)
+        } else {
+            Ok(Some(ver))
+        }
+    }
+
     /// Query the daemon's Unix `$USER` via `getShellEnvVar`.
     ///
     /// Best-effort identity check used to detect SSH-tunnel-to-wrong-user

@@ -297,6 +297,7 @@ mod session_info_tests {
             user: "meow".into(),
             created: "Apr  6 12:00:00 2026".into(),
             daemon_user: None,
+            daemon_version: None,
         }
     }
 

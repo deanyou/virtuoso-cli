@@ -156,16 +156,35 @@ pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
     //   - `get_daemon_user()` queries the daemon's Unix $USER so we can
     //     warn about SSH-tunnel-to-wrong-user misconfigurations.
     let port_open = s.is_alive();
-    let (daemon_user, daemon_user_warning, daemon_responsive) = if port_open {
+    let (
+        daemon_user,
+        daemon_user_warning,
+        daemon_responsive,
+        daemon_version,
+        daemon_version_warning,
+    ) = if port_open {
         let client = VirtuosoClient::new("127.0.0.1", s.port, 3);
         let user_result = client.get_daemon_user();
+        let version_result = client.get_daemon_version();
         let alive = client.daemon_alive();
+        let ver = version_result.as_ref().unwrap_or(&None).clone();
+        let ver_warn = match &version_result {
+            Ok(Some(v)) => check_version_skew(v),
+            Ok(None) => None, // daemon did not report a version — don't warn
+            Err(e) => Some(format!("daemon version query failed: {e}")),
+        };
         match user_result {
-            Ok(user_opt) => (user_opt, None, alive),
-            Err(e) => (None, Some(format!("daemon user query failed: {e}")), alive),
+            Ok(user_opt) => (user_opt, None, alive, ver, ver_warn),
+            Err(e) => (
+                None,
+                Some(format!("daemon user query failed: {e}")),
+                alive,
+                ver,
+                ver_warn,
+            ),
         }
     } else {
-        (None, None, false)
+        (None, None, false, None, None)
     };
 
     // Cross-user check: if user has configured VB_REMOTE_USER_<profile>
@@ -189,18 +208,28 @@ pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
         None
     };
 
-    // Cache daemon_user back into the session file so subsequent `session show`
-    // invocations and `session list` rows can surface it without re-querying.
-    // The write is best-effort; failure is silently ignored (we already have
-    // fresh data in the JSON response).
-    if let Some(user) = daemon_user.as_ref() {
+    // Cache daemon_user + daemon_version back into the session file so
+    // subsequent `session show` invocations and `session list` rows can
+    // surface them without re-querying. The write is best-effort; failure
+    // is silently ignored (we already have fresh data in the JSON response).
+    if daemon_user.is_some() || daemon_version.is_some() {
         let mut s_mut = s.clone();
-        s_mut.daemon_user = Some(user.clone());
+        if let Some(u) = daemon_user.as_ref() {
+            s_mut.daemon_user = Some(u.clone());
+        }
+        if let Some(v) = daemon_version.as_ref() {
+            s_mut.daemon_version = Some(v.clone());
+        }
         s_mut.save_to_session_file();
     }
 
+    let has_warnings = cross_user_warning.is_some()
+        || daemon_version_warning.is_some()
+        || daemon_user_warning.is_some()
+        || stale_daemon_hint.is_some();
+
     Ok(json!({
-        "status": if cross_user_warning.is_some() { "warning" } else { "success" },
+        "status": if has_warnings { "warning" } else { "success" },
         "session": {
             "id": s.id,
             "port": s.port,
@@ -211,13 +240,32 @@ pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
             "alive": port_open,
             "daemon_responsive": daemon_responsive,
             "daemon_user": daemon_user,
+            "daemon_version": daemon_version,
+            "cli_version": env!("CARGO_PKG_VERSION"),
         },
         "warnings": {
             "daemon_user": daemon_user_warning,
             "cross_user": cross_user_warning,
+            "version_skew": daemon_version_warning,
             "stale_daemon": stale_daemon_hint,
         }
     }))
+}
+
+/// Compare the daemon's reported version (from `RBDVersion` global) with the
+/// version compiled into this vcli binary. A mismatch usually means the
+/// user installed a new vcli but forgot to reload `ramic_bridge.il` (or vice
+/// versa), leaving the daemon binary out of sync with the SKILL wrapper.
+fn check_version_skew(daemon_version: &str) -> Option<String> {
+    const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+    if daemon_version == CLI_VERSION {
+        return None;
+    }
+    Some(format!(
+        "daemon reports version {daemon_version:?} but vcli binary is {CLI_VERSION:?}. \
+         They are out of sync — reinstall vcli (`cargo install --path .` or pull a fresh release) \
+         and reload ramic_bridge.il in the CIW to align versions."
+    ))
 }
 
 /// Compare the daemon's Unix user with the configured `VB_REMOTE_USER[<profile>]`.
@@ -285,6 +333,7 @@ mod tests {
             user: "meow".into(),
             created: "Jun  1 08:14:16 2026".into(),
             daemon_user: None,
+            daemon_version: None,
         }
     }
 
@@ -403,5 +452,58 @@ mod tests {
             "whitespace-only env var should be treated as unset"
         );
         clear_remote_user_env();
+    }
+
+    // ------------------------------------------------------------------
+    // check_version_skew
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn version_skew_match_returns_none() {
+        const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+        assert!(check_version_skew(CLI_VERSION).is_none());
+    }
+
+    #[test]
+    fn version_skew_mismatch_returns_warning_with_both_versions() {
+        const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+        // Pick something that's guaranteed not to equal CLI_VERSION.
+        let other = if CLI_VERSION == "0.0.0" {
+            "9.9.9"
+        } else {
+            "0.0.0"
+        };
+        let w = check_version_skew(other).expect("mismatch must warn");
+        assert!(
+            w.contains(other),
+            "warning should name daemon version {other:?}: {w}"
+        );
+        assert!(
+            w.contains(CLI_VERSION),
+            "warning should name CLI version {CLI_VERSION:?}: {w}"
+        );
+        assert!(
+            w.contains("reinstall") || w.contains("reload"),
+            "warning should mention remediation: {w}"
+        );
+    }
+
+    #[test]
+    fn version_skew_empty_string_warns() {
+        // Old daemon that never set RBDVersion reports "" — must warn so the
+        // user notices they need to upgrade.
+        assert!(
+            check_version_skew("").is_some(),
+            "empty RBDVersion should produce a skew warning"
+        );
+    }
+
+    #[test]
+    fn version_skew_question_mark_placeholder_warns() {
+        // The .il uses "?" as the placeholder when RBDVersion is "".
+        assert!(
+            check_version_skew("?").is_some(),
+            "'?' placeholder should produce a skew warning"
+        );
     }
 }

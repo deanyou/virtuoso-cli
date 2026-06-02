@@ -141,6 +141,7 @@ fn session_info_serializes_without_daemon_user_when_none() {
         user: "tester".into(),
         created: "2026-06-01T00:00:00Z".into(),
         daemon_user: None,
+        daemon_version: None,
     };
     let json = serde_json::to_string(&s).unwrap();
     // daemon_user is None → field should be OMITTED from JSON
@@ -160,6 +161,7 @@ fn session_info_serializes_with_daemon_user_when_some() {
         user: "tester".into(),
         created: "2026-06-01T00:00:00Z".into(),
         daemon_user: Some("alice".into()),
+        daemon_version: None,
     };
     let json = serde_json::to_string(&s).unwrap();
     assert!(json.contains("\"daemon_user\":\"alice\""), "got: {json}");
@@ -224,6 +226,7 @@ fn save_to_session_file_writes_to_sessions_dir() {
         user: "tester".into(),
         created: "2026-06-01T00:00:00Z".into(),
         daemon_user: None,
+        daemon_version: None,
     };
     s.daemon_user = Some("alice".into());
     s.save_to_session_file();
@@ -379,6 +382,7 @@ fn save_to_session_file_swallows_io_errors() {
         user: "u".into(),
         created: "now".into(),
         daemon_user: Some("bob".into()),
+        daemon_version: None,
     };
     // Should not panic
     s.save_to_session_file();
@@ -432,4 +436,167 @@ fn ramic_bridge_recovery_hint_strings_present() {
         after.contains("RBSessionId") || after.contains("session id"),
         "recovery hint should echo RBSessionId / session id"
     );
+}
+
+// ----------------------------------------------------------------------------
+// daemon_version field on SessionInfo (version-unification feature)
+// ----------------------------------------------------------------------------
+
+#[test]
+fn session_info_serializes_without_daemon_version_when_none() {
+    let s = SessionInfo {
+        id: "test-12345".into(),
+        port: 12345,
+        pid: 9999,
+        host: "test-host".into(),
+        user: "tester".into(),
+        created: "2026-06-01T00:00:00Z".into(),
+        daemon_user: None,
+        daemon_version: None,
+    };
+    let json = serde_json::to_string(&s).unwrap();
+    // daemon_version is None → field should be OMITTED from JSON
+    assert!(
+        !json.contains("daemon_version"),
+        "None daemon_version should be skipped: {json}"
+    );
+}
+
+#[test]
+fn session_info_serializes_with_daemon_version_when_some() {
+    let s = SessionInfo {
+        id: "test-12345".into(),
+        port: 12345,
+        pid: 9999,
+        host: "test-host".into(),
+        user: "tester".into(),
+        created: "2026-06-01T00:00:00Z".into(),
+        daemon_user: None,
+        daemon_version: Some("0.4.0-alpha.5".into()),
+    };
+    let json = serde_json::to_string(&s).unwrap();
+    assert!(
+        json.contains("\"daemon_version\":\"0.4.0-alpha.5\""),
+        "got: {json}"
+    );
+}
+
+#[test]
+fn session_info_deserializes_legacy_json_without_daemon_version() {
+    // Older vcli session files (and older .il) won't write daemon_version at
+    // all. The struct must still parse such files via #[serde(default)].
+    let legacy_json = r#"{
+        "id": "legacy-9999",
+        "port": 9999,
+        "pid": 8888,
+        "host": "old-host",
+        "user": "legacy",
+        "created": "2026-01-01T00:00:00Z"
+    }"#;
+    let s: SessionInfo = serde_json::from_str(legacy_json)
+        .expect("must deserialize legacy JSON without daemon_version field");
+    assert!(
+        s.daemon_version.is_none(),
+        "missing daemon_version should default to None"
+    );
+}
+
+#[test]
+fn session_info_deserializes_new_json_with_daemon_version() {
+    let new_json = r#"{
+        "id": "new-9999",
+        "port": 9999,
+        "pid": 8888,
+        "host": "new-host",
+        "user": "modern",
+        "created": "2026-06-01T00:00:00Z",
+        "daemon_user": "bob",
+        "daemon_version": "0.4.0-alpha.5"
+    }"#;
+    let s: SessionInfo = serde_json::from_str(new_json).unwrap();
+    assert_eq!(s.daemon_version.as_deref(), Some("0.4.0-alpha.5"));
+}
+
+// ----------------------------------------------------------------------------
+// ramic_bridge.il version stamp (regression check)
+// ----------------------------------------------------------------------------
+
+#[test]
+fn ramic_bridge_has_rb_version_stamp() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/ramic_bridge.il");
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+
+    // Stamp must exist somewhere near the top of the file.
+    let head = src.lines().take(15).collect::<Vec<_>>().join("\n");
+    assert!(
+        head.contains("; RB_VERSION:"),
+        "ramic_bridge.il should have a `; RB_VERSION: x.y.z` stamp in its first 15 lines, got:\n{head}"
+    );
+}
+
+#[test]
+fn ramic_bridge_version_stamp_matches_cargo_toml() {
+    // Read the stamp from .il
+    let il_path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/ramic_bridge.il");
+    let il_src = std::fs::read_to_string(&il_path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", il_path.display()));
+    let stamp_line = il_src
+        .lines()
+        .find(|l| {
+            l.trim_start_matches(';')
+                .trim_start()
+                .starts_with("RB_VERSION:")
+        })
+        .expect("ramic_bridge.il should have a `; RB_VERSION: ...` line");
+    let il_version = stamp_line
+        .trim_start_matches(';')
+        .trim()
+        .trim_start_matches("RB_VERSION:")
+        .trim();
+
+    // Read the version from Cargo.toml of the workspace root
+    let toml_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let toml_src = std::fs::read_to_string(&toml_path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", toml_path.display()));
+    // Find the first `version = "..."` in [package] section
+    let cli_version = toml_src
+        .lines()
+        .skip_while(|l| !l.trim_start().starts_with("[package]"))
+        .take_while(|l| {
+            let t = l.trim_start();
+            t.is_empty()
+                || t.starts_with('#')
+                || t.starts_with('[')
+                || t.starts_with("version")
+                || t.starts_with("name")
+                || t.starts_with("authors")
+                || t.starts_with("edition")
+                || t.starts_with("description")
+                || t.starts_with("license")
+                || t.starts_with("repository")
+                || t.starts_with("readme")
+                || t.starts_with("keywords")
+                || t.starts_with("categories")
+                || t.starts_with("publish")
+                || t.starts_with("include")
+                || t.starts_with("exclude")
+                || t.starts_with("default-run")
+                || t.starts_with("rust-version")
+                || t.starts_with("documentation")
+                || t.starts_with("homepage")
+                || t.starts_with("workspace")
+                || t.starts_with("path")
+        })
+        .find(|l| l.trim_start().starts_with("version"))
+        .and_then(|l| l.split('"').nth(1))
+        .map(str::to_string)
+        .expect("Cargo.toml should have a `version = \"...\"` in [package]");
+
+    assert_eq!(
+        il_version, cli_version,
+        "ramic_bridge.il RB_VERSION stamp ({il_version:?}) must match Cargo.toml version ({cli_version:?})"
+    );
+    assert_eq!(il_version, env!("CARGO_PKG_VERSION"));
 }

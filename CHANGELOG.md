@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0-alpha.6] - 2026-06-02
+
+### Added
+- **CLI/daemon version unification** — `vcli session show` now reports
+  the daemon's version (from the SKILL global `RBDVersion`, populated by
+  `RBIpcErrHandler` parsing the `VERSION:x.x.x` line the Rust daemon prints
+  to stderr on startup) and warns when it does not match the vcli binary
+  version (`CARGO_PKG_VERSION`). Catches the common "I upgraded vcli but
+  forgot to reload `ramic_bridge.il`" footgun where the SKILL wrapper
+  falls out of sync with the binary.
+- **`SessionInfo.daemon_version`** — optional field with the same
+  backward-compat guarantees as `daemon_user` (older `ramic_bridge.il`
+  never writes it; legacy session files still parse via
+  `#[serde(default, skip_serializing_if = "Option::is_none")]`).
+- **`VirtuosoClient::get_daemon_version()`** — narrow internal API
+  (fixed-literal SKILL payload, no capability required). Returns
+  `Ok(None)` for the empty/`"?"` placeholder so old daemons that never
+  emitted `VERSION:` are not falsely flagged.
+- **`check_version_skew()` helper in `commands::session`** — pure
+  function with 4 unit tests (match / mismatch / empty / `?`).
+- **`ramic_bridge.il` `; RB_VERSION: 0.4.0-alpha.6` stamp** — human-
+  readable top-of-file marker. Two new regression tests
+  (`ramic_bridge_has_rb_version_stamp`,
+  `ramic_bridge_version_stamp_matches_cargo_toml`) refuse to merge a
+  drift between the .il stamp and `Cargo.toml`.
+
+### Changed
+- `vcli session show` JSON now includes `daemon_version` and
+  `cli_version` in the `session` block, plus a new
+  `warnings.version_skew` field.
+
 ## [0.4.0-alpha.5] - 2026-06-01
 
 ### Added

@@ -179,6 +179,17 @@ pub struct SessionInfo {
     /// backward compatibility with legacy session files.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub daemon_user: Option<String>,
+
+    /// Backward-compat field for the daemon-side version string (e.g. `"0.4.0-alpha.5"`).
+    ///
+    /// Populated lazily by `vcli session show` (which queries the daemon's
+    /// `RBDVersion` SKILL global). The `RBDVersion` global is set by
+    /// `RBIpcErrHandler` parsing the `VERSION:x.x.x` line the Rust daemon
+    /// prints to stderr on startup. When `None`, either the user has not
+    /// yet run `session show` OR the daemon did not emit a version line
+    /// (very old daemon binaries).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daemon_version: Option<String>,
 }
 
 impl SessionInfo {
