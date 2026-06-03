@@ -54,29 +54,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-
       - name: Install aarch64 cross toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
       - name: Build virtuoso-daemon for aarch64
-        run: |
-          cargo build --release --features daemon --bin virtuoso-daemon --target aarch64-unknown-linux-gnu
-        env:
-          # linker auto-finds libgcc_s.so via /usr/aarch64-linux-gnu/lib/aarch64-linux-gnu/
-          # which gcc-aarch64-linux-gnu (Ubuntu) populates correctly.
-          # If your toolchain is missing it, see docs/aarch64-cross-compile.md.
-
+        run: cargo build --release --features daemon --bin virtuoso-daemon --target aarch64-unknown-linux-gnu
       - name: Package daemon
         env:
           TAG: ${{ github.ref_name }}
         run: |
           mkdir -p dist
-          cp target/aarch64-unknown-linux-gnu/release/virtuoso-daemon \
-             dist/virtuoso-daemon-${TAG}-linux-aarch64
+          cp target/aarch64-unknown-linux-gnu/release/virtuoso-daemon dist/virtuoso-daemon-${TAG}-linux-aarch64
           chmod +x dist/*
-
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
