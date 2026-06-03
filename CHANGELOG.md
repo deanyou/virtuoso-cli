@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0-alpha.8] - 2026-06-03
+
+### Added
+- **aarch64 cross-compiled `virtuoso-daemon`** — ships at
+  `resources/daemons/virtuoso-daemon-aarch64` (398 KB, ELF AArch64).
+  Lets `vcli tunnel start` deploy to ARM64 hosts (AWS Graviton, Apple
+  Silicon Linux VMs, Ampere Altra) without needing a Rust toolchain
+  on the remote side. Architecture is auto-detected at deploy time
+  and the matching binary is uploaded.
+  - `docs/aarch64-cross-compile.md` documents the manual Ubuntu
+    22.04 aarch64 sysroot setup under `/usr/aarch64-linux-gnu/sys-root/`
+    (Rocky 8 has no aarch64 glibc in its dnf repos) and the
+    `cannot find -lgcc_s` linker trap that required the explicit
+    `-L` flag in the gcc wrapper.
+  - GitHub Actions release workflow now builds the aarch64 daemon
+    in CI via cross-compile (Ubuntu runner + gcc-aarch64-linux-gnu +
+    rustup target), so the binary in the GitHub release is rebuilt
+    fresh on every tag.
+
+### Changed
+- **README.md** — bilingual sync to v0.4.0-alpha.7+. Both English
+  and Chinese sections now document:
+  - `vcli session show` reports `daemon_version` + `version_skew`
+  - Stale-daemon recovery on `ramic_bridge.il` `load`
+  - Native cross-arch tunnel deploy (x86_64 / aarch64)
+  - Per-client scratch scoping via `VB_CLIENT_ID`
+  - Skill Finder 5 search modes (`vcli skill find --mode {fuzzy,prefix,suffix,exact,regex}`)
+  - Admin capability gate (`VCLI_CAPABILITY=admin`) for `skill broadcast` and raw SKILL exec
+  - Ready banner version: 0.3.18 → 0.4.0-alpha.7
+  - Command Reference: `skill broadcast` (admin), `skill find`, `skill info`
+  - Configuration table: `VB_CLIENT_ID`, `VCLI_CAPABILITY`
+- **Release workflow** (`release.yml`) — added `build-linux-aarch64`
+  job that cross-compiles `virtuoso-daemon` for aarch64 and uploads
+  the binary to the GitHub release.
+
 ## [0.4.0-alpha.7] - 2026-06-02
 
 ### Fixed

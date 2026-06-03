@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  build-linux:
+  build-linux-x86_64:
     name: Build Linux x86_64
     runs-on: ubuntu-latest
     steps:
@@ -26,15 +26,16 @@ jobs:
           cargo build --release --features daemon --bin virtuoso-daemon
 
       - name: Package binaries
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
           mkdir -p dist
           cp target/release/vcli              dist/vcli-${TAG}-linux-x86_64
           cp target/release/vtui              dist/vtui-${TAG}-linux-x86_64
           cp target/release/virtuoso-daemon   dist/virtuoso-daemon-${TAG}-linux-x86_64
           chmod +x dist/*
 
-      - name: Create GitHub Release
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
@@ -42,10 +43,49 @@ jobs:
           body: |
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
 
+  build-linux-aarch64:
+    name: Build Linux aarch64 (daemon only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install aarch64 cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build virtuoso-daemon for aarch64
+        run: |
+          cargo build --release --features daemon --bin virtuoso-daemon --target aarch64-unknown-linux-gnu
+        env:
+          # linker auto-finds libgcc_s.so via /usr/aarch64-linux-gnu/lib/aarch64-linux-gnu/
+          # which gcc-aarch64-linux-gnu (Ubuntu) populates correctly.
+          # If your toolchain is missing it, see docs/aarch64-cross-compile.md.
+
+      - name: Package daemon
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          cp target/aarch64-unknown-linux-gnu/release/virtuoso-daemon \
+             dist/virtuoso-daemon-${TAG}-linux-aarch64
+          chmod +x dist/*
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/virtuoso-daemon-${{ github.ref_name }}-linux-aarch64
+
   publish-crate:
     name: Publish to crates.io
     runs-on: ubuntu-latest
-    needs: build-linux
+    needs: [build-linux-x86_64, build-linux-aarch64]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
