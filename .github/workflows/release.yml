@@ -56,6 +56,13 @@ jobs:
           cache-on-failure: true
       - name: Install aarch64 cross toolchain
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Configure cargo to use aarch64-linux-gnu-gcc as linker
+        run: |
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml <<'EOF'
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
       - name: Build virtuoso-daemon for aarch64
         run: cargo build --release --features daemon --bin virtuoso-daemon --target aarch64-unknown-linux-gnu
       - name: Package daemon
