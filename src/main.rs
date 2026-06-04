@@ -180,23 +180,67 @@ enum Commands {
 #[derive(Subcommand)]
 enum ProfileCmd {
     /// Show the resolved profile and its source
+    #[command(
+        long_about = "Print the connection profile that Config::from_env() would resolve, \
+            plus the source layer it came from.\n\n\
+            Resolution order:\n  \
+            1. VB_PROFILE env var\n  \
+            2. $VIRTUAL_ENV/.vcli-profile (Python venv binding)\n  \
+            3. ~/.vcli/.env VB_PROFILE=... (user-level default)\n\n\
+            Examples:\n  \
+            virtuoso profile show\n  \
+            virtuoso profile show --format json"
+    )]
     Show,
 
-    /// Bind the current virtualenv to a profile
+    /// Bind a profile name to a scope (write the binding file)
+    #[command(
+        long_about = "Bind a profile name to a scope so subsequent vcli invocations resolve \
+            that profile automatically. One of --venv, --user, or --local is required.\n\n\
+            Scopes:\n  \
+            --venv : write $VIRTUAL_ENV/.vcli-profile  (project Python venv)\n  \
+            --user : write ~/.vcli/.env VB_PROFILE=...  (user-level default)\n  \
+            --local: write ./.vcli-profile  (current working dir)\n\n\
+            Examples:\n  \
+            virtuoso profile bind t28_digital --venv\n  \
+            virtuoso profile bind analog_default --user"
+    )]
     Bind {
-        /// Profile name to bind
-        profile: String,
+        /// Profile name to bind (e.g. "t28_digital", "analog_default")
+        name: String,
 
-        /// Bind to the current virtualenv (required)
-        #[arg(long)]
+        /// Bind to $VIRTUAL_ENV/.vcli-profile
+        #[arg(long, conflicts_with_all = &["user", "local"])]
         venv: bool,
+
+        /// Bind to ~/.vcli/.env VB_PROFILE=
+        #[arg(long, conflicts_with_all = &["venv", "local"])]
+        user: bool,
+
+        /// Bind to ./.vcli-profile (current working dir)
+        #[arg(long, conflicts_with_all = &["venv", "user"])]
+        local: bool,
     },
 
-    /// Clear the virtualenv profile binding
+    /// Clear a profile binding (remove the file or relevant line)
+    #[command(
+        long_about = "Clear a profile binding. One of --venv, --user, or --local is required.\n\n\
+            Examples:\n  \
+            virtuoso profile clear --venv\n  \
+            virtuoso profile clear --user"
+    )]
     Clear {
-        /// Clear from the current virtualenv (required)
-        #[arg(long)]
+        /// Clear $VIRTUAL_ENV/.vcli-profile
+        #[arg(long, conflicts_with_all = &["user", "local"])]
         venv: bool,
+
+        /// Clear ~/.vcli/.env VB_PROFILE= line
+        #[arg(long, conflicts_with_all = &["venv", "local"])]
+        user: bool,
+
+        /// Clear ./.vcli-profile
+        #[arg(long, conflicts_with_all = &["venv", "user"])]
+        local: bool,
     },
 }
 
@@ -1243,6 +1287,118 @@ fn dispatch_tunnel(cmd: TunnelCmd, format: OutputFormat) -> error::Result<serde_
     }
 }
 
+fn dispatch_profile(cmd: ProfileCmd) -> error::Result<serde_json::Value> {
+    use virtuoso_cli::profile::{BindScope, ProfileResolution};
+    match cmd {
+        ProfileCmd::Show => {
+            let info: ProfileResolution = virtuoso_cli::profile::resolve_profile_info(None);
+            Ok(serde_json::json!({
+                "profile": info.profile,
+                "source": info.source,
+                "path": info.path.as_ref().map(|p| p.to_string_lossy().to_string()),
+                "resolution_order": [
+                    "1. explicit profile= argument / CLI -p/--profile",
+                    "2. process env VB_PROFILE",
+                    "3. $VIRTUAL_ENV/.vcli-profile (venv binding)",
+                    "4. ~/.vcli/.env VB_PROFILE= (user-level default)",
+                    "5. None (legacy default)",
+                ],
+            }))
+        }
+        ProfileCmd::Bind { name, venv, user, local } => {
+            let scope = parse_bind_scope(venv, user, local)?;
+            match scope {
+                BindScope::Venv => {
+                    let path = virtuoso_cli::profile::bind_venv_profile(&name)
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "bind",
+                        "scope": "venv",
+                        "profile": name,
+                        "path": path.to_string_lossy().to_string(),
+                    }))
+                }
+                BindScope::User => {
+                    let path = virtuoso_cli::profile::bind_user_profile(&name)
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "bind",
+                        "scope": "user",
+                        "profile": name,
+                        "path": path.to_string_lossy().to_string(),
+                    }))
+                }
+                BindScope::Local => {
+                    let path = virtuoso_cli::profile::bind_local_profile(&name)
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "bind",
+                        "scope": "local",
+                        "profile": name,
+                        "path": path.to_string_lossy().to_string(),
+                    }))
+                }
+            }
+        }
+        ProfileCmd::Clear { venv, user, local } => {
+            let scope = parse_bind_scope(venv, user, local)?;
+            match scope {
+                BindScope::Venv => {
+                    let path = virtuoso_cli::profile::clear_venv_profile()
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "clear",
+                        "scope": "venv",
+                        "path": path.to_string_lossy().to_string(),
+                    }))
+                }
+                BindScope::User => {
+                    virtuoso_cli::profile::clear_user_profile()
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "clear",
+                        "scope": "user",
+                    }))
+                }
+                BindScope::Local => {
+                    virtuoso_cli::profile::clear_local_profile()
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "clear",
+                        "scope": "local",
+                    }))
+                }
+            }
+        }
+    }
+}
+
+fn parse_bind_scope(venv: bool, user: bool, local: bool) -> error::Result<virtuoso_cli::profile::BindScope> {
+    let set: Vec<&str> = [
+        ("venv", venv),
+        ("user", user),
+        ("local", local),
+    ]
+    .iter()
+    .filter_map(|(n, b)| if *b { Some(*n) } else { None })
+    .collect();
+    match set.len() {
+        0 => Err(error::VirtuosoError::Config(
+            "must specify one of --venv, --user, or --local".into(),
+        )),
+        1 => Ok(match set[0] {
+            "venv" => virtuoso_cli::profile::BindScope::Venv,
+            "user" => virtuoso_cli::profile::BindScope::User,
+            "local" => virtuoso_cli::profile::BindScope::Local,
+            _ => unreachable!(),
+        }),
+        _ => Err(error::VirtuosoError::Config(format!(
+            "specify only one of --venv, --user, --local (got: {})",
+            set.join(", ")
+        ))),
+    }
+}
+
 fn dispatch_skill(cmd: SkillCmd) -> error::Result<serde_json::Value> {
     match cmd {
         SkillCmd::Exec {
@@ -1573,48 +1729,6 @@ fn dispatch_rpc(cmd: RpcCmd) -> error::Result<serde_json::Value> {
     }
 }
 
-fn dispatch_profile(cmd: ProfileCmd) -> error::Result<serde_json::Value> {
-    match cmd {
-        ProfileCmd::Show => {
-            let info = virtuoso_cli::resolve_profile_info(None);
-            Ok(serde_json::json!({
-                "profile": info.profile,
-                "source": info.source,
-                "path": info.path.map(|p| p.to_string_lossy().to_string()),
-            }))
-        }
-        ProfileCmd::Bind { profile, venv } => {
-            if !venv {
-                return Err(error::VirtuosoError::Config(
-                    "profile bind requires --venv flag".to_string(),
-                ));
-            }
-            match virtuoso_cli::profile::bind_venv_profile(&profile) {
-                Ok(path) => Ok(serde_json::json!({
-                    "status": "bound",
-                    "profile": profile,
-                    "path": path.to_string_lossy().to_string(),
-                })),
-                Err(e) => Err(error::VirtuosoError::Config(e.to_string())),
-            }
-        }
-        ProfileCmd::Clear { venv } => {
-            if !venv {
-                return Err(error::VirtuosoError::Config(
-                    "profile clear requires --venv flag".to_string(),
-                ));
-            }
-            match virtuoso_cli::profile::clear_venv_profile() {
-                Ok(path) => Ok(serde_json::json!({
-                    "status": "cleared",
-                    "path": path.to_string_lossy().to_string(),
-                })),
-                Err(e) => Err(error::VirtuosoError::Config(e.to_string())),
-            }
-        }
-    }
-}
-
 fn main() {
     let cli = Cli::parse();
 
@@ -1669,6 +1783,7 @@ fn main() {
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
         Commands::Tunnel(cmd) => dispatch_tunnel(cmd, format),
+        Commands::Profile(cmd) => dispatch_profile(cmd),
         Commands::Skill(cmd) => dispatch_skill(cmd),
         Commands::Cell(cmd) => dispatch_cell(cmd),
         Commands::Sim(cmd) => dispatch_sim(cmd),
@@ -1723,7 +1838,6 @@ fn main() {
             }
             std::process::exit(0);
         }
-        Commands::Profile(cmd) => dispatch_profile(cmd),
     };
 
     let exit_code = match &result {

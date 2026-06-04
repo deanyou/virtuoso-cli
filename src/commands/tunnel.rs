@@ -63,11 +63,16 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
         }));
     }
 
-    // Clean up remote files BEFORE killing tunnel
+    // Clean up remote files BEFORE killing tunnel.
+    // The cleanup path is profile-scoped (see transport::tunnel::setup_dir_for_profile)
+    // so stopping profile A's tunnel doesn't wipe profile B's setup.
     if !cfg.keep_remote_files {
         match SSHClient::from_env(cfg.keep_remote_files) {
             Ok(client) => {
-                if let Err(e) = client.run_command("rm -rf /tmp/virtuoso_bridge") {
+                let setup_dir = crate::transport::tunnel::setup_dir_for_profile(
+                    cfg.profile.as_deref(),
+                );
+                if let Err(e) = client.run_command(&format!("rm -rf {setup_dir}")) {
                     tracing::warn!("remote cleanup failed: {e}");
                 }
             }

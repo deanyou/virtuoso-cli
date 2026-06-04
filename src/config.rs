@@ -56,7 +56,10 @@ impl Config {
     }
 
     /// Resolve profile from env var, venv binding, or user-level config.
-    fn resolve_profile() -> Option<String> {
+    ///
+    /// `pub(crate)` so that `commands::profile::show()` and integration
+    /// tests can introspect resolution without going through `from_env`.
+    pub(crate) fn resolve_profile() -> Option<String> {
         // 1. Process environment VB_PROFILE
         if let Ok(v) = env::var("VB_PROFILE") {
             let trimmed = v.trim();
