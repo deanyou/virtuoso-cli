@@ -1,4 +1,4 @@
-; RB_VERSION: 0.4.0-alpha.8
+; RB_VERSION: 0.4.0-alpha.9
 ; Stamp must match the vcli binary's `Cargo.toml` version. `vcli session show`
 ; compares this with the daemon's `RBDVersion` global (parsed from the
 ; `VERSION:x.x.x` line the daemon prints to stderr on startup). If you see a

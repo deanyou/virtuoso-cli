@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0-alpha.9] - 2026-06-03
+
+### Fixed
+- **Multi-profile CIW setup-file collision** (ported from upstream
+  virtuoso-bridge-lite PR #86). Previously, two profiles on the
+  same remote host would both write to `/tmp/virtuoso_bridge/ramic_bridge.il`,
+  so the second profile's `tunnel start` would silently overwrite
+  the first profile's CIW setup file. The first profile's CIW `load()`
+  would then start the wrong daemon. After the fix:
+  - profile A's setup dir: `/tmp/virtuoso_bridge_analog/`
+  - profile B's setup dir: `/tmp/virtuoso_bridge_digital/`
+  - `tunnel stop` / `cleanup_remote` is now profile-scoped and never
+    wipes other profiles' dirs
+- **Tunnel cleanup wiping per-client scratch**: the previous
+  `rm -rf /tmp/virtuoso_bridge` in `cleanup_remote` was also
+  deleting all per-client `client_id` subdirs (those created by
+  the per-client scratch scoping feature). Now scoped to the
+  active profile's dir.
+
+### Added
+- **`vcli profile bind` / `vcli profile clear` extended with three
+  scopes** (was `--venv` only):
+  - `--venv`  → write `$VIRTUAL_ENV/.vcli-profile` (Python venv binding)
+  - `--user`  → write `~/.vcli/.env` `VB_PROFILE=...` line (user default)
+  - `--local` → write `./.vcli-profile` (current working dir)
+  Re-binding replaces the existing `VB_PROFILE=` line (no duplicate
+  append). Empty / whitespace-only / newline-injected names are
+  rejected. Other lines in `~/.vcli/.env` are preserved by `clear`.
+- **Public helpers** in `virtuoso_cli::transport::tunnel` for
+  external consumers:
+  - `profiled_bridge_leaf(Option<&str>) -> String`
+  - `profiled_env_key(&str, Option<&str>) -> String`
+  - `setup_dir_for_profile(Option<&str>) -> String`
+
+### Security
+- Profile name sanitization in setup-dir leaf: any char outside
+  `[A-Za-z0-9._-]` is replaced with `_`, length capped at 64.
+  Path-traversal attempts (`../etc/passwd`, etc.) are neutralized.
+  All-underscore results fall back to `virtuoso_bridge_profile` to
+  avoid shadowing the no-profile leaf.
+
+### Tests
+- +9 unit tests in `src/transport/tunnel.rs` (sanitization, length
+  cap, fallback, two-profile isolation)
+- +4 unit tests in `src/profile.rs` (bind/clear round-trip, line
+  preservation, empty/newline rejection) + `Mutex` for parallel
+  test safety on `~/.vcli/.env`
+- +7 integration tests in `tests/tunnel_profile.rs` (helper
+  invariants, CLI plumbing end-to-end, error handling)
+
+Total: 1133 tests pass, 0 clippy warnings.
+
 ## [0.4.0-alpha.8] - 2026-06-03
 
 ### Added
