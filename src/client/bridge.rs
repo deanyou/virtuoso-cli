@@ -99,9 +99,9 @@ impl VirtuosoClient {
         // 1. --session / VB_SESSION → load port from session file
         // 2. No session specified → auto-select if exactly one live session exists
         // 3. Fallback to VB_PORT / config.port for backward compat
-        let (port, resolved_session_id) =
+        let (port, resolved_session_id, resolved_session) =
             if let Some(base_port) = tunnel.as_ref().and_then(|t| t.saved_port()) {
-                (base_port, None)
+                (base_port, None, None)
             } else if let Ok(session_id) = std::env::var("VB_SESSION") {
                 // VB_SESSION may be a Maestro session name (e.g. "fnxSession8") rather than
                 // a bridge session ID — Maestro sessions don't have session files.
@@ -109,23 +109,23 @@ impl VirtuosoClient {
                 match crate::models::SessionInfo::load(&session_id) {
                     Ok(s) => {
                         tracing::info!("connecting to session '{}' on port {}", s.id, s.port);
-                        (s.port, Some(s.id))
+                        (s.port, Some(s.id.clone()), Some(s))
                     }
                     Err(_) => {
                         tracing::debug!(
                             "session '{}' not a bridge session (no file), using VB_PORT",
                             session_id
                         );
-                        (cfg.port, None)
+                        (cfg.port, None, None)
                     }
                 }
             } else {
                 let live_sessions = crate::models::SessionInfo::list_alive();
                 match live_sessions.len() {
                     1 => {
-                        let s = &live_sessions[0];
+                        let s = live_sessions.into_iter().next().unwrap();
                         tracing::info!("auto-selected session '{}' on port {}", s.id, s.port);
-                        (s.port, Some(s.id.clone()))
+                        (s.port, Some(s.id.clone()), Some(s))
                     }
                     n if n > 1 => {
                         let ids: Vec<&str> = live_sessions.iter().map(|s| s.id.as_str()).collect();
@@ -134,7 +134,7 @@ impl VirtuosoClient {
                         ids.join(", ")
                     )));
                     }
-                    _ => (cfg.port, None), // 0 live sessions → use VB_PORT
+                    _ => (cfg.port, None, None), // 0 live sessions → use VB_PORT
                 }
             };
 
@@ -147,6 +147,14 @@ impl VirtuosoClient {
                     sid
                 );
             }
+        }
+
+        // Cross-user daemon guard: verify the daemon was started by the same Unix
+        // user we expect before connecting. This prevents accidentally connecting
+        // to a daemon started by a different user (e.g., a colleague's session).
+        // Skipped if daemon_user is not yet known (populated lazily by `session show`).
+        if let Some(ref session) = resolved_session {
+            guard_cross_user(session)?;
         }
 
         Ok(Self {
@@ -663,6 +671,81 @@ impl VirtuosoClient {
 
 fn is_port_open(port: u16) -> bool {
     TcpStream::connect(format!("127.0.0.1:{port}")).is_ok()
+}
+
+/// Guard: verify the daemon's Unix user matches VB_REMOTE_USER before connecting.
+///
+/// This runs in `VirtuosoClient::from_env()` after session resolution, preventing
+/// accidental connection to a daemon started by a different Unix user. The check
+/// only applies when `session.daemon_user` is already known (populated by a prior
+/// `vcli session show` call). If `daemon_user` is `None`, the check is skipped
+/// with a debug log (the user will be unknown until first `session show`).
+///
+/// Set `VB_ALLOW_CROSS_USER_DAEMON=1` to disable this guard intentionally.
+fn guard_cross_user(session: &SessionInfo) -> Result<()> {
+    // Get expected user from VB_REMOTE_USER[<profile>] or plain VB_REMOTE_USER
+    let profile = std::env::var("VB_PROFILE").ok();
+    let expected = std::env::var(format!(
+        "VB_REMOTE_USER{}",
+        profile
+            .as_deref()
+            .filter(|p| !p.is_empty())
+            .map(|p| format!("_{p}"))
+            .unwrap_or_default()
+    ))
+    .ok()
+    .or_else(|| std::env::var("VB_REMOTE_USER").ok())
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty());
+
+    // If no expected user configured, skip the check
+    let expected = match expected {
+        Some(e) => e,
+        None => return Ok(()),
+    };
+
+    // If daemon_user is not yet known (None), we can't perform the check
+    let daemon_user = match session.daemon_user.as_deref() {
+        Some(u) => u,
+        None => {
+            tracing::debug!(
+                "cross-user guard: daemon_user unknown for session '{}', skipping check",
+                session.id
+            );
+            return Ok(());
+        }
+    };
+
+    // If users match, allow
+    if daemon_user == expected {
+        return Ok(());
+    }
+
+    // Allow override via VB_ALLOW_CROSS_USER_DAEMON=1
+    if std::env::var("VB_ALLOW_CROSS_USER_DAEMON")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+    {
+        tracing::warn!(
+            "cross-user guard: VB_ALLOW_CROSS_USER_DAEMON=1 set, allowing daemon user '{}' (expected '{}')",
+            daemon_user,
+            expected
+        );
+        return Ok(());
+    }
+
+    Err(VirtuosoError::Connection(format!(
+        "daemon Unix user '{}' does not match configured VB_REMOTE_USER '{}' for session '{}'. \
+         Set VB_ALLOW_CROSS_USER_DAEMON=1 to override if you intentionally want to connect.",
+        daemon_user, expected, session.id
+    )))
 }
 
 fn check_blocking_skill(code: &str) -> Option<String> {
