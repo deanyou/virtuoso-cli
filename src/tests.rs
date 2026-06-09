@@ -649,14 +649,14 @@ mod cm_tests {
     #[test]
     fn cm_disabled_by_default_is_true() {
         let r = SSHRunner::new("eda");
-        assert!(r.use_control_master.get());
+        assert!(*r.use_control_master.lock().unwrap());
     }
 
     #[test]
     fn cm_can_be_disabled() {
         let r = SSHRunner::new("eda");
-        r.use_control_master.set(false);
-        assert!(!r.use_control_master.get());
+        *r.use_control_master.lock().unwrap() = false;
+        assert!(!*r.use_control_master.lock().unwrap());
 
         // Verify SSH command no longer contains ControlMaster options
         let args = cmd_args(&r.build_ssh_cmd());

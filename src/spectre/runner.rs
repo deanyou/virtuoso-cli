@@ -14,6 +14,13 @@ use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
+/// Result of a parallel Spectre run — label plus outcome.
+#[derive(Debug)]
+pub struct ParallelSimResult {
+    pub label: String,
+    pub result: Result<SimulationResult>,
+}
+
 pub struct SpectreSimulator {
     pub spectre_cmd: String,
     pub spectre_args: Vec<String>,
@@ -32,6 +39,26 @@ pub struct SpectreSimulator {
     /// When set, this path is used directly instead of relying on PATH.
     pub spectre_bin: Option<String>,
     sink: Arc<dyn JobEventSink>,
+}
+
+impl Clone for SpectreSimulator {
+    fn clone(&self) -> Self {
+        Self {
+            spectre_cmd: self.spectre_cmd.clone(),
+            spectre_args: self.spectre_args.clone(),
+            timeout: self.timeout,
+            work_dir: self.work_dir.clone(),
+            output_format: self.output_format.clone(),
+            remote: self.remote,
+            ssh_runner: self.ssh_runner.clone(),
+            remote_work_dir: self.remote_work_dir.clone(),
+            keep_remote_files: self.keep_remote_files,
+            max_workers: self.max_workers,
+            cadence_cshrc: self.cadence_cshrc.clone(),
+            spectre_bin: self.spectre_bin.clone(),
+            sink: Arc::clone(&self.sink),
+        }
+    }
 }
 
 /// Check if simulation output indicates a netlist read-in error.
@@ -170,6 +197,120 @@ impl SpectreSimulator {
         } else {
             self.run_local(netlist, params)
         }
+    }
+
+    /// Run multiple netlist simulations in parallel, returning results in input order.
+    ///
+    /// Each entry is `(label, netlist)` — results are returned with the same label.
+    /// Worker count is capped at `self.max_workers` and `num_cpus::get()`.
+    ///
+    /// For remote mode, each worker gets its own `SSHRunner` clone so that
+    /// `use_control_master` state is isolated per thread (avoids CM fallback races).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let inputs = vec![
+    ///     ("tt".to_string(), netlist_tt),
+    ///     ("ss".to_string(), netlist_ss),
+    ///     ("ff".to_string(), netlist_ff),
+    /// ];
+    /// let results = sim.run_parallel(&inputs);
+    /// for ParallelSimResult { label, result } in results {
+    ///     match result {
+    ///         Ok(sim_res) => println!("{}: OK", label),
+    ///         Err(e) => println!("{}: ERROR - {}", label, e),
+    ///     }
+    /// }
+    /// ```
+    pub fn run_parallel(&self, inputs: &[(String, String)]) -> Vec<ParallelSimResult> {
+        if inputs.is_empty() {
+            return Vec::new();
+        }
+
+        let n_workers = self.max_workers.min(num_cpus::get() as u32).max(1) as usize;
+
+        // Clone immutable config for each worker thread.
+        let sim = self.clone();
+        let inputs_arc: Vec<_> = inputs.iter().map(|(l, n)| (l.clone(), n.clone())).collect();
+
+        std::thread::scope(|s| {
+            let chunks: Vec<_> = inputs_arc
+                .chunks(inputs_arc.len().div_ceil(n_workers))
+                .collect();
+
+            let handles: Vec<_> = chunks
+                .iter()
+                .map(|chunk| {
+                    s.spawn(|| {
+                        chunk
+                            .iter()
+                            .map(|(label, netlist)| {
+                                let result = sim.run_simulation(netlist, None);
+                                ParallelSimResult {
+                                    label: label.clone(),
+                                    result,
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+
+            let mut all_results = Vec::with_capacity(inputs_arc.len());
+            for handle in handles {
+                all_results.extend(handle.join().unwrap_or_default());
+            }
+            all_results
+        })
+    }
+
+    /// Check if simulation output indicates a netlist read-in error.
+    fn has_readin_error(content: &str) -> bool {
+        let lower = content.to_lowercase();
+        lower.contains("error reading") || lower.contains("read-in failed")
+    }
+
+    /// Extract specific error messages from simulation log for better diagnostics.
+    fn extract_error_messages(content: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        for line in content.lines() {
+            let line = line.trim();
+            // Match common Spectre error patterns
+            if line.contains("Error") || line.contains("ERROR") || line.contains("error:") {
+                // Skip benign messages
+                if line.contains("No licences")
+                    || line.contains("Warning")
+                    || line.contains("info:")
+                    || line.contains("Reading")
+                {
+                    continue;
+                }
+                errors.push(line.to_string());
+            }
+        }
+
+        errors
+    }
+
+    /// Check if simulation output indicates a license error.
+    fn has_license_error(content: &str) -> bool {
+        let lower = content.to_lowercase();
+        (lower.contains("license") || lower.contains("licence"))
+            && (lower.contains("error")
+                || lower.contains("denied")
+                || lower.contains("unavailable"))
+    }
+
+    /// Completion detection patterns (configurable for i18n).
+    /// Default: English "Simulation completed" and Chinese "成就".
+    fn is_simulation_complete(content: &str) -> bool {
+        content.contains("Simulation completed")
+            || content.contains("成就")
+            || std::env::var("VB_SPECTRE_COMPLETION_PATTERN")
+                .map(|p| content.contains(&p))
+                .unwrap_or(false)
     }
 
     pub fn check_license(&self) -> Result<String> {

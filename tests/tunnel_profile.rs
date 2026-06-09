@@ -46,7 +46,10 @@ fn profile_helpers_return_distinct_dirs() {
 #[test]
 fn env_keys_are_profile_suffixed() {
     use virtuoso_cli::transport::tunnel as t;
-    assert_eq!(t::profiled_env_key("VB_LOCAL_PORT", Some("a")), "VB_LOCAL_PORT_a");
+    assert_eq!(
+        t::profiled_env_key("VB_LOCAL_PORT", Some("a")),
+        "VB_LOCAL_PORT_a"
+    );
     assert_eq!(t::profiled_env_key("VB_LOCAL_PORT", None), "VB_LOCAL_PORT");
 }
 
@@ -168,7 +171,10 @@ fn vcli_profile_bind_user_then_clear() {
     assert!(show.status.success());
     let parsed: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
     assert_eq!(parsed["profile"], test_profile);
-    assert_eq!(parsed["source"], "environment", "VB_PROFILE env var should win");
+    assert_eq!(
+        parsed["source"], "environment",
+        "VB_PROFILE env var should win"
+    );
 
     // 4. Clear
     let clear = Command::new(&bin)
@@ -219,13 +225,7 @@ fn vcli_profile_bind_user_rejects_multi_scope() {
     // mentions the conflicting flags.
     let output = Command::new(vcli_bin())
         .args([
-            "profile",
-            "bind",
-            "test",
-            "--user",
-            "--venv",
-            "--format",
-            "json",
+            "profile", "bind", "test", "--user", "--venv", "--format", "json",
         ])
         .output()
         .expect("vcli profile bind (multi scope)");

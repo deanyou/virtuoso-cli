@@ -69,9 +69,8 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
     if !cfg.keep_remote_files {
         match SSHClient::from_env(cfg.keep_remote_files) {
             Ok(client) => {
-                let setup_dir = crate::transport::tunnel::setup_dir_for_profile(
-                    cfg.profile.as_deref(),
-                );
+                let setup_dir =
+                    crate::transport::tunnel::setup_dir_for_profile(cfg.profile.as_deref());
                 if let Err(e) = client.run_command(&format!("rm -rf {setup_dir}")) {
                     tracing::warn!("remote cleanup failed: {e}");
                 }

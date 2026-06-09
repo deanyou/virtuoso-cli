@@ -1,6 +1,113 @@
 use crate::client::bridge::VirtuosoClient;
 use crate::error::{Result, VirtuosoError};
+use regex::Regex;
 use serde_json::{json, Value};
+
+/// Window-kind tag — mirrors virtuoso-bridge-lite's snapshot classifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum WindowKind {
+    Maestro,
+    Schematic,
+    Layout,
+    Waveform,
+    Hierarchy,
+    Ciw,
+    Unknown,
+}
+
+impl WindowKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Maestro => "maestro",
+            Self::Schematic => "schematic",
+            Self::Layout => "layout",
+            Self::Waveform => "waveform",
+            Self::Hierarchy => "hierarchy",
+            Self::Ciw => "ciw",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Classify a Virtuoso window title into a kind tag.
+///
+/// This is a pure regex classifier — no I/O, no state.  It is exposed so that
+/// `virtuoso windows` CLI output can be colorized by kind and so that future
+/// snapshot aggregators can dispatch on kind without re-parsing.
+///
+/// Classification order matters: the first matching pattern wins.
+/// ADE windows are the most specific (full title structure), then editors,
+/// then generic tool windows.
+///
+/// # Examples
+///
+/// ```
+/// use virtuoso_cli::commands::window::classify_window;
+///
+/// assert_eq!(classify_window("ADE Assembler Editing: LIB CELL maestro").as_str(), "maestro");
+/// assert_eq!(classify_window("Virtuoso Schematic Editor").as_str(), "schematic");
+/// assert_eq!(classify_window("Visualization & Analysis").as_str(), "waveform");
+/// assert_eq!(classify_window("").as_str(), "unknown");
+/// ```
+pub fn classify_window(title: &str) -> WindowKind {
+    if title.is_empty() {
+        return WindowKind::Unknown;
+    }
+
+    for (regex, kind) in PATTERNS.iter() {
+        if regex.is_match(title) {
+            return *kind;
+        }
+    }
+
+    WindowKind::Unknown
+}
+
+// Minimal lazy-compiled regex wrapper — avoids recomputing the regex on every call.
+lazy_static::lazy_static! {
+    static ref PATTERNS: Vec<(Regex, WindowKind)> = vec![
+        // ADE Assembler/Explorer Editing/Reading — distinguish maestro vs schematic
+        // by the trailing VIEW token (maestro ends with "maestro", schematic with "schematic")
+        (
+            Regex::new(
+                r"ADE\s+(?:Assembler|Explorer)\s+(?:Editing|Reading):\s+\S+\s+\S+\s+maestro\b",
+            )
+            .expect("valid regex"),
+            WindowKind::Maestro,
+        ),
+        (
+            Regex::new(
+                r"ADE\s+(?:Assembler|Explorer)\s+(?:Editing|Reading):\s+\S+\s+\S+\s+schematic\b",
+            )
+            .expect("valid regex"),
+            WindowKind::Schematic,
+        ),
+        // Generic schematic editor (no ADE prefix)
+        (Regex::new(r"Schematic Editor").expect("valid regex"), WindowKind::Schematic),
+        // Layout editor
+        (Regex::new(r"Layout Suite").expect("valid regex"), WindowKind::Layout),
+        // Waveform windows — two variants
+        (
+            Regex::new(r"Visualization\s*&?\s*Analysis").expect("valid regex"),
+            WindowKind::Waveform,
+        ),
+        (
+            Regex::new(r"Waveform Window").expect("valid regex"),
+            WindowKind::Waveform,
+        ),
+        // Hierarchy browser
+        (
+            Regex::new(r"Cadence Hierarchy Editor").expect("valid regex"),
+            WindowKind::Hierarchy,
+        ),
+        // CIW / Log window — Virtuoso® 23.1.0 - Log: or Virtuoso - Log:
+        (
+            Regex::new(r"Virtuoso®?\s+[\d.\-a-z]+\s*-\s*Log:").expect("valid regex"),
+            WindowKind::Ciw,
+        ),
+    ];
+}
 
 /// List all open Virtuoso windows with their names.
 ///
@@ -148,8 +255,11 @@ fn annotate_modes(v: Value) -> Value {
                 .map(|mut item| {
                     if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
                         let mode = window_mode(name).to_string();
-                        item.as_object_mut()
-                            .map(|o| o.insert("mode".into(), json!(mode)));
+                        let kind = classify_window(name);
+                        if let Some(o) = item.as_object_mut() {
+                            o.insert("mode".into(), json!(mode));
+                            o.insert("kind".into(), json!(kind.as_str()));
+                        }
                     }
                     item
                 })

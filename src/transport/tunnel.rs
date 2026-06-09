@@ -127,7 +127,7 @@ impl SSHClient {
         runner.ssh_key_path = cfg.ssh_key.clone();
         runner.ssh_config_path = cfg.ssh_config.clone();
         if cfg.disable_control_master {
-            runner.use_control_master.set(false);
+            *runner.use_control_master.lock().unwrap() = false;
         }
 
         Ok(Self {
@@ -273,7 +273,7 @@ impl SSHClient {
 
         // Conditionally add ControlMaster options — disabled when CM has been
         // found to fail at runtime (WSL2/Windows named pipe issues).
-        if self.runner.use_control_master.get() {
+        if *self.runner.use_control_master.lock().unwrap() {
             let control_dir = dirs::cache_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
                 .join("virtuoso_bridge")

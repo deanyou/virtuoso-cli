@@ -433,18 +433,30 @@ mod tests {
         let path = bind_user_profile("t28_digital").unwrap();
         assert!(path.exists());
         let content = fs::read_to_string(&env_path).unwrap();
-        assert!(content.contains("VB_PROFILE=t28_digital"), "got: {content:?}");
+        assert!(
+            content.contains("VB_PROFILE=t28_digital"),
+            "got: {content:?}"
+        );
 
         // Re-bind: should replace, not duplicate.
         bind_user_profile("analog_default").unwrap();
         let content = fs::read_to_string(&env_path).unwrap();
-        assert!(content.contains("VB_PROFILE=analog_default"), "got: {content:?}");
-        assert!(!content.contains("VB_PROFILE=t28_digital"), "old entry should be replaced");
+        assert!(
+            content.contains("VB_PROFILE=analog_default"),
+            "got: {content:?}"
+        );
+        assert!(
+            !content.contains("VB_PROFILE=t28_digital"),
+            "old entry should be replaced"
+        );
 
         // Clear.
         clear_user_profile().unwrap();
         let content = fs::read_to_string(&env_path).unwrap_or_default();
-        assert!(!content.contains("VB_PROFILE="), "VB_PROFILE should be cleared");
+        assert!(
+            !content.contains("VB_PROFILE="),
+            "VB_PROFILE should be cleared"
+        );
 
         // Restore backup.
         if let Some(b) = backup {
@@ -473,14 +485,20 @@ mod tests {
         bind_user_profile("myprofile").unwrap();
 
         let content = fs::read_to_string(&env_path).unwrap();
-        assert!(content.contains("VB_REMOTE_HOST=eda-lab"), "other lines preserved");
+        assert!(
+            content.contains("VB_REMOTE_HOST=eda-lab"),
+            "other lines preserved"
+        );
         assert!(content.contains("VB_PORT=12345"), "other lines preserved");
         assert!(content.contains("VB_PROFILE=myprofile"), "new line added");
 
         clear_user_profile().unwrap();
         let content = fs::read_to_string(&env_path).unwrap();
         assert!(!content.contains("VB_PROFILE="), "VB_PROFILE cleared");
-        assert!(content.contains("VB_REMOTE_HOST=eda-lab"), "other lines still preserved");
+        assert!(
+            content.contains("VB_REMOTE_HOST=eda-lab"),
+            "other lines still preserved"
+        );
 
         if let Some(b) = backup {
             fs::write(&env_path, b).unwrap();

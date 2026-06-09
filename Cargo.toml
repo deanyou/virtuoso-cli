@@ -46,6 +46,7 @@ uuid = { version = "1", features = ["v4"] }
 dirs = "5"
 chrono = { version = "0.4", features = ["serde"] }
 once_cell = "1"
+lazy_static = "1"
 libc = "0.2"
 ratatui = "0.29"
 crossterm = "0.28"

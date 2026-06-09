@@ -1,11 +1,10 @@
 #![allow(dead_code)]
 
 use crate::error::{Result, VirtuosoError};
-use std::cell::Cell;
 use std::collections::HashMap;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::models::RemoteTaskResult;
@@ -31,7 +30,27 @@ pub struct SSHRunner {
     pub connect_timeout: u64,
     pub verbose: bool,
     /// Dynamically disabled when a ControlMaster failure is detected at runtime.
-    pub use_control_master: Cell<bool>,
+    /// `Mutex` allows sharing a single SSHRunner across threads (needed for parallel
+    /// Spectre runs that reuse the SSH ControlMaster connection).
+    pub use_control_master: Mutex<bool>,
+}
+
+impl Clone for SSHRunner {
+    fn clone(&self) -> Self {
+        Self {
+            host: self.host.clone(),
+            user: self.user.clone(),
+            jump_host: self.jump_host.clone(),
+            jump_user: self.jump_user.clone(),
+            ssh_port: self.ssh_port,
+            ssh_key_path: self.ssh_key_path.clone(),
+            ssh_config_path: self.ssh_config_path.clone(),
+            timeout: self.timeout,
+            connect_timeout: self.connect_timeout,
+            verbose: self.verbose,
+            use_control_master: Mutex::new(*self.use_control_master.lock().unwrap()),
+        }
+    }
 }
 
 impl SSHRunner {
@@ -47,7 +66,7 @@ impl SSHRunner {
             timeout: 30,
             connect_timeout: 10,
             verbose: false,
-            use_control_master: Cell::new(true),
+            use_control_master: Mutex::new(true),
         }
     }
 
@@ -79,12 +98,12 @@ impl SSHRunner {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-            if Self::is_cm_failure(&stderr) && self.use_control_master.get() {
+            if Self::is_cm_failure(&stderr) && *self.use_control_master.lock().unwrap() {
                 tracing::warn!(
                     "ControlMaster failure in test_connection, retrying without CM: {}",
                     stderr.lines().next().unwrap_or("")
                 );
-                self.use_control_master.set(false);
+                *self.use_control_master.lock().unwrap() = false;
                 let output2 = self.run_test_connection(effective_timeout)?;
                 return Ok(output2.status.success());
             }
@@ -104,12 +123,15 @@ impl SSHRunner {
 
     pub fn run_command(&self, command: &str, timeout: Option<u64>) -> Result<RemoteTaskResult> {
         let result = self.run_command_inner(command, timeout)?;
-        if !result.success && Self::is_cm_failure(&result.stderr) && self.use_control_master.get() {
+        if !result.success
+            && Self::is_cm_failure(&result.stderr)
+            && *self.use_control_master.lock().unwrap()
+        {
             tracing::warn!(
                 "ControlMaster failure detected, retrying without CM: {}",
                 result.stderr.lines().next().unwrap_or("")
             );
-            self.use_control_master.set(false);
+            *self.use_control_master.lock().unwrap() = false;
             return self.run_command_inner(command, timeout);
         }
         Ok(result)
@@ -126,12 +148,12 @@ impl SSHRunner {
         let output = attempt()?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if Self::is_cm_failure(&stderr) && self.use_control_master.get() {
+            if Self::is_cm_failure(&stderr) && *self.use_control_master.lock().unwrap() {
                 tracing::warn!(
                     "ControlMaster failure in file transfer, retrying without CM: {}",
                     stderr.lines().next().unwrap_or("")
                 );
-                self.use_control_master.set(false);
+                *self.use_control_master.lock().unwrap() = false;
                 return attempt();
             }
         }
@@ -388,7 +410,7 @@ impl SSHRunner {
             "HostbasedAuthentication=no",
         ]);
 
-        if self.use_control_master.get() {
+        if *self.use_control_master.lock().unwrap() {
             // ControlMaster: reuse SSH connections to avoid repeated handshakes.
             // Disabled at runtime if a CM failure is detected (WSL2/Windows paths
             // with non-ASCII characters, named pipe creation failures, etc.).

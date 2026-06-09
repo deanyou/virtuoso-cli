@@ -587,6 +587,82 @@ pub fn run_async(netlist_path: &str) -> Result<Value> {
     }))
 }
 
+/// Run multiple netlists in parallel, returning a JSON report of all outcomes.
+///
+/// Each input is a "label:path" pair (colon-separated, label may contain colons
+/// if the netlist path is absolute). The results array preserves input order.
+///
+/// Example:
+///   vcli sim run-parallel tt:/path/to/netlist_tt.scs ss:/path/to/netlist_ss.scs ff:/path/to/netlist_ff.scs
+///
+/// For each entry, the path is read as netlist content and passed to
+/// SpectreSimulator::run_parallel().
+pub fn run_parallel(inputs: &[(String, String)]) -> Result<Value> {
+    if inputs.is_empty() {
+        return Err(VirtuosoError::Config(
+            "run-parallel requires at least one input (label:path pair)".into(),
+        ));
+    }
+
+    // Read all netlist files into memory before parallel dispatch.
+    // Each worker gets its own clone of SpectreSimulator, so we read upfront
+    // to avoid file-access races and to surface I/O errors before spinning threads.
+    let mut netlists: Vec<(String, String)> = Vec::with_capacity(inputs.len());
+    for (label, path) in inputs {
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            VirtuosoError::Config(format!(
+                "Cannot read netlist '{path}' for label '{label}': {e}"
+            ))
+        })?;
+        netlists.push((label.clone(), content));
+    }
+
+    let sim = SpectreSimulator::from_env()?;
+    let results = sim.run_parallel(&netlists);
+
+    let mut rows = Vec::new();
+    let mut ok_count = 0usize;
+    let mut err_count = 0usize;
+
+    for r in results {
+        match r.result {
+            Ok(sr) => {
+                ok_count += 1;
+                rows.push(json!({
+                    "label": r.label,
+                    "status": "success",
+                    "errors": sr.errors,
+                    "warnings": sr.warnings,
+                }));
+            }
+            Err(e) => {
+                err_count += 1;
+                rows.push(json!({
+                    "label": r.label,
+                    "status": "error",
+                    "error": e.to_string(),
+                }));
+            }
+        }
+    }
+
+    let summary = if ok_count == inputs.len() {
+        "all_ok"
+    } else if err_count == inputs.len() {
+        "all_error"
+    } else {
+        "partial"
+    };
+
+    Ok(json!({
+        "status": summary,
+        "total": inputs.len(),
+        "ok": ok_count,
+        "errors": err_count,
+        "results": rows,
+    }))
+}
+
 pub fn job_status(id: &str) -> Result<Value> {
     let mut job = Job::load(id)?;
     job.refresh()?;

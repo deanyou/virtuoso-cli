@@ -730,6 +730,21 @@ enum SimCmd {
         /// Job ID
         id: String,
     },
+
+    /// Run multiple netlists in parallel using Spectre.
+    ///
+    /// Each input is a "label:path" pair. Paths are read as netlist files.
+    /// Results are returned in input order with per-simulation status.
+    ///
+    /// Examples:
+    ///   virtuoso sim run-parallel tt:/tmp/tt_netlist.scs ss:/tmp/ss_netlist.scs ff:/tmp/ff_netlist.scs
+    RunParallel {
+        /// Input pairs in "label:path" format (colon-separated).
+        /// Label may contain colons if the path is absolute.
+        /// Example: tt:/path/to/netlist.scs
+        #[arg(required = true)]
+        inputs: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1305,7 +1320,12 @@ fn dispatch_profile(cmd: ProfileCmd) -> error::Result<serde_json::Value> {
                 ],
             }))
         }
-        ProfileCmd::Bind { name, venv, user, local } => {
+        ProfileCmd::Bind {
+            name,
+            venv,
+            user,
+            local,
+        } => {
             let scope = parse_bind_scope(venv, user, local)?;
             match scope {
                 BindScope::Venv => {
@@ -1373,15 +1393,15 @@ fn dispatch_profile(cmd: ProfileCmd) -> error::Result<serde_json::Value> {
     }
 }
 
-fn parse_bind_scope(venv: bool, user: bool, local: bool) -> error::Result<virtuoso_cli::profile::BindScope> {
-    let set: Vec<&str> = [
-        ("venv", venv),
-        ("user", user),
-        ("local", local),
-    ]
-    .iter()
-    .filter_map(|(n, b)| if *b { Some(*n) } else { None })
-    .collect();
+fn parse_bind_scope(
+    venv: bool,
+    user: bool,
+    local: bool,
+) -> error::Result<virtuoso_cli::profile::BindScope> {
+    let set: Vec<&str> = [("venv", venv), ("user", user), ("local", local)]
+        .iter()
+        .filter_map(|(n, b)| if *b { Some(*n) } else { None })
+        .collect();
     match set.len() {
         0 => Err(error::VirtuosoError::Config(
             "must specify one of --venv, --user, or --local".into(),
@@ -1499,6 +1519,39 @@ fn dispatch_sim(cmd: SimCmd) -> error::Result<serde_json::Value> {
         SimCmd::JobStatus { id } => commands::sim::job_status(&id),
         SimCmd::JobList => commands::sim::job_list(),
         SimCmd::JobCancel { id } => commands::sim::job_cancel(&id),
+        SimCmd::RunParallel { inputs } => {
+            // Parse "label:path" pairs. Label may contain colons if path is absolute.
+            // Strategy: for each input, split on first ':' — the part before is label,
+            // the part after (if any) is path. If no ':' found, use the whole string as
+            // both label and path (error if path doesn't exist).
+            let parsed: Vec<(String, String)> = inputs
+                .iter()
+                .filter_map(|s| {
+                    let s = s.trim();
+                    if s.is_empty() {
+                        return None;
+                    }
+                    if let Some(pos) = s.find(':') {
+                        let label = s[..pos].trim().to_string();
+                        let path = s[pos + 1..].trim().to_string();
+                        if label.is_empty() || path.is_empty() {
+                            return None;
+                        }
+                        Some((label, path))
+                    } else {
+                        // No colon — treat whole string as path, derive label from filename
+                        let p = std::path::Path::new(s);
+                        let label = p
+                            .file_stem()
+                            .and_then(|l| l.to_str())
+                            .unwrap_or(s)
+                            .to_string();
+                        Some((label, s.to_string()))
+                    }
+                })
+                .collect();
+            commands::sim::run_parallel(&parsed)
+        }
     }
 }
 
