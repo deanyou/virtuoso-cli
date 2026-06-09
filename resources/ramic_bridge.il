@@ -466,17 +466,27 @@ RBLoadedPackages = nil
 
 procedure(RBLoadPackages()
     unless(RBLoadedPackages
-        ; Streamout — needed for GDS/CDL export, streamin
-        when(getnvIPkit("streamout")
-            loadi(strcat(getvIPlibDir("streamout") "/streamout.ile"))
-        )
-        ; Schematic — needed for schExportCdl, schematic editing APIs
-        when(getnvIPkit("schematic")
-            loadi(strcat(getvIPlibDir("schematic") "/schematic.ile"))
-        )
-        ; Si (ship) — needed for ADE/simulation integration
-        when(getnvIPkit("si")
-            loadi(strcat(getvIPlibDir("si") "/si.ile"))
+        ; Build the streamout/schematic/si package path using $CDS_INST.
+        ; The standard location is $CDS_INST/tools/dfII/etc/context/.
+        ; fileexists() guards against missing packages in minimal CIW.
+        ; errset() suppresses any load error (already loaded or missing kit).
+        let((cds_inst ctx)
+            cds_inst = getShellEnvVar("CDS_INST")
+            when(cds_inst
+                ctx = strcat(cds_inst "/tools/dfII/etc/context")
+                ; Streamout — needed for GDS/CDL export, streamin
+                when(fileexists(strcat(ctx "/streamout.ile"))
+                    errset(loadi(strcat(ctx "/streamout.ile")))
+                )
+                ; Schematic — needed for schExportCdl, schematic editing APIs
+                when(fileexists(strcat(ctx "/schematic.ile"))
+                    errset(loadi(strcat(ctx "/schematic.ile")))
+                )
+                ; Si (ship) — needed for ADE/simulation integration
+                when(fileexists(strcat(ctx "/si.ile"))
+                    errset(loadi(strcat(ctx "/si.ile")))
+                )
+            )
         )
         RBLoadedPackages = t
     )
