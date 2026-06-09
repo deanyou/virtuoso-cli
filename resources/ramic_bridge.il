@@ -454,6 +454,35 @@ procedure(vcli()
 )
 
 ; ============================================================================
+; Full Virtuoso session: auto-load packages needed for streamout/schematic/ADE.
+; Only loads packages that are present in the current Virtuoso installation.
+; Skips silently if a package is not available (e.g., minimal CIW environment).
+; Reload-safe: uses RBLoadedPackages guard so packages are not re-loaded on
+; subsequent load() calls (only the first load in a given Virtuoso session
+; triggers the load; reloads are no-ops).
+; ============================================================================
+
+RBLoadedPackages = nil
+
+procedure(RBLoadPackages()
+    unless(RBLoadedPackages
+        ; Streamout — needed for GDS/CDL export, streamin
+        when(getnvIPkit("streamout")
+            loadi(strcat(getvIPlibDir("streamout") "/streamout.ile"))
+        )
+        ; Schematic — needed for schExportCdl, schematic editing APIs
+        when(getnvIPkit("schematic")
+            loadi(strcat(getvIPlibDir("schematic") "/schematic.ile"))
+        )
+        ; Si (ship) — needed for ADE/simulation integration
+        when(getnvIPkit("si")
+            loadi(strcat(getvIPlibDir("si") "/si.ile"))
+        )
+        RBLoadedPackages = t
+    )
+)
+
+; ============================================================================
 ; Auto-start on every load(): stop stale daemon, reset path, start fresh.
 ; Wrapped in a procedure so no intermediate return values echo in CIW.
 ; ============================================================================
@@ -461,6 +490,9 @@ procedure(vcli()
 procedure(_RBAutoStart()
     RBPython = ""
     RBDPath = strcat(getShellEnvVar("HOME") "/.cargo/bin/virtuoso-daemon")
+    ; Load full-session packages before starting the daemon.
+    ; If any package is missing (e.g., minimal CIW), it is silently skipped.
+    RBLoadPackages()
     when(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) RBStop())
     vcli()
 )
