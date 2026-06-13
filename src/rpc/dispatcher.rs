@@ -475,6 +475,17 @@ impl RpcDispatcher {
                     Ok(serde_json::json!({ "dialog": out }))
                 }
             }
+            "dismiss_dialog_x11" => {
+                // SKILL channel cannot unstick a deadlocked CIW; this dispatches
+                // to the SSH+X11 bypass (transport::x11::dismiss).
+                let action = json_str_or(params.get("action"), "enter")?;
+                let dry_run = params
+                    .get("dry_run")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let display = params.get("display").and_then(|v| v.as_str());
+                crate::commands::window::dismiss_dialog_x11(&action, dry_run, display)
+            }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown window method '{}'",
                 op
@@ -520,6 +531,21 @@ impl RpcDispatcher {
                 );
                 let r = client.execute_skill_unchecked(&skill, None)?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
+            }
+            "read_path" => {
+                // Return the on-disk readPath of a registered library. Used by
+                // `vcli diag cdslck` to know where to look for lock files.
+                let lib = json_str(params.get("lib"), "lib")?;
+                let skill = format!(
+                    r#"ddGetObj("{lib}")~>readPath"#,
+                    lib = escape_skill_string(&lib)
+                );
+                let r = client.execute_skill_unchecked(&skill, None)?;
+                let raw = r.output.trim().trim_matches('"');
+                Ok(serde_json::json!({
+                    "lib": lib,
+                    "read_path": if raw == "nil" || raw.is_empty() { None } else { Some(raw) },
+                }))
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown cell method '{}'",
@@ -1075,8 +1101,8 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 61 methods total (58 + 3 new: skill.eval, maestro.snapshot, schematic.polish_label)
-        assert_eq!(schema.methods.len(), 61, "should have exactly 61 methods");
+        // Should have 63 methods (62 + 1 new: cell.read_path)
+        assert_eq!(schema.methods.len(), 63, "should have exactly 63 methods");
     }
 
     #[test]

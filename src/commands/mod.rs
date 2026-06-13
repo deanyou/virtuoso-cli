@@ -1,5 +1,6 @@
 pub mod cell;
 pub mod design;
+pub mod diag;
 pub mod init;
 pub mod maestro;
 pub mod process;

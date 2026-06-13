@@ -135,6 +135,10 @@ pub fn list() -> Result<Value> {
 /// With --dry-run, reports the dialog name without clicking anything.
 /// action "cancel" (default): clicks Cancel / closes dialog.
 /// action "ok": attempts hiSendOK — may not be supported by all dialog types.
+///
+/// When `use_x11` is true, the call goes through the X11 SSH bypass
+/// (`transport::x11::dismiss`) instead of SKILL. This is the only path
+/// that works when a modal has deadlocked the SKILL channel itself.
 pub fn dismiss_dialog(action: &str, dry_run: bool) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     if dry_run {
@@ -153,6 +157,97 @@ pub fn dismiss_dialog(action: &str, dry_run: bool) -> Result<Value> {
         "status": if dismissed { "dismissed" } else { "no-dialog" },
         "action": action,
     }))
+}
+
+/// List blocking dialog(s) via the X11 SSH bypass (no keypress sent).
+///
+/// Useful as a "dry-run" alternative when SKILL is deadlocked and you want
+/// to see what dialogs are present before deciding which action to send.
+pub fn list_dialogs_x11(explicit_display: Option<&str>) -> Result<Value> {
+    use crate::config::Config;
+    use crate::transport::x11;
+
+    let config = Config::from_env()?;
+    if config.remote_host.as_deref().unwrap_or("").is_empty() {
+        return Err(VirtuosoError::Config(
+            "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target".into(),
+        ));
+    }
+    let runner = x11::runner_for_config(&config)?;
+    let user = config.remote_user.as_deref();
+    let (env, dialogs) = x11::list_dialogs(
+        &runner,
+        &x11::client_id_for(&config),
+        user,
+        explicit_display,
+    )?;
+    Ok(json!({
+        "display": env.display,
+        "xauthority": env.xauthority,
+        "dialogs": dialogs,
+        "count": dialogs.len(),
+    }))
+}
+
+/// Dismiss blocking dialog(s) via the X11 SSH bypass.
+///
+/// This is the deadlock-resistant alternative to `dismiss_dialog`: it
+/// SSHes into the same host Virtuoso is running on, finds modal dialogs
+/// with `xwininfo`, and sends keypresses (`enter`/`escape`/`alt-y`/`alt-n`)
+/// via `XTest`. The SKILL channel cannot be used when a modal has stalled
+/// the CIW, so this path is independent of the SKILL bridge.
+///
+/// Adopted from <https://github.com/Arcadia-1/virtuoso-bridge-lite>
+/// (MIT, 2026-05; helper vendored in resources/x11_dismiss_dialog.py).
+pub fn dismiss_dialog_x11(
+    action: &str,
+    dry_run: bool,
+    explicit_display: Option<&str>,
+) -> Result<Value> {
+    use crate::config::Config;
+    use crate::transport::x11;
+
+    if !["enter", "escape", "alt-y", "alt-n"].contains(&action) {
+        return Err(VirtuosoError::Config(format!(
+            "invalid --action '{}': must be one of enter|escape|alt-y|alt-n",
+            action
+        )));
+    }
+    let config = Config::from_env()?;
+    if config.remote_host.as_deref().unwrap_or("").is_empty() {
+        return Err(VirtuosoError::Config(
+            "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target (or use the SKILL path without --x11)".into(),
+        ));
+    }
+    let runner = x11::runner_for_config(&config)?;
+    let user = config.remote_user.as_deref();
+    let result = x11::dismiss(
+        &runner,
+        &x11::client_id_for(&config),
+        user,
+        explicit_display,
+        action,
+        dry_run,
+    )?;
+    let mut out = serde_json::to_value(&result)
+        .map_err(|e| VirtuosoError::Execution(format!("failed to serialize X11 result: {e}")))?;
+    // Ensure the top-level "status" field is set for parity with the SKILL path.
+    let obj = out.as_object_mut().unwrap();
+    let n_found = result.found.len();
+    let n_dismissed = result.dismissed.len();
+    obj.insert(
+        "status".into(),
+        json!(if n_dismissed > 0 {
+            "dismissed"
+        } else if n_found > 0 {
+            "found"
+        } else {
+            "no-dialog"
+        }),
+    );
+    obj.insert("action".into(), json!(action));
+    obj.insert("dry_run".into(), json!(dry_run));
+    Ok(out)
 }
 
 /// Capture a screenshot of the current (or pattern-matched) Virtuoso window.

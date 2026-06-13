@@ -82,11 +82,30 @@ impl SSHRunner {
             || stderr.contains("mux_client_hello_exchange")
     }
 
+    /// Build an SSHRunner from a Config. Empty host is allowed (will be caught
+    /// at run time as a "no host" error) so callers can defer the check.
+    pub fn from_config(config: &crate::config::Config) -> Self {
+        let mut runner = Self::new(config.remote_host.as_deref().unwrap_or(""));
+        if let Some(ref user) = config.remote_user {
+            runner = runner.with_user(user);
+        }
+        if let Some(ref jump) = config.jump_host {
+            let mut r = runner.with_jump(jump);
+            if let Some(ref user) = config.jump_user {
+                r.jump_user = Some(user.clone());
+            }
+            runner = r;
+        }
+        runner.ssh_port = config.ssh_port;
+        runner.ssh_key_path = config.ssh_key.clone();
+        runner.ssh_config_path = config.ssh_config.clone();
+        runner
+    }
+
     pub fn with_jump(mut self, jump: &str) -> Self {
         self.jump_host = Some(jump.into());
         self
     }
-
     pub fn with_user(mut self, user: &str) -> Self {
         self.user = Some(user.into());
         self

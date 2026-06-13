@@ -165,6 +165,10 @@ enum Commands {
     #[command(subcommand)]
     Window(WindowCmd),
 
+    /// Read-only diagnostics for stuck Virtuoso state
+    #[command(subcommand)]
+    Diag(DiagCmd),
+
     /// Interactive TUI dashboard
     Tui,
 
@@ -1249,6 +1253,20 @@ enum WindowCmd {
         /// Report dialog name without clicking
         #[arg(long)]
         dry_run: bool,
+        /// Use X11 SSH bypass instead of SKILL. The only path that works
+        /// when a modal has deadlocked the CIW; requires VB_REMOTE_HOST.
+        #[arg(long)]
+        x11: bool,
+        /// Override the detected DISPLAY (X11 bypass only).
+        #[arg(long)]
+        display: Option<String>,
+    },
+
+    /// List dialogs visible via X11 SSH bypass (no keypress sent)
+    ListDialogsX11 {
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display: Option<String>,
     },
 
     /// Capture a screenshot of the current Virtuoso window (IC23.1+)
@@ -1259,6 +1277,22 @@ enum WindowCmd {
         /// Match window by name pattern (regex); uses current window if omitted
         #[arg(long)]
         window: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DiagCmd {
+    /// Enumerate `.cdslck` lock files under an OA library (read-only).
+    ///
+    /// Useful when "this view won't open" — reports the holder of every
+    /// .cdslck (owner@host:pid:start_time) plus the lock's age. Never
+    /// deletes locks: breaking a live lock corrupts the cellview.
+    Cdslck {
+        /// OA library name (must be registered in remote cds.lib)
+        lib: String,
+        /// Only show locks under this view (e.g. maestro, layout)
+        #[arg(long)]
+        view: Option<String>,
     },
 }
 
@@ -1736,12 +1770,30 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
 fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
     match cmd {
         WindowCmd::List => commands::window::list(),
-        WindowCmd::DismissDialog { action, dry_run } => {
-            commands::window::dismiss_dialog(&action, dry_run)
+        WindowCmd::DismissDialog {
+            action,
+            dry_run,
+            x11,
+            display,
+        } => {
+            if x11 {
+                commands::window::dismiss_dialog_x11(&action, dry_run, display.as_deref())
+            } else {
+                commands::window::dismiss_dialog(&action, dry_run)
+            }
+        }
+        WindowCmd::ListDialogsX11 { display } => {
+            commands::window::list_dialogs_x11(display.as_deref())
         }
         WindowCmd::Screenshot { path, window } => {
             commands::window::screenshot(&path, window.as_deref())
         }
+    }
+}
+
+fn dispatch_diag(cmd: DiagCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        DiagCmd::Cdslck { lib, view } => commands::diag::cdslck(&lib, view.as_deref()),
     }
 }
 
@@ -1868,6 +1920,7 @@ fn main() {
         Commands::Tx(cmd) => dispatch_tx(cmd),
         Commands::Rpc(cmd) => dispatch_rpc(cmd),
         Commands::Window(cmd) => dispatch_window(cmd),
+        Commands::Diag(cmd) => dispatch_diag(cmd),
         Commands::Schema { all, noun, verb } => {
             let schema = if all || noun.is_none() {
                 commands::schema::show(None, None)

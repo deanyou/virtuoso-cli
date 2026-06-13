@@ -277,6 +277,33 @@ pub fn standard_schema() -> RpcSchema {
             params: vec![],
             returns: "dialog name or null".into(),
         },
+        Method {
+            name: "window.dismiss_dialog_x11".into(),
+            summary:
+                "Dismiss blocking dialog(s) via X11 SSH bypass (works when SKILL is deadlocked)"
+                    .into(),
+            params: vec![
+                Param {
+                    name: "action".into(),
+                    ptype: "string".into(),
+                    description: "enter|escape|alt-y|alt-n (default: enter)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "dry_run".into(),
+                    ptype: "bool".into(),
+                    description: "List dialogs without sending keypress".into(),
+                    required: false,
+                },
+                Param {
+                    name: "display".into(),
+                    ptype: "string".into(),
+                    description: "Override the detected DISPLAY".into(),
+                    required: false,
+                },
+            ],
+            returns: "{status, found, dismissed, errors, display, raw_log}".into(),
+        },
         // ── Cell ─────────────────────────────────────────────────────
         Method {
             name: "cell.open".into(),
@@ -351,6 +378,17 @@ pub fn standard_schema() -> RpcSchema {
                 },
             ],
             returns: "null on success".into(),
+        },
+        Method {
+            name: "cell.read_path".into(),
+            summary: "Return the on-disk readPath of a registered OA library".into(),
+            params: vec![Param {
+                name: "lib".into(),
+                ptype: "string".into(),
+                description: "Library name (must be registered in remote cds.lib)".into(),
+                required: true,
+            }],
+            returns: "{lib, read_path: string|null}".into(),
         },
         // ── Maestro ───────────────────────────────────────────────────
         Method {
