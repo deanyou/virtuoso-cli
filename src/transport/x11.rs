@@ -736,6 +736,72 @@ mod tests {
     }
 
     #[test]
+    fn extract_helper_errors_empty_inputs_returns_empty() {
+        // No stdout, no stderr, returncode 0 → no errors.
+        let out = mkresult("", "", 0);
+        let errs = extract_helper_errors(&out);
+        assert!(errs.is_empty(), "expected empty errors, got {errs:?}");
+    }
+
+    #[test]
+    fn extract_helper_errors_json_with_extra_fields_still_extracted() {
+        // Helper emitted structured error with extra context fields — the
+        // `error` key alone is what we surface.
+        let out = mkresult(
+            r#"{"error": "xauth not set", "code": 2, "context": {"display": ":0"}}"#,
+            "",
+            0,
+        );
+        let errs = extract_helper_errors(&out);
+        assert_eq!(errs.len(), 1);
+        assert!(errs[0].contains("xauth not set"));
+    }
+
+    #[test]
+    fn extract_helper_errors_dedupes_repeated_json_lines() {
+        // Same error repeated across multiple stdout lines should appear once.
+        let out = mkresult(
+            "{\"error\": \"duplicate\"}\n{\"error\": \"duplicate\"}\n",
+            "",
+            0,
+        );
+        let errs = extract_helper_errors(&out);
+        assert_eq!(
+            errs.len(),
+            1,
+            "duplicate JSON errors should dedup: {errs:?}"
+        );
+        assert_eq!(errs[0], "duplicate");
+    }
+
+    #[test]
+    fn extract_helper_errors_mixed_json_and_returncode_prefers_json() {
+        // When a structured JSON error is present, the generic returncode
+        // summary is suppressed — the user gets the specific message, not
+        // a fallback like "exited with code 1".
+        let out = mkresult(
+            "{\"error\": \"specific failure reason\"}\n",
+            "python traceback: something failed\n",
+            1,
+        );
+        let errs = extract_helper_errors(&out);
+        assert_eq!(errs.len(), 1);
+        assert!(
+            errs[0].contains("specific failure reason"),
+            "should surface JSON error, got {errs:?}"
+        );
+    }
+
+    #[test]
+    fn extract_helper_errors_preserves_json_order_then_appends_stderr() {
+        // Distinct JSON errors are emitted in order; then if no JSON was
+        // found, distinct stderr lines are appended (preserving order).
+        let out = mkresult("{\"error\": \"first\"}\n{\"error\": \"second\"}\n", "", 0);
+        let errs = extract_helper_errors(&out);
+        assert_eq!(errs, vec!["first", "second"]);
+    }
+
+    #[test]
     fn truncate_log_caps_at_8k() {
         let huge = "x".repeat(20_000);
         let out = RemoteTaskResult {

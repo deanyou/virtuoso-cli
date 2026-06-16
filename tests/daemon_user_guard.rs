@@ -656,3 +656,121 @@ fn log_root_respects_vb_log_dir_env_override() {
         None => env::remove_var("VB_LOG_DIR"),
     }
 }
+
+// ─── end-to-end migration coverage: runtime_paths + downstream consumer ───────
+
+/// End-to-end: writing a session file under a `VB_CACHE_DIR` override
+/// and reading it back via the **public** `SessionInfo::load` API must
+/// succeed. This verifies the full create-on-disk + read-back path is
+/// consistent with the env override — i.e. the rest of the codebase,
+/// which calls `SessionInfo::load`, transparently picks up the new path
+/// resolution. (The internal `SessionInfo::sessions_dir()` is
+/// `pub(crate)` and not callable from integration tests; this round-trip
+/// is the integration-level proof that the wiring is correct.)
+#[test]
+fn session_round_trip_under_vb_cache_dir_override() {
+    use virtuoso_cli::models::SessionInfo;
+    use virtuoso_cli::runtime_paths;
+
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+    let original_xdg = env::var_os("XDG_CACHE_HOME");
+    let original_vb = env::var_os("VB_CACHE_DIR");
+    let tmp = tempfile::tempdir().expect("tempdir");
+    env::set_var("VB_CACHE_DIR", tmp.path());
+    env::remove_var("XDG_CACHE_HOME");
+
+    // Compute the expected sessions dir via the public runtime_paths API
+    // (mirrors what `SessionInfo::sessions_dir()` does internally).
+    let dir = runtime_paths::cache_subdir(&["sessions"]);
+    assert_eq!(
+        dir,
+        tmp.path().join("virtuoso_bridge/sessions"),
+        "runtime_paths::cache_subdir([\"sessions\"]) must land under VB_CACHE_DIR"
+    );
+
+    // Build a session, write it via std::fs to the env-overridden path,
+    // then reload through the public SessionInfo::load API.
+    let s = SessionInfo {
+        id: "round-trip-1234".into(),
+        port: 49152,
+        pid: 7777,
+        host: "roundtrip-host".into(),
+        user: "tester".into(),
+        created: "2026-06-13T00:00:00Z".into(),
+        daemon_user: Some("bob".into()),
+        daemon_version: Some("0.4.0-alpha.10".into()),
+    };
+    std::fs::create_dir_all(&dir).expect("create sessions dir");
+    let path = dir.join(format!("{}.json", s.id));
+    std::fs::write(&path, serde_json::to_string_pretty(&s).unwrap()).expect("write session");
+
+    // The public load API should find the file in the env-override location.
+    let loaded = SessionInfo::load(&s.id).expect("reload session");
+    assert_eq!(loaded.id, s.id);
+    assert_eq!(loaded.port, s.port);
+    assert_eq!(loaded.daemon_user.as_deref(), Some("bob"));
+    assert_eq!(loaded.daemon_version.as_deref(), Some("0.4.0-alpha.10"));
+
+    match original_xdg {
+        Some(v) => env::set_var("XDG_CACHE_HOME", v),
+        None => env::remove_var("XDG_CACHE_HOME"),
+    }
+    match original_vb {
+        Some(v) => env::set_var("VB_CACHE_DIR", v),
+        None => env::remove_var("VB_CACHE_DIR"),
+    }
+}
+
+/// `legacy_state_file` should land at `<cache_root>/virtuoso_bridge/state.json`
+/// (or `state_<profile>.json`) regardless of whether `VB_HOME`, `VB_CACHE_DIR`,
+/// or `XDG_CACHE_HOME` was used to set the root — it always follows whatever
+/// the active cache root is.
+#[test]
+fn legacy_state_file_tracks_active_cache_root() {
+    use virtuoso_cli::runtime_paths;
+
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+    let original_xdg = env::var_os("XDG_CACHE_HOME");
+    let original_vb = env::var_os("VB_CACHE_DIR");
+    let original_home = env::var_os("VB_HOME");
+
+    // Case 1: VB_CACHE_DIR
+    let tmp1 = tempfile::tempdir().expect("tempdir");
+    env::set_var("VB_CACHE_DIR", tmp1.path());
+    env::remove_var("XDG_CACHE_HOME");
+    env::remove_var("VB_HOME");
+    assert_eq!(
+        runtime_paths::legacy_state_file(None),
+        tmp1.path().join("virtuoso_bridge/state.json")
+    );
+    assert_eq!(
+        runtime_paths::legacy_state_file(Some("p1")),
+        tmp1.path().join("virtuoso_bridge/state_p1.json")
+    );
+
+    // Case 2: VB_HOME/cache (no VB_CACHE_DIR)
+    let tmp2 = tempfile::tempdir().expect("tempdir");
+    env::remove_var("VB_CACHE_DIR");
+    env::remove_var("XDG_CACHE_HOME");
+    env::set_var("VB_HOME", tmp2.path());
+    assert_eq!(
+        runtime_paths::legacy_state_file(None),
+        tmp2.path().join("cache/virtuoso_bridge/state.json")
+    );
+
+    // Restore
+    match original_xdg {
+        Some(v) => env::set_var("XDG_CACHE_HOME", v),
+        None => env::remove_var("XDG_CACHE_HOME"),
+    }
+    match original_vb {
+        Some(v) => env::set_var("VB_CACHE_DIR", v),
+        None => env::remove_var("VB_CACHE_DIR"),
+    }
+    match original_home {
+        Some(v) => env::set_var("VB_HOME", v),
+        None => env::remove_var("VB_HOME"),
+    }
+}

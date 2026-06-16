@@ -196,18 +196,41 @@ pub fn legacy_state_file(profile: Option<&str>) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
 
-    /// Apply a test-scoped env override, run `f`, then restore.
+    /// Process-wide lock for env-var-mutating tests. cargo test runs unit
+    /// tests in parallel by default; without this lock, tests that set
+    /// `XDG_*` or `VB_*` race each other and intermittently fail.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Apply a test-scoped env override, run `f`, then restore. Holds
+    /// `ENV_LOCK` for the duration of the override so concurrent tests
+    /// in the same process can't observe the in-flight value.
     fn with_env<F: FnOnce()>(var: &str, value: Option<&str>, f: F) {
-        let original = std::env::var_os(var);
-        match value {
-            Some(v) => std::env::set_var(var, v),
-            None => std::env::remove_var(var),
+        with_env_many(&[(var, value)], f);
+    }
+
+    /// Apply multiple env-var overrides in a single critical section, then
+    /// restore. Use this instead of nesting `with_env` — `std::sync::Mutex`
+    /// is not reentrant, so nested locks would deadlock.
+    fn with_env_many<F: FnOnce()>(overrides: &[(&str, Option<&str>)], f: F) {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let originals: Vec<_> = overrides
+            .iter()
+            .map(|(var, _)| (var, std::env::var_os(var)))
+            .collect();
+        for (var, value) in overrides {
+            match value {
+                Some(v) => std::env::set_var(var, v),
+                None => std::env::remove_var(var),
+            }
         }
         f();
-        match original {
-            Some(o) => std::env::set_var(var, o),
-            None => std::env::remove_var(var),
+        for (var, original) in originals {
+            match original {
+                Some(o) => std::env::set_var(var, o),
+                None => std::env::remove_var(var),
+            }
         }
     }
 
@@ -244,12 +267,16 @@ mod tests {
 
     #[test]
     fn cache_subdir_vb_cache_dir_takes_priority_over_vb_home() {
-        with_env("VB_HOME", Some("/tmp/test-vb-home"), || {
-            with_env("VB_CACHE_DIR", Some("/tmp/test-vb-cache-2"), || {
+        with_env_many(
+            &[
+                ("VB_HOME", Some("/tmp/test-vb-home")),
+                ("VB_CACHE_DIR", Some("/tmp/test-vb-cache-2")),
+            ],
+            || {
                 let p = cache_subdir(&["x"]);
                 assert_eq!(p, PathBuf::from("/tmp/test-vb-cache-2/virtuoso_bridge/x"));
-            });
-        });
+            },
+        );
     }
 
     #[test]
@@ -328,5 +355,373 @@ mod tests {
                 PathBuf::from("/tmp/test-nested/virtuoso_bridge/a/b/c.json")
             );
         });
+    }
+
+    // ----------------------------------------------------------------
+    // cache_root() direct coverage
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn cache_root_respects_vb_cache_dir() {
+        with_env("VB_CACHE_DIR", Some("/tmp/test-cr-1"), || {
+            assert_eq!(cache_root(), PathBuf::from("/tmp/test-cr-1"));
+        });
+    }
+
+    #[test]
+    fn cache_root_respects_vb_home_cache_subpath() {
+        with_env_many(
+            &[("VB_HOME", Some("/tmp/test-cr-2")), ("VB_CACHE_DIR", None)],
+            || {
+                assert_eq!(cache_root(), PathBuf::from("/tmp/test-cr-2/cache"));
+            },
+        );
+    }
+
+    #[test]
+    fn cache_root_respects_xdg_cache_home() {
+        with_env_many(
+            &[
+                ("XDG_CACHE_HOME", Some("/tmp/test-cr-3")),
+                ("VB_HOME", None),
+                ("VB_CACHE_DIR", None),
+            ],
+            || {
+                assert_eq!(cache_root(), PathBuf::from("/tmp/test-cr-3"));
+            },
+        );
+    }
+
+    #[test]
+    fn cache_root_vb_home_cache_takes_priority_over_xdg_cache_home() {
+        // Actual precedence: VB_CACHE_DIR > VB_HOME/cache > XDG_CACHE_HOME > dirs.
+        // Documenting this with an explicit test so a future refactor that
+        // reorders the precedence chain cannot silently flip it.
+        with_env_many(
+            &[
+                ("VB_HOME", Some("/tmp/test-cr-4-vbhome")),
+                ("XDG_CACHE_HOME", Some("/tmp/test-cr-4-xdg")),
+                ("VB_CACHE_DIR", None),
+            ],
+            || {
+                assert_eq!(cache_root(), PathBuf::from("/tmp/test-cr-4-vbhome/cache"));
+            },
+        );
+    }
+
+    #[test]
+    fn cache_root_blank_vb_cache_dir_falls_through() {
+        with_env_many(
+            &[
+                ("VB_CACHE_DIR", Some("")),
+                ("VB_HOME", Some("/tmp/test-cr-5-vbhome")),
+                ("XDG_CACHE_HOME", None),
+            ],
+            || {
+                assert_eq!(cache_root(), PathBuf::from("/tmp/test-cr-5-vbhome/cache"));
+            },
+        );
+    }
+
+    // ----------------------------------------------------------------
+    // log_root() coverage
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn log_root_respects_vb_home_logs() {
+        with_env_many(
+            &[("VB_HOME", Some("/tmp/test-lr-1")), ("VB_LOG_DIR", None)],
+            || {
+                assert_eq!(log_root(), PathBuf::from("/tmp/test-lr-1/logs"));
+            },
+        );
+    }
+
+    #[test]
+    fn log_root_vb_log_dir_takes_priority_over_vb_home() {
+        with_env_many(
+            &[
+                ("VB_HOME", Some("/tmp/test-lr-2-vbhome")),
+                ("VB_LOG_DIR", Some("/tmp/test-lr-2-vblog")),
+            ],
+            || {
+                assert_eq!(log_root(), PathBuf::from("/tmp/test-lr-2-vblog"));
+            },
+        );
+    }
+
+    // ----------------------------------------------------------------
+    // state_root() coverage
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn state_root_respects_vb_home_state() {
+        with_env_many(
+            &[("VB_HOME", Some("/tmp/test-sr-1")), ("VB_STATE_DIR", None)],
+            || {
+                assert_eq!(state_root(), PathBuf::from("/tmp/test-sr-1/state"));
+            },
+        );
+    }
+
+    #[test]
+    fn state_root_respects_xdg_state_home() {
+        with_env_many(
+            &[
+                ("XDG_STATE_HOME", Some("/tmp/test-sr-2")),
+                ("VB_STATE_DIR", None),
+                ("VB_HOME", None),
+            ],
+            || {
+                assert_eq!(state_root(), PathBuf::from("/tmp/test-sr-2"));
+            },
+        );
+    }
+
+    #[test]
+    fn state_root_vb_home_state_takes_priority_over_xdg_state_home() {
+        // Actual precedence: VB_STATE_DIR > VB_HOME/state > XDG_STATE_HOME > cache_root.
+        // Documenting this with an explicit test so a future refactor that
+        // reorders the precedence chain cannot silently flip it.
+        with_env_many(
+            &[
+                ("VB_HOME", Some("/tmp/test-sr-3-vbhome")),
+                ("XDG_STATE_HOME", Some("/tmp/test-sr-3-xdg")),
+                ("VB_STATE_DIR", None),
+            ],
+            || {
+                assert_eq!(state_root(), PathBuf::from("/tmp/test-sr-3-vbhome/state"));
+            },
+        );
+    }
+
+    #[test]
+    fn state_root_falls_back_to_cache_root() {
+        // Back-compat: when nothing is set, state_root() should still produce
+        // a path inside the cache root (legacy state.json location).
+        with_env_many(
+            &[
+                ("VB_STATE_DIR", None),
+                ("VB_HOME", None),
+                ("XDG_STATE_HOME", None),
+            ],
+            || {
+                let sr = state_root();
+                let cr = cache_root();
+                assert!(
+                    sr.starts_with(&cr),
+                    "state_root {sr:?} should be under cache_root {cr:?}"
+                );
+            },
+        );
+    }
+
+    // ----------------------------------------------------------------
+    // config_root() / config_subdir() — previously zero coverage
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn config_root_respects_vb_config_dir() {
+        with_env("VB_CONFIG_DIR", Some("/tmp/test-cfg-1"), || {
+            assert_eq!(config_root(), PathBuf::from("/tmp/test-cfg-1"));
+        });
+    }
+
+    #[test]
+    fn config_root_respects_vb_home_config() {
+        with_env_many(
+            &[
+                ("VB_HOME", Some("/tmp/test-cfg-2")),
+                ("VB_CONFIG_DIR", None),
+            ],
+            || {
+                assert_eq!(config_root(), PathBuf::from("/tmp/test-cfg-2/config"));
+            },
+        );
+    }
+
+    #[test]
+    fn config_root_respects_xdg_config_home() {
+        with_env_many(
+            &[
+                ("XDG_CONFIG_HOME", Some("/tmp/test-cfg-3")),
+                ("VB_HOME", None),
+                ("VB_CONFIG_DIR", None),
+            ],
+            || {
+                assert_eq!(config_root(), PathBuf::from("/tmp/test-cfg-3"));
+            },
+        );
+    }
+
+    #[test]
+    fn config_subdir_includes_vcli_prefix() {
+        with_env("VB_CONFIG_DIR", Some("/tmp/test-cfgsub-1"), || {
+            let p = config_subdir(&["plugins"]);
+            assert_eq!(p, PathBuf::from("/tmp/test-cfgsub-1/vcli/plugins"));
+        });
+    }
+
+    #[test]
+    fn config_subdir_nested_components() {
+        with_env("VB_CONFIG_DIR", Some("/tmp/test-cfgsub-2"), || {
+            let p = config_subdir(&["plugins", "subdir", "x.json"]);
+            assert_eq!(
+                p,
+                PathBuf::from("/tmp/test-cfgsub-2/vcli/plugins/subdir/x.json")
+            );
+        });
+    }
+
+    // ----------------------------------------------------------------
+    // tmp_root() coverage
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn tmp_root_respects_vb_home_tmp() {
+        with_env_many(
+            &[
+                ("VB_HOME", Some("/tmp/test-tmp-1")),
+                ("VB_TMP_DIR", None),
+                ("TMPDIR", None),
+            ],
+            || {
+                assert_eq!(tmp_root(), PathBuf::from("/tmp/test-tmp-1/tmp"));
+            },
+        );
+    }
+
+    #[test]
+    fn tmp_root_respects_tmpdir_env() {
+        with_env_many(
+            &[
+                ("TMPDIR", Some("/tmp/test-tmp-2")),
+                ("VB_TMP_DIR", None),
+                ("VB_HOME", None),
+            ],
+            || {
+                assert_eq!(tmp_root(), PathBuf::from("/tmp/test-tmp-2"));
+            },
+        );
+    }
+
+    #[test]
+    fn tmp_root_vb_tmp_dir_takes_priority_over_vb_home() {
+        with_env_many(
+            &[
+                ("VB_HOME", Some("/tmp/test-tmp-3-vbhome")),
+                ("VB_TMP_DIR", Some("/tmp/test-tmp-3-vbtmp")),
+            ],
+            || {
+                assert_eq!(tmp_root(), PathBuf::from("/tmp/test-tmp-3-vbtmp"));
+            },
+        );
+    }
+
+    #[test]
+    fn tmp_root_falls_back_to_absolute_path() {
+        with_env_many(
+            &[("VB_TMP_DIR", None), ("VB_HOME", None), ("TMPDIR", None)],
+            || {
+                let t = tmp_root();
+                assert!(t.is_absolute(), "tmp_root must be absolute, got {t:?}");
+                assert!(!t.as_os_str().is_empty());
+            },
+        );
+    }
+
+    // ----------------------------------------------------------------
+    // artifact_root() coverage
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn artifact_root_respects_vb_home_artifacts() {
+        with_env_many(
+            &[
+                ("VB_HOME", Some("/tmp/test-art-1")),
+                ("VB_OUTPUT_DIR", None),
+                ("XDG_STATE_HOME", None),
+            ],
+            || {
+                assert_eq!(artifact_root(), PathBuf::from("/tmp/test-art-1/artifacts"));
+            },
+        );
+    }
+
+    #[test]
+    fn artifact_root_respects_xdg_state_home_artifacts() {
+        with_env_many(
+            &[
+                ("XDG_STATE_HOME", Some("/tmp/test-art-2")),
+                ("VB_HOME", None),
+                ("VB_OUTPUT_DIR", None),
+            ],
+            || {
+                assert_eq!(artifact_root(), PathBuf::from("/tmp/test-art-2/artifacts"));
+            },
+        );
+    }
+
+    #[test]
+    fn artifact_root_falls_back_to_cache_root_with_artifacts() {
+        with_env_many(
+            &[
+                ("VB_OUTPUT_DIR", None),
+                ("VB_HOME", None),
+                ("XDG_STATE_HOME", None),
+            ],
+            || {
+                let ar = artifact_root();
+                let cr = cache_root();
+                assert!(
+                    ar.starts_with(&cr),
+                    "artifact_root {ar:?} should be under cache_root {cr:?}"
+                );
+                assert!(ar.to_string_lossy().contains("artifacts"));
+            },
+        );
+    }
+
+    // ----------------------------------------------------------------
+    // legacy_cache_file() — previously zero coverage
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn legacy_cache_file_with_profile_appends_underscore() {
+        with_env("VB_CACHE_DIR", Some("/tmp/test-legacy-1"), || {
+            assert_eq!(
+                legacy_cache_file("jobs", Some("analog-eda")),
+                PathBuf::from("/tmp/test-legacy-1/virtuoso_bridge/jobs_analog-eda")
+            );
+        });
+    }
+
+    #[test]
+    fn legacy_cache_file_without_profile_uses_bare_name() {
+        with_env("VB_CACHE_DIR", Some("/tmp/test-legacy-2"), || {
+            assert_eq!(
+                legacy_cache_file("snapshots", None),
+                PathBuf::from("/tmp/test-legacy-2/virtuoso_bridge/snapshots")
+            );
+        });
+    }
+
+    #[test]
+    fn legacy_cache_file_tracks_cache_root_changes() {
+        // legacy_cache_file should follow VB_CACHE_DIR / VB_HOME / XDG
+        // because it delegates to cache_root().
+        with_env_many(
+            &[
+                ("VB_HOME", Some("/tmp/test-legacy-3")),
+                ("VB_CACHE_DIR", None),
+                ("XDG_CACHE_HOME", None),
+            ],
+            || {
+                assert_eq!(
+                    legacy_cache_file("snapshots", None),
+                    PathBuf::from("/tmp/test-legacy-3/cache/virtuoso_bridge/snapshots")
+                );
+            },
+        );
     }
 }
