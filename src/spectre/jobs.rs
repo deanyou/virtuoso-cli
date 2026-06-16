@@ -30,10 +30,7 @@ pub struct Job {
 
 impl Job {
     fn dir() -> PathBuf {
-        let dir = dirs::cache_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("virtuoso_bridge")
-            .join("jobs");
+        let dir = crate::runtime_paths::cache_subdir(&["jobs"]);
         let _ = fs::create_dir_all(&dir);
         dir
     }

@@ -212,6 +212,8 @@ fn session_info_deserializes_new_json_with_daemon_user() {
 fn save_to_session_file_writes_to_sessions_dir() {
     use std::env;
 
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     // Save and restore the env var that save() uses for cache_dir resolution
     let original_xdg = env::var_os("XDG_CACHE_HOME").and_then(|s| s.into_string().ok());
 
@@ -371,6 +373,8 @@ fn ensure_remote_dir_local_mode_creates_dir() {
 fn save_to_session_file_swallows_io_errors() {
     // Pointing the cache to a non-writable path should NOT panic — the
     // contract is "best-effort, errors silently ignored".
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     let original_xdg = std::env::var_os("XDG_CACHE_HOME").and_then(|s| s.into_string().ok());
     std::env::set_var("XDG_CACHE_HOME", "/nonexistent-readonly-path/abc/def");
 
@@ -599,4 +603,56 @@ fn ramic_bridge_version_stamp_matches_cargo_toml() {
         "ramic_bridge.il RB_VERSION stamp ({il_version:?}) must match Cargo.toml version ({cli_version:?})"
     );
     assert_eq!(il_version, env!("CARGO_PKG_VERSION"));
+}
+
+// ─── runtime_paths integration ──────────────────────────────────────────────
+
+#[test]
+fn sessions_dir_respects_vb_cache_dir_env_override() {
+    use virtuoso_cli::runtime_paths;
+
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+    let original_xdg = env::var_os("XDG_CACHE_HOME");
+    let original_vb = env::var_os("VB_CACHE_DIR");
+    let tmp = tempfile::tempdir().expect("tempdir");
+    env::set_var("VB_CACHE_DIR", tmp.path());
+    env::remove_var("XDG_CACHE_HOME");
+
+    let sessions = runtime_paths::cache_subdir(&["sessions"]);
+    assert_eq!(sessions, tmp.path().join("virtuoso_bridge/sessions"));
+
+    // Restore
+    match original_xdg {
+        Some(v) => env::set_var("XDG_CACHE_HOME", v),
+        None => env::remove_var("XDG_CACHE_HOME"),
+    }
+    match original_vb {
+        Some(v) => env::set_var("VB_CACHE_DIR", v),
+        None => env::remove_var("VB_CACHE_DIR"),
+    }
+}
+
+#[test]
+fn log_root_respects_vb_log_dir_env_override() {
+    use virtuoso_cli::runtime_paths;
+
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+    let original = env::var_os("VB_LOG_DIR");
+    let tmp = tempfile::tempdir().expect("tempdir");
+    env::set_var("VB_LOG_DIR", tmp.path());
+
+    let log_root = runtime_paths::log_root();
+    assert_eq!(
+        log_root,
+        tmp.path()
+            .canonicalize()
+            .unwrap_or(tmp.path().to_path_buf())
+    );
+
+    match original {
+        Some(v) => env::set_var("VB_LOG_DIR", v),
+        None => env::remove_var("VB_LOG_DIR"),
+    }
 }

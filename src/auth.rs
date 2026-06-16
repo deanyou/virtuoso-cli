@@ -164,10 +164,8 @@ impl AuditEntry {
 }
 
 fn audit_path() -> PathBuf {
-    let dir = dirs::cache_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("virtuoso_bridge")
-        .join("logs");
+    use crate::runtime_paths;
+    let dir = runtime_paths::log_root();
     let _ = fs::create_dir_all(&dir);
     dir.join("audit.log")
 }

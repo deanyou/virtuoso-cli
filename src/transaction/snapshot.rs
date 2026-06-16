@@ -131,10 +131,6 @@ impl SchematicSnapshot {
     }
 
     fn path_for(transaction_id: &str) -> PathBuf {
-        dirs::cache_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("virtuoso_bridge")
-            .join("snapshots")
-            .join(format!("{transaction_id}.json"))
+        crate::runtime_paths::cache_subdir(&["snapshots"]).join(format!("{transaction_id}.json"))
     }
 }

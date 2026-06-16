@@ -121,7 +121,7 @@ impl Config {
             ));
         }
 
-        let sessions_dir = dirs::cache_dir().map(|d| d.join("virtuoso_bridge").join("sessions"));
+        let sessions_dir = Some(crate::runtime_paths::cache_subdir(&["sessions"]));
         if let Some(ref d) = sessions_dir {
             tracing::debug!("session dir: {}", d.display());
         }

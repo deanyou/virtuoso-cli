@@ -274,10 +274,7 @@ impl SSHClient {
         // Conditionally add ControlMaster options — disabled when CM has been
         // found to fail at runtime (WSL2/Windows named pipe issues).
         if *self.runner.use_control_master.lock().unwrap() {
-            let control_dir = dirs::cache_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                .join("virtuoso_bridge")
-                .join("ssh");
+            let control_dir = crate::runtime_paths::cache_subdir(&["ssh"]);
             let _ = std::fs::create_dir_all(&control_dir);
             let control_path = control_dir.join("%h-%p-%r");
             cmd.args([

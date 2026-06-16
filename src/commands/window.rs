@@ -250,6 +250,83 @@ pub fn dismiss_dialog_x11(
     Ok(out)
 }
 
+/// List every Virtuoso-related X11 window (no keypress sent).
+///
+/// Unlike `list_dialogs_x11` (which only returns dialogs matching the
+/// geometric modal test), this enumerates every mapped Virtuoso window
+/// along with its WM frame and dismiss id. Use this when you want to see
+/// what's on screen before picking a target.
+pub fn list_windows_x11(explicit_display: Option<&str>) -> Result<Value> {
+    use crate::config::Config;
+    use crate::transport::x11;
+
+    let config = Config::from_env()?;
+    if config.remote_host.as_deref().unwrap_or("").is_empty() {
+        return Err(VirtuosoError::Config(
+            "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target".into(),
+        ));
+    }
+    let runner = x11::runner_for_config(&config)?;
+    let user = config.remote_user.as_deref();
+    let (env, windows) = x11::list_windows(
+        &runner,
+        &x11::client_id_for(&config),
+        user,
+        explicit_display,
+    )?;
+    Ok(json!({
+        "display": env.display,
+        "xauthority": env.xauthority,
+        "windows": windows,
+        "count": windows.len(),
+    }))
+}
+
+/// Dismiss a SPECIFIC X11 window by id. Use `list_windows_x11` to find the id first.
+///
+/// The window id is the `dismiss_id` field returned by `--list-windows`
+/// (typically an X resource id like `0x2e01f16`).
+pub fn dismiss_window_x11(
+    window_id: &str,
+    action: &str,
+    explicit_display: Option<&str>,
+) -> Result<Value> {
+    use crate::config::Config;
+    use crate::transport::x11;
+
+    let config = Config::from_env()?;
+    if config.remote_host.as_deref().unwrap_or("").is_empty() {
+        return Err(VirtuosoError::Config(
+            "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target".into(),
+        ));
+    }
+    let runner = x11::runner_for_config(&config)?;
+    let user = config.remote_user.as_deref();
+    let result = x11::dismiss_window(
+        &runner,
+        &x11::client_id_for(&config),
+        user,
+        explicit_display,
+        window_id,
+        action,
+    )?;
+    let mut out = serde_json::to_value(&result)
+        .map_err(|e| VirtuosoError::Execution(format!("failed to serialize X11 result: {e}")))?;
+    let obj = out.as_object_mut().unwrap();
+    let n_dismissed = result.dismissed.len();
+    obj.insert(
+        "status".into(),
+        json!(if n_dismissed > 0 {
+            "dismissed"
+        } else {
+            "not-found"
+        }),
+    );
+    obj.insert("action".into(), json!(action));
+    obj.insert("window_id".into(), json!(window_id));
+    Ok(out)
+}
+
 /// Capture a screenshot of the current (or pattern-matched) Virtuoso window.
 ///
 /// Saves to --path as PNG. Requires IC23.1+ (hiGetWindowScreenDump).

@@ -72,6 +72,76 @@ vcli session list
 vcli --session meowu-meow-38371 skill exec 'getCurrentTime()'
 ```
 
+## Multi-line input — `skill eval --stdin`
+
+For snippets that span more than one line, or that contain characters painful to
+shell-quote (double quotes, parens, dollar signs), pipe the SKILL through stdin
+instead of stuffing it on the argv:
+
+```bash
+# argv form — fine for one-liners
+vcli skill exec '1+2' --format json
+
+# stdin form — survives any quoting problem; here-doc friendly
+cat <<'EOF' | vcli skill eval --stdin --format json
+let((x y)
+    x = 1 + 2
+    y = x * x
+    y
+)
+EOF
+```
+
+Both `skill exec` and `skill eval` go through the daemon, but they differ in two
+ways that matter:
+
+| | `skill exec` | `skill eval` |
+|---|---|---|
+| Input | argv only (`<code>` positional) | argv OR `--stdin` |
+| Multi-statement | daemon `let((r) r=<code>)` — **single form only** | wrapped in `progn(\n<code>\n)` — **any number of forms** |
+| Trailing `; comment` | safe | safe (the `\n)` before `)` terminates the line comment) |
+| Return value | the daemon's `r` | the value of the **last form** inside `progn` |
+
+**Rule of thumb**: use `eval --stdin` whenever your SKILL has more than one top-level
+form, contains full-line comments, or defines a procedure then calls it.
+
+> ⚠️ **Gotcha — `skill exec` silently drops earlier forms.** Inside the daemon's
+> `let(((__vb_r <code>)) ...)`, `f1() f2()` parses as "apply the result of `f1()` to
+> the arguments of `f2()`" — only `f2()` runs. If you see `printf(...)` succeed but
+> the side effect you expected from the prior statement is missing, switch to
+> `skill eval --stdin` so the input is wrapped in `progn(...)`.
+
+## CIW output vs return value
+
+`vcli skill exec` (and `eval`) send the SKILL expression to Virtuoso for evaluation
+and capture the **return value** back into the JSON `output` field. They do **not**
+echo anything to the CIW window unless your expression does it itself with `printf`.
+
+```bash
+# Pure return value — CIW stays silent; vcli stdout gets "3"
+vcli skill exec '1+2' --format json
+# → {"status":"success","output":"3","errors":[],"warnings":[],...}
+# CIW: (nothing)
+
+# Both — printf shows in CIW, the let body's final form is the return value
+vcli skill exec 'let((v) v=1+2 printf("1+2 = %d\n" v) v)' --format json
+# → {"status":"success","output":"3",...}
+# CIW: 1+2 = 3
+```
+
+When debugging a long expression, the `printf(...)` + final-form pattern is the
+cleanest way to inspect intermediate state without leaving CIW trace breadcrumbs
+that pollute later reads.
+
+## Attribution
+
+The multi-line SKILL wrapping (`progn(\n<code>\n)`), `--stdin` input mode, and
+the CIW output vs return-value distinction are adapted from
+[virtuoso-bridge-lite](https://github.com/Arcadia-1/virtuoso-bridge-lite)
+(MIT, 2026-06) — specifically `cli.py::cli_eval`,
+`examples/01_virtuoso/basic/05_multiline_skill.py`, and
+`examples/01_virtuoso/basic/00_ciw_output_vs_return.py`.
+
 ## Important notes
 
 - Use `--format json` for structured output (auto in pipe mode)

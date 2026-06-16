@@ -15,6 +15,7 @@ pub mod output;
 pub mod plugins;
 pub mod profile;
 pub mod rpc;
+pub mod runtime_paths;
 pub mod session;
 pub mod skill_finder;
 pub mod spectre;

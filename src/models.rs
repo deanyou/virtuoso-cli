@@ -139,9 +139,7 @@ impl DaemonStats {
     /// Returns the path to the daemon stats file.
     /// Uses the system cache directory (e.g., ~/.cache/virtuoso_bridge/).
     fn cache_dir() -> std::path::PathBuf {
-        dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("virtuoso_bridge")
+        crate::runtime_paths::cache_subdir::<&str>(&[])
     }
 
     pub fn path(port: u16) -> String {
@@ -194,10 +192,7 @@ pub struct SessionInfo {
 
 impl SessionInfo {
     pub(crate) fn sessions_dir() -> std::path::PathBuf {
-        dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("virtuoso_bridge")
-            .join("sessions")
+        crate::runtime_paths::cache_subdir(&["sessions"])
     }
 
     pub fn load(id: &str) -> std::io::Result<Self> {
@@ -319,15 +314,25 @@ pub struct TunnelState {
 
 impl TunnelState {
     fn state_path(profile: Option<&str>) -> std::path::PathBuf {
-        let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("virtuoso_bridge");
-        let _ = std::fs::create_dir_all(&cache_dir);
-        let filename = match profile {
-            Some(p) if !p.is_empty() => format!("state_{p}.json"),
-            _ => "state.json".into(),
-        };
-        cache_dir.join(filename)
+        // Default to state_root (XDG_STATE_HOME) and fall back to the legacy
+        // ~/.cache/virtuoso_bridge/state_*.json path so older daemon
+        // processes keep finding their state files after a refactor.
+        let primary = crate::runtime_paths::state_root()
+            .join(crate::runtime_paths::APP_DIR)
+            .join(match profile {
+                Some(p) if !p.is_empty() => format!("state_{p}.json"),
+                _ => "state.json".into(),
+            });
+        let legacy = crate::runtime_paths::legacy_state_file(profile);
+        if primary.exists() {
+            primary
+        } else if legacy.exists() {
+            legacy
+        } else {
+            // Default to primary for new writes; create the dir on demand.
+            let _ = std::fs::create_dir_all(primary.parent().unwrap_or(&primary));
+            primary
+        }
     }
 
     pub fn save_with_profile(&self, profile: Option<&str>) -> std::io::Result<()> {

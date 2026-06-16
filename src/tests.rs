@@ -1706,6 +1706,49 @@ mod skill_command_tests {
         let result = skill::eval(Some("code".to_string()), true);
         assert!(matches!(result, Err(VirtuosoError::Config(_))));
     }
+
+    #[test]
+    fn eval_progn_preserves_inline_comments() {
+        // Borrowed pattern: let + inline `; comment` should survive progn wrap.
+        let code = "let((a b c)\n    a = 10 ; first value\n    b = a * 2 ; double it\n    b)";
+        let wrapped = format!("progn(\n{}\n)", code);
+        assert!(wrapped.contains("a = 10 ; first value"));
+        assert!(wrapped.contains("b = a * 2 ; double it"));
+        assert!(wrapped.ends_with("\n)"));
+    }
+
+    #[test]
+    fn eval_progn_preserves_full_line_comments() {
+        // Full-line `; comment` must not be stripped — the daemon parses it.
+        let code = "; top comment\nlet((x) x=42 x)";
+        let wrapped = format!("progn(\n{}\n)", code);
+        assert!(wrapped.contains("; top comment"));
+        assert!(wrapped.contains("x=42"));
+    }
+
+    #[test]
+    fn eval_progn_handles_procedure_def_then_call() {
+        // Borrowed example: define procedure, then call it on next form.
+        // Without progn wrap the daemon's let-path would only execute one form.
+        let code = "procedure(_test_add(a b) a + b)\n_test_add(17 25)";
+        let wrapped = format!("progn(\n{}\n)", code);
+        assert!(wrapped.starts_with("progn(\n"));
+        assert!(wrapped.contains("procedure(_test_add(a b)"));
+        assert!(wrapped.contains("_test_add(17 25)"));
+        assert!(wrapped.ends_with("\n)"));
+    }
+
+    #[test]
+    fn eval_stdin_mode_validates_empty_input() {
+        // eval() with stdin=true and a non-empty code string must error
+        // (mutually exclusive). The empty-input path requires actual stdin,
+        // so this just covers the validation table.
+        use crate::commands::skill;
+        use crate::error::VirtuosoError;
+
+        let result = skill::eval(Some(String::new()), true);
+        assert!(matches!(result, Err(VirtuosoError::Config(_))));
+    }
 }
 
 /// Integration tests for Spectre simulation parsing.

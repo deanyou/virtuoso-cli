@@ -16,6 +16,7 @@ mod ocean;
 mod output;
 mod plugins;
 mod rpc;
+mod runtime_paths;
 mod skill_finder;
 mod spectre;
 mod streaming;
@@ -1269,6 +1270,28 @@ enum WindowCmd {
         display: Option<String>,
     },
 
+    /// List all Virtuoso-related X11 windows (no dismiss). Use to find a
+    /// window id before `dismiss-window <id>`.
+    ListWindowsX11 {
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display: Option<String>,
+    },
+
+    /// Dismiss a SPECIFIC X11 window by id. Id is the `dismiss_id` field
+    /// from `list-windows-x11` (e.g. 0x2e01f16). Use this when you have
+    /// multiple Virtuoso-related windows and don't want to dismiss them all.
+    DismissWindowX11 {
+        /// X11 window id (dismiss_id from list-windows-x11)
+        window_id: String,
+        /// enter (default) | escape | alt-y | alt-n
+        #[arg(long, default_value = "enter")]
+        action: String,
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display: Option<String>,
+    },
+
     /// Capture a screenshot of the current Virtuoso window (IC23.1+)
     Screenshot {
         /// Output file path (PNG)
@@ -1785,6 +1808,14 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
         WindowCmd::ListDialogsX11 { display } => {
             commands::window::list_dialogs_x11(display.as_deref())
         }
+        WindowCmd::ListWindowsX11 { display } => {
+            commands::window::list_windows_x11(display.as_deref())
+        }
+        WindowCmd::DismissWindowX11 {
+            window_id,
+            action,
+            display,
+        } => commands::window::dismiss_window_x11(&window_id, &action, display.as_deref()),
         WindowCmd::Screenshot { path, window } => {
             commands::window::screenshot(&path, window.as_deref())
         }

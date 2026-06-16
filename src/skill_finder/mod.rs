@@ -287,7 +287,7 @@ impl SKILLFinder {
 /// Get the cache directory for a host.
 /// Returns: `~/.cache/virtuoso_bridge/skill_finder/<host>/`
 pub fn cache_dir(host: &str) -> Option<PathBuf> {
-    dirs::cache_dir().map(|d| d.join("virtuoso_bridge").join("skill_finder").join(host))
+    Some(crate::runtime_paths::cache_subdir(&["skill_finder", host]))
 }
 
 /// Check if cache exists for a host

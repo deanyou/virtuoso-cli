@@ -210,6 +210,176 @@ def _find_app_child(display, frame_id_str):
     return frame_id_str  # fallback to frame itself
 
 
+def _parse_window_line(line):
+    """Parse a line from `xwininfo -root -children` or `-tree`.
+
+    Returns a dict {id, title, class} or None if the line doesn't look
+    like a window row.
+    """
+    line = line.strip()
+    if not line.startswith("0x"):
+        return None
+    parts = line.split()
+    win_id = parts[0]
+    title = ""
+    classes = []
+    for token in parts:
+        if token.startswith('"') and token.endswith('"') and len(token) > 2:
+            # "Title" or "Class:Subclass"
+            inner = token[1:-1]
+            if ":" in inner and " " not in inner:
+                classes.extend(inner.split(":"))
+            else:
+                title = inner
+    return {"id": win_id, "title": title, "class": classes}
+
+
+def _read_window_geometry(win_id):
+    """Read x, y, w, h and mapped state for a window. Returns a dict."""
+    try:
+        info = subprocess.check_output(
+            ["xwininfo", "-id", win_id],
+            stderr=subprocess.PIPE,
+        ).decode("utf-8", "replace")
+    except (subprocess.CalledProcessError, OSError):
+        return {"x": 0, "y": 0, "w": 0, "h": 0, "mapped": False}
+    geometry = {"x": 0, "y": 0, "w": 0, "h": 0}
+    mapped = False
+    for il in info.splitlines():
+        il = il.strip()
+        if il.startswith("Absolute upper-left X:"):
+            try:
+                geometry["x"] = int(il.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+        elif il.startswith("Absolute upper-left Y:"):
+            try:
+                geometry["y"] = int(il.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+        elif il.startswith("Width:"):
+            try:
+                geometry["w"] = int(il.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+        elif il.startswith("Height:"):
+            try:
+                geometry["h"] = int(il.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+        elif "Map State:" in il and "IsViewable" in il:
+            mapped = True
+    geometry["mapped"] = mapped
+    return geometry
+
+
+def _is_virtuoso_class(classes):
+    lowered = [c.lower() for c in (classes or [])]
+    for cls in VIRTUOSO_WM_CLASSES:
+        if cls.lower() in lowered:
+            return True
+    return False
+
+
+def _root_frames():
+    """Enumerate top-level window frames from `xwininfo -root -children`."""
+    try:
+        tree = subprocess.check_output(
+            ["xwininfo", "-root", "-children"],
+            stderr=subprocess.PIPE,
+        ).decode("utf-8", "replace")
+    except (subprocess.CalledProcessError, OSError) as exc:
+        print(json.dumps({"error": "xwininfo failed: %s" % exc}))
+        return []
+    frames = []
+    in_children = False
+    for line in tree.splitlines():
+        if "children" in line.lower() and ":" in line:
+            in_children = True
+            continue
+        if not in_children:
+            continue
+        frame = _parse_window_line(line)
+        if not frame:
+            continue
+        frames.append(frame)
+    return frames
+
+
+def _frame_children(frame_id):
+    """Enumerate the immediate children of a frame (1 level of `xwininfo -tree`)."""
+    try:
+        tree = subprocess.check_output(
+            ["xwininfo", "-id", frame_id, "-tree"],
+            stderr=subprocess.PIPE,
+        ).decode("utf-8", "replace")
+    except (subprocess.CalledProcessError, OSError):
+        return []
+    children = []
+    for line in tree.splitlines():
+        child = _parse_window_line(line)
+        if child and child["id"] != frame_id:
+            children.append(child)
+    return children
+
+
+def _is_dialog_sized(geometry):
+    """Geometric test: is this window a modal dialog (not editor pane / main frame)?"""
+    w = int(geometry.get("w") or 0)
+    h = int(geometry.get("h") or 0)
+    if w < MIN_DIALOG_DIM or h < MIN_DIALOG_DIM:
+        return False
+    if h > MAX_DIALOG_HEIGHT:
+        return False
+    if w > MAX_DIALOG_WHEN_LARGE_WIDTH and h > MAX_DIALOG_WHEN_LARGE_HEIGHT:
+        return False
+    return True
+
+
+def discover_windows(display):
+    """Enumerate Virtuoso-related X11 windows with frame + child details.
+
+    Returns a list of dicts: {frame_id, window_id, dismiss_id, title, class, geometry}.
+    Each Virtuoso-associated child window is one entry, with the parent frame_id
+    recorded alongside so callers can dismiss via the child id directly.
+
+    Unlike `find_dialogs`, this does NOT apply the dialog-size filter — it returns
+    every Virtuoso-related window, so callers can decide which to dismiss.
+    """
+    os.environ["DISPLAY"] = display
+    windows = []
+    seen = set()
+    for frame in _root_frames():
+        frame_id = frame["id"]
+        geometry = _read_window_geometry(frame_id)
+        if not geometry.get("mapped", False):
+            continue
+        children = _frame_children(frame_id)
+        virt_children = [c for c in children if _is_virtuoso_class(c.get("class"))]
+        if _is_virtuoso_class(frame.get("class")):
+            virt_children.append(frame)
+        for child in virt_children:
+            dismiss_id = child["id"]
+            key = (frame_id, dismiss_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            windows.append({
+                "frame_id": frame_id,
+                "window_id": dismiss_id,
+                "dismiss_id": dismiss_id,
+                "title": child.get("title") or frame.get("title") or "",
+                "class": child.get("class") or frame.get("class") or [],
+                "geometry": {
+                    "w": int(geometry.get("w") or 0),
+                    "h": int(geometry.get("h") or 0),
+                    "x": int(geometry.get("x") or 0),
+                    "y": int(geometry.get("y") or 0),
+                },
+            })
+    return windows
+
+
 def _press_pair(dpy, xlib, xtst, kc_modifier, kc_key, action_name):
     """Press modifier+key, release, and return the action name + keycodes."""
     if kc_modifier is not None:
@@ -222,11 +392,15 @@ def _press_pair(dpy, xlib, xtst, kc_modifier, kc_key, action_name):
     return action_name
 
 
-def dismiss_window(display, win_id_str, action, title=""):
+def dismiss_window(display, win_id_str, action, title="", target_is_explicit=False):
     """Dismiss a window via XTest.
 
     `action` is one of 'enter' (default), 'escape', 'alt-y', 'alt-n'.
     Raises RuntimeError on display/X11/lib loading failure.
+
+    When `target_is_explicit=True` (i.e., called from `--dismiss-window <ID>`),
+    `win_id_str` is the caller-provided target and is used directly. Otherwise
+    we resolve the WM frame to its first named child (the actual app window).
     """
     if action not in VALID_ACTIONS:
         raise ValueError("action must be one of %s" % (VALID_ACTIONS,))
@@ -243,8 +417,12 @@ def dismiss_window(display, win_id_str, action, title=""):
         raise RuntimeError("cannot open display %s" % display)
 
     try:
-        # Focus the actual app child window, not the WM frame.
-        child_id_str = _find_app_child(display, win_id_str)
+        # If caller passed an explicit window id, use it directly; otherwise
+        # resolve the WM frame to its app child.
+        if target_is_explicit:
+            child_id_str = win_id_str
+        else:
+            child_id_str = _find_app_child(display, win_id_str)
         child_id = int(child_id_str, 16) if child_id_str.startswith("0x") else int(child_id_str)
         xlib.XRaiseWindow(dpy, child_id)
         xlib.XSetInputFocus(dpy, child_id, 1, 0)  # RevertToParent
@@ -293,6 +471,8 @@ def main():
     args = sys.argv[1:]
     display = None
     do_dismiss = False
+    list_windows = False
+    dismiss_target = None
     action = "enter"
 
     i = 0
@@ -300,12 +480,27 @@ def main():
         a = args[i]
         if a == "--dismiss":
             do_dismiss = True
+        elif a == "--list-windows":
+            list_windows = True
+        elif a == "--dismiss-window":
+            if i + 1 >= len(args):
+                print(json.dumps({"error": "--dismiss-window requires a window id"}))
+                sys.exit(2)
+            dismiss_target = args[i + 1]
+            i += 1
         elif a == "--action" and i + 1 < len(args):
             action = args[i + 1]
             i += 1
         elif a in ("-h", "--help"):
-            print("usage: x11_dismiss_dialog.py [DISPLAY] [--dismiss] [--action enter|escape|alt-y|alt-n]",
-                  file=sys.stderr)
+            print(
+                "usage: x11_dismiss_dialog.py [DISPLAY] [options]\n"
+                "  --list-windows                 enumerate Virtuoso-related X11 windows\n"
+                "  --dismiss                      dismiss all detected dialogs\n"
+                "  --dismiss-window <ID>          dismiss a specific window id\n"
+                "  --action <a>                   enter|escape|alt-y|alt-n (default: enter)\n"
+                "  --json                         reserved (always JSON)\n",
+                file=sys.stderr,
+            )
             sys.exit(0)
         elif not a.startswith("-"):
             display = a
@@ -324,6 +519,23 @@ def main():
         xauth = x11_env.get("XAUTHORITY")
         if isinstance(xauth, str) and xauth:
             os.environ["XAUTHORITY"] = xauth
+
+    if dismiss_target:
+        # Single explicit window dismiss. Does NOT require dialog-size filter.
+        try:
+            result = dismiss_window(
+                display, dismiss_target, action=action, target_is_explicit=True
+            )
+        except (RuntimeError, ValueError) as exc:
+            result = {"error": str(exc), "window_id": dismiss_target}
+        print(json.dumps(result))
+        sys.exit(0 if "dismissed" in result else 1)
+
+    if list_windows:
+        windows = discover_windows(display)
+        for w in windows:
+            print(json.dumps(w))
+        sys.exit(0 if windows else 1)
 
     dialogs = find_dialogs(display)
     for d in dialogs:

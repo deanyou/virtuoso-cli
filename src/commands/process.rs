@@ -128,7 +128,7 @@ pub fn char_netlist(
     let mut all_data: Vec<Value> = Vec::new();
     let mut total_points = 0;
 
-    let work_dir = std::path::PathBuf::from(format!("/tmp/vcli_char_{device_type}"));
+    let work_dir = crate::runtime_paths::tmp_root().join(format!("vcli_char_{device_type}"));
     std::fs::create_dir_all(&work_dir).map_err(VirtuosoError::Io)?;
 
     for &l in l_values {

@@ -304,6 +304,46 @@ pub fn standard_schema() -> RpcSchema {
             ],
             returns: "{status, found, dismissed, errors, display, raw_log}".into(),
         },
+        Method {
+            name: "window.list_windows_x11".into(),
+            summary: "Enumerate all Virtuoso-related X11 windows (no keypress sent)"
+                .into(),
+            params: vec![Param {
+                name: "display".into(),
+                ptype: "string".into(),
+                description: "Override the detected DISPLAY".into(),
+                required: false,
+            }],
+            returns: "{display, xauthority, windows, count}".into(),
+        },
+        Method {
+            name: "window.dismiss_window_x11".into(),
+            summary:
+                "Dismiss a SPECIFIC X11 window by id (typically the dismiss_id from list_windows_x11). Bypasses the dialog-size filter."
+                    .into(),
+            params: vec![
+                Param {
+                    name: "window_id".into(),
+                    ptype: "string".into(),
+                    description: "X11 window id (e.g. 0x2e01f16) from list_windows_x11"
+                        .into(),
+                    required: true,
+                },
+                Param {
+                    name: "action".into(),
+                    ptype: "string".into(),
+                    description: "enter|escape|alt-y|alt-n (default: enter)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "display".into(),
+                    ptype: "string".into(),
+                    description: "Override the detected DISPLAY".into(),
+                    required: false,
+                },
+            ],
+            returns: "{status, dismissed, errors, display, raw_log}".into(),
+        },
         // ── Cell ─────────────────────────────────────────────────────
         Method {
             name: "cell.open".into(),

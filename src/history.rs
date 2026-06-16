@@ -30,9 +30,7 @@ pub struct CmdEntry {
 }
 
 pub fn history_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join(".cache/virtuoso_bridge/history")
+    crate::runtime_paths::cache_subdir(&["history"])
 }
 
 fn write_jsonl_line(path: &std::path::Path, line: &str) {

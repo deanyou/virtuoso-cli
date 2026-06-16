@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0-alpha.10] - 2026-06-13
+
+### Added
+- **Centralized `runtime_paths` module** (`src/runtime_paths.rs`, ported from
+  virtuoso-bridge-lite `6b9309d`). Honors XDG Base Directory spec
+  (`XDG_CACHE_HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME`) with `VB_*`
+  env-var overrides (`VB_CACHE_DIR`, `VB_LOG_DIR`, `VB_OUTPUT_DIR`,
+  `VB_TMP_DIR`, `VB_STATE_DIR`, `VB_CONFIG_DIR`) and a `VB_HOME` umbrella.
+  Backward-compatible default: `~/.cache/virtuoso_bridge/...` on Linux.
+  Eleven call sites migrated: `command_log`, `auth`, `config`, `history`,
+  `models`, `transaction/snapshot`, `transport/ssh`, `transport/tunnel`,
+  `plugins/registry`, `skill_finder`, `spectre/jobs`, `commands/process`.
+- **X11 helper structured errors** (`src/transport/x11.rs`). New
+  `extract_helper_errors()` surfaces three independent failure signal
+  sources — structured JSON errors on stdout, non-zero returncode with
+  stderr context, and non-empty stderr alone — deduped via `BTreeSet`.
+  Wired into `dismiss()`, `dismiss_window()`, `list_dialogs()`, and
+  `list_windows()`; the list paths now return `VirtuosoError::Execution`
+  when the helper dies, so "no windows" can no longer be confused with
+  "helper crashed".
+- **Digital import verification recipes** (`.claude/skills/digital-import/SKILL.md`,
+  ported from virtuoso-bridge-lite `1ae2156`). Step 1 (strmin) now
+  includes a `length(cv~>shapes) + length(cv~>instances) > 0` check
+  that catches the silent-stub failure mode where strmin prints
+  "Translation completed" and exits 0 but leaves an empty layout cell.
+  Step 2 (ihdl) adds a `ddGetObj(lib mod view)` check for `schematic`
+  + `symbol` views to catch ihdl's partial-import mode.
+
+### Tests
+- 13 unit tests in `runtime_paths` (env precedence, blank values,
+  profile variants, XDG fallback).
+- 6 unit tests in `transport::x11` (extract_helper_errors: JSON
+  errors, non-zero returncode, dedup, distinct-message preservation).
+- 2 integration tests in `daemon_user_guard.rs` (`VB_CACHE_DIR` /
+  `VB_LOG_DIR` end-to-end override via the public `runtime_paths` API).
+- Fixed pre-existing test isolation race: `save_to_session_file_*`
+  tests now hold `ENV_LOCK` to serialize `XDG_CACHE_HOME` mutations.
+
 ## [0.4.0-alpha.9] - 2026-06-03
 
 ### Fixed

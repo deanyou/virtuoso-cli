@@ -433,10 +433,7 @@ impl SSHRunner {
             // ControlMaster: reuse SSH connections to avoid repeated handshakes.
             // Disabled at runtime if a CM failure is detected (WSL2/Windows paths
             // with non-ASCII characters, named pipe creation failures, etc.).
-            let control_dir = dirs::cache_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                .join("virtuoso_bridge")
-                .join("ssh");
+            let control_dir = crate::runtime_paths::cache_subdir(&["ssh"]);
             let _ = std::fs::create_dir_all(&control_dir);
             let control_path = control_dir.join("%h-%p-%r");
             cmd.args([

@@ -22,10 +22,7 @@ pub struct PluginRegistry {
 impl PluginRegistry {
     /// Discover and load all plugins from `~/.config/vcli/plugins/*.toml`.
     pub fn discover() -> Result<Self> {
-        let config_dir = dirs::config_dir()
-            .ok_or_else(|| VirtuosoError::Execution("cannot find config directory".into()))?
-            .join("vcli")
-            .join("plugins");
+        let config_dir = crate::runtime_paths::config_subdir(&["plugins"]);
 
         if !config_dir.exists() {
             return Ok(PluginRegistry { tools: Vec::new() });

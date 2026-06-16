@@ -63,6 +63,56 @@ vcli skill exec 'dbOpenCellViewByType("DIG_OUTPUT" "LFSR_32BIT" "layout" nil "r"
 `XST_CDS_LIB` is a strmin magic literal — mutually exclusive with a real ref file.
 Use it when the project's cds.lib is already curated (every dependency has a DEFINE).
 
+### ⚠️ Verify every expected cell actually landed
+
+> ⚠️ **Source**: [virtuoso-bridge-lite](https://github.com/Arcadia-1/virtuoso-bridge-lite),
+> commit `1ae2156` (MIT, 2026-06-05).
+
+`strmin`'s exit code and `Translation completed` line are **necessary but not
+sufficient**. GDSII files can have undef-rec / unresolved-cell references that
+strmin accepts as a no-op: it still prints "Translation completed", exits 0,
+and leaves the cell with a default empty layout. The `dbOpenCellView...~>bBox`
+check above only confirms the cell exists in the DB, not that it's a real
+layout vs a placeholder. The reliable check is `dbCompareCell` (or
+`dbOpenCellView...~>shapes~>??`):
+
+```bash
+# Reliable strmin verification — every expected cell is a real layout, not a
+# stub. Returned as a single space-separated status string.
+vcli skill exec 'let((lib cells results n ok missing)
+  lib = "DIG_OUTPUT"
+  cells = list("LFSR_32BIT" "FIFO_8x32" "CLK_DIV_4")
+  results = nil
+  n = 0
+  foreach(cell cells
+    n = n + 1
+    cv = dbOpenCellViewByType(lib cell "layout" nil "r")
+    when(cv
+      n_shapes = length(cv~>shapes)
+      n_insts  = length(cv~>instances)
+      ok = (n_shapes + n_insts) > 0
+      results = cons(sprintf(nil "%s=%d shapes+%d insts%s"
+                                    cell n_shapes n_insts
+                                    (ok ? "" : " [EMPTY]"))
+                    results)
+      dbClose(cv)
+      unless(ok missing = cons(cell missing))
+    )
+    when(!cv missing = cons(cell missing))
+  )
+  sprintf(nil "%s\nmissing: %s" reverse(results) missing))'
+```
+
+**When to use this**: any time you import a multi-cell GDS block, the
+import "succeeded" but the *downstream* tool reports an empty cell or
+broken connectivity. This check costs 3-5 SKILL calls — run it once after
+every block import.
+
+Why the existing `dbOpenCellViewByType...~>bBox` check is not enough:
+strmin's placeholder cell is `(0,0,0,0)` bBox, so a non-nil bBox proves
+the cellview is opened, not that it has contents. The `shapes + instances > 0`
+check catches the silent-stub case.
+
 ---
 
 ## Step 2 — Import Verilog (ihdl)
@@ -79,6 +129,40 @@ vcli skill exec 'let((f)
 ```
 
 If ihdl fails, check `<virtuoso_workdir>/verilogIn.batch.log` for diagnostics.
+
+### Verify every expected module created a view
+
+ihdl exits 0 on a partial import: a Verilog with 5 modules where 4 have
+unresolved references (e.g. bus ports in `module foo(a[3:0])` mapped to a
+missing `tech library`) leaves those modules unreferenced and creates only
+the "good" ones. The `design_library` has all the imported cells but the
+top-level may be missing. Use the same `ddGetObj` + `views~>name` check
+from R3-7 / commit `1ae2156`:
+
+```bash
+# After ihdl: confirm each top module has BOTH a schematic and a symbol view
+# (ihdl's typical contract). Misses are not always fatal, but you want to
+# know about them.
+vcli skill exec 'let((lib modules expected missing)
+  lib = "DIG_OUTPUT"
+  modules = list("LFSR_32BIT" "FIFO_8x32" "CLK_DIV_4")
+  expected = list("schematic" "symbol")
+  missing = nil
+  foreach(mod modules
+    foreach(view expected
+      r = ddGetObj(lib mod view)
+      unless(r
+        missing = cons(sprintf(nil "%s/%s" mod view) missing)
+      )
+    )
+  )
+  sprintf(nil "missing views: %s" (missing ? reverse(missing) : "none")))'
+```
+
+**When to use this**: any time you import a Verilog block and the schematic
+"looks fine" but the symbol generation in Step 3 says "no terminals found".
+Most often the top module is missing the `schematic` view because ihdl
+silently failed on a parameter declaration.
 
 ---
 
@@ -202,6 +286,65 @@ silently ignores the imported cells (no error from strmin itself).
 strmin with `-replaceBusBitChar` rewrites `signal[3]` → `signal<3>` in labels.
 When matching pin names from Innovus floorplan Tcl against imported labels, replace
 `[` → `<` and `]` → `>`.
+
+### The 10-min trap — strmin/ihdl die silently
+
+> ⚠️ **Source**: [virtuoso-bridge-lite](https://github.com/Arcadia-1/virtuoso-bridge-lite),
+> AGENTS.md (MIT, 2026-05). Observed 2026-05-14 on
+> `examples/01_virtuoso/digital_import/import_gds.py`.
+
+`strmout` / `strmin` / `ihdl` `system()` return codes are **unreliable** — the
+parent process returns 0 even when the child tool died with a fatal error in
+under 2 seconds. A wrapper that polls for the expected output artifact will
+happily sleep for its full 10-minute timeout waiting for a file that will
+*never* appear because the tool already aborted with a sentinel like
+`XSTRM-273: Translation failed` or `ihdl: OPEN_FAILED`.
+
+**Symptom (diagnostic)**: strmin/ihdl call returns "successfully" within
+~2 s of wall time, but the expected output file is missing AND
+`/tmp/strmin.log` (or the tool log) contains one of:
+
+```
+XSTRM-273: Translation failed
+XSTRM-210: cannot open reference library
+ihdl: OPEN_FAILED
+ihdl: ERROR <message>
+```
+
+**Dual-defense template** — apply whenever you wrap a `system()`-launched
+tool in a poll-for-output loop:
+
+1. **Before invoking the tool**: stage any local file args to the tool's cwd
+   via `client.upload_file()` so file-not-found can't happen. (For our
+   `strmin` example, the GDS path is already remote, but the `-logFile`
+   path needs to be a writable remote path.)
+
+2. **In the poll loop**, on every iteration `tail -n 200 <tool.log>` and
+   fast-exit with the offending line if you see a terminal-failure marker:
+
+   ```bash
+   # pseudo-loop
+   for i in $(seq 1 600); do  # 600 × 1s = 10 min max
+       # Did the artifact appear?
+       if ssh remote "test -s /path/to/output"; then
+           break
+       fi
+       # Did the tool log a fatal error in the meantime?
+       if ssh remote "tail -n 200 /tmp/strmin.log | grep -qE '(Translation failed|OPEN_FAILED|ERROR|FATAL)'"; then
+           err=$(ssh remote "grep -m1 -E '(Translation failed|OPEN_FAILED|ERROR|FATAL)' /tmp/strmin.log")
+           echo "strmin aborted: $err" >&2
+           exit 1
+       fi
+       sleep 1
+   done
+   ```
+
+   Without (2), a 2-second tool death manifests as a 10-minute hang —
+   the most expensive possible failure mode in a CI loop.
+
+3. **Bonus**: set `-logFile` to a known path **and** parse the final
+   `tail -n 1` of that log; if it doesn't contain a known success sentinel
+   (e.g. `Translation completed` / `ihdl: done`) treat that as failure too.
 
 ---
 

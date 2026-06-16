@@ -486,6 +486,23 @@ impl RpcDispatcher {
                 let display = params.get("display").and_then(|v| v.as_str());
                 crate::commands::window::dismiss_dialog_x11(&action, dry_run, display)
             }
+            "list_windows_x11" => {
+                // Enumerate every Virtuoso-related X11 window (no keypress).
+                // Returns { display, windows, count }. Use the `dismiss_id`
+                // from each entry to feed `dismiss_window_x11` next.
+                let display = params.get("display").and_then(|v| v.as_str());
+                crate::commands::window::list_windows_x11(display)
+            }
+            "dismiss_window_x11" => {
+                // Dismiss a SPECIFIC window by id (typically the dismiss_id
+                // returned by list_windows_x11). Unlike dismiss_dialog_x11
+                // this does NOT apply the dialog-size filter — the caller is
+                // expected to have already identified the target window.
+                let window_id = json_str(params.get("window_id"), "window_id")?;
+                let action = json_str_or(params.get("action"), "enter")?;
+                let display = params.get("display").and_then(|v| v.as_str());
+                crate::commands::window::dismiss_window_x11(&window_id, &action, display)
+            }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown window method '{}'",
                 op
@@ -932,6 +949,18 @@ mod tests {
             names.contains(&"window.get_dialog_info"),
             "should have window.get_dialog_info"
         );
+        assert!(
+            names.contains(&"window.dismiss_dialog_x11"),
+            "should have window.dismiss_dialog_x11"
+        );
+        assert!(
+            names.contains(&"window.list_windows_x11"),
+            "should have window.list_windows_x11"
+        );
+        assert!(
+            names.contains(&"window.dismiss_window_x11"),
+            "should have window.dismiss_window_x11"
+        );
     }
 
     #[test]
@@ -1101,8 +1130,8 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 63 methods (62 + 1 new: cell.read_path)
-        assert_eq!(schema.methods.len(), 63, "should have exactly 63 methods");
+        // Should have 65 methods (63 + 2 new: window.list_windows_x11, window.dismiss_window_x11)
+        assert_eq!(schema.methods.len(), 65, "should have exactly 65 methods");
     }
 
     #[test]
