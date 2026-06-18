@@ -21,4 +21,11 @@ __pycache__/
 test_tb.ahdlSimDB/
 test_tb.log
 
+# Spectre characterization run logs (analog design `vcli process char` etc.)
+char_*.log
+gmid_test*.log
+
+# Agent workflow run records (per-session metadata, regenerated each run)
+.claude/workflow-runs/
+
 /0
