@@ -388,21 +388,53 @@ impl HostnameCheck {
             )));
         }
 
-        // getHostName() returns a SKILL string like "myhost\n" — strip
-        // surrounding whitespace, quotes, and any trailing newlines.
-        let actual = result.output.trim().trim_matches('"').trim().to_string();
-        if actual.is_empty() {
-            return Err(VirtuosoError::Execution(
-                "getHostName() returned empty string".into(),
-            ));
-        }
-
+        let actual = Self::parse_gethostname_output(&result.output)?;
         let mismatch = actual != configured;
         Ok(Some(Self {
             configured: Some(configured),
             actual,
             mismatch,
         }))
+    }
+
+    /// Parse the raw output of `getHostName()`. The function is pure and
+    /// extracted from `run()` for testability — see the unit tests below.
+    ///
+    /// `getHostName()` returns a SKILL string like `"myhost\n"`. We strip:
+    ///   - surrounding whitespace and trailing newlines (the RBIPC channel
+    ///     sometimes appends a `\n`)
+    ///   - a single pair of surrounding double quotes (the SKILL string
+    ///     representation wraps a quoted value)
+    ///
+    /// Returns `Err` if the result is empty after stripping, since that
+    /// indicates the daemon returned something nonsensical (the empty
+    /// string is the only case where we can't produce a meaningful check).
+    pub(crate) fn parse_gethostname_output(raw: &str) -> Result<String> {
+        let trimmed = raw.trim();
+        // strip one leading + one trailing double quote if present
+        let stripped = trimmed
+            .strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .unwrap_or(trimmed)
+            .trim();
+        if stripped.is_empty() {
+            return Err(VirtuosoError::Execution(
+                "getHostName() returned empty string".into(),
+            ));
+        }
+        Ok(stripped.to_string())
+    }
+
+    /// Build a HostnameCheck directly. Used by tests and by any caller
+    /// that already has both the configured and actual values.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn from_parts(configured: String, actual: String) -> Self {
+        let mismatch = configured != actual;
+        Self {
+            configured: Some(configured),
+            actual,
+            mismatch,
+        }
     }
 
     /// Human-readable warning text for the table output. Empty when there's
@@ -443,6 +475,8 @@ mod tests {
         }
     }
 
+    // ─── Warning text + JSON shape (existing 4 tests) ────────────────────
+
     #[test]
     fn warning_message_empty_when_no_mismatch() {
         let c = check("eda-1", "eda-1");
@@ -474,7 +508,123 @@ mod tests {
         assert_eq!(j["mismatch"], true);
     }
 
-    // The run() method needs a live VirtuosoClient; tested separately in
-    // an integration test if a daemon is available. The pure-data helpers
-    // above cover the mismatch-detection logic itself.
+    // ─── parse_gethostname_output (new) ──────────────────────────────────
+
+    #[test]
+    fn parse_gethostname_output_strips_trailing_newline() {
+        // Most common case — the RBIPC channel appends a trailing newline.
+        assert_eq!(
+            HostnameCheck::parse_gethostname_output("myhost\n").unwrap(),
+            "myhost"
+        );
+    }
+
+    #[test]
+    fn parse_gethostname_output_strips_surrounding_quotes() {
+        // SKILL string repr is `"myhost"` (note the quotes).
+        assert_eq!(
+            HostnameCheck::parse_gethostname_output("\"myhost\"").unwrap(),
+            "myhost"
+        );
+    }
+
+    #[test]
+    fn parse_gethostname_output_strips_quotes_and_newline_together() {
+        // The realistic raw output from the bridge.
+        assert_eq!(
+            HostnameCheck::parse_gethostname_output("\"myhost\"\n").unwrap(),
+            "myhost"
+        );
+    }
+
+    #[test]
+    fn parse_gethostname_output_strips_internal_padding() {
+        // Defensive: some channels pad with spaces.
+        assert_eq!(
+            HostnameCheck::parse_gethostname_output("  myhost  \n").unwrap(),
+            "myhost"
+        );
+    }
+
+    #[test]
+    fn parse_gethostname_output_preserves_underscores_and_dashes() {
+        // Common EDA hostname pattern.
+        assert_eq!(
+            HostnameCheck::parse_gethostname_output("compute-eda_42\n").unwrap(),
+            "compute-eda_42"
+        );
+    }
+
+    #[test]
+    fn parse_gethostname_output_handles_fully_qualified_names() {
+        // FQDN: dots must be preserved.
+        assert_eq!(
+            HostnameCheck::parse_gethostname_output("eda-42.corp.example.com\n").unwrap(),
+            "eda-42.corp.example.com"
+        );
+    }
+
+    #[test]
+    fn parse_gethostname_output_errors_on_empty() {
+        assert!(HostnameCheck::parse_gethostname_output("").is_err());
+    }
+
+    #[test]
+    fn parse_gethostname_output_errors_on_whitespace_only() {
+        assert!(HostnameCheck::parse_gethostname_output("   \n").is_err());
+    }
+
+    #[test]
+    fn parse_gethostname_output_errors_on_just_quotes() {
+        // The pair of quotes is stripped, leaving an empty string.
+        assert!(HostnameCheck::parse_gethostname_output("\"\"").is_err());
+    }
+
+    // ─── from_parts (new) ────────────────────────────────────────────────
+
+    #[test]
+    fn from_parts_constructs_matching_check() {
+        let c = HostnameCheck::from_parts("eda-1".into(), "eda-1".into());
+        assert!(!c.mismatch);
+        assert_eq!(c.configured.as_deref(), Some("eda-1"));
+        assert_eq!(c.actual, "eda-1");
+    }
+
+    #[test]
+    fn from_parts_constructs_mismatching_check() {
+        let c = HostnameCheck::from_parts("jump".into(), "compute".into());
+        assert!(c.mismatch);
+    }
+
+    // ─── Mismatch edge cases (new) ───────────────────────────────────────
+
+    #[test]
+    fn mismatch_when_actual_is_empty_string() {
+        // If getHostName() somehow returned an empty actual, the check
+        // should still distinguish mismatch (the configured host is not "").
+        let c = check("eda-1", "");
+        assert!(c.mismatch);
+    }
+
+    #[test]
+    fn mismatch_case_sensitive() {
+        // Hostnames are case-sensitive on Linux. Make sure we don't
+        // accidentally do a case-insensitive comparison.
+        let c = check("EDA-1", "eda-1");
+        assert!(c.mismatch, "hostname comparison must be case-sensitive");
+    }
+
+    #[test]
+    fn match_for_identical_fqdn() {
+        let c = check(
+            "compute-eda-42.corp.example.com",
+            "compute-eda-42.corp.example.com",
+        );
+        assert!(!c.mismatch);
+    }
+
+    // The run() method needs a live VirtuosoClient; the parsing is
+    // covered by parse_gethostname_output tests above. The
+    // execute_skill_unchecked path is exercised by the bridge's own
+    // tests in client/bridge.rs.
 }
