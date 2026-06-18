@@ -176,13 +176,18 @@ pub fn diagnose() -> Result<Value> {
     };
 
     // Hostname verification — see `HostnameCheck` doc. Skip when no
-    // remote host is configured (local mode).
-    let hostname_check = if daemon_ok && cfg.is_remote() {
+    // remote host is configured (local mode). Gated on `tcp_ok` (not
+    // `daemon_ok`) because on strict daemons test_connection's `1+1`
+    // SKILL call is blocked, but getHostName() via execute_skill_unchecked
+    // still works — the hostname check has its own error path for
+    // genuinely-unreachable daemons.
+    let hostname_check = if tcp_ok && cfg.is_remote() {
         let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
-        HostnameCheck::run(&vc, cfg.remote_host.as_deref(), Some(5))
-            .ok()
-            .flatten()
-            .map(|c| c.to_json())
+        match HostnameCheck::run(&vc, cfg.remote_host.as_deref(), Some(5)) {
+            Ok(Some(c)) => Some(c.to_json()),
+            Ok(None) => None, // local mode (shouldn't reach here given gate)
+            Err(e) => Some(json!({ "skipped": format!("daemon error: {e}") })),
+        }
     } else {
         None
     };
