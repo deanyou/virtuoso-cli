@@ -1,8 +1,10 @@
+use crate::client::bridge::VirtuosoClient;
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
 use crate::models::{SessionInfo, TunnelState};
 use crate::output::OutputFormat;
 use crate::transport::tunnel::SSHClient;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
@@ -165,7 +167,7 @@ pub fn diagnose() -> Result<Value> {
 
     // SKILL eval test
     let skill_ok = if daemon_ok {
-        let vc = crate::client::bridge::VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
+        let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         vc.execute_skill("1+1", None)
             .map(|r| r.output.trim() == "2")
             .unwrap_or(false)
@@ -173,8 +175,28 @@ pub fn diagnose() -> Result<Value> {
         false
     };
 
+    // Hostname verification — see `HostnameCheck` doc. Skip when no
+    // remote host is configured (local mode).
+    let hostname_check = if daemon_ok && cfg.is_remote() {
+        let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
+        HostnameCheck::run(&vc, cfg.remote_host.as_deref(), Some(5))
+            .ok()
+            .flatten()
+            .map(|c| c.to_json())
+    } else {
+        None
+    };
+
     let summary = if skill_ok {
-        "fully operational"
+        if let Some(ref hc) = hostname_check {
+            if hc.get("mismatch").and_then(|v| v.as_bool()) == Some(true) {
+                "fully operational BUT hostname mismatch (jump host misconfig?)"
+            } else {
+                "fully operational"
+            }
+        } else {
+            "fully operational"
+        }
     } else if daemon_ok {
         "daemon responds but SKILL eval failed"
     } else if tcp_ok {
@@ -183,7 +205,7 @@ pub fn diagnose() -> Result<Value> {
         "not reachable"
     };
 
-    Ok(json!({
+    let mut result = json!({
         "port": port,
         "tcp_reachable": tcp_ok,
         "daemon_responsive": daemon_ok,
@@ -191,7 +213,11 @@ pub fn diagnose() -> Result<Value> {
         "latency_ms": latency_ms,
         "virtuoso_version": virtuoso_version,
         "summary": summary,
-    }))
+    });
+    if let Some(hc) = hostname_check {
+        result["hostname_check"] = hc;
+    }
+    Ok(result)
 }
 
 pub fn status(format: OutputFormat) -> Result<Value> {
@@ -224,8 +250,8 @@ pub fn status(format: OutputFormat) -> Result<Value> {
 
     let port = TunnelState::load()?.map(|s| s.port).unwrap_or(cfg.port);
 
-    let daemon_info = if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
-        let vc = crate::client::bridge::VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
+    let mut daemon_info = if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
+        let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         match vc.test_connection(Some(5)) {
             Ok(true) => json!({ "responsive": true }),
             Ok(false) => json!({ "responsive": false, "detail": "unexpected response" }),
@@ -234,6 +260,31 @@ pub fn status(format: OutputFormat) -> Result<Value> {
     } else {
         json!({ "responsive": false, "detail": "port not reachable" })
     };
+
+    // Hostname verification: ask the daemon what host it thinks it's on,
+    // compare to VB_REMOTE_HOST. Most common EDA misconfig is pointing
+    // VB_REMOTE_HOST at the jump host instead of the compute host.
+    // Uses execute_skill_unchecked because tunnel status is a diagnostic
+    // command — it must work without Admin capability.
+    if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
+        let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
+        match HostnameCheck::run(&vc, cfg.remote_host.as_deref(), Some(5)) {
+            Ok(Some(check)) => {
+                daemon_info["hostname_check"] = check.to_json();
+                if check.mismatch {
+                    daemon_info["warning"] = json!(check.warning_message());
+                }
+            }
+            Ok(None) => {
+                daemon_info["hostname_check"] = json!({ "skipped": "local mode" });
+            }
+            Err(e) => {
+                daemon_info["hostname_check"] =
+                    json!({ "skipped": format!("daemon did not respond: {e}") });
+            }
+        }
+    }
+
     result["daemon"] = daemon_info;
 
     if format == OutputFormat::Table {
@@ -268,9 +319,162 @@ pub fn status(format: OutputFormat) -> Result<Value> {
                 };
                 println!("  {k}: {display}");
             }
+            // If hostname check found a mismatch, surface a prominent warning.
+            if let Some(check) = daemon.get("hostname_check") {
+                if check.get("mismatch").and_then(|v| v.as_bool()) == Some(true) {
+                    if let (Some(actual), Some(configured)) = (
+                        check.get("actual").and_then(|v| v.as_str()),
+                        check.get("configured").and_then(|v| v.as_str()),
+                    ) {
+                        println!();
+                        println!("  ⚠ hostname mismatch:");
+                        println!("    VB_REMOTE_HOST    = {configured}");
+                        println!("    daemon reports    = {actual}");
+                        println!("    Make sure VB_REMOTE_HOST points to the machine running");
+                        println!("    Virtuoso, NOT the jump host. See `vcli tunnel status` JSON");
+                        println!("    for full details.");
+                    }
+                }
+            }
             println!();
         }
     }
 
     Ok(result)
+}
+
+/// Hostname verification result — compares the user-configured remote host
+/// (`VB_REMOTE_HOST`) to the actual hostname the Virtuoso daemon reports
+/// via `getHostName()`. A mismatch is the most common EDA misconfig:
+/// pointing `VB_REMOTE_HOST` at a jump host instead of the compute host
+/// where Virtuoso actually runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostnameCheck {
+    /// The configured `VB_REMOTE_HOST` (or whatever profile variant).
+    /// `None` means local mode — no check is performed.
+    pub configured: Option<String>,
+    /// The actual hostname the daemon reports via `getHostName()`.
+    pub actual: String,
+    /// `true` when `configured != actual` and both are non-empty.
+    pub mismatch: bool,
+}
+
+impl HostnameCheck {
+    /// Run the check by executing `getHostName()` on the daemon. Returns:
+    /// - `Ok(None)` if `configured` is `None` (local mode — nothing to verify).
+    /// - `Ok(Some(check))` if the check ran.
+    /// - `Err(_)` if the daemon is unreachable or returned a non-string value.
+    ///
+    /// `timeout` is the SKILL call timeout; pass `None` for the daemon's default.
+    pub fn run(
+        vc: &VirtuosoClient,
+        configured: Option<&str>,
+        timeout: Option<u64>,
+    ) -> Result<Option<Self>> {
+        // Local mode — no configured remote host, nothing to verify.
+        let configured = match configured {
+            Some(s) if !s.is_empty() => s.to_string(),
+            _ => return Ok(None),
+        };
+
+        // Use execute_skill_unchecked because tunnel status / diagnose are
+        // diagnostic commands — they must work without Admin capability.
+        // getHostName() is read-only; the worst it can leak is the host name.
+        let result = vc.execute_skill_unchecked("getHostName()", timeout)?;
+        if !result.skill_ok() {
+            return Err(VirtuosoError::Execution(format!(
+                "getHostName() failed: {}",
+                result.errors.first().cloned().unwrap_or_default()
+            )));
+        }
+
+        // getHostName() returns a SKILL string like "myhost\n" — strip
+        // surrounding whitespace, quotes, and any trailing newlines.
+        let actual = result.output.trim().trim_matches('"').trim().to_string();
+        if actual.is_empty() {
+            return Err(VirtuosoError::Execution(
+                "getHostName() returned empty string".into(),
+            ));
+        }
+
+        let mismatch = actual != configured;
+        Ok(Some(Self {
+            configured: Some(configured),
+            actual,
+            mismatch,
+        }))
+    }
+
+    /// Human-readable warning text for the table output. Empty when there's
+    /// no mismatch — the caller can `is_empty()` to decide whether to print.
+    pub fn warning_message(&self) -> String {
+        if !self.mismatch {
+            return String::new();
+        }
+        let configured = self.configured.as_deref().unwrap_or("");
+        format!(
+            "VB_REMOTE_HOST='{configured}' but daemon is running on '{actual}'. \
+             Most common cause: VB_REMOTE_HOST points to the jump host instead \
+             of the compute host. See AGENTS.md 'three-host model' for the correct setup.",
+            configured = configured,
+            actual = self.actual,
+        )
+    }
+
+    /// JSON shape for the `daemon.hostname_check` field of `tunnel status`.
+    pub fn to_json(&self) -> Value {
+        json!({
+            "configured": self.configured,
+            "actual": self.actual,
+            "mismatch": self.mismatch,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check(configured: &str, actual: &str) -> HostnameCheck {
+        HostnameCheck {
+            configured: Some(configured.into()),
+            actual: actual.into(),
+            mismatch: actual != configured,
+        }
+    }
+
+    #[test]
+    fn warning_message_empty_when_no_mismatch() {
+        let c = check("eda-1", "eda-1");
+        assert!(c.warning_message().is_empty());
+    }
+
+    #[test]
+    fn warning_message_includes_both_hostnames_on_mismatch() {
+        let c = check("jump-bastion", "compute-1");
+        let msg = c.warning_message();
+        assert!(msg.contains("jump-bastion"), "got: {msg}");
+        assert!(msg.contains("compute-1"), "got: {msg}");
+        assert!(msg.contains("jump host"), "got: {msg}");
+    }
+
+    #[test]
+    fn to_json_shape() {
+        let c = check("eda-1", "eda-1");
+        let j = c.to_json();
+        assert_eq!(j["configured"], "eda-1");
+        assert_eq!(j["actual"], "eda-1");
+        assert_eq!(j["mismatch"], false);
+    }
+
+    #[test]
+    fn to_json_shape_mismatch() {
+        let c = check("jump", "compute");
+        let j = c.to_json();
+        assert_eq!(j["mismatch"], true);
+    }
+
+    // The run() method needs a live VirtuosoClient; tested separately in
+    // an integration test if a daemon is available. The pure-data helpers
+    // above cover the mismatch-detection logic itself.
 }

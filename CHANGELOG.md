@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0-alpha.11] - 2026-06-18
+
+### Added
+- **Hostname verification in `tunnel status` and `diagnose`**
+  (`src/commands/tunnel.rs`, new `HostnameCheck` type). The status
+  command now runs `getHostName()` against the daemon and compares
+  to `VB_REMOTE_HOST`. On mismatch, a prominent `⚠ hostname mismatch`
+  warning is printed in Table mode and `daemon.hostname_check` is
+  added to the JSON output. Catches the most common EDA misconfig:
+  pointing `VB_REMOTE_HOST` at the jump host instead of the compute
+  host. Uses `execute_skill_unchecked` so it works without Admin
+  capability. 4 new unit tests cover the warning message and JSON
+  shape.
+- **Three-host model section in `AGENTS.md`**. Documents the
+  local → jump → compute host layout with a diagram, the single
+  rule (`VB_REMOTE_HOST` = compute host, `VB_JUMP_HOST` = jump host),
+  and a diagnostic flow using the new `daemon.hostname_check` field.
+- **Jump host misconfig cheat sheet in `.claude/skills/tunnel-connect/SKILL.md`**.
+  Symptoms table, diagnostic recipe (4-step), and fix matrix for
+  the most common "I connected but I don't see my cells" problem.
+
+### Fixed
+- `AGENTS.md` test count: was "91 unit tests" → now
+  "369 unit + 116 integration tests".
+
+### Borrowed from virtuoso-bridge-lite
+- `e179001` (issue #1): jump host docs, hostname check, SSH timeout
+- `685b7a5`: use `127.0.0.1` instead of `localhost` in `-L` flag
+  (already correct in vcli, no change needed)
+
 ## [0.4.0-alpha.10] - 2026-06-13
 
 ### Added

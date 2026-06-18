@@ -70,3 +70,82 @@ VB_PORT=38669 VB_SESSION=4e3898b12b7c-user-6 vcli skill exec '1+1'
 - **Connection reset**: The daemon may have crashed — check if `conn.shutdown()` error in `/tmp/RB.log`; restart with `RBDLog = t` then `RBStop()` then `RBStart()` in CIW
 - **Port already in use**: Run `RBStopAll()` in CIW, or change `VB_PORT` in `.env`
 - **Multiple sessions**: Use `VB_SESSION` to specify which session to connect to
+
+## Jump Host Misconfig Cheat Sheet
+
+The single most common "I connected but I don't see my cells" problem is
+pointing `VB_REMOTE_HOST` at the **jump host** instead of the
+**compute host** where Virtuoso actually runs. `vcli tunnel status`
+now detects this automatically — see `daemon.hostname_check` in the
+JSON output, or look for the `⚠ hostname mismatch` block in Table mode.
+
+```
+       local box          jump host          compute host
+          │            (bastion / SSH)        (Virtuoso)
+          │                   │                    │
+   vcli ──┴── SSH ──────────▶│  SSH ────────────▶ │
+   env:                        ENV:                ENV:
+     VB_REMOTE_HOST = compute-eda-42  ← the COMPUTE host
+     VB_JUMP_HOST   = bastion-01      ← the JUMP host
+```
+
+### Symptoms
+
+- `vcli rpc call --method cell.info --params '{"lib":"myLib",...}'` returns
+  `library not found` even though the library exists in the Virtuoso
+  CIW window
+- `vcli session list` shows a session file with the wrong `host` field
+- `getHostName()` on the remote daemon returns the bastion hostname,
+  not the EDA server hostname
+- `vcli tunnel status --format json | jq .daemon.hostname_check.mismatch`
+  is `true`
+
+### Diagnostic recipe
+
+```bash
+# 1. See what the daemon reports
+vcli --session $VB_SESSION tunnel status --format json | \
+  jq '.daemon.hostname_check'
+# {
+#   "configured": "bastion-01",   ← wrong! this is the jump host
+#   "actual":     "compute-eda-42",
+#   "mismatch":   true
+# }
+
+# 2. Cross-check what getHostName() returns directly
+vcli --session $VB_SESSION rpc call --method cell.info \
+  --params '{"lib":"tsmcN28","cell":"INVX2"}' --format json
+# If this succeeds, the daemon CAN reach the cell DB — your
+# code's library path is just wrong, not the network.
+
+# 3. Check who the SSH session is actually logged in as
+ssh -J $VB_JUMP_HOST $VB_REMOTE_HOST 'hostname && whoami'
+
+# 4. Check the local state files for the wrong host
+ls ~/.cache/virtuoso_bridge/sessions/
+cat ~/.cache/virtuoso_bridge/sessions/<id>.json | jq .host
+```
+
+### Fix
+
+| Symptom | Fix |
+|---------|-----|
+| `daemon.hostname_check.mismatch == true` | `export VB_REMOTE_HOST=<compute host, not bastion>` |
+| `vcli session list` shows wrong `host` | `vcli session cleanup` then restart with the right `VB_REMOTE_HOST` |
+| `cell.info` returns "library not found" for a lib that exists in CIW | Check `cds.lib` DEFINE lines on the compute host — they're relative to the daemon's PWD, not yours |
+| SSH works but daemon doesn't start | Check that `~/.bashrc` on compute host sources Cadence init (`source /path/to/cshrc` or similar) — Virtuoso must be in `$PATH` for `virtuoso` to be launchable via `system()` |
+
+### Why this matters
+
+`VB_REMOTE_HOST` is what the daemon binds to and what `getHostName()`
+should return. If the jump host has any kind of CIW (e.g. a user
+inadvertently ran `load("ramic_bridge.il")` there), the daemon
+will happily come up on the jump host — your SSH tunnel works,
+your session file is written, but every library lookup fails
+because the jump host has no `cds.lib` pointing to your design.
+
+`vcli tunnel status` is the fast way to catch this: if the
+`hostname_check.mismatch` is `true`, **stop debugging and fix
+`VB_REMOTE_HOST` first** — every other "library not found"
+error message after that is a downstream symptom.
+

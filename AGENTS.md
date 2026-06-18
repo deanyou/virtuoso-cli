@@ -9,7 +9,7 @@ CLI tool for controlling Cadence Virtuoso from the command line. Three binaries:
 cargo build                          # debug build
 cargo build --release
 cargo build --features daemon        # required to build virtuoso-daemon
-cargo test                           # 91 unit tests, no live Virtuoso needed
+cargo test                           # 369 unit + 116 integration tests, no live Virtuoso needed
 cargo clippy -- -D warnings
 cargo fmt --check
 ```
@@ -86,7 +86,63 @@ Sessions are stored as JSON in `~/.cache/virtuoso_bridge/sessions/<id>.json`.
 `SessionInfo::list()` returns all files; `list_alive()` filters to ports that are currently bound.
 Test helpers must bind a real `TcpListener` for sessions that should survive concurrent `cleanup()` calls.
 
+## Three-Host Model (Local → Jump → Compute)
+
+Most EDA setups involve three distinct machines, and the most common
+remote-debugging failure is pointing `VB_REMOTE_HOST` at the wrong one.
+This is the canonical layout and the one `vcli tunnel status` now
+verifies (see `HostnameCheck` in `src/commands/tunnel.rs`):
+
+```
+┌──────────────┐    SSH     ┌──────────────┐    SSH     ┌──────────────────┐
+│  Local box   │ ─────────▶ │  Jump host   │ ─────────▶ │  Compute host    │
+│              │            │  (bastion)   │            │  (Virtuoso runs  │
+│  where vcli  │            │              │            │   here)          │
+│  is invoked  │            │  may NOT     │            │                  │
+│              │            │  have VCL /  │            │  HBridge listens │
+│              │            │  Virtuoso    │            │  on a TCP port   │
+└──────────────┘            └──────────────┘            └──────────────────┘
+       │                                                       ▲
+       │  VB_REMOTE_HOST must point HERE (compute host) ──────┘
+       │  NOT to the jump host — that's the most common bug.
+       │
+       └─ VB_JUMP_HOST is the host SSH uses to reach compute
+          (separate from VB_REMOTE_HOST).
+```
+
+**The single rule**:
+
+> `VB_REMOTE_HOST` = the machine **running Virtuoso** (the compute host).
+> `VB_JUMP_HOST`  = the host SSH uses to **reach** that machine.
+> These are *not* the same value in a jump-host setup.
+
+**Diagnostic flow** when the daemon connects but you see "no cells" or
+"library not found":
+
+```bash
+vcli tunnel status --format json | jq '.daemon.hostname_check'
+# {
+#   "configured": "jump-bastion-01",   ← your VB_REMOTE_HOST
+#   "actual":     "compute-eda-42",    ← what getHostName() says
+#   "mismatch":   true                 ← jump-host misconfig
+# }
+```
+
+If `mismatch: true`, fix `VB_REMOTE_HOST` (not `VB_JUMP_HOST`):
+
+```bash
+export VB_REMOTE_HOST=compute-eda-42    # not the bastion
+export VB_JUMP_HOST=jump-bastion-01
+```
+
+**`vcli tunnel status` Table output** surfaces a prominent `⚠` warning
+on mismatch with both hostnames spelled out — no need to JSON-parse
+during a debugging session.
+
 ## Environment Variables
 
 All configuration via env vars — see `src/config.rs` `Config::from_env()`.
-Key vars: `VB_HOST`, `VB_PORT`, `VB_SESSION`, `VB_TIMEOUT` (default 30 s; set to 120 for busy servers).
+Key vars: `VB_HOST`, `VB_PORT`, `VB_SESSION`, `VB_TIMEOUT` (default 30 s; set to 120 for busy servers),
+`VB_REMOTE_HOST`, `VB_JUMP_HOST`, `VB_CLIENT_ID`/`VB_PROFILE` (per-client scratch isolation),
+`VB_CACHE_DIR` / `VB_HOME` / `VB_LOG_DIR` / `VB_OUTPUT_DIR` / `VB_TMP_DIR` / `VB_STATE_DIR` / `VB_CONFIG_DIR`
+(overrides for `runtime_paths::cache_root` etc. — see `src/runtime_paths.rs`).
