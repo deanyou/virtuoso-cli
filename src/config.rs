@@ -19,6 +19,9 @@ pub struct Config {
     /// Set this on WSL2/Windows when the CM socket path contains non-ASCII chars.
     pub disable_control_master: bool,
     pub timeout: u64,
+    /// Timeout for read operations (list_instances, list_nets, etc.) in seconds.
+    /// VB_READ_TIMEOUT, default 120. Separate from VB_TIMEOUT which covers write ops.
+    pub read_timeout: u64,
     pub keep_remote_files: bool,
     pub spectre_cmd: String,
     pub spectre_args: Vec<String>,
@@ -142,6 +145,9 @@ impl Config {
             timeout: Self::env_with_profile("VB_TIMEOUT", profile)
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(30),
+            read_timeout: Self::env_with_profile("VB_READ_TIMEOUT", profile)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(120),
             keep_remote_files: Self::env_with_profile("VB_KEEP_REMOTE_FILES", profile)
                 .map(|v| v == "1" || v.to_lowercase() == "true")
                 .unwrap_or(false),

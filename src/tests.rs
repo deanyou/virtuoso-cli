@@ -38,6 +38,7 @@ mod config_tests {
             ssh_config: None,
             disable_control_master: false,
             timeout: 30,
+            read_timeout: 120,
             keep_remote_files: false,
             spectre_cmd: "spectre".into(),
             spectre_args: vec![],

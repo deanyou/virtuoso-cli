@@ -415,7 +415,7 @@ pub fn parse_skill_json(output: &str) -> Result<Value> {
 pub fn list_instances() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.list_instances();
-    let r = client.execute_skill(&skill, None)?;
+    let r = client.execute_skill(&skill, Some(client.read_timeout()))?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to list instances: {}",
@@ -428,7 +428,7 @@ pub fn list_instances() -> Result<Value> {
 pub fn list_nets() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.list_nets();
-    let r = client.execute_skill(&skill, None)?;
+    let r = client.execute_skill(&skill, Some(client.read_timeout()))?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to list nets: {}",
@@ -441,7 +441,7 @@ pub fn list_nets() -> Result<Value> {
 pub fn list_pins() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.list_pins();
-    let r = client.execute_skill(&skill, None)?;
+    let r = client.execute_skill(&skill, Some(client.read_timeout()))?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to list pins: {}",
@@ -454,7 +454,7 @@ pub fn list_pins() -> Result<Value> {
 pub fn get_params(inst: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.get_instance_params(inst);
-    let r = client.execute_skill(&skill, None)?;
+    let r = client.execute_skill(&skill, Some(client.read_timeout()))?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
             "Failed to get params for '{}': {}",

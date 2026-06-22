@@ -24,6 +24,7 @@ pub struct VirtuosoClient {
     host: String,
     port: u16,
     timeout: u64,
+    read_timeout: u64,
     tunnel: Option<SSHClient>,
     #[allow(dead_code)]
     pub layout: LayoutOps,
@@ -42,6 +43,7 @@ impl VirtuosoClient {
             host: host.into(),
             port,
             timeout,
+            read_timeout: 120,
             tunnel: None,
             layout: LayoutOps::new(),
             maestro: MaestroOps,
@@ -62,6 +64,13 @@ impl VirtuosoClient {
     pub fn with_capabilities(mut self, caps: CapabilitySet) -> Self {
         self.capabilities = caps;
         self
+    }
+
+    /// Returns the configured read timeout in seconds.
+    /// Used for read-heavy operations (list_instances, list_nets, etc.)
+    /// that may take longer than the default timeout on large schematics.
+    pub fn read_timeout(&self) -> u64 {
+        self.read_timeout
     }
 
     /// Check if a raw SKILL string is permitted given current capabilities.
@@ -161,6 +170,7 @@ impl VirtuosoClient {
             host: "127.0.0.1".into(),
             port,
             timeout: cfg.timeout,
+            read_timeout: cfg.read_timeout,
             tunnel,
             layout: LayoutOps::new(),
             maestro: MaestroOps,
