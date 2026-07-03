@@ -1,7 +1,7 @@
 ---
 name: sim-run
 description: Run circuit simulation (DC, tran, AC) on Virtuoso. Use when executing Spectre simulation, running analysis, or checking simulation results.
-argument-hint: [analysis, e.g. "tran 10us" or "ac 1Hz-1GHz" or "dc"]
+argument-hint: '[analysis, e.g. "tran 10us" or "ac 1Hz-1GHz" or "dc"]'
 allowed-tools: Bash(virtuoso *)
 ---
 

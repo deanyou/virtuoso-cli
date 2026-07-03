@@ -11,7 +11,7 @@ description: |
 author: Claude Code
 version: 1.0.0
 date: 2026-04-06
-argument-hint: [chart type, e.g. "AC Bode plot" or "sweep line chart"]
+argument-hint: '[chart type, e.g. "AC Bode plot" or "sweep line chart"]'
 allowed-tools: Bash(python *) Read Write
 ---
 
