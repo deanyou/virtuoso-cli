@@ -13,7 +13,7 @@ version: 1.0.0
 date: 2026-04-19
 source: /opt/cadence/IC231/doc/spectremod/Chap1.html (vsource/isource/port syntax)
         /opt/cadence/IC231/doc/spectreref/chap3.html (analysis statements)
-argument-hint: [circuit type, e.g. "OTA" or "LDO" or "bandgap" or "VCO"]
+argument-hint: '[circuit type, e.g. "OTA" or "LDO" or "bandgap" or "VCO"]'
 allowed-tools: Bash(python *) Bash(spectre *) Read Write
 ---
 
