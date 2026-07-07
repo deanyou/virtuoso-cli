@@ -947,6 +947,91 @@ pub fn standard_schema() -> RpcSchema {
             ],
             returns: "VirtuosoResult JSON".into(),
         },
+        // ── SKILL Finder ─────────────────────────────────────────────
+        Method {
+            name: "skill.find".into(),
+            summary: "Search SKILL function database (fuzzy/prefix/suffix/exact/regex)".into(),
+            params: vec![
+                Param {
+                    name: "query".into(),
+                    ptype: "string".into(),
+                    description: "Search string".into(),
+                    required: true,
+                },
+                Param {
+                    name: "mode".into(),
+                    ptype: "string".into(),
+                    description: "Search mode: fuzzy (default), prefix, suffix, exact, regex".into(),
+                    required: false,
+                },
+                Param {
+                    name: "limit".into(),
+                    ptype: "integer".into(),
+                    description: "Max results (default: 50)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "include_desc".into(),
+                    ptype: "boolean".into(),
+                    description: "Also search in description field".into(),
+                    required: false,
+                },
+                Param {
+                    name: "refresh".into(),
+                    ptype: "boolean".into(),
+                    description: "Force refresh remote cache".into(),
+                    required: false,
+                },
+            ],
+            returns: "{query, mode, count, entries[]}".into(),
+        },
+        Method {
+            name: "skill.info".into(),
+            summary: "Get detailed More Info documentation for a SKILL function".into(),
+            params: vec![Param {
+                name: "func".into(),
+                ptype: "string".into(),
+                description: "Function name".into(),
+                required: true,
+            }],
+            returns: "{func, html, plain_text}".into(),
+        },
+        Method {
+            name: "skill.sync".into(),
+            summary: "Sync SKILL Finder cache from remote host".into(),
+            params: vec![Param {
+                name: "host".into(),
+                ptype: "string".into(),
+                description: "Remote host to sync from (optional; uses VB_REMOTE_HOST)".into(),
+                required: false,
+            }],
+            returns: "{status, cached_count}".into(),
+        },
+        Method {
+            name: "skill.cache".into(),
+            summary: "Show or clear local SKILL Finder cache".into(),
+            params: vec![
+                Param {
+                    name: "host".into(),
+                    ptype: "string".into(),
+                    description: "Host to show cache for (optional)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "clear".into(),
+                    ptype: "boolean".into(),
+                    description: "Clear the cache for this host".into(),
+                    required: false,
+                },
+            ],
+            returns: "{cache_dir, file_count, modified}".into(),
+        },
+        Method {
+            name: "sim.check_license".into(),
+            summary: "Check Spectre license availability and version".into(),
+            params: vec![],
+            returns: "{ok, remote, version, spectre_path, licenses[]}".into(),
+        },
         Method {
             name: "maestro.snapshot".into(),
             summary: "Snapshot Maestro run artifacts to local directory (YAML-filtered)".into(),

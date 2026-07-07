@@ -691,6 +691,110 @@ pub fn job_cancel(id: &str) -> Result<Value> {
     }))
 }
 
+/// Check Spectre license availability on local or remote host.
+/// Queries `spectre -V` for version and `lmstat -a` for license usage.
+pub fn check_license() -> Result<Value> {
+    use std::process::Command;
+
+    let cfg = crate::config::Config::from_env()?;
+    let remote = cfg.is_remote();
+
+    if remote {
+        let runner = crate::transport::ssh::SSHRunner::from_config(&cfg);
+
+        let cshrc = cfg.cadence_cshrc.as_deref();
+        let cshrc_quoted = cshrc
+            .map(|c| {
+                shlex::try_quote(c)
+                    .map(|q| q.to_string())
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+
+        let env_setup = format!(
+            "HOSTNAME=`hostname 2>/dev/null || echo localhost`; export HOSTNAME; eval \"$(csh -c 'source {}; env' 2>/dev/null | grep -E '^(PATH|LM_LICENSE_FILE|CDS)=' | sed 's/^/export /')\" 2>/dev/null",
+            cshrc_quoted
+        );
+
+        let check_script = format!(
+            "{}; spectre -V 2>&1 | head -1; lmstat -a 2>/dev/null | grep -E 'Users of' | grep -v '0 licenses in use'",
+            env_setup
+        );
+
+        let result = runner.run_command(&check_script, Some(30))?;
+        let stdout = result.stdout.trim();
+        let stderr = result.stderr.trim();
+
+        let mut version = String::new();
+        let mut licenses = Vec::new();
+
+        for line in stdout.lines() {
+            let line = line.trim();
+            if line.starts_with("@(#)$CDS:") || line.starts_with("spectre ") {
+                version = line.to_string();
+            } else if line.contains("Users of") {
+                licenses.push(line.to_string());
+            }
+        }
+
+        Ok(json!({
+            "ok": !version.is_empty(),
+            "remote": true,
+            "version": version,
+            "licenses": licenses,
+            "stderr": stderr,
+        }))
+    } else {
+        // Local mode
+        let spectre_bin = cfg.spectre_bin.as_deref().unwrap_or("spectre");
+
+        let version_output = Command::new(spectre_bin).arg("-V").output().map_err(|e| {
+            VirtuosoError::Execution(format!("Failed to run '{} -V': {}", spectre_bin, e))
+        })?;
+
+        let version = String::from_utf8_lossy(&version_output.stderr)
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let lmstat_output = Command::new("lmstat").args(["-a"]).output();
+
+        let mut licenses = Vec::new();
+        if let Ok(lm) = lmstat_output {
+            for line in String::from_utf8_lossy(&lm.stdout).lines() {
+                let line = line.trim();
+                if line.contains("Users of") && !line.contains("0 licenses in use") {
+                    licenses.push(line.to_string());
+                }
+            }
+        }
+
+        // Find spectre path
+        let spectre_path = Command::new("which")
+            .arg(spectre_bin)
+            .output()
+            .ok()
+            .and_then(|o| {
+                if o.status.success() {
+                    Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
+
+        Ok(json!({
+            "ok": !version.is_empty(),
+            "remote": false,
+            "version": version,
+            "spectre_path": spectre_path,
+            "licenses": licenses,
+        }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{analysis_block, validate_measure_expr};

@@ -750,6 +750,9 @@ enum SimCmd {
         #[arg(required = true)]
         inputs: Vec<String>,
     },
+
+    /// Check Spectre license availability and version
+    CheckLicense,
 }
 
 #[derive(Subcommand)]
@@ -1609,6 +1612,7 @@ fn dispatch_sim(cmd: SimCmd) -> error::Result<serde_json::Value> {
                 .collect();
             commands::sim::run_parallel(&parsed)
         }
+        SimCmd::CheckLicense => commands::sim::check_license(),
     }
 }
 

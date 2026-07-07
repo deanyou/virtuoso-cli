@@ -113,6 +113,7 @@ impl RpcDispatcher {
             "file" => Self::dispatch_file(client, op, params),
             "util" => Self::dispatch_util(client, op, params),
             "skill" => Self::dispatch_skill(client, op, params),
+            "sim" => Self::dispatch_sim(client, op, params),
             _ => {
                 // Try plugin registry for unknown domains
                 match crate::plugins::PluginRegistry::get_global() {
@@ -712,8 +713,54 @@ impl RpcDispatcher {
                 let r = commands::skill::eval(code, stdin)?;
                 Ok(r)
             }
+            "find" => {
+                let query = json_str(params.get("query"), "query")?;
+                let mode = params
+                    .get("mode")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("fuzzy");
+                let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+                let include_desc = params
+                    .get("include_desc")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let refresh = params
+                    .get("refresh")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                commands::skill::find(&query, mode, limit, refresh, include_desc)
+            }
+            "info" => {
+                let func = json_str(params.get("func"), "func")?;
+                commands::skill::info(&func)
+            }
+            "sync" => {
+                let host = params.get("host").and_then(|v| v.as_str());
+                commands::skill::sync_cache(host, None, false)
+            }
+            "cache" => {
+                let host = params.get("host").and_then(|v| v.as_str());
+                let clear = params
+                    .get("clear")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                commands::skill::show_cache(host, clear)
+            }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown skill method '{}'",
+                op
+            ))),
+        }
+    }
+
+    fn dispatch_sim(_client: &VirtuosoClient, op: &str, _params: Value) -> Result<Value> {
+        match op {
+            "check_license" => {
+                let _ = _client;
+                commands::sim::check_license()
+            }
+            _ => Err(VirtuosoError::Execution(format!(
+                "unknown sim method '{}'",
                 op
             ))),
         }
