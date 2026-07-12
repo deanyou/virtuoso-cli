@@ -233,6 +233,29 @@ impl RpcDispatcher {
                 let r = commands::schematic::polish_label(&net, &preset, auto_rotate, offset)?;
                 Ok(r)
             }
+            "net_stub" => {
+                let net = json_str(params.get("net"), "net")?;
+                let x = json_i64_or(params.get("x"), 0);
+                let y = json_i64_or(params.get("y"), 0);
+                let direction = json_str_or(params.get("direction"), "right")?;
+                let length = params.get("length").and_then(|v| v.as_f64()).unwrap_or(0.5);
+                let cosmetic = json_str_or(params.get("cosmetic"), "default")?;
+                let r = commands::schematic::net_stub(&net, x, y, &direction, length, &cosmetic)?;
+                Ok(r)
+            }
+            "label_term" => {
+                let inst = json_str(params.get("inst"), "inst")?;
+                let term = json_str(params.get("term"), "term")?;
+                let net = json_str(params.get("net"), "net")?;
+                let cosmetic = json_str_or(params.get("cosmetic"), "default")?;
+                let auto_rotate = params
+                    .get("auto_rotate")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let r =
+                    commands::schematic::label_term(&inst, &term, &net, &cosmetic, auto_rotate)?;
+                Ok(r)
+            }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown schematic method '{}'",
                 op
@@ -1177,8 +1200,8 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 65 methods (63 + 2 new: window.list_windows_x11, window.dismiss_window_x11)
-        assert_eq!(schema.methods.len(), 65, "should have exactly 65 methods");
+        // Should have 72 methods (65 + 4 skill.find/info/sync/cache + 1 sim.check_license + 2 schematic.net_stub/label_term)
+        assert_eq!(schema.methods.len(), 72, "should have exactly 72 methods");
     }
 
     #[test]

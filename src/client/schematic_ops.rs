@@ -167,6 +167,92 @@ impl SchematicOps {
         )
     }
 
+    /// Create a short labeled net stub in a given direction.
+    ///
+    /// Draws a wire segment of `length` grid units from (x,y) in the specified
+    /// direction and places a net label at its midpoint. Useful for power/ground
+    /// connections and test points without manually computing endpoint coords.
+    ///
+    /// direction: "right" (default) | "left" | "up" | "down"
+    /// length: stub length in DBU (default 0.5 grid units = 0.5 for typical libs)
+    /// cosmetic: "default" (fontSize 0.0625, centerCenter) or "clean" (0.125, lowerCenter)
+    pub fn create_net_stub(
+        &self,
+        net_name: &str,
+        x: i64,
+        y: i64,
+        direction: &str,
+        length: f64,
+        cosmetic: &str,
+    ) -> String {
+        let net_name = escape_skill_string(net_name);
+        let (dx, dy, rot) = match direction {
+            "up" => (0.0, 1.0, "R90"),
+            "down" => (0.0, -1.0, "R90"),
+            "left" => (-1.0, 0.0, "R0"),
+            _ => (1.0, 0.0, "R0"),
+        };
+        let end_x = x as f64 + dx * length;
+        let end_y = y as f64 + dy * length;
+        let label_x = (x as f64 + end_x) / 2.0;
+        let label_y = (y as f64 + end_y) / 2.0;
+        let (font_size, just) = if cosmetic == "clean" {
+            ("0.125", "\"lowerCenter\"")
+        } else {
+            ("0.0625", "\"centerCenter\"")
+        };
+
+        // Format floats as clean SKILL numbers (avoid precision artifacts)
+        let end_x_s = end_x.to_string();
+        let end_y_s = end_y.to_string();
+        let label_x_s = label_x.to_string();
+        let label_y_s = label_y.to_string();
+
+        format!(
+            r#"let((cv) cv = geGetEditCellView() when(!cv error("No cellview open")) dbCreateWire(cv dbMakeNet(cv "{net_name}") dbFindLayerByName(cv "wire") list(list({x} {y}) list({end_x_s} {end_y_s}))) dbCreateLabel(cv dbFindNetByName(cv "{net_name}") "{net_name}" list({label_x_s} {label_y_s}) {just} "{rot}" "stick" {font_size}))"#
+        )
+    }
+
+    /// Label an instance terminal (D/G/S/B) with a net name at the terminal's
+    /// precise pin center, using the MOS-aware geometric stub direction.
+    ///
+    /// inst_name: instance name (e.g. "M1")
+    /// term_name: terminal name — "D", "G", "S", or "B" for MOS; any term for other devs
+    /// net_name: name to assign to this terminal
+    /// cosmetic: "default" (0.0625, centerCenter) or "clean" (0.125, lowerCenter)
+    /// auto_rotate: infer rotation from stub direction
+    pub fn label_instance_term(
+        &self,
+        inst_name: &str,
+        term_name: &str,
+        net_name: &str,
+        cosmetic: &str,
+        auto_rotate: bool,
+    ) -> String {
+        let inst_name = escape_skill_string(inst_name);
+        let term_name = escape_skill_string(term_name);
+        let net_name = escape_skill_string(net_name);
+        let (font_size, just) = if cosmetic == "clean" {
+            ("0.125", "\"lowerCenter\"")
+        } else {
+            ("0.0625", "\"centerCenter\"")
+        };
+
+        // Stub extends 0.5 DBU from terminal center in the terminal's direction.
+        // For MOS terminals, direction is derived from the instance bbox dominant axis.
+        let auto_rot_part: &str = if auto_rotate {
+            r#" when(rbStubDir "left" "right" rbDx>=0 "R0" "R180" when(rbStubDir "up" "down" rbDy>=0 "R90" "R270")"#
+        } else {
+            ""
+        };
+
+        format!(
+            r#"let((cv inst term pin bbox rbTermCenter rbDx rbDy rbStubDir rbEnd rbLabelRot) cv = geGetEditCellView() when(!cv error("No cellview open")) inst = car(setof(i cv~>instances i~>name == "{inst_name}")) when(!inst error("instance not found: {inst_name}")) term = car(setof(t inst~>instTerms t~>name == "{term_name}")) when(!term error("terminal not found: {term_name}")) pin = car(term~>pins) when(!pin error("terminal has no pins")) bbox = pin~>bBox rbTermCenter = list((caar(bbox)+caadr(bbox))/2.0 (cadr(car(bbox))+cadr(bbox))/2.0) rbDx = caadr(bbox) - caar(bbox) rbDy = cadr(car(bbox)) - cadr(bbox) rbStubDir = if(abs(rbDx) >= abs(rbDy) when(rbDx >= 0 "right" "left") when(rbDy >= 0 "up" "down")) rbEnd = list(car(rbTermCenter) + when(rbStubDir "right" -rbDx when(rbStubDir "left" rbDx) when(rbStubDir "up" -rbDx when(rbStubDir "down" rbDx))) cadr(rbTermCenter) + when(rbStubDir "right" -rbDy when(rbStubDir "left" rbDy) when(rbStubDir "up" -rbDy when(rbStubDir "down" rbDy))) rbLabelRot = "{rot}"{auto_rot} net = dbMakeNet(cv "{net_name}") when(net dbCreateWire(cv net dbFindLayerByName(cv "wire") list(rbTermCenter rbEnd) 0 0 0 nil nil)) when(net dbCreateLabel(cv net "{net_name}" rbTermCenter {just} rbLabelRot "stick" {font_size}))"#,
+            rot = "R0",
+            auto_rot = auto_rot_part
+        )
+    }
+
     /// Polish all labels on a net with cosmetic preset, auto-rotation, or offset.
     ///
     /// preset: "readable" → fontSize 0.125, just "centerCenter"
@@ -295,5 +381,52 @@ mod tests {
         let s = ops().save();
         assert!(s.contains("geGetEditCellView"), "{s}");
         assert!(s.contains("dbSave"), "{s}");
+    }
+
+    #[test]
+    fn create_net_stub_right() {
+        let s = ops().create_net_stub("VDD", 100, 200, "right", 0.5, "default");
+        assert!(s.contains("VDD"), "net name must appear: {s}");
+        assert!(s.contains("dbCreateWire"), "must use dbCreateWire: {s}");
+        assert!(s.contains("dbCreateLabel"), "must use dbCreateLabel: {s}");
+        assert!(s.contains("geGetEditCellView"), "must have guard: {s}");
+    }
+
+    #[test]
+    fn create_net_stub_up() {
+        let s = ops().create_net_stub("VSS", 0, 0, "up", 1.0, "clean");
+        assert!(s.contains("VSS"), "net name must appear: {s}");
+        assert!(s.contains("R90"), "up direction should use R90: {s}");
+    }
+
+    #[test]
+    fn create_net_stub_cosmetic_clean() {
+        let s = ops().create_net_stub("NET", 50, 50, "left", 0.5, "clean");
+        assert!(s.contains("0.125"), "clean should use fontSize 0.125: {s}");
+        assert!(
+            s.contains("lowerCenter"),
+            "clean should use lowerCenter: {s}"
+        );
+    }
+
+    #[test]
+    fn label_instance_term_uses_term_resolution() {
+        let s = ops().label_instance_term("M1", "D", "VDD", "default", false);
+        assert!(s.contains("M1"), "inst name must appear: {s}");
+        assert!(s.contains("D"), "term name must appear: {s}");
+        assert!(s.contains("VDD"), "net name must appear: {s}");
+        assert!(s.contains("dbCreateWire"), "must create wire: {s}");
+        assert!(s.contains("dbCreateLabel"), "must create label: {s}");
+        assert!(s.contains("geGetEditCellView"), "must have guard: {s}");
+    }
+
+    #[test]
+    fn label_instance_term_cosmetic_clean() {
+        let s = ops().label_instance_term("X1", "G", "VIN", "clean", true);
+        assert!(s.contains("0.125"), "clean should use fontSize 0.125: {s}");
+        assert!(
+            s.contains("lowerCenter"),
+            "clean should use lowerCenter: {s}"
+        );
     }
 }

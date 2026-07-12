@@ -1094,5 +1094,85 @@ pub fn standard_schema() -> RpcSchema {
             ],
             returns: "Number of labels updated".into(),
         },
+        Method {
+            name: "schematic.net_stub".into(),
+            summary: "Create a short labeled net stub in a given direction".into(),
+            params: vec![
+                Param {
+                    name: "net".into(),
+                    ptype: "string".into(),
+                    description: "Net name".into(),
+                    required: true,
+                },
+                Param {
+                    name: "x".into(),
+                    ptype: "integer".into(),
+                    description: "X origin in DBU".into(),
+                    required: true,
+                },
+                Param {
+                    name: "y".into(),
+                    ptype: "integer".into(),
+                    description: "Y origin in DBU".into(),
+                    required: true,
+                },
+                Param {
+                    name: "direction".into(),
+                    ptype: "string".into(),
+                    description: "Direction: right (default), left, up, down".into(),
+                    required: false,
+                },
+                Param {
+                    name: "length".into(),
+                    ptype: "number".into(),
+                    description: "Stub length in grid units (default 0.5)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "cosmetic".into(),
+                    ptype: "string".into(),
+                    description: "'default' (0.0625, centerCenter) or 'clean' (0.125, lowerCenter)".into(),
+                    required: false,
+                },
+            ],
+            returns: "{status, net, direction, origin}".into(),
+        },
+        Method {
+            name: "schematic.label_term".into(),
+            summary: "Label an instance terminal (D/G/S/B) with a net name at the terminal's pin center".into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Instance name (e.g. M1)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "term".into(),
+                    ptype: "string".into(),
+                    description: "Terminal name (e.g. D, G, S, B)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "net".into(),
+                    ptype: "string".into(),
+                    description: "Net name to label the terminal with".into(),
+                    required: true,
+                },
+                Param {
+                    name: "cosmetic".into(),
+                    ptype: "string".into(),
+                    description: "'default' or 'clean'".into(),
+                    required: false,
+                },
+                Param {
+                    name: "auto_rotate".into(),
+                    ptype: "boolean".into(),
+                    description: "Auto-rotate label based on stub direction".into(),
+                    required: false,
+                },
+            ],
+            returns: "{status, instance, terminal, net}".into(),
+        },
     ])
 }

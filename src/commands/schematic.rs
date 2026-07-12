@@ -162,6 +162,62 @@ pub fn save() -> Result<Value> {
     }))
 }
 
+/// Create a short labeled net stub in a given direction.
+///
+/// direction: "right" | "left" | "up" | "down"
+/// length: stub length in grid units (default 0.5)
+/// cosmetic: "default" (0.0625, centerCenter) or "clean" (0.125, lowerCenter)
+pub fn net_stub(
+    net: &str,
+    x: i64,
+    y: i64,
+    direction: &str,
+    length: f64,
+    cosmetic: &str,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+    let skill = client
+        .schematic
+        .create_net_stub(net, x, y, direction, length, cosmetic);
+    let r = client.execute_skill(&skill, None)?;
+    Ok(json!({
+        "status": if r.skill_ok() { "success" } else { "error" },
+        "net": net,
+        "direction": direction,
+        "origin": [x, y],
+        "output": r.output,
+    }))
+}
+
+/// Label an instance terminal (D/G/S/B) with a net name at the terminal's
+/// precise pin center.
+///
+/// inst: "instance_name" (e.g. "M1")
+/// term: terminal name (e.g. "D", "G", "S", "B")
+/// net: net name to assign
+/// cosmetic: "default" or "clean"
+/// auto_rotate: infer label rotation from stub direction
+pub fn label_term(
+    inst: &str,
+    term: &str,
+    net: &str,
+    cosmetic: &str,
+    auto_rotate: bool,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+    let skill = client
+        .schematic
+        .label_instance_term(inst, term, net, cosmetic, auto_rotate);
+    let r = client.execute_skill(&skill, None)?;
+    Ok(json!({
+        "status": if r.skill_ok() { "success" } else { "error" },
+        "instance": inst,
+        "terminal": term,
+        "net": net,
+        "output": r.output,
+    }))
+}
+
 // ── Build (batch from JSON spec) ────────────────────────────────────
 
 #[derive(Deserialize)]

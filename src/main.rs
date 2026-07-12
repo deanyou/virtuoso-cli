@@ -1162,6 +1162,61 @@ enum SchematicCmd {
         #[arg(long)]
         offset: Option<String>,
     },
+
+    /// Create a short labeled net stub in a given direction
+    ///
+    /// Draws a wire segment of `length` grid units from (x,y) in the specified
+    /// direction and places a net label at its midpoint.
+    ///
+    /// Examples:
+    ///   vcli schematic net-stub VDD --x 100 --y 200 --direction right --length 0.5
+    ///   vcli schematic net-stub VSS --x 0 --y 0 --direction up --cosmetic clean
+    NetStub {
+        /// Net name
+        #[arg(long)]
+        net: String,
+        /// X origin in DBU
+        #[arg(long)]
+        x: i64,
+        /// Y origin in DBU
+        #[arg(long)]
+        y: i64,
+        /// Direction: right (default), left, up, down
+        #[arg(long, default_value = "right")]
+        direction: String,
+        /// Stub length in grid units (default 0.5)
+        #[arg(long, default_value = "0.5")]
+        length: f64,
+        /// Cosmetic preset: "default" (0.0625, centerCenter) or "clean" (0.125, lowerCenter)
+        #[arg(long, default_value = "default")]
+        cosmetic: String,
+    },
+
+    /// Label an instance terminal (D/G/S/B) with a net name at the terminal's pin center
+    ///
+    /// Automatically resolves the terminal pin location from the instance rather
+    /// than requiring manual coordinate entry.
+    ///
+    /// Examples:
+    ///   vcli schematic label-term M1 D VDD
+    ///   vcli schematic label-term X1 G VIN --cosmetic clean --auto-rotate
+    LabelTerm {
+        /// Instance name (e.g. M1)
+        #[arg(long)]
+        inst: String,
+        /// Terminal name (e.g. D, G, S, B)
+        #[arg(long)]
+        term: String,
+        /// Net name to label the terminal with
+        #[arg(long)]
+        net: String,
+        /// Cosmetic preset: "default" or "clean"
+        #[arg(long, default_value = "default")]
+        cosmetic: String,
+        /// Auto-rotate label based on stub direction
+        #[arg(long)]
+        auto_rotate: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1791,6 +1846,21 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
             auto_rotate,
             offset,
         } => commands::schematic::polish_label(&net, &preset, auto_rotate, offset.as_deref()),
+        SchematicCmd::NetStub {
+            net,
+            x,
+            y,
+            direction,
+            length,
+            cosmetic,
+        } => commands::schematic::net_stub(&net, x, y, &direction, length, &cosmetic),
+        SchematicCmd::LabelTerm {
+            inst,
+            term,
+            net,
+            cosmetic,
+            auto_rotate,
+        } => commands::schematic::label_term(&inst, &term, &net, &cosmetic, auto_rotate),
     }
 }
 
