@@ -1,5 +1,6 @@
 use crate::error::{Result, VirtuosoError};
 use crate::models::VirtuosoResult;
+use serde_json::Value;
 
 pub(crate) fn escape_string(value: &str) -> String {
     value
@@ -40,6 +41,22 @@ pub(crate) fn require_non_nil<'a>(
         )));
     }
     Ok(output)
+}
+
+pub(crate) fn decode_json(result: &VirtuosoResult, action: &str) -> Result<Value> {
+    let output = require_non_nil(result, action)?;
+    let outer: Value = serde_json::from_str(output).map_err(|error| {
+        VirtuosoError::Execution(format!("{action}: invalid JSON result: {error}"))
+    })?;
+
+    match outer {
+        Value::String(inner) => serde_json::from_str(&inner).map_err(|error| {
+            VirtuosoError::Execution(format!(
+                "{action}: invalid wrapped JSON result: {error}"
+            ))
+        }),
+        value => Ok(value),
+    }
 }
 
 #[cfg(test)]
@@ -86,5 +103,24 @@ mod tests {
         let result = VirtuosoResult::error(vec!["daemon rejected request".into()]);
         let error = require_transport(&result, "run analysis").unwrap_err();
         assert!(error.to_string().contains("daemon rejected request"));
+    }
+
+    #[test]
+    fn decode_json_accepts_direct_json() {
+        let result = VirtuosoResult::success(r#"{"name":"M1"}"#);
+        assert_eq!(decode_json(&result, "instances").unwrap()["name"], "M1");
+    }
+
+    #[test]
+    fn decode_json_accepts_skill_wrapped_json() {
+        let result = VirtuosoResult::success(r#""{\"name\":\"M1\"}""#);
+        assert_eq!(decode_json(&result, "instances").unwrap()["name"], "M1");
+    }
+
+    #[test]
+    fn decode_json_rejects_invalid_payload() {
+        let result = VirtuosoResult::success("not-json");
+        let error = decode_json(&result, "instances").unwrap_err();
+        assert!(error.to_string().contains("instances"));
     }
 }

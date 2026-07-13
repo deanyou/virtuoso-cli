@@ -1,5 +1,5 @@
 use crate::client::bridge::VirtuosoClient;
-use crate::commands::schematic::parse_skill_json;
+use crate::client::skill_runtime::decode_json;
 use crate::error::{Result, VirtuosoError};
 use serde_json::{json, Value};
 
@@ -35,13 +35,7 @@ pub fn list_sessions() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.list_sessions();
     let r = client.execute_skill(&skill, None)?;
-    if !r.skill_ok() {
-        return Err(VirtuosoError::Execution(format!(
-            "Failed to list sessions: {}",
-            r.output
-        )));
-    }
-    Ok(parse_skill_json(&r.output))
+    decode_json(&r, "failed to list Maestro sessions")
 }
 
 pub fn set_var(session: &str, name: &str, value: &str) -> Result<Value> {
