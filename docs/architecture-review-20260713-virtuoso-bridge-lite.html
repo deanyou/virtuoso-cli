@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>架构分析 — virtuoso-bridge-lite</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({startOnLoad:true,theme:"neutral",securityLevel:"loose",flowchart:{curve:"basis"}});
+  </script>
+  <style>
+    body{background:#f7f5f0}.paper{box-shadow:0 18px 55px rgba(15,23,42,.08)}
+    .seam{border-style:dashed}.deep{background:linear-gradient(135deg,#0f172a,#26364e)}
+    .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    .mass-interface{background:#fef2f2;border-color:#fca5a5}.mass-impl{background:#f8fafc;border-color:#cbd5e1}
+  </style>
+</head>
+<body class="text-slate-900">
+<main class="max-w-6xl mx-auto px-5 py-10 space-y-10">
+  <header class="paper rounded-3xl bg-white border border-stone-200 p-8">
+    <div class="flex flex-wrap items-start justify-between gap-6">
+      <div><p class="text-xs uppercase tracking-[.25em] text-indigo-600">Architecture review · 2026-07-13</p>
+      <h1 class="mt-2 text-4xl font-serif">virtuoso-bridge-lite</h1>
+      <p class="mt-3 text-slate-600 max-w-3xl">Cadence Virtuoso 的 Python 控制面：TCP/SKILL 执行、SSH 传输与隧道、Spectre 仿真，以及 schematic/layout/symbol/Maestro 领域操作。</p></div>
+      <div class="grid grid-cols-2 gap-2 text-center text-sm"><div class="rounded-xl bg-slate-100 px-4 py-3"><b class="block text-2xl">≈38k</b>源码+测试行</div><div class="rounded-xl bg-slate-100 px-4 py-3"><b class="block text-2xl">34</b>测试文件</div></div>
+    </div>
+    <div class="mt-6 flex flex-wrap gap-4 text-xs text-slate-600"><span>▣ 实线框：module</span><span>┄ 虚线：seam</span><span class="text-red-600">→ 红色：泄漏/反向依赖</span><span class="text-slate-900 font-semibold">深色粗框：deep module</span></div>
+  </header>
+
+  <section class="paper rounded-3xl bg-white border border-stone-200 p-8">
+    <div class="flex items-center justify-between"><h2 class="text-2xl font-serif">现状架构</h2><span class="rounded-full bg-emerald-100 text-emerald-800 px-3 py-1 text-xs font-semibold">总体分层合理</span></div>
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-stone-50 p-5 overflow-x-auto"><pre class="mermaid">
+flowchart LR
+  U[Python / CLI / Agent] --> C[VirtuosoClient]
+  C --> D[Domain Ops\nlayout · schematic · symbol · library]
+  D --> K[SKILL builders / readers / editors]
+  C --> T[TCP JSON protocol]
+  T --> R[RAMIC daemon]
+  R --> V[Cadence Virtuoso CIW]
+  C -. optional .-> SC[SSHClient]
+  SC --> SR[SSHRunner\nControlMaster · shell · file transfer]
+  SR --> H[Remote compute host]
+  SP[SpectreSimulator] --> SR
+  SP --> P[Spectre + parsers]
+  M[Maestro] --> C
+  M --> SR
+  classDef deep fill:#172033,color:#fff,stroke:#0f172a,stroke-width:3px;
+  class C,SR deep;
+    </pre></div>
+    <div class="mt-6 grid md:grid-cols-4 gap-4 text-sm">
+      <div class="rounded-xl bg-indigo-50 p-4"><b>执行 module</b><p class="mt-1 text-slate-600">VirtuosoClient 隔离 TCP/SKILL 协议。</p></div>
+      <div class="rounded-xl bg-sky-50 p-4"><b>传输 module</b><p class="mt-1 text-slate-600">SSHRunner 统一命令、文件和隧道。</p></div>
+      <div class="rounded-xl bg-emerald-50 p-4"><b>领域 module</b><p class="mt-1 text-slate-600">设计域操作挂载到 client。</p></div>
+      <div class="rounded-xl bg-amber-50 p-4"><b>仿真 module</b><p class="mt-1 text-slate-600">Spectre 可独立运行或复用 SSH。</p></div>
+    </div>
+  </section>
+
+  <section id="candidates" class="space-y-8">
+    <article id="c1" class="paper rounded-3xl bg-white border border-stone-200 p-8">
+      <div class="flex flex-wrap justify-between gap-3"><h2 class="text-2xl font-serif">1. 深化远程执行 module</h2><div class="flex gap-2"><span class="rounded-full bg-emerald-100 text-emerald-800 px-3 py-1 text-xs font-bold">Strong</span><span class="rounded-full bg-slate-100 px-3 py-1 text-xs">ports & adapters</span></div></div>
+      <p class="code mt-3 text-xs text-slate-500">transport/ssh.py · transport/tunnel.py · spectre/runner.py · maestro/* · layout/streamout.py</p>
+      <div class="mt-6 grid md:grid-cols-2 gap-5"><div><p class="text-xs uppercase tracking-wider text-slate-500">Before</p><div class="mt-2 rounded-xl border bg-stone-50 p-3"><pre class="mermaid">flowchart TB
+ A[Maestro] -->|run_command| S[SSHRunner internals]
+ B[Streamout] -->|runner.user + run_command| S
+ C[Spectre] -->|SSHRunner concrete type| S
+ D[VirtuosoClient] -->|ssh_runner property| S
+ classDef leak stroke:#dc2626,stroke-width:2px;
+ class A,B,C,D leak;</pre></div></div>
+      <div><p class="text-xs uppercase tracking-wider text-slate-500">After</p><div class="deep mt-2 rounded-xl border-4 border-slate-900 p-5 text-white h-[260px]"><p class="text-xs uppercase tracking-wider text-slate-300">Remote Execution</p><p class="mt-3 text-xl">execute · upload · download · identity</p><div class="seam mt-5 rounded-lg border-2 border-slate-400 p-3 text-sm">唯一 interface<br><span class="text-slate-300">SSH adapter / local adapter / test adapter</span></div><p class="mt-5 text-xs text-slate-400">ControlMaster、超时预算、平台差异留在 implementation 内</p></div></div></div>
+      <div class="mt-5 grid md:grid-cols-3 gap-4 text-sm"><div><b>Problem</b><p class="text-slate-600">调用者知道 SSHRunner 具体属性与返回形状，传输知识跨 seam 泄漏。</p></div><div><b>Solution</b><p class="text-slate-600">建立面向远程执行能力的窄 interface，由 SSH 与本地 adapter 实现。</p></div><div><b>Wins</b><ul class="mt-1 text-slate-600"><li>• locality：超时集中</li><li>• leverage：多个调用域复用</li><li>• 测试只跨一个 interface</li></ul></div></div>
+    </article>
+
+    <article id="c2" class="paper rounded-3xl bg-white border border-stone-200 p-8">
+      <div class="flex flex-wrap justify-between gap-3"><h2 class="text-2xl font-serif">2. 拆分 CLI 解析与命令编排</h2><div class="flex gap-2"><span class="rounded-full bg-emerald-100 text-emerald-800 px-3 py-1 text-xs font-bold">Strong</span><span class="rounded-full bg-slate-100 px-3 py-1 text-xs">in-process</span></div></div>
+      <p class="code mt-3 text-xs text-slate-500">cli.py（1766 行）· tests/test_cli_eval.py · tests/test_cli_load.py</p>
+      <div class="mt-6 grid md:grid-cols-2 gap-5"><div><p class="text-xs uppercase tracking-wider text-slate-500">Before · 浅横切面</p><div class="mt-2 space-y-2 h-[260px]"><div class="border-l-4 border-red-400 bg-red-50 p-3">argparse 定义</div><div class="border-l-4 border-red-400 bg-red-50 p-3">环境/profile 状态</div><div class="border-l-4 border-red-400 bg-red-50 p-3">start/status/eval/load</div><div class="border-l-4 border-red-400 bg-red-50 p-3">X11/snapshot/Visio</div><div class="border-l-4 border-red-400 bg-red-50 p-3">输出格式与错误处理</div></div></div>
+      <div><p class="text-xs uppercase tracking-wider text-slate-500">After · deep 命令 module</p><div class="deep mt-2 rounded-xl p-5 h-[260px] text-white"><div class="rounded-lg bg-white/10 p-3 text-sm">CLI interface：parse → CommandRequest</div><div class="my-4 text-center text-slate-400">↓</div><div class="seam rounded-lg border-2 border-slate-500 p-4"><b>Command modules</b><p class="mt-2 text-sm text-slate-300">lifecycle · skill · inspect · export</p></div><div class="mt-4 text-xs text-slate-400">main 只负责选择和呈现</div></div></div></div>
+      <div class="mt-5 grid md:grid-cols-3 gap-4 text-sm"><div><b>Problem</b><p class="text-slate-600">一个 module 暴露了整套命令知识，改一条命令需理解全文件。</p></div><div><b>Solution</b><p class="text-slate-600">按命令族形成 deep module，解析结果以稳定请求对象跨 seam。</p></div><div><b>Wins</b><ul class="mt-1 text-slate-600"><li>• locality：命令知识集中</li><li>• interface 缩到请求/结果</li><li>• 测试不再依赖全局状态</li></ul></div></div>
+    </article>
+
+    <article id="c3" class="paper rounded-3xl bg-white border border-stone-200 p-8">
+      <div class="flex flex-wrap justify-between gap-3"><h2 class="text-2xl font-serif">3. 让领域 module 依赖协议，而非包根</h2><div class="flex gap-2"><span class="rounded-full bg-amber-100 text-amber-800 px-3 py-1 text-xs font-bold">Worth exploring</span><span class="rounded-full bg-slate-100 px-3 py-1 text-xs">local-substitutable</span></div></div>
+      <p class="code mt-3 text-xs text-slate-500">virtuoso/maestro/* · schematic/params.py · schematic/reader.py · virtuoso/basic/bridge.py · models.py</p>
+      <div class="mt-6 grid md:grid-cols-2 gap-5"><div><p class="text-xs uppercase tracking-wider text-slate-500">Before</p><div class="mt-2 rounded-xl border bg-stone-50 p-3"><pre class="mermaid">flowchart LR
+ Root[package __init__] --> VC[VirtuosoClient]
+ VC --> Domains[domain modules]
+ Domains -. import VirtuosoClient .-> Root
+ classDef leak stroke:#dc2626,stroke-width:3px;
+ class Domains,Root leak;</pre></div></div>
+      <div><p class="text-xs uppercase tracking-wider text-slate-500">After</p><div class="mt-2 rounded-xl border bg-stone-50 p-3"><pre class="mermaid">flowchart LR
+ P[SkillExecutor protocol] --> VC[VirtuosoClient adapter]
+ Domains[domain modules] --> P
+ Tests[Test adapter] --> P
+ classDef deep fill:#172033,color:#fff,stroke:#0f172a,stroke-width:3px;
+ class P deep;</pre></div></div></div>
+      <div class="mt-5 grid md:grid-cols-3 gap-4 text-sm"><div><b>Problem</b><p class="text-slate-600">内部 module 反向导入公开包根，形成循环初始化风险并扩大测试面。</p></div><div><b>Solution</b><p class="text-slate-600">领域逻辑仅依赖最小执行 interface；VirtuosoClient 成为 adapter。</p></div><div><b>Wins</b><ul class="mt-1 text-slate-600"><li>• seam 可被真实测试 adapter 替换</li><li>• locality：执行契约集中</li><li>• 包初始化方向单向</li></ul></div></div>
+    </article>
+
+    <article id="c4" class="paper rounded-3xl bg-white border border-stone-200 p-8">
+      <div class="flex flex-wrap justify-between gap-3"><h2 class="text-2xl font-serif">4. 把 GDS 导出状态机变成显式 deep module</h2><div class="flex gap-2"><span class="rounded-full bg-amber-100 text-amber-800 px-3 py-1 text-xs font-bold">Worth exploring</span><span class="rounded-full bg-slate-100 px-3 py-1 text-xs">in-process</span></div></div>
+      <p class="code mt-3 text-xs text-slate-500">virtuoso/layout/streamout.py（2955 行）· layout/xstream.py · tests/test_layout_streamout.py（5527 行）</p>
+      <div class="mt-6 grid md:grid-cols-2 gap-5"><div><p class="text-xs uppercase tracking-wider text-slate-500">Before · interface 与 implementation 同样宽</p><div class="mt-2 flex gap-4 items-end h-[250px]"><div class="w-1/2"><div class="mass-interface border-2 rounded-t-xl h-40 p-3 text-sm">timeouts<br>poll interval<br>cleanup policy<br>recovery hook<br>log path<br>skill timeout<br>finalization reserve</div><div class="mass-impl border-2 border-t-0 rounded-b-xl h-20 p-3 text-sm">导出编排</div></div><p class="text-red-600 text-sm pb-10">浅：调用者必须理解状态机细节</p></div></div>
+      <div><p class="text-xs uppercase tracking-wider text-slate-500">After · 窄 interface，深 implementation</p><div class="mt-2 flex gap-4 items-end h-[250px]"><div class="w-4/5"><div class="border-2 border-emerald-300 bg-emerald-50 rounded-t-xl h-12 p-3 text-sm">export(request) → result</div><div class="deep rounded-b-xl h-44 p-4 text-white text-sm"><b>GDS Export State Machine</b><p class="mt-3 text-slate-300">stage → launch → observe log/artifact → classify → publish → cleanup</p><p class="mt-4 text-xs text-slate-400">预算、恢复、local/remote 差异全部内聚</p></div></div></div></div></div>
+      <div class="mt-5 grid md:grid-cols-3 gap-4 text-sm"><div><b>Problem</b><p class="text-slate-600">导出可靠性很强，但配置与状态分支使 interface 接近 implementation 复杂度。</p></div><div><b>Solution</b><p class="text-slate-600">以请求/结果收窄 interface，把状态转换与 adapter 选择留在 implementation。</p></div><div><b>Wins</b><ul class="mt-1 text-slate-600"><li>• leverage：可靠导出一处复用</li><li>• locality：失败分类集中</li><li>• 表驱动测试覆盖状态</li></ul></div></div>
+    </article>
+  </section>
+
+  <section class="paper rounded-3xl bg-slate-950 text-white p-8">
+    <p class="text-xs uppercase tracking-[.22em] text-emerald-400">Top recommendation</p>
+    <h2 class="mt-2 text-3xl font-serif"><a class="underline decoration-emerald-500" href="#c1">深化远程执行 module</a></h2>
+    <p class="mt-3 text-slate-300">它跨越 Virtuoso、Maestro、Layout 与 Spectre，能用一个更窄的 interface 同时提升 locality、测试替换能力和跨平台可靠性。</p>
+  </section>
+
+  <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950"><b>验证范围</b>：结论来自静态源码、测试结构和项目文档。未发现项目 <span class="code">.env</span>，未执行远程 Virtuoso/SSH 检查；当前环境也没有 pytest，因此未运行测试。graphify 启动器指向已删除的临时环境，本报告采用架构审查回退流程生成。</section>
+</main>
+</body></html>
