@@ -338,7 +338,5 @@ fn check_blocking_skill(code: &str) -> Option<String> {
 }
 
 pub fn escape_skill_string(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
+    crate::client::skill_runtime::escape_string(s)
 }
