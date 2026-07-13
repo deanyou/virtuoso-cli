@@ -1,9 +1,18 @@
-mod input;
-mod render;
-mod state;
-mod theme;
+//! Interactive terminal UI — entry point and event loop.
+//!
+//! Architecture (borrowed from cc-switch-cli):
+//! - `app/`  — App state, overlay enum, event cascade, action handler
+//! - `ui/`   — pure rendering: chrome (header), content tabs, overlays, footer
+//! - `theme` — colors + no_color accessibility mode
+//!
+//! Input priority cascade: overlay → globals → tab content. An active overlay
+//! suppresses all other keys, so vim motions inside a log viewer never leak
+//! into tab switching.
 
-use crate::command_log;
+pub mod app;
+pub mod theme;
+pub mod ui;
+
 use crate::error::Result;
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::terminal::{
@@ -19,86 +28,49 @@ fn err(e: impl std::fmt::Display) -> crate::error::VirtuosoError {
     crate::error::VirtuosoError::Execution(e.to_string())
 }
 
-fn load_log(state: &mut state::TuiState) {
-    if let Ok(content) = std::fs::read_to_string(command_log::log_path()) {
-        state.log_lines = content.lines().map(|l| l.to_string()).collect();
-        state.log_scroll = state.log_lines.len().saturating_sub(1);
-    }
-}
-
 pub fn run_tui() -> Result<()> {
-    let mut state = state::TuiState::new();
-    let theme = theme::Theme::default();
-    load_log(&mut state);
+    let mut app = app::state::App::new();
+    let theme = theme::Theme::detect();
 
     enable_raw_mode().map_err(err)?;
     stdout().execute(EnterAlternateScreen).map_err(err)?;
     let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend).map_err(err)?;
 
-    let result = run_loop(&mut terminal, &mut state, &theme);
+    let result = run_loop(&mut terminal, &mut app, &theme);
 
     let _ = disable_raw_mode();
     let _ = stdout().execute(LeaveAlternateScreen);
-
     result
 }
 
 fn run_loop(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
-    state: &mut state::TuiState,
+    app: &mut app::state::App,
     theme: &theme::Theme,
 ) -> Result<()> {
     loop {
         terminal
-            .draw(|frame| render::render(frame, state, theme))
+            .draw(|frame| ui::draw(frame, app, theme))
             .map_err(err)?;
 
         if !event::poll(Duration::from_millis(500)).map_err(err)? {
-            state.spinner_frame = state.spinner_frame.wrapping_add(1);
-            if let Some((_, at)) = &state.status_msg {
-                if at.elapsed().as_secs() >= 3 {
-                    state.status_msg = None;
-                }
-            }
+            app.spinner_frame = app.spinner_frame.wrapping_add(1);
+            app.clear_expired_status();
+            app.refresh_daemon_stats();
             continue;
         }
 
-        let ev = event::read().map_err(err)?;
-
-        if let Event::Key(key) = ev {
+        if let Event::Key(key) = event::read().map_err(err)? {
             if key.kind != KeyEventKind::Press {
                 continue;
             }
-            match input::handle_key(state, key) {
-                input::EventAction::Quit => break,
-                input::EventAction::Refresh => {
-                    state.refresh();
-                    load_log(state);
-                    state.set_status("Refreshed");
-                }
-                input::EventAction::ShowLog => {
-                    state.show_log = true;
-                }
-                input::EventAction::CancelJob => {
-                    let idx = state.selected_job;
-                    if let Some(job) = state.jobs.get_mut(idx) {
-                        if job.status == crate::spectre::jobs::JobStatus::Running {
-                            let _ = job.cancel();
-                        }
-                    }
-                    if let Some(job) = state.jobs.get(idx) {
-                        state.set_status(&format!("Cancelled job {}", job.id));
-                    }
-                }
-                input::EventAction::SaveConfig => match state.save_config() {
-                    Ok(_) => state.set_status("Config saved to .env"),
-                    Err(e) => state.set_status(&format!("Save failed: {e}")),
-                },
-                input::EventAction::Continue => {}
+            let action = app::on_key(app, key);
+            app::handle_action(app, action);
+            if app.should_quit {
+                break;
             }
         }
     }
-
     Ok(())
 }

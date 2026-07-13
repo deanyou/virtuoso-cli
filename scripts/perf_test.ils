@@ -1,0 +1,104 @@
+; perf_test.ils - Performance tests
+
+procedure(report(name cnt elapsed)
+    let((per)
+        per = float(elapsed) / float(cnt)
+        printf("%-20s %8d  %8.3f ms  %10.6f ms/op\n" name cnt elapsed per)
+    )
+)
+
+; Test 1: List cons
+procedure(test_cons(n)
+    let((r)
+        r = nil
+        t1 = getCurrentTime()
+        for(i 1 n
+            r = cons(i r)
+        )
+        t2 = getCurrentTime()
+        report("List cons" n subtract(t2 t1))
+    )
+)
+
+; Test 2: List append
+procedure(test_append(n)
+    let((r)
+        r = nil
+        t1 = getCurrentTime()
+        for(i 1 n
+            r = append(r list(i))
+        )
+        t2 = getCurrentTime()
+        report("List append" n subtract(t2 t1))
+    )
+)
+
+; Test 3: Hash lookup
+procedure(test_hash(n)
+    let((ht v)
+        ht = makeTable("t" nil)
+        for(i 1 n
+            ht[i] = i
+        )
+        v = 0
+        t1 = getCurrentTime()
+        for(i 1 n
+            v = ht[i]
+        )
+        t2 = getCurrentTime()
+        report("Hash lookup" n subtract(t2 t1))
+    )
+)
+
+; Test 4: List nth
+procedure(test_nth(n)
+    let((r v)
+        r = nil
+        for(i 1 n
+            r = cons(i r)
+        )
+        v = 0
+        t1 = getCurrentTime()
+        for(i 1 50
+            v = car(nth(i r))
+        )
+        t2 = getCurrentTime()
+        report("List nth" 50 subtract(t2 t1))
+    )
+)
+
+; Test 5: String concat
+procedure(test_strcat(n)
+    let((s)
+        s = ""
+        t1 = getCurrentTime()
+        for(i 1 n
+            s = strcat(s "x")
+        )
+        t2 = getCurrentTime()
+        report("Strcat" n subtract(t2 t1))
+    )
+)
+
+; Test 6: Eval string
+procedure(test_evalstr(n)
+    let((v)
+        t1 = getCurrentTime()
+        for(i 1 n
+            v = evalstring(sprintf(nil "%d+1" i))
+        )
+        t2 = getCurrentTime()
+        report("Evalstring" n subtract(t2 t1))
+    )
+)
+
+printf("\n=== SKILL PERFORMANCE TESTS ===\n\n")
+
+test_cons(5000)
+test_append(500)
+test_hash(5000)
+test_nth(5000)
+test_strcat(200)
+test_evalstr(20)
+
+printf("\n=== DONE ===\n")

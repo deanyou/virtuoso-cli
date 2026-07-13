@@ -1,7 +1,8 @@
 ---
 name: circuit-optimizer
 description: Bayesian optimization for circuit auto-tuning — closed-loop optimizer where Claude acts as the BO engine. Sweeps gm/Id + L parameters, runs Spectre, scores against specs, and iterates. Supports progressive PVT corners. Use when optimizing circuit sizing, auto-tuning amplifier parameters, or running design-space exploration. Triggers on "optimize", "auto-tune", "bayesian", "find best sizing".
-allowed-tools: Bash(*/virtuoso *) Read Write
+argument-hint: [optimization goal, e.g. "maximize GBW subject to PM>60deg"]
+allowed-tools: Bash(virtuoso *) Read Write
 ---
 
 # Circuit Optimizer (Bayesian)
@@ -281,6 +282,178 @@ ls process_data/*/opt_history/*.json
 # Claude reads the file, picks up at meta.iteration + 1
 # Continues in the current phase with accumulated history
 ```
+
+## Bandgap IP Support
+
+For bandgap circuits, use the bundled script `scripts/run_bandgap_sweep.py`.
+
+### Bandgap FOM (Figure of Merit)
+
+```
+feasibility_cost = max(0, (Vbg_target - Vbg_measured) / Vbg_target)   # Vbg too low
+                 + max(0, (Vbg_measured - Vbg_target) / Vbg_target)   # Vbg too high
+                 + max(0, (PSRR_min - PSRR_measured) / PSRR_min)      # PSRR insufficient
+                 + max(0, (TC_measured - TC_max) / TC_max)             # TC too high
+
+If infeasible: cost = 1000 + feasibility_cost
+If feasible:   cost = w_vbg * |1 - Vbg/Vbg_target|
+                    + w_psrr * |1 - PSRR/PSRR_target| * 0.5
+                    + w_tc   * |1 - TC_target/TC_measured| * 0.3
+```
+
+Default weights: `w_vbg=1.0`, `w_psrr=0.5`, `w_tc=0.3`
+
+### Bandgap Workflow
+
+```bash
+# Step 1: Write spec YAML
+cat > bandgap.yaml << 'EOF'
+ip_type: bandgap
+target:
+  Vbg: 1.20
+  PSRR: 80
+  TC: 20
+params:
+  W:
+    min: 1e-6
+    max: 10e-6
+    step: 1e-6
+  L:
+    min: 0.18e-6
+    max: 1e-6
+    step: 0.18e-6
+corner: tt
+EOF
+
+# Step 2: Write Spectre netlist template (use ${W}, ${L} placeholders)
+# template.scs must contain: parameters W=${W} L=${L}
+
+# Step 3: Run batch (all W×L combos)
+python ${CLAUDE_SKILL_DIR}/scripts/run_bandgap_sweep.py run \
+  --spec bandgap.yaml --netlist template.scs --timeout 600
+# → {"optim_id": "bg-a3c4f9", "total_jobs": 50, "completed": 48, ...}
+
+# Step 4: Check status
+python ${CLAUDE_SKILL_DIR}/scripts/run_bandgap_sweep.py status bg-a3c4f9
+
+# Step 5: Score results — read raw PSF dirs, apply FOM above
+# best["raw_dir"] contains the PSF directory for the best job
+
+# Step 6: Suggest next W×L range (exploit best, halve step)
+# Update spec YAML with narrower range around best params
+# Repeat from Step 3 (multi-iteration loop driven by this skill)
+
+# Step 7: Generate report
+python ${CLAUDE_SKILL_DIR}/scripts/run_bandgap_sweep.py report bg-a3c4f9 --output bg_report.md
+```
+
+### Spec YAML Reference
+
+```yaml
+ip_type: bandgap        # required, identifies IP type
+target:
+  Vbg: 1.20             # required (V) — nominal bandgap voltage
+  PSRR: 80              # optional (dB)
+  TC: 20                # optional (ppm/°C)
+params:
+  W:                    # any parameter name matching ${W} in template
+    min: 1e-6
+    max: 10e-6
+    step: 1e-6
+  L:
+    min: 0.18e-6
+    max: 1e-6
+    step: 0.18e-6
+corner: tt              # optional, default "tt"
+evolution_strategy: balanced  # optional — see Strategy Presets below
+```
+
+### Strategy Presets
+
+`evolution_strategy` controls the exploration/exploitation balance and convergence tolerance.
+
+| Strategy | When to use | Surrogate behavior | Convergence gate |
+|----------|------------|-------------------|-----------------|
+| `balanced` (default) | Normal sizing run | Exploit best ×2, explore new ×1 in each batch | Δ < 1% for 2 consecutive iterations |
+| `innovate` | First sizing of new topology; need broad landscape view | Explore ×3, exploit ×1; accept 10% FOM degradation if coverage improves | Δ < 5%; max 30 iterations |
+| `harden` | Known-good sizing; tighten to meet worst corner | Exploit only (±10% around best point); reject any candidate outside current feasible region | Δ < 0.2% for 3 consecutive iterations |
+| `repair-only` | One spec failing; all others nominal | Freeze all params except the one linked to failing spec; minimize that spec's violation only | Failing spec enters feasible region |
+
+**Surrogate reasoning adjustments per strategy:**
+
+```
+balanced:
+  - Evaluate top-3 candidates from surrogate model
+  - Pick 2 that exploit (lowest predicted cost near current best)
+  - Pick 1 that explores (highest uncertainty region)
+
+innovate:
+  - Latin hypercube sample 5 new points across full parameter range
+  - Keep 1 best from previous iteration (anchor)
+  - Looser feasibility: skip corners beyond "tt" for first 3 iterations
+
+harden:
+  - Grid search ±10% around best known point (step = original_step / 5)
+  - All corners mandatory from iteration 1
+  - Reject candidates where any spec degrades vs. current best
+
+repair-only:
+  - Identify failing spec → find its dominant parameter (sensitivity analysis)
+  - Fix all other params at their best-known values
+  - Sweep only the dominant parameter in [current - 3σ, current + 3σ]
+  - Stop when failing spec first enters [min, max] feasible window
+```
+
+**In the history JSON, record the strategy:**
+```json
+{
+  "evolution_strategy": "harden",
+  "iteration": 5,
+  "best_cost": 0.032,
+  ...
+}
+```
+
+### Artifact Capture Whitelist
+
+批量 sweep 每个点都会产生大量 PSF 文件（`dc/`、`ac/`、`tran/`、`oppoint/`…），
+默认全部保留会导致磁盘爆炸，debug 也难找。用 YAML `artifacts` 字段声明只保留哪些分析目录：
+
+```yaml
+# 在 spec YAML 里加 artifacts 节
+artifacts:
+  keep:
+    - "ac"        # 只保留 ac/ 目录下的 PSF
+    - "dcOpInfo"  # DC operating point
+  # 其他目录（tran/, noise/ …）在 sweep 结束后自动删除
+```
+
+`run_bandgap_sweep.py` 在每个点仿完后根据 `artifacts.keep` 清理：
+
+```python
+# scripts/run_bandgap_sweep.py 内部逻辑（伪代码）
+for dir in psf_root.iterdir():
+    if dir.name not in spec.get("artifacts", {}).get("keep", [...all...]):
+        shutil.rmtree(dir)
+```
+
+**使用原则：**
+
+- 只测 DC 工作点 → `keep: ["dcOpInfo"]`
+- 只测 AC 性能 → `keep: ["ac", "dcOpInfo"]`（dcOpInfo 通常很小，建议一起留）
+- 完整 PVT → `keep: ["ac", "dcOpInfo", "tran"]`，noise 很大可以不留
+- 调试单个失败点时，临时去掉 `artifacts` 字段，保留全部
+
+白名单 **只影响磁盘**，不影响测量——`vcli sim measure` 从内存/活跃 PSF 读取，仿真期间 PSF 仍完整，清理在读完结果之后进行。
+
+### When to Use Script vs Manual Loop
+
+| Scenario | Use |
+|----------|-----|
+| Bandgap W/L sweep | `run_bandgap_sweep.py run` |
+| OTA multi-param (gmid, L, Cc) | Manual iteration (this skill) |
+| PVT corners on known sizing | `vcli sim corner` |
+| Arbitrary IP first sizing | `/spec-driven-circuit-design` then this skill |
 
 ## Integration with Other Skills
 

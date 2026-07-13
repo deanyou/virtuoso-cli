@@ -1,5 +1,6 @@
 pub mod cell;
 pub mod design;
+pub mod diag;
 pub mod init;
 pub mod maestro;
 pub mod process;
@@ -8,4 +9,6 @@ pub mod schematic;
 pub mod session;
 pub mod sim;
 pub mod skill;
+pub mod transaction;
 pub mod tunnel;
+pub mod window;

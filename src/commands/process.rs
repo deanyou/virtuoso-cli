@@ -52,27 +52,41 @@ pub fn char(
             client.execute_skill("save('all)", None)?;
             client.execute_skill("run()", Some(timeout))?;
 
+            // Fetch all 5 oppoint params in one round-trip via SKILL list().
             let params = ["gm", "ids", "gds", "vth", "cgs"];
-            let mut opvals = OpVals::default();
-            let mut ok = true;
+            let fetch_expr = {
+                let gets: Vec<String> = params
+                    .iter()
+                    .map(|p| {
+                        let signal = format!("{inst}:{p}");
+                        format!(
+                            "value(getData({} ?result \"dcOpInfo\"))",
+                            string_literal(&signal)
+                        )
+                    })
+                    .collect();
+                format!("list({})", gets.join(" "))
+            };
+            let r = client.execute_skill(&fetch_expr, None)?;
+            let cleaned = r.output.trim().trim_matches(|c| c == '(' || c == ')');
+            let vals: Vec<&str> = cleaned.split_whitespace().collect();
 
-            for p in &params {
-                let signal = format!("{inst}:{p}");
-                let expr = format!(
-                    "value(getData({} ?result \"dcOpInfo\"))",
-                    string_literal(&signal)
-                );
-                let r = client.execute_skill(&expr, None)?;
-                let v = r.output.trim().trim_matches('"');
-                if v == "nil" || v.is_empty() {
-                    ok = false;
-                    break;
-                }
-                match v.parse::<f64>() {
-                    Ok(f) => opvals.set(p, f),
-                    Err(_) => {
+            let mut opvals = OpVals::default();
+            let mut ok = vals.len() == params.len();
+
+            if ok {
+                for (p, v) in params.iter().zip(vals.iter()) {
+                    let v = v.trim_matches('"');
+                    if v == "nil" || v.is_empty() {
                         ok = false;
                         break;
+                    }
+                    match v.parse::<f64>() {
+                        Ok(f) => opvals.set(p, f),
+                        Err(_) => {
+                            ok = false;
+                            break;
+                        }
                     }
                 }
             }
@@ -128,7 +142,7 @@ pub fn char_netlist(
     let mut all_data: Vec<Value> = Vec::new();
     let mut total_points = 0;
 
-    let work_dir = std::path::PathBuf::from(format!("/tmp/vcli_char_{device_type}"));
+    let work_dir = crate::runtime_paths::tmp_root().join(format!("vcli_char_{device_type}"));
     std::fs::create_dir_all(&work_dir).map_err(VirtuosoError::Io)?;
 
     for &l in l_values {

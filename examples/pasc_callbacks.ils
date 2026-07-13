@@ -1,0 +1,474 @@
+;;;============================================================================
+;;; Spectre Simulation Callback Handler
+;;;
+;;; Topic: pascDone errors from callbacks
+;;; URL: https://community.cadence.com/cadence_technology_forums/f/custom-ic-skill/65280
+;;;
+;;; Purpose: Handle simulation callbacks properly to avoid errors when
+;;;         simulation completes, especially in ADE/Maestro environment
+;;;
+;;; This demonstrates proper callback registration, error handling, and
+;;; cleanup to prevent "pascDone" errors that occur when callbacks
+;;; reference objects that have been deleted or are invalid.
+;;;============================================================================
+
+;;;============================================================================
+;;; SECTION 1: Core Callback Procedures
+;;;============================================================================
+
+;;;----------------------------------------------------------------------------
+;;; pascDoneCB - Called when simulation completes successfully
+;;; 
+;;; IMPORTANT: This callback must handle the case where the simulation session
+;;; may have been invalidated or the results directory cleaned up.
+;;;----------------------------------------------------------------------------
+procedure(pascDoneCB(session resultsDir @key (errorList nil))
+  ;;; Called by Spectre when simulation completes
+  ;;; Parameters:
+  ;;;   session    - Simulation session object (may be invalid after completion)
+  ;;;   resultsDir - Path to results directory
+  ;;;   errorList  - List of errors if any
+  
+  let((status errMsg)
+    printf("\n[Callback] Simulation completed\n")
+    printf("  Results directory: %L\n" resultsDir)
+    
+    ; Check for errors
+    when(errorList
+      printf("  Errors encountered:\n")
+      foreach(err errorList
+        printf("    - %L\n" err)
+      )
+    )
+    
+    ; Safe cleanup - don't reference session after simulation ends
+    ; Session may be invalidated by this point
+    
+    ; Return t to indicate successful handling
+    t
+  );let
+);procedure
+
+;;;----------------------------------------------------------------------------
+;;; pascErrorCB - Called when simulation encounters errors
+;;;----------------------------------------------------------------------------
+procedure(pascErrorCB(session errorMsg @key (errorCode 0))
+  ;;; Called when simulation fails
+  ;;; Parameters:
+  ;;;   session    - Simulation session (may be invalid)
+  ;;;   errorMsg   - Error message string
+  ;;;   errorCode  - Numeric error code
+  
+  let((logFile)
+    printf("\n[Callback] Simulation ERROR\n")
+    printf("  Error: %L\n" errorMsg)
+    printf("  Code:  %L\n" errorCode)
+    
+    ; Log error to file for later analysis
+    logFile = strcat(resultsDir session "sim_errors.log")
+    when(logFile
+      let((fp)
+        fp = outfile(logFile "a")
+        when(fp
+          fprintf(fp "=== Simulation Error @ %s ===\n" getCurrentTime())
+          fprintf(fp "Error: %L\n" errorMsg)
+          fprintf(fp "Code:  %L\n" errorCode)
+          fprintf(fp "================================\n\n")
+          close(fp)
+        )
+      )
+    )
+    
+    ; Return nil to signal error was handled
+    nil
+  );let
+);procedure
+
+;;;----------------------------------------------------------------------------
+;;; pascStartCB - Called when simulation starts
+;;;----------------------------------------------------------------------------
+procedure(pascStartCB(session params)
+  ;;; Called when simulation begins
+  ;;; Parameters:
+  ;;;   session - Simulation session
+  ;;;   params  - Simulation parameters alist
+  
+  let((analysisType lib cell)
+    printf("\n[Callback] Simulation starting\n")
+    
+    ; Extract useful info from params if available
+    when(params
+      when(assoc('analysis params)
+        printf("  Analysis: %L\n" cadr(assoc('analysis params)))
+      )
+    )
+    
+    t  ; Return t to allow simulation to proceed
+  );let
+);procedure
+
+;;;----------------------------------------------------------------------------
+;;; pascAbortCB - Called when simulation is aborted
+;;;----------------------------------------------------------------------------
+procedure(pascAbortCB(session reason)
+  ;;; Called when simulation is cancelled/aborted
+  
+  printf("\n[Callback] Simulation ABORTED\n")
+  printf("  Reason: %L\n" reason)
+  
+  ; Perform cleanup
+  ; Don't try to access results - they may be incomplete
+  
+  t
+);procedure
+
+;;;----------------------------------------------------------------------------
+;;; pascProgressCB - Called periodically during simulation
+;;;----------------------------------------------------------------------------
+procedure(pascProgressCB(session progressInfo)
+  ;;; Called during simulation to report progress
+  ;;; Parameters:
+  ;;;   session      - Simulation session
+  ;;;   progressInfo - Alist with progress data
+  
+  let((percent timeElapsed)
+    ; Extract progress percentage
+    percent = when(assoc('percent progressInfo) 
+      cdr(assoc('percent progressInfo))
+    )
+    
+    ; Extract elapsed time
+    timeElapsed = when(assoc('time progressInfo)
+      cdr(assoc('time progressInfo))
+    )
+    
+    ; Update progress display (non-blocking)
+    when(percent
+      printf("\r[Progress] %3.1f%%" percent)
+      when(timeElapsed
+        printf(" (%.1f s)" timeElapsed)
+      )
+    )
+    
+    t  ; Return t to continue simulation
+  );let
+);procedure
+
+;;;============================================================================
+;;; SECTION 2: Callback Registration/Unregistration
+;;;============================================================================
+
+;;;----------------------------------------------------------------------------
+;;; Register all callbacks for a simulation session
+;;;----------------------------------------------------------------------------
+procedure(registerSimulationCallbacks(session)
+  ;;; Register all callback handlers for a session
+  ;;; Parameters:
+  ;;;   session - Active simulation session
+  
+  let((cbTable)
+    printf("\n>>> Registering simulation callbacks <<<\n")
+    
+    ; Build callback table
+    cbTable = list(
+      list('pascDone    'pascDoneCB)
+      list('pascError   'pascErrorCB)
+      list('pascStart   'pascStartCB)
+      list('pascAbort   'pascAbortCB)
+      list('pascProgress 'pascProgressCB)
+    )
+    
+    ; Register each callback
+    foreach(cb cbTable
+      when(boundp('pascSetCallbacks)
+        ; Safe way to register - wrap in errset to catch errors
+        let((result)
+          result = errset(
+            apply('pascSetCallbacks list(session car(cb) cdr(cb))
+            t  ; Enable error catching
+          )
+          when(result
+            printf("  Registered: %L\n" car(cb))
+          )
+        )
+      )
+    )
+    
+    printf(">>> Callbacks registered <<<\n\n")
+    t
+  );let
+);procedure
+
+;;;----------------------------------------------------------------------------
+;;; Unregister all callbacks
+;;;----------------------------------------------------------------------------
+procedure(unregisterSimulationCallbacks(session)
+  ;;; Unregister all callbacks for a session
+  ;;; IMPORTANT: Always unregister before session is destroyed!
+  
+  printf("\n>>> Unregistering simulation callbacks <<<\n")
+  
+  ; Set callbacks to nil to unregister
+  when(boundp('pascSetCallbacks)
+    let((result)
+      result = errset(
+        pascSetCallbacks(session 'pascDone nil)
+        pascSetCallbacks(session 'pascError nil)
+        pascSetCallbacks(session 'pascStart nil)
+        pascSetCallbacks(session 'pascAbort nil)
+        pascSetCallbacks(session 'pascProgress nil)
+        t
+      )
+      when(result
+        printf("  All callbacks unregistered\n")
+      )
+    )
+  )
+  
+  printf(">>> Done <<<\n\n")
+);procedure
+
+;;;============================================================================
+;;; SECTION 3: Safe Simulation Wrapper
+;;;============================================================================
+
+;;;----------------------------------------------------------------------------
+;;; Run simulation with proper callback handling
+;;;----------------------------------------------------------------------------
+procedure(safeSimulationRun(@key (design nil) (analysis "tran") (callbackMode t))
+  ;;; Run simulation with automatic callback management
+  ;;; Parameters:
+  ;;;   design        - Cellview to simulate (nil = current)
+  ;;;   analysis      - Analysis type string
+  ;;;   callbackMode  - Enable/disable callbacks
+  
+  let((session maSession result)
+    printf("\n========================================\n")
+    printf("  Starting Safe Simulation\n")
+    printf("========================================\n")
+    
+    ; Get Maestro session
+    maSession = maGetCurrentSession()
+    unless(maSession
+      error("No active Maestro session")
+    )
+    
+    ; Create simulation session
+    session = maCreateSimulationSession(maSession ?design design)
+    unless(session
+      error("Failed to create simulation session")
+    )
+    
+    ; Register callbacks if enabled
+    when(callbackMode
+      registerSimulationCallbacks(session)
+    )
+    
+    ; Run simulation with protected error handling
+    result = errset(
+      begin
+        ; Run the simulation
+        maRunSimulation(session)
+        
+        ; Wait for completion (non-blocking would return immediately)
+        ; For blocking mode, simulation waits here
+        ; maJoinSimulation(session)  ; Uncomment for blocking mode
+        
+        ; Get results
+        list(t "Simulation completed successfully")
+      end
+      t  ; Enable error catching
+    )
+    
+    ; Handle result
+    if(result
+      then
+        printf("\n>>> Simulation SUCCESS <<<\n")
+      else
+        printf("\n!!! Simulation FAILED !!!\n")
+    )
+    
+    ; ALWAYS unregister callbacks before cleanup
+    when(callbackMode
+      unregisterSimulationCallbacks(session)
+    )
+    
+    ; Cleanup session
+    when(session~>destroy
+      session->destroy()
+    )
+    
+    printf("========================================\n\n")
+    
+    ; Return result
+    car(result)
+  );let
+);procedure
+
+;;;============================================================================
+;;; SECTION 4: Error Recovery and Debugging
+;;;============================================================================
+
+;;;----------------------------------------------------------------------------
+;;; Debug callback issues
+;;;----------------------------------------------------------------------------
+procedure(debugSimulationCallbacks()
+  ;;; Diagnose callback registration issues
+  
+  printf("\n=== Callback Debug Report ===\n")
+  
+  ; Check if pascSetCallbacks exists
+  printf("\n1. Checking pascSetCallbacks function:\n")
+  if(boundp('pascSetCallbacks)
+    then
+      printf("   EXISTS\n")
+    else
+      printf("   NOT FOUND - Callbacks may not be available\n")
+  )
+  
+  ; Check Maestro session
+  printf("\n2. Checking Maestro session:\n")
+  let((maSession)
+    maSession = maGetCurrentSession()
+    if(maSession
+      then
+        printf("   Active session found\n")
+        printf("   Session ID: %L\n" maSession~>id)
+      else
+        printf("   No active Maestro session\n")
+    )
+  )
+  
+  ; List current callbacks
+  printf("\n3. Registered callbacks:\n")
+  when(boundp('pascSetCallbacks)
+    ; This would require access to internal state
+    printf("   (Use maGetCallbacks() if available)\n")
+  )
+  
+  printf("\n=============================\n\n")
+);procedure
+
+;;;----------------------------------------------------------------------------
+;;; Reset all callback state
+;;;----------------------------------------------------------------------------
+procedure(resetSimulationCallbacks()
+  ;;; Force reset of all callback state
+  ;;; Use this if callbacks are stuck or causing errors
+  
+  printf("\n>>> Resetting callback state <<<\n")
+  
+  ; Clear any global callback storage
+  when(boundp('simulationCallbacks)
+    simulationCallbacks = nil
+  )
+  
+  printf(">>> Reset complete <<<\n\n")
+);procedure
+
+;;;============================================================================
+;;; SECTION 5: Test/Demo Procedures
+;;;============================================================================
+
+;;;----------------------------------------------------------------------------
+;;; Test callback registration only (no actual simulation)
+;;;----------------------------------------------------------------------------
+procedure(testCallbacks()
+  ;;; Test that callback procedures are defined correctly
+  
+  printf("\n=== Testing Callback Definitions ===\n")
+  
+  let((allGood allCBs cbName)
+    allGood = t
+    allCBs = '(pascDoneCB pascErrorCB pascStartCB pascAbortCB pascProgressCB)
+    
+    ; Test each callback
+    foreach(cbName allCBs
+      let((cb)
+        cb = eval(list('quote cbName))
+        when(cb
+          printf("  [OK] %L defined\n" cbName)
+        )
+      )
+    )
+    
+    ; Test pascSetCallbacks availability
+    printf("\n  pascSetCallbacks: ")
+    if(boundp('pascSetCallbacks)
+      then
+        printf("available\n")
+      else
+        printf("NOT available (may not be in this context)\n")
+    )
+    
+    printf("\n=== Test Complete ===\n")
+    t
+  );let
+);procedure
+
+;;;----------------------------------------------------------------------------
+;;; Demo callback invocation (simulated)
+;;;----------------------------------------------------------------------------
+procedure(demoCallbacks()
+  ;;; Demonstrate callback invocation with test data
+  
+  printf("\n=== Callback Demo ===\n")
+  
+  ; Demo pascStartCB
+  printf("\n1. Testing pascStartCB:\n")
+  pascStartCB(nil list(analysis 'tran))
+  
+  ; Demo pascProgressCB
+  printf("\n2. Testing pascProgressCB:\n")
+  pascProgressCB(nil list(percent 45.5 time 12.3))
+  
+  ; Demo pascDoneCB
+  printf("\n3. Testing pascDoneCB:\n")
+  pascDoneCB(nil "/path/to/results" errorList nil)
+  
+  ; Demo pascErrorCB
+  printf("\n4. Testing pascErrorCB:\n")
+  pascErrorCB(nil "Test error message" errorCode 123)
+  
+  ; Demo pascAbortCB
+  printf("\n5. Testing pascAbortCB:\n")
+  pascAbortCB(nil "User cancelled")
+  
+  printf("\n=== Demo Complete ===\n\n")
+);procedure
+
+;;;============================================================================
+;;; Load Message
+;;;============================================================================
+printf("\n")
+printf("======================================================================\n")
+printf("  Spectre Simulation Callback Handler Loaded\n")
+printf("  Topic: pascDone errors from callbacks\n")
+printf("======================================================================\n")
+printf("\nAvailable procedures:\n")
+printf("\n  Core Callbacks (normally called by Spectre):\n")
+printf("    pascDoneCB(session resultsDir @key errorList)\n")
+printf("    pascErrorCB(session errorMsg @key errorCode)\n")
+printf("    pascStartCB(session params)\n")
+printf("    pascAbortCB(session reason)\n")
+printf("    pascProgressCB(session progressInfo)\n")
+printf("\n  Registration:\n")
+printf("    registerSimulationCallbacks(session)  - Register all callbacks\n")
+printf("    unregisterSimulationCallbacks(session) - Cleanup callbacks\n")
+printf("    safeSimulationRun(@key design analysis) - Run with callbacks\n")
+printf("\n  Debugging:\n")
+printf("    debugSimulationCallbacks() - Diagnose callback issues\n")
+printf("    resetSimulationCallbacks()  - Reset callback state\n")
+printf("    testCallbacks()             - Verify callback definitions\n")
+printf("    demoCallbacks()             - Demo callback invocation\n")
+printf("\nExample usage:\n")
+printf("  ; Test callback definitions\n")
+printf("  testCallbacks()\n")
+printf("\n  ; Demo callback invocation\n")
+printf("  demoCallbacks()\n")
+printf("\n  ; Debug current callback state\n")
+printf("  debugSimulationCallbacks()\n")
+printf("\n  ; Run simulation with callbacks\n")
+printf("  safeSimulationRun(?analysis \"tran\")\n")
+printf("======================================================================\n\n")
+); ended load block

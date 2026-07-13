@@ -1,0 +1,67 @@
+; load_test.ils - Simple SKILL load test
+; Run with: vcli skill load load_test.ils
+
+procedure(LoadTest_Run(num_iterations)
+    let((results)
+        printf("=== Load Test: %d iterations ===\n" num_iterations)
+        results = nil
+        for(i 1 num_iterations
+            results = cons(i results)
+        )
+        printf("Completed %d iterations\n" num_iterations)
+        printf("Result list length: %d\n" length(results))
+        printf("First item: %L\n" car(results))
+        results
+    )
+)
+
+procedure(LoadTest_CPULoop(num_ops)
+    let((result)
+        result = 0
+        for(i 1 num_ops
+            result = plus(result sqrt(float(i)))
+        )
+        printf("CPU loop: %d sqrt ops completed\n" num_ops)
+        result
+    )
+)
+
+procedure(LoadTest_Memory(num_items)
+    let((big_list)
+        printf("Creating %d list items...\n" num_items)
+        big_list = nil
+        for(i 1 num_items
+            big_list = cons(list(i i*2 i*3) big_list)
+        )
+        printf("Created list with %d items\n" length(big_list))
+        printf("First item: %L\n" car(big_list))
+        big_list
+    )
+)
+
+procedure(LoadTest_Summary()
+    printf("\n=== Available Tests ===\n")
+    printf("LoadTest_Run(n)       - List creation test\n")
+    printf("LoadTest_CPULoop(n)   - CPU-intensive sqrt loop\n")
+    printf("LoadTest_Memory(n)    - Memory allocation test\n")
+    printf("LoadTest_RunAll()     - Run all tests with defaults\n")
+)
+
+procedure(LoadTest_RunAll()
+    printf("\n========== LOAD TEST SUITE ==========\n")
+    printf("Running all benchmarks...\n\n")
+    
+    printf("1. List creation (10000 iterations)...\n")
+    LoadTest_Run(10000)
+    
+    printf("\n2. CPU loop (100000 sqrt ops)...\n")
+    LoadTest_CPULoop(100000)
+    
+    printf("\n3. Memory allocation (1000 items)...\n")
+    LoadTest_Memory(1000)
+    
+    printf("\n========== ALL TESTS COMPLETE ==========\n")
+)
+
+; Auto-run all tests when loaded
+LoadTest_RunAll()

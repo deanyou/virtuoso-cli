@@ -1,4 +1,56 @@
+#![allow(dead_code)]
+
 use crate::client::bridge::escape_skill_string;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ops() -> LayoutOps {
+        LayoutOps::new()
+    }
+
+    #[test]
+    fn create_rect_skill_format() {
+        let s = ops().create_rect("M1", "drawing", &[(0, 0), (100, 200)]);
+        assert_eq!(
+            s,
+            r#"rodCreateRect(?layer "M1" ?purpose "drawing" ?bBox ((0 0) (100 200)))"#
+        );
+    }
+
+    #[test]
+    fn create_rect_escapes_layer() {
+        let s = ops().create_rect(r#"M"1"#, "drawing", &[(0, 0), (1, 1)]);
+        assert!(s.contains(r#""M\"1""#), "layer must be escaped: {s}");
+    }
+
+    #[test]
+    fn create_polygon_skill_format() {
+        let pts = vec![(0, 0), (10, 0), (10, 10)];
+        let s = ops().create_polygon("poly", "drawing", &pts);
+        assert!(s.contains("rodCreatePolygon"), "{s}");
+        assert!(s.contains("0 0"), "{s}");
+        assert!(s.contains("10 10"), "{s}");
+    }
+
+    #[test]
+    fn create_path_includes_width() {
+        let pts = vec![(0, 0), (50, 0)];
+        let s = ops().create_path("M2", "drawing", 5, &pts);
+        assert!(s.contains("?width 5"), "{s}");
+    }
+
+    #[test]
+    fn create_instance_orientation() {
+        let s = ops().create_instance("tsmc", "nmos", "layout", (10, 20), "MY");
+        assert!(s.contains("\"MY\""), "orient must appear: {s}");
+        assert!(
+            s.contains("10:20") || s.contains("10 20"),
+            "origin must appear: {s}"
+        );
+    }
+}
 
 #[derive(Default)]
 pub struct LayoutOps;
@@ -8,10 +60,15 @@ impl LayoutOps {
         Self
     }
 
-    pub fn create_rect(&self, layer: &str, purpose: &str, bbox: &[(i64, i64); 4]) -> String {
+    /// `bbox`: `[(ll_x, ll_y), (ur_x, ur_y)]` — lower-left and upper-right corners.
+    /// Formats to SKILL `?bBox ((ll_x ll_y) (ur_x ur_y))`.
+    pub fn create_rect(&self, layer: &str, purpose: &str, bbox: &[(i64, i64); 2]) -> String {
         let layer = escape_skill_string(layer);
         let purpose = escape_skill_string(purpose);
-        format!(r#"rodCreateRect(?layer "{layer}" ?purpose "{purpose}" ?bBox {bbox:?})"#)
+        let ((x1, y1), (x2, y2)) = (bbox[0], bbox[1]);
+        format!(
+            r#"rodCreateRect(?layer "{layer}" ?purpose "{purpose}" ?bBox (({x1} {y1}) ({x2} {y2})))"#
+        )
     }
 
     pub fn create_polygon(&self, layer: &str, purpose: &str, points: &[(i64, i64)]) -> String {

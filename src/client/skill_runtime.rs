@@ -3,11 +3,23 @@ use crate::models::VirtuosoResult;
 use serde_json::Value;
 
 pub(crate) fn escape_string(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
+    let mut escaped = String::with_capacity(value.len() * 2);
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            '\0' => escaped.push_str("\\000"),
+            control if control.is_control() => {
+                escaped.push('\\');
+                escaped.push(control);
+            }
+            other => escaped.push(other),
+        }
+    }
+    escaped
 }
 
 pub(crate) fn string_literal(value: &str) -> String {
@@ -29,10 +41,7 @@ pub(crate) fn require_identifier<'a>(value: &'a str, kind: &str) -> Result<&'a s
     )))
 }
 
-pub(crate) fn require_transport<'a>(
-    result: &'a VirtuosoResult,
-    action: &str,
-) -> Result<&'a str> {
+pub(crate) fn require_transport<'a>(result: &'a VirtuosoResult, action: &str) -> Result<&'a str> {
     if result.ok() {
         return Ok(result.output.trim());
     }
@@ -45,10 +54,7 @@ pub(crate) fn require_transport<'a>(
     Err(VirtuosoError::Execution(format!("{action}: {detail}")))
 }
 
-pub(crate) fn require_non_nil<'a>(
-    result: &'a VirtuosoResult,
-    action: &str,
-) -> Result<&'a str> {
+pub(crate) fn require_non_nil<'a>(result: &'a VirtuosoResult, action: &str) -> Result<&'a str> {
     let output = require_transport(result, action)?;
     if output == "nil" {
         return Err(VirtuosoError::Execution(format!(
@@ -60,15 +66,17 @@ pub(crate) fn require_non_nil<'a>(
 
 pub(crate) fn decode_json(result: &VirtuosoResult, action: &str) -> Result<Value> {
     let output = require_non_nil(result, action)?;
+    decode_json_payload(output, action)
+}
+
+pub(crate) fn decode_json_payload(output: &str, action: &str) -> Result<Value> {
     let outer: Value = serde_json::from_str(output).map_err(|error| {
         VirtuosoError::Execution(format!("{action}: invalid JSON result: {error}"))
     })?;
 
     match outer {
         Value::String(inner) => serde_json::from_str(&inner).map_err(|error| {
-            VirtuosoError::Execution(format!(
-                "{action}: invalid wrapped JSON result: {error}"
-            ))
+            VirtuosoError::Execution(format!("{action}: invalid wrapped JSON result: {error}"))
         }),
         value => Ok(value),
     }
@@ -80,10 +88,7 @@ mod tests {
 
     #[test]
     fn string_literal_escapes_skill_control_characters() {
-        assert_eq!(
-            string_literal("a\\b\"c\nd\re"),
-            "\"a\\\\b\\\"c\\nd\\re\""
-        );
+        assert_eq!(string_literal("a\\b\"c\nd\re"), "\"a\\\\b\\\"c\\nd\\re\"");
     }
 
     #[test]
@@ -107,10 +112,7 @@ mod tests {
     #[test]
     fn require_non_nil_accepts_string_nil() {
         let result = VirtuosoResult::success("\"nil\"");
-        assert_eq!(
-            require_non_nil(&result, "read value").unwrap(),
-            "\"nil\""
-        );
+        assert_eq!(require_non_nil(&result, "read value").unwrap(), "\"nil\"");
     }
 
     #[test]

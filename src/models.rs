@@ -1,3 +1,4 @@
+use crate::error::{Result, VirtuosoError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -34,6 +35,29 @@ impl VirtuosoResult {
         self.status == ExecutionStatus::Success && self.output.trim() != "nil"
     }
 
+    /// Propagate a SKILL-level failure as `Err(VirtuosoError::Execution)`.
+    /// `context` is the operation name; the error message becomes `"{context} failed: {detail}"`.
+    /// When output is empty (NAK transport error), falls back to the first error in `errors`.
+    pub fn ok_or_exec(self, context: &str) -> Result<Self> {
+        if self.skill_ok() {
+            Ok(self)
+        } else {
+            let detail = if self.output.is_empty() {
+                self.errors.first().cloned().unwrap_or_default()
+            } else {
+                self.output.clone()
+            };
+            Err(VirtuosoError::Execution(format!(
+                "{context} failed: {detail}"
+            )))
+        }
+    }
+
+    /// Return the output string with surrounding SKILL double-quotes stripped.
+    pub fn output_unquoted(&self) -> &str {
+        self.output.trim_matches('"')
+    }
+
     pub fn success(output: impl Into<String>) -> Self {
         Self {
             status: ExecutionStatus::Success,
@@ -45,6 +69,7 @@ impl VirtuosoResult {
         }
     }
 
+    #[allow(dead_code)]
     pub fn error(errors: Vec<String>) -> Self {
         Self {
             status: ExecutionStatus::Error,
@@ -56,6 +81,7 @@ impl VirtuosoResult {
         }
     }
 
+    #[allow(dead_code)]
     pub fn save_json(&self, path: &std::path::Path) -> std::io::Result<()> {
         let json =
             serde_json::to_string_pretty(self).map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -73,6 +99,7 @@ pub struct SimulationResult {
     pub metadata: HashMap<String, String>,
 }
 
+#[allow(dead_code)]
 impl SimulationResult {
     pub fn ok(&self) -> bool {
         self.status == ExecutionStatus::Success
@@ -96,16 +123,36 @@ pub struct RemoteTaskResult {
     pub timings: HashMap<String, f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoteSshEnv {
-    pub remote_host: String,
-    pub remote_user: Option<String>,
-    pub jump_host: Option<String>,
-    pub jump_user: Option<String>,
-}
-
 fn default_version() -> u32 {
     1
+}
+
+/// Runtime metrics written by the daemon to `/tmp/.ramic_stats_{port}` after each request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonStats {
+    pub calls: u64,
+    pub errors: u64,
+    pub uptime_secs: u64,
+}
+
+impl DaemonStats {
+    /// Returns the path to the daemon stats file.
+    /// Uses the system cache directory (e.g., ~/.cache/virtuoso_bridge/).
+    fn cache_dir() -> std::path::PathBuf {
+        crate::runtime_paths::cache_subdir::<&str>(&[])
+    }
+
+    pub fn path(port: u16) -> String {
+        Self::cache_dir()
+            .join(format!(".ramic_stats_{port}"))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    pub fn load(port: u16) -> Option<Self> {
+        let json = std::fs::read_to_string(Self::path(port)).ok()?;
+        serde_json::from_str(&json).ok()
+    }
 }
 
 /// Registration record written by bridge.il when a Virtuoso session starts.
@@ -118,14 +165,34 @@ pub struct SessionInfo {
     pub host: String,
     pub user: String,
     pub created: String,
+    /// Backward-compat field for the daemon-side Unix `$USER`.
+    ///
+    /// Populated lazily by `vcli session show` (which queries the daemon via
+    /// `getShellEnvVar("USER")` and writes the result back to the session
+    /// file). When `None`, either the user has not yet run `session show`
+    /// OR the query failed/returned nil.
+    ///
+    /// Older ramic_bridge.il versions never write this key, so the field is
+    /// `#[serde(default, skip_serializing_if = "Option::is_none")]` for
+    /// backward compatibility with legacy session files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daemon_user: Option<String>,
+
+    /// Backward-compat field for the daemon-side version string (e.g. `"0.4.0-alpha.5"`).
+    ///
+    /// Populated lazily by `vcli session show` (which queries the daemon's
+    /// `RBDVersion` SKILL global). The `RBDVersion` global is set by
+    /// `RBIpcErrHandler` parsing the `VERSION:x.x.x` line the Rust daemon
+    /// prints to stderr on startup. When `None`, either the user has not
+    /// yet run `session show` OR the daemon did not emit a version line
+    /// (very old daemon binaries).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daemon_version: Option<String>,
 }
 
 impl SessionInfo {
     pub(crate) fn sessions_dir() -> std::path::PathBuf {
-        dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("virtuoso_bridge")
-            .join("sessions")
+        crate::runtime_paths::cache_subdir(&["sessions"])
     }
 
     pub fn load(id: &str) -> std::io::Result<Self> {
@@ -205,6 +272,34 @@ impl SessionInfo {
         )
         .is_ok()
     }
+
+    /// Return only sessions whose daemon is currently alive.
+    pub fn list_alive() -> Vec<Self> {
+        Self::list()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|s| s.is_alive())
+            .collect()
+    }
+
+    /// Best-effort write-back of an augmented session record to the per-session
+    /// JSON file (the same path `load(id)` reads from). Used to persist
+    /// Rust-only metadata (e.g. `daemon_user`) that the SKILL side never writes.
+    ///
+    /// Creates the parent directory if it does not exist (the SKILL side
+    /// normally creates it on first session start, but Rust-only callers
+    /// like a cold `vcli session show` may need to create it themselves).
+    ///
+    /// Errors are swallowed because the caller (e.g. `vcli session show`)
+    /// prefers to still display fresh data over aborting on a disk failure.
+    pub fn save_to_session_file(&self) {
+        let dir = Self::sessions_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join(format!("{}.json", self.id));
+        if let Ok(json) = serde_json::to_string_pretty(self) {
+            let _ = std::fs::write(path, json);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -219,15 +314,25 @@ pub struct TunnelState {
 
 impl TunnelState {
     fn state_path(profile: Option<&str>) -> std::path::PathBuf {
-        let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("virtuoso_bridge");
-        let _ = std::fs::create_dir_all(&cache_dir);
-        let filename = match profile {
-            Some(p) if !p.is_empty() => format!("state_{p}.json"),
-            _ => "state.json".into(),
-        };
-        cache_dir.join(filename)
+        // Default to state_root (XDG_STATE_HOME) and fall back to the legacy
+        // ~/.cache/virtuoso_bridge/state_*.json path so older daemon
+        // processes keep finding their state files after a refactor.
+        let primary = crate::runtime_paths::state_root()
+            .join(crate::runtime_paths::APP_DIR)
+            .join(match profile {
+                Some(p) if !p.is_empty() => format!("state_{p}.json"),
+                _ => "state.json".into(),
+            });
+        let legacy = crate::runtime_paths::legacy_state_file(profile);
+        if primary.exists() {
+            primary
+        } else if legacy.exists() {
+            legacy
+        } else {
+            // Default to primary for new writes; create the dir on demand.
+            let _ = std::fs::create_dir_all(primary.parent().unwrap_or(&primary));
+            primary
+        }
     }
 
     pub fn save_with_profile(&self, profile: Option<&str>) -> std::io::Result<()> {

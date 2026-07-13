@@ -1,21 +1,35 @@
-#![allow(dead_code)]
-
 use tracing_subscriber::EnvFilter;
 
+mod async_runtime;
+mod auth;
+mod capability;
 mod client;
 mod command_log;
 mod commands;
 mod config;
 mod error;
 mod exit_codes;
+mod history;
+mod mcp;
 mod models;
 mod ocean;
 mod output;
+mod plugins;
+mod rpc;
+mod runtime_paths;
+mod skill_finder;
 mod spectre;
+mod streaming;
 #[cfg(test)]
 mod tests;
+mod transaction;
 mod transport;
 mod tui;
+mod version;
+
+pub use auth::Auth;
+pub use rpc::schema::standard_schema;
+pub use transaction::{SchematicDiff, SchematicSnapshot, TransactionManager};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use output::{print_json, OutputFormat};
@@ -121,6 +135,14 @@ enum Commands {
     #[command(subcommand)]
     Session(SessionCmd),
 
+    /// Transaction management — begin/commit/rollback/diff snapshots of schematic changes
+    #[command(subcommand)]
+    Tx(TxCmd),
+
+    /// Typed RPC — call methods by name with JSON params (AI agent interface)
+    #[command(subcommand)]
+    Rpc(RpcCmd),
+
     /// Show CLI command schema as JSON for agent introspection
     #[command(
         long_about = "Show the full command schema as JSON, useful for AI agent discovery.\n\n\
@@ -140,8 +162,107 @@ enum Commands {
         verb: Option<String>,
     },
 
+    /// Manage Virtuoso windows and dialogs
+    #[command(subcommand)]
+    Window(WindowCmd),
+
+    /// Read-only diagnostics for stuck Virtuoso state
+    #[command(subcommand)]
+    Diag(DiagCmd),
+
     /// Interactive TUI dashboard
     Tui,
+
+    /// Start stdio-based MCP server for AI agent integration
+    #[command(subcommand)]
+    Mcp(McpCmd),
+
+    /// Show or edit connection profile bindings
+    #[command(subcommand)]
+    Profile(ProfileCmd),
+}
+
+#[derive(Subcommand)]
+enum ProfileCmd {
+    /// Show the resolved profile and its source
+    #[command(
+        long_about = "Print the connection profile that Config::from_env() would resolve, \
+            plus the source layer it came from.\n\n\
+            Resolution order:\n  \
+            1. VB_PROFILE env var\n  \
+            2. $VIRTUAL_ENV/.vcli-profile (Python venv binding)\n  \
+            3. ~/.vcli/.env VB_PROFILE=... (user-level default)\n\n\
+            Examples:\n  \
+            virtuoso profile show\n  \
+            virtuoso profile show --format json"
+    )]
+    Show,
+
+    /// Bind a profile name to a scope (write the binding file)
+    #[command(
+        long_about = "Bind a profile name to a scope so subsequent vcli invocations resolve \
+            that profile automatically. One of --venv, --user, or --local is required.\n\n\
+            Scopes:\n  \
+            --venv : write $VIRTUAL_ENV/.vcli-profile  (project Python venv)\n  \
+            --user : write ~/.vcli/.env VB_PROFILE=...  (user-level default)\n  \
+            --local: write ./.vcli-profile  (current working dir)\n\n\
+            Examples:\n  \
+            virtuoso profile bind t28_digital --venv\n  \
+            virtuoso profile bind analog_default --user"
+    )]
+    Bind {
+        /// Profile name to bind (e.g. "t28_digital", "analog_default")
+        name: String,
+
+        /// Bind to $VIRTUAL_ENV/.vcli-profile
+        #[arg(long, conflicts_with_all = &["user", "local"])]
+        venv: bool,
+
+        /// Bind to ~/.vcli/.env VB_PROFILE=
+        #[arg(long, conflicts_with_all = &["venv", "local"])]
+        user: bool,
+
+        /// Bind to ./.vcli-profile (current working dir)
+        #[arg(long, conflicts_with_all = &["venv", "user"])]
+        local: bool,
+    },
+
+    /// Clear a profile binding (remove the file or relevant line)
+    #[command(
+        long_about = "Clear a profile binding. One of --venv, --user, or --local is required.\n\n\
+            Examples:\n  \
+            virtuoso profile clear --venv\n  \
+            virtuoso profile clear --user"
+    )]
+    Clear {
+        /// Clear $VIRTUAL_ENV/.vcli-profile
+        #[arg(long, conflicts_with_all = &["user", "local"])]
+        venv: bool,
+
+        /// Clear ~/.vcli/.env VB_PROFILE= line
+        #[arg(long, conflicts_with_all = &["venv", "local"])]
+        user: bool,
+
+        /// Clear ./.vcli-profile
+        #[arg(long, conflicts_with_all = &["venv", "user"])]
+        local: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum McpCmd {
+    /// Run the MCP server (stdio mode)
+    Serve,
+}
+
+impl McpCmd {
+    fn dispatch(&self) -> error::Result<serde_json::Value> {
+        // Initialize auth before serving (reads VCLI_API_KEY from env)
+        Auth::init();
+        match self {
+            McpCmd::Serve => crate::mcp::server::run().map(|_| serde_json::json!({})),
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -215,6 +336,10 @@ enum SkillCmd {
         /// Execution timeout in seconds
         #[arg(long, short, default_value = "30")]
         timeout: u64,
+
+        /// Sandbox/readonly mode — blocks system/sh/evalstring and other dangerous patterns
+        #[arg(long)]
+        readonly: bool,
     },
 
     /// Upload and load an IL script file into Virtuoso
@@ -226,6 +351,150 @@ enum SkillCmd {
     Load {
         /// Path to .il file
         file: String,
+    },
+
+    /// Execute a SKILL expression across all live sessions concurrently
+    #[command(
+        long_about = "Run a SKILL expression on every live local session in parallel.\n\n\
+            Each session gets its own connection; results are collected into a JSON array.\
+            \n\
+            Exit code is non-zero only when every session fails.\n\n\
+            Examples:\n  \
+            virtuoso skill broadcast 'getVersion(t)'\n  \
+            virtuoso skill broadcast 'geGetEditCellView()~>cellName'"
+    )]
+    Broadcast {
+        /// SKILL expression to evaluate on all sessions
+        code: String,
+
+        /// Execution timeout in seconds (per session)
+        #[arg(long, short, default_value = "30")]
+        timeout: u64,
+    },
+
+    /// Execute inline SKILL one-liners (companion to `load` for round-trip checks)
+    #[command(
+        long_about = "Execute inline SKILL expressions — companion to `load` for one-liners.\n\n\
+            Two input modes:\n\
+            \n\
+            virtuoso skill eval 'getCurrentTime()'\n\
+            echo 'expr' | virtuoso skill eval --stdin\n\n\
+            --stdin sidesteps shell quoting for snippets with embedded quotes, parens, or\n\
+            quoted symbols, and is the natural way to feed multi-line SKILL via heredoc.\n\n\
+            Multi-statement input is supported transparently — the expression is wrapped in\n\
+            `progn(...)` before sending, and the value of the last form is returned.\n\n\
+            Output: full VirtuosoResult as JSON (same shape as `exec`).",
+        name = "eval"
+    )]
+    Eval {
+        /// SKILL expression to evaluate (omit when using --stdin)
+        #[arg(default_value = None)]
+        code: Option<String>,
+
+        /// Read the SKILL expression from stdin instead of argv
+        #[arg(long)]
+        stdin: bool,
+    },
+
+    /// Search SKILL function names using Cadence SKILL Finder database
+    #[command(
+        long_about = "Search SKILL function names from the Cadence SKILL Finder database.\n\n\
+            The SKILL Finder database contains all public SKILL functions with their\n\
+            syntax signatures and one-line descriptions.\n\n\
+            Search modes:\n\
+            - fuzzy: Case-insensitive substring match (default)\n\
+            - prefix: Name starts with query\n\
+            - suffix: Name ends with query\n\
+            - exact: Exact name match\n\
+            - regex: Python regular expression match\n\n\
+            Examples:\n\
+            virtuoso skill find dbOpen\n\
+            virtuoso skill find dbOpen --mode prefix\n\
+            virtuoso skill find '^db.*' --mode regex --limit 20\n\n\
+            Data source: $IC/doc/finder/SKILL/*.fnd\n\
+            Set VB_SKILL_FINDER_DIR to override the default location.",
+        name = "find"
+    )]
+    Find {
+        /// Search string or pattern
+        query: String,
+
+        /// Search mode
+        #[arg(long, short, default_value = "fuzzy")]
+        mode: String,
+
+        /// Maximum number of results
+        #[arg(long, short, default_value = "50")]
+        limit: usize,
+
+        /// Also search the description field, not just the function name.
+        /// Useful for "what function does X" questions where you only know
+        /// the use case, not the function name.
+        #[arg(long)]
+        include_desc: bool,
+    },
+
+    /// Get detailed More Info documentation for a SKILL function
+    #[command(
+        long_about = "Get detailed documentation for a specific SKILL function.\n\n\
+            Queries the Cadence More Info system via the Virtuoso bridge.\n\
+            Returns HTML content with full documentation including Description,\n\
+            Arguments, Returns, and Example sections.\n\n\
+            Examples:\n\
+            virtuoso skill info dbOpenCellView\n\
+            virtuoso skill info mfGetOption\n\n\
+            Note: Requires Virtuoso connection. The More Info system provides\n\
+            detailed HTML documentation indexed by function name.",
+        name = "info"
+    )]
+    Info {
+        /// SKILL function name
+        func: String,
+    },
+
+    /// Sync SKILL Finder database from remote server to local cache
+    #[command(
+        long_about = "Download the SKILL Finder database from a remote server.\n\n\
+            Downloads all .fnd files from the remote `doc/finder/SKILL/` directory\n\
+            to the local cache for faster subsequent queries.\n\n\
+            Cache location: ~/.cache/virtuoso_bridge/skill_finder/<host>/\n\n\
+            Examples:\n\
+            virtuoso skill sync\n\
+            virtuoso skill sync --host eda-server\n\
+            virtuoso skill sync --host eda-server --cshrc /path/to/cshrc",
+        name = "sync"
+    )]
+    Sync {
+        /// Remote host (uses VB_HOST or profile remote_host if not specified)
+        #[arg(long)]
+        host: Option<String>,
+
+        /// Path to Cadence cshrc file (uses VB_CADENCE_CSHRC if not specified)
+        #[arg(long)]
+        cshrc: Option<String>,
+
+        /// Verbose output
+        #[arg(long, short)]
+        verbose: bool,
+    },
+
+    /// Show cache status for SKILL Finder
+    #[command(
+        long_about = "Show information about the local SKILL Finder cache.\n\n\
+            Displays cache location, number of cached files, and last modified time.\n\n\
+            Examples:\n\
+            virtuoso skill cache\n\
+            virtuoso skill cache --host eda-server",
+        name = "cache"
+    )]
+    Cache {
+        /// Remote host (uses VB_HOST or profile remote_host if not specified)
+        #[arg(long)]
+        host: Option<String>,
+
+        /// Clear the cache
+        #[arg(long, short)]
+        clear: bool,
     },
 }
 
@@ -413,17 +682,36 @@ enum SimCmd {
     /// Show simulation results directory and contents
     Results,
 
-    /// Force netlist regeneration
+    /// Regenerate simulation netlist (self-contained: sets up session then exports)
     #[command(
-        long_about = "Attempt to regenerate the simulation netlist programmatically.\n\n\
+        long_about = "Set up the Ocean session and regenerate the Spectre netlist.\n\
+            Does not require a prior `sim setup` or open ADE window.\n\n\
             Examples:\n  \
-            virtuoso sim netlist\n  \
-            virtuoso sim netlist --recreate"
+            virtuoso sim netlist --lib FT0001A_SH --cell ota5t\n  \
+            virtuoso sim netlist --lib FT0001A_SH --cell ota5t --recreate"
     )]
     Netlist {
-        /// Force full netlist recreation
+        /// Library name
+        #[arg(long)]
+        lib: String,
+
+        /// Cell name
+        #[arg(long)]
+        cell: String,
+
+        /// View name
+        #[arg(long, default_value = "schematic")]
+        view: String,
+
+        /// Force full netlist recreation (clears stale cache)
         #[arg(long)]
         recreate: bool,
+
+        /// Append analysis block(s) for standalone Spectre (dc, ac, tran).
+        /// Also auto-fixes ADE OA-relative model paths (SFE-868).
+        /// Can be specified multiple times: --with-analysis dc --with-analysis ac
+        #[arg(long = "with-analysis", value_name = "TYPE")]
+        with_analysis: Vec<String>,
     },
 
     /// Launch simulation asynchronously (returns job ID)
@@ -447,6 +735,24 @@ enum SimCmd {
         /// Job ID
         id: String,
     },
+
+    /// Run multiple netlists in parallel using Spectre.
+    ///
+    /// Each input is a "label:path" pair. Paths are read as netlist files.
+    /// Results are returned in input order with per-simulation status.
+    ///
+    /// Examples:
+    ///   virtuoso sim run-parallel tt:/tmp/tt_netlist.scs ss:/tmp/ss_netlist.scs ff:/tmp/ff_netlist.scs
+    RunParallel {
+        /// Input pairs in "label:path" format (colon-separated).
+        /// Label may contain colons if the path is absolute.
+        /// Example: tt:/path/to/netlist.scs
+        #[arg(required = true)]
+        inputs: Vec<String>,
+    },
+
+    /// Check Spectre license availability and version
+    CheckLicense,
 }
 
 #[derive(Subcommand)]
@@ -588,28 +894,49 @@ enum MaestroCmd {
     /// List all active Maestro sessions
     ListSessions,
 
-    /// Set a design variable
+    /// Set a design variable value
     SetVar {
-        #[arg(long)]
-        session: String,
         #[arg(long)]
         name: String,
         #[arg(long)]
         value: String,
     },
 
-    /// Get enabled analyses
+    /// Get a design variable value
+    GetVar {
+        #[arg(long)]
+        name: String,
+    },
+
+    /// List all design variables
+    ListVars,
+
+    /// Get enabled analyses for a test
     GetAnalyses {
         #[arg(long)]
         session: String,
     },
 
-    /// Add an output expression
-    AddOutput {
+    /// Enable an analysis type (e.g. ac, dc, tran, noise)
+    SetAnalysis {
         #[arg(long)]
         session: String,
+        /// Analysis type: ac | dc | tran | noise | ...
         #[arg(long)]
-        name: String,
+        analysis: String,
+        /// Analysis options as JSON string, e.g. '{"start":"1","stop":"10G","dec":"20"}'
+        #[arg(long)]
+        options: Option<String>,
+    },
+
+    /// Add an output expression to a test
+    AddOutput {
+        /// Output name (e.g. "maxOut")
+        #[arg(long)]
+        output_name: String,
+        /// Test name (e.g. "AC")
+        #[arg(long)]
+        test_name: String,
         #[arg(long)]
         expr: String,
     },
@@ -626,13 +953,90 @@ enum MaestroCmd {
         session: String,
     },
 
-    /// Export results to CSV
+    /// Export results to CSV via maeExportOutputView
     Export {
         #[arg(long)]
         session: String,
         /// Output CSV file path
         #[arg(long)]
         path: String,
+        /// Test name to export (optional; API uses default when omitted)
+        #[arg(long)]
+        test_name: Option<String>,
+        /// History run name, e.g. ExplorerRun.0 (optional; API uses default when omitted)
+        #[arg(long)]
+        history: Option<String>,
+    },
+
+    /// Inspect focused ADE window and return session metadata
+    SessionInfo {
+        /// Session name for run_dir lookup (optional; omit to skip run_dir)
+        #[arg(long)]
+        session: Option<String>,
+    },
+
+    // --- Result Reading Commands ---
+    /// Open a history run for programmatic result access
+    OpenResults {
+        /// History run name (e.g. "Interactive.1")
+        #[arg(long)]
+        history: String,
+    },
+
+    /// Close the currently open results
+    CloseResults,
+
+    /// List all test names that have results in the current history
+    ResultTests,
+
+    /// List all output names for a given test in the current history
+    ResultOutputs {
+        #[arg(long)]
+        test_name: String,
+    },
+
+    /// Get the value of a specific output
+    GetOutputValue {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        test_name: String,
+        /// Corner name (optional)
+        #[arg(long)]
+        corner: Option<String>,
+    },
+
+    /// Get the spec pass/fail status for an output
+    SpecStatus {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        test_name: String,
+    },
+
+    /// Get simulation messages (errors/warnings) from last run
+    SimMessages {
+        #[arg(long)]
+        session: String,
+    },
+
+    /// List available history runs for the current Maestro session
+    HistoryList,
+
+    /// Snapshot run artifacts to a local directory (YAML-filtered)
+    Snapshot {
+        /// Output directory path
+        #[arg(long)]
+        output: String,
+        /// Session name (optional; auto-detects from focused window)
+        #[arg(long)]
+        session: Option<String>,
+        /// History run name (optional; picks newest if omitted)
+        #[arg(long)]
+        history: Option<String>,
+        /// Path to custom filter YAML (optional; uses built-in if omitted)
+        #[arg(long)]
+        filter: Option<String>,
     },
 }
 
@@ -662,9 +1066,9 @@ enum SchematicCmd {
         /// Y coordinate
         #[arg(long, default_value = "0")]
         y: i64,
-        /// Orientation (R0, R90, R180, R270, MY, MX)
-        #[arg(long, default_value = "R0")]
-        orient: String,
+        /// Orientation
+        #[arg(long, value_enum, default_value_t = commands::schematic::Orient::R0)]
+        orient: commands::schematic::Orient,
         /// Instance parameters as key=value pairs (e.g. w=14u,l=1u)
         #[arg(long)]
         params: Option<String>,
@@ -742,6 +1146,77 @@ enum SchematicCmd {
         #[arg(long)]
         inst: String,
     },
+
+    /// Polish net labels — cosmetic preset, auto-rotation, or repositioning
+    PolishLabel {
+        /// Net name whose labels to polish
+        #[arg(long)]
+        net: String,
+        /// Preset: "readable" (largest font, center-aligned) or "compact" (smallest font)
+        #[arg(long, default_value = "readable")]
+        preset: String,
+        /// Apply auto-rotation based on wire direction
+        #[arg(long)]
+        auto_rotate: bool,
+        /// Offset in DB units: "small" (+5), "medium" (+10), "large" (+20)
+        #[arg(long)]
+        offset: Option<String>,
+    },
+
+    /// Create a short labeled net stub in a given direction
+    ///
+    /// Draws a wire segment of `length` grid units from (x,y) in the specified
+    /// direction and places a net label at its midpoint.
+    ///
+    /// Examples:
+    ///   vcli schematic net-stub VDD --x 100 --y 200 --direction right --length 0.5
+    ///   vcli schematic net-stub VSS --x 0 --y 0 --direction up --cosmetic clean
+    NetStub {
+        /// Net name
+        #[arg(long)]
+        net: String,
+        /// X origin in DBU
+        #[arg(long)]
+        x: i64,
+        /// Y origin in DBU
+        #[arg(long)]
+        y: i64,
+        /// Direction: right (default), left, up, down
+        #[arg(long, default_value = "right")]
+        direction: String,
+        /// Stub length in grid units (default 0.5)
+        #[arg(long, default_value = "0.5")]
+        length: f64,
+        /// Cosmetic preset: "default" (0.0625, centerCenter) or "clean" (0.125, lowerCenter)
+        #[arg(long, default_value = "default")]
+        cosmetic: String,
+    },
+
+    /// Label an instance terminal (D/G/S/B) with a net name at the terminal's pin center
+    ///
+    /// Automatically resolves the terminal pin location from the instance rather
+    /// than requiring manual coordinate entry.
+    ///
+    /// Examples:
+    ///   vcli schematic label-term M1 D VDD
+    ///   vcli schematic label-term X1 G VIN --cosmetic clean --auto-rotate
+    LabelTerm {
+        /// Instance name (e.g. M1)
+        #[arg(long)]
+        inst: String,
+        /// Terminal name (e.g. D, G, S, B)
+        #[arg(long)]
+        term: String,
+        /// Net name to label the terminal with
+        #[arg(long)]
+        net: String,
+        /// Cosmetic preset: "default" or "clean"
+        #[arg(long, default_value = "default")]
+        cosmetic: String,
+        /// Auto-rotate label based on stub direction
+        #[arg(long)]
+        auto_rotate: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -760,6 +1235,167 @@ enum SessionCmd {
         /// Session ID (e.g. eda-meow-1)
         id: String,
     },
+
+    /// Show which session would be auto-selected (dry-run of session discovery)
+    Current,
+
+    /// Remove stale session files for daemons that are no longer running
+    Cleanup,
+
+    /// Show SKILL and command history for a session
+    History {
+        /// Session ID to show history for (e.g. eda-meow-34785)
+        id: String,
+        /// Show only SKILL executions (default: both)
+        #[arg(long)]
+        skill: bool,
+        /// Show only CLI commands (default: both)
+        #[arg(long)]
+        cmd: bool,
+        /// Maximum number of entries to show (0 = all)
+        #[arg(long, default_value = "50")]
+        limit: usize,
+    },
+
+    /// Start background heartbeat daemon (pings sessions to detect stale Virtuoso)
+    Heartbeat {
+        /// Heartbeat interval in seconds (default: 30)
+        #[arg(long, default_value = "30")]
+        interval: u64,
+    },
+}
+
+#[derive(Subcommand)]
+enum TxCmd {
+    /// Begin a transaction — captures a snapshot of the currently open cellview
+    Begin {
+        /// Transaction ID (e.g. "my-design-tx")
+        #[arg(long)]
+        id: String,
+
+        /// Library name
+        #[arg(long)]
+        lib: String,
+
+        /// Cell name
+        #[arg(long)]
+        cell: String,
+
+        /// View name
+        #[arg(long, default_value = "schematic")]
+        view: String,
+    },
+
+    /// Commit the active transaction — discards snapshot
+    Commit,
+
+    /// Rollback — restore the cellview to the snapshot state
+    Rollback,
+
+    /// Show differences between snapshot and current cellview
+    Diff,
+
+    /// Show active transaction status (ID and timestamp)
+    Status,
+}
+
+#[derive(Subcommand)]
+enum WindowCmd {
+    /// List all open Virtuoso windows with their names and derived mode
+    List,
+
+    /// Dismiss the currently active blocking dialog
+    DismissDialog {
+        /// Action to take: cancel (default) or ok
+        #[arg(long, default_value = "cancel")]
+        action: String,
+        /// Report dialog name without clicking
+        #[arg(long)]
+        dry_run: bool,
+        /// Use X11 SSH bypass instead of SKILL. The only path that works
+        /// when a modal has deadlocked the CIW; requires VB_REMOTE_HOST.
+        #[arg(long)]
+        x11: bool,
+        /// Override the detected DISPLAY (X11 bypass only).
+        #[arg(long)]
+        display: Option<String>,
+    },
+
+    /// List dialogs visible via X11 SSH bypass (no keypress sent)
+    ListDialogsX11 {
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display: Option<String>,
+    },
+
+    /// List all Virtuoso-related X11 windows (no dismiss). Use to find a
+    /// window id before `dismiss-window <id>`.
+    ListWindowsX11 {
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display: Option<String>,
+    },
+
+    /// Dismiss a SPECIFIC X11 window by id. Id is the `dismiss_id` field
+    /// from `list-windows-x11` (e.g. 0x2e01f16). Use this when you have
+    /// multiple Virtuoso-related windows and don't want to dismiss them all.
+    DismissWindowX11 {
+        /// X11 window id (dismiss_id from list-windows-x11)
+        window_id: String,
+        /// enter (default) | escape | alt-y | alt-n
+        #[arg(long, default_value = "enter")]
+        action: String,
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display: Option<String>,
+    },
+
+    /// Capture a screenshot of the current Virtuoso window (IC23.1+)
+    Screenshot {
+        /// Output file path (PNG)
+        #[arg(long)]
+        path: String,
+        /// Match window by name pattern (regex); uses current window if omitted
+        #[arg(long)]
+        window: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DiagCmd {
+    /// Enumerate `.cdslck` lock files under an OA library (read-only).
+    ///
+    /// Useful when "this view won't open" — reports the holder of every
+    /// .cdslck (owner@host:pid:start_time) plus the lock's age. Never
+    /// deletes locks: breaking a live lock corrupts the cellview.
+    Cdslck {
+        /// OA library name (must be registered in remote cds.lib)
+        lib: String,
+        /// Only show locks under this view (e.g. maestro, layout)
+        #[arg(long)]
+        view: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum RpcCmd {
+    /// Call an RPC method by name with JSON params
+    ///
+    /// Examples:
+    ///   vcli rpc call schematic.open_cell_view '{"lib":"myLib","cell":"myCell"}'
+    ///   vcli rpc call schematic.list_instances '{}'
+    Call {
+        /// Method name (e.g. schematic.place)
+        #[arg(long)]
+        method: String,
+
+        /// JSON params object
+        #[arg(long)]
+        params: String,
+    },
+
+    /// Show all available RPC methods and their signatures
+    Schema,
 }
 
 fn parse_key_val(s: &str) -> std::result::Result<(String, String), String> {
@@ -767,6 +1403,540 @@ fn parse_key_val(s: &str) -> std::result::Result<(String, String), String> {
         .find('=')
         .ok_or_else(|| format!("invalid KEY=VALUE: no '=' in '{s}'"))?;
     Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
+}
+
+// ── Per-group dispatch helpers ───────────────────────────────────────
+
+fn dispatch_tunnel(cmd: TunnelCmd, format: OutputFormat) -> error::Result<serde_json::Value> {
+    match cmd {
+        TunnelCmd::Start { timeout, dry_run } => commands::tunnel::start(Some(timeout), dry_run),
+        TunnelCmd::Stop { force, dry_run } => commands::tunnel::stop(force, dry_run),
+        TunnelCmd::Restart { timeout } => commands::tunnel::restart(Some(timeout)),
+        TunnelCmd::Status => commands::tunnel::status(format),
+        TunnelCmd::Diagnose => commands::tunnel::diagnose(),
+    }
+}
+
+fn dispatch_profile(cmd: ProfileCmd) -> error::Result<serde_json::Value> {
+    use virtuoso_cli::profile::{BindScope, ProfileResolution};
+    match cmd {
+        ProfileCmd::Show => {
+            let info: ProfileResolution = virtuoso_cli::profile::resolve_profile_info(None);
+            Ok(serde_json::json!({
+                "profile": info.profile,
+                "source": info.source,
+                "path": info.path.as_ref().map(|p| p.to_string_lossy().to_string()),
+                "resolution_order": [
+                    "1. explicit profile= argument / CLI -p/--profile",
+                    "2. process env VB_PROFILE",
+                    "3. $VIRTUAL_ENV/.vcli-profile (venv binding)",
+                    "4. ~/.vcli/.env VB_PROFILE= (user-level default)",
+                    "5. None (legacy default)",
+                ],
+            }))
+        }
+        ProfileCmd::Bind {
+            name,
+            venv,
+            user,
+            local,
+        } => {
+            let scope = parse_bind_scope(venv, user, local)?;
+            match scope {
+                BindScope::Venv => {
+                    let path = virtuoso_cli::profile::bind_venv_profile(&name)
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "bind",
+                        "scope": "venv",
+                        "profile": name,
+                        "path": path.to_string_lossy().to_string(),
+                    }))
+                }
+                BindScope::User => {
+                    let path = virtuoso_cli::profile::bind_user_profile(&name)
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "bind",
+                        "scope": "user",
+                        "profile": name,
+                        "path": path.to_string_lossy().to_string(),
+                    }))
+                }
+                BindScope::Local => {
+                    let path = virtuoso_cli::profile::bind_local_profile(&name)
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "bind",
+                        "scope": "local",
+                        "profile": name,
+                        "path": path.to_string_lossy().to_string(),
+                    }))
+                }
+            }
+        }
+        ProfileCmd::Clear { venv, user, local } => {
+            let scope = parse_bind_scope(venv, user, local)?;
+            match scope {
+                BindScope::Venv => {
+                    let path = virtuoso_cli::profile::clear_venv_profile()
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "clear",
+                        "scope": "venv",
+                        "path": path.to_string_lossy().to_string(),
+                    }))
+                }
+                BindScope::User => {
+                    virtuoso_cli::profile::clear_user_profile()
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "clear",
+                        "scope": "user",
+                    }))
+                }
+                BindScope::Local => {
+                    virtuoso_cli::profile::clear_local_profile()
+                        .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+                    Ok(serde_json::json!({
+                        "action": "clear",
+                        "scope": "local",
+                    }))
+                }
+            }
+        }
+    }
+}
+
+fn parse_bind_scope(
+    venv: bool,
+    user: bool,
+    local: bool,
+) -> error::Result<virtuoso_cli::profile::BindScope> {
+    let set: Vec<&str> = [("venv", venv), ("user", user), ("local", local)]
+        .iter()
+        .filter_map(|(n, b)| if *b { Some(*n) } else { None })
+        .collect();
+    match set.len() {
+        0 => Err(error::VirtuosoError::Config(
+            "must specify one of --venv, --user, or --local".into(),
+        )),
+        1 => Ok(match set[0] {
+            "venv" => virtuoso_cli::profile::BindScope::Venv,
+            "user" => virtuoso_cli::profile::BindScope::User,
+            "local" => virtuoso_cli::profile::BindScope::Local,
+            _ => unreachable!(),
+        }),
+        _ => Err(error::VirtuosoError::Config(format!(
+            "specify only one of --venv, --user, --local (got: {})",
+            set.join(", ")
+        ))),
+    }
+}
+
+fn dispatch_skill(cmd: SkillCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        SkillCmd::Exec {
+            code,
+            timeout,
+            readonly,
+        } => commands::skill::exec(&code, timeout, readonly),
+        SkillCmd::Load { file } => commands::skill::load(&file),
+        SkillCmd::Broadcast { code, timeout } => commands::skill::broadcast(&code, timeout),
+        SkillCmd::Eval { code, stdin } => commands::skill::eval(code, stdin),
+        SkillCmd::Find {
+            query,
+            mode,
+            limit,
+            include_desc,
+        } => commands::skill::find(&query, &mode, limit, false, include_desc),
+        SkillCmd::Info { func } => commands::skill::info(&func),
+        SkillCmd::Sync {
+            host,
+            cshrc,
+            verbose,
+        } => commands::skill::sync_cache(host.as_deref(), cshrc.as_deref(), verbose),
+        SkillCmd::Cache { host, clear } => commands::skill::show_cache(host.as_deref(), clear),
+    }
+}
+
+fn dispatch_cell(cmd: CellCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        CellCmd::Open {
+            lib,
+            cell,
+            view,
+            mode,
+            dry_run,
+        } => commands::cell::open(&lib, &cell, &view, &mode, dry_run),
+        CellCmd::Save => commands::cell::save(),
+        CellCmd::Close => commands::cell::close(),
+        CellCmd::Info => commands::cell::info(),
+    }
+}
+
+fn dispatch_sim(cmd: SimCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        SimCmd::Setup {
+            lib,
+            cell,
+            view,
+            simulator,
+        } => commands::sim::setup(&lib, &cell, &view, &simulator),
+        SimCmd::Run {
+            analysis,
+            stop,
+            start,
+            from,
+            to,
+            step,
+            dec,
+            errpreset,
+            param,
+            timeout,
+        } => {
+            let mut params: std::collections::HashMap<String, String> = param.into_iter().collect();
+            for (key, val) in [
+                ("stop", stop),
+                ("start", start),
+                ("from", from),
+                ("to", to),
+                ("step", step),
+                ("dec", dec),
+                ("errpreset", errpreset),
+            ] {
+                if let Some(v) = val {
+                    params.insert(key.into(), v);
+                }
+            }
+            commands::sim::run(&analysis, &params, timeout)
+        }
+        SimCmd::Measure { expr, analysis } => commands::sim::measure(&analysis, &expr),
+        SimCmd::Sweep {
+            var,
+            from,
+            to,
+            step,
+            measure,
+            analysis,
+            timeout,
+        } => commands::sim::sweep(&var, from, to, step, &analysis, &measure, timeout),
+        SimCmd::Corner { file, timeout } => commands::sim::corner(&file, timeout),
+        SimCmd::Results => commands::sim::results(),
+        SimCmd::Netlist {
+            lib,
+            cell,
+            view,
+            recreate,
+            with_analysis,
+        } => commands::sim::netlist(&lib, &cell, &view, recreate, &with_analysis),
+        SimCmd::RunAsync { netlist } => commands::sim::run_async(&netlist),
+        SimCmd::JobStatus { id } => commands::sim::job_status(&id),
+        SimCmd::JobList => commands::sim::job_list(),
+        SimCmd::JobCancel { id } => commands::sim::job_cancel(&id),
+        SimCmd::RunParallel { inputs } => {
+            // Parse "label:path" pairs. Label may contain colons if path is absolute.
+            // Strategy: for each input, split on first ':' — the part before is label,
+            // the part after (if any) is path. If no ':' found, use the whole string as
+            // both label and path (error if path doesn't exist).
+            let parsed: Vec<(String, String)> = inputs
+                .iter()
+                .filter_map(|s| {
+                    let s = s.trim();
+                    if s.is_empty() {
+                        return None;
+                    }
+                    if let Some(pos) = s.find(':') {
+                        let label = s[..pos].trim().to_string();
+                        let path = s[pos + 1..].trim().to_string();
+                        if label.is_empty() || path.is_empty() {
+                            return None;
+                        }
+                        Some((label, path))
+                    } else {
+                        // No colon — treat whole string as path, derive label from filename
+                        let p = std::path::Path::new(s);
+                        let label = p
+                            .file_stem()
+                            .and_then(|l| l.to_str())
+                            .unwrap_or(s)
+                            .to_string();
+                        Some((label, s.to_string()))
+                    }
+                })
+                .collect();
+            commands::sim::run_parallel(&parsed)
+        }
+        SimCmd::CheckLicense => commands::sim::check_license(),
+    }
+}
+
+fn dispatch_process(cmd: ProcessCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        ProcessCmd::Char {
+            lib,
+            cell,
+            view,
+            inst,
+            r#type,
+            l_values,
+            vgs_start,
+            vgs_stop,
+            vgs_step,
+            output,
+            timeout,
+            netlist,
+            model_file,
+            model_section,
+            vdd,
+            nmos_model,
+            pmos_model,
+            inst_name,
+            vds,
+        } => {
+            let l_vals: Vec<f64> = l_values
+                .split(',')
+                .filter_map(|s| s.trim().parse().ok())
+                .collect();
+            if netlist {
+                let device_model = if r#type == "pmos" {
+                    &pmos_model
+                } else {
+                    &nmos_model
+                };
+                let resolved_inst = inst_name.unwrap_or_else(|| {
+                    if r#type == "pmos" {
+                        "PM0".into()
+                    } else {
+                        "NM0".into()
+                    }
+                });
+                commands::process::char_netlist(
+                    &r#type,
+                    &l_vals,
+                    vgs_start,
+                    vgs_stop,
+                    vgs_step,
+                    &output,
+                    &model_file,
+                    &model_section,
+                    vdd,
+                    device_model,
+                    &resolved_inst,
+                    vds,
+                )
+            } else {
+                commands::process::char(
+                    &lib, &cell, &view, &inst, &r#type, &l_vals, vgs_start, vgs_stop, vgs_step,
+                    &output, timeout,
+                )
+            }
+        }
+    }
+}
+
+fn dispatch_design(cmd: DesignCmd, format: OutputFormat) -> error::Result<serde_json::Value> {
+    match cmd {
+        DesignCmd::Size {
+            gmid,
+            l,
+            gm,
+            id,
+            pdk,
+            r#type,
+        } => commands::design::size(gmid, l, gm, id, &pdk, &r#type, format),
+        DesignCmd::Explore { pdk, r#type } => commands::design::explore(&pdk, &r#type, format),
+    }
+}
+
+fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        MaestroCmd::Open { lib, cell, view } => commands::maestro::open(&lib, &cell, &view),
+        MaestroCmd::Close { session } => commands::maestro::close(&session),
+        MaestroCmd::ListSessions => commands::maestro::list_sessions(),
+        MaestroCmd::SetVar { name, value } => commands::maestro::set_var(&name, &value),
+        MaestroCmd::GetVar { name } => commands::maestro::get_var(&name),
+        MaestroCmd::ListVars => commands::maestro::list_vars(),
+        MaestroCmd::GetAnalyses { session } => commands::maestro::get_analyses(&session),
+        MaestroCmd::SetAnalysis {
+            session,
+            analysis,
+            options,
+        } => commands::maestro::set_analysis(&session, &analysis, options.as_deref()),
+        MaestroCmd::AddOutput {
+            output_name,
+            test_name,
+            expr,
+        } => commands::maestro::add_output(&output_name, &test_name, &expr),
+        MaestroCmd::Run { session } => commands::maestro::run(&session),
+        MaestroCmd::Save { session } => commands::maestro::save(&session),
+        MaestroCmd::Export {
+            session,
+            path,
+            test_name,
+            history,
+        } => commands::maestro::export(&session, &path, test_name.as_deref(), history.as_deref()),
+        MaestroCmd::SessionInfo { session } => commands::maestro::session_info(session.as_deref()),
+        MaestroCmd::OpenResults { history } => commands::maestro::open_results(&history),
+        MaestroCmd::CloseResults => commands::maestro::close_results(),
+        MaestroCmd::ResultTests => commands::maestro::get_result_tests(),
+        MaestroCmd::ResultOutputs { test_name } => {
+            commands::maestro::get_result_outputs(&test_name)
+        }
+        MaestroCmd::GetOutputValue {
+            name,
+            test_name,
+            corner,
+        } => commands::maestro::get_output_value(&name, &test_name, corner.as_deref()),
+        MaestroCmd::SpecStatus { name, test_name } => {
+            commands::maestro::get_spec_status(&name, &test_name)
+        }
+        MaestroCmd::SimMessages { session } => commands::maestro::get_sim_messages(&session),
+        MaestroCmd::HistoryList => commands::maestro::get_history_list(),
+        MaestroCmd::Snapshot {
+            output,
+            session,
+            history,
+            filter,
+        } => commands::maestro::snapshot(
+            &output,
+            session.as_deref(),
+            history.as_deref(),
+            filter.as_deref(),
+        ),
+    }
+}
+
+fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        SchematicCmd::Open { lib, cell, view } => commands::schematic::open(&lib, &cell, &view),
+        SchematicCmd::Place {
+            master,
+            name,
+            x,
+            y,
+            orient,
+            params,
+        } => {
+            let param_pairs: Vec<(String, String)> = params
+                .unwrap_or_default()
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .filter_map(|s| {
+                    let (k, v) = s.split_once('=')?;
+                    Some((k.to_string(), v.to_string()))
+                })
+                .collect();
+            commands::schematic::place(&master, &name, x, y, orient, &param_pairs)
+        }
+        SchematicCmd::Wire { net, points } => commands::schematic::wire_from_strings(&net, &points),
+        SchematicCmd::Conn { net, from, to } => commands::schematic::conn(&net, &from, &to),
+        SchematicCmd::Label { net, x, y } => commands::schematic::label(&net, x, y),
+        SchematicCmd::Pin { net, dir, x, y } => commands::schematic::pin(&net, &dir, x, y),
+        SchematicCmd::Check => commands::schematic::check(),
+        SchematicCmd::Save => commands::schematic::save(),
+        SchematicCmd::Build { spec } => commands::schematic::build(&spec),
+        SchematicCmd::ListInstances => commands::schematic::list_instances(),
+        SchematicCmd::ListNets => commands::schematic::list_nets(),
+        SchematicCmd::ListPins => commands::schematic::list_pins(),
+        SchematicCmd::GetParams { inst } => commands::schematic::get_params(&inst),
+        SchematicCmd::PolishLabel {
+            net,
+            preset,
+            auto_rotate,
+            offset,
+        } => commands::schematic::polish_label(&net, &preset, auto_rotate, offset.as_deref()),
+        SchematicCmd::NetStub {
+            net,
+            x,
+            y,
+            direction,
+            length,
+            cosmetic,
+        } => commands::schematic::net_stub(&net, x, y, &direction, length, &cosmetic),
+        SchematicCmd::LabelTerm {
+            inst,
+            term,
+            net,
+            cosmetic,
+            auto_rotate,
+        } => commands::schematic::label_term(&inst, &term, &net, &cosmetic, auto_rotate),
+    }
+}
+
+fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        WindowCmd::List => commands::window::list(),
+        WindowCmd::DismissDialog {
+            action,
+            dry_run,
+            x11,
+            display,
+        } => {
+            if x11 {
+                commands::window::dismiss_dialog_x11(&action, dry_run, display.as_deref())
+            } else {
+                commands::window::dismiss_dialog(&action, dry_run)
+            }
+        }
+        WindowCmd::ListDialogsX11 { display } => {
+            commands::window::list_dialogs_x11(display.as_deref())
+        }
+        WindowCmd::ListWindowsX11 { display } => {
+            commands::window::list_windows_x11(display.as_deref())
+        }
+        WindowCmd::DismissWindowX11 {
+            window_id,
+            action,
+            display,
+        } => commands::window::dismiss_window_x11(&window_id, &action, display.as_deref()),
+        WindowCmd::Screenshot { path, window } => {
+            commands::window::screenshot(&path, window.as_deref())
+        }
+    }
+}
+
+fn dispatch_diag(cmd: DiagCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        DiagCmd::Cdslck { lib, view } => commands::diag::cdslck(&lib, view.as_deref()),
+    }
+}
+
+fn dispatch_tx(cmd: TxCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        TxCmd::Begin {
+            id,
+            lib,
+            cell,
+            view,
+        } => commands::transaction::begin(&id, &lib, &cell, &view),
+        TxCmd::Commit => commands::transaction::commit(),
+        TxCmd::Rollback => commands::transaction::rollback(),
+        TxCmd::Diff => commands::transaction::diff(),
+        TxCmd::Status => commands::transaction::status(),
+    }
+}
+
+fn dispatch_rpc(cmd: RpcCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        RpcCmd::Call { method, params } => {
+            let params: serde_json::Value =
+                serde_json::from_str(&params).map_err(crate::error::VirtuosoError::Json)?;
+            let client = crate::client::bridge::VirtuosoClient::from_env()?;
+            // Read API key from environment if set (VCLI_API_KEY)
+            let api_key = std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty());
+            let request = crate::rpc::dispatcher::RpcRequest {
+                method,
+                params,
+                api_key,
+            };
+            crate::rpc::dispatcher::RpcDispatcher::dispatch(&client, request)
+        }
+        RpcCmd::Schema => {
+            let schema = standard_schema();
+            Ok(serde_json::to_value(schema).unwrap())
+        }
+    }
 }
 
 fn main() {
@@ -792,240 +1962,70 @@ fn main() {
         .with_target(false)
         .init();
 
+    // Initialize auth (reads VCLI_API_KEY from env)
+    Auth::init();
+
     let format = match &cli.format {
         Some(FormatArg::Json) => OutputFormat::Json,
         Some(FormatArg::Table) => OutputFormat::Table,
         None => OutputFormat::resolve(None),
     };
 
-    // Propagate --session (or VB_SESSION env) so VirtuosoClient::from_env() picks it up
+    // Propagate --session so VirtuosoClient::from_env() picks it up.
+    //
+    // Maestro subcommands define their own --session for Maestro session names
+    // (e.g. "fnxSession0"), which are NOT bridge session IDs. Propagating a
+    // Maestro session name to VB_SESSION causes VirtuosoClient::from_env() to
+    // look for a non-existent bridge session file and fall back to VB_PORT=0,
+    // producing ECONNREFUSED. Skip propagation for Maestro commands entirely.
     let session_from_env = std::env::var("VB_SESSION").ok();
-    let effective_session = cli.session.as_ref().or(session_from_env.as_ref());
-    if let Some(s) = effective_session {
-        std::env::set_var("VB_SESSION", s);
+    if session_from_env.is_none() && !matches!(&cli.command, Commands::Maestro(_)) {
+        if let Some(ref s) = cli.session {
+            std::env::set_var("VB_SESSION", s);
+        }
     }
 
     let is_status_cmd = matches!(&cli.command, Commands::Tunnel(TunnelCmd::Status));
 
+    let cli_args: Vec<String> = std::env::args().collect();
+    let cli_session = cli.session.clone();
+
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
-        Commands::Tunnel(cmd) => match cmd {
-            TunnelCmd::Start { timeout, dry_run } => {
-                commands::tunnel::start(Some(timeout), dry_run)
-            }
-            TunnelCmd::Stop { force, dry_run } => commands::tunnel::stop(force, dry_run),
-            TunnelCmd::Restart { timeout } => commands::tunnel::restart(Some(timeout)),
-            TunnelCmd::Status => commands::tunnel::status(format),
-            TunnelCmd::Diagnose => commands::tunnel::diagnose(),
-        },
-        Commands::Skill(cmd) => match cmd {
-            SkillCmd::Exec { code, timeout } => commands::skill::exec(&code, timeout),
-            SkillCmd::Load { file } => commands::skill::load(&file),
-        },
-        Commands::Cell(cmd) => match cmd {
-            CellCmd::Open {
-                lib,
-                cell,
-                view,
-                mode,
-                dry_run,
-            } => commands::cell::open(&lib, &cell, &view, &mode, dry_run),
-            CellCmd::Save => commands::cell::save(),
-            CellCmd::Close => commands::cell::close(),
-            CellCmd::Info => commands::cell::info(),
-        },
-        Commands::Sim(cmd) => match cmd {
-            SimCmd::Setup {
-                lib,
-                cell,
-                view,
-                simulator,
-            } => commands::sim::setup(&lib, &cell, &view, &simulator),
-            SimCmd::Run {
-                analysis,
-                stop,
-                start,
-                from,
-                to,
-                step,
-                dec,
-                errpreset,
-                param,
-                timeout,
-            } => {
-                let mut params: std::collections::HashMap<String, String> =
-                    param.into_iter().collect();
-                if let Some(v) = stop {
-                    params.insert("stop".into(), v);
-                }
-                if let Some(v) = start {
-                    params.insert("start".into(), v);
-                }
-                if let Some(v) = from {
-                    params.insert("from".into(), v);
-                }
-                if let Some(v) = to {
-                    params.insert("to".into(), v);
-                }
-                if let Some(v) = step {
-                    params.insert("step".into(), v);
-                }
-                if let Some(v) = dec {
-                    params.insert("dec".into(), v);
-                }
-                if let Some(v) = errpreset {
-                    params.insert("errpreset".into(), v);
-                }
-                commands::sim::run(&analysis, &params, timeout)
-            }
-            SimCmd::Measure { expr, analysis } => commands::sim::measure(&analysis, &expr),
-            SimCmd::Sweep {
-                var,
-                from,
-                to,
-                step,
-                measure,
-                analysis,
-                timeout,
-            } => commands::sim::sweep(&var, from, to, step, &analysis, &measure, timeout),
-            SimCmd::Corner { file, timeout } => commands::sim::corner(&file, timeout),
-            SimCmd::Results => commands::sim::results(),
-            SimCmd::Netlist { recreate } => commands::sim::netlist(recreate),
-            SimCmd::RunAsync { netlist } => commands::sim::run_async(&netlist),
-            SimCmd::JobStatus { id } => commands::sim::job_status(&id),
-            SimCmd::JobList => commands::sim::job_list(),
-            SimCmd::JobCancel { id } => commands::sim::job_cancel(&id),
-        },
-        Commands::Process(cmd) => match cmd {
-            ProcessCmd::Char {
-                lib,
-                cell,
-                view,
-                inst,
-                r#type,
-                l_values,
-                vgs_start,
-                vgs_stop,
-                vgs_step,
-                output,
-                timeout,
-                netlist,
-                model_file,
-                model_section,
-                vdd,
-                nmos_model,
-                pmos_model,
-                inst_name,
-                vds,
-            } => {
-                let l_vals: Vec<f64> = l_values
-                    .split(',')
-                    .filter_map(|s| s.trim().parse().ok())
-                    .collect();
-                if netlist {
-                    let device_model = if r#type == "pmos" {
-                        &pmos_model
-                    } else {
-                        &nmos_model
-                    };
-                    let resolved_inst = inst_name.unwrap_or_else(|| {
-                        if r#type == "pmos" {
-                            "PM0".into()
-                        } else {
-                            "NM0".into()
-                        }
-                    });
-                    commands::process::char_netlist(
-                        &r#type,
-                        &l_vals,
-                        vgs_start,
-                        vgs_stop,
-                        vgs_step,
-                        &output,
-                        &model_file,
-                        &model_section,
-                        vdd,
-                        device_model,
-                        &resolved_inst,
-                        vds,
-                    )
-                } else {
-                    commands::process::char(
-                        &lib, &cell, &view, &inst, &r#type, &l_vals, vgs_start, vgs_stop, vgs_step,
-                        &output, timeout,
-                    )
-                }
-            }
-        },
-        Commands::Design(cmd) => match cmd {
-            DesignCmd::Size {
-                gmid,
-                l,
-                gm,
-                id,
-                pdk,
-                r#type,
-            } => commands::design::size(gmid, l, gm, id, &pdk, &r#type, format),
-            DesignCmd::Explore { pdk, r#type } => commands::design::explore(&pdk, &r#type, format),
-        },
-        Commands::Maestro(cmd) => match cmd {
-            MaestroCmd::Open { lib, cell, view } => commands::maestro::open(&lib, &cell, &view),
-            MaestroCmd::Close { session } => commands::maestro::close(&session),
-            MaestroCmd::ListSessions => commands::maestro::list_sessions(),
-            MaestroCmd::SetVar {
-                session,
-                name,
-                value,
-            } => commands::maestro::set_var(&session, &name, &value),
-            MaestroCmd::GetAnalyses { session } => commands::maestro::get_analyses(&session),
-            MaestroCmd::AddOutput {
-                session,
-                name,
-                expr,
-            } => commands::maestro::add_output(&session, &name, &expr),
-            MaestroCmd::Run { session } => commands::maestro::run(&session),
-            MaestroCmd::Save { session } => commands::maestro::save(&session),
-            MaestroCmd::Export { session, path } => commands::maestro::export(&session, &path),
-        },
-        Commands::Schematic(cmd) => match cmd {
-            SchematicCmd::Open { lib, cell, view } => commands::schematic::open(&lib, &cell, &view),
-            SchematicCmd::Place {
-                master,
-                name,
-                x,
-                y,
-                orient,
-                params,
-            } => {
-                let param_pairs: Vec<(String, String)> = params
-                    .unwrap_or_default()
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .filter_map(|s| {
-                        let (k, v) = s.split_once('=')?;
-                        Some((k.to_string(), v.to_string()))
-                    })
-                    .collect();
-                commands::schematic::place(&master, &name, x, y, &orient, &param_pairs)
-            }
-            SchematicCmd::Wire { net, points } => {
-                commands::schematic::wire_from_strings(&net, &points)
-            }
-            SchematicCmd::Conn { net, from, to } => commands::schematic::conn(&net, &from, &to),
-            SchematicCmd::Label { net, x, y } => commands::schematic::label(&net, x, y),
-            SchematicCmd::Pin { net, dir, x, y } => commands::schematic::pin(&net, &dir, x, y),
-            SchematicCmd::Check => commands::schematic::check(),
-            SchematicCmd::Save => commands::schematic::save(),
-            SchematicCmd::Build { spec } => commands::schematic::build(&spec),
-            SchematicCmd::ListInstances => commands::schematic::list_instances(),
-            SchematicCmd::ListNets => commands::schematic::list_nets(),
-            SchematicCmd::ListPins => commands::schematic::list_pins(),
-            SchematicCmd::GetParams { inst } => commands::schematic::get_params(&inst),
-        },
+        Commands::Tunnel(cmd) => dispatch_tunnel(cmd, format),
+        Commands::Profile(cmd) => dispatch_profile(cmd),
+        Commands::Skill(cmd) => dispatch_skill(cmd),
+        Commands::Cell(cmd) => dispatch_cell(cmd),
+        Commands::Sim(cmd) => dispatch_sim(cmd),
+        Commands::Process(cmd) => dispatch_process(cmd),
+        Commands::Design(cmd) => dispatch_design(cmd, format),
+        Commands::Maestro(cmd) => dispatch_maestro(cmd),
+        Commands::Schematic(cmd) => dispatch_schematic(cmd),
         Commands::Session(cmd) => match cmd {
             SessionCmd::List => commands::session::list(format),
             SessionCmd::Show { id } => commands::session::show(&id, format),
+            SessionCmd::Current => commands::session::current(),
+            SessionCmd::Cleanup => commands::session::cleanup(),
+            SessionCmd::History {
+                id,
+                skill,
+                cmd,
+                limit,
+            } => commands::session::history(&id, skill, cmd, limit),
+            SessionCmd::Heartbeat { interval } => {
+                let hb = virtuoso_cli::session::SessionHeartbeat::new(interval);
+                hb.start();
+                tracing::info!("heartbeat daemon started (interval={}s)", interval);
+                // Keep the main thread alive — the heartbeat runs in background
+                loop {
+                    std::thread::park();
+                }
+            }
         },
+        Commands::Tx(cmd) => dispatch_tx(cmd),
+        Commands::Rpc(cmd) => dispatch_rpc(cmd),
+        Commands::Window(cmd) => dispatch_window(cmd),
+        Commands::Diag(cmd) => dispatch_diag(cmd),
         Commands::Schema { all, noun, verb } => {
             let schema = if all || noun.is_none() {
                 commands::schema::show(None, None)
@@ -1033,20 +2033,27 @@ fn main() {
                 commands::schema::show(noun.as_deref(), verb.as_deref())
             };
             print_json(&schema);
-            return;
+            std::process::exit(0);
         }
         Commands::Tui => {
             if let Err(e) = tui::run_tui() {
                 eprintln!("TUI error: {e}");
                 std::process::exit(1);
             }
-            return;
+            std::process::exit(0);
+        }
+        Commands::Mcp(cmd) => {
+            if let Err(e) = cmd.dispatch() {
+                eprintln!("MCP error: {e}");
+                std::process::exit(1);
+            }
+            std::process::exit(0);
         }
     };
 
-    match result {
+    let exit_code = match &result {
         Ok(value) => {
-            let exit_code = if value
+            if value
                 .get("dry_run")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false)
@@ -1054,23 +2061,25 @@ fn main() {
                 exit_codes::DRY_RUN_OK
             } else {
                 exit_codes::SUCCESS
-            };
+            }
+        }
+        Err(e) => e.exit_code(),
+    };
+    history::append_cmd(&cli_args, cli_session.as_deref(), exit_code as i32);
 
-            match format {
-                OutputFormat::Json => print_json(&value),
-                OutputFormat::Table => {
-                    if !is_status_cmd {
-                        output::print_value(&value, format);
-                    }
+    match result {
+        Ok(value) => match format {
+            OutputFormat::Json => print_json(&value),
+            OutputFormat::Table => {
+                if !is_status_cmd {
+                    output::print_value(&value, format);
                 }
             }
-
-            std::process::exit(exit_code);
-        }
+        },
         Err(e) => {
             let cli_error = e.to_cli_error();
             cli_error.print(format);
-            std::process::exit(e.exit_code());
         }
     }
+    std::process::exit(exit_code);
 }

@@ -9,10 +9,13 @@ description: |
   (5) parsing PSF ASCII output from Spectre (dc_op.dc, ac_gain.ac, noise_an.noise),
   (6) phase margin calculation for inverting amplifier topologies,
   (7) slew rate measurement gives wrong result with small-signal step — need large signal,
-  (8) ICMR from DC sweep — use transistor region fields, not CM gain (which is ≈ 0).
+  (8) ICMR from DC sweep — use transistor region fields, not CM gain (which is ≈ 0),
+  (9) SFE-868 from ADE-generated netlist — oa/lib/../ model path only works in ADE interactive mode.
 author: Claude Code
 version: 1.0.0
 date: 2026-04-07
+argument-hint: [error or symptom, e.g. "SFE-30" or "noise in megavolts"]
+allowed-tools: Bash(spectre *) Read Write
 ---
 
 # Spectre Netlist-Mode Gotchas
@@ -20,28 +23,45 @@ date: 2026-04-07
 Lessons from standalone Spectre simulation (no ADE/Virtuoso), covering vsource syntax,
 noise analysis setup, PSF ASCII parsing, and PM calculation for inverting topologies.
 
-## 1. vsource AC Stimulus: `mag=` not `ac=`
+## 1. vsource AC Stimulus: `mag=` not `ac=`; `type=dc` suppresses AC
 
 ### Problem
-In native Spectre language (`simulator lang=spectre`), using `ac=1` on a vsource
-causes **SFE-30** (invalid parameter).
+Two failure modes, both produce zero AC response with no error:
+
+**A)** Using `ac=1` causes **SFE-30** (invalid parameter in native Spectre lang).
+
+**B)** Any vsource without `mag=` has **zero AC response by default** — this is true
+whether or not `type=dc` is specified. The AC small-signal amplitude defaults to 0.
+Verified: `vsource dc=1.0` and `vsource dc=1.0 type=dc` both produce `(0.0 0.0)` at
+every frequency. `type=dc` is not the cause; the absence of `mag=` is.
 
 ### Root Cause
-`ac=` is SPICE-compatibility syntax only. Native Spectre uses `mag=` for small-signal
-AC amplitude.
+- `ac=` is SPICE-compatibility syntax only; native Spectre uses `mag=` for AC amplitude
+- Default AC magnitude for all vsource types is `mag=0` — must be set explicitly
+- Typical trap: engineer sets up a DC supply for DC analysis, forgets `mag=1` for AC
 
 ### Fix
 ```spectre
-// ✗ WRONG — SPICE-compat only
+// ✗ WRONG — SPICE-compat only, causes SFE-30
 Vip (vip 0) vsource dc=0.9 ac=1
 
-// ✓ CORRECT — native Spectre
+// ✗ WRONG — no mag= → zero AC response (true with OR without type=dc)
+VVDDA (VDDA 0) vsource dc=3.3
+VVDDA (VDDA 0) vsource dc=3.3 type=dc   // same result — still zero AC
+
+// ✓ CORRECT — pure AC stimulus
 Vip (vip 0) vsource dc=0.9 mag=1
+
+// ✓ CORRECT — DC supply with AC perturbation (PSRR measurement)
+VVDDA (VDDA 0) vsource dc=3.3 type=dc mag=1 srcType=dc
 ```
 
 ### Discovery
 Run `spectre -h vsource` to see all valid parameters. The relevant parameter is:
 `mag=0 V (Small signal voltage)`.
+
+Symptom: AC analysis runs without error, all node voltages show `(0.0 0.0)` complex
+values → verify `mag=1` is present on the excitation source.
 
 ---
 
@@ -235,6 +255,66 @@ output_swing = (vtail - vov_m2) - vov_m4
 
 ---
 
+## 8. ADE-Generated Netlist: Model Path Fails for Direct Invocation (SFE-868)
+
+### Problem
+Running `spectre input.scs` directly on an ADE-generated netlist fails with SFE-868:
+```
+ERROR (SFE-868): Cannot open the input file
+  '.../oa/smic13mmrf_1233/../models/spectre/ms013_io33_v2p6_7p_spe.lib'
+ERROR (SFE-868): Cannot open the input file 'tt'
+spectre terminated prematurely due to fatal error.
+```
+
+### Root Cause
+ADE generates model include paths using an OA-relative pattern:
+```
+include ".../oa/smic13mmrf_1233//../models/spectre/ms013_io33_v2p6_7p_spe.lib"
+include "tt"
+```
+The `..` goes up one level from `smic13mmrf_1233/` into `oa/` — resolving to
+`oa/models/spectre/` which does not exist. When ADE runs spectre via `runSimulation`
+with `+adespetkn=adespe`, it uses OA-aware path resolution that bypasses this
+filesystem issue. Standalone spectre does plain filesystem `..` traversal and fails.
+
+### Fix: Patch to Absolute Path Before Running
+```bash
+# Find the correct path (one level up from oa/):
+# .../0.13um_1p3m_8k/oa/smic13mmrf_1233/../  →  .../0.13um_1p3m_8k/oa/  (wrong)
+# correct:  .../0.13um_1p3m_8k/models/spectre/...
+
+# Replace the two broken lines with a direct include + section:
+sed -i \
+  -e 's|include ".*/oa/smic13mmrf_1233//../models/spectre/ms013_io33_v2p6_7p_spe.lib"|include "/foundry/smic/013mmrf/pdk/20250911/cadence/0.13um_1p3m_8k/models/spectre/ms013_io33_v2p6_7p_spe.lib" section=tt|' \
+  -e '/^include "tt"$/d' \
+  input.scs
+```
+
+Or manually replace:
+```
+// ✗ ADE-generated (broken for standalone)
+include ".../oa/smic13mmrf_1233//../models/spectre/ms013_io33_v2p6_7p_spe.lib"
+include "tt"
+
+// ✓ Direct path (works for standalone spectre)
+include "/foundry/smic/013mmrf/pdk/20250911/cadence/0.13um_1p3m_8k/models/spectre/ms013_io33_v2p6_7p_spe.lib" section=tt
+```
+
+### Warning: Patch Is Overwritten on Re-Netlist
+Every `vcli sim netlist --recreate` regenerates input.scs with the broken ADE path.
+Reapply the patch after each re-netlist when using standalone spectre.
+
+### Also: `vcli sim run` Reports Success Even When Spectre Fails This Way
+`run()` returns the resultsDir (non-nil = "success" to Ocean) the moment spectre
+is launched, before spectre's exit code is checked. Always verify:
+```bash
+tail -2 <resultsDir>/psf/spectre.out
+# ✓ "spectre completes with 0 errors"
+# ✗ "spectre terminated prematurely due to fatal error"
+ls <resultsDir>/psf/*.dc 2>/dev/null || echo "NO DATA FILES — sim failed"
+```
+
+---
 ## Quick Reference: Spectre Help
 
 ```bash

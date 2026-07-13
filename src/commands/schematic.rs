@@ -3,10 +3,39 @@ use std::fs;
 
 use crate::client::bridge::VirtuosoClient;
 use crate::client::editor::SchematicEditor;
-use crate::client::skill_runtime::decode_json;
 use crate::error::{Result, VirtuosoError};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tempfile;
+
+/// Cadence symbol orientation. Exactly the 8 values SKILL accepts.
+#[derive(Debug, Clone, Copy, Deserialize, clap::ValueEnum)]
+#[clap(rename_all = "verbatim")]
+pub enum Orient {
+    R0,
+    R90,
+    R180,
+    R270,
+    MX,
+    MY,
+    MXR90,
+    MYR90,
+}
+
+impl Orient {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::R0 => "R0",
+            Self::R90 => "R90",
+            Self::R180 => "R180",
+            Self::R270 => "R270",
+            Self::MX => "MX",
+            Self::MY => "MY",
+            Self::MXR90 => "MXR90",
+            Self::MYR90 => "MYR90",
+        }
+    }
+}
 
 // ── Atomic commands ─────────────────────────────────────────────────
 
@@ -26,17 +55,15 @@ pub fn place(
     name: &str,
     x: i64,
     y: i64,
-    orient: &str,
+    orient: Orient,
     params: &[(String, String)],
 ) -> Result<Value> {
     let (lib, cell) = master
         .split_once('/')
         .ok_or_else(|| VirtuosoError::Config("--master must be lib/cell format".into()))?;
-    let _ = orient; // TODO: pass orient to create_instance
-
     let client = VirtuosoClient::from_env()?;
     let mut ed = SchematicEditor::new(&client);
-    ed.add_instance(lib, cell, "symbol", name, (x, y));
+    ed.add_instance(lib, cell, "symbol", name, (x, y), orient.as_str());
     for (k, v) in params {
         ed.set_param(name, k, v);
     }
@@ -135,6 +162,62 @@ pub fn save() -> Result<Value> {
     }))
 }
 
+/// Create a short labeled net stub in a given direction.
+///
+/// direction: "right" | "left" | "up" | "down"
+/// length: stub length in grid units (default 0.5)
+/// cosmetic: "default" (0.0625, centerCenter) or "clean" (0.125, lowerCenter)
+pub fn net_stub(
+    net: &str,
+    x: i64,
+    y: i64,
+    direction: &str,
+    length: f64,
+    cosmetic: &str,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+    let skill = client
+        .schematic
+        .create_net_stub(net, x, y, direction, length, cosmetic);
+    let r = client.execute_skill(&skill, None)?;
+    Ok(json!({
+        "status": if r.skill_ok() { "success" } else { "error" },
+        "net": net,
+        "direction": direction,
+        "origin": [x, y],
+        "output": r.output,
+    }))
+}
+
+/// Label an instance terminal (D/G/S/B) with a net name at the terminal's
+/// precise pin center.
+///
+/// inst: "instance_name" (e.g. "M1")
+/// term: terminal name (e.g. "D", "G", "S", "B")
+/// net: net name to assign
+/// cosmetic: "default" or "clean"
+/// auto_rotate: infer label rotation from stub direction
+pub fn label_term(
+    inst: &str,
+    term: &str,
+    net: &str,
+    cosmetic: &str,
+    auto_rotate: bool,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+    let skill = client
+        .schematic
+        .label_instance_term(inst, term, net, cosmetic, auto_rotate);
+    let r = client.execute_skill(&skill, None)?;
+    Ok(json!({
+        "status": if r.skill_ok() { "success" } else { "error" },
+        "instance": inst,
+        "terminal": term,
+        "net": net,
+        "output": r.output,
+    }))
+}
+
 // ── Build (batch from JSON spec) ────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -170,8 +253,14 @@ pub struct SpecInstance {
     pub x: i64,
     #[serde(default)]
     pub y: i64,
+    #[serde(default = "default_orient")]
+    pub orient: Orient,
     #[serde(default)]
     pub params: HashMap<String, String>,
+}
+
+fn default_orient() -> Orient {
+    Orient::R0
 }
 
 #[derive(Deserialize)]
@@ -193,6 +282,7 @@ pub struct SpecPin {
     #[serde(rename = "type")]
     pub pin_type: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub connect: Option<String>, // "M2:G"
     #[serde(default)]
     pub x: i64,
@@ -230,7 +320,14 @@ pub fn build(spec_path: &str) -> Result<Value> {
                 inst.name, inst.master
             ))
         })?;
-        ed.add_instance(lib, cell, "symbol", &inst.name, (inst.x, inst.y));
+        ed.add_instance(
+            lib,
+            cell,
+            "symbol",
+            &inst.name,
+            (inst.x, inst.y),
+            inst.orient.as_str(),
+        );
         for (k, v) in &inst.params {
             ed.set_param(&inst.name, k, v);
         }
@@ -268,13 +365,21 @@ pub fn build(spec_path: &str) -> Result<Value> {
         }
 
         // Load the RB_connectTerminal helper procedure
-        let helper_path = "/tmp/rb_schematic_helper.il";
+        let helper_file = tempfile::Builder::new()
+            .prefix("rb_schematic_helper_")
+            .suffix(".il")
+            .tempfile()
+            .map_err(|e| VirtuosoError::Config(format!("Cannot create temp helper: {e}")))?;
+        let helper_path = helper_file.path();
         fs::write(
             helper_path,
             include_str!("../../resources/rb_connect_terminal.il"),
         )
         .map_err(|e| VirtuosoError::Config(format!("Cannot write helper: {e}")))?;
-        let r = client.execute_skill(&format!(r#"load("{helper_path}")"#), None)?;
+        let r = client.execute_skill(
+            &format!(r#"load("{path}")"#, path = helper_path.display()),
+            None,
+        )?;
         if !r.skill_ok() {
             return Err(VirtuosoError::Execution(format!(
                 "Failed to load connection helper: {}",
@@ -291,10 +396,18 @@ pub fn build(spec_path: &str) -> Result<Value> {
         }
         lines.push("t)".to_string());
 
-        let script_path = "/tmp/rb_schematic_conn.il";
+        let script_file = tempfile::Builder::new()
+            .prefix("rb_schematic_conn_")
+            .suffix(".il")
+            .tempfile()
+            .map_err(|e| VirtuosoError::Config(format!("Cannot create temp script: {e}")))?;
+        let script_path = script_file.path();
         fs::write(script_path, lines.join("\n"))
             .map_err(|e| VirtuosoError::Config(format!("Cannot write script: {e}")))?;
-        let r = client.execute_skill(&format!(r#"load("{script_path}")"#), None)?;
+        let r = client.execute_skill(
+            &format!(r#"load("{path}")"#, path = script_path.display()),
+            None,
+        )?;
         if !r.skill_ok() {
             return Err(VirtuosoError::Execution(format!(
                 "Failed to create connections: {}",
@@ -336,31 +449,100 @@ pub fn build(spec_path: &str) -> Result<Value> {
 
 // ── Read commands ───────────────────────────────────────────────────
 
+/// Parse SKILL JSON output: bridge returns `"\"[...]\""`  — strip outer quotes, unescape inner.
+/// Returns `Err` if the output cannot be parsed as JSON after unescaping.
+pub fn parse_skill_json(output: &str) -> Result<Value> {
+    // output is like: "\"[{\\\"name\\\":\\\"M1\\\"}]\""
+    // Step 1: strip outer quotes from SKILL string
+    let s = output.trim_matches('"');
+    // Step 2: try parsing directly (works if no extra escaping)
+    if let Ok(v) = serde_json::from_str(s) {
+        return Ok(v);
+    }
+    // Step 3: unescape \" → " and \\\\ → \ then retry
+    let unescaped = s.replace("\\\"", "\"").replace("\\\\", "\\");
+    serde_json::from_str(&unescaped).map_err(|e| {
+        VirtuosoError::Execution(format!(
+            "Failed to parse SKILL JSON output: {e}. Raw: {output}"
+        ))
+    })
+}
+
 pub fn list_instances() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.list_instances();
-    let r = client.execute_skill(&skill, None)?;
-    decode_json(&r, "failed to list schematic instances")
+    let r = client.execute_skill(&skill, Some(client.read_timeout()))?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "Failed to list instances: {}",
+            r.output
+        )));
+    }
+    parse_skill_json(&r.output)
 }
 
 pub fn list_nets() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.list_nets();
-    let r = client.execute_skill(&skill, None)?;
-    decode_json(&r, "failed to list schematic nets")
+    let r = client.execute_skill(&skill, Some(client.read_timeout()))?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "Failed to list nets: {}",
+            r.output
+        )));
+    }
+    parse_skill_json(&r.output)
 }
 
 pub fn list_pins() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.list_pins();
-    let r = client.execute_skill(&skill, None)?;
-    decode_json(&r, "failed to list schematic pins")
+    let r = client.execute_skill(&skill, Some(client.read_timeout()))?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "Failed to list pins: {}",
+            r.output
+        )));
+    }
+    parse_skill_json(&r.output)
 }
 
 pub fn get_params(inst: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.get_instance_params(inst);
+    let r = client.execute_skill(&skill, Some(client.read_timeout()))?;
+    if !r.skill_ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "Failed to get params for '{}': {}",
+            inst, r.output
+        )));
+    }
+    Ok(json!({"instance": inst, "params": parse_skill_json(&r.output)?}))
+}
+
+/// Polish net labels with cosmetic presets, auto-rotation, or offset repositioning.
+///
+/// preset: "readable" (fontSize 0.125, centerCenter) or "compact" (fontSize 0.0625, centerLeft)
+/// auto_rotate: infer rotation from wire direction
+/// offset: "small" (+5 DBU), "medium" (+10), "large" (+20)
+pub fn polish_label(
+    net: &str,
+    preset: &str,
+    auto_rotate: bool,
+    offset: Option<&str>,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+    let skill = client
+        .schematic
+        .polish_labels(net, preset, auto_rotate, offset);
     let r = client.execute_skill(&skill, None)?;
-    let params = decode_json(&r, &format!("failed to get params for '{inst}'"))?;
-    Ok(json!({"instance": inst, "params": params}))
+    let labels_updated = r.output_unquoted().parse::<usize>().unwrap_or(0);
+    Ok(json!({
+        "status": if r.skill_ok() { "success" } else { "error" },
+        "net": net,
+        "labels_updated": labels_updated,
+        "preset": preset,
+        "auto_rotate": auto_rotate,
+        "offset": offset,
+    }))
 }

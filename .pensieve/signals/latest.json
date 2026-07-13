@@ -1,0 +1,19 @@
+{
+  "generated": "2026-04-19T07:33:06.227291",
+  "recommended_skills": [
+    {
+      "skill": "spectre-netlist-gotchas",
+      "reason": "sfe_30 ×1: SFE-30 ac= 应改为 mag=",
+      "error_types": [
+        "sfe_30"
+      ],
+      "count": 1,
+      "last_seen": "2026-04-19T10:00:00"
+    }
+  ],
+  "promotion_candidates": [],
+  "summary": {
+    "hot_skills": 1,
+    "ready_to_promote": 0
+  }
+}

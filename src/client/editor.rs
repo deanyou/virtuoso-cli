@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::client::bridge::VirtuosoClient;
 use crate::client::layout_ops::LayoutOps;
 use crate::client::schematic_ops::SchematicOps;
@@ -21,7 +23,7 @@ impl<'a> LayoutEditor<'a> {
         }
     }
 
-    pub fn add_rect(&mut self, layer: &str, purpose: &str, bbox: [(i64, i64); 4]) {
+    pub fn add_rect(&mut self, layer: &str, purpose: &str, bbox: [(i64, i64); 2]) {
         let ops = LayoutOps;
         self.commands.push(ops.create_rect(layer, purpose, &bbox));
     }
@@ -81,10 +83,11 @@ impl<'a> SchematicEditor<'a> {
         view: &str,
         name: &str,
         origin: (i64, i64),
+        orient: &str,
     ) {
         let ops = SchematicOps;
         self.commands
-            .push(ops.create_instance(lib, cell, view, name, origin));
+            .push(ops.create_instance(lib, cell, view, name, origin, orient));
     }
 
     pub fn add_wire(&mut self, points: Vec<(i64, i64)>, layer: &str, net_name: &str) {

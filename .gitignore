@@ -11,3 +11,21 @@ sim/
 plots/
 # Async sim job output dirs (8-char UUID)
 [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/
+libManager.log
+
+# Spectre simulation artifacts
+input.ahdlSimDB/
+spectre.dc
+*.pyc
+__pycache__/
+test_tb.ahdlSimDB/
+test_tb.log
+
+# Spectre characterization run logs (analog design `vcli process char` etc.)
+char_*.log
+gmid_test*.log
+
+# Agent workflow run records (per-session metadata, regenerated each run)
+.claude/workflow-runs/
+
+/0

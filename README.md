@@ -27,14 +27,22 @@ Control Cadence Virtuoso from anywhere — locally or remotely. Designed for AI 
 ### Key Features
 
 - **Multi-session support** — Multiple Virtuoso instances on the same server each get a unique session ID and random port, with no conflicts
+- **Multi-session broadcast** — `vcli skill broadcast` fans out to all live sessions concurrently via scoped threads; subagent mode supports heterogeneous multi-step per-session workflows
 - **Dynamic port assignment** — Daemon binds port 0 (OS assigns), eliminating port collision
-- **Session auto-discovery** — Single session connects automatically; multiple sessions require `--session` or `VB_SESSION`
+- **Session auto-discovery** — Single session connects automatically; multiple sessions require `--session` or `VB_SESSION`; stale session files for dead daemons are silently filtered out
+- **CLI/daemon version unification** — `vcli session show` reports `daemon_version` and a `version_skew` warning when the running vcli binary and the deployed daemon don't match, so you know when to rebuild
+- **Stale-daemon recovery** — `ramic_bridge.il` checks `ipcIsAliveProcess` on `load` and silently reaps dead daemons before starting a new one; no manual cleanup required
+- **Session history** — Per-session SKILL execution log and CLI command history; survives reconnection (`vcli session history <id>`)
 - **Three programming modes** — Raw SKILL expressions, high-level API, or load `.il` files directly
 - **Local + remote modes** — Direct local connection or SSH tunnel with ControlMaster multiplexing
+- **Native cross-arch tunnel deploy** — `vcli tunnel start` detects remote CPU arch and uploads the matching `resources/daemons/virtuoso-daemon-{x86_64,aarch64}` binary — no need to build on the remote
+- **Per-client scratch scoping** — Concurrent vcli invocations from different `VB_CLIENT_ID` / `VB_PROFILE` env values get isolated `/tmp/virtuoso_bridge/<client>/` scratch dirs, so two operators on the same host never collide
+- **Skill Finder** — Fuzzy / prefix / suffix / exact / regex search over Cadence's `~/.cdsinit` and `/opt/cadence/.../finder/SKILL/*.fnd` files (`vcli skill find query --mode fuzzy`)
+- **Admin capability gate** — `VCLI_CAPABILITY=admin` unlocks `vcli skill broadcast` and raw SKILL exec for system-wide operations
 - **Agent-native CLI** — Noun-verb command structure, JSON structured output, schema introspection, semantic exit codes
 - **Schematic editing & reading** — Create, place, wire, connect + read instances, nets, pins, parameters
 - **Maestro ADE management** — Open/close Explorer (`maestro`) view sessions, set variables, run simulations, export results (IC23.1+ unified ADE)
-- **Spectre simulation** — Sync/async simulation, job registry with status tracking, PSF parser
+- **Spectre simulation** — Sync/async simulation, job registry with status tracking and atomic file writes, PSF parser
 - **Multi-profile support** — `--profile` flag for concurrent connections to multiple Virtuoso instances
 - **Command logging** — All SKILL executions logged to `~/.cache/virtuoso_bridge/logs/commands.log`
 - **Interactive TUI** — `vtui` terminal dashboard showing sessions, jobs, tunnel status
@@ -67,8 +75,9 @@ All binaries (`vcli`, `vtui`) are installed to `~/.cargo/bin/`.
 
 ```skill
 load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
-vcli()
 ```
+
+`load` automatically stops any existing daemon, resets the path to `~/.cargo/bin/virtuoso-daemon`, starts fresh, and prints the Ready banner — works for first load and for reloading after updates.
 
 Output:
 ```
@@ -77,6 +86,8 @@ Output:
 ├─────────────────────────────────────────┤
 │  Session : eda-meow-1                   │
 │  Port    : 42109                        │
+│  Version : 0.4.0-alpha.7                  │
+│  Daemon  : ~/.cargo/bin/virtuoso-daemon │
 ├─────────────────────────────────────────┤
 │  Terminal: vcli skill exec 'version()'  │
 │  Sessions: vcli session list            │
@@ -86,7 +97,6 @@ Output:
 Add to `~/.cdsinit` for automatic loading on Virtuoso startup:
 ```skill
 load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
-vcli()
 ```
 
 **2. Connect from terminal:**
@@ -123,6 +133,12 @@ vcli maestro run --session fnxSession4                 # async run
 vcli maestro export --session fnxSession4 --path out.csv
 ```
 
+**Multi-Session Operations:**
+```bash
+vcli skill broadcast 'getVersion(t)'            # Same SKILL on all sessions
+VB_SESSION=eda-meow-1 vcli maestro run ...      # Different tasks via subagents
+```
+
 ### Multi-Session Architecture
 
 ```
@@ -142,7 +158,10 @@ vcli [--profile P] [--session S] [--format json|table]
 ├── init                              Generate .env config template
 ├── session                           Manage bridge sessions
 │   ├── list                              List all active sessions
-│   └── show [id]                         Show session details
+│   ├── show [id]                         Show session details (with daemon_version + version_skew check)
+│   ├── current                           Show which session would be auto-selected
+│   ├── cleanup                           Remove stale session files for dead daemons
+│   └── history <id> [--skill] [--cmd] [--limit N]   SKILL + CLI history for a session
 ├── tunnel                            Manage SSH tunnel
 │   ├── start [--timeout N] [--dry-run]
 │   ├── stop [--force] [--dry-run]
@@ -151,7 +170,10 @@ vcli [--profile P] [--session S] [--format json|table]
 │   └── diagnose                          Full connection diagnostics
 ├── skill                             Execute SKILL code
 │   ├── exec <code> [--timeout N]
-│   └── load <file>
+│   ├── load <file>
+│   ├── broadcast <code>              Fan out to all live sessions in parallel (requires VCLI_CAPABILITY=admin)
+│   ├── find <query> [--mode M] [--include-desc]   Search Cadence .fnd (fuzzy/prefix/suffix/exact/regex)
+│   └── info <name>                     Detailed info for one SKILL function
 ├── cell                              Manage cellviews
 │   ├── open --lib L --cell C [--view V] [--mode M] [--dry-run]
 │   ├── save / close / info
@@ -188,6 +210,8 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_JUMP_HOST` | — | Bastion/jump host address |
 | `VB_TIMEOUT` | `30` | Connection/execution timeout (seconds) |
 | `VB_PROFILE` | — | Config profile (reads `VB_*_<profile>` vars) |
+| `VB_CLIENT_ID` | `$VB_PROFILE` or `gethostname()` | Per-client remote scratch scoping (e.g. `vcli-A`, `vcli-B`); isolates `/tmp/virtuoso_bridge/<client>/` paths between concurrent operators |
+| `VCLI_CAPABILITY` | `user` | Set to `admin` to unlock `vcli skill broadcast` and raw SKILL exec |
 | `RB_DAEMON_PATH` | auto-detected | Override daemon binary path |
 
 ### How It Works
@@ -235,10 +259,18 @@ vcli skill exec    # connects to port N
 ### 核心特性
 
 - **多 session 支持** — 同一台服务器上可同时运行多个 Virtuoso 实例，每个实例自动分配唯一 session_id 和随机端口，互不干扰
+- **多 session 并发广播** — `vcli skill broadcast` 通过 scoped threads 并发广播到所有活跃 session；subagent 模式支持不同 session 执行不同多步工作流
 - **动态端口分配** — daemon 绑定端口 0（OS 自动分配），彻底避免端口冲突
-- **session 自动发现** — 只有一个 session 时无需指定；多个 session 时通过 `--session` 或 `VB_SESSION` 选择
+- **session 自动发现** — 只有一个 session 时无需指定；多个 session 时通过 `--session` 或 `VB_SESSION` 选择；已死亡的 daemon 对应的 session 文件自动过滤
+- **CLI/daemon 版本统一** — `vcli session show` 显示 `daemon_version` 字段，若 vcli 二进制版本与运行中的 daemon 不一致会报 `version_skew` 警告，提示需重新部署
+- **陈旧 daemon 自动恢复** — `ramic_bridge.il` 在 `load` 时检查 `ipcIsAliveProcess`，静默清理已死的 daemon 后再启动新实例；无需手动清理
+- **Session 历史记录** — 每个 session 独立保存 SKILL 执行日志和 CLI 命令历史，断线重连后可恢复（`vcli session history <id>`）
 - **三种编程方式** — 原始 SKILL 表达式、高阶 API、或直接加载 .il 文件
 - **本地+远程模式** — 支持本地直连或 SSH 隧道（ControlMaster 连接复用）
+- **隧道跨架构原生部署** — `vcli tunnel start` 自动检测远端 CPU 架构，并上传对应的 `resources/daemons/virtuoso-daemon-{x86_64,aarch64}` 二进制，无需在远端 build
+- **每客户端 scratch 隔离** — 不同 `VB_CLIENT_ID` / `VB_PROFILE` 环境变量下的并发 vcli 调用拥有独立的 `/tmp/virtuoso_bridge/<client>/` 目录，多个操作员在同一主机操作时互不冲突
+- **Skill Finder** — 模糊 / 前缀 / 后缀 / 精确 / 正则 五种模式搜索 Cadence `~/.cdsinit` 与 `/opt/cadence/.../finder/SKILL/*.fnd` 文件（`vcli skill find query --mode fuzzy`）
+- **Admin 权限门** — `VCLI_CAPABILITY=admin` 解锁 `vcli skill broadcast` 与原始 SKILL 执行权限
 - **Agent 原生 CLI** — noun-verb 命令结构、JSON 结构化输出、schema 自省、语义化退出码
 - **原理图编辑与读取** — 创建、放置、连线 + 读取实例/网络/引脚/参数
 - **Maestro ADE 管理** — 打开/关闭 Explorer（`maestro` view）session、设置变量、运行仿真、导出结果（IC23.1+ 统一 ADE）
@@ -275,8 +307,9 @@ cargo install --path .
 
 ```skill
 load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
-vcli()
 ```
+
+`load` 会自动停止旧 daemon、将路径重置为 `~/.cargo/bin/virtuoso-daemon` 并重启，首次加载和更新后重载均适用。
 
 输出：
 ```
@@ -285,6 +318,8 @@ vcli()
 ├─────────────────────────────────────────┤
 │  Session : eda-meow-1                   │
 │  Port    : 42109                        │
+│  Version : 0.4.0-alpha.7                  │
+│  Daemon  : ~/.cargo/bin/virtuoso-daemon │
 ├─────────────────────────────────────────┤
 │  Terminal: vcli skill exec 'version()'  │
 │  Sessions: vcli session list            │
@@ -294,7 +329,6 @@ vcli()
 在 `~/.cdsinit` 中加入以下内容，实现 Virtuoso 启动时自动加载：
 ```skill
 load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
-vcli()
 ```
 
 **第二步：从终端连接：**
@@ -331,6 +365,12 @@ vcli maestro run --session fnxSession4                 # 异步运行
 vcli maestro export --session fnxSession4 --path out.csv
 ```
 
+**多 session 并发操作：**
+```bash
+vcli skill broadcast 'getVersion(t)'            # 同一 SKILL 广播到所有 session
+VB_SESSION=eda-meow-1 vcli maestro run ...      # 通过 subagent 实现不同任务
+```
+
 ### 多 Session 工作原理
 
 ```
@@ -350,13 +390,19 @@ vcli [--profile P] [--session S] [--format json|table]
 ├── init                              创建 .env 配置模板
 ├── session                           管理 bridge session
 │   ├── list                              列出所有活跃 session
-│   └── show [id]                         查看 session 详情
+│   ├── show [id]                         查看 session 详情（含 daemon_version + version_skew 检查）
+│   ├── current                           显示会被自动选中的 session
+│   ├── cleanup                           删除已死亡 daemon 的 session 文件
+│   └── history <id> [--skill] [--cmd] [--limit N]   查看 SKILL + CLI 历史
 ├── tunnel                            管理 SSH 隧道
 │   ├── start / stop / restart / status
 │   └── diagnose                          完整连接诊断
 ├── skill                             执行 SKILL 代码
 │   ├── exec <code> [--timeout N]
-│   └── load <file>
+│   ├── load <file>
+│   ├── broadcast <code>              并发广播到所有活跃 session（需 VCLI_CAPABILITY=admin）
+│   ├── find <query> [--mode M] [--include-desc]   搜索 Cadence .fnd（fuzzy/prefix/suffix/exact/regex）
+│   └── info <name>                     查看单个 SKILL 函数详情
 ├── cell                              管理 cellview
 │   ├── open / save / close / info
 ├── schematic                         原理图编辑与读取
@@ -388,6 +434,8 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_JUMP_HOST` | - | 跳板机/堡垒机地址 |
 | `VB_TIMEOUT` | `30` | 连接/执行超时（秒） |
 | `VB_PROFILE` | - | 配置 profile（读取 `VB_*_<profile>` 变量） |
+| `VB_CLIENT_ID` | `$VB_PROFILE` 或 `gethostname()` | 每客户端远端 scratch 隔离标识（如 `vcli-A`、`vcli-B`）；隔离 `/tmp/virtuoso_bridge/<client>/` 路径，避免多操作员并发冲突 |
+| `VCLI_CAPABILITY` | `user` | 设为 `admin` 解锁 `vcli skill broadcast` 与原始 SKILL 执行权限 |
 | `RB_DAEMON_PATH` | 自动检测 | 覆盖 daemon 二进制路径 |
 
 ### 工作原理

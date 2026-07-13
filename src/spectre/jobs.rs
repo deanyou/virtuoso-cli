@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum JobStatus {
     Running,
@@ -30,10 +30,7 @@ pub struct Job {
 
 impl Job {
     fn dir() -> PathBuf {
-        let dir = dirs::cache_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("virtuoso_bridge")
-            .join("jobs");
+        let dir = crate::runtime_paths::cache_subdir(&["jobs"]);
         let _ = fs::create_dir_all(&dir);
         dir
     }
@@ -45,7 +42,10 @@ impl Job {
     pub fn save(&self) -> Result<()> {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| VirtuosoError::Execution(e.to_string()))?;
-        fs::write(Self::path(&self.id), json).map_err(|e| VirtuosoError::Execution(e.to_string()))
+        let path = Self::path(&self.id);
+        let tmp = path.with_extension("json.tmp");
+        fs::write(&tmp, json).map_err(|e| VirtuosoError::Execution(e.to_string()))?;
+        fs::rename(&tmp, &path).map_err(|e| VirtuosoError::Execution(e.to_string()))
     }
 
     pub fn load(id: &str) -> Result<Self> {
@@ -100,6 +100,22 @@ impl Job {
 
             if !alive {
                 self.finish_from_log()?;
+            } else if self.remote_host.is_none() {
+                // For local jobs: zombie processes answer kill -0 with "alive".
+                // Check the log directly — if spectre already printed its completion
+                // line, reap it regardless of PID status.
+                let log_dir = std::path::Path::new(&self.netlist_path)
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."));
+                let log = log_dir.join("spectre.out");
+                if log.exists() {
+                    let content = fs::read_to_string(&log).unwrap_or_default();
+                    if content.contains("completes with 0 errors")
+                        || content.contains("completes with")
+                    {
+                        self.finish_from_log()?;
+                    }
+                }
             }
         }
         Ok(())
@@ -121,7 +137,7 @@ impl Job {
                     .arg(format!("cat {rdir}/spectre.out 2>/dev/null"))
                     .output()
                     .ok();
-                out.map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
                     .unwrap_or_default()
             } else if log.exists() {
                 fs::read_to_string(&log).unwrap_or_default()
@@ -148,7 +164,7 @@ impl Job {
 
     pub fn cancel(&mut self) -> Result<()> {
         if self.status != JobStatus::Running {
-            return Err(VirtuosoError::Config(format!(
+            return Err(VirtuosoError::Execution(format!(
                 "job '{}' is not running (status: {:?})",
                 self.id, self.status
             )));
@@ -168,6 +184,7 @@ impl Job {
         self.save()
     }
 
+    #[allow(dead_code)]
     pub fn delete(id: &str) -> Result<()> {
         let path = Self::path(id);
         fs::remove_file(&path).map_err(|_| VirtuosoError::NotFound(format!("job '{id}' not found")))

@@ -1,14 +1,31 @@
-#![allow(dead_code)]
-
+pub mod async_runtime;
+pub mod auth;
+pub mod capability;
 pub mod client;
 pub mod command_log;
 pub mod commands;
 pub mod config;
 pub mod error;
 pub mod exit_codes;
+pub mod history;
+pub mod mcp;
 pub mod models;
 pub mod ocean;
 pub mod output;
+pub mod plugins;
+pub mod profile;
+pub mod rpc;
+pub mod runtime_paths;
+pub mod session;
+pub mod skill_finder;
 pub mod spectre;
+pub mod streaming;
+pub mod transaction;
 pub mod transport;
 pub mod tui;
+pub mod version;
+
+pub use auth::{auth, check_auth, log_rpc, Auth};
+pub use capability::{Capability, CapabilitySet};
+pub use profile::{resolve_profile, resolve_profile_info, ProfileResolution};
+pub use transaction::{SchematicDiff, SchematicSnapshot, TransactionManager};

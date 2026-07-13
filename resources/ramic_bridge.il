@@ -1,3 +1,11 @@
+; RB_VERSION: 0.4.0-alpha.11
+; Stamp must match the vcli binary's `Cargo.toml` version. `vcli session show`
+; compares this with the daemon's `RBDVersion` global (parsed from the
+; `VERSION:x.x.x` line the daemon prints to stderr on startup). If you see a
+; version_skew warning, either:
+;   (a) reload this .il after upgrading vcli, or
+;   (b) reinstall vcli (`cargo install --path .` or pull the matching release).
+;
 ;RB = RAMIC Bridge
 ;RBD = RB Daemon
 ;RBM = RB Monitor
@@ -29,48 +37,86 @@ when(RBDPath == "" || RBDPath == nil
 unless(boundp('RBPython) RBPython = "")
 ; All state vars preserved across reloads — only initialized if not yet bound.
 ; RBPort must NOT be reset on reload: the running daemon's actual port would be lost.
-unless(boundp('RBPort)      RBPort      = 0)   ; 0 = OS assigns; updated by RBIpcErrHandler
-unless(boundp('RBLocal)     RBLocal     = nil)
-unless(boundp('RBEcho)      RBEcho      = nil)
-unless(boundp('RBDLog)      RBDLog      = nil)
+unless(boundp('RBPort)       RBPort       = 0)   ; 0 = OS assigns; updated by RBIpcErrHandler
+unless(boundp('RBLocal)      RBLocal      = nil)
+unless(boundp('RBEcho)       RBEcho       = nil)
+unless(boundp('RBDLog)       RBDLog       = nil)
+unless(boundp('RBShowBanner) RBShowBanner = nil) ; t = print banner when next PORT: arrives
+unless(boundp('RBDVersion)   RBDVersion   = "")  ; set from VERSION: line before PORT:
 
 ; IPC process handle — must survive reload so we don't spawn a second daemon.
 unless(boundp('RBIpc) RBIpc = 'unbound)
 
 ; Session management — persist across reloads so session_id stays stable
 unless(boundp('RBSessionId)   RBSessionId   = "")
-unless(boundp('RBSessionSeq)  RBSessionSeq  = 0)
+; hostname-user prefix; RBIpcErrHandler appends the OS-assigned port to form the final unique ID
+unless(boundp('RBSessionBase) RBSessionBase = "")
+; SSH port for tunnel connection — read from env or default to 2222
+unless(boundp('RBsshPort)
+    RBsshPort = let((envPort)
+        envPort = getShellEnvVar("RB_SSH_PORT")
+        if(envPort then
+            atoi(envPort)
+        else
+            2222
+        )
+    )
+)
+
+procedure(RBSendCallback(msg)
+  ; Write result to a temp file pair instead of ipcWriteProcess — works around
+  ; the IC23.1/RHEL8 bug where ipcWriteProcess stops firing after the first call.
+  ; Daemon polls for the .done marker, reads data file, then deletes both.
+  let((cbPort dataFile doneFile port)
+    cbPort = RBPort + 1
+    dataFile = sprintf(nil "/tmp/.ramic_cb_%d" cbPort)
+    doneFile = sprintf(nil "/tmp/.ramic_cb_%d.done" cbPort)
+    port = outfile(dataFile "w")
+    when(port fprintf(port "%s" msg) close(port))
+    port = outfile(doneFile "w")
+    when(port close(port))
+  )
+)
 
 procedure(RBIpcDataHandler(ipcId data)
-  ; Handler for successful data received from the daemon.
+  ; IPC data handler: eval SKILL expression, send STX (success) or NAK (error) via callback file.
   ; evalstring() bypasses CIW's interactive loop — printf output is line-buffered
   ; and won't appear until a "\n" is received or hiFlush() is called explicitly.
   ; We call hiFlush() after every evalstring to force CIW UI refresh.
-  let((result)
+  let((result resultStr)
     when(RBEcho printf("[RAMIC Bridge (%L)] receive:%L\n" ipcId data))
-    if(errset(result=evalstring(data)) then
-	    ; Success: Send response with STX (0x02) start marker and RS (0x1E) end marker
-	    ipcWriteProcess(ipcId sprintf(nil "%c%L%c" intToChar(2) result intToChar(30)))
-		when(RBEcho printf("[RAMIC Bridge (%L)] return:%L\n" ipcId result))
-	else
-        ; Error: NAK + payload to daemon only (no CIW printf; client parses errors)
-        ipcWriteProcess(ipcId sprintf(nil "%c%L%c" intToChar(21) errset.errset intToChar(30)))
+    if(errset(result=evalstring(strcat("(progn " data ")"))) then
+        resultStr = sprintf(nil "%c%L%c" intToChar(2) result intToChar(30))
+        when(RBEcho printf("[RAMIC Bridge (%L)] return:%L\n" ipcId result))
+    else
+        resultStr = sprintf(nil "%c%L%c" intToChar(21) errset.errset intToChar(30))
     )
+    RBSendCallback(resultStr)
     hiFlush()  ; force CIW UI refresh — evalstring is line-buffered unlike interactive CIW
   )
 )
 
 procedure(RBIpcErrHandler(ipcId data)
-    ; Parse "PORT:XXXXX" line emitted by daemon on startup to capture actual bound port.
-    ; The daemon prints this to stderr before accepting connections.
+    ; Parse VERSION:x.x.x and PORT:XXXXX lines emitted by daemon on startup.
+    ; VERSION arrives first so it is stored before the banner fires on PORT.
+    rexCompile("VERSION:\\([^ \n]*\\)")
+    when(rexExecute(data)
+        RBDVersion = rexSubstitute("\\1")
+    )
     rexCompile("PORT:\\([0-9][0-9]*\\)")
     when(rexExecute(data)
         let((actualPort)
             actualPort = atoi(rexSubstitute("\\1"))
             when(actualPort > 0
                 RBPort = actualPort
+                RBSessionId = sprintf(nil "%s-%d" RBSessionBase RBPort)
                 RBWriteSession(RBSessionId RBPort)
                 printf("[RAMIC Bridge] Session '%s' on port %d\n" RBSessionId RBPort)
+                ; Print banner here so the port is always known-correct.
+                when(RBShowBanner
+                    RBShowBanner = nil
+                    RBPrintBanner()
+                )
             )
         )
     )
@@ -92,6 +138,12 @@ procedure(RBStart()
     ; writes the session registration file.
 	if(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) then
 		printf("[RAMIC Bridge (%L)] is already running\n", RBIpc)
+		printf("  bound port   : %d\n" RBPort)
+		printf("  session id   : %s\n" RBSessionId)
+		printf("  To switch profile/port, run in CIW:\n")
+		printf("    RBStop()\n")
+		printf("    load(\".../ramic_bridge.il\")\n")
+		printf("  If that does not clear it, use RBStopAll() before loading again.\n")
 	else
 		prog((host logpath hostname username)
 			; Determine host binding based on RBLocal setting
@@ -106,14 +158,14 @@ procedure(RBStart()
 			else
 				logpath = ""
 			)
-			; Generate stable session_id: hostname-username-N (increments per RBStart)
+			; Session ID is finalized by RBIpcErrHandler once the OS-assigned port is known,
+			; guaranteeing uniqueness when multiple Virtuoso instances run concurrently.
 			hostname = getShellEnvVar("HOSTNAME")
 			unless(hostname hostname = "localhost")
 			hostname = car(parseString(hostname "."))  ; strip domain
 			username = getShellEnvVar("USER")
 			unless(username username = "user")
-			RBSessionSeq = RBSessionSeq + 1
-			RBSessionId = sprintf(nil "%s-%s-%d" hostname username RBSessionSeq)
+			RBSessionBase = sprintf(nil "%s-%s" hostname username)
 			; Start the daemon with port=0 (OS assigns free port).
 			; RBIpcErrHandler will parse PORT:N from stderr and write session file.
 			RBIpc = ipcBeginProcess(sprintf(nil "%s %s 0" RBDPath host) "" 'RBIpcDataHandler 'RBIpcErrHandler 'RBIpcFinishHandler logpath)
@@ -127,6 +179,7 @@ procedure(RBStop()
 	if(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) then
 		ipcKillProcess(RBIpc)
 		RBDeleteSession(RBSessionId)
+		RBPort = 0   ; clear stale port so next start shows correct value
 	else
 		printf("[RAMIC Bridge] is already down\n" )
 	)
@@ -350,37 +403,107 @@ procedure(RBPrintEmptyLines()
 )
 
 ; ============================================================================
-; virtuoso_cli() — convenience wrapper: start bridge + print connection info
+; RBPrintBanner — print the Ready box to CIW (called by RBIpcErrHandler
+;                 after PORT is confirmed, so the port is always correct)
 ; ============================================================================
-; Call this in .cdsinit or CIW instead of calling RBStart() directly.
-; Prints session ID and the vcli command to use in the terminal.
 
-procedure(vcli()
-    ; Start bridge (no-op if already running)
-    RBStart()
-    ; Print connection summary
-    if(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) then
+procedure(RBPrintBanner()
+    let((home daemonDisp ver)
+        home = getShellEnvVar("HOME")
+        ; Replace $HOME prefix with ~ for a compact path display
+        daemonDisp = RBDPath
+        when(strncmp(daemonDisp home strlen(home)) == 0
+            daemonDisp = strcat("~" substring(daemonDisp strlen(home) + 1))
+        )
+        ver = if(RBDVersion != "" then RBDVersion else "?")
         printf("\n")
         printf("┌─────────────────────────────────────────┐\n")
         printf("│  vcli (Virtuoso CLI Bridge) — Ready     │\n")
         printf("├─────────────────────────────────────────┤\n")
         printf("│  Session : %-29s │\n" RBSessionId)
-        if(RBPort > 0 then
-            printf("│  Port    : %-29d │\n" RBPort)
-        else
-            printf("│  Port    : (assigning...)               │\n")
-        )
+        printf("│  Port    : %-29d │\n" RBPort)
+        printf("│  SSH     : %-29d │\n" RBsshPort)
+        printf("│  Version : %-29s │\n" ver)
+        printf("│  Daemon  : %-29s │\n" daemonDisp)
         printf("├─────────────────────────────────────────┤\n")
         printf("│  Terminal: vcli skill exec 'version()'  │\n")
         printf("│  Sessions: vcli session list            │\n")
         printf("└─────────────────────────────────────────┘\n")
         printf("\n")
-        ; Session file is written automatically by RBIpcErrHandler when PORT: arrives.
-        ; Do NOT call RBWriteSession here — it would race with the async handler.
-    else
-        printf("[vcli] Bridge failed to start. Check RBDPath=%s\n" RBDPath)
     )
 )
 
-; Auto-start the bridge when this file is loaded (no second daemon if already up)
-RBStart()
+; ============================================================================
+; vcli() — convenience wrapper: start bridge + show Ready banner.
+; Banner prints after PORT is received so the port number is always correct.
+; ============================================================================
+
+procedure(vcli()
+    if(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) && RBPort > 0 then
+        ; Already running — print banner immediately (port already known).
+        RBPrintBanner()
+    else
+        ; Starting fresh — set flag so RBIpcErrHandler prints banner on PORT arrival.
+        RBShowBanner = t
+        RBStart()
+        unless(boundp('RBIpc) && ipcIsAliveProcess(RBIpc)
+            printf("[vcli] Bridge failed to start. Check RBDPath=%s\n" RBDPath)
+            RBShowBanner = nil
+        )
+    )
+)
+
+; ============================================================================
+; Full Virtuoso session: auto-load packages needed for streamout/schematic/ADE.
+; Only loads packages that are present in the current Virtuoso installation.
+; Skips silently if a package is not available (e.g., minimal CIW environment).
+; Reload-safe: uses RBLoadedPackages guard so packages are not re-loaded on
+; subsequent load() calls (only the first load in a given Virtuoso session
+; triggers the load; reloads are no-ops).
+; ============================================================================
+
+RBLoadedPackages = nil
+
+procedure(RBLoadPackages()
+    unless(RBLoadedPackages
+        ; Build the streamout/schematic/si package path using $CDS_INST.
+        ; The standard location is $CDS_INST/tools/dfII/etc/context/.
+        ; fileexists() guards against missing packages in minimal CIW.
+        ; errset() suppresses any load error (already loaded or missing kit).
+        let((cds_inst ctx)
+            cds_inst = getShellEnvVar("CDS_INST")
+            when(cds_inst
+                ctx = strcat(cds_inst "/tools/dfII/etc/context")
+                ; Streamout — needed for GDS/CDL export, streamin
+                when(fileexists(strcat(ctx "/streamout.ile"))
+                    errset(loadi(strcat(ctx "/streamout.ile")))
+                )
+                ; Schematic — needed for schExportCdl, schematic editing APIs
+                when(fileexists(strcat(ctx "/schematic.ile"))
+                    errset(loadi(strcat(ctx "/schematic.ile")))
+                )
+                ; Si (ship) — needed for ADE/simulation integration
+                when(fileexists(strcat(ctx "/si.ile"))
+                    errset(loadi(strcat(ctx "/si.ile")))
+                )
+            )
+        )
+        RBLoadedPackages = t
+    )
+)
+
+; ============================================================================
+; Auto-start on every load(): stop stale daemon, reset path, start fresh.
+; Wrapped in a procedure so no intermediate return values echo in CIW.
+; ============================================================================
+
+procedure(_RBAutoStart()
+    RBPython = ""
+    RBDPath = strcat(getShellEnvVar("HOME") "/.cargo/bin/virtuoso-daemon")
+    ; Load full-session packages before starting the daemon.
+    ; If any package is missing (e.g., minimal CIW), it is silently skipped.
+    RBLoadPackages()
+    when(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) RBStop())
+    vcli()
+)
+_RBAutoStart()

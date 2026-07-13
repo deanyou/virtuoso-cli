@@ -1,7 +1,8 @@
 ---
 name: cell-explore
 description: Explore Virtuoso cellviews - list libraries, cells, instances, nets, layers, and hierarchy. Use when browsing a design, understanding circuit topology, or inspecting layout/schematic contents.
-allowed-tools: Bash(*/virtuoso *)
+argument-hint: [library or cell path, e.g. "myLib" or "myLib/myCell"]
+allowed-tools: Bash(virtuoso *)
 ---
 
 # Explore Virtuoso Cellviews
@@ -55,6 +56,7 @@ virtuoso cell save --format json
 
 ## Key gotcha
 
+- **Always open cellviews in `"r"` (read-only) mode** — using `"w"` creates an empty `.oa` file on disk, destroying the schematic. The fifth argument to `dbOpenCellViewByType` must be `"r"` for any exploration/inspection call.
 - **View property is `v~>name`**, not `v~>viewName` — the latter returns nil in IC23.1
 - **`nthCdr` and `subList` don't exist** — use `foreach` with counter for pagination
 - **`buildString` may not work** with nil values — guard with `when(views ...)`

@@ -1,14 +1,23 @@
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::os::unix::io::AsRawFd;
+use std::path::Path;
 use std::process;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 
-const STX: u8 = 0x02;
 const NAK: u8 = 0x15;
 const RS: u8 = 0x1e;
 
+static CALLS: AtomicU64 = AtomicU64::new(0);
+static ERRORS: AtomicU64 = AtomicU64::new(0);
+static START: OnceLock<std::time::Instant> = OnceLock::new();
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(|s| s.as_str()) == Some("--version") {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     if args.len() < 3 {
         eprintln!("usage: virtuoso-daemon <host> <port>");
         process::exit(1);
@@ -20,22 +29,28 @@ fn main() {
         process::exit(1);
     });
 
-    set_nonblocking_stdin();
-
     let listener = TcpListener::bind(format!("{host}:{port}")).unwrap_or_else(|e| {
         eprintln!("failed to bind {host}:{port}: {e}");
         process::exit(1);
     });
 
     let actual_port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
-    // Print actual port so bridge.il can read it (important when port=0 was passed)
+    // Print version and port to stderr so ramic_bridge.il can read them.
+    // VERSION must come before PORT so it is stored before the banner fires.
+    eprintln!("VERSION:{}", env!("CARGO_PKG_VERSION"));
     eprintln!("PORT:{actual_port}");
     eprintln!("[virtuoso-daemon] listening on {host}:{actual_port}");
+
+    // cb_port mirrors RBCallbackPort in ramic_bridge.il (RBPort + 1).
+    // Must use actual_port, not the argv port (which may be 0 for OS-assigned).
+    let cb_port = actual_port + 1;
+
+    START.get_or_init(std::time::Instant::now);
 
     for stream in listener.incoming() {
         match stream {
             Ok(conn) => {
-                if let Err(e) = handle_connection(conn) {
+                if let Err(e) = handle_connection(conn, cb_port, actual_port) {
                     eprintln!("[virtuoso-daemon] error: {e}");
                 }
             }
@@ -46,7 +61,9 @@ fn main() {
     }
 }
 
-fn handle_connection(mut conn: TcpStream) -> io::Result<()> {
+fn handle_connection(mut conn: TcpStream, cb_port: u16, actual_port: u16) -> io::Result<()> {
+    CALLS.fetch_add(1, Ordering::Relaxed);
+
     let mut req_bytes = Vec::new();
     conn.read_to_end(&mut req_bytes)?;
 
@@ -55,12 +72,22 @@ fn handle_connection(mut conn: TcpStream) -> io::Result<()> {
 
     let timeout = req.timeout.unwrap_or(30);
 
+    // Clean up any stale callback files before sending the request
+    let (data_file, done_file) = callback_files(cb_port);
+    let _ = std::fs::remove_file(&data_file);
+    let _ = std::fs::remove_file(&done_file);
+
     let stdout = io::stdout();
     let mut out = stdout.lock();
     out.write_all(req.skill.as_bytes())?;
     out.flush()?;
 
-    let result = read_until_delimiter(timeout)?;
+    let result = read_callback_file(cb_port, timeout)?;
+
+    if result.first() == Some(&NAK) {
+        ERRORS.fetch_add(1, Ordering::Relaxed);
+    }
+    write_stats(actual_port);
 
     conn.write_all(&result)?;
     let _ = conn.shutdown(std::net::Shutdown::Both);
@@ -68,60 +95,60 @@ fn handle_connection(mut conn: TcpStream) -> io::Result<()> {
     Ok(())
 }
 
-fn read_until_delimiter(timeout_secs: u64) -> io::Result<Vec<u8>> {
-    let stdin = io::stdin();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+fn stats_path(port: u16) -> String {
+    format!("/tmp/.ramic_stats_{port}")
+}
 
-    let mut buf = Vec::new();
-    let mut started = false;
-    let mut one_byte = [0u8; 1];
+fn write_stats(port: u16) {
+    let uptime = START.get().map(|t| t.elapsed().as_secs()).unwrap_or(0);
+    let json = format!(
+        r#"{{"calls":{},"errors":{},"uptime_secs":{}}}"#,
+        CALLS.load(Ordering::Relaxed),
+        ERRORS.load(Ordering::Relaxed),
+        uptime
+    );
+    let _ = std::fs::write(stats_path(port), json);
+}
+
+fn callback_files(cb_port: u16) -> (String, String) {
+    (
+        format!("/tmp/.ramic_cb_{cb_port}"),
+        format!("/tmp/.ramic_cb_{cb_port}.done"),
+    )
+}
+
+/// Poll for the temp file written by RBSendCallback in ramic_bridge.il.
+/// RBSendCallback writes data to /tmp/.ramic_cb_{port+1} then creates
+/// /tmp/.ramic_cb_{port+1}.done as an atomic completion marker.
+fn read_callback_file(cb_port: u16, timeout_secs: u64) -> io::Result<Vec<u8>> {
+    let (data_file, done_file) = callback_files(cb_port);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
 
     loop {
         if std::time::Instant::now() > deadline {
             return Ok(vec![
-                NAK, b'T', b'i', b'm', b'e', b'o', b'u', b't', b'E', b'r', b'r', b'o', b'r', RS,
+                NAK, b'T', b'i', b'm', b'e', b'o', b'u', b't', b'E', b'r', b'r', b'o', b'r',
             ]);
         }
 
-        let n = match stdin.lock().read(&mut one_byte) {
-            Ok(n) => n,
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(std::time::Duration::from_millis(1));
-                continue;
+        if Path::new(&done_file).exists() {
+            match std::fs::read(&data_file) {
+                Ok(mut data) => {
+                    let _ = std::fs::remove_file(&data_file);
+                    let _ = std::fs::remove_file(&done_file);
+                    // Strip trailing RS marker written by RBSendCallback's sprintf %c
+                    if data.last() == Some(&RS) {
+                        data.pop();
+                    }
+                    return Ok(data);
+                }
+                Err(_) => {
+                    // done_file appeared but data_file not readable yet — retry
+                }
             }
-            Err(e) => return Err(e),
-        };
-        if n == 0 {
-            std::thread::sleep(std::time::Duration::from_millis(1));
-            continue;
         }
 
-        let ch = one_byte[0];
-
-        if !started {
-            if ch == STX || ch == NAK {
-                started = true;
-                buf.push(ch);
-            }
-            continue;
-        }
-
-        if ch == RS {
-            break;
-        }
-        buf.push(ch);
-    }
-
-    Ok(buf)
-}
-
-fn set_nonblocking_stdin() {
-    let fd = io::stdin().lock().as_raw_fd();
-    unsafe {
-        let flags = libc::fcntl(fd, libc::F_GETFL);
-        if flags >= 0 {
-            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 

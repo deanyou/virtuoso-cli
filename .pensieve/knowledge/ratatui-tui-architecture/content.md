@@ -1,3 +1,13 @@
+---
+id: content
+type: knowledge
+title: ratatui TUI Architecture Pattern for CLI Tools
+status: active
+created: 2026-05-27
+updated: 2026-05-27
+tags: ["knowledge"]
+---
+
 # ratatui TUI Architecture Pattern for CLI Tools
 
 ## Source

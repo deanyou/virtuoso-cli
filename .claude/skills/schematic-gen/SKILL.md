@@ -5,6 +5,8 @@ description: |
   Use when: (1) user wants to draw/create a schematic in Virtuoso, (2) user says
   "draw the OTA" or "create the schematic", (3) after sizing is complete and ready
   to build the circuit, (4) user provides a topology and wants it instantiated.
+argument-hint: [topology, e.g. "5T OTA" or "cascode current mirror"]
+allowed-tools: Bash(vcli *) Read Write Edit
 ---
 
 # Schematic Generation
@@ -162,6 +164,25 @@ Compensation: Cc between nd1 and vout, optional Rz in series.
 
 Params are PDK-specific. Always pass W/L via `--params` or JSON `params` field.
 
+## Label Placement — Auto-Rotation
+
+When placing labels on terminals, pick rotation based on the stub direction rather than
+using a fixed angle. The stub direction is determined by the terminal geometry:
+
+| Stub direction | `abs(rbDx) >= abs(rbDy)` | Recommended rotation |
+|---------------|--------------------------|---------------------|
+| Horizontal    | true                     | R0 (0°)             |
+| Vertical      | false                    | R90 (90°)           |
+
+For `schematic_label_instance_term_offset` (label on a perpendicular branch off the
+stub), align the rotation with the **branch** direction, not the stub:
+- branch `"up"` or `"down"` → R90
+- branch `"left"` or `"right"` → R0
+
+This avoids overlapping labels on crowded ports (e.g., MOS gate rows) and matches
+what Virtuoso's "Clean" cosmetic preset produces. When stub geometry is degenerate
+(rbDx or rbDy is nil, e.g. MOS-stub path), fall back to the user-supplied rotation.
+
 ## Notes
 
 - `vcli schematic open` must be called before other commands (opens cellview in GUI)
@@ -169,3 +190,5 @@ Params are PDK-specific. Always pass W/L via `--params` or JSON `params` field.
 - `wire` uses exact coordinates — use when you need specific routing paths
 - Global nets (vdd!, gnd!) use `!` suffix in Virtuoso convention
 - After `build`, always run `check` and `save`
+- Always call `dbClose` after `dbSave` in SKILL loops that open cellviews programmatically;
+  omitting it leaves views accumulating in Virtuoso memory across repeated invocations

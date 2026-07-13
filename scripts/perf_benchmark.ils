@@ -1,0 +1,274 @@
+; perf_benchmark.ils - SKILL Performance Tests
+
+procedure(report(name cnt elapsed)
+    let((per)
+        per = float(elapsed) / float(cnt)
+        printf("%-24s %8d  %10.3f ms  %10.6f ms/op\n" name cnt elapsed per)
+    )
+)
+
+; Function call overhead
+procedure(test_func_call(n)
+    let((r)
+        procedure(tf(x) x)
+        r = nil
+        start = getCurrentTime()
+        for(i 1 n
+            r = cons(tf(i) r)
+        )
+        end = getCurrentTime()
+        report("Function call" n subtract(end start))
+        r
+    )
+)
+
+; List cons (prepend)
+procedure(test_list_cons(n)
+    let((r)
+        r = nil
+        start = getCurrentTime()
+        for(i 1 n
+            r = cons(i r)
+        )
+        end = getCurrentTime()
+        report("List cons (fast)" n subtract(end start))
+        r
+    )
+)
+
+; List append (slow!)
+procedure(test_list_append(n)
+    let((r)
+        r = nil
+        start = getCurrentTime()
+        for(i 1 n
+            r = append(r list(i))
+        )
+        end = getCurrentTime()
+        report("List append (SLOW)" n subtract(end start))
+        r
+    )
+)
+
+; List car
+procedure(test_list_car(n)
+    let((r s)
+        r = nil
+        for(i 1 n
+            r = cons(i r)
+        )
+        s = 0
+        start = getCurrentTime()
+        for(i 1 n
+            s = plus(s car(r))
+        )
+        end = getCurrentTime()
+        report("List car" n subtract(end start))
+        s
+    )
+)
+
+; List nth (slow)
+procedure(test_list_nth(n)
+    let((r s)
+        r = nil
+        for(i 1 n
+            r = cons(i r)
+        )
+        s = 0
+        start = getCurrentTime()
+        for(i 1 50
+            s = car(nth(i r))
+        )
+        end = getCurrentTime()
+        report("List nth (slow)" 50 subtract(end start))
+        s
+    )
+)
+
+; List length (O(n))
+procedure(test_list_length(n)
+    let((r l)
+        r = nil
+        for(i 1 n
+            r = cons(i r)
+        )
+        l = 0
+        start = getCurrentTime()
+        for(i 1 50
+            l = length(r)
+        )
+        end = getCurrentTime()
+        report("List length O(n)" 50 subtract(end start))
+        l
+    )
+)
+
+; String concat (very slow)
+procedure(test_string_concat(n)
+    let((s)
+        s = ""
+        start = getCurrentTime()
+        for(i 1 n
+            s = strcat(s "x")
+        )
+        end = getCurrentTime()
+        report("String concat SLOW" n subtract(end start))
+        s
+    )
+)
+
+; String sprintf
+procedure(test_string_sprintf(n)
+    let((x)
+        x = nil
+        start = getCurrentTime()
+        for(i 1 n
+            sprintf(x "val=%d" i)
+        )
+        end = getCurrentTime()
+        report("String sprintf" n subtract(end start))
+        x
+    )
+)
+
+; Hash table create
+procedure(test_hash_create(n)
+    let((ht)
+        start = getCurrentTime()
+        ht = makeTable("t" nil)
+        for(i 1 n
+            ht[i] = i
+        )
+        end = getCurrentTime()
+        report("Hash create" n subtract(end start))
+        ht
+    )
+)
+
+; Hash table lookup
+procedure(test_hash_lookup(n)
+    let((ht r)
+        ht = makeTable("t" nil)
+        for(i 1 n
+            ht[i] = i
+        )
+        r = 0
+        start = getCurrentTime()
+        for(i 1 n
+            r = ht[i]
+        )
+        end = getCurrentTime()
+        report("Hash lookup" n subtract(end start))
+        r
+    )
+)
+
+; Integer add
+procedure(test_int_add(n)
+    let((r)
+        r = 0
+        start = getCurrentTime()
+        for(i 1 n
+            r = plus(r i)
+        )
+        end = getCurrentTime()
+        report("Integer add" n subtract(end start))
+        r
+    )
+)
+
+; Float sqrt
+procedure(test_float_sqrt(n)
+    let((r)
+        r = 0.0
+        start = getCurrentTime()
+        for(i 1 n
+            r = plus(r sqrt(float(i)))
+        )
+        end = getCurrentTime()
+        report("Float sqrt" n subtract(end start))
+        r
+    )
+)
+
+; Trig sin
+procedure(test_trig_sin(n)
+    let((r)
+        r = 0.0
+        start = getCurrentTime()
+        for(i 1 n
+            r = plus(r sin(float(i) / 1000.0))
+        )
+        end = getCurrentTime()
+        report("Trig sin()" n subtract(end start))
+        r
+    )
+)
+
+; Eval list
+procedure(test_eval_list(n)
+    let((r)
+        start = getCurrentTime()
+        for(i 1 n
+            r = eval(list('plus i 1))
+        )
+        end = getCurrentTime()
+        report("Eval list" n subtract(end start))
+        r
+    )
+)
+
+; Eval string (VERY slow)
+procedure(test_eval_string(n)
+    let((r)
+        start = getCurrentTime()
+        for(i 1 n
+            r = evalstring(sprintf(nil "%d + 1" i))
+        )
+        end = getCurrentTime()
+        report("Evalstring PARSE" n subtract(end start))
+        r
+    )
+)
+
+; Run all
+procedure(run_benchmark()
+    printf("\n========== SKILL PERFORMANCE BENCHMARK ==========\n\n")
+    printf("%-26s %10s  %10s  %10s\n" "Operation" "Count" "Total(ms)" "Per-op(ms)")
+    printf("%-26s %10s  %10s  %10s\n" "---------" "-----" "---------" "---------")
+    
+    printf("\n[Function Calls]\n")
+    test_func_call(10000)
+    
+    printf("\n[List Operations]\n")
+    test_list_cons(10000)
+    test_list_append(1000)
+    test_list_car(10000)
+    test_list_nth(1000)
+    test_list_length(1000)
+    
+    printf("\n[String Operations]\n")
+    test_string_concat(500)
+    test_string_sprintf(10000)
+    
+    printf("\n[Hash Table]\n")
+    test_hash_create(10000)
+    test_hash_lookup(10000)
+    
+    printf("\n[Arithmetic]\n")
+    test_int_add(100000)
+    test_float_sqrt(10000)
+    test_trig_sin(10000)
+    
+    printf("\n[Eval Overhead]\n")
+    test_eval_list(1000)
+    test_eval_string(50)
+    
+    printf("\n========== KEY INSIGHTS ==========\n")
+    printf("AVOID: list append, strcat in loop, evalstring\n")
+    printf("USE:   cons + reverse, sprintf, eval(list), hash table\n")
+    printf("================================\n\n")
+)
+
+run_benchmark()
