@@ -1,16 +1,16 @@
 pub mod corner;
 
-use crate::client::bridge::escape_skill_string;
+use crate::client::skill_runtime::string_literal;
 use corner::{AnalysisConfig, CornerConfig};
 use std::collections::HashMap;
 
 pub fn setup_skill(lib: &str, cell: &str, view: &str, simulator: &str) -> String {
-    let lib = escape_skill_string(lib);
-    let cell = escape_skill_string(cell);
-    let view = escape_skill_string(view);
+    let lib = string_literal(lib);
+    let cell = string_literal(cell);
+    let view = string_literal(view);
     // Only call simulator() if not already set to avoid resetting session state (modelFile etc.)
     format!(
-        "unless(simulator() == '{simulator} simulator('{simulator}))\ndesign(\"{lib}\" \"{cell}\" \"{view}\")\nresultsDir()"
+        "unless(simulator() == '{simulator} simulator('{simulator}))\ndesign({lib} {cell} {view})\nresultsDir()"
     )
 }
 
@@ -19,9 +19,13 @@ pub fn analysis_skill(config: &AnalysisConfig) -> String {
     let mut skill = format!("analysis('{typ}");
     for (k, v) in &config.params {
         let val = match v {
-            serde_json::Value::String(s) => format!(" ?{k} \"{s}\""),
+            serde_json::Value::String(s) => format!(" ?{k} {}", string_literal(s)),
             serde_json::Value::Number(n) => format!(" ?{k} {n}"),
-            other => format!(" ?{k} \"{other}\""),
+            serde_json::Value::Bool(value) => {
+                format!(" ?{k} {}", if *value { "t" } else { "nil" })
+            }
+            serde_json::Value::Null => format!(" ?{k} nil"),
+            other => format!(" ?{k} {}", string_literal(&other.to_string())),
         };
         skill.push_str(&val);
     }
@@ -36,7 +40,7 @@ pub fn analysis_skill_simple(typ: &str, params: &HashMap<String, String>) -> Str
         if v == "t" || v == "nil" || v.parse::<f64>().is_ok() {
             skill.push_str(&format!(" ?{k} {v}"));
         } else {
-            skill.push_str(&format!(" ?{k} \"{v}\""));
+            skill.push_str(&format!(" ?{k} {}", string_literal(v)));
         }
     }
     skill.push(')');
@@ -66,7 +70,7 @@ pub fn sweep_skill(
     analysis_type: &str,
     measure_exprs: &[String],
 ) -> String {
-    let var = escape_skill_string(var);
+    let var = string_literal(var);
     let values_str = values
         .iter()
         .map(|v| format!("{v:e}"))
@@ -83,7 +87,7 @@ pub fn sweep_skill(
         r#"let((results)
   results = nil
   foreach(val '({values_str})
-    desVar("{var}" val)
+    desVar({var} val)
     run()
     selectResult('{analysis_type})
     results = cons(list(val
@@ -96,40 +100,8 @@ pub fn sweep_skill(
 }
 
 pub fn corner_skill(config: &CornerConfig) -> String {
-    let model_file = escape_skill_string(&config.model_file);
+    let model_file = string_literal(&config.model_file);
     let analysis = analysis_skill(&config.analysis);
-
-    // Build corner data list
-    let _corner_entries: Vec<String> = config
-        .corners
-        .iter()
-        .map(|c| {
-            let _name = escape_skill_string(&c.name);
-            let section = escape_skill_string(&c.section);
-            // Collect extra vars
-            let vars: Vec<String> = c
-                .vars
-                .iter()
-                .map(|(k, v)| {
-                    let val = match v {
-                        serde_json::Value::Number(n) => n.to_string(),
-                        serde_json::Value::String(s) => format!("\"{s}\""),
-                        other => other.to_string(),
-                    };
-                    format!("    desVar(\"{k}\" {val})")
-                })
-                .collect();
-            let vars_code = vars.join("\n");
-            format!(
-                r#"    ;; Corner: {name}
-    modelFile('("{model_file}" "") "{section}")
-    temp({temp})
-{vars_code}"#,
-                name = c.name,
-                temp = c.temp,
-            )
-        })
-        .collect();
 
     let measures = config
         .measures
@@ -138,46 +110,43 @@ pub fn corner_skill(config: &CornerConfig) -> String {
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Build corner names for identification
-    let _corner_names: Vec<String> = config
-        .corners
-        .iter()
-        .map(|c| format!("\"{}\"", escape_skill_string(&c.name)))
-        .collect();
-
     let mut skill = format!(
-        "simulator('{sim})\ndesign(\"{lib}\" \"{cell}\" \"{view}\")\n{analysis}\n",
+        "simulator('{sim})\ndesign({lib} {cell} {view})\n{analysis}\n",
         sim = config.simulator.as_deref().unwrap_or("spectre"),
-        lib = escape_skill_string(&config.design.lib),
-        cell = escape_skill_string(&config.design.cell),
-        view = escape_skill_string(&config.design.view),
+        lib = string_literal(&config.design.lib),
+        cell = string_literal(&config.design.cell),
+        view = string_literal(&config.design.view),
     );
 
     skill.push_str("let((results)\n  results = nil\n");
 
     for corner in config.corners.iter() {
-        let name = escape_skill_string(&corner.name);
-        let section = escape_skill_string(&corner.section);
+        let name = string_literal(&corner.name);
+        let section = string_literal(&corner.section);
         let vars_code: String = corner
             .vars
             .iter()
             .map(|(k, v)| {
                 let val = match v {
                     serde_json::Value::Number(n) => n.to_string(),
-                    serde_json::Value::String(s) => format!("\"{s}\""),
-                    other => other.to_string(),
+                    serde_json::Value::String(s) => string_literal(s),
+                    serde_json::Value::Bool(value) => {
+                        if *value { "t".into() } else { "nil".into() }
+                    }
+                    serde_json::Value::Null => "nil".into(),
+                    other => string_literal(&other.to_string()),
                 };
-                format!("  desVar(\"{k}\" {val})\n")
+                format!("  desVar({} {val})\n", string_literal(k))
             })
             .collect();
 
         skill.push_str(&format!(
             r#"  ;; {name}
-  modelFile('("{model_file}" "") "{section}")
+  modelFile('({model_file} "") {section})
   temp({temp})
 {vars_code}  run()
   selectResult('{analysis_type})
-  results = cons(list("{name}" {temp}
+  results = cons(list({name} {temp}
 {measures}
   ) results)
 "#,
@@ -261,4 +230,34 @@ pub fn parse_skill_list(output: &str) -> Vec<Vec<String>> {
     }
 
     results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_skill_uses_safe_string_literals() {
+        let skill = setup_skill("lib\"x", "cell\\x", "schematic\nnext", "spectre");
+        assert!(skill.contains(r#"design("lib\"x" "cell\\x" "schematic\nnext")"#));
+    }
+
+    #[test]
+    fn analysis_string_values_are_escaped() {
+        let mut params = HashMap::new();
+        params.insert("stop".into(), "1u\" injected".into());
+        let skill = analysis_skill_simple("tran", &params);
+        assert!(skill.contains(r#"?stop "1u\" injected""#));
+    }
+
+    #[test]
+    fn analysis_atoms_remain_unquoted() {
+        let params = HashMap::from([
+            ("saveOppoint".into(), "t".into()),
+            ("points".into(), "10".into()),
+        ]);
+        let skill = analysis_skill_simple("dc", &params);
+        assert!(skill.contains("?saveOppoint t"));
+        assert!(skill.contains("?points 10"));
+    }
 }

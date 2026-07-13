@@ -1,4 +1,5 @@
 use crate::client::bridge::VirtuosoClient;
+use crate::client::skill_runtime::string_literal;
 use crate::error::{Result, VirtuosoError};
 use serde_json::{json, Value};
 
@@ -19,8 +20,15 @@ pub fn char(
     let client = VirtuosoClient::from_env()?;
 
     client.execute_skill("simulator('spectre)", None)?;
-    let design_result =
-        client.execute_skill(&format!("design(\"{lib}\" \"{cell}\" \"{view}\")"), None)?;
+    let design_result = client.execute_skill(
+        &format!(
+            "design({} {} {})",
+            string_literal(lib),
+            string_literal(cell),
+            string_literal(view)
+        ),
+        None,
+    )?;
     if !design_result.skill_ok() {
         return Err(VirtuosoError::NotFound(format!(
             "design {lib}/{cell}/{view} not found"
@@ -39,7 +47,7 @@ pub fn char(
         while vgs <= vgs_stop + vgs_step * 0.01 {
             client.execute_skill(&format!("desVar(\"VGS\" {vgs})"), None)?;
             let rdir = format!("/tmp/char_{device_type}_{l:e}_{vgs}");
-            client.execute_skill(&format!("resultsDir(\"{rdir}\")"), None)?;
+            client.execute_skill(&format!("resultsDir({})", string_literal(&rdir)), None)?;
             client.execute_skill("analysis('dc ?saveOppoint t)", None)?;
             client.execute_skill("save('all)", None)?;
             client.execute_skill("run()", Some(timeout))?;
@@ -49,7 +57,11 @@ pub fn char(
             let mut ok = true;
 
             for p in &params {
-                let expr = format!("value(getData(\"{inst}:{p}\" ?result \"dcOpInfo\"))");
+                let signal = format!("{inst}:{p}");
+                let expr = format!(
+                    "value(getData({} ?result \"dcOpInfo\"))",
+                    string_literal(&signal)
+                );
                 let r = client.execute_skill(&expr, None)?;
                 let v = r.output.trim().trim_matches('"');
                 if v == "nil" || v.is_empty() {

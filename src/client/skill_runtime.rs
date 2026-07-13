@@ -14,6 +14,21 @@ pub(crate) fn string_literal(value: &str) -> String {
     format!("\"{}\"", escape_string(value))
 }
 
+pub(crate) fn require_identifier<'a>(value: &'a str, kind: &str) -> Result<&'a str> {
+    let mut chars = value.chars();
+    let valid_start = chars
+        .next()
+        .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_');
+    let valid_rest = chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_');
+    if valid_start && valid_rest {
+        return Ok(value);
+    }
+
+    Err(VirtuosoError::Config(format!(
+        "invalid {kind} identifier: '{value}'"
+    )))
+}
+
 pub(crate) fn require_transport<'a>(
     result: &'a VirtuosoResult,
     action: &str,
@@ -122,5 +137,11 @@ mod tests {
         let result = VirtuosoResult::success("not-json");
         let error = decode_json(&result, "instances").unwrap_err();
         assert!(error.to_string().contains("instances"));
+    }
+
+    #[test]
+    fn identifier_rejects_skill_injection() {
+        let error = require_identifier("tran) system(\"bad\")", "analysis").unwrap_err();
+        assert!(error.to_string().contains("analysis"));
     }
 }
