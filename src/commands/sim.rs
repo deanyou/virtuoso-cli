@@ -1,4 +1,7 @@
 use crate::client::bridge::VirtuosoClient;
+use crate::client::skill_runtime::{
+    require_identifier, require_non_nil, require_transport, string_literal,
+};
 use crate::error::{Result, VirtuosoError};
 use crate::ocean;
 use crate::ocean::corner::CornerConfig;
@@ -8,30 +11,33 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 
 pub fn setup(lib: &str, cell: &str, view: &str, simulator: &str) -> Result<Value> {
+    require_identifier(simulator, "simulator")?;
     let client = VirtuosoClient::from_env()?;
     let skill = ocean::setup_skill(lib, cell, view, simulator);
     let result = client.execute_skill(&skill, None)?;
 
-    if !result.ok() {
-        return Err(VirtuosoError::Execution(result.errors.join("; ")));
-    }
+    let output = require_non_nil(&result, "set up simulation")?;
 
     Ok(json!({
         "status": "success",
         "simulator": simulator,
         "design": { "lib": lib, "cell": cell, "view": view },
-        "results_dir": result.output.trim().trim_matches('"'),
+        "results_dir": output.trim_matches('"'),
     }))
 }
 
 pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Result<Value> {
+    require_identifier(analysis, "analysis")?;
+    for name in params.keys() {
+        require_identifier(name, "analysis parameter")?;
+    }
     let client = VirtuosoClient::from_env()?;
 
     // Check if resultsDir is set — do NOT override if it is, as changing
     // resultsDir while an ADE session is active causes run() to silently
     // return nil (ADE binds the session to a specific results path).
     let rdir = client.execute_skill("resultsDir()", None)?;
-    let rdir_val = rdir.output.trim().trim_matches('"');
+    let rdir_val = require_transport(&rdir, "read results directory")?.trim_matches('"');
     if rdir_val == "nil" || rdir_val.is_empty() {
         return Err(VirtuosoError::Execution(
             "resultsDir is not set. Run `virtuoso sim setup` first, or open \
@@ -44,29 +50,30 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
     // Send analysis setup
     let analysis_skill = ocean::analysis_skill_simple(analysis, params);
     let analysis_result = client.execute_skill(&analysis_skill, None)?;
-    if !analysis_result.ok() {
-        return Err(VirtuosoError::Execution(analysis_result.errors.join("; ")));
-    }
+    require_non_nil(&analysis_result, "configure simulation analysis")?;
 
     // Send save
     let _ = client.execute_skill("save('all)", None);
 
     // Execute run
     let result = client.execute_skill("run()", Some(timeout))?;
-    if !result.ok() {
-        return Err(VirtuosoError::Execution(result.errors.join("; ")));
-    }
+    let run_output = require_transport(&result, "run simulation")?;
 
     // Get actual results dir
     let rdir = client.execute_skill("resultsDir()", None)?;
-    let results_dir = rdir.output.trim().trim_matches('"').to_string();
+    let results_dir = require_non_nil(&rdir, "read simulation results directory")?
+        .trim_matches('"')
+        .to_string();
 
     // Validate: run() returning nil usually means simulation didn't execute
-    let run_output = result.output.trim().trim_matches('"');
-    if run_output == "nil" {
-        let check =
-            client.execute_skill(&format!(r#"isFile("{results_dir}/psf/spectre.out")"#), None)?;
-        let has_spectre_out = check.output.trim().trim_matches('"');
+    if run_output.trim_matches('"') == "nil" {
+        let spectre_out = format!("{results_dir}/psf/spectre.out");
+        let check = client.execute_skill(
+            &format!("isFile({})", string_literal(&spectre_out)),
+            None,
+        )?;
+        let has_spectre_out =
+            require_transport(&check, "check spectre output")?.trim_matches('"');
         if has_spectre_out == "nil" || has_spectre_out == "0" {
             return Err(VirtuosoError::Execution(
                 "Simulation failed: run() returned nil and no spectre.out found. \
@@ -87,13 +94,17 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
 }
 
 pub fn measure(analysis: &str, exprs: &[String]) -> Result<Value> {
+    require_identifier(analysis, "analysis")?;
     let client = VirtuosoClient::from_env()?;
 
     // Open results from resultsDir PSF and select result type
     let rdir = client.execute_skill("resultsDir()", None)?;
-    let rdir_val = rdir.output.trim().trim_matches('"');
+    let rdir_val = require_transport(&rdir, "read results directory")?.trim_matches('"');
     if rdir_val != "nil" && !rdir_val.is_empty() {
-        let open_skill = format!("openResults(\"{rdir_val}/psf\")");
+        let open_skill = format!(
+            "openResults({})",
+            string_literal(&format!("{rdir_val}/psf"))
+        );
         let _ = client.execute_skill(&open_skill, None);
     }
     let select_skill = format!("selectResult('{analysis})");
@@ -103,10 +114,9 @@ pub fn measure(analysis: &str, exprs: &[String]) -> Result<Value> {
     let mut measures = Vec::new();
     for expr in exprs {
         let result = client.execute_skill(expr, None)?;
-        let value = if result.ok() {
-            result.output.trim().trim_matches('"').to_string()
-        } else {
-            format!("ERROR: {}", result.errors.join("; "))
+        let value = match require_transport(&result, "measure waveform") {
+            Ok(output) => output.trim_matches('"').to_string(),
+            Err(error) => format!("ERROR: {error}"),
         };
         measures.push(json!({
             "expr": expr,
@@ -125,14 +135,16 @@ pub fn measure(analysis: &str, exprs: &[String]) -> Result<Value> {
 
     let mut warnings: Vec<String> = Vec::new();
     if all_nil {
-        let rdir_for_check = rdir_val.to_string();
+        let spectre_out = format!("{rdir_val}/psf/spectre.out");
         let spectre_exists = client
             .execute_skill(
-                &format!(r#"isFile("{rdir_for_check}/psf/spectre.out")"#),
+                &format!("isFile({})", string_literal(&spectre_out)),
                 None,
             )
-            .map(|r| {
-                let v = r.output.trim().trim_matches('"');
+            .ok()
+            .and_then(|r| require_transport(&r, "check spectre output").ok().map(str::to_owned))
+            .map(|output| {
+                let v = output.trim_matches('"');
                 v != "nil" && v != "0"
             })
             .unwrap_or(false);
@@ -169,6 +181,7 @@ pub fn sweep(
     measure_exprs: &[String],
     timeout: u64,
 ) -> Result<Value> {
+    require_identifier(analysis, "analysis")?;
     let client = VirtuosoClient::from_env()?;
 
     // Generate value list
@@ -181,12 +194,8 @@ pub fn sweep(
 
     let skill = ocean::sweep_skill(var, &values, analysis, measure_exprs);
     let result = client.execute_skill(&skill, Some(timeout))?;
-
-    if !result.ok() {
-        return Err(VirtuosoError::Execution(result.errors.join("; ")));
-    }
-
-    let parsed = ocean::parse_skill_list(result.output.trim());
+    let output = require_non_nil(&result, "run simulation sweep")?;
+    let parsed = ocean::parse_skill_list(output);
 
     let mut headers = vec![var.to_string()];
     headers.extend(measure_exprs.iter().cloned());
@@ -221,15 +230,19 @@ pub fn corner(file: &str, timeout: u64) -> Result<Value> {
     let config: CornerConfig = serde_json::from_str(&content)
         .map_err(|e| VirtuosoError::Config(format!("invalid corner config: {e}")))?;
 
+    if let Some(simulator) = config.simulator.as_deref() {
+        require_identifier(simulator, "simulator")?;
+    }
+    require_identifier(&config.analysis.analysis_type, "analysis")?;
+    for name in config.analysis.params.keys() {
+        require_identifier(name, "analysis parameter")?;
+    }
+
     let client = VirtuosoClient::from_env()?;
     let skill = ocean::corner_skill(&config);
     let result = client.execute_skill(&skill, Some(timeout))?;
-
-    if !result.ok() {
-        return Err(VirtuosoError::Execution(result.errors.join("; ")));
-    }
-
-    let parsed = ocean::parse_skill_list(result.output.trim());
+    let output = require_non_nil(&result, "run corner simulation")?;
+    let parsed = ocean::parse_skill_list(output);
 
     let mut headers = vec!["corner".to_string(), "temp".to_string()];
     headers.extend(config.measures.iter().map(|m| m.name.clone()));
@@ -260,23 +273,24 @@ pub fn corner(file: &str, timeout: u64) -> Result<Value> {
 pub fn results() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let result = client.execute_skill("resultsDir()", None)?;
-
-    if !result.ok() {
-        return Err(VirtuosoError::Execution(result.errors.join("; ")));
-    }
-
-    let dir = result.output.trim().trim_matches('"').to_string();
+    let dir = require_non_nil(&result, "read results directory")?
+        .trim_matches('"')
+        .to_string();
 
     // Query available result types
     let types_result = client.execute_skill(
-        &format!(r#"let((dir files) dir="{dir}" when(isDir(dir) files=getDirFiles(dir)) files)"#),
+        &format!(
+            "let((dir files) dir={} when(isDir(dir) files=getDirFiles(dir)) files)",
+            string_literal(&dir)
+        ),
         None,
     )?;
+    let contents = require_transport(&types_result, "list result files")?;
 
     Ok(json!({
         "status": "success",
         "results_dir": dir,
-        "contents": types_result.output.trim(),
+        "contents": contents,
     }))
 }
 
@@ -292,12 +306,11 @@ pub fn netlist(recreate: bool) -> Result<Value> {
         },
         Some(60),
     )?;
-    let r1_out = r1.output.trim().trim_matches('"');
-    if r1.ok() && r1_out != "nil" {
+    if let Ok(r1_out) = require_non_nil(&r1, "create netlist") {
         return Ok(json!({
             "status": "success",
             "method": "createNetlist",
-            "output": r1_out,
+            "output": r1_out.trim_matches('"'),
         }));
     }
 
@@ -306,12 +319,11 @@ pub fn netlist(recreate: bool) -> Result<Value> {
         "asiCreateNetlist(asiGetSession(hiGetCurrentWindow()))",
         Some(60),
     )?;
-    let r2_out = r2.output.trim().trim_matches('"');
-    if r2.ok() && r2_out != "nil" {
+    if let Ok(r2_out) = require_non_nil(&r2, "create ASI netlist") {
         return Ok(json!({
             "status": "success",
             "method": "asiCreateNetlist",
-            "output": r2_out,
+            "output": r2_out.trim_matches('"'),
         }));
     }
 
