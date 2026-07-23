@@ -25,6 +25,45 @@ pub struct ParallelSimResult {
     pub result: Result<SimulationResult>,
 }
 
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|message| (*message).to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic".to_string())
+}
+
+fn catch_parallel_job<F>(label: String, operation: F) -> ParallelSimResult
+where
+    F: FnOnce() -> Result<SimulationResult>,
+{
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation)).unwrap_or_else(
+        |payload| {
+            Err(VirtuosoError::Execution(format!(
+                "parallel simulation worker panicked: {}",
+                panic_message(payload.as_ref())
+            )))
+        },
+    );
+    ParallelSimResult { label, result }
+}
+
+fn parallel_chunk_panic_results(
+    labels: &[String],
+    payload: &(dyn std::any::Any + Send),
+) -> Vec<ParallelSimResult> {
+    let message = panic_message(payload);
+    labels
+        .iter()
+        .map(|label| ParallelSimResult {
+            label: label.clone(),
+            result: Err(VirtuosoError::Execution(format!(
+                "parallel simulation chunk panicked: {message}"
+            ))),
+        })
+        .collect()
+}
+
 type ParsedSimulationOutput = (
     HashMap<String, Vec<f64>>,
     HashMap<String, crate::models::ScalarValue>,
@@ -196,6 +235,17 @@ fn combined_remote_log(
     ))
 }
 
+fn remote_directory_exists(result: &crate::models::RemoteTaskResult) -> Result<bool> {
+    match result.returncode {
+        0 => Ok(true),
+        1 => Ok(false),
+        code => Err(VirtuosoError::Ssh(format!(
+            "failed to inspect remote result directory (exit {code}): {}",
+            result.stderr.trim()
+        ))),
+    }
+}
+
 /// Progress reporting has an explicit lifecycle independent of Spectre log
 /// wording.  The owner always requests cancellation before joining it.
 struct ProgressFollower {
@@ -237,23 +287,31 @@ impl ProgressFollower {
     }
 }
 
-fn timeout_wait_budget(kill_succeeded: bool) -> Option<Duration> {
-    kill_succeeded.then(|| Duration::from_secs(1))
+fn terminate_timed_out_child(child: &mut std::process::Child) -> Result<std::process::ExitStatus> {
+    match child.kill() {
+        Ok(()) => child.wait().map_err(|wait_error| {
+            VirtuosoError::Execution(format!(
+                "spectre kill succeeded but reap failed: {wait_error}"
+            ))
+        }),
+        Err(kill_error) => Err(describe_failed_kill(kill_error, child.try_wait())),
+    }
 }
 
-fn wait_for_child_exit(
-    child: &mut std::process::Child,
-    timeout: Duration,
-) -> std::io::Result<bool> {
-    let deadline = std::time::Instant::now() + timeout;
-    loop {
-        if child.try_wait()?.is_some() {
-            return Ok(true);
-        }
-        if std::time::Instant::now() >= deadline {
-            return Ok(false);
-        }
-        thread::sleep(Duration::from_millis(10));
+fn describe_failed_kill(
+    kill_error: std::io::Error,
+    wait_state: std::io::Result<Option<std::process::ExitStatus>>,
+) -> VirtuosoError {
+    match wait_state {
+        Ok(Some(status)) => VirtuosoError::Execution(format!(
+            "spectre kill failed ({kill_error}); child was already reaped with {status}"
+        )),
+        Ok(None) => VirtuosoError::Execution(format!(
+            "spectre kill failed ({kill_error}); child is still running and was not waited indefinitely"
+        )),
+        Err(wait_error) => VirtuosoError::Execution(format!(
+            "spectre kill failed ({kill_error}); status check also failed ({wait_error})"
+        )),
     }
 }
 
@@ -608,6 +666,7 @@ impl SpectreSimulator {
                 }
                 runner = r;
             }
+            runner.timeout = cfg.timeout;
             Some(runner)
         } else {
             None
@@ -757,25 +816,34 @@ impl SpectreSimulator {
             let handles: Vec<_> = chunks
                 .iter()
                 .map(|chunk| {
-                    s.spawn(|| {
+                    let labels = chunk
+                        .iter()
+                        .map(|(label, _)| label.clone())
+                        .collect::<Vec<_>>();
+                    let handle = s.spawn(|| {
                         chunk
                             .iter()
                             .map(|(label, netlist)| {
-                                let result = sim.run_simulation(netlist, None);
-                                ParallelSimResult {
-                                    label: label.clone(),
-                                    result,
-                                }
+                                catch_parallel_job(label.clone(), || {
+                                    sim.run_simulation(netlist, None)
+                                })
                             })
                             .collect::<Vec<_>>()
-                    })
+                    });
+                    (labels, handle)
                 })
                 .collect();
 
             let mut all_results = Vec::with_capacity(inputs_arc.len());
-            for handle in handles {
-                all_results.extend(handle.join().unwrap_or_default());
+            for (labels, handle) in handles {
+                match handle.join() {
+                    Ok(results) => all_results.extend(results),
+                    Err(payload) => {
+                        all_results.extend(parallel_chunk_panic_results(&labels, payload.as_ref()))
+                    }
+                }
             }
+            debug_assert_eq!(all_results.len(), inputs_arc.len());
             all_results
         })
     }
@@ -1006,9 +1074,11 @@ impl SpectreSimulator {
                 Ok(None) => {
                     if std::time::Instant::now() > deadline {
                         progress_follower.stop_and_join();
-                        let kill_succeeded = child.kill().is_ok();
-                        if let Some(wait_budget) = timeout_wait_budget(kill_succeeded) {
-                            let _ = wait_for_child_exit(&mut child, wait_budget);
+                        if let Err(termination_error) = terminate_timed_out_child(&mut child) {
+                            return Err(VirtuosoError::Execution(format!(
+                                "spectre timed out after {}s; {termination_error}",
+                                self.timeout
+                            )));
                         }
                         return Err(VirtuosoError::Timeout(self.timeout));
                     }
@@ -1115,16 +1185,24 @@ impl SpectreSimulator {
         )?;
         let combined_output = combined_remote_log(&result, &remote_log)?;
 
-        // ── Attempt data download even on failure (convergence failure may leave partial data) ──
+        // Missing raw output is classifier input, not a transfer failure. A
+        // directory that exists but cannot be transferred remains an SSH error.
+        let remote_raw = format!("{remote_dir}/raw");
+        let raw_check = runner.run_command(
+            &format!("test -d {}", shell_quote(&remote_raw)),
+            Some(self.timeout),
+        )?;
         let local_raw = self.work_dir.join(&run_id).join("raw");
-        runner
-            .download_dir(&format!("{remote_dir}/raw"), local_raw.to_str().unwrap())
-            .map_err(|e| {
+        let (data, operating_points) = if remote_directory_exists(&raw_check)? {
+            runner.download_dir(&remote_raw, &local_raw).map_err(|e| {
                 VirtuosoError::Ssh(format!(
                     "failed to retrieve remote Spectre raw results from {remote_dir}: {e}"
                 ))
             })?;
-        let (data, operating_points) = parse_simulation_output(&local_raw)?;
+            parse_simulation_output(&local_raw)?
+        } else {
+            (HashMap::new(), HashMap::new())
+        };
 
         // ── Build result from classification ───────────────────────────────────────
         // Re-classify now that we know if raw data exists
@@ -1627,9 +1705,26 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn timeout_wait_policy_never_waits_after_failed_kill_and_bounds_successful_kill() {
-        assert_eq!(timeout_wait_budget(false), None);
-        assert_eq!(timeout_wait_budget(true), Some(Duration::from_secs(1)));
+    #[cfg(unix)]
+    fn timeout_termination_reaps_after_successful_kill() {
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg("exec sleep 30")
+            .spawn()
+            .unwrap();
+        let status = terminate_timed_out_child(&mut child).unwrap();
+        assert!(!status.success());
+        assert!(child.try_wait().unwrap().is_some());
+    }
+
+    #[test]
+    fn timeout_termination_reports_kill_and_wait_state_when_kill_fails() {
+        let status = Command::new("true").status().unwrap();
+        let error =
+            describe_failed_kill(std::io::Error::other("permission denied"), Ok(Some(status)))
+                .to_string();
+        assert!(error.contains("kill failed"), "{error}");
+        assert!(error.contains("reaped"), "{error}");
     }
 
     #[test]
@@ -1714,6 +1809,75 @@ pub(crate) mod tests {
             combined_remote_log(&simulation, &failed_log),
             Err(VirtuosoError::Ssh(_))
         ));
+    }
+
+    #[test]
+    fn missing_remote_raw_directory_is_not_a_transfer_error() {
+        let missing = crate::models::RemoteTaskResult {
+            success: false,
+            returncode: 1,
+            stdout: String::new(),
+            stderr: String::new(),
+            remote_dir: None,
+            error: None,
+            timings: HashMap::new(),
+        };
+        assert_eq!(remote_directory_exists(&missing).unwrap(), false);
+
+        let outcome = classify_simulation_output(
+            true,
+            "Simulation complete",
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        assert!(matches!(outcome, SpectreOutcome::Failure { .. }));
+    }
+
+    #[test]
+    fn remote_raw_inspection_failure_is_propagated() {
+        let failed = crate::models::RemoteTaskResult {
+            success: false,
+            returncode: 255,
+            stdout: String::new(),
+            stderr: "connection lost".to_string(),
+            remote_dir: None,
+            error: Some("connection lost".to_string()),
+            timings: HashMap::new(),
+        };
+        assert!(matches!(
+            remote_directory_exists(&failed),
+            Err(VirtuosoError::Ssh(_))
+        ));
+    }
+
+    #[test]
+    fn parallel_job_panic_becomes_labeled_error_result() {
+        let result = catch_parallel_job("tt".to_string(), || -> Result<SimulationResult> {
+            panic!("worker exploded")
+        });
+        assert_eq!(result.label, "tt");
+        assert!(result
+            .result
+            .unwrap_err()
+            .to_string()
+            .contains("worker exploded"));
+    }
+
+    #[test]
+    fn parallel_chunk_panic_preserves_one_error_per_input() {
+        let labels = vec!["tt".to_string(), "ss".to_string(), "ff".to_string()];
+        let payload: Box<dyn std::any::Any + Send> = Box::new("chunk exploded");
+        let results = parallel_chunk_panic_results(&labels, payload.as_ref());
+        assert_eq!(results.len(), labels.len());
+        assert!(results.iter().zip(labels).all(|(result, label)| {
+            result.label == label
+                && result
+                    .result
+                    .as_ref()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("chunk exploded")
+        }));
     }
 
     // === Completion detection tests ===

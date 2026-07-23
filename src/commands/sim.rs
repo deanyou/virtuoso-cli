@@ -634,6 +634,7 @@ fn parallel_report(results: Vec<ParallelSimResult>, total: usize) -> Value {
     let mut ok_count = 0usize;
     let mut partial_count = 0usize;
     let mut err_count = 0usize;
+    let mut failure_count = 0usize;
 
     for result in results {
         match result.result {
@@ -645,10 +646,12 @@ fn parallel_report(results: Vec<ParallelSimResult>, total: usize) -> Value {
                     }
                     ExecutionStatus::Partial => {
                         partial_count += 1;
+                        err_count += 1;
                         "partial"
                     }
                     ExecutionStatus::Failure | ExecutionStatus::Error => {
                         err_count += 1;
+                        failure_count += 1;
                         "error"
                     }
                 };
@@ -661,6 +664,7 @@ fn parallel_report(results: Vec<ParallelSimResult>, total: usize) -> Value {
             }
             Err(error) => {
                 err_count += 1;
+                failure_count += 1;
                 rows.push(json!({
                     "label": result.label,
                     "status": "error",
@@ -672,7 +676,7 @@ fn parallel_report(results: Vec<ParallelSimResult>, total: usize) -> Value {
 
     let summary = if ok_count == total {
         "all_ok"
-    } else if err_count == total {
+    } else if failure_count == total {
         "all_error"
     } else {
         "partial"
@@ -878,9 +882,33 @@ mod tests {
 
         assert_eq!(report["status"], "partial");
         assert_eq!(report["ok"], 1);
-        assert_eq!(report["errors"], 0);
+        assert_eq!(report["errors"], 1);
         assert_eq!(report["partial"], 1);
+        assert_eq!(
+            report["ok"].as_u64().unwrap() + report["errors"].as_u64().unwrap(),
+            2
+        );
         assert_eq!(report["results"][1]["status"], "partial");
+    }
+
+    #[test]
+    fn parallel_report_keeps_all_partial_summary_and_count_invariants() {
+        let report = parallel_report(
+            vec![ParallelSimResult {
+                label: "warn".to_string(),
+                result: Ok(simulation_result(ExecutionStatus::Partial)),
+            }],
+            1,
+        );
+
+        assert_eq!(report["status"], "partial");
+        assert_eq!(report["ok"], 0);
+        assert_eq!(report["partial"], 1);
+        assert_eq!(report["errors"], 1);
+        assert_eq!(
+            report["ok"].as_u64().unwrap() + report["errors"].as_u64().unwrap(),
+            1
+        );
     }
 
     #[test]

@@ -2,8 +2,9 @@
 
 use crate::error::{Result, VirtuosoError};
 use std::collections::HashMap;
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::io::{Read, Write};
+use std::path::Path;
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -35,6 +36,143 @@ fn validate_directory_download(
         )));
     }
     Ok(())
+}
+
+fn should_retry_cm_failure(attempt_used_control_master: bool, stderr: &str) -> bool {
+    attempt_used_control_master && SSHRunner::is_cm_failure(stderr)
+}
+
+#[derive(Debug)]
+struct PipelineOutput {
+    producer_status: ExitStatus,
+    producer_stderr: Vec<u8>,
+    consumer_status: ExitStatus,
+    consumer_stderr: Vec<u8>,
+}
+
+fn drain_pipe<R: Read + Send + 'static>(
+    mut pipe: R,
+) -> std::thread::JoinHandle<std::io::Result<Vec<u8>>> {
+    std::thread::spawn(move || {
+        let mut output = Vec::new();
+        pipe.read_to_end(&mut output)?;
+        Ok(output)
+    })
+}
+
+fn terminate_pipeline_child(child: &mut Child, name: &str) -> Result<ExitStatus> {
+    if let Some(status) = child
+        .try_wait()
+        .map_err(|e| VirtuosoError::Ssh(format!("failed checking {name}: {e}")))?
+    {
+        return Ok(status);
+    }
+    if let Err(kill_error) = child.kill() {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|e| VirtuosoError::Ssh(format!("failed rechecking {name}: {e}")))?
+        {
+            return Ok(status);
+        }
+        return Err(VirtuosoError::Ssh(format!(
+            "failed to kill timed-out {name}: {kill_error}"
+        )));
+    }
+    child
+        .wait()
+        .map_err(|e| VirtuosoError::Ssh(format!("failed to reap timed-out {name}: {e}")))
+}
+
+fn join_pipe_reader(
+    reader: std::thread::JoinHandle<std::io::Result<Vec<u8>>>,
+    name: &str,
+) -> Result<Vec<u8>> {
+    reader
+        .join()
+        .map_err(|_| VirtuosoError::Ssh(format!("{name} reader panicked")))?
+        .map_err(|e| VirtuosoError::Ssh(format!("failed reading {name}: {e}")))
+}
+
+fn run_streaming_pipeline(
+    mut producer_command: Command,
+    mut consumer_command: Command,
+    timeout: Duration,
+) -> Result<PipelineOutput> {
+    let mut producer = producer_command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| VirtuosoError::Ssh(format!("failed to start directory producer: {e}")))?;
+    let producer_stdout = producer
+        .stdout
+        .take()
+        .ok_or_else(|| VirtuosoError::Ssh("directory producer stdout was not piped".into()))?;
+    let producer_stderr = producer
+        .stderr
+        .take()
+        .ok_or_else(|| VirtuosoError::Ssh("directory producer stderr was not piped".into()))?;
+    let producer_stderr_reader = drain_pipe(producer_stderr);
+
+    let mut consumer = match consumer_command
+        .stdin(producer_stdout)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(error) => {
+            let _ = terminate_pipeline_child(&mut producer, "directory producer");
+            let _ = join_pipe_reader(producer_stderr_reader, "directory producer stderr");
+            return Err(VirtuosoError::Ssh(format!(
+                "failed to start directory consumer: {error}"
+            )));
+        }
+    };
+    let consumer_stderr = consumer
+        .stderr
+        .take()
+        .ok_or_else(|| VirtuosoError::Ssh("directory consumer stderr was not piped".into()))?;
+    let consumer_stderr_reader = drain_pipe(consumer_stderr);
+
+    let deadline = Instant::now() + timeout;
+    let mut producer_status = None;
+    let mut consumer_status = None;
+    loop {
+        if producer_status.is_none() {
+            producer_status = producer
+                .try_wait()
+                .map_err(|e| VirtuosoError::Ssh(format!("failed waiting for ssh tar: {e}")))?;
+        }
+        if consumer_status.is_none() {
+            consumer_status = consumer
+                .try_wait()
+                .map_err(|e| VirtuosoError::Ssh(format!("failed waiting for local tar: {e}")))?;
+        }
+        if producer_status.is_some() && consumer_status.is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let producer_termination =
+                terminate_pipeline_child(&mut producer, "directory producer");
+            let consumer_termination =
+                terminate_pipeline_child(&mut consumer, "directory consumer");
+            producer_termination.and(consumer_termination)?;
+            let producer_read =
+                join_pipe_reader(producer_stderr_reader, "directory producer stderr");
+            let consumer_read =
+                join_pipe_reader(consumer_stderr_reader, "directory consumer stderr");
+            producer_read.map(|_| ()).and(consumer_read.map(|_| ()))?;
+            return Err(VirtuosoError::Timeout(timeout.as_secs().max(1)));
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    Ok(PipelineOutput {
+        producer_status: producer_status.expect("producer status checked"),
+        producer_stderr: join_pipe_reader(producer_stderr_reader, "directory producer stderr")?,
+        consumer_status: consumer_status.expect("consumer status checked"),
+        consumer_stderr: join_pipe_reader(consumer_stderr_reader, "directory consumer stderr")?,
+    })
 }
 
 pub struct SSHRunner {
@@ -118,6 +256,7 @@ impl SSHRunner {
         runner.ssh_port = config.ssh_port;
         runner.ssh_key_path = config.ssh_key.clone();
         runner.ssh_config_path = config.ssh_config.clone();
+        runner.timeout = config.timeout;
         runner
     }
 
@@ -132,25 +271,30 @@ impl SSHRunner {
 
     pub fn test_connection(&self, timeout: Option<u64>) -> Result<bool> {
         let effective_timeout = timeout.unwrap_or(self.connect_timeout);
-        let output = self.run_test_connection(effective_timeout)?;
+        let attempt_used_control_master = *self.use_control_master.lock().unwrap();
+        let output = self.run_test_connection(effective_timeout, attempt_used_control_master)?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-            if Self::is_cm_failure(&stderr) && *self.use_control_master.lock().unwrap() {
+            if should_retry_cm_failure(attempt_used_control_master, &stderr) {
                 tracing::warn!(
                     "ControlMaster failure in test_connection, retrying without CM: {}",
                     stderr.lines().next().unwrap_or("")
                 );
                 *self.use_control_master.lock().unwrap() = false;
-                let output2 = self.run_test_connection(effective_timeout)?;
+                let output2 = self.run_test_connection(effective_timeout, false)?;
                 return Ok(output2.status.success());
             }
         }
         Ok(output.status.success())
     }
 
-    fn run_test_connection(&self, connect_timeout: u64) -> Result<std::process::Output> {
-        let mut cmd = self.build_ssh_cmd_with_timeout(connect_timeout);
+    fn run_test_connection(
+        &self,
+        connect_timeout: u64,
+        use_control_master: bool,
+    ) -> Result<std::process::Output> {
+        let mut cmd = self.build_ssh_cmd_with_mode(connect_timeout, use_control_master);
         cmd.arg("exit").arg("0");
         cmd.stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -160,17 +304,15 @@ impl SSHRunner {
     }
 
     pub fn run_command(&self, command: &str, timeout: Option<u64>) -> Result<RemoteTaskResult> {
-        let result = self.run_command_inner(command, timeout)?;
-        if !result.success
-            && Self::is_cm_failure(&result.stderr)
-            && *self.use_control_master.lock().unwrap()
-        {
+        let attempt_used_control_master = *self.use_control_master.lock().unwrap();
+        let result = self.run_command_inner(command, timeout, attempt_used_control_master)?;
+        if !result.success && should_retry_cm_failure(attempt_used_control_master, &result.stderr) {
             tracing::warn!(
                 "ControlMaster failure detected, retrying without CM: {}",
                 result.stderr.lines().next().unwrap_or("")
             );
             *self.use_control_master.lock().unwrap() = false;
-            return self.run_command_inner(command, timeout);
+            return self.run_command_inner(command, timeout, false);
         }
         Ok(result)
     }
@@ -181,18 +323,19 @@ impl SSHRunner {
     /// `build_ssh_cmd()`, which respects the updated `use_control_master` flag).
     fn attempt_with_cm_fallback<F>(&self, mut attempt: F) -> Result<std::process::Output>
     where
-        F: FnMut() -> Result<std::process::Output>,
+        F: FnMut(bool) -> Result<std::process::Output>,
     {
-        let output = attempt()?;
+        let attempt_used_control_master = *self.use_control_master.lock().unwrap();
+        let output = attempt(attempt_used_control_master)?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if Self::is_cm_failure(&stderr) && *self.use_control_master.lock().unwrap() {
+            if should_retry_cm_failure(attempt_used_control_master, &stderr) {
                 tracing::warn!(
                     "ControlMaster failure in file transfer, retrying without CM: {}",
                     stderr.lines().next().unwrap_or("")
                 );
                 *self.use_control_master.lock().unwrap() = false;
-                return attempt();
+                return attempt(false);
             }
         }
         Ok(output)
@@ -201,16 +344,26 @@ impl SSHRunner {
     /// Base SSH command with login shell args (`sh -l -s`) appended.
     /// Extracted so the login-shell flag is testable without spawning a process.
     pub(crate) fn build_run_cmd(&self) -> Command {
-        let mut cmd = self.build_ssh_cmd();
+        let use_control_master = *self.use_control_master.lock().unwrap();
+        self.build_run_cmd_with_mode(use_control_master)
+    }
+
+    fn build_run_cmd_with_mode(&self, use_control_master: bool) -> Command {
+        let mut cmd = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
         cmd.arg("sh").arg("-l").arg("-s");
         cmd
     }
 
-    fn run_command_inner(&self, command: &str, timeout: Option<u64>) -> Result<RemoteTaskResult> {
+    fn run_command_inner(
+        &self,
+        command: &str,
+        timeout: Option<u64>,
+        use_control_master: bool,
+    ) -> Result<RemoteTaskResult> {
         let timeout_secs = Duration::from_secs(timeout.unwrap_or(self.timeout));
         let start = Instant::now();
 
-        let mut cmd = self.build_run_cmd();
+        let mut cmd = self.build_run_cmd_with_mode(use_control_master);
 
         let mut child = cmd
             .stdin(Stdio::piped())
@@ -297,7 +450,7 @@ impl SSHRunner {
         // breaking commands with &&.
         let inner_cmd = format!("mkdir -p {quoted_dir} && cd {quoted_dir} && tar xf -");
 
-        let output = self.attempt_with_cm_fallback(|| {
+        let output = self.attempt_with_cm_fallback(|use_control_master| {
             let tar = Command::new("tar")
                 .arg("cf")
                 .arg("-")
@@ -309,7 +462,7 @@ impl SSHRunner {
                 .map_err(|e| VirtuosoError::Ssh(format!("tar failed: {e}")))?;
 
             let tar_stdout = tar.stdout.unwrap();
-            let mut ssh = self.build_ssh_cmd();
+            let mut ssh = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
             ssh.arg(format!("sh -c {}", shell_quote(&inner_cmd)));
             ssh.stdin(tar_stdout)
                 .stdout(Stdio::null())
@@ -346,8 +499,8 @@ impl SSHRunner {
         // Must pass "sh -c 'command'" as a single argument to SSH,
         // otherwise "sh", "-c", "command" are concatenated without quotes,
         // breaking commands with &&.
-        let output = self.attempt_with_cm_fallback(|| {
-            let mut cmd = self.build_ssh_cmd();
+        let output = self.attempt_with_cm_fallback(|use_control_master| {
+            let mut cmd = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
             cmd.arg(format!(
                 "sh -c {}",
                 shell_quote(&format!("cat > {quoted_remote}"))
@@ -385,8 +538,8 @@ impl SSHRunner {
                 .map_err(|e| VirtuosoError::Ssh(format!("failed to create local dir: {e}")))?;
         }
 
-        let output = self.attempt_with_cm_fallback(|| {
-            let mut cmd = self.build_ssh_cmd();
+        let output = self.attempt_with_cm_fallback(|use_control_master| {
+            let mut cmd = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
             cmd.arg("cat").arg(remote);
             cmd.stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -408,10 +561,11 @@ impl SSHRunner {
     fn build_download_dir_commands(
         &self,
         remote: &str,
-        local: &std::path::Path,
+        local: &Path,
+        use_control_master: bool,
     ) -> (Command, Command) {
         let archive_command = format!("tar cf - -C {} .", shell_quote(remote));
-        let mut ssh = self.build_ssh_cmd();
+        let mut ssh = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
         ssh.arg(format!("sh -c {}", shell_quote(&archive_command)));
 
         let mut tar = Command::new("tar");
@@ -419,51 +573,36 @@ impl SSHRunner {
         (ssh, tar)
     }
 
+    fn directory_transfer_timeout(&self) -> Duration {
+        Duration::from_secs(self.timeout)
+    }
+
     /// Stream a remote directory into a local directory using ssh + tar.
     ///
     /// The archive is never buffered in memory: ssh stdout is connected
     /// directly to the local tar process stdin. Both process exit statuses are
     /// checked, and ControlMaster failures retain the existing one-retry policy.
-    pub fn download_dir(&self, remote: &str, local: &str) -> Result<()> {
-        let local_path = std::path::Path::new(local);
-        std::fs::create_dir_all(local_path)
-            .map_err(|e| VirtuosoError::Ssh(format!("failed to create local dir: {e}")))?;
-
+    pub fn download_dir(&self, remote: &str, local: &Path) -> Result<()> {
         loop {
-            let (mut ssh_command, mut tar_command) =
-                self.build_download_dir_commands(remote, local_path);
-            let mut ssh = ssh_command
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .map_err(|e| VirtuosoError::Ssh(format!("ssh directory download failed: {e}")))?;
-            let ssh_stdout = ssh.stdout.take().ok_or_else(|| {
-                VirtuosoError::Ssh("ssh directory download stdout was not piped".into())
-            })?;
+            if local.exists() {
+                std::fs::remove_dir_all(local).map_err(|e| {
+                    VirtuosoError::Ssh(format!("failed to clear local result dir: {e}"))
+                })?;
+            }
+            std::fs::create_dir_all(local)
+                .map_err(|e| VirtuosoError::Ssh(format!("failed to create local dir: {e}")))?;
 
-            let tar_output = match tar_command
-                .stdin(ssh_stdout)
-                .stdout(Stdio::null())
-                .stderr(Stdio::piped())
-                .output()
-            {
-                Ok(output) => output,
-                Err(error) => {
-                    let _ = ssh.kill();
-                    let _ = ssh.wait();
-                    return Err(VirtuosoError::Ssh(format!(
-                        "failed to extract remote directory: {error}"
-                    )));
-                }
-            };
-            let ssh_output = ssh.wait_with_output().map_err(|e| {
-                VirtuosoError::Ssh(format!("failed waiting for directory download: {e}"))
-            })?;
-
-            let ssh_stderr = String::from_utf8_lossy(&ssh_output.stderr);
-            if !ssh_output.status.success()
-                && Self::is_cm_failure(&ssh_stderr)
-                && *self.use_control_master.lock().unwrap()
+            let attempt_used_control_master = *self.use_control_master.lock().unwrap();
+            let (ssh_command, tar_command) =
+                self.build_download_dir_commands(remote, local, attempt_used_control_master);
+            let output = run_streaming_pipeline(
+                ssh_command,
+                tar_command,
+                self.directory_transfer_timeout(),
+            )?;
+            let ssh_stderr = String::from_utf8_lossy(&output.producer_stderr);
+            if !output.producer_status.success()
+                && should_retry_cm_failure(attempt_used_control_master, &ssh_stderr)
             {
                 tracing::warn!(
                     "ControlMaster failure in directory download, retrying without CM: {}",
@@ -472,11 +611,11 @@ impl SSHRunner {
                 *self.use_control_master.lock().unwrap() = false;
                 continue;
             }
-            let tar_stderr = String::from_utf8_lossy(&tar_output.stderr);
+            let tar_stderr = String::from_utf8_lossy(&output.consumer_stderr);
             return validate_directory_download(
-                ssh_output.status.success(),
+                output.producer_status.success(),
                 &ssh_stderr,
-                tar_output.status.success(),
+                output.consumer_status.success(),
                 &tar_stderr,
             );
         }
@@ -509,6 +648,11 @@ impl SSHRunner {
     }
 
     fn build_ssh_cmd_with_timeout(&self, connect_timeout: u64) -> Command {
+        let use_control_master = *self.use_control_master.lock().unwrap();
+        self.build_ssh_cmd_with_mode(connect_timeout, use_control_master)
+    }
+
+    fn build_ssh_cmd_with_mode(&self, connect_timeout: u64, use_control_master: bool) -> Command {
         let mut cmd = Command::new("ssh");
         cmd.args([
             "-o",
@@ -525,7 +669,7 @@ impl SSHRunner {
             "HostbasedAuthentication=no",
         ]);
 
-        if *self.use_control_master.lock().unwrap() {
+        if use_control_master {
             // ControlMaster: reuse SSH connections to avoid repeated handshakes.
             // Disabled at runtime if a CM failure is detected (WSL2/Windows paths
             // with non-ASCII characters, named pipe creation failures, etc.).
@@ -618,7 +762,7 @@ mod tests {
         let local = std::path::Path::new("/tmp/local raw;safe");
         let remote = "/remote/raw dir;touch 'owned'";
 
-        let (ssh, tar) = runner.build_download_dir_commands(remote, local);
+        let (ssh, tar) = runner.build_download_dir_commands(remote, local, false);
         let ssh_args = ssh
             .get_args()
             .map(|arg| arg.to_string_lossy().into_owned())
@@ -651,5 +795,81 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("tar failed"));
+    }
+
+    #[test]
+    fn download_dir_timeout_uses_runner_configuration() {
+        let mut runner = SSHRunner::new("compute");
+        runner.timeout = 17;
+        assert_eq!(runner.directory_transfer_timeout(), Duration::from_secs(17));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn streaming_pipeline_drains_large_producer_stderr_without_deadlock() {
+        let source = tempfile::tempdir().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        std::fs::write(source.path().join("payload"), b"complete").unwrap();
+
+        let mut producer = Command::new("sh");
+        producer.arg("-c").arg(format!(
+            "head -c 262144 /dev/zero >&2; tar cf - -C {} .",
+            shell_quote(source.path().to_str().unwrap())
+        ));
+        let mut consumer = Command::new("tar");
+        consumer
+            .arg("xf")
+            .arg("-")
+            .arg("-C")
+            .arg(destination.path());
+
+        let output = run_streaming_pipeline(producer, consumer, Duration::from_secs(5)).unwrap();
+        assert!(output.producer_status.success());
+        assert!(output.consumer_status.success());
+        assert!(output.producer_stderr.len() >= 262144);
+        assert_eq!(
+            std::fs::read(destination.path().join("payload")).unwrap(),
+            b"complete"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn streaming_pipeline_timeout_kills_reaps_and_returns_promptly() {
+        let mut producer = Command::new("sh");
+        producer.arg("-c").arg("exec sleep 30");
+        let mut consumer = Command::new("sh");
+        consumer.arg("-c").arg("exec sleep 30");
+        let started = Instant::now();
+
+        let error =
+            run_streaming_pipeline(producer, consumer, Duration::from_millis(100)).unwrap_err();
+        assert!(matches!(error, VirtuosoError::Timeout(_)));
+        assert!(started.elapsed() < Duration::from_secs(3));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn download_dir_command_accepts_non_utf8_local_path() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let runner = SSHRunner::new("compute");
+        let local =
+            std::path::PathBuf::from(std::ffi::OsString::from_vec(b"/tmp/non-utf8-\xff".to_vec()));
+        let (_, tar) = runner.build_download_dir_commands("/remote/raw", &local, false);
+        assert_eq!(tar.get_args().last(), Some(local.as_os_str()));
+    }
+
+    #[test]
+    fn cm_failure_retry_depends_on_attempt_snapshot_not_shared_flag() {
+        let attempt_used_control_master = true;
+        assert!(should_retry_cm_failure(
+            attempt_used_control_master,
+            "mux_client_request_session failed"
+        ));
+        assert!(!should_retry_cm_failure(
+            false,
+            "mux_client_request_session failed"
+        ));
     }
 }
