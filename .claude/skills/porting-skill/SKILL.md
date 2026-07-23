@@ -11,7 +11,7 @@ description: |
   voltage", "our .sdb corners don't match new PDK", or any mention of PDK/process
   transition. Invoke this skill proactively when you detect PDK-specific paths or
   corner names in netlists that don't match the target environment.
-argument-hint: [source → target, e.g. "SMIC 28nm to TSMC 40nm" or "IC23 to IC25"]
+argument-hint: '[source → target, e.g. "SMIC 28nm to TSMC 40nm" or "IC23 to IC25"]'
 allowed-tools: Bash(vcli *) Bash(virtuoso *) Bash(spectre *) Read Write Edit Grep
 ---
 

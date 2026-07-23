@@ -1,7 +1,7 @@
 ---
 name: amp-copilot
 description: Amplifier design copilot — topology selection, sizing via gm/Id lookup tables, PVT corner validation, and process-portable design. Use when designing amplifiers (OTA, opamp, comparator), selecting topology from specs, sizing transistors, or characterizing a new process node. Also triggers on keywords like amplifier, OTA, opamp, gain-bandwidth, CMRR, PSRR, slew rate.
-argument-hint: [circuit type and specs, e.g. "two-stage OTA GBW=50MHz CL=10pF"]
+argument-hint: '[circuit type and specs, e.g. "two-stage OTA GBW=50MHz CL=10pF"]'
 allowed-tools: Bash(virtuoso *) Read Write
 ---
 

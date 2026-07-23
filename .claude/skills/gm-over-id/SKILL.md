@@ -1,7 +1,7 @@
 ---
 name: gm-over-id
 description: gm/Id methodology for analog IC design — transistor sizing via lookup table approach. Use when designing amplifiers, current mirrors, OTAs, or any analog circuit where you need to determine W/L from specs (GBW, gain, noise). Also use when the user mentions gm/id, transistor sizing, Vov, current density, or design space exploration.
-argument-hint: [transistor and target, e.g. "NMOS gm/Id=15 Ids=100uA"]
+argument-hint: '[transistor and target, e.g. "NMOS gm/Id=15 Ids=100uA"]'
 allowed-tools: Bash(virtuoso *) Read Write
 ---
 
