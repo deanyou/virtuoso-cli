@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::error::Result;
+use crate::models::ScalarValue;
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
@@ -310,6 +311,204 @@ pub fn parse_sweep_flat(output_dir: &Path) -> Result<Vec<SweepPoint>> {
     Ok(points)
 }
 
+/// Parse PSF ASCII files for scalar operating-point / STRUCT blocks.
+///
+/// Matches blocks like:
+/// ```text
+/// "M0" "mos" (
+///   1.906e-04
+///   4.500e-01
+///   "saturation"
+/// )
+/// ```
+///
+/// For mos transistors the known positional parameters are:
+///   0 → gm, 1 → Vov (Vdsat), 2 → region
+/// All other values are stored as `param<N>`.
+pub fn parse_structured_op_blocks(raw_dir: &Path) -> HashMap<String, ScalarValue> {
+    let mut ops = HashMap::new();
+
+    let scan_root = find_psf_scan_root(raw_dir);
+    let Ok(entries) = fs::read_dir(&scan_root) else {
+        return ops;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Ok(content) = fs::read_to_string(&path) else {
+            continue;
+        };
+        // Only scan files likely to contain OP data (not tran.tran etc.)
+        if should_skip_psf_file(path.file_name().and_then(|n| n.to_str()).unwrap_or("")) {
+            continue;
+        }
+        parse_op_blocks_from_content(&content, &mut ops);
+    }
+
+    ops
+}
+
+/// Files whose names look like sweep or time-domain waveforms — skip these for OP parsing.
+/// Conservatively skips transient/AC/Noise/PSS/PXF/SP analysis outputs; keeps OP files (dc_op.dc, etc.).
+fn should_skip_psf_file(name: &str) -> bool {
+    // <type>.<type> files (e.g. dc.dc, ac.ac, noise.noise) — skip
+    // <type>_<suffix>.<type> where suffix != "op" (e.g. dc_tran.dc, ac_steady.ac) — skip
+    // <type>_op.<type> (e.g. dc_op.dc, ac_op.ocn) — keep (operating-point files)
+    let skip_type_pattern = |n: &str, t: &str| -> bool {
+        n == format!("{t}.{t}")
+            || (n.starts_with(&format!("{t}_")) && !n.starts_with(&format!("{t}_op.")))
+    };
+
+    name.contains("tran")
+        || skip_type_pattern(name, "dc")
+        || skip_type_pattern(name, "ac")
+        || name.contains("noise")
+        || skip_type_pattern(name, "pss")
+        || skip_type_pattern(name, "pxf")
+        || skip_type_pattern(name, "sp")
+        || name.ends_with(".tr0")
+        || name.ends_with(".asci")
+}
+
+/// Extract OP blocks from a single PSF file's content.
+fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarValue>) {
+    // Match quoted device name, quoted type, opening paren on same or next line
+    let block_re = Regex::new(r#""([^"]+)"\s+"([^"]+)"\s*\(\s*"#).ok();
+    let block_re = match block_re {
+        Some(re) => re,
+        None => return,
+    };
+
+    let mut last_end = 0;
+    while let Some(block_cap) = block_re.captures(&content[last_end..]) {
+        let full_match = block_cap.get(0).unwrap();
+        let _start_offset = last_end + full_match.start();
+        let end_offset = last_end + full_match.end();
+
+        let dev_name = block_cap.get(1).unwrap().as_str().to_string();
+        let dev_type = block_cap.get(2).unwrap().as_str().to_lowercase();
+
+        // Find the matching closing paren
+        if let Some(block_end) = find_closing_paren(content, end_offset) {
+            let inner = &content[end_offset..block_end];
+            let values = parse_op_inner_values(inner);
+
+            if values.is_empty() {
+                last_end = block_end;
+                continue;
+            }
+
+            // Apply named-parameter convention for mos devices
+            if dev_type == "mos" {
+                // Standard mos OP order (Spectre): gm, Vov (or Vdsat), region
+                if !values.is_empty() {
+                    ops.insert(format!("{}:gm", dev_name), values[0].clone());
+                }
+                if values.len() >= 2 {
+                    ops.insert(format!("{}:vov", dev_name), values[1].clone());
+                }
+                if let ScalarValue::String(_) = &values[2.min(values.len() - 1)] {
+                    ops.insert(
+                        format!("{}:region", dev_name),
+                        values[2.min(values.len() - 1)].clone(),
+                    );
+                }
+                // Remaining params as positional
+                for (i, v) in values.iter().enumerate().skip(3) {
+                    ops.insert(format!("{}:param{}", dev_name, i), v.clone());
+                }
+            } else {
+                // Generic: all positional
+                for (i, v) in values.iter().enumerate() {
+                    ops.insert(format!("{}:param{}", dev_name, i), v.clone());
+                }
+            }
+
+            last_end = block_end;
+        } else {
+            last_end = end_offset;
+        }
+    }
+}
+
+/// Find the matching `)` in a balanced-paren block starting after `open_offset`.
+/// Respects double-quoted strings so `)` inside `"..."` is not counted.
+fn find_closing_paren(content: &str, open_offset: usize) -> Option<usize> {
+    let bytes = content.as_bytes();
+    let mut depth = 1;
+    let mut in_string = false;
+    let mut i = open_offset;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => in_string = !in_string,
+            b'(' if !in_string => depth += 1,
+            b')' if !in_string => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Parse the comma- or whitespace-separated values inside an OP block.
+fn parse_op_inner_values(inner: &str) -> Vec<ScalarValue> {
+    let mut values = Vec::new();
+    let mut current = String::new();
+    let mut in_string = false;
+
+    for ch in inner.chars() {
+        match ch {
+            '"' => {
+                in_string = !in_string;
+                current.push(ch);
+            }
+            ',' | '\n' | '\r' | '\t' | ' ' if !in_string => {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() && trimmed != "\"\"" {
+                    if let Some(sv) = parse_scalar(trimmed) {
+                        values.push(sv);
+                    }
+                }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    // Last value (no trailing comma)
+    let trimmed = current.trim();
+    if !trimmed.is_empty() && trimmed != "\"\"" {
+        if let Some(sv) = parse_scalar(trimmed) {
+            values.push(sv);
+        }
+    }
+    values
+}
+
+/// Parse a single scalar token (quoted string, integer, or float).
+fn parse_scalar(token: &str) -> Option<ScalarValue> {
+    let t = token.trim();
+    if (t.starts_with('"') && t.ends_with('"')) || (t.starts_with('"') && t.ends_with('"')) {
+        // Quoted string — strip quotes
+        let inner = &t[1..t.len() - 1];
+        return Some(ScalarValue::String(inner.to_string()));
+    }
+    if let Ok(i) = t.parse::<i64>() {
+        return Some(ScalarValue::Integer(i));
+    }
+    if let Ok(f) = t.parse::<f64>() {
+        return Some(ScalarValue::Float(f));
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,5 +744,149 @@ END"#;
 
         assert_eq!(point.get_scalar("v(out)"), Some(1.2));
         assert_eq!(point.get_scalar("v(in)"), None);
+    }
+
+    // === OP block parsing tests ===
+
+    #[test]
+    fn test_parse_scalar_float() {
+        assert!(matches!(
+            parse_scalar("1.906e-04"),
+            Some(ScalarValue::Float(_))
+        ));
+        assert!(matches!(parse_scalar("0.45"), Some(ScalarValue::Float(_))));
+        assert!(matches!(parse_scalar("-1.5"), Some(ScalarValue::Float(_))));
+    }
+
+    #[test]
+    fn test_parse_scalar_integer() {
+        assert!(matches!(parse_scalar("42"), Some(ScalarValue::Integer(42))));
+        assert!(matches!(parse_scalar("-7"), Some(ScalarValue::Integer(-7))));
+    }
+
+    #[test]
+    fn test_parse_scalar_string() {
+        let sv = parse_scalar("\"saturation\"").unwrap();
+        assert!(matches!(sv, ScalarValue::String(s) if s == "saturation"));
+    }
+
+    #[test]
+    fn test_parse_op_inner_values_mos() {
+        let inner = "1.906e-04\n  4.500e-01\n  \"saturation\"\n";
+        let values = parse_op_inner_values(inner);
+        assert_eq!(values.len(), 3);
+        assert!(values[0].as_f64().unwrap() > 0.0);
+        assert!(values[1].as_f64().unwrap() > 0.0);
+        assert!(matches!(&values[2], ScalarValue::String(s) if s == "saturation"));
+    }
+
+    #[test]
+    fn test_parse_op_blocks_from_content_mos() {
+        let content = r#""M0" "mos" (
+  1.906e-04
+  4.500e-01
+  "saturation"
+)
+""#;
+        let mut ops = HashMap::new();
+        parse_op_blocks_from_content(content, &mut ops);
+
+        assert!(ops.contains_key("M0:gm"));
+        assert!(ops.contains_key("M0:vov"));
+        assert!(ops.contains_key("M0:region"));
+        assert!(matches!(ops.get("M0:region"), Some(ScalarValue::String(s)) if s == "saturation"));
+    }
+
+    #[test]
+    fn test_parse_op_blocks_multiple_devices() {
+        let content = r#""M0" "mos" (
+  1.906e-04
+  4.500e-01
+  "saturation"
+)
+
+"M1" "mos" (
+  9.500e-05
+  3.200e-01
+  "triode"
+)
+""#;
+        let mut ops = HashMap::new();
+        parse_op_blocks_from_content(content, &mut ops);
+
+        assert!(ops.contains_key("M0:gm"));
+        assert!(ops.contains_key("M1:gm"));
+        assert!(ops.contains_key("M1:region"));
+        assert!(matches!(ops.get("M1:region"), Some(ScalarValue::String(s)) if s == "triode"));
+    }
+
+    #[test]
+    fn test_parse_structured_op_blocks_skips_tran_files() {
+        let tmp = TempDir::new().unwrap();
+        let raw = tmp.path().join("raw");
+        fs::create_dir_all(&raw).unwrap();
+
+        fs::write(
+            raw.join("tran.tran"),
+            r#""M0" "mos" (
+  1.0
+  0.5
+  "sat"
+)
+"#,
+        )
+        .unwrap();
+
+        fs::write(
+            raw.join("dc_op.dc"),
+            r#""M1" "mos" (
+  2.0
+  0.6
+  "saturation"
+)
+"#,
+        )
+        .unwrap();
+
+        let ops = parse_structured_op_blocks(&raw);
+        assert!(!ops.contains_key("M0:gm"), "tran files should be skipped");
+        assert!(ops.contains_key("M1:gm"), "op files should be parsed");
+    }
+
+    #[test]
+    fn test_parse_structured_op_blocks_empty_dir() {
+        let tmp = TempDir::new().unwrap();
+        let ops = parse_structured_op_blocks(tmp.path());
+        assert!(ops.is_empty());
+    }
+
+    #[test]
+    fn test_should_skip_psf_file() {
+        assert!(should_skip_psf_file("tran.tran"));
+        assert!(should_skip_psf_file("ac.ac"));
+        assert!(should_skip_psf_file("dc.dc"));
+        assert!(should_skip_psf_file("noise.noise"));
+        assert!(should_skip_psf_file("pss.pss"));
+        assert!(!should_skip_psf_file("dc_op.dc"));
+        assert!(!should_skip_psf_file("ac_op.ocn"));
+    }
+
+    // NOTE: find_closing_paren is tested implicitly via
+    // test_parse_op_blocks_from_content_mos (full PSF block parsing).
+    // The function requires PSF-format content (starts with '('),
+    // so testing it in isolation with non-PSF strings is misleading.
+
+    #[test]
+    fn test_scalar_value_accessors() {
+        let f = ScalarValue::Float(1.906e-04);
+        assert_eq!(f.as_f64(), Some(1.906e-04));
+        assert_eq!(f.as_str(), None);
+
+        let s = ScalarValue::String("saturation".to_string());
+        assert_eq!(s.as_str(), Some("saturation"));
+        assert_eq!(s.as_f64(), None);
+
+        let i = ScalarValue::Integer(42);
+        assert_eq!(i.as_f64(), Some(42.0));
     }
 }

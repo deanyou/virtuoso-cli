@@ -89,11 +89,43 @@ impl VirtuosoResult {
     }
 }
 
+/// A scalar value extracted from PSF operating-point blocks (e.g., M0:vth, M0:region).
+/// Ordered to serialize cleanly as JSON without needing complex enum tagging.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ScalarValue {
+    Float(f64),
+    String(String),
+    Integer(i64),
+}
+
+#[allow(dead_code)]
+impl ScalarValue {
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            ScalarValue::Float(v) => Some(*v),
+            ScalarValue::Integer(v) => Some(*v as f64),
+            ScalarValue::String(_) => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            ScalarValue::String(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulationResult {
     pub status: ExecutionStatus,
     pub tool_version: Option<String>,
+    /// Signal waveforms / sweep data: signal_name -> values.
     pub data: HashMap<String, Vec<f64>>,
+    /// Scalar operating points extracted from PSF STRUCT/OP blocks
+    /// (e.g., M0:gm, M0:vth, M0:region).
+    pub operating_points: HashMap<String, ScalarValue>,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
     pub metadata: HashMap<String, String>,
