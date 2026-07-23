@@ -105,10 +105,26 @@ fn extract_error_messages(content: &str) -> Vec<String> {
 /// emits warnings without the word "error", so routing warnings through the
 /// error extractor loses useful outcome information.
 fn extract_warning_messages(content: &str) -> Vec<String> {
+    let zero_summary = Regex::new(
+        r"(?i)(?:\b(?:no|zero)\s+warnings?\b|\b0\s+warnings?\b|\bwarnings?\s*:\s*0\b|\bwarning count\s*:\s*0\b)",
+    )
+    .ok();
     content
         .lines()
         .map(str::trim)
-        .filter(|line| !line.is_empty() && line.to_lowercase().contains("warning"))
+        .filter(|line| {
+            if line.is_empty() {
+                return false;
+            }
+            let lower = line.to_lowercase();
+            if !lower.contains("warning") {
+                return false;
+            }
+            !zero_summary
+                .as_ref()
+                .map(|regex| regex.is_match(&lower))
+                .unwrap_or(false)
+        })
         .map(ToOwned::to_owned)
         .collect()
 }
@@ -121,6 +137,20 @@ fn has_usable_output(
     operating_points: &HashMap<String, crate::models::ScalarValue>,
 ) -> bool {
     !data.is_empty() || !operating_points.is_empty()
+}
+
+fn classify_simulation_output(
+    exit_ok: bool,
+    log_content: &str,
+    data: &HashMap<String, Vec<f64>>,
+    operating_points: &HashMap<String, crate::models::ScalarValue>,
+) -> SpectreOutcome {
+    SpectreOutcomeClassifier::new(
+        exit_ok,
+        log_content,
+        has_usable_output(data, operating_points),
+    )
+    .classify()
 }
 
 fn parse_simulation_output(raw_dir: &std::path::Path) -> Result<ParsedSimulationOutput> {
@@ -205,6 +235,30 @@ impl ProgressFollower {
             let _ = handle.join();
         }
     }
+}
+
+fn timeout_wait_budget(kill_succeeded: bool) -> Option<Duration> {
+    kill_succeeded.then(|| Duration::from_secs(1))
+}
+
+fn wait_for_child_exit(
+    child: &mut std::process::Child,
+    timeout: Duration,
+) -> std::io::Result<bool> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if child.try_wait()?.is_some() {
+            return Ok(true);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Ok(false);
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn should_cleanup_remote(outcome: &SpectreOutcome, keep_remote_files: bool) -> bool {
+    !keep_remote_files && matches!(outcome, SpectreOutcome::Success)
 }
 
 /// Check if simulation output indicates a license error.
@@ -474,7 +528,7 @@ impl SpectreOutcomeClassifier {
         let lower = content.to_lowercase();
         // SFE diagnostic codes are netlist/elaboration errors, even when a
         // wrapper process exits successfully.
-        if Regex::new(r"(?i)\bSFE-\d+\b")
+        if Regex::new(r"(?im)^\s*(?:error|fatal)\b[^\n]{0,40}\(\s*SFE-\d+\s*\)")
             .map(|re| re.is_match(content))
             .unwrap_or(false)
         {
@@ -581,38 +635,71 @@ impl SpectreSimulator {
         self
     }
 
-    /// Build a command prefix that sources the Cadence environment.
-    /// Returns "" if no cshrc is configured, otherwise returns
-    /// "source /path/to/cshrc && " for csh or ". /path/to/cshrc && " for bash.
-    fn env_prefix(&self) -> String {
-        if let Some(ref cshrc) = self.cadence_cshrc {
-            // Try to detect shell type - default to csh for Cadence tools
-            if cshrc.ends_with(".csh") || cshrc.ends_with(".cshrc") {
-                format!("source {cshrc} && ")
-            } else {
-                format!(". {cshrc} && ")
-            }
-        } else {
-            String::new()
-        }
-    }
-
     /// Get the effective Spectre command to execute.
     /// Prefers spectre_bin (absolute path) over spectre_cmd (command name).
     fn spectre_command(&self) -> &str {
         self.spectre_bin.as_deref().unwrap_or(&self.spectre_cmd)
     }
 
-    /// Run a command with Cadence environment sourced (for remote SSH).
-    fn run_with_env(
-        &self,
-        runner: &SSHRunner,
-        cmd: &str,
-        timeout: Option<u64>,
-    ) -> crate::error::Result<crate::models::RemoteTaskResult> {
-        let prefix = self.env_prefix();
-        let full_cmd = format!("{prefix}{cmd}");
-        runner.run_command(&full_cmd, timeout)
+    fn remote_spectre_argv(&self) -> Vec<String> {
+        let mut argv = vec![
+            self.spectre_command().to_string(),
+            "-64".to_string(),
+            "input.scs".to_string(),
+            "+escchars".to_string(),
+            "+log".to_string(),
+            "spectre.out".to_string(),
+            "-format".to_string(),
+            self.output_format.clone(),
+            "-raw".to_string(),
+            "raw".to_string(),
+            "+lqtimeout".to_string(),
+            "900".to_string(),
+            "-maxw".to_string(),
+            "5".to_string(),
+            "-maxn".to_string(),
+            self.max_workers.to_string(),
+            "+logstatus".to_string(),
+        ];
+        argv.extend(self.spectre_args.iter().cloned());
+        argv
+    }
+
+    fn remote_spectre_command(&self, remote_dir: &str, background: bool) -> String {
+        let tool_command = self
+            .remote_spectre_argv()
+            .iter()
+            .map(|arg| shell_quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let environment_command = match self.cadence_cshrc.as_deref() {
+            Some(cshrc) => {
+                let source = if cshrc.ends_with(".csh") || cshrc.ends_with(".cshrc") {
+                    format!("source {} && exec {tool_command}", shell_quote(cshrc))
+                } else {
+                    format!(". {} && exec {tool_command}", shell_quote(cshrc))
+                };
+                let shell = if cshrc.ends_with(".csh") || cshrc.ends_with(".cshrc") {
+                    "csh"
+                } else {
+                    "sh"
+                };
+                format!("{shell} -c {}", shell_quote(&source))
+            }
+            None => tool_command,
+        };
+
+        let cd = format!("cd {}", shell_quote(remote_dir));
+        if background {
+            format!(
+                ". /etc/profile 2>/dev/null; . ~/.bash_profile 2>/dev/null; \
+                 . ~/.bashrc 2>/dev/null; {cd} && nohup {environment_command} \
+                 > /dev/null 2>&1 & echo $!"
+            )
+        } else {
+            format!("{cd} && {environment_command}")
+        }
     }
 
     pub fn run_simulation(
@@ -828,27 +915,10 @@ impl SpectreSimulator {
         let remote_dir = format!("/tmp/virtuoso_bridge/spectre/{run_id}");
 
         // Create dir + upload netlist
-        runner.run_command(&format!("mkdir -p {remote_dir}"), None)?;
+        runner.run_command(&format!("mkdir -p {}", shell_quote(&remote_dir)), None)?;
         runner.upload_text(netlist, &format!("{remote_dir}/input.scs"))?;
 
-        // Build spectre command with Cadence environment sourced
-        let extra = if self.spectre_args.is_empty() {
-            String::new()
-        } else {
-            format!(" {}", self.spectre_args.join(" "))
-        };
-        // Source login profile for PATH + license env (non-interactive SSH lacks them).
-        // Use VB_CADENCE_CSHRC to source Cadence environment if configured.
-        let env_prefix = self.env_prefix();
-        let spectre_cmd = format!(
-            ". /etc/profile 2>/dev/null; . ~/.bash_profile 2>/dev/null; . ~/.bashrc 2>/dev/null; \
-             cd {remote_dir} && {env_prefix}nohup {cmd} -64 input.scs +escchars +log spectre.out \
-             -format {fmt} -raw raw +lqtimeout 900 -maxw 5 -maxn {maxn} +logstatus{extra} \
-             > /dev/null 2>&1 & echo $!",
-            cmd = self.spectre_command(),
-            fmt = self.output_format,
-            maxn = self.max_workers,
-        );
+        let spectre_cmd = self.remote_spectre_command(&remote_dir, true);
 
         // Launch and capture PID
         let result = runner.run_command(&spectre_cmd, Some(10))?;
@@ -935,9 +1005,11 @@ impl SpectreSimulator {
                 Ok(Some(s)) => break s,
                 Ok(None) => {
                     if std::time::Instant::now() > deadline {
-                        let _ = child.kill();
-                        let _ = child.wait();
                         progress_follower.stop_and_join();
+                        let kill_succeeded = child.kill().is_ok();
+                        if let Some(wait_budget) = timeout_wait_budget(kill_succeeded) {
+                            let _ = wait_for_child_exit(&mut child, wait_budget);
+                        }
                         return Err(VirtuosoError::Timeout(self.timeout));
                     }
                     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -960,9 +1032,8 @@ impl SpectreSimulator {
         // Parse before classification so an empty directory or an empty parse does
         // not masquerade as usable output.  OP-only output is valid data too.
         let (data, operating_points) = parse_simulation_output(&raw_dir)?;
-        let has_raw = has_usable_output(&data, &operating_points);
-        let classifier = SpectreOutcomeClassifier::new(status.success(), &log_content, has_raw);
-        let outcome = classifier.classify();
+        let outcome =
+            classify_simulation_output(status.success(), &log_content, &data, &operating_points);
 
         // ── Emit event based on classification ─────────────────────────────────────
         match &outcome {
@@ -1027,33 +1098,19 @@ impl SpectreSimulator {
         let run_id = Uuid::new_v4().to_string();
         let remote_dir = format!("/tmp/virtuoso_bridge/spectre/{run_id}");
 
-        runner.run_command(&format!("mkdir -p {remote_dir}"), None)?;
+        runner.run_command(&format!("mkdir -p {}", shell_quote(&remote_dir)), None)?;
 
         let netlist_content = netlist.to_string();
         runner.upload_text(&netlist_content, &format!("{remote_dir}/input.scs"))?;
 
-        let extra = if self.spectre_args.is_empty() {
-            String::new()
-        } else {
-            format!(" {}", self.spectre_args.join(" "))
-        };
-        let spectre_cmd = format!(
-            "{cmd} -64 input.scs +escchars +log spectre.out -format {fmt} -raw raw +lqtimeout 900 -maxw 5 -maxn {maxn} +logstatus{extra}",
-            cmd = self.spectre_command(),
-            fmt = self.output_format,
-            maxn = self.max_workers,
-        );
-
-        // Build command with Cadence environment sourced for remote execution
-        let env_prefix = self.env_prefix();
-        let sim_cmd = format!("cd {remote_dir} && {env_prefix}{spectre_cmd}");
+        let sim_cmd = self.remote_spectre_command(&remote_dir, false);
         let result = runner.run_command(&sim_cmd, Some(self.timeout * 2))?;
 
         // SSH stdout/stderr often omit diagnostic details because Spectre writes
         // them to +log.  Reading that log is required before classification.
         // Do not clean up remote artifacts on any retrieval failure.
         let remote_log = runner.run_command(
-            &format!("cat {}/spectre.out", shell_quote(&remote_dir)),
+            &format!("cat {}", shell_quote(&format!("{remote_dir}/spectre.out"))),
             Some(self.timeout),
         )?;
         let combined_output = combined_remote_log(&result, &remote_log)?;
@@ -1061,7 +1118,7 @@ impl SpectreSimulator {
         // ── Attempt data download even on failure (convergence failure may leave partial data) ──
         let local_raw = self.work_dir.join(&run_id).join("raw");
         runner
-            .download(&format!("{remote_dir}/raw"), local_raw.to_str().unwrap())
+            .download_dir(&format!("{remote_dir}/raw"), local_raw.to_str().unwrap())
             .map_err(|e| {
                 VirtuosoError::Ssh(format!(
                     "failed to retrieve remote Spectre raw results from {remote_dir}: {e}"
@@ -1072,8 +1129,7 @@ impl SpectreSimulator {
         // ── Build result from classification ───────────────────────────────────────
         // Re-classify now that we know if raw data exists
         let outcome =
-            SpectreOutcomeClassifier::new(result.success, &combined_output, !data.is_empty())
-                .classify();
+            classify_simulation_output(result.success, &combined_output, &data, &operating_points);
 
         let (errors, warnings, status) = match &outcome {
             SpectreOutcome::Success => (Vec::new(), Vec::new(), ExecutionStatus::Success),
@@ -1090,8 +1146,8 @@ impl SpectreSimulator {
 
         // Keep failed/partial artifacts for diagnosis.  Cleanup is allowed only
         // once retrieval completed and classification confirmed a usable run.
-        if !self.keep_remote_files && outcome.is_ok() {
-            runner.run_command(&format!("rm -rf {remote_dir}"), None)?;
+        if should_cleanup_remote(&outcome, self.keep_remote_files) {
+            runner.run_command(&format!("rm -rf {}", shell_quote(&remote_dir)), None)?;
         }
 
         Ok(SimulationResult {
@@ -1249,6 +1305,24 @@ fn extract_percent(s: &str) -> Option<f32> {
 pub(crate) mod tests {
     use super::*;
 
+    fn test_simulator() -> SpectreSimulator {
+        SpectreSimulator {
+            spectre_cmd: "spectre".to_string(),
+            spectre_args: Vec::new(),
+            timeout: 30,
+            work_dir: PathBuf::from("/tmp"),
+            output_format: "psfascii".to_string(),
+            remote: false,
+            ssh_runner: None,
+            remote_work_dir: None,
+            keep_remote_files: false,
+            max_workers: 1,
+            cadence_cshrc: None,
+            spectre_bin: None,
+            sink: Arc::new(crate::streaming::NullSink),
+        }
+    }
+
     // === Error detection tests ===
 
     #[test]
@@ -1370,6 +1444,18 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn classifier_does_not_treat_benign_sfe_reference_as_fatal() {
+        let outcome = SpectreOutcomeClassifier::new(
+            true,
+            "For more information, see SFE-23 in the reference manual.",
+            true,
+        )
+        .classify();
+
+        assert_eq!(outcome, SpectreOutcome::Success);
+    }
+
+    #[test]
     fn classifier_handles_spcrtrf_case_insensitively_and_preserves_partial_data() {
         let outcome =
             SpectreOutcomeClassifier::new(true, "error (spcrtrf-15044): failed at time 2ns", true)
@@ -1401,6 +1487,149 @@ pub(crate) mod tests {
             SpectreOutcome::PartialSuccess { ref warnings }
                 if warnings == &vec!["Warning (SPECTRE-123): deprecated option".to_string()]
         ));
+    }
+
+    #[test]
+    fn warning_extractor_ignores_zero_and_negated_summaries() {
+        let log = "0 warnings\nNo warnings were issued\nwarnings: 0\nWarning count: 0\nNumber of warnings: 0";
+        assert!(extract_warning_messages(log).is_empty());
+    }
+
+    #[test]
+    fn warning_extractor_keeps_real_warning_lines_and_positive_counts() {
+        let log = "Warning (SPECTRE-123): deprecated option\nwarnings: 2";
+        assert_eq!(
+            extract_warning_messages(log),
+            vec![
+                "Warning (SPECTRE-123): deprecated option".to_string(),
+                "warnings: 2".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn classifier_treats_zero_warning_summary_as_clean_success() {
+        let outcome = SpectreOutcomeClassifier::new(true, "Simulation complete. Warnings: 0", true)
+            .classify();
+        assert_eq!(outcome, SpectreOutcome::Success);
+    }
+
+    #[test]
+    fn remote_op_only_output_is_usable_for_classification() {
+        let data = HashMap::new();
+        let operating_points = [("M0:gm".to_string(), crate::models::ScalarValue::Float(1e-3))]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
+        let outcome = classify_simulation_output(true, "", &data, &operating_points);
+        assert!(has_usable_output(&data, &operating_points));
+        assert_eq!(outcome, SpectreOutcome::Success);
+    }
+
+    #[test]
+    fn remote_sh_environment_quotes_shell_metacharacters() {
+        let simulator = SpectreSimulator {
+            cadence_cshrc: Some("/cadence/env setup;touch 'owned'.sh".to_string()),
+            ..test_simulator()
+        };
+        let command = simulator.remote_spectre_command("/tmp/run", false);
+        let tool_command = simulator
+            .remote_spectre_argv()
+            .iter()
+            .map(|arg| shell_quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let inner = format!(
+            ". {} && exec {tool_command}",
+            shell_quote(simulator.cadence_cshrc.as_deref().unwrap())
+        );
+        assert_eq!(
+            command,
+            format!(
+                "cd {} && sh -c {}",
+                shell_quote("/tmp/run"),
+                shell_quote(&inner)
+            )
+        );
+    }
+
+    #[test]
+    fn remote_spectre_command_quotes_directory_binary_format_and_each_argument() {
+        let remote_dir = "/tmp/run dir;touch 'dir-owned'";
+        let simulator = SpectreSimulator {
+            spectre_bin: Some("/cadence/bin/spectre;touch 'bin-owned'".to_string()),
+            output_format: "psf ascii;touch format-owned".to_string(),
+            spectre_args: vec![
+                "--label=space value".to_string(),
+                "; touch arg-owned".to_string(),
+                "quote'argument".to_string(),
+            ],
+            ..test_simulator()
+        };
+
+        let command = simulator.remote_spectre_command(remote_dir, false);
+        let expected_argv = simulator
+            .remote_spectre_argv()
+            .iter()
+            .map(|arg| shell_quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(
+            command,
+            format!("cd {} && {expected_argv}", shell_quote(remote_dir))
+        );
+    }
+
+    #[test]
+    fn remote_spectre_command_quotes_csh_environment_before_wrapping() {
+        let simulator = SpectreSimulator {
+            cadence_cshrc: Some("/cadence/env setup;touch 'env-owned'.csh".to_string()),
+            ..test_simulator()
+        };
+
+        let command = simulator.remote_spectre_command("/tmp/run", false);
+        let tool_command = simulator
+            .remote_spectre_argv()
+            .iter()
+            .map(|arg| shell_quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let inner = format!(
+            "source {} && exec {tool_command}",
+            shell_quote(simulator.cadence_cshrc.as_deref().unwrap())
+        );
+        assert_eq!(
+            command,
+            format!(
+                "cd {} && csh -c {}",
+                shell_quote("/tmp/run"),
+                shell_quote(&inner)
+            )
+        );
+    }
+
+    #[test]
+    fn remote_cleanup_requires_full_success() {
+        assert!(should_cleanup_remote(&SpectreOutcome::Success, false));
+        assert!(!should_cleanup_remote(
+            &SpectreOutcome::PartialSuccess {
+                warnings: vec!["warning".to_string()]
+            },
+            false
+        ));
+        assert!(!should_cleanup_remote(
+            &SpectreOutcome::PartialFailure {
+                reason: "partial".to_string()
+            },
+            false
+        ));
+        assert!(!should_cleanup_remote(&SpectreOutcome::Success, true));
+    }
+
+    #[test]
+    fn timeout_wait_policy_never_waits_after_failed_kill_and_bounds_successful_kill() {
+        assert_eq!(timeout_wait_budget(false), None);
+        assert_eq!(timeout_wait_budget(true), Some(Duration::from_secs(1)));
     }
 
     #[test]

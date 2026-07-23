@@ -632,6 +632,7 @@ pub fn run_parallel(inputs: &[(String, String)]) -> Result<Value> {
 fn parallel_report(results: Vec<ParallelSimResult>, total: usize) -> Value {
     let mut rows = Vec::with_capacity(results.len());
     let mut ok_count = 0usize;
+    let mut partial_count = 0usize;
     let mut err_count = 0usize;
 
     for result in results {
@@ -643,7 +644,7 @@ fn parallel_report(results: Vec<ParallelSimResult>, total: usize) -> Value {
                         "success"
                     }
                     ExecutionStatus::Partial => {
-                        err_count += 1;
+                        partial_count += 1;
                         "partial"
                     }
                     ExecutionStatus::Failure | ExecutionStatus::Error => {
@@ -681,6 +682,7 @@ fn parallel_report(results: Vec<ParallelSimResult>, total: usize) -> Value {
         "status": summary,
         "total": total,
         "ok": ok_count,
+        "partial": partial_count,
         "errors": err_count,
         "results": rows,
     })
@@ -876,7 +878,8 @@ mod tests {
 
         assert_eq!(report["status"], "partial");
         assert_eq!(report["ok"], 1);
-        assert_eq!(report["errors"], 1);
+        assert_eq!(report["errors"], 0);
+        assert_eq!(report["partial"], 1);
         assert_eq!(report["results"][1]["status"], "partial");
     }
 

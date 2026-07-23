@@ -18,6 +18,25 @@ pub(crate) fn shell_quote(s: &str) -> String {
         .into_owned()
 }
 
+fn validate_directory_download(
+    ssh_success: bool,
+    ssh_stderr: &str,
+    tar_success: bool,
+    tar_stderr: &str,
+) -> Result<()> {
+    if !ssh_success {
+        return Err(VirtuosoError::Ssh(format!(
+            "directory download failed: {ssh_stderr}"
+        )));
+    }
+    if !tar_success {
+        return Err(VirtuosoError::Ssh(format!(
+            "directory extraction failed: {tar_stderr}"
+        )));
+    }
+    Ok(())
+}
+
 pub struct SSHRunner {
     pub host: String,
     pub user: Option<String>,
@@ -386,6 +405,83 @@ impl SSHRunner {
         Ok(())
     }
 
+    fn build_download_dir_commands(
+        &self,
+        remote: &str,
+        local: &std::path::Path,
+    ) -> (Command, Command) {
+        let archive_command = format!("tar cf - -C {} .", shell_quote(remote));
+        let mut ssh = self.build_ssh_cmd();
+        ssh.arg(format!("sh -c {}", shell_quote(&archive_command)));
+
+        let mut tar = Command::new("tar");
+        tar.arg("xf").arg("-").arg("-C").arg(local);
+        (ssh, tar)
+    }
+
+    /// Stream a remote directory into a local directory using ssh + tar.
+    ///
+    /// The archive is never buffered in memory: ssh stdout is connected
+    /// directly to the local tar process stdin. Both process exit statuses are
+    /// checked, and ControlMaster failures retain the existing one-retry policy.
+    pub fn download_dir(&self, remote: &str, local: &str) -> Result<()> {
+        let local_path = std::path::Path::new(local);
+        std::fs::create_dir_all(local_path)
+            .map_err(|e| VirtuosoError::Ssh(format!("failed to create local dir: {e}")))?;
+
+        loop {
+            let (mut ssh_command, mut tar_command) =
+                self.build_download_dir_commands(remote, local_path);
+            let mut ssh = ssh_command
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| VirtuosoError::Ssh(format!("ssh directory download failed: {e}")))?;
+            let ssh_stdout = ssh.stdout.take().ok_or_else(|| {
+                VirtuosoError::Ssh("ssh directory download stdout was not piped".into())
+            })?;
+
+            let tar_output = match tar_command
+                .stdin(ssh_stdout)
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .output()
+            {
+                Ok(output) => output,
+                Err(error) => {
+                    let _ = ssh.kill();
+                    let _ = ssh.wait();
+                    return Err(VirtuosoError::Ssh(format!(
+                        "failed to extract remote directory: {error}"
+                    )));
+                }
+            };
+            let ssh_output = ssh.wait_with_output().map_err(|e| {
+                VirtuosoError::Ssh(format!("failed waiting for directory download: {e}"))
+            })?;
+
+            let ssh_stderr = String::from_utf8_lossy(&ssh_output.stderr);
+            if !ssh_output.status.success()
+                && Self::is_cm_failure(&ssh_stderr)
+                && *self.use_control_master.lock().unwrap()
+            {
+                tracing::warn!(
+                    "ControlMaster failure in directory download, retrying without CM: {}",
+                    ssh_stderr.lines().next().unwrap_or("")
+                );
+                *self.use_control_master.lock().unwrap() = false;
+                continue;
+            }
+            let tar_stderr = String::from_utf8_lossy(&tar_output.stderr);
+            return validate_directory_download(
+                ssh_output.status.success(),
+                &ssh_stderr,
+                tar_output.status.success(),
+                &tar_stderr,
+            );
+        }
+    }
+
     pub fn detect_python(&self) -> Result<Option<String>> {
         for py in &["python3", "python", "python2.7"] {
             let result = self.run_command(&format!("which {py} 2>/dev/null"), None)?;
@@ -508,5 +604,52 @@ impl SSHRunner {
         } else {
             stderr.lines().take(3).collect::<Vec<_>>().join("; ")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn download_dir_builds_streaming_ssh_and_local_tar_commands() {
+        let runner = SSHRunner::new("compute");
+        *runner.use_control_master.lock().unwrap() = false;
+        let local = std::path::Path::new("/tmp/local raw;safe");
+        let remote = "/remote/raw dir;touch 'owned'";
+
+        let (ssh, tar) = runner.build_download_dir_commands(remote, local);
+        let ssh_args = ssh
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let archive_command = format!("tar cf - -C {} .", shell_quote(remote));
+        assert_eq!(
+            ssh_args.last().unwrap(),
+            &format!("sh -c {}", shell_quote(&archive_command))
+        );
+        assert_eq!(tar.get_program(), "tar");
+        assert_eq!(
+            tar.get_args().collect::<Vec<_>>(),
+            vec![
+                std::ffi::OsStr::new("xf"),
+                std::ffi::OsStr::new("-"),
+                std::ffi::OsStr::new("-C"),
+                local.as_os_str(),
+            ]
+        );
+    }
+
+    #[test]
+    fn download_dir_contract_checks_both_pipeline_processes() {
+        assert!(validate_directory_download(true, "", true, "").is_ok());
+        assert!(validate_directory_download(false, "ssh failed", true, "")
+            .unwrap_err()
+            .to_string()
+            .contains("ssh failed"));
+        assert!(validate_directory_download(true, "", false, "tar failed")
+            .unwrap_err()
+            .to_string()
+            .contains("tar failed"));
     }
 }
