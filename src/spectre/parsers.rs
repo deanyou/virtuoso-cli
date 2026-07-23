@@ -373,8 +373,61 @@ fn should_skip_psf_file(name: &str) -> bool {
         || name.ends_with(".asci")
 }
 
+/// Parse the PSF @output-library section to extract type field names.
+///
+/// The @output-library section in a PSF ASCII file describes each device type
+/// and its field names. The format is:
+///
+/// ```text
+/// @output-library
+///   @types
+///     mos
+///       @fields (gm vdsat vth region)
+///     nmos
+///       @fields (gm vdsat vth region)
+/// ```
+///
+/// If the @output-library section is absent (older Spectre versions),
+/// falls back to the well-known mos-family ordering.
+fn parse_psf_type_library(content: &str) -> Option<HashMap<String, Vec<String>>> {
+    let mut type_fields: HashMap<String, Vec<String>> = HashMap::new();
+
+    // Find @output-library section
+    let output_lib_start = content.find("@output-library")?;
+    let section = &content[output_lib_start..];
+
+    // Match each @types ... @fields (...) block
+    // e.g., "mos\n  @fields (gm vdsat vth region)"
+    let type_re = Regex::new(r#"(?m)^(\S[^\n]*)\s+@fields\s*\(([^)]+)\)"#).ok()?;
+    for caps in type_re.captures_iter(section) {
+        let dev_type = caps.get(1).unwrap().as_str().trim().to_lowercase();
+        let fields_str = caps.get(2).unwrap().as_str();
+        let fields: Vec<String> = fields_str
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
+        if !fields.is_empty() {
+            type_fields.insert(dev_type, fields);
+        }
+    }
+
+    // If nmos isn't explicitly defined but mos is, inherit mos fields.
+    // Same for pmos, r, c, etc. (they share the same field set as mos family).
+    if type_fields.contains_key("mos") && !type_fields.contains_key("nmos") {
+        type_fields.insert("nmos".to_string(), type_fields["mos"].clone());
+    }
+    if type_fields.contains_key("mos") && !type_fields.contains_key("pmos") {
+        type_fields.insert("pmos".to_string(), type_fields["mos"].clone());
+    }
+
+    Some(type_fields)
+}
+
 /// Extract OP blocks from a single PSF file's content.
 fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarValue>) {
+    // Parse @output-library for type field names first
+    let type_fields = parse_psf_type_library(content).unwrap_or_default();
+
     // Match quoted device name, quoted type, opening paren on same or next line
     let block_re = Regex::new(r#""([^"]+)"\s+"([^"]+)"\s*\(\s*"#).ok();
     let block_re = match block_re {
@@ -385,7 +438,6 @@ fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarV
     let mut last_end = 0;
     while let Some(block_cap) = block_re.captures(&content[last_end..]) {
         let full_match = block_cap.get(0).unwrap();
-        let _start_offset = last_end + full_match.start();
         let end_offset = last_end + full_match.end();
 
         let dev_name = block_cap.get(1).unwrap().as_str().to_string();
@@ -401,29 +453,50 @@ fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarV
                 continue;
             }
 
-            // Apply named-parameter convention for mos devices
-            if dev_type == "mos" {
-                // Standard mos OP order (Spectre): gm, Vov (or Vdsat), region
-                if !values.is_empty() {
-                    ops.insert(format!("{}:gm", dev_name), values[0].clone());
-                }
-                if values.len() >= 2 {
-                    ops.insert(format!("{}:vov", dev_name), values[1].clone());
-                }
-                if let ScalarValue::String(_) = &values[2.min(values.len() - 1)] {
-                    ops.insert(
-                        format!("{}:region", dev_name),
-                        values[2.min(values.len() - 1)].clone(),
-                    );
-                }
-                // Remaining params as positional
-                for (i, v) in values.iter().enumerate().skip(3) {
-                    ops.insert(format!("{}:param{}", dev_name, i), v.clone());
+            // Try to use field names from @output-library if available
+            if let Some(fields) = type_fields.get(&dev_type) {
+                for (idx, field_name) in fields.iter().enumerate() {
+                    if idx < values.len() {
+                        ops.insert(format!("{}:{}", dev_name, field_name), values[idx].clone());
+                    }
                 }
             } else {
-                // Generic: all positional
-                for (i, v) in values.iter().enumerate() {
-                    ops.insert(format!("{}:param{}", dev_name, i), v.clone());
+                // Fallback for unknown types: apply mos-family convention if the
+                // lowercased type contains "mos", otherwise positional param<N>.
+                let is_mos_family = dev_type.contains("mos")
+                    || dev_type == "nmos"
+                    || dev_type == "pmos"
+                    || dev_type == "pch"; // pch = pmos in some PDKs
+
+                if is_mos_family && !values.is_empty() {
+                    // Standard Spectre mos OP order: gm, vdsat, vth, region
+                    ops.insert(format!("{}:gm", dev_name), values[0].clone());
+                }
+                if is_mos_family && values.len() >= 2 {
+                    ops.insert(format!("{}:vdsat", dev_name), values[1].clone());
+                }
+                if is_mos_family && values.len() >= 3 {
+                    // Index 2 is vth, NOT region (region is a string at index 3+)
+                    if !values[2].as_str().is_some() {
+                        ops.insert(format!("{}:vth", dev_name), values[2].clone());
+                    }
+                }
+                if is_mos_family && values.len() >= 4 {
+                    // Index 3 is region (string) in standard mos order: gm vdsat vth region
+                    if let ScalarValue::String(_) = &values[3] {
+                        ops.insert(format!("{}:region", dev_name), values[3].clone());
+                    }
+                }
+                if is_mos_family {
+                    // Extra fields beyond standard gm/vdsat/vth/region go as param<N>
+                    for (i, v) in values.iter().enumerate().skip(4) {
+                        ops.insert(format!("{}:param{}", dev_name, i), v.clone());
+                    }
+                } else {
+                    // Unknown non-mos type: all positional
+                    for (i, v) in values.iter().enumerate() {
+                        ops.insert(format!("{}:param{}", dev_name, i), v.clone());
+                    }
                 }
             }
 
@@ -782,9 +855,11 @@ END"#;
 
     #[test]
     fn test_parse_op_blocks_from_content_mos() {
+        // Modern Spectre @output-library mos-family: gm, vdsat, vth, region
         let content = r#""M0" "mos" (
   1.906e-04
   4.500e-01
+  5.200e-01
   "saturation"
 )
 ""#;
@@ -792,7 +867,8 @@ END"#;
         parse_op_blocks_from_content(content, &mut ops);
 
         assert!(ops.contains_key("M0:gm"));
-        assert!(ops.contains_key("M0:vov"));
+        assert!(ops.contains_key("M0:vdsat"));
+        assert!(ops.contains_key("M0:vth"));
         assert!(ops.contains_key("M0:region"));
         assert!(matches!(ops.get("M0:region"), Some(ScalarValue::String(s)) if s == "saturation"));
     }
@@ -802,12 +878,14 @@ END"#;
         let content = r#""M0" "mos" (
   1.906e-04
   4.500e-01
+  5.200e-01
   "saturation"
 )
 
-"M1" "mos" (
+"M1" "nmos" (
   9.500e-05
   3.200e-01
+  4.800e-01
   "triode"
 )
 ""#;
@@ -816,6 +894,7 @@ END"#;
 
         assert!(ops.contains_key("M0:gm"));
         assert!(ops.contains_key("M1:gm"));
+        assert!(ops.contains_key("M1:vth"));
         assert!(ops.contains_key("M1:region"));
         assert!(matches!(ops.get("M1:region"), Some(ScalarValue::String(s)) if s == "triode"));
     }
