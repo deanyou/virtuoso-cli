@@ -95,21 +95,77 @@ impl PluginTool {
             }
         }
 
-        let mut skill = self.skill_template.clone();
-        for (key, value) in args {
-            let placeholder = format!("{{{}}}", key);
-            let definition = &self.params[key];
-            let replacement = Self::serialize_param(key, &definition.ptype, value)?;
-            skill = skill.replace(&placeholder, &replacement);
+        self.render_template(args)
+    }
+
+    /// Render valid `{identifier}` tokens in a single pass. This deliberately
+    /// never re-scans rendered values, so a string argument containing braces
+    /// cannot become a second placeholder expansion.
+    fn render_template(&self, args: &Map<String, Value>) -> Result<String> {
+        let template = self.skill_template.as_str();
+        let mut rendered = String::with_capacity(template.len());
+        let mut index = 0;
+
+        while index < template.len() {
+            let character = template[index..]
+                .chars()
+                .next()
+                .expect("index is within a UTF-8 string");
+            if character != '{' {
+                rendered.push(character);
+                index += character.len_utf8();
+                continue;
+            }
+
+            let token_start = index + 1;
+            let Some(first) = template[token_start..].chars().next() else {
+                rendered.push('{');
+                break;
+            };
+            if !is_placeholder_start(first) {
+                rendered.push('{');
+                index += 1;
+                continue;
+            }
+
+            let mut token_end = token_start + first.len_utf8();
+            while let Some(next) = template[token_end..].chars().next() {
+                if !is_placeholder_continue(next) {
+                    break;
+                }
+                token_end += next.len_utf8();
+            }
+
+            if token_end == template.len() {
+                return Err(VirtuosoError::Execution(
+                    "malformed plugin parameter placeholder".into(),
+                ));
+            }
+            if template[token_end..].starts_with('}') {
+                let name = &template[token_start..token_end];
+                let definition = self.params.get(name).ok_or_else(|| {
+                    VirtuosoError::Execution(format!(
+                        "unknown plugin parameter placeholder: {name}"
+                    ))
+                })?;
+                let value = args.get(name).ok_or_else(|| {
+                    VirtuosoError::Execution(format!("missing required parameter: {name}"))
+                })?;
+                rendered.push_str(&Self::serialize_param(name, &definition.ptype, value)?);
+                index = token_end + 1;
+            } else if template[token_end..].starts_with('-') {
+                return Err(VirtuosoError::Execution(
+                    "malformed plugin parameter placeholder".into(),
+                ));
+            } else {
+                // This is a literal brace sequence (for example a JSON object),
+                // not a plugin token. Keep scanning so nested valid tokens work.
+                rendered.push('{');
+                index += 1;
+            }
         }
 
-        if skill.contains('{') || skill.contains('}') {
-            return Err(VirtuosoError::Execution(
-                "unreplaced plugin parameter placeholder".into(),
-            ));
-        }
-
-        Ok(skill)
+        Ok(rendered)
     }
 
     fn serialize_param(name: &str, ptype: &str, value: &Value) -> Result<String> {
@@ -127,6 +183,14 @@ impl PluginTool {
             ))),
         }
     }
+}
+
+fn is_placeholder_start(character: char) -> bool {
+    character.is_ascii_alphabetic() || character == '_'
+}
+
+fn is_placeholder_continue(character: char) -> bool {
+    character.is_ascii_alphanumeric() || character == '_'
 }
 
 #[cfg(test)]
@@ -278,6 +342,68 @@ mod tests {
         let mut args = Map::new();
         args.insert("enabled".into(), Value::Bool(true));
         assert_eq!(tool.render_skill(&args).unwrap(), "toggle(t)");
+    }
+
+    #[test]
+    fn render_skill_preserves_braces_inside_rendered_string_values() {
+        let tool = tool_with_params("echo({first}, {other})", &["first", "other"]);
+        let mut args = Map::new();
+        args.insert("first".into(), Value::String("{other}".into()));
+        args.insert("other".into(), Value::String("safe".into()));
+
+        assert_eq!(
+            tool.render_skill(&args).unwrap(),
+            r#"echo("{other}", "safe")"#
+        );
+    }
+
+    #[test]
+    fn render_skill_preserves_literal_json_braces_and_repeats_placeholders() {
+        let tool = tool_with_params(
+            r#"emit({"kind": "tag", "value": {name}, "again": {name}})"#,
+            &["name"],
+        );
+        let mut args = Map::new();
+        args.insert("name".into(), Value::String("signal".into()));
+
+        assert_eq!(
+            tool.render_skill(&args).unwrap(),
+            r#"emit({"kind": "tag", "value": "signal", "again": "signal"})"#
+        );
+    }
+
+    #[test]
+    fn render_skill_rejects_unknown_and_malformed_template_placeholders() {
+        let unknown = tool_with_params("echo({missing})", &["name"]);
+        let malformed = tool_with_params("echo({bad-name})", &["name"]);
+        let mut args = Map::new();
+        args.insert("name".into(), Value::String("signal".into()));
+
+        assert!(unknown.render_skill(&args).is_err());
+        assert!(malformed.render_skill(&args).is_err());
+    }
+
+    fn tool_with_params(template: &str, names: &[&str]) -> PluginTool {
+        let params = names
+            .iter()
+            .map(|name| {
+                (
+                    (*name).to_string(),
+                    ParamDef {
+                        ptype: "string".into(),
+                        required: true,
+                        description: "Test".into(),
+                    },
+                )
+            })
+            .collect();
+        PluginTool {
+            domain: "test".into(),
+            name: "render".into(),
+            description: "Test".into(),
+            skill_template: template.into(),
+            params,
+        }
     }
 
     #[test]

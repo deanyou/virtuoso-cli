@@ -78,6 +78,10 @@ fn execute_query_skill(
     require_transport_result(client.execute_skill_unchecked(skill, None)?, operation)
 }
 
+fn require_cell_write_result(result: VirtuosoResult, operation: &str) -> Result<VirtuosoResult> {
+    require_skill_result(result, operation)
+}
+
 /// JSON-RPC request.
 #[derive(Debug)]
 pub struct RpcRequest {
@@ -570,15 +574,18 @@ impl RpcDispatcher {
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str_or(params.get("view"), "layout")?;
                 let mode = json_str_or(params.get("mode"), "a")?;
-                let r = client.open_cell_view(&lib, &cell, &view, &mode)?;
+                let r = require_cell_write_result(
+                    client.open_cell_view(&lib, &cell, &view, &mode)?,
+                    "open cell",
+                )?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output }))
             }
             "save" => {
-                let r = client.save_current_cellview()?;
+                let r = require_cell_write_result(client.save_current_cellview()?, "save cell")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output }))
             }
             "close" => {
-                let r = client.close_current_cellview()?;
+                let r = require_cell_write_result(client.close_current_cellview()?, "close cell")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output }))
             }
             "info" => {
@@ -849,6 +856,15 @@ mod tests {
     #[test]
     fn required_skill_result_rejects_skill_nil() {
         assert!(require_skill_result(VirtuosoResult::success("nil"), "save").is_err());
+    }
+
+    #[test]
+    fn cell_write_operations_reject_skill_nil() {
+        for operation in ["open cell", "save cell", "close cell"] {
+            let error =
+                require_cell_write_result(VirtuosoResult::success("nil"), operation).unwrap_err();
+            assert!(error.to_string().contains(operation));
+        }
     }
 
     #[test]

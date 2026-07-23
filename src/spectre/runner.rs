@@ -116,7 +116,14 @@ fn build_remote_license_command(cadence_cshrc: Option<&str>, spectre: &str) -> S
 
     match cadence_cshrc {
         Some(cshrc) if cshrc.ends_with(".csh") || cshrc.ends_with(".cshrc") => {
-            format!("source {} && ({probe})", shell_quote(cshrc))
+            // SSHRunner feeds commands to `sh -l -s`; source the csh file only
+            // inside an explicitly invoked csh, then execute the POSIX probe.
+            let csh_script = format!(
+                "source {} && exec sh -c {}",
+                shell_quote(cshrc),
+                shell_quote(&probe)
+            );
+            format!("csh -c {}", shell_quote(&csh_script))
         }
         Some(cshrc) => format!(". {} && ({probe})", shell_quote(cshrc)),
         None => probe,
@@ -1257,6 +1264,27 @@ pub(crate) mod tests {
         assert!(command.contains("source '/cadence/env setup.csh'"));
         assert!(command.contains("'spectre; touch /tmp/pwned' -W"));
         assert!(!command.contains("spectre; touch /tmp/pwned -W"));
+    }
+
+    #[test]
+    fn remote_license_check_sources_sh_environment_in_login_shell() {
+        let command = build_remote_license_command(Some("/cadence/env setup.sh"), "spectre");
+        assert!(command.starts_with(". '/cadence/env setup.sh' &&"));
+        assert!(command.contains("spectre -W"));
+    }
+
+    #[test]
+    fn remote_license_check_runs_csh_environment_under_csh_with_quoted_values() {
+        let command = build_remote_license_command(
+            Some("/cadence/env; setup.csh"),
+            "spectre; touch /tmp/pwned",
+        );
+        assert!(command.starts_with("csh -c "));
+        assert!(command.contains("/cadence/env; setup.csh"));
+        assert!(command.contains("spectre; touch /tmp/pwned"));
+        assert!(!command.contains("source /cadence/env; setup.csh"));
+        assert!(!command.contains("spectre; touch /tmp/pwned -W"));
+        assert!(!command.starts_with("source "));
     }
 
     #[test]
