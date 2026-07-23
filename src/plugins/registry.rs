@@ -56,12 +56,17 @@ impl PluginRegistry {
 
         // Try parsing as an array of tools first (TOML array of tables: [[tools]]...)
         if let Ok(single) = toml::from_str::<PluginTool>(&content) {
+            single.validate()?;
             return Ok(vec![single]);
         }
 
         // Try parsing as Vec<PluginTool> for multiple [[tools]] entries
         let plugins: Vec<PluginTool> = toml::from_str(&content)
             .map_err(|e| VirtuosoError::Execution(format!("failed to parse {:?}: {e}", path)))?;
+
+        for plugin in &plugins {
+            plugin.validate()?;
+        }
 
         Ok(plugins)
     }

@@ -49,7 +49,10 @@ impl PluginTool {
 
         for (name, param) in &self.params {
             let mut prop = Map::new();
-            prop.insert("type".into(), Value::String(param.ptype.clone()));
+            prop.insert(
+                "type".into(),
+                Value::String(json_schema_type(&param.ptype).into()),
+            );
             prop.insert(
                 "description".into(),
                 Value::String(param.description.clone()),
@@ -75,6 +78,8 @@ impl PluginTool {
 
     /// Render the SKILL string by substituting type-safe {param} placeholders.
     pub fn render_skill(&self, args: &Map<String, Value>) -> Result<String> {
+        self.validate()?;
+
         for name in args.keys() {
             if !self.params.contains_key(name) {
                 return Err(VirtuosoError::Execution(format!(
@@ -96,6 +101,20 @@ impl PluginTool {
         }
 
         self.render_template(args)
+    }
+
+    /// Parameter names are part of the template language even when a declared
+    /// optional parameter is not used by this particular template.
+    /// Validate plugin declarations before exposing them through RPC/MCP schemas.
+    pub(crate) fn validate(&self) -> Result<()> {
+        for name in self.params.keys() {
+            if !is_parameter_identifier(name) {
+                return Err(VirtuosoError::Execution(format!(
+                    "invalid plugin parameter name '{name}': expected [A-Za-z_][A-Za-z0-9_]*"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Render valid `{identifier}` tokens in a single pass. This deliberately
@@ -191,6 +210,21 @@ fn is_placeholder_start(character: char) -> bool {
 
 fn is_placeholder_continue(character: char) -> bool {
     character.is_ascii_alphanumeric() || character == '_'
+}
+
+fn is_parameter_identifier(name: &str) -> bool {
+    let mut characters = name.chars();
+    match characters.next() {
+        Some(first) if is_placeholder_start(first) => characters.all(is_placeholder_continue),
+        _ => false,
+    }
+}
+
+fn json_schema_type(ptype: &str) -> &str {
+    match ptype {
+        "bool" => "boolean",
+        other => other,
+    }
 }
 
 #[cfg(test)]
@@ -381,6 +415,55 @@ mod tests {
 
         assert!(unknown.render_skill(&args).is_err());
         assert!(malformed.render_skill(&args).is_err());
+    }
+
+    #[test]
+    fn render_skill_rejects_invalid_declared_parameter_names() {
+        for name in ["1", "foo-bar", "参数"] {
+            let tool = tool_with_params("echo()", &[name]);
+            let mut args = Map::new();
+            args.insert(name.into(), Value::String("value".into()));
+            let error = tool.render_skill(&args).unwrap_err();
+            assert!(error.to_string().contains("invalid plugin parameter name"));
+        }
+    }
+
+    #[test]
+    fn validate_rejects_invalid_declared_parameter_names_before_rendering() {
+        let tool = tool_with_params("echo()", &["foo-bar"]);
+        assert!(tool.validate().is_err());
+    }
+
+    #[test]
+    fn render_skill_accepts_underscore_identifier_and_repeated_placeholders() {
+        let tool = tool_with_params("echo({signal_1}, {signal_1})", &["signal_1"]);
+        let mut args = Map::new();
+        args.insert("signal_1".into(), Value::String("ok".into()));
+        assert_eq!(tool.render_skill(&args).unwrap(), r#"echo("ok", "ok")"#);
+    }
+
+    #[test]
+    fn input_schema_normalizes_bool_alias_to_boolean() {
+        let mut params = HashMap::new();
+        params.insert(
+            "enabled".into(),
+            ParamDef {
+                ptype: "bool".into(),
+                required: true,
+                description: "Enabled".into(),
+            },
+        );
+        let tool = PluginTool {
+            domain: "test".into(),
+            name: "toggle".into(),
+            description: "Test".into(),
+            skill_template: "toggle({enabled})".into(),
+            params,
+        };
+        assert_eq!(
+            tool.input_schema()["properties"]["enabled"]["type"],
+            "boolean"
+        );
     }
 
     fn tool_with_params(template: &str, names: &[&str]) -> PluginTool {
