@@ -4,6 +4,9 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 
+use crate::client::skill_runtime::string_literal;
+use crate::error::{Result, VirtuosoError};
+
 /// Parameter definition from TOML.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ParamDef {
@@ -70,20 +73,59 @@ impl PluginTool {
         Value::Object(schema)
     }
 
-    /// Render the SKILL string by substituting {param} placeholders.
-    pub fn render_skill(&self, args: &Map<String, Value>) -> String {
+    /// Render the SKILL string by substituting type-safe {param} placeholders.
+    pub fn render_skill(&self, args: &Map<String, Value>) -> Result<String> {
+        for name in args.keys() {
+            if !self.params.contains_key(name) {
+                return Err(VirtuosoError::Execution(format!(
+                    "unknown parameter: {name}"
+                )));
+            }
+        }
+
+        for (name, def) in &self.params {
+            let value = args.get(name);
+            if def.required && value.is_none() {
+                return Err(VirtuosoError::Execution(format!(
+                    "missing required parameter: {name}"
+                )));
+            }
+            if let Some(value) = value {
+                Self::serialize_param(name, &def.ptype, value)?;
+            }
+        }
+
         let mut skill = self.skill_template.clone();
         for (key, value) in args {
             let placeholder = format!("{{{}}}", key);
-            let replacement = match value {
-                Value::String(s) => s.clone(),
-                Value::Number(n) => n.to_string(),
-                Value::Bool(b) => b.to_string(),
-                other => other.to_string(),
-            };
+            let definition = &self.params[key];
+            let replacement = Self::serialize_param(key, &definition.ptype, value)?;
             skill = skill.replace(&placeholder, &replacement);
         }
-        skill
+
+        if skill.contains('{') || skill.contains('}') {
+            return Err(VirtuosoError::Execution(
+                "unreplaced plugin parameter placeholder".into(),
+            ));
+        }
+
+        Ok(skill)
+    }
+
+    fn serialize_param(name: &str, ptype: &str, value: &Value) -> Result<String> {
+        match (ptype, value) {
+            ("string", Value::String(s)) => Ok(string_literal(s)),
+            ("number", Value::Number(n)) => Ok(n.to_string()),
+            ("integer", Value::Number(n)) if n.is_i64() || n.is_u64() => Ok(n.to_string()),
+            ("boolean" | "bool", Value::Bool(true)) => Ok("t".into()),
+            ("boolean" | "bool", Value::Bool(false)) => Ok("nil".into()),
+            ("string" | "number" | "integer" | "boolean" | "bool", _) => Err(
+                VirtuosoError::Execution(format!("parameter '{name}' must be {ptype}")),
+            ),
+            _ => Err(VirtuosoError::Execution(format!(
+                "parameter '{name}' has unsupported type '{ptype}'"
+            ))),
+        }
     }
 }
 
@@ -127,8 +169,115 @@ mod tests {
         let mut args = Map::new();
         args.insert("direction".into(), Value::String("left".into()));
 
-        let skill = tool.render_skill(&args);
-        assert_eq!(skill, "layoutSkill('align_pins ?dir left)");
+        let skill = tool.render_skill(&args).unwrap();
+        assert_eq!(skill, "layoutSkill('align_pins ?dir \"left\")");
+    }
+
+    #[test]
+    fn render_skill_quotes_string_values_to_prevent_skill_injection() {
+        let mut params = HashMap::new();
+        params.insert(
+            "name".into(),
+            ParamDef {
+                ptype: "string".into(),
+                required: true,
+                description: "Name".into(),
+            },
+        );
+        let tool = PluginTool {
+            domain: "test".into(),
+            name: "echo".into(),
+            description: "Test".into(),
+            skill_template: "echo({name})".into(),
+            params,
+        };
+        let mut args = Map::new();
+        args.insert(
+            "name".into(),
+            Value::String("x\") ; dangerousCall() ; (\"".into()),
+        );
+
+        assert_eq!(
+            tool.render_skill(&args).unwrap(),
+            r#"echo("x\") ; dangerousCall() ; (\"")"#
+        );
+    }
+
+    #[test]
+    fn render_skill_rejects_unknown_parameters_and_type_mismatches() {
+        let mut params = HashMap::new();
+        params.insert(
+            "count".into(),
+            ParamDef {
+                ptype: "number".into(),
+                required: true,
+                description: "Count".into(),
+            },
+        );
+        let tool = PluginTool {
+            domain: "test".into(),
+            name: "count".into(),
+            description: "Test".into(),
+            skill_template: "count({count})".into(),
+            params,
+        };
+
+        let mut unknown = Map::new();
+        unknown.insert("extra".into(), Value::Number(1.into()));
+        assert!(tool.render_skill(&unknown).is_err());
+
+        let mut wrong_type = Map::new();
+        wrong_type.insert("count".into(), Value::String("1; dangerousCall()".into()));
+        assert!(tool.render_skill(&wrong_type).is_err());
+    }
+
+    #[test]
+    fn render_skill_rejects_missing_and_unreplaced_placeholders() {
+        let mut params = HashMap::new();
+        params.insert(
+            "name".into(),
+            ParamDef {
+                ptype: "string".into(),
+                required: true,
+                description: "Name".into(),
+            },
+        );
+        let tool = PluginTool {
+            domain: "test".into(),
+            name: "echo".into(),
+            description: "Test".into(),
+            skill_template: "echo({name}, {missing})".into(),
+            params,
+        };
+
+        assert!(tool.render_skill(&Map::new()).is_err());
+
+        let mut args = Map::new();
+        args.insert("name".into(), Value::String("ok".into()));
+        assert!(tool.render_skill(&args).is_err());
+    }
+
+    #[test]
+    fn render_skill_serializes_booleans_as_skill_atoms() {
+        let mut params = HashMap::new();
+        params.insert(
+            "enabled".into(),
+            ParamDef {
+                ptype: "boolean".into(),
+                required: true,
+                description: "Enabled".into(),
+            },
+        );
+        let tool = PluginTool {
+            domain: "test".into(),
+            name: "toggle".into(),
+            description: "Test".into(),
+            skill_template: "toggle({enabled})".into(),
+            params,
+        };
+        let mut args = Map::new();
+        args.insert("enabled".into(), Value::Bool(true));
+        assert_eq!(tool.render_skill(&args).unwrap(), "toggle(t)");
     }
 
     #[test]

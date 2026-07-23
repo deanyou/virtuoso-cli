@@ -4,7 +4,7 @@ use crate::error::{Result, VirtuosoError};
 use crate::models::{ExecutionStatus, SimulationResult};
 use crate::spectre::jobs::{Job, JobStatus};
 use crate::streaming::{JobEvent, JobEventSink};
-use crate::transport::ssh::SSHRunner;
+use crate::transport::ssh::{shell_quote, SSHRunner};
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
@@ -98,6 +98,29 @@ fn has_license_error(content: &str) -> bool {
     let lower = content.to_lowercase();
     (lower.contains("license") || lower.contains("licence"))
         && (lower.contains("error") || lower.contains("denied") || lower.contains("unavailable"))
+}
+
+fn build_local_license_command(spectre: &str) -> Command {
+    let mut command = Command::new(spectre);
+    command.arg("-W");
+    command
+}
+
+fn build_remote_license_command(cadence_cshrc: Option<&str>, spectre: &str) -> String {
+    let spectre = shell_quote(spectre);
+    let probe = format!(
+        "command -v {spectre} 2>/dev/null || echo 'not found'; \
+         {spectre} -W 2>/dev/null | head -1 || echo 'unknown'; \
+         lmstat -a 2>/dev/null | grep -i spectre | head -5 || echo 'lmstat not available'"
+    );
+
+    match cadence_cshrc {
+        Some(cshrc) if cshrc.ends_with(".csh") || cshrc.ends_with(".cshrc") => {
+            format!("source {} && ({probe})", shell_quote(cshrc))
+        }
+        Some(cshrc) => format!(". {} && ({probe})", shell_quote(cshrc)),
+        None => probe,
+    }
 }
 
 /// Completion detection patterns (configurable for i18n).
@@ -598,26 +621,11 @@ impl SpectreSimulator {
     pub fn check_license(&self) -> Result<String> {
         let spectre = self.spectre_command();
         if let Some(ref runner) = self.ssh_runner {
-            // Build command with environment sourced
-            let check_cmd = format!(
-                "which {} 2>/dev/null || echo 'not found'; \
-                 {} -W 2>/dev/null | head -1 || echo 'unknown'; \
-                 lmstat -a 2>/dev/null | grep -i spectre | head -5 || echo 'lmstat not available'",
-                spectre, spectre
-            );
-            // Use env_prefix for SSH commands to load Cadence environment
-            let prefix = self.env_prefix();
-            let full_cmd = format!("{prefix}{check_cmd}");
-            let result = runner.run_command(&full_cmd, None)?;
+            let command = build_remote_license_command(self.cadence_cshrc.as_deref(), spectre);
+            let result = runner.run_command(&command, None)?;
             Ok(result.stdout.trim().to_string())
         } else {
-            let cmd = format!(
-                "which {} 2>/dev/null && {} -W 2>/dev/null | head -1",
-                spectre, spectre
-            );
-            let output = Command::new("sh")
-                .arg("-c")
-                .arg(&cmd)
+            let output = build_local_license_command(spectre)
                 .output()
                 .map_err(|e| VirtuosoError::Execution(e.to_string()))?;
             Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -1228,6 +1236,27 @@ pub(crate) mod tests {
         // "license" alone without error/denied/unavailable is not an error
         let content = "Using license file: /path/to/license.dat";
         assert!(!has_license_error(content));
+    }
+
+    #[test]
+    fn local_license_check_uses_direct_spectre_argv() {
+        let command = build_local_license_command("spectre; touch /tmp/pwned");
+        assert_eq!(command.get_program(), "spectre; touch /tmp/pwned");
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            vec![std::ffi::OsStr::new("-W")]
+        );
+    }
+
+    #[test]
+    fn remote_license_check_quotes_environment_and_spectre_command() {
+        let command = build_remote_license_command(
+            Some("/cadence/env setup.csh"),
+            "spectre; touch /tmp/pwned",
+        );
+        assert!(command.contains("source '/cadence/env setup.csh'"));
+        assert!(command.contains("'spectre; touch /tmp/pwned' -W"));
+        assert!(!command.contains("spectre; touch /tmp/pwned -W"));
     }
 
     #[test]

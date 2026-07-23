@@ -7,6 +7,7 @@ use crate::auth::{check_auth, log_rpc};
 use crate::client::bridge::{escape_skill_string, VirtuosoClient};
 use crate::commands;
 use crate::error::{Result, VirtuosoError};
+use crate::models::VirtuosoResult;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::Value;
@@ -47,6 +48,34 @@ fn parse_skill_json(output: &str) -> Result<Value> {
             "Failed to parse SKILL JSON output: {e}. Raw: {output}"
         ))
     })
+}
+
+/// Require both a successful bridge transport and a non-nil SKILL result.
+/// RPC write operations use this rather than treating an STX frame as success.
+fn require_skill_result(result: VirtuosoResult, operation: &str) -> Result<VirtuosoResult> {
+    result.ok_or_exec(operation)
+}
+
+fn execute_required_skill(
+    client: &VirtuosoClient,
+    skill: &str,
+    operation: &str,
+) -> Result<VirtuosoResult> {
+    require_skill_result(client.execute_skill_unchecked(skill, None)?, operation)
+}
+
+/// Require a successful bridge transport while preserving documented nil query results.
+fn require_transport_result(result: VirtuosoResult, operation: &str) -> Result<VirtuosoResult> {
+    crate::client::skill_runtime::require_transport(&result, operation)?;
+    Ok(result)
+}
+
+fn execute_query_skill(
+    client: &VirtuosoClient,
+    skill: &str,
+    operation: &str,
+) -> Result<VirtuosoResult> {
+    require_transport_result(client.execute_skill_unchecked(skill, None)?, operation)
 }
 
 /// JSON-RPC request.
@@ -135,7 +164,7 @@ impl RpcDispatcher {
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str_or(params.get("view"), "schematic")?;
                 let skill = ops.open_cellview(&lib, &cell, &view);
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "open cell view")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "place" => {
@@ -145,7 +174,7 @@ impl RpcDispatcher {
                 let y = json_i64_or(params.get("y"), 0);
                 let orient = json_str_or(params.get("orient"), "R0")?;
                 let skill = ops.create_instance(&master, &master, "symbol", &name, (x, y), &orient);
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "place instance")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "wire" => {
@@ -167,7 +196,7 @@ impl RpcDispatcher {
                     })
                     .collect();
                 let skill = ops.create_wire(&pts, "wire", &net);
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "create wire")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "label" => {
@@ -175,7 +204,7 @@ impl RpcDispatcher {
                 let x = json_i64_or(params.get("x"), 0);
                 let y = json_i64_or(params.get("y"), 0);
                 let skill = ops.create_wire_label(&net, (x, y));
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "create label")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "pin" => {
@@ -184,38 +213,38 @@ impl RpcDispatcher {
                 let x = json_i64_or(params.get("x"), 0);
                 let y = json_i64_or(params.get("y"), 0);
                 let skill = ops.create_pin(&net, &dir, (x, y));
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "create pin")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "save" => {
                 let skill = ops.save();
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "save schematic")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "check" => {
                 let skill = ops.check();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_required_skill(client, &skill, "check schematic")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output }))
             }
             "list_instances" => {
                 let skill = ops.list_instances();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "list schematic instances")?;
                 parse_skill_json(&r.output)
             }
             "list_nets" => {
                 let skill = ops.list_nets();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "list schematic nets")?;
                 parse_skill_json(&r.output)
             }
             "list_pins" => {
                 let skill = ops.list_pins();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "list schematic pins")?;
                 parse_skill_json(&r.output)
             }
             "get_params" => {
                 let inst = json_str(params.get("inst"), "inst")?;
                 let skill = ops.get_instance_params(&inst);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get instance parameters")?;
                 if r.output.trim() == "null" {
                     Ok(serde_json::Value::Null)
                 } else {
@@ -271,18 +300,18 @@ impl RpcDispatcher {
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str_or(params.get("view"), "maestro")?;
                 let skill = ops.open_session(&lib, &cell, &view);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_required_skill(client, &skill, "open Maestro session")?;
                 Ok(serde_json::json!({ "status": "ok", "session": r.output.trim() }))
             }
             "close_session" => {
                 let session = json_str(params.get("session"), "session")?;
                 let skill = ops.close_session(&session);
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "close Maestro session")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "list_sessions" => {
                 let skill = ops.list_sessions();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "list Maestro sessions")?;
                 let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
                 Ok(parsed)
             }
@@ -290,31 +319,31 @@ impl RpcDispatcher {
                 let name = json_str(params.get("name"), "name")?;
                 let value = json_str(params.get("value"), "value")?;
                 let skill = ops.set_var(&name, &value);
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "set Maestro variable")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "get_var" => {
                 let name = json_str(params.get("name"), "name")?;
                 let skill = ops.get_var(&name);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get Maestro variable")?;
                 Ok(serde_json::json!({ "value": r.output.trim() }))
             }
             "list_vars" => {
                 let skill = ops.list_vars();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "list Maestro variables")?;
                 let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
                 Ok(parsed)
             }
             "run" => {
                 let session = json_str(params.get("session"), "session")?;
                 let skill = ops.run_simulation(&session);
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "run Maestro simulation")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "save" => {
                 let session = json_str(params.get("session"), "session")?;
                 let skill = ops.save_setup(&session);
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "save Maestro setup")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "export" => {
@@ -322,30 +351,30 @@ impl RpcDispatcher {
                 let path = json_str(params.get("path"), "path")?;
                 let test_name = params.get("test_name").and_then(|v| v.as_str());
                 let skill = ops.export_results(&session, &path, test_name, None);
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "export Maestro results")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             // ── Result Reading ────────────────────────────────────────
             "open_results" => {
                 let history = json_str(params.get("history"), "history")?;
                 let skill = ops.open_results(&history);
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "open Maestro results")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "close_results" => {
                 let skill = ops.close_results();
-                client.execute_skill_unchecked(&skill, None)?;
+                execute_required_skill(client, &skill, "close Maestro results")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "get_result_tests" => {
                 let skill = ops.get_result_tests();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get Maestro result tests")?;
                 parse_skill_json(&r.output)
             }
             "get_result_outputs" => {
                 let test_name = json_str(params.get("test"), "test")?;
                 let skill = ops.get_result_outputs(&test_name);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get Maestro result outputs")?;
                 parse_skill_json(&r.output)
             }
             "get_output_value" => {
@@ -353,35 +382,35 @@ impl RpcDispatcher {
                 let test = json_str(params.get("test"), "test")?;
                 let corner = params.get("corner").and_then(|v| v.as_str());
                 let skill = ops.get_output_value(&name, &test, corner);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get Maestro output value")?;
                 Ok(serde_json::json!({ "value": r.output.trim() }))
             }
             "get_history_list" => {
                 let skill = ops.get_history_list();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get Maestro history list")?;
                 parse_skill_json(&r.output)
             }
             "get_analyses" => {
                 let skill = r#"maeGetEnabledAnalysis(car(maeGetSetup()))"#;
-                let r = client.execute_skill_unchecked(skill, None)?;
+                let r = execute_query_skill(client, skill, "get Maestro analyses")?;
                 Ok(serde_json::json!({ "analyses": r.output.trim() }))
             }
             "get_outputs" => {
                 let test = json_str(params.get("test"), "test")?;
                 let skill = ops.get_outputs(&test);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get Maestro outputs")?;
                 parse_skill_json(&r.output)
             }
             "get_sim_messages" => {
                 let session = json_str(params.get("session"), "session")?;
                 let skill = ops.get_sim_messages(&session);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get Maestro simulation messages")?;
                 Ok(serde_json::json!({ "messages": r.output.trim() }))
             }
             // ── Session & Setup Management ─────────────────────────────
             "get_current_session" => {
                 let skill = ops.get_current_session();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get current Maestro session")?;
                 // SKILL returns: "nil" (quoted) when no session
                 let session = r.output.trim().trim_matches('"');
                 if session == "nil" {
@@ -398,7 +427,7 @@ impl RpcDispatcher {
                     .version()
                     .unwrap_or(crate::version::VirtuosoVersion::IC23);
                 let skill = ops.set_analysis(&session, &analysis_type, options, version);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_required_skill(client, &skill, "set Maestro analysis")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
             }
             "add_output" => {
@@ -406,7 +435,7 @@ impl RpcDispatcher {
                 let test = json_str(params.get("test"), "test")?;
                 let expr = json_str(params.get("expr"), "expr")?;
                 let skill = ops.add_output(&name, &test, &expr);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_required_skill(client, &skill, "add Maestro output")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
             }
             "set_design" => {
@@ -415,20 +444,20 @@ impl RpcDispatcher {
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str(params.get("view"), "view")?;
                 let skill = ops.set_design(&session, &lib, &cell, &view);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_required_skill(client, &skill, "set Maestro design")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
             }
             "save_setup" => {
                 let session = json_str(params.get("session"), "session")?;
                 let skill = ops.save_setup(&session);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_required_skill(client, &skill, "save Maestro setup")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
             }
             "get_spec_status" => {
                 let name = json_str(params.get("name"), "name")?;
                 let test = json_str(params.get("test"), "test")?;
                 let skill = ops.get_spec_status(&name, &test);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get Maestro spec status")?;
                 Ok(serde_json::json!({ "status": r.output.trim() }))
             }
             "snapshot" => {
@@ -451,13 +480,13 @@ impl RpcDispatcher {
         match op {
             "list" => {
                 let skill = ops.list_windows();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "list windows")?;
                 parse_skill_json(&r.output)
             }
             "screenshot" => {
                 let path = json_str(params.get("path"), "path")?;
                 let skill = ops.screenshot(&path);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "capture screenshot")?;
                 if r.output.trim().is_empty() || r.output.contains("nil") {
                     Ok(serde_json::json!({ "status": "no-dialog-or-capture-failed" }))
                 } else {
@@ -468,7 +497,7 @@ impl RpcDispatcher {
                 let path = json_str(params.get("path"), "path")?;
                 let pattern = json_str(params.get("pattern"), "pattern")?;
                 let skill = ops.screenshot_by_pattern(&path, &pattern);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "capture screenshot by pattern")?;
                 let out = r.output.trim();
                 if out == "no-match" {
                     Ok(serde_json::json!({ "status": "no-match" }))
@@ -481,7 +510,7 @@ impl RpcDispatcher {
             "dismiss_dialog" => {
                 let action = json_str_or(params.get("action"), "cancel")?;
                 let skill = ops.dismiss_dialog(&action);
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_required_skill(client, &skill, "dismiss dialog")?;
                 let out = r.output.trim();
                 if out == "no-dialog" {
                     Ok(serde_json::json!({ "status": "no-dialog" }))
@@ -491,7 +520,7 @@ impl RpcDispatcher {
             }
             "get_dialog_info" => {
                 let skill = ops.get_dialog_info();
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "get dialog information")?;
                 let out = r.output.trim();
                 if out == "no-dialog" {
                     Ok(serde_json::json!({ "dialog": null }))
@@ -570,7 +599,7 @@ impl RpcDispatcher {
                     cell = escape_skill_string(&cell),
                     view = escape_skill_string(&view)
                 );
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_required_skill(client, &skill, "create cell")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
             }
             "read_path" => {
@@ -581,7 +610,7 @@ impl RpcDispatcher {
                     r#"ddGetObj("{lib}")~>readPath"#,
                     lib = escape_skill_string(&lib)
                 );
-                let r = client.execute_skill_unchecked(&skill, None)?;
+                let r = execute_query_skill(client, &skill, "read library path")?;
                 let raw = r.output.trim().trim_matches('"');
                 Ok(serde_json::json!({
                     "lib": lib,
@@ -697,6 +726,7 @@ impl RpcDispatcher {
                     &format!("println(\"{}\")", escape_skill_string(&message)),
                     None,
                 )?;
+                let r = require_skill_result(r, "print to CIW")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
             }
             "reconnect" => {
@@ -813,7 +843,13 @@ fn json_i64_or(value: Option<&Value>, default: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::VirtuosoResult;
     use crate::rpc::schema::{standard_schema, RpcSchema};
+
+    #[test]
+    fn required_skill_result_rejects_skill_nil() {
+        assert!(require_skill_result(VirtuosoResult::success("nil"), "save").is_err());
+    }
 
     #[test]
     fn schema_contains_schematic_methods() {

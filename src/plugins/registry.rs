@@ -94,20 +94,12 @@ impl PluginRegistry {
             .as_object()
             .ok_or_else(|| VirtuosoError::Execution("params must be an object".into()))?;
 
-        // Check required params
-        for (name, def) in &tool.params {
-            if def.required && !args.contains_key(name) {
-                return Err(VirtuosoError::Execution(format!(
-                    "missing required parameter: {}",
-                    name
-                )));
-            }
-        }
+        let skill = tool.render_skill(args)?;
+        let result = client
+            .execute_skill_unchecked(&skill, None)?
+            .ok_or_exec(&format!("plugin {}.{}", domain, op))?;
 
-        let skill = tool.render_skill(args);
-        let result = client.execute_skill_unchecked(&skill, None)?;
-
-        if result.output.trim().is_empty() || result.output.contains("nil") {
+        if result.output.trim().is_empty() {
             Ok(Value::Null)
         } else {
             // Try to parse as JSON, fall back to string
