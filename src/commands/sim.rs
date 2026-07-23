@@ -3,10 +3,11 @@ use crate::client::skill_runtime::{
     require_identifier, require_non_nil, require_transport, string_literal,
 };
 use crate::error::{Result, VirtuosoError};
+use crate::models::ExecutionStatus;
 use crate::ocean;
 use crate::ocean::corner::CornerConfig;
 use crate::spectre::jobs::Job;
-use crate::spectre::runner::SpectreSimulator;
+use crate::spectre::runner::{ParallelSimResult, SpectreSimulator};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -625,47 +626,64 @@ pub fn run_parallel(inputs: &[(String, String)]) -> Result<Value> {
     let sim = SpectreSimulator::from_env()?;
     let results = sim.run_parallel(&netlists);
 
-    let mut rows = Vec::new();
+    Ok(parallel_report(results, inputs.len()))
+}
+
+fn parallel_report(results: Vec<ParallelSimResult>, total: usize) -> Value {
+    let mut rows = Vec::with_capacity(results.len());
     let mut ok_count = 0usize;
     let mut err_count = 0usize;
 
-    for r in results {
-        match r.result {
-            Ok(sr) => {
-                ok_count += 1;
+    for result in results {
+        match result.result {
+            Ok(simulation) => {
+                let status = match simulation.status {
+                    ExecutionStatus::Success => {
+                        ok_count += 1;
+                        "success"
+                    }
+                    ExecutionStatus::Partial => {
+                        err_count += 1;
+                        "partial"
+                    }
+                    ExecutionStatus::Failure | ExecutionStatus::Error => {
+                        err_count += 1;
+                        "error"
+                    }
+                };
                 rows.push(json!({
-                    "label": r.label,
-                    "status": "success",
-                    "errors": sr.errors,
-                    "warnings": sr.warnings,
+                    "label": result.label,
+                    "status": status,
+                    "errors": simulation.errors,
+                    "warnings": simulation.warnings,
                 }));
             }
-            Err(e) => {
+            Err(error) => {
                 err_count += 1;
                 rows.push(json!({
-                    "label": r.label,
+                    "label": result.label,
                     "status": "error",
-                    "error": e.to_string(),
+                    "error": error.to_string(),
                 }));
             }
         }
     }
 
-    let summary = if ok_count == inputs.len() {
+    let summary = if ok_count == total {
         "all_ok"
-    } else if err_count == inputs.len() {
+    } else if err_count == total {
         "all_error"
     } else {
         "partial"
     };
 
-    Ok(json!({
+    json!({
         "status": summary,
-        "total": inputs.len(),
+        "total": total,
         "ok": ok_count,
         "errors": err_count,
         "results": rows,
-    }))
+    })
 }
 
 pub fn job_status(id: &str) -> Result<Value> {
@@ -802,7 +820,65 @@ pub fn check_license() -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::{analysis_block, validate_measure_expr};
+    use super::{analysis_block, parallel_report, validate_measure_expr};
+    use crate::models::{ExecutionStatus, SimulationResult};
+    use crate::spectre::runner::ParallelSimResult;
+    use std::collections::HashMap;
+
+    fn simulation_result(status: ExecutionStatus) -> SimulationResult {
+        SimulationResult {
+            status,
+            tool_version: None,
+            data: HashMap::new(),
+            operating_points: HashMap::new(),
+            errors: Vec::new(),
+            warnings: Vec::new(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn parallel_report_is_all_ok_only_when_every_simulation_status_is_success() {
+        let report = parallel_report(
+            vec![
+                ParallelSimResult {
+                    label: "tt".to_string(),
+                    result: Ok(simulation_result(ExecutionStatus::Success)),
+                },
+                ParallelSimResult {
+                    label: "ff".to_string(),
+                    result: Ok(simulation_result(ExecutionStatus::Success)),
+                },
+            ],
+            2,
+        );
+
+        assert_eq!(report["status"], "all_ok");
+        assert_eq!(report["ok"], 2);
+        assert_eq!(report["errors"], 0);
+    }
+
+    #[test]
+    fn parallel_report_counts_partial_simulation_result_as_non_ok() {
+        let report = parallel_report(
+            vec![
+                ParallelSimResult {
+                    label: "tt".to_string(),
+                    result: Ok(simulation_result(ExecutionStatus::Success)),
+                },
+                ParallelSimResult {
+                    label: "ss".to_string(),
+                    result: Ok(simulation_result(ExecutionStatus::Partial)),
+                },
+            ],
+            2,
+        );
+
+        assert_eq!(report["status"], "partial");
+        assert_eq!(report["ok"], 1);
+        assert_eq!(report["errors"], 1);
+        assert_eq!(report["results"][1]["status"], "partial");
+    }
 
     #[test]
     fn safe_waveform_exprs_are_allowed() {

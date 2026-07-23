@@ -10,7 +10,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
@@ -21,6 +24,11 @@ pub struct ParallelSimResult {
     pub label: String,
     pub result: Result<SimulationResult>,
 }
+
+type ParsedSimulationOutput = (
+    HashMap<String, Vec<f64>>,
+    HashMap<String, crate::models::ScalarValue>,
+);
 
 pub struct SpectreSimulator {
     pub spectre_cmd: String,
@@ -91,6 +99,112 @@ fn extract_error_messages(content: &str) -> Vec<String> {
     }
 
     errors
+}
+
+/// Extract warning diagnostics independently from errors.  Spectre frequently
+/// emits warnings without the word "error", so routing warnings through the
+/// error extractor loses useful outcome information.
+fn extract_warning_messages(content: &str) -> Vec<String> {
+    content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && line.to_lowercase().contains("warning"))
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+/// Output is usable only after it has been parsed into non-empty analyses or
+/// operating points.  Directory presence and a successful empty parse do not
+/// prove Spectre produced data.
+fn has_usable_output(
+    data: &HashMap<String, Vec<f64>>,
+    operating_points: &HashMap<String, crate::models::ScalarValue>,
+) -> bool {
+    !data.is_empty() || !operating_points.is_empty()
+}
+
+fn parse_simulation_output(raw_dir: &std::path::Path) -> Result<ParsedSimulationOutput> {
+    let sweep = crate::spectre::parsers::parse_sweep_psf_directory(raw_dir)?;
+    let data = if !sweep.is_empty() {
+        let mut flat = HashMap::new();
+        let mut indices: Vec<_> = sweep.keys().collect();
+        indices.sort();
+        for &idx in indices {
+            for (signal, values) in &sweep[&idx] {
+                flat.insert(format!("point_{}_{}", idx, signal), values.clone());
+            }
+        }
+        flat
+    } else if raw_dir.join("psf").exists() || raw_dir.join("results").exists() {
+        crate::spectre::parsers::parse_psf_ascii(raw_dir)?
+    } else {
+        HashMap::new()
+    };
+    let operating_points = crate::spectre::parsers::parse_structured_op_blocks(raw_dir);
+    Ok((data, operating_points))
+}
+
+/// Combines the simulation SSH streams with the actual Spectre log.  A failed
+/// log read is an operational failure: without spectre.out we cannot make a
+/// trustworthy outcome decision.
+fn combined_remote_log(
+    simulation: &crate::models::RemoteTaskResult,
+    log_read: &crate::models::RemoteTaskResult,
+) -> Result<String> {
+    if !log_read.success {
+        return Err(VirtuosoError::Ssh(format!(
+            "failed to read remote spectre.out: {}",
+            log_read
+                .error
+                .as_deref()
+                .unwrap_or_else(|| log_read.stderr.trim())
+        )));
+    }
+    Ok(format!(
+        "{}\n{}\n{}",
+        simulation.stdout, simulation.stderr, log_read.stdout
+    ))
+}
+
+/// Progress reporting has an explicit lifecycle independent of Spectre log
+/// wording.  The owner always requests cancellation before joining it.
+struct ProgressFollower {
+    stop: Arc<AtomicBool>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl ProgressFollower {
+    fn spawn(sink: Arc<dyn JobEventSink>, log_path: PathBuf, job_id: String) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_for_thread = Arc::clone(&stop);
+        let handle = thread::spawn(move || {
+            while !stop_for_thread.load(Ordering::Acquire) {
+                if let Ok(content) = fs::read_to_string(&log_path) {
+                    if let Some((percent, message)) = parse_spectre_progress(&content) {
+                        sink.emit(JobEvent::Progress {
+                            job_id: job_id.clone(),
+                            percent,
+                            message,
+                            iteration: None,
+                            time_point: None,
+                        });
+                    }
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        });
+        Self {
+            stop,
+            handle: Some(handle),
+        }
+    }
+
+    fn stop_and_join(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
 }
 
 /// Check if simulation output indicates a license error.
@@ -331,9 +445,9 @@ impl SpectreOutcomeClassifier {
             || lower.contains("do not converge")
             || lower.contains("could not converge")
             // SPCRTRF error codes: e.g., SPCRTRF-15044
-            || Regex::new(r"SPCRTRF[:-]\d+").map(|re| re.is_match(content)).unwrap_or(false)
+            || Regex::new(r"(?i)SPCRTRF[:-]\d+").map(|re| re.is_match(content)).unwrap_or(false)
             // Spectre hierarchical error format: SPCRTRF_<number>
-            || Regex::new(r"SPCRTRF_\d+")
+            || Regex::new(r"(?i)SPCRTRF_\d+")
                 .map(|re| re.is_match(content))
                 .unwrap_or(false)
     }
@@ -342,7 +456,7 @@ impl SpectreOutcomeClassifier {
         let lower = content.to_lowercase();
         if lower.contains("failed to converge") || lower.contains("convergence failure") {
             "convergence failure".to_string()
-        } else if let Some(caps) = Regex::new(r"(SPCRTRF[:-]?\d+)")
+        } else if let Some(caps) = Regex::new(r"(?i)(SPCRTRF[:-]?\d+)")
             .ok()
             .and_then(|re| re.captures(content))
         {
@@ -358,6 +472,14 @@ impl SpectreOutcomeClassifier {
     /// Fatal: "fatal" near an error, SEV, panic, assertion failure.
     fn has_fatal_error(&self, content: &str) -> bool {
         let lower = content.to_lowercase();
+        // SFE diagnostic codes are netlist/elaboration errors, even when a
+        // wrapper process exits successfully.
+        if Regex::new(r"(?i)\bSFE-\d+\b")
+            .map(|re| re.is_match(content))
+            .unwrap_or(false)
+        {
+            return true;
+        }
         // "fatal" as a standalone word near error context
         if lower.contains("fatal") {
             return true;
@@ -411,13 +533,7 @@ impl SpectreOutcomeClassifier {
     }
 
     fn warnings(&self) -> Vec<String> {
-        extract_error_messages(&self.log_content)
-            .into_iter()
-            .filter(|e| {
-                let l = e.to_lowercase();
-                l.contains("warning") || l.contains("warning:")
-            })
-            .collect()
+        extract_warning_messages(&self.log_content)
     }
 }
 
@@ -809,42 +925,8 @@ impl SpectreSimulator {
             .spawn()
             .map_err(|e| VirtuosoError::Execution(format!("spectre failed to start: {e}")))?;
 
-        let sink = Arc::clone(&self.sink);
-        let log_path_for_thread = log_path.clone();
-        let job_id_for_thread = run_id.clone();
-
-        // Spawn progress tracking thread using tokio runtime
-        let progress_thread = thread::spawn(move || {
-            let rt = crate::async_runtime::runtime();
-            rt.block_on(async move {
-                let poll_interval = Duration::from_millis(500);
-                let mut interval = tokio::time::interval(poll_interval);
-                loop {
-                    interval.tick().await;
-
-                    // Parse log for progress
-                    if let Ok(content) = fs::read_to_string(&log_path_for_thread) {
-                        // Check if simulation is done
-                        if is_simulation_complete(&content)
-                            || content.contains("Error:")
-                            || content.contains("Failed")
-                        {
-                            break;
-                        }
-
-                        if let Some((percent, message)) = parse_spectre_progress(&content) {
-                            sink.emit(JobEvent::Progress {
-                                job_id: job_id_for_thread.clone(),
-                                percent,
-                                message,
-                                iteration: None,
-                                time_point: None,
-                            });
-                        }
-                    }
-                }
-            });
-        });
+        let mut progress_follower =
+            ProgressFollower::spawn(Arc::clone(&self.sink), log_path.clone(), run_id.clone());
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(self.timeout);
         let start_time = std::time::Instant::now();
@@ -855,13 +937,13 @@ impl SpectreSimulator {
                     if std::time::Instant::now() > deadline {
                         let _ = child.kill();
                         let _ = child.wait();
-                        let _ = progress_thread.join();
+                        progress_follower.stop_and_join();
                         return Err(VirtuosoError::Timeout(self.timeout));
                     }
                     std::thread::sleep(std::time::Duration::from_millis(500));
                 }
                 Err(e) => {
-                    let _ = progress_thread.join();
+                    progress_follower.stop_and_join();
                     return Err(VirtuosoError::Execution(format!(
                         "failed to wait on spectre: {e}"
                     )));
@@ -869,18 +951,16 @@ impl SpectreSimulator {
             }
         };
 
-        // Wait for progress thread to finish
-        let _ = progress_thread.join();
+        // Child termination is the sole completion signal for the follower.
+        progress_follower.stop_and_join();
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
         let log_content = fs::read_to_string(&log_path).unwrap_or_default();
 
-        // ── Classify outcome BEFORE data parsing ─────────────────────────────────
-        // This replaces the old `!status.success() || has_readin_error()` check
-        // and correctly detects convergence failures even when exit code is 0.
-        let has_raw = raw_dir.join("psf").exists()
-            || raw_dir.join("results").exists()
-            || crate::spectre::parsers::parse_sweep_psf_directory(&raw_dir).is_ok();
+        // Parse before classification so an empty directory or an empty parse does
+        // not masquerade as usable output.  OP-only output is valid data too.
+        let (data, operating_points) = parse_simulation_output(&raw_dir)?;
+        let has_raw = has_usable_output(&data, &operating_points);
         let classifier = SpectreOutcomeClassifier::new(status.success(), &log_content, has_raw);
         let outcome = classifier.classify();
 
@@ -914,35 +994,12 @@ impl SpectreSimulator {
             }
         }
 
-        // ── Parse results — always attempt even on failure (data may be partial) ──
-        let data = if let Ok(sweep) = crate::spectre::parsers::parse_sweep_psf_directory(&raw_dir) {
-            // Convert sweep data to regular HashMap for compatibility
-            // Each sweep point's data is stored as "point_<N>_<signal>" keys
-            let mut flat: HashMap<String, Vec<f64>> = HashMap::new();
-            let mut indices: Vec<_> = sweep.keys().collect();
-            indices.sort();
-            for &idx in indices {
-                for (signal, values) in &sweep[&idx] {
-                    let key = format!("point_{}_{}", idx, signal);
-                    flat.insert(key, values.clone());
-                }
-            }
-            flat
-        } else if raw_dir.join("psf").exists() || raw_dir.join("results").exists() {
-            crate::spectre::parsers::parse_psf_ascii(&raw_dir)?
-        } else {
-            HashMap::new()
-        };
-
-        // Parse scalar operating-point / STRUCT blocks
-        let operating_points = crate::spectre::parsers::parse_structured_op_blocks(&raw_dir);
-
         // ── Build result — status from classification, not raw exit code ─────────
         let (errors, warnings) = match &outcome {
             SpectreOutcome::Success => (Vec::new(), Vec::new()),
             SpectreOutcome::PartialSuccess { warnings } => (Vec::new(), warnings.clone()),
             SpectreOutcome::Failure { reason } => (vec![reason.clone()], Vec::new()),
-            SpectreOutcome::PartialFailure { reason } => (Vec::new(), vec![reason.clone()]),
+            SpectreOutcome::PartialFailure { reason } => (vec![reason.clone()], Vec::new()),
         };
 
         Ok(SimulationResult {
@@ -992,35 +1049,25 @@ impl SpectreSimulator {
         let sim_cmd = format!("cd {remote_dir} && {env_prefix}{spectre_cmd}");
         let result = runner.run_command(&sim_cmd, Some(self.timeout * 2))?;
 
-        // Classify outcome — replaces `!result.success || has_readin_error(...)`.
-        // Detects convergence failures (SPCRTRF-*, "failed to converge") even with exit 0.
-        let combined_output = format!("{}\n{}", result.stdout, result.stderr);
+        // SSH stdout/stderr often omit diagnostic details because Spectre writes
+        // them to +log.  Reading that log is required before classification.
+        // Do not clean up remote artifacts on any retrieval failure.
+        let remote_log = runner.run_command(
+            &format!("cat {}/spectre.out", shell_quote(&remote_dir)),
+            Some(self.timeout),
+        )?;
+        let combined_output = combined_remote_log(&result, &remote_log)?;
 
         // ── Attempt data download even on failure (convergence failure may leave partial data) ──
-        let mut data = HashMap::new();
-        let mut operating_points = HashMap::new();
-
         let local_raw = self.work_dir.join(&run_id).join("raw");
-        if runner
+        runner
             .download(&format!("{remote_dir}/raw"), local_raw.to_str().unwrap())
-            .is_ok()
-        {
-            if let Ok(sweep) = crate::spectre::parsers::parse_sweep_psf_directory(&local_raw) {
-                let mut flat: HashMap<String, Vec<f64>> = HashMap::new();
-                let mut indices: Vec<_> = sweep.keys().collect();
-                indices.sort();
-                for &idx in indices {
-                    for (signal, values) in &sweep[&idx] {
-                        let key = format!("point_{}_{}", idx, signal);
-                        flat.insert(key, values.clone());
-                    }
-                }
-                data = flat;
-            } else if let Ok(parsed) = crate::spectre::parsers::parse_psf_ascii(&local_raw) {
-                data = parsed;
-            }
-            operating_points = crate::spectre::parsers::parse_structured_op_blocks(&local_raw);
-        }
+            .map_err(|e| {
+                VirtuosoError::Ssh(format!(
+                    "failed to retrieve remote Spectre raw results from {remote_dir}: {e}"
+                ))
+            })?;
+        let (data, operating_points) = parse_simulation_output(&local_raw)?;
 
         // ── Build result from classification ───────────────────────────────────────
         // Re-classify now that we know if raw data exists
@@ -1037,11 +1084,13 @@ impl SpectreSimulator {
                 (vec![reason.clone()], Vec::new(), ExecutionStatus::Error)
             }
             SpectreOutcome::PartialFailure { reason } => {
-                (Vec::new(), vec![reason.clone()], ExecutionStatus::Partial)
+                (vec![reason.clone()], Vec::new(), ExecutionStatus::Partial)
             }
         };
 
-        if !self.keep_remote_files {
+        // Keep failed/partial artifacts for diagnosis.  Cleanup is allowed only
+        // once retrieval completed and classification confirmed a usable run.
+        if !self.keep_remote_files && outcome.is_ok() {
             runner.run_command(&format!("rm -rf {remote_dir}"), None)?;
         }
 
@@ -1055,6 +1104,7 @@ impl SpectreSimulator {
             metadata: [
                 ("run_id".into(), run_id.clone()),
                 ("remote_dir".into(), remote_dir.clone()),
+                ("log".into(), combined_output),
             ]
             .into_iter()
             .collect(),
@@ -1308,6 +1358,133 @@ pub(crate) mod tests {
         let content = "";
         let errors = extract_error_messages(content);
         assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn classifier_treats_sfe_errors_as_fatal_even_with_success_exit() {
+        let outcome =
+            SpectreOutcomeClassifier::new(true, "ERROR (SFE-23): instance M0 is undefined", true)
+                .classify();
+
+        assert!(matches!(outcome, SpectreOutcome::Failure { .. }));
+    }
+
+    #[test]
+    fn classifier_handles_spcrtrf_case_insensitively_and_preserves_partial_data() {
+        let outcome =
+            SpectreOutcomeClassifier::new(true, "error (spcrtrf-15044): failed at time 2ns", true)
+                .classify();
+
+        assert!(matches!(outcome, SpectreOutcome::PartialFailure { .. }));
+    }
+
+    #[test]
+    fn classifier_does_not_treat_benign_convergence_chatter_as_fatal() {
+        let outcome = SpectreOutcomeClassifier::new(
+            true,
+            "Notice: no convergence difficulties detected.",
+            true,
+        )
+        .classify();
+
+        assert_eq!(outcome, SpectreOutcome::Success);
+    }
+
+    #[test]
+    fn classifier_reports_warning_lines_independently_from_errors() {
+        let outcome =
+            SpectreOutcomeClassifier::new(true, "Warning (SPECTRE-123): deprecated option", true)
+                .classify();
+
+        assert!(matches!(
+            outcome,
+            SpectreOutcome::PartialSuccess { ref warnings }
+                if warnings == &vec!["Warning (SPECTRE-123): deprecated option".to_string()]
+        ));
+    }
+
+    #[test]
+    fn classifier_rejects_clean_exit_without_usable_data() {
+        assert!(matches!(
+            SpectreOutcomeClassifier::new(true, "Spectre completed", false).classify(),
+            SpectreOutcome::Failure { .. }
+        ));
+    }
+
+    #[test]
+    fn usable_output_includes_operating_point_only_results() {
+        let mut operating_points = HashMap::new();
+        assert!(!has_usable_output(&HashMap::new(), &operating_points));
+
+        operating_points.insert("M0:gm".to_string(), crate::models::ScalarValue::Float(1e-3));
+        assert!(has_usable_output(&HashMap::new(), &operating_points));
+    }
+
+    #[test]
+    fn parse_output_uses_non_sweep_psf_data_when_sweep_parse_is_empty() {
+        let temp = tempfile::tempdir().unwrap();
+        let psf_dir = temp.path().join("psf");
+        fs::create_dir(&psf_dir).unwrap();
+        fs::write(psf_dir.join("tran.tran"), "0\n1e-9\n").unwrap();
+
+        let (data, operating_points) = parse_simulation_output(temp.path()).unwrap();
+        assert_eq!(data.get("tran").unwrap(), &vec![0.0, 1e-9]);
+        assert!(operating_points.is_empty());
+    }
+
+    #[test]
+    fn progress_follower_requires_explicit_stop_even_when_log_has_error_text() {
+        let log = tempfile::NamedTempFile::new().unwrap();
+        fs::write(log.path(), "ERROR (SFE-23): malformed instance").unwrap();
+        let mut follower = ProgressFollower::spawn(
+            Arc::new(crate::streaming::NullSink),
+            log.path().to_path_buf(),
+            "job".to_string(),
+        );
+
+        thread::sleep(Duration::from_millis(150));
+        assert!(!follower.handle.as_ref().unwrap().is_finished());
+        follower.stop_and_join();
+        assert!(follower.handle.is_none());
+    }
+
+    #[test]
+    fn combined_remote_log_includes_spectre_out_and_propagates_read_failure() {
+        let simulation = crate::models::RemoteTaskResult {
+            success: true,
+            returncode: 0,
+            stdout: "ssh stdout".to_string(),
+            stderr: "ssh stderr".to_string(),
+            remote_dir: None,
+            error: None,
+            timings: HashMap::new(),
+        };
+        let log = crate::models::RemoteTaskResult {
+            success: true,
+            returncode: 0,
+            stdout: "ERROR (SFE-23): only in spectre.out".to_string(),
+            stderr: String::new(),
+            remote_dir: None,
+            error: None,
+            timings: HashMap::new(),
+        };
+        assert!(combined_remote_log(&simulation, &log)
+            .unwrap()
+            .contains("ERROR (SFE-23)"));
+
+        let failed_log = crate::models::RemoteTaskResult {
+            success: false,
+            returncode: 1,
+            stdout: String::new(),
+            stderr: "cat: spectre.out: No such file".to_string(),
+            remote_dir: None,
+            error: None,
+            timings: HashMap::new(),
+        };
+        assert!(matches!(
+            combined_remote_log(&simulation, &failed_log),
+            Err(VirtuosoError::Ssh(_))
+        ));
     }
 
     // === Completion detection tests ===
