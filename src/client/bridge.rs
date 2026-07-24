@@ -112,20 +112,15 @@ impl VirtuosoClient {
             if let Some(base_port) = tunnel.as_ref().and_then(|t| t.saved_port()) {
                 (base_port, None, None)
             } else if let Ok(session_id) = std::env::var("VB_SESSION") {
-                // VB_SESSION may be a Maestro session name (e.g. "fnxSession8") rather than
-                // a bridge session ID — Maestro sessions don't have session files.
-                // Fall back to VB_PORT in that case.
                 match crate::models::SessionInfo::load(&session_id) {
                     Ok(s) => {
                         tracing::info!("connecting to session '{}' on port {}", s.id, s.port);
                         (s.port, Some(s.id.clone()), Some(s))
                     }
-                    Err(_) => {
-                        tracing::debug!(
-                            "session '{}' not a bridge session (no file), using VB_PORT",
-                            session_id
-                        );
-                        (cfg.port, None, None)
+                    Err(error) => {
+                        return Err(crate::error::VirtuosoError::Config(format!(
+                            "session '{session_id}' not found: {error}. Run `vcli session list`."
+                        )));
                     }
                 }
             } else {
@@ -1154,6 +1149,9 @@ mod client_id_tests {
         std::env::remove_var("VB_CLIENT_ID");
         std::env::remove_var("VB_PROFILE");
         std::env::remove_var("HOSTNAME");
+        std::env::remove_var("VB_SESSION");
+        std::env::remove_var("VB_REMOTE_HOST");
+        std::env::remove_var("VB_JUMP_HOST");
     }
 
     #[test]
@@ -1205,6 +1203,29 @@ mod client_id_tests {
         std::env::set_var("VB_PROFILE", "fallback-prof");
         // Empty VB_CLIENT_ID falls through to VB_PROFILE
         assert_eq!(resolve_client_id(), "fallback-prof");
+        clear_env();
+    }
+
+    #[test]
+    fn from_env_rejects_unknown_bridge_session() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_env();
+        std::env::set_var(
+            "VB_SESSION",
+            format!("missing-session-{}", std::process::id()),
+        );
+        std::env::set_var("VB_PORT", "65534");
+
+        let error = match VirtuosoClient::from_env() {
+            Ok(_) => panic!("unknown session must be rejected"),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(error, VirtuosoError::Config(_)),
+            "expected config error, got: {error}"
+        );
+
+        std::env::remove_var("VB_PORT");
         clear_env();
     }
 }
