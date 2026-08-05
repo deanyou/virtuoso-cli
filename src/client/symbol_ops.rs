@@ -17,7 +17,7 @@ impl SymbolOps {
             escape_skill_string(view_type),
         );
         format!(
-            r#"let((cv out) out=nil cv=errset(dbOpenCellViewByType("{lib}" "{cell}" "{view}" "{view_type}" "r") nil) if(!cv list("notFound" "symbol view not found") then(progn(cv=car(cv) out=unwindProtect(progn(list("success" cv~>bBox mapcar(lambda((t) list(t~>name if(t~>direction t~>direction "inputOutput") if(t~>numBits t~>numBits 1))) cv~>terminals) schGetPinOrder(cv) cv~>portOrder cv~>termOrder)) dbClose(cv))) out)))"#
+            r#"let((r cv res) r=errset(dbOpenCellViewByType("{lib}" "{cell}" "{view}" "{view_type}" "r") nil) if(r progn(cv=car(r) res=unwindProtect(progn(list("success" cv~>bBox mapcar(lambda((p) list(p~>name if(p~>direction p~>direction "inputOutput") if(p~>numBits p~>numBits 1))) cv~>terminals) schGetPinOrder(cv) cv~>portOrder cv~>termOrder)) dbClose(cv))) list("notFound" "symbol view not found")) res)"#
         )
     }
 

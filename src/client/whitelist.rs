@@ -2,12 +2,19 @@
 //! before the request is serialized and sent over TCP to the daemon.
 
 /// Whitelist entry type.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub enum WhitelistEntry {
     /// Case-insensitive substring match
     Substring(&'static str),
-    /// Word-boundary match on a function name (e.g. `system(`)
+    /// Substring match that allows specific safe prefixes (e.g. `hiFlush`).
+    /// Only blocks if the substring is found AND no allowlisted prefix precedes it.
+    SubstringWithAllowlist {
+        pattern: &'static str,
+        allowlist: &'static [&'static str],
+    },
+    /// Case-insensitive word-boundary match on a function name (e.g. `\bsystem\(`).
+    /// Prevents `hiSystem` matching as `system(`.
     FunctionName(&'static str),
 }
 
@@ -15,7 +22,30 @@ impl WhitelistEntry {
     fn matches(&self, code: &str) -> bool {
         match self {
             Self::Substring(needle) => code.to_lowercase().contains(&needle.to_lowercase()),
-            Self::FunctionName(name) => code.to_lowercase().contains(&format!("{name}(")),
+            Self::SubstringWithAllowlist { pattern, allowlist } => {
+                let code_lc = code.to_lowercase();
+                if !code_lc.contains(&pattern.to_lowercase()) {
+                    return false;
+                }
+                // Block the pattern UNLESS the entire expression is a single
+                // allowlisted function call (e.g. hiFlush() is safe even
+                // though it contains "sh(" as substring).
+                // Safe: hiFlush()  hiShell()  hiFlush(1 2)
+                // Block: sh(x)  system(sh(x))  Fish(sh(x))
+                for safe in *allowlist {
+                    let safe_call = format!("{}(", safe.to_lowercase());
+                    if code_lc.starts_with(&safe_call) {
+                        return false; // this IS the safe function, allow
+                    }
+                }
+                true // dangerous context
+            }
+            Self::FunctionName(name) => {
+                let pattern = format!(r"(?i)\b{name}\(");
+                regex::Regex::new(&pattern)
+                    .map(|r| r.is_match(code))
+                    .unwrap_or(false)
+            }
         }
     }
 }
@@ -25,7 +55,14 @@ fn default_dangerous() -> Vec<WhitelistEntry> {
     vec![
         // Shell invocations
         WhitelistEntry::Substring("system("),
-        WhitelistEntry::Substring("sh("),
+        // sh( blocked except when the entire expression IS a hi-prefixed UI function
+        // (hiFlush/hiShell contain 'sh(' as substring — those are allowed).
+        // Blocks: sh(x)  system(sh(x))  Fish(sh(x))
+        // Allows: hiFlush()  hiShell()
+        WhitelistEntry::SubstringWithAllowlist {
+            pattern: "sh(",
+            allowlist: &["hiFlush", "hiShell"],
+        },
         WhitelistEntry::Substring("csh "),
         WhitelistEntry::Substring("exec("),
         WhitelistEntry::Substring("pipe("),
@@ -98,6 +135,7 @@ impl EvalstringWhitelist {
                     "blocked: matches dangerous pattern '{}'",
                     match entry {
                         WhitelistEntry::Substring(s) => *s,
+                        WhitelistEntry::SubstringWithAllowlist { pattern, .. } => *pattern,
                         WhitelistEntry::FunctionName(n) => *n,
                     }
                 ));
@@ -140,6 +178,17 @@ mod tests {
     fn block_system() {
         assert!(wl().check("system(\"find /\")").is_some());
         assert!(wl().check("sh(\"ls -la\")").is_some());
+    }
+
+    #[test]
+    fn block_sh_except_hi_prefixed_ui_functions() {
+        // sh( in dangerous contexts is blocked
+        assert!(wl().check("sh(x)").is_some());
+        assert!(wl().check("system(sh(x))").is_some());
+        assert!(wl().check("Fish(sh(x))").is_some());
+        // hi-prefixed UI functions contain 'sh(' but are safe SKILL APIs
+        assert!(wl().check("hiFlush()").is_none());
+        assert!(wl().check("hiShell()").is_none());
     }
 
     #[test]
