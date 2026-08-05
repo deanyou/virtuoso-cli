@@ -466,25 +466,40 @@ RBLoadedPackages = nil
 
 procedure(RBLoadPackages()
     unless(RBLoadedPackages
-        ; Build the streamout/schematic/si package path using $CDS_INST.
-        ; The standard location is $CDS_INST/tools/dfII/etc/context/.
+        ; Build the streamout/schematic/si package path.
+        ; IC23 uses $CDS_INST/tools/dfII/etc/context/ with .ile files.
+        ; IC25 uses $CADENCE_HOME/tools/dfII/etc/context/64bit/ with .aux files.
+        ; snmNetlist is NOT available in IC25 — the netlister is built into Virtuoso core.
         ; fileexists() guards against missing packages in minimal CIW.
         ; errset() suppresses any load error (already loaded or missing kit).
-        let((cds_inst ctx)
-            cds_inst = getShellEnvVar("CDS_INST")
-            when(cds_inst
-                ctx = strcat(cds_inst "/tools/dfII/etc/context")
-                ; Streamout — needed for GDS/CDL export, streamin
-                when(fileexists(strcat(ctx "/streamout.ile"))
-                    errset(loadi(strcat(ctx "/streamout.ile")))
+        let((inst ctx)
+            ; Try CDS_INST first (IC23), fall back to CADENCE_HOME (IC25)
+            inst = getShellEnvVar("CDS_INST")
+            unless(inst inst = getShellEnvVar("CADENCE_HOME"))
+            when(inst
+                ctx = if(getShellEnvVar("CDS_INST")
+                    then strcat(inst "/tools/dfII/etc/context")
+                    else strcat(inst "/tools/dfII/etc/context/64bit")
                 )
                 ; Schematic — needed for schExportCdl, schematic editing APIs
-                when(fileexists(strcat(ctx "/schematic.ile"))
-                    errset(loadi(strcat(ctx "/schematic.ile")))
+                ; IC23: schematic.ile  IC25: schematic.aux
+                foreach(pkg '("schematic.ile" "schematic.aux")
+                    when(fileexists(strcat(ctx "/" pkg))
+                        errset(loadi(strcat(ctx "/" pkg)))
+                        ; Stop after first success (don't double-load .ile+.aux)
+                    )
                 )
                 ; Si (ship) — needed for ADE/simulation integration
-                when(fileexists(strcat(ctx "/si.ile"))
-                    errset(loadi(strcat(ctx "/si.ile")))
+                ; IC23: si.ile  IC25: si.aux
+                foreach(pkg '("si.ile" "si.aux")
+                    when(fileexists(strcat(ctx "/" pkg))
+                        errset(loadi(strcat(ctx "/" pkg)))
+                    )
+                )
+                ; Streamout — needed for GDS/CDL export, streamin
+                ; Only in IC23; IC25 uses schematic for most streamout ops
+                when(fileexists(strcat(ctx "/streamout.ile"))
+                    errset(loadi(strcat(ctx "/streamout.ile")))
                 )
             )
         )

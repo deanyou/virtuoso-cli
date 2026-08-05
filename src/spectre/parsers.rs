@@ -477,7 +477,7 @@ fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarV
                 }
                 if is_mos_family && values.len() >= 3 {
                     // Index 2 is vth, NOT region (region is a string at index 3+)
-                    if !values[2].as_str().is_some() {
+                    if values[2].as_str().is_none() {
                         ops.insert(format!("{}:vth", dev_name), values[2].clone());
                     }
                 }
