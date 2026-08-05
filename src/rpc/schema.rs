@@ -1064,6 +1064,41 @@ pub fn standard_schema() -> RpcSchema {
             returns: "Snapshot result with files_copied count".into(),
         },
         Method {
+            name: "maestro.create_corner_netlist".into(),
+            summary:
+                "Export a single corner's netlist for a Maestro session (remote temp dir, download to local)"
+                    .into(),
+            params: vec![
+                Param {
+                    name: "session".into(),
+                    ptype: "string".into(),
+                    description: "Maestro session name (e.g. fnxSession4)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "test".into(),
+                    ptype: "string".into(),
+                    description: "Test name (e.g. AC)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "corner".into(),
+                    ptype: "string".into(),
+                    description: "Corner name (e.g. tt, ss, ff)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "output_dir".into(),
+                    ptype: "string".into(),
+                    description: "Local destination directory for downloaded netlist files".into(),
+                    required: true,
+                },
+            ],
+            returns:
+                "JSON {status, session, test, corner, output_dir, remote_dir, files[], remote_cleaned}"
+                    .into(),
+        },
+        Method {
             name: "schematic.polish_label".into(),
             summary: "Polish net labels with cosmetic presets, auto-rotation, or offset".into(),
             params: vec![

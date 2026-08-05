@@ -1038,6 +1038,30 @@ enum MaestroCmd {
         #[arg(long)]
         filter: Option<String>,
     },
+
+    /// Export a single corner's netlist for a Maestro session (session-scoped).
+    ///
+    /// Generates a unique remote temp dir via SSH, executes the
+    /// `maeCreateNetlistForCorner` SKILL call against the live Virtuoso session,
+    /// verifies the remote dir is non-empty, streams it back to a local
+    /// directory, and cleans up the remote dir. Requires VB_REMOTE_HOST.
+    ///
+    /// Examples:
+    ///   vcli maestro export-netlist --session fnxSession4 --test AC --corner tt --output ./netlists/tt
+    ExportNetlist {
+        /// Maestro session name (e.g. fnxSession4)
+        #[arg(long)]
+        session: String,
+        /// Test name (e.g. AC)
+        #[arg(long)]
+        test: String,
+        /// Corner name (e.g. tt, ss, ff)
+        #[arg(long)]
+        corner: String,
+        /// Local destination directory for downloaded netlist files
+        #[arg(long)]
+        output: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1804,6 +1828,12 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
             history.as_deref(),
             filter.as_deref(),
         ),
+        MaestroCmd::ExportNetlist {
+            session,
+            test,
+            corner,
+            output,
+        } => commands::maestro::create_corner_netlist(&session, &test, &corner, &output),
     }
 }
 

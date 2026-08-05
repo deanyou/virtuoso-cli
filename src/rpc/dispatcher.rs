@@ -472,6 +472,22 @@ impl RpcDispatcher {
                 let r = commands::maestro::snapshot(&output_dir, session, history, filter_path)?;
                 Ok(r)
             }
+            "create_corner_netlist" => {
+                // Dispatch the same helper the CLI uses. RPC params mirror
+                // the CLI flags exactly: `session`, `test`, `corner`, `output_dir`,
+                // all required and shell-quoted downstream by the helper.
+                let session = json_str(params.get("session"), "session")?;
+                let test = json_str(params.get("test"), "test")?;
+                let corner = json_str(params.get("corner"), "corner")?;
+                let output_dir = json_str(params.get("output_dir"), "output_dir")?;
+                let r = crate::commands::maestro::create_corner_netlist(
+                    &session,
+                    &test,
+                    &corner,
+                    &output_dir,
+                )?;
+                Ok(r)
+            }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown maestro method '{}'",
                 op
@@ -1252,8 +1268,32 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 72 methods (65 + 4 skill.find/info/sync/cache + 1 sim.check_license + 2 schematic.net_stub/label_term)
-        assert_eq!(schema.methods.len(), 72, "should have exactly 72 methods");
+        // Should have 73 methods (72 prior + 1 maestro.create_corner_netlist)
+        assert_eq!(schema.methods.len(), 73, "should have exactly 73 methods");
+    }
+
+    #[test]
+    fn schema_contains_create_corner_netlist() {
+        let schema = standard_schema();
+        let method = schema
+            .methods
+            .iter()
+            .find(|m| m.name == "maestro.create_corner_netlist")
+            .expect("maestro.create_corner_netlist must be registered");
+
+        // All four params are required.
+        for name in ["session", "test", "corner", "output_dir"] {
+            assert!(
+                method.params.iter().any(|p| p.name == name && p.required),
+                "maestro.create_corner_netlist must require '{name}'"
+            );
+        }
+        // No optional params.
+        assert_eq!(
+            method.params.iter().filter(|p| !p.required).count(),
+            0,
+            "maestro.create_corner_netlist should have no optional params"
+        );
     }
 
     #[test]

@@ -127,6 +127,24 @@ impl MaestroOps {
         format!(r#"maeSaveSetup(?session "{session}")"#)
     }
 
+    /// Create a netlist for a specific corner.
+    /// maeCreateNetlistForCorner(testName cornerName outputDir ?session s)
+    pub fn create_netlist_for_corner(
+        &self,
+        test_name: &str,
+        corner: &str,
+        output_dir: &str,
+        session: &str,
+    ) -> String {
+        let test_name = escape_skill_string(test_name);
+        let corner = escape_skill_string(corner);
+        let output_dir = escape_skill_string(output_dir);
+        let session = escape_skill_string(session);
+        format!(
+            r#"maeCreateNetlistForCorner("{test_name}" "{corner}" "{output_dir}" ?session "{session}")"#
+        )
+    }
+
     pub fn get_sim_messages(&self, session: &str) -> String {
         let session = escape_skill_string(session);
         format!(r#"maeGetSimulationMessages(?session "{session}")"#)
@@ -508,6 +526,77 @@ mod tests {
         assert!(s.contains("maeAddOutput"), "{s}");
         assert!(s.contains("\"gain\""), "{s}");
         assert!(s.contains("\"AC\""), "{s}");
+    }
+
+    #[test]
+    fn create_netlist_for_corner_format() {
+        let s = ops().create_netlist_for_corner("AC", "tt", "/tmp/out", "fnxSession4");
+        assert_eq!(
+            s,
+            r#"maeCreateNetlistForCorner("AC" "tt" "/tmp/out" ?session "fnxSession4")"#
+        );
+    }
+
+    #[test]
+    fn create_netlist_for_corner_escapes_quote_in_test() {
+        // Quotes inside the test name must be SKILL-escaped (`"` → `\"`).
+        let s = ops().create_netlist_for_corner(r#"te"st"#, "tt", "/tmp/out", "fnxSession4");
+        assert!(s.contains(r#""te\"st""#), "{s}");
+        // Confirm command is still single-line and well-formed.
+        assert!(s.starts_with("maeCreateNetlistForCorner("), "{s}");
+        assert!(s.ends_with(")"), "{s}");
+    }
+
+    #[test]
+    fn create_netlist_for_corner_escapes_backslash_in_corner() {
+        // Backslash inside the corner name must be doubled (`\` → `\\`).
+        let s = ops().create_netlist_for_corner("AC", r#"a\b"#, "/tmp/out", "fnxSession4");
+        assert!(s.contains(r#""a\\b""#), "{s}");
+    }
+
+    #[test]
+    fn create_netlist_for_corner_escapes_quote_in_output_dir() {
+        // Quote and space inside the output dir must be SKILL-escaped.
+        let s = ops().create_netlist_for_corner("AC", "tt", r#"/tmp/out "x""#, "fnxSession4");
+        assert!(s.contains(r#""/tmp/out \"x\"""#), "{s}");
+    }
+
+    #[test]
+    fn create_netlist_for_corner_escapes_quote_in_session() {
+        let s = ops().create_netlist_for_corner("AC", "tt", "/tmp/out", r#"fnx"4"#);
+        assert!(s.contains(r#"?session "fnx\"4""#), "{s}");
+    }
+
+    #[test]
+    fn create_netlist_for_corner_escapes_all_four_args_independently() {
+        // All four SKILL string parameters use the same escape function,
+        // so each one must round-trip its special characters independently.
+        let s = ops().create_netlist_for_corner(
+            r#"te"st"#,
+            r#"co\rner"#,
+            r#"/tmp/out "x""#,
+            r#"fnx"4"#,
+        );
+        assert!(s.contains(r#""te\"st""#), "{s}");
+        assert!(s.contains(r#""co\\rner""#), "{s}");
+        assert!(s.contains(r#""/tmp/out \"x\"""#), "{s}");
+        assert!(s.contains(r#""fnx\"4""#), "{s}");
+        // Exactly one occurrence of the opening maeCreateNetlistForCorner( and one closing ).
+        assert_eq!(s.matches("maeCreateNetlistForCorner(").count(), 1);
+        assert!(s.trim_end().ends_with(')'));
+        assert_eq!(s.matches("?session").count(), 1);
+    }
+
+    #[test]
+    fn create_netlist_for_corner_includes_session_keyword() {
+        let s = ops().create_netlist_for_corner("AC", "tt", "/tmp/out", "fnxSession0");
+        // Position of the ?session keyword must come last in the builder.
+        let session_pos = s.find("?session").expect("?session keyword");
+        let paren_end = s.rfind(')').expect("closing paren");
+        assert!(
+            session_pos < paren_end,
+            "session keyword before closing paren: {s}"
+        );
     }
 
     #[test]
