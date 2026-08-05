@@ -9,6 +9,7 @@ pub mod schematic;
 pub mod session;
 pub mod sim;
 pub mod skill;
+pub mod symbol;
 pub mod transaction;
 pub mod tunnel;
 pub mod window;

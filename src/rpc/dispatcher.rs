@@ -139,6 +139,26 @@ impl RpcDispatcher {
 
         match domain {
             "schematic" => Self::dispatch_schematic(client, op, params),
+            "symbol" => match op {
+                "inspect" => {
+                    let lib = json_str(params.get("lib"), "lib")?;
+                    let cell = json_str(params.get("cell"), "cell")?;
+                    let view = json_str_or(params.get("view"), "symbol")?;
+                    let view_type = json_str_or(params.get("view_type"), "schematicSymbol")?;
+                    crate::commands::symbol::inspect(&lib, &cell, &view, &view_type)
+                }
+                "generate" => {
+                    let lib = json_str(params.get("lib"), "lib")?;
+                    let cell = json_str(params.get("cell"), "cell")?;
+                    let src = json_str_or(params.get("schematic_view"), "schematic")?;
+                    let dst = json_str_or(params.get("symbol_view"), "symbol")?;
+                    let sort = params.get("sort_pins").and_then(Value::as_str);
+                    crate::commands::symbol::generate(&lib, &cell, &src, &dst, sort)
+                }
+                _ => Err(VirtuosoError::NotFound(format!(
+                    "unknown symbol method '{op}'"
+                ))),
+            },
             "maestro" => Self::dispatch_maestro(client, op, params),
             "window" => Self::dispatch_window(client, op, params),
             "cell" => Self::dispatch_cell(client, op, params),
@@ -1268,8 +1288,8 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 73 methods (72 prior + 1 maestro.create_corner_netlist)
-        assert_eq!(schema.methods.len(), 73, "should have exactly 73 methods");
+        // Should have 75 methods (73 prior + symbol.inspect/generate)
+        assert_eq!(schema.methods.len(), 75, "should have exactly 75 methods");
     }
 
     #[test]

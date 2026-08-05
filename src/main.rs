@@ -131,6 +131,10 @@ enum Commands {
     #[command(subcommand)]
     Schematic(SchematicCmd),
 
+    /// Inspect and generate symbol views.
+    #[command(subcommand)]
+    Symbol(SymbolCmd),
+
     /// List and inspect active Virtuoso bridge sessions
     #[command(subcommand)]
     Session(SessionCmd),
@@ -180,6 +184,32 @@ enum Commands {
     /// Show or edit connection profile bindings
     #[command(subcommand)]
     Profile(ProfileCmd),
+}
+
+#[derive(Subcommand)]
+enum SymbolCmd {
+    Inspect {
+        #[arg(long)]
+        lib: String,
+        #[arg(long)]
+        cell: String,
+        #[arg(long, default_value = "symbol")]
+        view: String,
+        #[arg(long, default_value = "schematicSymbol")]
+        view_type: String,
+    },
+    Generate {
+        #[arg(long)]
+        lib: String,
+        #[arg(long)]
+        cell: String,
+        #[arg(long, default_value = "schematic")]
+        schematic_view: String,
+        #[arg(long, default_value = "symbol")]
+        symbol_view: String,
+        #[arg(long)]
+        sort_pins: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1894,6 +1924,30 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
     }
 }
 
+fn dispatch_symbol(cmd: SymbolCmd) -> error::Result<serde_json::Value> {
+    match cmd {
+        SymbolCmd::Inspect {
+            lib,
+            cell,
+            view,
+            view_type,
+        } => commands::symbol::inspect(&lib, &cell, &view, &view_type),
+        SymbolCmd::Generate {
+            lib,
+            cell,
+            schematic_view,
+            symbol_view,
+            sort_pins,
+        } => commands::symbol::generate(
+            &lib,
+            &cell,
+            &schematic_view,
+            &symbol_view,
+            sort_pins.as_deref(),
+        ),
+    }
+}
+
 fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
     match cmd {
         WindowCmd::List => commands::window::list(),
@@ -2031,6 +2085,7 @@ fn main() {
         Commands::Design(cmd) => dispatch_design(cmd, format),
         Commands::Maestro(cmd) => dispatch_maestro(cmd),
         Commands::Schematic(cmd) => dispatch_schematic(cmd),
+        Commands::Symbol(cmd) => dispatch_symbol(cmd),
         Commands::Session(cmd) => match cmd {
             SessionCmd::List => commands::session::list(format),
             SessionCmd::Show { id } => commands::session::show(&id, format),
