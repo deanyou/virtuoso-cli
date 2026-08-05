@@ -50,6 +50,23 @@ mod tests {
             "origin must appear: {s}"
         );
     }
+
+    #[test]
+    fn xstream_out_escapes_all_paths_and_disables_dialog() {
+        let s = ops().xstream_out(
+            "lib\"x",
+            "top",
+            "layout",
+            "/tmp/out.gds",
+            "/tmp/map",
+            "/tmp/log",
+            "/tmp/run",
+        );
+        assert!(s.contains("xstOutDoTranslate()"));
+        assert!(s.contains("xstSetField(\"showCompletionMsgBox\" \"false\")"));
+        assert!(s.contains("lib\\\"x"));
+        assert!(s.contains("xstSetField(\"strmFile\" \"/tmp/out.gds\")"));
+    }
 }
 
 #[derive(Default)]
@@ -58,6 +75,38 @@ pub struct LayoutOps;
 impl LayoutOps {
     pub fn new() -> Self {
         Self
+    }
+
+    /// Build a non-interactive XStream Out request.  The caller is expected
+    /// to provide execution-host paths (typically profile-scoped temporary
+    /// paths) and to validate/publish the resulting GDS file separately.
+    pub fn xstream_out(
+        &self,
+        library: &str,
+        top_cell: &str,
+        view: &str,
+        stream_file: &str,
+        layer_map: &str,
+        log_file: &str,
+        run_dir: &str,
+    ) -> String {
+        let values = [
+            library,
+            top_cell,
+            view,
+            stream_file,
+            layer_map,
+            log_file,
+            run_dir,
+        ]
+        .into_iter()
+        .map(escape_skill_string)
+        .collect::<Vec<_>>();
+        let [library, top_cell, view, stream_file, layer_map, log_file, run_dir] =
+            values.try_into().expect("seven XStream values");
+        format!(
+            r#"let((vbOldLibrary vbOldTopCell vbOldView vbOldStreamFile vbOldLayerMap vbOldLogFile vbOldRunDir vbOldMsg) unwindProtect(progn(unless(and(isCallable('xstGetField) isCallable('xstSetField) isCallable('xstOutDoTranslate)) error("XStream APIs unavailable")) vbOldLibrary=xstGetField("library") vbOldTopCell=xstGetField("topCell") vbOldView=xstGetField("view") vbOldStreamFile=xstGetField("strmFile") vbOldLayerMap=xstGetField("layerMap") vbOldLogFile=xstGetField("logFile") vbOldRunDir=xstGetField("runDir") vbOldMsg=xstGetField("showCompletionMsgBox") xstSetField("library" "{library}") xstSetField("topCell" "{top_cell}") xstSetField("view" "{view}") xstSetField("strmFile" "{stream_file}") xstSetField("layerMap" "{layer_map}") xstSetField("logFile" "{log_file}") xstSetField("runDir" "{run_dir}") xstSetField("showCompletionMsgBox" "false") xstOutDoTranslate()) progn(when(vbOldLibrary xstSetField("library" vbOldLibrary)) when(vbOldTopCell xstSetField("topCell" vbOldTopCell)) when(vbOldView xstSetField("view" vbOldView)) when(vbOldStreamFile xstSetField("strmFile" vbOldStreamFile)) when(vbOldLayerMap xstSetField("layerMap" vbOldLayerMap)) when(vbOldLogFile xstSetField("logFile" vbOldLogFile)) when(vbOldRunDir xstSetField("runDir" vbOldRunDir)) when(vbOldMsg xstSetField("showCompletionMsgBox" vbOldMsg)))))"#
+        )
     }
 
     /// `bbox`: `[(ll_x, ll_y), (ur_x, ur_y)]` — lower-left and upper-right corners.
