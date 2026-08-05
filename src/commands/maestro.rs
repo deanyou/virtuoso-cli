@@ -1252,7 +1252,7 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
                 dst.display()
             )));
         }
-        return Err(VirtuosoError::Ssh(format!(
+        Err(VirtuosoError::Ssh(format!(
             "atomic publish failed (renamex_np RENAME_EXCL) for staging '{}' → destination '{}': \
              errno={} ({}); \
              netlist artifacts preserved at remote_dir={remote_dir}",
@@ -1260,7 +1260,7 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
             dst.display(),
             errno,
             err
-        )));
+        )))
     }
 
     #[cfg(target_os = "linux")]
@@ -1344,9 +1344,9 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
 ///   8. Allocate a unique local staging dir as a SIBLING of `output_dir`
 ///      (same parent dir, fixed prefix `.vcli_corner_netlist_staging_`
 ///      + UUIDv4); install an RAII guard that removes ONLY that staging
-///      dir, AND only when its leaf name still matches the verified
-///      prefix + 32 lowercase hex chars AND its parent matches the
-///      parent it was created for.
+///        dir, and only when its leaf name still matches the verified prefix
+///        plus 32 lowercase hex chars and its parent matches the parent it
+///        was created for.
 ///   9. Stream the remote dir to the staging dir via `download_dir`.
 ///      The user `output_dir` is NEVER touched here.
 ///  10. Validate the staging dir recursively with `symlink_metadata` —

@@ -135,6 +135,10 @@ enum Commands {
     #[command(subcommand)]
     Symbol(SymbolCmd),
 
+    /// Read-only OA library queries.
+    #[command(subcommand)]
+    Library(LibraryCmd),
+
     /// List and inspect active Virtuoso bridge sessions
     #[command(subcommand)]
     Session(SessionCmd),
@@ -210,6 +214,11 @@ enum SymbolCmd {
         #[arg(long)]
         sort_pins: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum LibraryCmd {
+    List,
 }
 
 #[derive(Subcommand)]
@@ -2086,6 +2095,7 @@ fn main() {
         Commands::Maestro(cmd) => dispatch_maestro(cmd),
         Commands::Schematic(cmd) => dispatch_schematic(cmd),
         Commands::Symbol(cmd) => dispatch_symbol(cmd),
+        Commands::Library(LibraryCmd::List) => commands::library::list(),
         Commands::Session(cmd) => match cmd {
             SessionCmd::List => commands::session::list(format),
             SessionCmd::Show { id } => commands::session::show(&id, format),

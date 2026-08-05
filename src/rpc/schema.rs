@@ -184,6 +184,7 @@ pub fn standard_schema() -> RpcSchema {
         },
         Method { name: "symbol.inspect".into(), summary: "Inspect a symbol view".into(), params: vec![Param{name:"lib".into(),ptype:"string".into(),description:"Library".into(),required:true}, Param{name:"cell".into(),ptype:"string".into(),description:"Cell".into(),required:true}, Param{name:"view".into(),ptype:"string".into(),description:"Symbol view".into(),required:false}, Param{name:"view_type".into(),ptype:"string".into(),description:"View type".into(),required:false}], returns:"Symbol inspection result".into() },
         Method { name: "symbol.generate".into(), summary: "Generate a symbol from a schematic".into(), params: vec![Param{name:"lib".into(),ptype:"string".into(),description:"Library".into(),required:true}, Param{name:"cell".into(),ptype:"string".into(),description:"Cell".into(),required:true}, Param{name:"schematic_view".into(),ptype:"string".into(),description:"Source schematic view".into(),required:false}, Param{name:"symbol_view".into(),ptype:"string".into(),description:"Target symbol view".into(),required:false}, Param{name:"sort_pins".into(),ptype:"string".into(),description:"alphanumeric or geometric".into(),required:false}], returns:"Symbol generation result".into() },
+        Method { name: "library.list".into(), summary: "List registered OA libraries (read-only)".into(), params: vec![], returns: "JSON array of library names".into() },
         Method {
             name: "schematic.save".into(),
             summary: "Save the current schematic".into(),

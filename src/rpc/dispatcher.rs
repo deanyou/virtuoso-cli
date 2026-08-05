@@ -159,6 +159,17 @@ impl RpcDispatcher {
                     "unknown symbol method '{op}'"
                 ))),
             },
+            "library" => match op {
+                "list"
+                    if params.is_null()
+                        || params.as_object().map(|m| m.is_empty()).unwrap_or(false) =>
+                {
+                    crate::commands::library::list()
+                }
+                _ => Err(VirtuosoError::NotFound(format!(
+                    "unknown library method '{op}'"
+                ))),
+            },
             "maestro" => Self::dispatch_maestro(client, op, params),
             "window" => Self::dispatch_window(client, op, params),
             "cell" => Self::dispatch_cell(client, op, params),
@@ -1288,8 +1299,8 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 75 methods (73 prior + symbol.inspect/generate)
-        assert_eq!(schema.methods.len(), 75, "should have exactly 75 methods");
+        // Should have 76 methods (73 prior + symbol.inspect/generate + library.list)
+        assert_eq!(schema.methods.len(), 76, "should have exactly 76 methods");
     }
 
     #[test]
