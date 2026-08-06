@@ -40,27 +40,25 @@ impl MaestroOps {
         r#"let((vars out sep) vars = asiGetDesignVarList(asiGetCurrentSession()) out = "[" sep = "" foreach(v vars out = strcat(out sep sprintf(nil "{\"name\":\"%s\",\"value\":\"%s\"}" car(v) cadr(v))) sep = ",") strcat(out "]"))"#.into()
     }
 
-    /// Get enabled analyses — version-aware.
+    /// Get enabled analyses — IC23/IC25 均用 positional (setupName)。
     ///
-    /// IC23: `maeGetEnabledAnalysis(setupName)` — needs car(maeGetSetup(...)) first.
-    /// IC25: `maeGetEnabledAnalysis(?session sessionName)` — direct keyword.
-    pub fn get_analyses(&self, session: &str, version: VirtuosoVersion) -> String {
+    /// 实测（IC25.1 ISR7）：`maeGetEnabledAnalysis(?session ...)` 报错，
+    /// 必须先 `car(maeGetSetup(?session ...))` 取 setup 名，再 positional 传入。
+    pub fn get_analyses(&self, session: &str, _version: VirtuosoVersion) -> String {
         let session = escape_skill_string(session);
-        if version.is_ic25() {
-            format!(r#"maeGetEnabledAnalysis(?session "{session}")"#)
-        } else {
-            format!(
-                r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeGetEnabledAnalysis(setup))"#
-            )
-        }
+        format!(
+            r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeGetEnabledAnalysis(setup))"#
+        )
     }
 
     /// Enable an analysis type — version-aware.
     ///
-    /// IC23: `maeSetAnalysis(setupName analysisType)`.
-    /// IC25: `maeSetAnalysis(analysisType ?session s ?enable t ?options \`(...))`.
+    /// IC23: `maeSetAnalysis(setupName analysisType)` — positional.
+    /// IC25: `maeSetAnalysis(setupName analysisType ?session s ?enable t ?options (list ...))`.
     ///
-    /// `options_skill_alist` is validated and converted at the command layer before this is called.
+    /// 实测 IC25（2026-08-06, IC25.1 ISR7）：
+    /// - `?options (list (list "stop" "1e10"))` 成功写入 netlist
+    /// - `?options` 中 `dec` 被静默丢弃，需通过 netlist sed 补全
     pub fn set_analysis(
         &self,
         session: &str,
@@ -71,20 +69,45 @@ impl MaestroOps {
         let session = escape_skill_string(session);
         let analysis_type = escape_skill_string(analysis_type);
         if version.is_ic25() {
-            let options_part = match options_skill_alist {
-                Some(alist) => format!(" ?options `{alist}"),
-                None => String::new(),
+            // IC25: maeSetAnalysis(setupName type ?session s ?enable t ?options opts)
+            //
+            // 实测（IC25.1 ISR4）：
+            //  - maeSetAnalysis(setup "ac" ?enable t) → t，写 netlist ✓
+            //  - maeSetAnalysis(setup "ac" ?enable t ?options opts) → t，ISR4 不写 netlist（Maestro 限制）
+            //  - maeSetAnalysis(setup "ac" ?enable t ?options opts) 在 ISR7 写入成功
+            //
+            //  SKILL evalstring 陷阱：(list "key" "val") 被求值为函数调用 → 用 quote 保护。
+            //  正确格式：list(quote(("key" "val"))) — list 里的 quote 保护内层 pair 不被求值。
+            //
+            //  绑定形式：(let ((setup ...) (opts ...)) body...) — flat let，两个绑定并列。
+            //  opts 的绑定表达式不引用 setup，所以 flat let 即可工作。
+            //  maeSetAnalysis 在 body 中，可以引用 setup 和 opts。
+            let (opts_binding, opts_arg) = match options_skill_alist {
+                Some(alist) => {
+                    let pairs: Vec<String> = parse_skill_pairs(alist);
+                    let quoted: String = pairs
+                        .iter()
+                        .map(|p| skill_pair_to_quoted(p))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    (format!("opts = (list {})", quoted), " ?options opts".to_string())
+                }
+                None => (String::new(), String::new()),
             };
+            // flat let: two bindings in ONE binding list — setup and opts side by side.
+            // Both binding expressions are evaluated simultaneously (no inter-reference needed).
+            // Generated form: let((setup opts) setup=car(...) opts=(list quote(...)) maeSetAnalysis(...))
             format!(
-                r#"maeSetAnalysis("{analysis_type}" ?session "{session}" ?enable t{options_part})"#
+                r#"let((setup opts) setup = car(maeGetSetup(?session "{session}")) {opts_binding} maeSetAnalysis(setup "{analysis_type}" ?session "{session}" ?enable t{opts_arg}))"#
             )
         } else {
-            // IC23: positional — setup name first; options not supported in this path
+            // IC23: positional — setup name first; options not supported
             format!(
                 r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeSetAnalysis(setup "{analysis_type}"))"#
             )
         }
     }
+
 
     /// Run simulation asynchronously. Returns immediately.
     pub fn run_simulation(&self, session: &str) -> String {
@@ -364,6 +387,78 @@ impl MaestroOps {
     }
 }
 
+/// Parse a SKILL alist string into individual pair strings like `["(list \"k1\" \"v1\")", "(list \"k2\" \"v2\")"]`.
+///
+/// Handles both formats:
+///   - With `list` keyword:  `(list (list "k1" "v1") (list "k2" "v2"))`
+///   - Without `list` keyword (from `json_to_skill_alist`): `(("k1" "v1") ("k2" "v2"))`
+fn parse_skill_pairs(alist: &str) -> Vec<String> {
+    let alist = alist.trim();
+    if alist.len() < 2 {
+        return vec![alist.to_string()];
+    }
+    // Format A: "(list (list ...) (list ...))"
+    if alist.starts_with("(list (") {
+        let inner = &alist[1..alist.len() - 1]; // strip first '(' and last ')'
+        return parse_inner_pairs(inner);
+    }
+    // Format B: "((\"k1\" \"v1\") (\"k2\" \"v2\"))" — bare pairs, no outer list keyword
+    if alist.starts_with("((") {
+        let inner = &alist[1..alist.len() - 1]; // strip outer '(' and ')'
+        return parse_inner_pairs(inner);
+    }
+    vec![alist.to_string()]
+}
+
+/// Parse the inner content between the outer parentheses of an alist,
+/// extracting each top-level parenthetical group as a separate pair.
+fn parse_inner_pairs(inner: &str) -> Vec<String> {
+    let mut results = Vec::new();
+    let mut depth = 0;
+    let mut start = 0;
+    for (i, c) in inner.char_indices() {
+        match c {
+            '(' => {
+                depth += 1;
+                if depth == 1 {
+                    start = i;
+                }
+            }
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    results.push(inner[start..=i].trim().to_string());
+                }
+            }
+            _ => {}
+        }
+        if depth < 0 {
+            break;
+        }
+    }
+    if results.is_empty() {
+        vec![inner.trim().to_string()]
+    } else {
+        results
+    }
+}
+
+/// Convert a parsed pair to a SKILL quoted list: `quote(("key" "val"))`.
+///
+/// maeSetAnalysis ?options expects a list of such quoted pairs.
+fn skill_pair_to_quoted(pair: &str) -> String {
+    let trimmed = pair.trim();
+    if trimmed.starts_with("(list ") {
+        // Has list keyword: strip "(list " and trailing ")"
+        let without_prefix = &trimmed["(list ".len()..];
+        let stripped = without_prefix.strip_suffix(')').unwrap_or(without_prefix).trim();
+        format!("quote(({stripped}))")
+    } else {
+        // Bare pair: `("key" "val")`
+        format!("quote({trimmed})")
+    }
+}
+
 /// Wrap a SKILL expression that returns a list-of-strings into a JSON array string.
 ///
 /// If `list_expr` returns nil (empty), the output is `"[]"`.
@@ -438,13 +533,13 @@ mod tests {
     }
 
     #[test]
-    fn get_analyses_ic25_uses_ic23_path() {
-        // IC25.1 ISR4 实测：maeGetSetup 仍返回 list，car() 有效
-        // is_ic25() 返回 false，所以 IC25 版本走 IC23 路径
+    fn get_analyses_ic25_uses_setup_name() {
+        // 实测 IC25.1 ISR7：maeGetEnabledAnalysis(?session ...) 报错
+        // IC23/IC25 均需 car(maeGetSetup()) 取 setup 名，positional 传入
         let s = ops().get_analyses("sess1", VirtuosoVersion::IC25);
         assert!(
             s.contains("maeGetSetup"),
-            "IC25 currently uses IC23 path: {s}"
+            "Both IC23 and IC25 need maeGetSetup: {s}"
         );
         assert!(s.contains("maeGetEnabledAnalysis"), "{s}");
     }
@@ -510,14 +605,30 @@ mod tests {
     }
 
     #[test]
-    fn set_analysis_ic25_uses_ic23_path() {
-        // IC25.1 ISR4 实测：maeSetAnalysis 仍为 positional (setupName type)
+    fn set_analysis_ic25_includes_keywords() {
+        // IC25 uses ?session and ?enable t keywords (unlike IC23 positional-only)
         let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC25);
-        assert!(
-            s.contains("maeGetSetup"),
-            "IC25 currently uses IC23 path: {s}"
+        assert!(s.contains("?session"), "IC25 must include ?session keyword: {s}");
+        assert!(s.contains("?enable t"), "IC25 must include ?enable t: {s}");
+        assert!(s.contains("maeGetSetup"), "IC25 needs setup name: {s}");
+        assert!(!s.contains("?options"), "IC25 without options must not inject ?options: {s}");
+    }
+
+    #[test]
+    fn set_analysis_ic25_with_options() {
+        // IC25: maeSetAnalysis with ?options using quote to protect inner pairs.
+        // json_to_skill_alist returns "((\"stop\" \"1e10\") (\"start\" \"1\"))" — bare pairs.
+        // skill_pair_to_quoted wraps each as quote(("stop" "1e10")).
+        // Generated: let((setup opts) setup=car(...) opts=(list quote(...)) maeSetAnalysis(...))
+        let s = ops().set_analysis(
+            "sess1", "ac", Some(r#"(("stop" "1e10") ("start" "1"))"#), VirtuosoVersion::IC25,
         );
-        assert!(s.contains("maeSetAnalysis"), "{s}");
+        assert!(s.contains(r#"quote(("stop" "1e10"))"#), "IC25 options must use quote: {s}");
+        assert!(s.contains("?options opts"), "Must pass options via ?options keyword: {s}");
+        assert!(s.contains("let((setup opts)"), "Must use flat let with two bindings: {s}");
+        assert!(s.contains("opts = (list"), "opts must be bound via = form: {s}");
+        assert!(s.contains("maeSetAnalysis(setup"), "Must call maeSetAnalysis directly: {s}");
+        assert!(!s.contains("apply("), "No apply() needed for direct maeSetAnalysis: {s}");
     }
 
     #[test]

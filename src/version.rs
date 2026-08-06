@@ -5,11 +5,14 @@ use crate::error::Result;
 ///
 /// API 实测结果（2026-04-20, IC25.1 ISR4）：
 /// - `maeGetSetup` 仍然返回 list `("setupName")`，`car()` 有效
-/// - `maeSetAnalysis` 仍然使用 positional `(setupName type)` 签名
-/// - `maeGetEnabledAnalysis` 仍然使用 positional `(setupName)` 签名
+/// - `maeSetAnalysis` positional `(setupName type)` — IC23/IC25 签名相同
+/// - `maeGetEnabledAnalysis` positional `(setupName)` — IC23/IC25 签名相同
+/// - IC25 新增 `?options` 参数：`(list (list "stop" "1e10"))` 可写入 sweep 参数
 ///
-/// 目前 IC23/IC25 Maestro API 签名完全一致。
-/// 版本检测留作基础设施，等未来真正出现不兼容时再启用分支。
+/// 实测（2026-08-06, IC25.1 ISR7）：
+/// - `maeSetAnalysis("setupName" "ac" ?session "fnxSession0" ?enable t)` 返回 t
+/// - `?options (list (list "stop" "1e10"))` 成功写入 netlist 的 `ac ac stop=1e10`
+/// - `?options` 中 `dec` 等字段被静默丢弃（不在 maeSetAnalysis 可写字段白名单中）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VirtuosoVersion {
     /// IC23.1 / IC25.1 ISR4 — positional API（当前实测兼容）
@@ -22,12 +25,9 @@ pub enum VirtuosoVersion {
 
 impl VirtuosoVersion {
     /// Returns true if this version uses the IC25+ Maestro API signatures.
-    /// 当前 IC25.1 ISR4 实测与 IC23 签名一致，返回 false。
-    /// 只有真正检测到 API 变化时才返回 true。
+    /// IC25 adds `?options` parameter support to `maeSetAnalysis`.
     pub fn is_ic25(&self) -> bool {
-        // 当前 IC25.1 ISR4 签名与 IC23 一致，不做分支。
-        // 如果未来版本出现真正的不兼容，修改这里的判断逻辑。
-        false
+        matches!(self, VirtuosoVersion::IC25)
     }
 }
 

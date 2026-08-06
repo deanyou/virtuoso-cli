@@ -22,97 +22,105 @@ allowed-tools: Bash(vcli *)
 vcli window list
 # → [{"name":"Virtuoso® ADE Explorer Editing: FT0001A_SH CMOP_TB maestro ...","mode":"ade-editing"}, ...]
 
-# 或旧方式
-vcli skill exec 'hiGetWindowName(hiGetCurrentWindow())'
-
 # 2. 获取 ADE session 名
-vcli skill exec 'axlGetWindowSession(hiGetCurrentWindow())'
-# → "fnxSession3"
+vcli maestro list-sessions
+# → ["fnxSession0"]
 
-# 3. 获取 setup 名（analysis 操作需要它）
-vcli skill exec 'maeGetSetup(?session "fnxSession0")'
-# → ("FT0001A_SH_CMOP_TB_1")
+# 3. 确认当前有哪些 analyses
+vcli maestro get-analyses --session fnxSession0
+# → {"analyses": ["tran", "ac"], ...}
 
-# 4. 启用 analysis（IC25 实测签名：positional，无 ?session）
-vcli skill exec 'maeSetAnalysis("FT0001A_SH_CMOP_TB_1" "ac")'
-# 支持类型: "ac" | "dc" | "tran" | "noise" | "dcOp"
+# 4. 设置 AC sweep 参数（IC25 支持，IC23 不支持）
+vcli maestro set-analysis --session fnxSession0 --analysis ac \
+  --options '{"start":"1","stop":"1e10"}'
 
-# 4b. 也可用 vcli 子命令
-vcli --session <bridge> maestro set-analysis --session fnxSession0 --analysis ac
+# 5. 保存 setup
+vcli maestro save --session fnxSession0
 
-# 5. 确认 analysis 已添加
-vcli skill exec 'maeGetEnabledAnalysis("FT0001A_SH_CMOP_TB_1")'
-# → ("ac")
+# 6. 运行
+vcli maestro run --session fnxSession0
 
-# 6. 添加输出
-vcli skill exec 'maeAddOutput("VOUT" "FT0001A_SH_CMOP_TB_1" ?expr "getData(\"/VOUT\")")'
-
-# 7. 保存
-vcli skill exec 'maeSaveSetup(?session "fnxSession0")'
-
-# 8. 运行（需要 Xvfb 已安装）
-vcli skill exec 'maeRunSimulation(?session "fnxSession0")'
-
-# 9. 查看仿真消息/错误
+# 7. 查看仿真消息
 vcli skill exec 'maeGetSimulationMessages(?session "fnxSession0")'
-
-# 10. 等待完成后导出结果
-vcli skill exec 'maeExportOutputView(?session "fnxSession0" ?fileName "/tmp/results.csv" ?view "Detail")'
 ```
 
-## IC23.1 实测函数签名
+## Maestro API 实测签名
 
-> 以下签名在 IC23.1-64b.500 环境下实测验证。IC25 可能有差异。
+> IC23.1-64b.500 和 IC25.1 ISR7 均实测验证。签名基本一致，主要差异在 `maeSetAnalysis` 的 `?options` 参数。
 
-| 函数 | IC23.1 实测签名 | 注意 |
-|------|----------------|------|
-| `maeGetSessions` | `()` | 无参 |
-| `maeIsValidMaestroSession` | `(sessionName)` | positional |
-| `maeGetSetup` | `(?session sessionName)` | keyword，返回 list `("setupName")` |
-| `maeSetAnalysis` | `(setupName analysisType)` | positional，arg2 是 type 字符串，返回 `t` 成功 |
-| `maeGetEnabledAnalysis` | `(setupName)` | positional，**不接受** `?session` keyword |
-| `maeGetAnalysis` | `(setupName sessionName)` | 两个 positional |
-| `maeRunSimulation` | `(?session sessionName)` | keyword，异步，返回 run 名称如 `"ExplorerRun.0"` |
-| `maeGetSimulationMessages` | `(?session sessionName)` | keyword |
-| `maeGetAllExplorerHistoryNames` | `(sessionName)` | positional，**不接受** `?session` |
-| `maeOpenResults` | `(?history historyName)` | keyword |
-| `maeSaveSetup` | `(?session sessionName)` | keyword |
-| `maeExportOutputView` | `(?session s ?fileName f ?view v)` | keyword |
-| `maeAddOutput` | `(outputName testName ?expr e)` | mixed |
-| `maeSetVar` | `(name value)` | positional，无 session 参数 |
-| `maeGetVar` | `(name)` | positional，无 session 参数 |
-| `maeSetDesign` | `(?session s ?libName l ?cellName c ?viewName v)` | keyword |
+### 通用的 mae* 函数（IC23 / IC25 签名相同）
+
+| 函数 | 实测签名 | 返回值 |
+|------|---------|--------|
+| `maeGetSessions` | `()` | `("fnxSession0" ...)` |
+| `maeGetSetup` | `(?session sessionName)` | `("setupName")` — **返回 list**，需 `car()` 取 setup 名 |
+| `maeSetAnalysis` | `(setupName analysisType)` | `t` = 成功 |
+| `maeGetEnabledAnalysis` | `(setupName)` | `("ac" "tran" ...)` — **positional**，不支持 `?session` |
+| `maeGetAnalysis` | `(setupName sessionName)` | analysis 配置信息 |
+| `maeRunSimulation` | `(?session sessionName)` | 异步，返回 run 名称 |
+| `maeGetSimulationMessages` | `(?session sessionName)` | 仿真日志字符串 |
+| `maeSaveSetup` | `(?session sessionName)` | `t` |
+| `maeAddOutput` | `(outputName testName ?expr expr)` | `t` |
+| `maeOpenResults` | `(?history historyName)` | `t` |
+| `maeExportOutputView` | `(?session s ?fileName f ?view v)` | 导出 CSV |
+| `maeGetAllExplorerHistoryNames` | `(sessionName)` | `("ExplorerRun.0" ...)` |
+
+### IC25 独有的 `?options` 参数
+
+IC25 的 `maeSetAnalysis` 支持额外的 `?options` 参数（IC23 不支持）：
+
+```
+maeSetAnalysis(setupName analysisType
+  ?session sessionName
+  ?enable t
+  ?options (list (list "start" "1") (list "stop" "1e10")))
+```
+
+**`?options` alist 格式：**
+
+```skill
+(list (list "key1" "value1") (list "key2" "value2"))
+```
+
+对应 vcli 命令的 `--options '{"start":"1","stop":"1e10"}'`。
+
+**已知有效字段（2026-08-06 实测 IC25.1 ISR7）：**
+
+| 字段 | 示例值 | 效果 |
+|------|--------|------|
+| `start` | `"1"` | sweep 起始频率/时间 ✅ |
+| `stop` | `"1e10"` | sweep 截止频率/时间 ✅ |
+| `dec` | `"20"` | 每 decade 点数 | ❌ 静默丢弃，需 sed 补 netlist |
+| `lin` | `"100"` | 线性 sweep 点数 | ❌ 未验证 |
+| `step` | `"1u"` | 步长 | ❌ 未验证 |
+
+> ⚠️ `dec` 不在 `maeSetAnalysis` 的可写字段白名单中，会被静默丢弃。
+> workaround：`maeSaveSetup` 后用 sed 替换 netlist 中对应的 analysis 行。
 
 ## 版本检测与自动适配
 
-vcli 自动检测 Virtuoso IC 版本（IC23 vs IC25），并使用对应的 SKILL API 签名。检测通过 `getVersionString()` 实现，结果缓存在内存中。
+vcli 通过 `getVersion(t)` 查询 daemon 返回的 IC 版本字符串，自动选择 Maestro API 路径。
 
-**版本差异关键点：**
+**`VirtuosoVersion::is_ic25()` 现在正确返回 `true`**（2026-08-06 修复，之前硬编码返回 `false`）。
 
-| 函数 | IC23 | IC25 | 差异 |
-|------|------|------|------|
-| `maeGetSetup` | 返回 list `("setupName")` → 需要 `car()` | 返回 string `"setupName"` | IC25 下 `car()` 返回 nil |
-| `maeSetAnalysis` | `(setupName type)` positional | `(type ?session s ?enable t ?options \`(...))` keyword | IC25 不接受 setup name 作为第一个参数 |
-| `maeGetEnabledAnalysis` | `(setupName)` positional | `(?session s)` keyword | IC25 用 `?session` 取代 setup name |
-| `maeSetAnalysis ?options` | 不支持通过 CLI 配置 | 支持 JSON → backtick alist | IC25 需要 `?options` 配置 sweep 参数 |
+**IC25 当前与 IC23 的差异：**
 
-CLI 的 `set-analysis` 命令在 IC25 下支持 `--options` 参数：
-```bash
-vcli maestro set-analysis --session fnxSession0 --analysis ac --options '{"start":"1","stop":"10G","dec":"20"}'
-```
+| 方面 | IC23 | IC25 |
+|------|------|------|
+| `maeGetSetup` 返回值 | `("setupName")` — list | 同 IC23，需 `car()` |
+| `maeSetAnalysis` | `(setupName type)` | `(setupName type ?session s ?enable t ?options ...)` |
+| `?options` 参数 | ❌ 不支持 | ✅ 支持 start/stop 写入 netlist |
 
-## 设计变量更新（IC23 关键陷阱）
+## 设计变量更新
 
-IC23 中存在**两层变量命名空间**，必须分清：
+IC23/IC25 共享两层变量命名空间陷阱：
 
-| API | 写入位置 | 是否流入 netlist |
-|-----|---------|----------------|
+| API | 写入位置 | 流入 netlist |
+|-----|---------|-------------|
 | `maeSetVar("W34" "16u")` | Maestro 内部 varList | ❌ 不影响 input.scs |
 | `asiSetDesignVarList(sess newList)` | asi session 层 | ✅ 写入 `parameters ...` |
 
-`maeSetVar` 会返回 `t`，`maeGetVar` 也能读回新值——但仿真仍然用旧值。只有 `asiSetDesignVarList` 才真正改变 netlist。
-
-**IC23 正确 pattern：**
+**正确 pattern：**
 
 ```skill
 vcli skill exec 'let((sess vl)
@@ -122,100 +130,84 @@ vcli skill exec 'let((sess vl)
   asiSetDesignVarList(sess vl))'
 ```
 
-- `cons(newEntry removeOldEntry)` — 替换已有变量（assoc 定位旧项，remove 删除，cons 前插新项）
-- 更新多个变量时重复 `cons(...)` 链即可
-- 更新后用 `vcli maestro save --session <name>` 持久化
+验证：`grep "^parameters" netlist/input.scs`
 
-**IC23.1 下以下函数未定义，勿用：**
-- `asiSetDesVar` → `*Error* eval: undefined function`
-- `asiSetDesignVar` → 同上
-- `desVar("name" val)` → 通过 bridge 调用返回 nil（缺少 ADE session 上下文）
+**IC23/IC25 下以下函数未定义，勿用：**
+- `asiSetDesVar` → undefined
+- `asiSetDesignVar` → undefined
+- `desVar("name" val)` → 返回 nil
 
-验证变量已写入 netlist：检查最新 `input.scs` 的 `parameters ...` 行，而非相信 `maeGetVar` 的返回值。
+## AC Sweep 完整流程（IC25）
+
+```bash
+# 1. 设置 sweep 参数（只支持 start/stop）
+vcli maestro set-analysis --session fnxSession0 --analysis ac \
+  --options '{"start":"1","stop":"1e10"}'
+
+# 2. 保存（生成新 netlist）
+vcli maestro save --session fnxSession0
+
+# 3. 确认 netlist 中有 sweep 参数（若无 dec 需补全）
+grep "^ac " netlist/input.scs
+
+# 4. 补 dec（如果缺失）
+sed -i 's/^ac ac stop=1e10 annotate=status $/ac ac start=1 stop=1e10 dec=20 annotate=status/' \
+  netlist/input.scs
+
+# 5. 直接跑 Spectre 获取 ASCII PSF（绕开 Maestro binary PSF 读取困难问题）
+spectre -format psfascii -raw ./psf netlist/input.scs
+
+# 6. 解析 ac.ac 输出 CSV
+python3 -c "
+import re, math, csv
+with open('psf/ac.ac') as f: c = f.read()
+freqs = re.findall(r'\"freq\"\s+([-+e\d.]+)', c)
+vouts = re.findall(r'\"VOUT\"\s+\(([^)]+)\)', c)
+with open('/tmp/vout_ac.csv', 'w') as f:
+    w = csv.writer(f)
+    w.writerow(['freq_Hz','real','imag','mag_dB','phase_deg'])
+    for f, v in zip(freqs, vouts):
+        r,i = map(float, v.split())
+        mag = 20*math.log10(math.sqrt(r*r+i*i))
+        phase = math.degrees(math.atan2(i, r))
+        w.writerow([f, r, i, f'{mag:.4f}', f'{phase:.4f}'])
+print(f'{len(freqs)} points exported')
+"
+```
 
 ## 全新 cell 的前置步骤（ensure_maestro_view）
 
-> ⚠️ **Gotcha**: `vcli maestro open` / `deOpenCellView("a")` 假设 maestro view **已经存在磁盘上**。
+> ⚠️ `vcli maestro open` / `deOpenCellView("a")` 假设 maestro view **已经存在磁盘上**。
 > 对于从未在 Maestro 中打开过的全新 cell，该目录不存在，`deOpenCellView` 返回 nil 并弹出
 > **"Data file does not exist"** GUI dialog，阻塞 SKILL channel。
 
-bootstrap 模式（两步，idempotent — 已存在时 no-op）：
+bootstrap 模式（两步，idempotent）：
 
 ```bash
-# 步骤 1：在内存中创建 maestro view 并写入磁盘
+# 步骤 1：创建 maestro view 并写入磁盘
 vcli skill exec 'let((sess)
   sess=maeOpenSetup("LIB" "CELL" "maestro")
   maeSaveSetup(?session sess)
   close_session(sess))'
 
-# 或者拆开更清楚：
-vcli skill exec 'maeOpenSetup("LIB" "CELL" "maestro")'
-# → "fnxSession12"（返回后台 session 名）
-vcli skill exec 'maeSaveSetup(?session "fnxSession12")'
-
-# 步骤 2：正常打开 GUI（现在 maestro/ 目录已存在）
+# 步骤 2：正常打开 GUI
 vcli maestro open --lib LIB --cell CELL
 ```
-
-何时需要：新建 testbench cell 后第一次打开 Maestro 时。之后每次都不需要。
-
----
-
-## Simulator Mode 切换（Spectre X / LX / APS）
-
-> ⚠️ **Gotcha**: `+lx` flag 和 command env option 中设置 `spectre +preset=lx` 会被**静默忽略**，
-> 仿真回退到 APS。正确 API 是 `asiSetHighPerformanceOptionVal`。
-
-```bash
-# 切换到 Spectre LX（mode ∈ LX / MX / AX / VX / CX / APS / FX）
-vcli skill exec 'let((th)
-  th=asiGetTest("TEST_NAME" "fnxSession0")
-  asiSetHighPerformanceOptionVal(th '"'"'uniMode "Spectre X")
-  asiSetHighPerformanceOptionVal(th '"'"'spectreXPreset "LX"))'
-
-# 切回 APS
-vcli skill exec 'let((th)
-  th=asiGetTest("TEST_NAME" "fnxSession0")
-  asiSetHighPerformanceOptionVal(th '"'"'uniMode "APS"))'
-
-# 验证（应在 netlist options 中看到 +preset=lx）
-vcli skill exec 'maeGetCurrentNetlistOptionsValues(?session "fnxSession0" ?test "TEST_NAME")'
-```
-
-| `uniMode` | `spectreXPreset` | 说明 |
-|-----------|-----------------|------|
-| `"Spectre"` | — | 标准 Spectre |
-| `"APS"` | — | APS（默认） |
-| `"Spectre X"` | `"LX"` / `"MX"` / `"AX"` / `"VX"` / `"CX"` | Spectre X 各精度档 |
-| `"Spectre FX"` | — | Fast X |
-
----
-
-## VB_TIMEOUT 建议
-
-Maestro view 首次打开（`deOpenCellView`）P50 耗时 15-30s，在繁忙服务器上可能超过默认的 30s：
-
-```bash
-export VB_TIMEOUT=120   # 对所有 vcli 命令生效
-vcli maestro open --lib LIB --cell CELL
-```
-
----
 
 ## 常见问题
 
-### maeGetEnabledAnalysis 在 IC23.1 下签名与 IC25 文档不同
+### 仿真完成但 ac.ac 只有 DCOP 点（freq=0 Hz）
 
-IC23.1 实际只接受 positional `(setupName)`，IC25 使用 `?session` keyword。
-vcli 自动按版本选择正确的签名，无需手动干预。
+原因：Maestro session 的 netlist 中 AC analysis 没有 sweep 参数，`ac ac annotate=status` 只有 annotate 关键字。
 
-### 没有 analysis (EXPLORER-9059)
+解决：见上方「AC Sweep 完整流程」第 3-4 步。
 
+### `maeGetEnabledAnalysis` 返回 nil
+
+检查 setup 名是否正确获取：
 ```bash
-# 先获取 setup 名
 vcli skill exec 'maeGetSetup(?session "fnxSession0")'
-# 再启用 analysis
-vcli skill exec 'maeSetAnalysis("YOUR_SETUP_NAME" "ac")'
+# → 应返回 ("setupName")，用 car() 取 setup 名
 ```
 
 ### 锁文件导致打不开编辑模式
