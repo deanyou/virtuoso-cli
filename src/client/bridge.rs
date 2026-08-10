@@ -435,7 +435,7 @@ impl VirtuosoClient {
     }
 
     pub fn get_current_design(&self) -> Result<(String, String, String)> {
-        let result = self.execute_skill(
+        let result = self.execute_skill_unchecked(
             r#"let((cv) cv = geGetEditCellView() list(cv~>libName cv~>cellName cv~>viewName))"#,
             None,
         )?;
