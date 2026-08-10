@@ -462,50 +462,25 @@ procedure(vcli()
 ; triggers the load; reloads are no-ops).
 ; ============================================================================
 
+; ============================================================================
+; Package Loading — DISABLED
+; 
+; Virtuoso loads contexts (schematic/si/streamout) AUTOMATICALLY when needed.
+; Manual loadi() calls are:
+;   1. UNNECESSARY — contexts auto-load
+;   2. POTENTIALLY HARMFUL — double-loading can cause parser state corruption
+;   3. CAUSE OF "too many arguments" cascading errors in IC25
+;
+; Original code tried to preload contexts via loadi() for .ile/.aux files.
+; This was for IC23 where explicit loading was needed for some operations.
+; In IC25, Virtuoso handles all context loading internally.
+; ============================================================================
+
 RBLoadedPackages = nil
 
-procedure(RBLoadPackages()
-    unless(RBLoadedPackages
-        ; Build the streamout/schematic/si package path.
-        ; IC23 uses $CDS_INST/tools/dfII/etc/context/ with .ile files.
-        ; IC25 uses $CADENCE_HOME/tools/dfII/etc/context/64bit/ with .aux files.
-        ; snmNetlist is NOT available in IC25 — the netlister is built into Virtuoso core.
-        ; isFile() guards against missing packages in minimal CIW.
-        ; errset() suppresses any load error (already loaded or missing kit).
-        let((inst ctx)
-            ; Try CDS_INST first (IC23), fall back to CADENCE_HOME (IC25)
-            inst = getShellEnvVar("CDS_INST")
-            unless(inst inst = getShellEnvVar("CADENCE_HOME"))
-            when(inst
-                ctx = if(getShellEnvVar("CDS_INST")
-                    then strcat(inst "/tools/dfII/etc/context")
-                    else strcat(inst "/tools/dfII/etc/context/64bit")
-                )
-                ; Schematic — needed for schExportCdl, schematic editing APIs
-                ; IC23: schematic.ile  IC25: schematic.aux
-                foreach(pkg '("schematic.ile" "schematic.aux")
-                    when(isFile(strcat(ctx "/" pkg))
-                        errset(loadi(strcat(ctx "/" pkg)))
-                        ; Stop after first success (don't double-load .ile+.aux)
-                    )
-                )
-                ; Si (ship) — needed for ADE/simulation integration
-                ; IC23: si.ile  IC25: si.aux
-                foreach(pkg '("si.ile" "si.aux")
-                    when(isFile(strcat(ctx "/" pkg))
-                        errset(loadi(strcat(ctx "/" pkg)))
-                    )
-                )
-                ; Streamout — needed for GDS/CDL export, streamin
-                ; Only in IC23; IC25 uses schematic for most streamout ops
-                when(isFile(strcat(ctx "/streamout.ile"))
-                    errset(loadi(strcat(ctx "/streamout.ile")))
-                )
-            )
-        )
-        RBLoadedPackages = t
-    )
-)
+; procedure(RBLoadPackages()
+;     ; ... (disabled — see above)
+; )
 
 ; ============================================================================
 ; Auto-start on every load(): stop stale daemon, reset path, start fresh.
@@ -515,9 +490,8 @@ procedure(RBLoadPackages()
 procedure(_RBAutoStart()
     RBPython = ""
     RBDPath = strcat(getShellEnvVar("HOME") "/.cargo/bin/virtuoso-daemon")
-    ; Load full-session packages before starting the daemon.
-    ; If any package is missing (e.g., minimal CIW), it is silently skipped.
-    RBLoadPackages()
+    ; No manual package loading needed — Virtuoso handles context loading internally.
+    ; Manual loadi() calls caused "too many arguments" parser errors in IC25.
     when(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) RBStop())
     vcli()
 )

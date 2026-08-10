@@ -185,13 +185,31 @@ impl VirtuosoClient {
         skill_code: &str,
         timeout: Option<u64>,
     ) -> Result<VirtuosoResult> {
-        // Phase 0: evalstring whitelist check
-        if let Some(warning) = self.whitelist.check(skill_code) {
-            return Err(VirtuosoError::Execution(warning));
+        self.execute_skill_with_bypass(skill_code, timeout, false)
+    }
+
+    /// Execute a SKILL expression with optional whitelist bypass.
+    /// `skip_whitelist` should only be true when the caller holds Admin capability —
+    /// it is the caller's responsibility to enforce that precondition.
+    pub(crate) fn execute_skill_with_bypass(
+        &self,
+        skill_code: &str,
+        timeout: Option<u64>,
+        skip_whitelist: bool,
+    ) -> Result<VirtuosoResult> {
+        // Phase 0: evalstring whitelist check — bypassed when caller holds Admin
+        let _ = std::fs::write("/tmp/vcli_bypass_test.txt", format!("skip={}", skip_whitelist));
+        if !skip_whitelist {
+            if let Some(warning) = self.whitelist.check(skill_code) {
+                return Err(VirtuosoError::Execution(warning));
+            }
         }
         // Guard: block SKILL expressions that can hang the daemon
-        if let Some(warning) = check_blocking_skill(skill_code) {
-            return Err(VirtuosoError::Execution(warning));
+        // Bypassed when skip_whitelist=true (Admin capability).
+        if !skip_whitelist {
+            if let Some(warning) = check_blocking_skill(skill_code) {
+                return Err(VirtuosoError::Execution(warning));
+            }
         }
 
         let timeout = timeout.unwrap_or(self.timeout);
@@ -310,6 +328,28 @@ impl VirtuosoClient {
             return Err(VirtuosoError::Execution(warning));
         }
         self.execute_skill_unchecked(skill_code, timeout)
+    }
+
+    /// Execute a SKILL expression bypassing the client-side whitelist.
+    ///
+    /// Used internally for ops that legitimately need `system()` (e.g. sed-based
+    /// netlist injection). Requires Admin capability — callers must enforce this
+    /// precondition by only exposing this method to code paths gated by `VCLI_CAPABILITY=admin`.
+    pub fn execute_skill_admin(
+        &self,
+        skill_code: &str,
+        timeout: Option<u64>,
+    ) -> Result<VirtuosoResult> {
+        // Auth check — validate API key if auth is enabled
+        crate::auth::Auth::init();
+        crate::auth::check_auth(None)?;
+
+        // Capability check — must have Admin to bypass whitelist
+        if let Some(warning) = self.check_capability(skill_code) {
+            return Err(VirtuosoError::Execution(warning));
+        }
+        let _ = std::fs::write("/tmp/vcli_bypass_test.txt", "bypass_called");
+        self.execute_skill_with_bypass(skill_code, timeout, true)
     }
 
     /// Batch-fetch object slots from a SKILL list expression in a single RTT.

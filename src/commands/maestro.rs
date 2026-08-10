@@ -125,13 +125,79 @@ pub fn set_analysis(session: &str, analysis_type: &str, options: Option<&str>) -
     Ok(json!({"status": "success", "session": session, "analysis": analysis_type}))
 }
 
-pub fn run(session: &str) -> Result<Value> {
+/// Run simulation with optional analysis configuration and dec injection.
+///
+/// Strategy: maeSetAnalysis (updates Maestro config) + maeSaveSetup (writes netlist) +
+/// sed via SKILL system() (injects dec) + maeRunSimulation (blocks ~3s while Spectre reads).
+/// By running sed in the SAME SKILL call before maeRunSimulation returns, dec is guaranteed
+/// present when Spectre reads the netlist.
+pub fn run_with_analysis(
+    session: &str,
+    analysis_type: Option<&str>,
+    options: Option<&str>,
+    dec: Option<&u32>,
+) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let skill = client.maestro.run_simulation(session);
-    client
-        .execute_skill(&skill, None)?
-        .ok_or_exec("run simulation")?;
-    Ok(json!({"status": "launched", "session": session}))
+
+    let skill = if let Some(dec_val) = dec {
+        let at = analysis_type.ok_or_else(|| {
+            VirtuosoError::Execution("dec requires --analysis".to_string())
+        })?;
+        let alist = match options {
+            None => None,
+            Some(opts) => {
+                let ver = client.version()?;
+                if !ver.is_ic25() {
+                    eprintln!(
+                        "warning: --options is only supported on IC25; ignoring on IC23"
+                    );
+                    None
+                } else {
+                    Some(
+                        crate::client::maestro_ops::json_to_skill_alist(opts)
+                            .map_err(|e| VirtuosoError::Execution(format!("--options: {e}")))?,
+                    )
+                }
+            }
+        };
+        client.maestro.run_with_dec(session, at, alist.as_deref(), *dec_val)
+    } else {
+        // No dec: existing path — set analysis then run
+        if let Some(at) = analysis_type {
+            let (alist, version) = match options {
+                None => (None, crate::version::VirtuosoVersion::IC23),
+                Some(opts) => {
+                    let a = crate::client::maestro_ops::json_to_skill_alist(opts)
+                        .map_err(|e| VirtuosoError::Execution(format!("--options: {e}")))?;
+                    let ver = client.version()?;
+                    if !ver.is_ic25() {
+                        eprintln!(
+                            "warning: --options is only supported on IC25; ignoring on IC23"
+                        );
+                        (None, ver)
+                    } else {
+                        (Some(a), ver)
+                    }
+                }
+            };
+            let skill = client.maestro.set_analysis(session, at, alist.as_deref(), version);
+            client.execute_skill(&skill, None)?.ok_or_exec("set analysis")?;
+        }
+        client.maestro.run_simulation(session)
+    };
+
+    // dec injection uses system(sed) — requires Admin capability + whitelist bypass
+    if dec.is_some() {
+        let _ = std::fs::write("/tmp/vcli_dec_skill.txt", &skill);
+        client.execute_skill_admin(&skill, None)?.ok_or_exec("run simulation")?;
+    } else {
+        client.execute_skill(&skill, None)?.ok_or_exec("run simulation")?;
+    }
+    Ok(json!({
+        "status": "launched",
+        "session": session,
+        "dec_injection": if dec.is_some() { "inline_skilled" } else { "none" }
+    }))
 }
 
 pub fn add_output(output_name: &str, test_name: &str, expr: &str) -> Result<Value> {

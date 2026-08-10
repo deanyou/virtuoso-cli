@@ -1,0 +1,16 @@
+#
+# Edit Lock-Stake file. CAUTION: Please do not change.
+#
+# Information about current Edit Lock Owner.
+#
+LockStakeVersion               1.1
+LoginName                      user1
+HostName                       dean
+ProcessIdentifier              63171
+ProcessCreationTime_UTC        1786100811
+ProcessCreationTime_Readable   Fri Aug  7 19:06:51 2026 CST
+AppIdentifier                  /opt/cadence/ic251/tools.lnx86/dfII/bin/64bit/virtuoso
+OSType                         lnx86
+ReasonForPlacingEditLock       Lock file for generating unique number for ICRP command and log file directories.
+FilePathUsedToEditLock         /home/user1/git/virtuoso-cli/.tmp_user1/.unique_number_0_file
+TimeEditLocked                 Fri Aug  7 19:12:48 2026 CST
