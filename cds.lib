@@ -1,0 +1,21 @@
+# This is a default cds.lib file. It was automatically created
+# by the ddCreateLib function.
+# This file is a template for your own private
+# cds.lib file that you will use in this workarea.  This file
+# is never checked in (in fact there is a policy in place to
+# prevent it from being checked in.)  This file is meant to 
+# act as a starting point for accessing library data and
+# as a temporary holding place for local libraries that
+# you create.  Once you decide to check a library in you
+# will move the definition of that library (DEFINE statement) 
+# from this file to the project.lib file.  The project.lib
+# file should be checked out, modified with the cdsLibEditor,
+# and then checked back in.
+# 
+# At the start, this file has one entry and that is used
+# to read in the project's project.lib file.
+# 
+# SOFTINCLUDE project.lib
+# 
+SOFTINCLUDE project.lib
+DEFINE FT0001A_SH /home/user1/git/virtuoso-cli/FT0001A_SH

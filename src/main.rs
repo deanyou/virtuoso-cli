@@ -980,10 +980,34 @@ enum MaestroCmd {
         expr: String,
     },
 
-    /// Run simulation (async, returns immediately)
+    /// Run simulation (async, returns immediately).
+    ///
+    /// Optionally configure analysis first and/or inject dec into the netlist:
+    ///   vcli maestro run --session fnxSession0
+    ///   vcli maestro run --session fnxSession0 --analysis ac --options '{"start":"1","stop":"1e10"}'
+    ///   vcli maestro run --session fnxSession0 --dec 20 --options '{"start":"1","stop":"1e10"}'
+    ///
+    /// On IC25 ISR4, maeSetAnalysis does not write `dec` to the netlist. When --dec is
+    /// provided, vcli launches maeRunSimulation asynchronously then spawns a background thread
+    /// that polls the ExplorerRun.0 netlist mtime (50ms interval) and injects `dec` into the
+    /// ac line before Spectre reads it.
     Run {
         #[arg(long)]
         session: String,
+        /// Analysis type to set before running (e.g. ac, dc, tran).
+        /// Implies --options is used to set sweep parameters.
+        #[arg(long)]
+        analysis: Option<String>,
+        /// Analysis options as JSON, e.g. '{"start":"1","stop":"1e10"}'.
+        /// Only used when --analysis is also provided.
+        #[arg(long)]
+        options: Option<String>,
+        /// Decimation per decade for AC sweep (e.g. 20).
+        /// Injected via sed into the ExplorerRun.0 netlist after maeRunSimulation
+        /// returns but before Spectre reads it — required on IC25 ISR4 where
+        /// maeSetAnalysis ?options does not write dec to the netlist.
+        #[arg(long)]
+        dec: Option<u32>,
     },
 
     /// Save Maestro setup to disk
@@ -1831,7 +1855,9 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
             test_name,
             expr,
         } => commands::maestro::add_output(&output_name, &test_name, &expr),
-        MaestroCmd::Run { session } => commands::maestro::run(&session),
+        MaestroCmd::Run { session, analysis, options, dec } => {
+            commands::maestro::run_with_analysis(&session, analysis.as_deref(), options.as_deref(), dec.map(|d| d as u32).as_ref())
+        }
         MaestroCmd::Save { session } => commands::maestro::save(&session),
         MaestroCmd::Export {
             session,
