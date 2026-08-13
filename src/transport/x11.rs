@@ -40,6 +40,12 @@ pub struct DialogInfo {
     pub y: i32,
     pub w: i32,
     pub h: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub child: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub still_mapped: Option<bool>,
 }
 
 /// One window from `--list-windows`. Includes both the WM frame and the
@@ -213,6 +219,9 @@ pub fn list_dialogs(
                 y: 0,
                 w: 0,
                 h: 0,
+                child: None,
+                action: None,
+                still_mapped: None,
             });
         }
     }
@@ -255,28 +264,21 @@ pub fn dismiss(
         if line.is_empty() {
             continue;
         }
-        if let Ok(d) = serde_json::from_str::<DialogInfo>(line) {
-            // Dismiss records are emitted on stdout as {"dismissed":"...","action":"enter",...}
-            // and look the same as a DialogInfo because they have window_id+x+y+w+h+title.
-            // The helper places them AFTER the "found" list, and a dismiss record
-            // has an extra "action" or "error" key. We split on that.
-            if line.contains("\"action\"") || line.contains("\"error\"") {
-                if let Some(rest) = line.split_once("\"action\"") {
-                    // Re-parse as dismiss record by adding a dummy field.
-                    if let Ok(rec) = serde_json::from_str::<DialogInfo>(&format!("{}}}", rest.0)) {
-                        dismissed.push(rec);
-                    }
-                } else if let Ok(rec) = serde_json::from_str::<DialogInfo>(line) {
-                    dismissed.push(rec);
-                }
-            } else {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(line) {
+            if val.get("error").is_some() {
+                continue;
+            }
+            if val.get("dismissed").is_some() {
+                dismissed.push(dialog_info_from_dismiss_value(&val, None));
+            } else if let Ok(d) = serde_json::from_value::<DialogInfo>(val) {
                 found.push(d);
             }
         }
         // Note: `{"error": "..."}` JSON lines are surfaced via extract_helper_errors
         // below; we don't double-count them here.
     }
-    let errors = extract_helper_errors(&out);
+    let mut errors = extract_helper_errors(&out);
+    append_still_mapped_errors(&mut errors, &dismissed);
     Ok(DismissResult {
         display,
         found,
@@ -327,9 +329,9 @@ pub fn dismiss_window(
     window_id: &str,
     action: &str,
 ) -> Result<DismissResult> {
-    if !["enter", "escape", "alt-y", "alt-n"].contains(&action) {
+    if !["enter", "escape", "alt-y", "alt-n", "alt-o"].contains(&action) {
         return Err(VirtuosoError::Config(format!(
-            "invalid action '{action}': must be one of enter|escape|alt-y|alt-n"
+            "invalid action '{action}': must be one of enter|escape|alt-y|alt-n|alt-o"
         )));
     }
     if window_id.is_empty() {
@@ -362,22 +364,12 @@ pub fn dismiss_window(
                 continue;
             }
             if val.get("dismissed").is_some() {
-                dismissed.push(DialogInfo {
-                    window_id: window_id.to_string(),
-                    title: val
-                        .get("title")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string(),
-                    x: 0,
-                    y: 0,
-                    w: 0,
-                    h: 0,
-                });
+                dismissed.push(dialog_info_from_dismiss_value(&val, Some(window_id)));
             }
         }
     }
-    let errors = extract_helper_errors(&out);
+    let mut errors = extract_helper_errors(&out);
+    append_still_mapped_errors(&mut errors, &dismissed);
     Ok(DismissResult {
         display,
         found: Vec::new(),
@@ -385,6 +377,48 @@ pub fn dismiss_window(
         errors,
         raw_log: truncate_log(&out),
     })
+}
+
+fn dialog_info_from_dismiss_value(
+    val: &serde_json::Value,
+    requested_window_id: Option<&str>,
+) -> DialogInfo {
+    DialogInfo {
+        window_id: requested_window_id
+            .or_else(|| val.get("dismissed").and_then(|v| v.as_str()))
+            .unwrap_or("")
+            .to_string(),
+        title: val
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 0,
+        child: val
+            .get("child")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        action: val
+            .get("action")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        still_mapped: val.get("still_mapped").and_then(|v| v.as_bool()),
+    }
+}
+
+fn append_still_mapped_errors(errors: &mut Vec<String>, dismissed: &[DialogInfo]) {
+    for d in dismissed {
+        if d.still_mapped == Some(true) {
+            errors.push(format!(
+                "window {} still mapped after action {}",
+                d.window_id,
+                d.action.as_deref().unwrap_or("unknown")
+            ));
+        }
+    }
 }
 
 /// Shared env-resolution: explicit display, else auto-detect from the running
@@ -631,11 +665,11 @@ mod tests {
             ":0",
             None,
             true,
-            "alt-n",
+            "alt-o",
         );
         assert!(cmd.contains("'/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py'"));
         assert!(cmd.contains("--dismiss"));
-        assert!(cmd.contains("--action alt-n"));
+        assert!(cmd.contains("--action alt-o"));
         assert!(!cmd.contains("XAUTHORITY="));
     }
 
@@ -659,6 +693,7 @@ mod tests {
         let dialogs = parse_helper_output(&out);
         assert_eq!(dialogs.len(), 1);
         assert_eq!(dialogs[0].window_id, "0x1");
+        assert_eq!(dialogs[0].still_mapped, None);
     }
 
     fn mkresult(stdout: &str, stderr: &str, returncode: i32) -> RemoteTaskResult {
@@ -849,6 +884,50 @@ mod tests {
     fn build_helper_cmd_dismiss_window_quotes_window_id_with_spaces() {
         let cmd = build_helper_cmd_dismiss_window("/h.py", ":0", None, "0x a", "enter");
         assert!(cmd.contains("'0x a'"));
+    }
+
+    #[test]
+    fn dialog_info_parses_dismiss_metadata() {
+        let line = r#"{"window_id":"0x1","title":"a","x":0,"y":0,"w":1,"h":1,"child":"0x2","action":"alt-o","still_mapped":false}"#;
+        let d: DialogInfo = serde_json::from_str(line).expect("parse");
+        assert_eq!(d.child.as_deref(), Some("0x2"));
+        assert_eq!(d.action.as_deref(), Some("alt-o"));
+        assert_eq!(d.still_mapped, Some(false));
+    }
+
+    #[test]
+    fn dismiss_value_uses_reported_window_and_metadata() {
+        let val: serde_json::Value = serde_json::from_str(
+            r#"{"dismissed":"0x1","child":"0x2","title":"ADE Assembler Message 1749","action":"alt-o","still_mapped":true}"#,
+        )
+        .expect("json");
+        let d = dialog_info_from_dismiss_value(&val, None);
+        assert_eq!(d.window_id, "0x1");
+        assert_eq!(d.child.as_deref(), Some("0x2"));
+        assert_eq!(d.action.as_deref(), Some("alt-o"));
+        assert_eq!(d.still_mapped, Some(true));
+    }
+
+    #[test]
+    fn still_mapped_dismiss_records_become_errors() {
+        let mut errors = Vec::new();
+        append_still_mapped_errors(
+            &mut errors,
+            &[DialogInfo {
+                window_id: "0x1".into(),
+                title: "".into(),
+                x: 0,
+                y: 0,
+                w: 0,
+                h: 0,
+                child: Some("0x2".into()),
+                action: Some("alt-o".into()),
+                still_mapped: Some(true),
+            }],
+        );
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("0x1"));
+        assert!(errors[0].contains("alt-o"));
     }
 
     #[test]

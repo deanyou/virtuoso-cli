@@ -5,7 +5,7 @@ Adapted from virtuoso-bridge-lite
 (https://github.com/Arcadia-1/virtuoso-bridge-lite), which is MIT-licensed.
 
 Usage:
-    python3 x11_dismiss_dialog.py [DISPLAY] [--dismiss] [--action enter|escape|alt-y|alt-n]
+    python3 x11_dismiss_dialog.py [DISPLAY] [--dismiss] [--action enter|escape|alt-y|alt-n|alt-o]
 
 Output (stdout): JSON lines, one per dialog found:
     {"window_id": "0x2e01f16", "title": "Save Changes", "x": 1010, "y": 378, "w": 239, "h": 142}
@@ -37,11 +37,12 @@ MAX_DIALOG_WHEN_LARGE_WIDTH = 1000
 MAX_DIALOG_WHEN_LARGE_HEIGHT = 300
 MIN_DIALOG_DIM = 20
 
-VALID_ACTIONS = ("enter", "escape", "alt-y", "alt-n")
+VALID_ACTIONS = ("enter", "escape", "alt-y", "alt-n", "alt-o")
 
 KEYSYM_RETURN = 0xFF0D
 KEYSYM_ESCAPE = 0xFF1B
 KEYSYM_N = 0x006E
+KEYSYM_O = 0x006F
 KEYSYM_Y = 0x0079
 KEYSYM_ALT_L = 0xFFE9
 
@@ -273,6 +274,10 @@ def _read_window_geometry(win_id):
     return geometry
 
 
+def _is_window_mapped(win_id):
+    return bool(_read_window_geometry(win_id).get("mapped", False))
+
+
 def _is_virtuoso_class(classes):
     lowered = [c.lower() for c in (classes or [])]
     for cls in VIRTUOSO_WM_CLASSES:
@@ -395,7 +400,7 @@ def _press_pair(dpy, xlib, xtst, kc_modifier, kc_key, action_name):
 def dismiss_window(display, win_id_str, action, title="", target_is_explicit=False):
     """Dismiss a window via XTest.
 
-    `action` is one of 'enter' (default), 'escape', 'alt-y', 'alt-n'.
+    `action` is one of 'enter' (default), 'escape', 'alt-y', 'alt-n', 'alt-o'.
     Raises RuntimeError on display/X11/lib loading failure.
 
     When `target_is_explicit=True` (i.e., called from `--dismiss-window <ID>`),
@@ -435,32 +440,49 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
             xtst.XTestFakeKeyEvent(dpy, keycode, True, 0)
             xtst.XTestFakeKeyEvent(dpy, keycode, False, 0)
             xlib.XFlush(dpy)
+            time.sleep(0.30)
             return {
                 "dismissed": win_id_str, "child": child_id_str, "title": title,
                 "action": "enter", "keycode": int(keycode),
+                "still_mapped": _is_window_mapped(child_id_str),
             }
         if action == "escape":
             keycode = xlib.XKeysymToKeycode(dpy, KEYSYM_ESCAPE)
             xtst.XTestFakeKeyEvent(dpy, keycode, True, 0)
             xtst.XTestFakeKeyEvent(dpy, keycode, False, 0)
             xlib.XFlush(dpy)
+            time.sleep(0.30)
             return {
                 "dismissed": win_id_str, "child": child_id_str, "title": title,
                 "action": "escape", "keycode": int(keycode),
+                "still_mapped": _is_window_mapped(child_id_str),
             }
         if action == "alt-y":
             kc_y = xlib.XKeysymToKeycode(dpy, KEYSYM_Y)
             _press_pair(dpy, xlib, xtst, kc_alt, kc_y, "alt-y")
+            time.sleep(0.30)
             return {
                 "dismissed": win_id_str, "child": child_id_str, "title": title,
                 "action": "alt-y", "keycode_alt": int(kc_alt), "keycode_y": int(kc_y),
+                "still_mapped": _is_window_mapped(child_id_str),
             }
         if action == "alt-n":
             kc_n = xlib.XKeysymToKeycode(dpy, KEYSYM_N)
             _press_pair(dpy, xlib, xtst, kc_alt, kc_n, "alt-n")
+            time.sleep(0.30)
             return {
                 "dismissed": win_id_str, "child": child_id_str, "title": title,
                 "action": "alt-n", "keycode_alt": int(kc_alt), "keycode_n": int(kc_n),
+                "still_mapped": _is_window_mapped(child_id_str),
+            }
+        if action == "alt-o":
+            kc_o = xlib.XKeysymToKeycode(dpy, KEYSYM_O)
+            _press_pair(dpy, xlib, xtst, kc_alt, kc_o, "alt-o")
+            time.sleep(0.30)
+            return {
+                "dismissed": win_id_str, "child": child_id_str, "title": title,
+                "action": "alt-o", "keycode_alt": int(kc_alt), "keycode_o": int(kc_o),
+                "still_mapped": _is_window_mapped(child_id_str),
             }
         raise AssertionError("unreachable: action=%r" % action)
     finally:
@@ -497,7 +519,7 @@ def main():
                 "  --list-windows                 enumerate Virtuoso-related X11 windows\n"
                 "  --dismiss                      dismiss all detected dialogs\n"
                 "  --dismiss-window <ID>          dismiss a specific window id\n"
-                "  --action <a>                   enter|escape|alt-y|alt-n (default: enter)\n"
+                "  --action <a>                   enter|escape|alt-y|alt-n|alt-o (default: enter)\n"
                 "  --json                         reserved (always JSON)\n",
                 file=sys.stderr,
             )

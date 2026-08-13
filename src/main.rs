@@ -1405,7 +1405,7 @@ enum WindowCmd {
     DismissWindowX11 {
         /// X11 window id (dismiss_id from list-windows-x11)
         window_id: String,
-        /// enter (default) | escape | alt-y | alt-n
+        /// enter (default) | escape | alt-y | alt-n | alt-o
         #[arg(long, default_value = "enter")]
         action: String,
         /// Override the detected DISPLAY

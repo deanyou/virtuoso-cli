@@ -9,6 +9,7 @@ use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::models::RemoteTaskResult;
+use sha2::{Digest, Sha256};
 
 /// POSIX-shell single-quote a string. Wraps in `'…'` and escapes embedded
 /// `'` as `'\''`. Used whenever an arbitrary string is interpolated into a
@@ -496,15 +497,44 @@ impl SSHRunner {
         }
 
         let quoted_remote = shell_quote(remote);
+        let staging = format!(
+            "{remote}.tmp.{}.{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        );
+        let quoted_staging = shell_quote(&staging);
+        let expected_size = text.len();
+        let mut hasher = Sha256::new();
+        hasher.update(text.as_bytes());
+        let expected_sha = hex::encode(hasher.finalize());
+        let publish_cmd = format!(
+            concat!(
+                "set -eu; ",
+                "tmp={quoted_staging}; dest={quoted_remote}; ",
+                "cleanup() {{ rm -f \"$tmp\"; }}; trap cleanup EXIT HUP INT TERM; ",
+                "cat > \"$tmp\"; ",
+                "size=$(wc -c < \"$tmp\" | tr -d ' '); ",
+                "if command -v sha256sum >/dev/null 2>&1; then ",
+                "sha=$(sha256sum \"$tmp\" | awk '{{print $1}}'); ",
+                "else sha=$(shasum -a 256 \"$tmp\" | awk '{{print $1}}'); fi; ",
+                "test \"$size\" = {expected_size}; ",
+                "test \"$sha\" = {expected_sha_q}; ",
+                "if [ -e \"$dest\" ]; then ",
+                "mode=$(stat -c %a \"$dest\" 2>/dev/null || stat -f %Lp \"$dest\" 2>/dev/null || true); ",
+                "if [ -n \"$mode\" ]; then chmod \"$mode\" \"$tmp\"; fi; fi; ",
+                "mv -f \"$tmp\" \"$dest\"; trap - EXIT"
+            ),
+            quoted_staging = quoted_staging,
+            quoted_remote = quoted_remote,
+            expected_size = expected_size,
+            expected_sha_q = shell_quote(&expected_sha),
+        );
         // Must pass "sh -c 'command'" as a single argument to SSH,
         // otherwise "sh", "-c", "command" are concatenated without quotes,
         // breaking commands with &&.
         let output = self.attempt_with_cm_fallback(|use_control_master| {
             let mut cmd = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
-            cmd.arg(format!(
-                "sh -c {}",
-                shell_quote(&format!("cat > {quoted_remote}"))
-            ));
+            cmd.arg(format!("sh -c {}", shell_quote(&publish_cmd)));
 
             let mut child = cmd
                 .stdin(Stdio::piped())

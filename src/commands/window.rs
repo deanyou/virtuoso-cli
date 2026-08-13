@@ -193,7 +193,7 @@ pub fn list_dialogs_x11(explicit_display: Option<&str>) -> Result<Value> {
 ///
 /// This is the deadlock-resistant alternative to `dismiss_dialog`: it
 /// SSHes into the same host Virtuoso is running on, finds modal dialogs
-/// with `xwininfo`, and sends keypresses (`enter`/`escape`/`alt-y`/`alt-n`)
+/// with `xwininfo`, and sends keypresses (`enter`/`escape`/`alt-y`/`alt-n`/`alt-o`)
 /// via `XTest`. The SKILL channel cannot be used when a modal has stalled
 /// the CIW, so this path is independent of the SKILL bridge.
 ///
@@ -207,9 +207,9 @@ pub fn dismiss_dialog_x11(
     use crate::config::Config;
     use crate::transport::x11;
 
-    if !["enter", "escape", "alt-y", "alt-n"].contains(&action) {
+    if !["enter", "escape", "alt-y", "alt-n", "alt-o"].contains(&action) {
         return Err(VirtuosoError::Config(format!(
-            "invalid --action '{}': must be one of enter|escape|alt-y|alt-n",
+            "invalid --action '{}': must be one of enter|escape|alt-y|alt-n|alt-o",
             action
         )));
     }

@@ -289,7 +289,7 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "action".into(),
                     ptype: "string".into(),
-                    description: "enter|escape|alt-y|alt-n (default: enter)".into(),
+                    description: "enter|escape|alt-y|alt-n|alt-o (default: enter)".into(),
                     required: false,
                 },
                 Param {
@@ -335,7 +335,7 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "action".into(),
                     ptype: "string".into(),
-                    description: "enter|escape|alt-y|alt-n (default: enter)".into(),
+                    description: "enter|escape|alt-y|alt-n|alt-o (default: enter)".into(),
                     required: false,
                 },
                 Param {
