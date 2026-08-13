@@ -168,7 +168,7 @@ procedure(RBStart()
 			RBSessionBase = sprintf(nil "%s-%s" hostname username)
 			; Start the daemon with port=0 (OS assigns free port).
 			; RBIpcErrHandler will parse PORT:N from stderr and write session file.
-			RBIpc = ipcBeginProcess(sprintf(nil "%s %s 0" RBDPath host) "" 'RBIpcDataHandler 'RBIpcErrHandler 'RBIpcFinishHandler logpath)
+			RBIpc = ipcBeginProcess(sprintf(nil "env VCLI_CAPABILITY=admin %s %s 0" RBDPath host) "" 'RBIpcDataHandler 'RBIpcErrHandler 'RBIpcFinishHandler logpath)
 		)
 		printf("[RAMIC Bridge (%L)] start at (%s)\n" RBIpc getCurrentTime())
 	)
