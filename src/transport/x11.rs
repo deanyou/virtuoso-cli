@@ -35,6 +35,12 @@ pub struct X11Env {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DialogInfo {
     pub window_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requested_window_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_window_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display: Option<String>,
     pub title: String,
     pub x: i32,
     pub y: i32,
@@ -55,6 +61,10 @@ pub struct WindowInfo {
     pub frame_id: String,
     pub window_id: String,
     pub dismiss_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub xauthority: Option<String>,
     pub title: String,
     #[serde(default)]
     pub class: Vec<String>,
@@ -156,32 +166,66 @@ pub fn ensure_helper_uploaded(runner: &SSHRunner, client_id: &str) -> Result<Str
 }
 
 /// Discover DISPLAY/XAUTHORITY from a running virtuoso process.
+#[allow(dead_code)]
 pub fn detect_env(runner: &SSHRunner, user: Option<&str>) -> Result<X11Env> {
+    Ok(detect_envs(runner, user)?
+        .into_iter()
+        .next()
+        .unwrap_or(X11Env {
+            display: None,
+            xauthority: None,
+        }))
+}
+
+/// Discover all interactive Virtuoso DISPLAY/XAUTHORITY pairs.
+pub fn detect_envs(runner: &SSHRunner, user: Option<&str>) -> Result<Vec<X11Env>> {
     let user_filter = match user {
         Some(u) => format!("-u {u} "),
         None => "".to_string(),
     };
-    // Use the pgrep pattern from the vendored helper so the contract matches.
     let cmd = format!(
-        "pgrep {user_filter}-x virtuoso | head -1 | xargs -I{{}} sh -c 'tr \"\\0\" \"\\n\" </proc/{{}}/environ 2>/dev/null | grep -E \"^(DISPLAY|XAUTHORITY)=\"'"
+        "pgrep {user_filter}-x virtuoso | while read pid; do if tr '\\0' ' ' </proc/$pid/cmdline 2>/dev/null | grep -q -- '-nograph'; then continue; fi; printf '__PID__=%s\\n' \"$pid\"; tr '\\0' '\\n' </proc/$pid/environ 2>/dev/null | grep -E '^(DISPLAY|XAUTHORITY)='; done"
     );
     let out = runner.run_command(&cmd, Some(10))?;
-    let mut env = X11Env {
+    let mut envs = Vec::new();
+    let mut current = X11Env {
         display: None,
         xauthority: None,
     };
+    let mut seen = std::collections::BTreeSet::new();
     for line in out.stdout.lines() {
-        if let Some(v) = line.strip_prefix("DISPLAY=") {
+        if line.starts_with("__PID__=") {
+            push_unique_env(&mut envs, &mut seen, &mut current);
+        } else if let Some(v) = line.strip_prefix("DISPLAY=") {
             if !v.is_empty() {
-                env.display = Some(v.to_string());
+                current.display = Some(v.to_string());
             }
         } else if let Some(v) = line.strip_prefix("XAUTHORITY=") {
             if !v.is_empty() {
-                env.xauthority = Some(v.to_string());
+                current.xauthority = Some(v.to_string());
             }
         }
     }
-    Ok(env)
+    push_unique_env(&mut envs, &mut seen, &mut current);
+    Ok(envs)
+}
+
+fn push_unique_env(
+    envs: &mut Vec<X11Env>,
+    seen: &mut std::collections::BTreeSet<(String, Option<String>)>,
+    current: &mut X11Env,
+) {
+    let Some(display) = current.display.take() else {
+        current.xauthority = None;
+        return;
+    };
+    let xauthority = current.xauthority.take();
+    if seen.insert((display.clone(), xauthority.clone())) {
+        envs.push(X11Env {
+            display: Some(display),
+            xauthority,
+        });
+    }
 }
 
 /// Run the helper in detection-only mode (no dismiss).
@@ -192,40 +236,41 @@ pub fn list_dialogs(
     explicit_display: Option<&str>,
 ) -> Result<(X11Env, Vec<DialogInfo>)> {
     let helper = ensure_helper_uploaded(runner, client_id)?;
-    let env = match explicit_display {
-        Some(d) => X11Env {
-            display: Some(d.to_string()),
-            xauthority: None,
-        },
-        None => detect_env(runner, user)?,
-    };
-    let display = env.display.clone().ok_or_else(|| {
-        VirtuosoError::Config("cannot detect DISPLAY from virtuoso process".into())
-    })?;
-    let cmd = build_helper_cmd(&helper, &display, env.xauthority.as_deref(), false, "enter");
-    let out = runner.run_command(&cmd, Some(30))?;
+    let envs = resolve_envs(runner, user, explicit_display)?;
+    let primary_env = envs[0].clone();
     // If the helper itself failed (e.g. xwininfo missing, libX11 not installed,
     // python not on PATH), surface the error so the user doesn't see an empty
     // list and assume "no dialogs". We attach a synthetic "no-dialog" entry so
     // the existing (env, Vec<DialogInfo>) signature stays unchanged.
-    let mut dialogs = parse_helper_output(&out);
-    let helper_errors = extract_helper_errors(&out);
-    if dialogs.is_empty() && !helper_errors.is_empty() {
-        for e in &helper_errors {
-            dialogs.push(DialogInfo {
-                window_id: "helper-error".into(),
-                title: format!("x11 helper error: {e}"),
-                x: 0,
-                y: 0,
-                w: 0,
-                h: 0,
-                child: None,
-                action: None,
-                still_mapped: None,
-            });
+    let mut dialogs = Vec::new();
+    for env in &envs {
+        let display = env.display.as_deref().unwrap_or("");
+        let cmd = build_helper_cmd(&helper, display, env.xauthority.as_deref(), false, "enter");
+        let out = runner.run_command(&cmd, Some(30))?;
+        let mut these = parse_helper_output(&out);
+        annotate_dialogs(&mut these, display);
+        let helper_errors = extract_helper_errors(&out);
+        if these.is_empty() && !helper_errors.is_empty() {
+            for e in &helper_errors {
+                these.push(DialogInfo {
+                    window_id: "helper-error".into(),
+                    requested_window_id: None,
+                    resolved_window_id: None,
+                    display: Some(display.to_string()),
+                    title: format!("x11 helper error: {e}"),
+                    x: 0,
+                    y: 0,
+                    w: 0,
+                    h: 0,
+                    child: None,
+                    action: None,
+                    still_mapped: None,
+                });
+            }
         }
+        dialogs.extend(these);
     }
-    Ok((env, dialogs))
+    Ok((primary_env, dialogs))
 }
 
 /// Run the helper in dismiss mode.
@@ -238,53 +283,52 @@ pub fn dismiss(
     dry_run: bool,
 ) -> Result<DismissResult> {
     let helper = ensure_helper_uploaded(runner, client_id)?;
-    let env = match explicit_display {
-        Some(d) => X11Env {
-            display: Some(d.to_string()),
-            xauthority: None,
-        },
-        None => detect_env(runner, user)?,
-    };
-    let display = env.display.clone().ok_or_else(|| {
-        VirtuosoError::Config("cannot detect DISPLAY from virtuoso process".into())
-    })?;
-    let cmd = build_helper_cmd(
-        &helper,
-        &display,
-        env.xauthority.as_deref(),
-        !dry_run,
-        action,
-    );
-    let out = runner.run_command(&cmd, Some(30))?;
-
     let mut found = Vec::new();
     let mut dismissed = Vec::new();
-    for line in out.stdout.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(line) {
-            if val.get("error").is_some() {
+    let mut errors = Vec::new();
+    let mut logs = Vec::new();
+    let envs = resolve_envs(runner, user, explicit_display)?;
+    for env in &envs {
+        let display = env.display.as_deref().unwrap_or("");
+        let cmd = build_helper_cmd(
+            &helper,
+            display,
+            env.xauthority.as_deref(),
+            !dry_run,
+            action,
+        );
+        let out = runner.run_command(&cmd, Some(30))?;
+        for line in out.stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() {
                 continue;
             }
-            if val.get("dismissed").is_some() {
-                dismissed.push(dialog_info_from_dismiss_value(&val, None));
-            } else if let Ok(d) = serde_json::from_value::<DialogInfo>(val) {
-                found.push(d);
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(line) {
+                if val.get("error").is_some() {
+                    continue;
+                }
+                if val.get("dismissed").is_some() {
+                    dismissed.push(dialog_info_from_dismiss_value(&val, None, Some(display)));
+                } else if let Ok(mut d) = serde_json::from_value::<DialogInfo>(val) {
+                    d.display = Some(display.to_string());
+                    found.push(d);
+                }
             }
         }
-        // Note: `{"error": "..."}` JSON lines are surfaced via extract_helper_errors
-        // below; we don't double-count them here.
+        errors.extend(extract_helper_errors(&out));
+        logs.push(truncate_log(&out));
     }
-    let mut errors = extract_helper_errors(&out);
     append_still_mapped_errors(&mut errors, &dismissed);
     Ok(DismissResult {
-        display,
+        display: envs
+            .iter()
+            .filter_map(|e| e.display.as_deref())
+            .collect::<Vec<_>>()
+            .join(","),
         found,
         dismissed,
         errors,
-        raw_log: truncate_log(&out),
+        raw_log: logs.join("\n--- next display ---\n"),
     })
 }
 
@@ -296,26 +340,39 @@ pub fn list_windows(
     explicit_display: Option<&str>,
 ) -> Result<(X11Env, Vec<WindowInfo>)> {
     let helper = ensure_helper_uploaded(runner, client_id)?;
-    let (env, display) = resolve_env(runner, user, explicit_display)?;
-    let cmd = build_helper_cmd_list_windows(&helper, &display, env.xauthority.as_deref());
-    let out = runner.run_command(&cmd, Some(15))?;
-    let windows: Vec<WindowInfo> = out
-        .stdout
-        .lines()
-        .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
-        .collect();
+    let envs = resolve_envs(runner, user, explicit_display)?;
+    let primary_env = envs[0].clone();
+    let mut windows = Vec::new();
+    let mut helper_errors = Vec::new();
+    for env in &envs {
+        let display = env.display.as_deref().unwrap_or("");
+        let cmd = build_helper_cmd_list_windows(&helper, display, env.xauthority.as_deref());
+        let out = runner.run_command(&cmd, Some(15))?;
+        let mut these: Vec<WindowInfo> = out
+            .stdout
+            .lines()
+            .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
+            .collect();
+        for w in &mut these {
+            w.display = Some(display.to_string());
+            w.xauthority = env.xauthority.clone();
+        }
+        if these.is_empty() {
+            helper_errors.extend(extract_helper_errors(&out));
+        }
+        windows.extend(these);
+    }
     // If the helper died and produced no windows, surface the error so callers
     // can distinguish "no Virtuoso windows" from "x11 helper crashed".
     if windows.is_empty() {
-        let errors = extract_helper_errors(&out);
-        if !errors.is_empty() {
+        if !helper_errors.is_empty() {
             return Err(VirtuosoError::Execution(format!(
                 "x11 helper failed: {}",
-                errors.join("; ")
+                helper_errors.join("; ")
             )));
         }
     }
-    Ok((env, windows))
+    Ok((primary_env, windows))
 }
 
 /// Dismiss a specific X11 window by id. Does NOT apply the dialog-size filter —
@@ -340,54 +397,76 @@ pub fn dismiss_window(
         ));
     }
     let helper = ensure_helper_uploaded(runner, client_id)?;
-    let (env, display) = resolve_env(runner, user, explicit_display)?;
-    let cmd = build_helper_cmd_dismiss_window(
-        &helper,
-        &display,
-        env.xauthority.as_deref(),
-        window_id,
-        action,
-    );
-    let out = runner.run_command(&cmd, Some(15))?;
-
-    // The helper emits exactly one JSON line for --dismiss-window: either
-    // {"dismissed": "...", "action": "..."} or {"error": "..."}.
     let mut dismissed: Vec<DialogInfo> = Vec::new();
-    for line in out.stdout.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(line) {
-            if val.get("error").is_some() {
-                // Captured by extract_helper_errors below
+    let mut errors = Vec::new();
+    let mut logs = Vec::new();
+    let envs = resolve_envs(runner, user, explicit_display)?;
+    for env in &envs {
+        let display = env.display.as_deref().unwrap_or("");
+        let cmd = build_helper_cmd_dismiss_window(
+            &helper,
+            display,
+            env.xauthority.as_deref(),
+            window_id,
+            action,
+        );
+        let out = runner.run_command(&cmd, Some(15))?;
+        for line in out.stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() {
                 continue;
             }
-            if val.get("dismissed").is_some() {
-                dismissed.push(dialog_info_from_dismiss_value(&val, Some(window_id)));
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(line) {
+                if val.get("error").is_some() {
+                    continue;
+                }
+                if val.get("dismissed").is_some() {
+                    dismissed.push(dialog_info_from_dismiss_value(
+                        &val,
+                        Some(window_id),
+                        Some(display),
+                    ));
+                }
             }
         }
+        errors.extend(extract_helper_errors(&out));
+        logs.push(truncate_log(&out));
     }
-    let mut errors = extract_helper_errors(&out);
     append_still_mapped_errors(&mut errors, &dismissed);
     Ok(DismissResult {
-        display,
+        display: envs
+            .iter()
+            .filter_map(|e| e.display.as_deref())
+            .collect::<Vec<_>>()
+            .join(","),
         found: Vec::new(),
         dismissed,
         errors,
-        raw_log: truncate_log(&out),
+        raw_log: logs.join("\n--- next display ---\n"),
     })
 }
 
 fn dialog_info_from_dismiss_value(
     val: &serde_json::Value,
     requested_window_id: Option<&str>,
+    display: Option<&str>,
 ) -> DialogInfo {
     DialogInfo {
         window_id: requested_window_id
             .or_else(|| val.get("dismissed").and_then(|v| v.as_str()))
             .unwrap_or("")
             .to_string(),
+        requested_window_id: val
+            .get("requested_window_id")
+            .and_then(|v| v.as_str())
+            .or(requested_window_id)
+            .map(|s| s.to_string()),
+        resolved_window_id: val
+            .get("resolved_window_id")
+            .and_then(|v| v.as_str())
+            .or_else(|| val.get("child").and_then(|v| v.as_str()))
+            .map(|s| s.to_string()),
+        display: display.map(|s| s.to_string()),
         title: val
             .get("title")
             .and_then(|v| v.as_str())
@@ -409,6 +488,12 @@ fn dialog_info_from_dismiss_value(
     }
 }
 
+fn annotate_dialogs(dialogs: &mut [DialogInfo], display: &str) {
+    for d in dialogs {
+        d.display = Some(display.to_string());
+    }
+}
+
 fn append_still_mapped_errors(errors: &mut Vec<String>, dismissed: &[DialogInfo]) {
     for d in dismissed {
         if d.still_mapped == Some(true) {
@@ -423,22 +508,24 @@ fn append_still_mapped_errors(errors: &mut Vec<String>, dismissed: &[DialogInfo]
 
 /// Shared env-resolution: explicit display, else auto-detect from the running
 /// virtuoso process. Returns the resolved env and the display string.
-fn resolve_env(
+fn resolve_envs(
     runner: &SSHRunner,
     user: Option<&str>,
     explicit_display: Option<&str>,
-) -> Result<(X11Env, String)> {
-    let env = match explicit_display {
-        Some(d) => X11Env {
+) -> Result<Vec<X11Env>> {
+    let envs = match explicit_display {
+        Some(d) => vec![X11Env {
             display: Some(d.to_string()),
             xauthority: None,
-        },
-        None => detect_env(runner, user)?,
+        }],
+        None => detect_envs(runner, user)?,
     };
-    let display = env.display.clone().ok_or_else(|| {
-        VirtuosoError::Config("cannot detect DISPLAY from virtuoso process".into())
-    })?;
-    Ok((env, display))
+    if envs.is_empty() {
+        return Err(VirtuosoError::Config(
+            "cannot detect DISPLAY from virtuoso process".into(),
+        ));
+    }
+    Ok(envs)
 }
 
 fn build_helper_cmd(
@@ -901,11 +988,12 @@ mod tests {
             r#"{"dismissed":"0x1","child":"0x2","title":"ADE Assembler Message 1749","action":"alt-o","still_mapped":true}"#,
         )
         .expect("json");
-        let d = dialog_info_from_dismiss_value(&val, None);
+        let d = dialog_info_from_dismiss_value(&val, None, Some(":1"));
         assert_eq!(d.window_id, "0x1");
         assert_eq!(d.child.as_deref(), Some("0x2"));
         assert_eq!(d.action.as_deref(), Some("alt-o"));
         assert_eq!(d.still_mapped, Some(true));
+        assert_eq!(d.display.as_deref(), Some(":1"));
     }
 
     #[test]
@@ -915,6 +1003,9 @@ mod tests {
             &mut errors,
             &[DialogInfo {
                 window_id: "0x1".into(),
+                requested_window_id: None,
+                resolved_window_id: None,
+                display: None,
                 title: "".into(),
                 x: 0,
                 y: 0,

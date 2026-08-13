@@ -237,7 +237,9 @@ pub fn dismiss_dialog_x11(
     let n_dismissed = result.dismissed.len();
     obj.insert(
         "status".into(),
-        json!(if n_dismissed > 0 {
+        json!(if !result.errors.is_empty() {
+            "failed"
+        } else if n_dismissed > 0 {
             "dismissed"
         } else if n_found > 0 {
             "found"
@@ -316,7 +318,9 @@ pub fn dismiss_window_x11(
     let n_dismissed = result.dismissed.len();
     obj.insert(
         "status".into(),
-        json!(if n_dismissed > 0 {
+        json!(if !result.errors.is_empty() {
+            "failed"
+        } else if n_dismissed > 0 {
             "dismissed"
         } else {
             "not-found"

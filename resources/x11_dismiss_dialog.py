@@ -38,6 +38,9 @@ MAX_DIALOG_WHEN_LARGE_HEIGHT = 300
 MIN_DIALOG_DIM = 20
 
 VALID_ACTIONS = ("enter", "escape", "alt-y", "alt-n", "alt-o")
+TITLE_ACTIONS = (
+    ("ADE Assembler Message 1749", "alt-o"),
+)
 
 KEYSYM_RETURN = 0xFF0D
 KEYSYM_ESCAPE = 0xFF1B
@@ -90,6 +93,14 @@ def find_x11_env(user=None):
     if not candidates:
         return {"DISPLAY": None, "XAUTHORITY": None}
     return candidates[0]
+
+
+def choose_action(title, requested_action):
+    """Map known Virtuoso dialog titles to the key sequence that closes them."""
+    for marker, mapped_action in TITLE_ACTIONS:
+        if marker in (title or ""):
+            return mapped_action
+    return requested_action
 
 
 def find_dialogs(display):
@@ -209,6 +220,14 @@ def _find_app_child(display, frame_id_str):
     except (subprocess.CalledProcessError, OSError):
         pass
     return frame_id_str  # fallback to frame itself
+
+
+def _find_window_by_id(display, win_id_str):
+    """Resolve a frame/app/child id to the canonical discover_windows entry."""
+    for w in discover_windows(display):
+        if win_id_str in (w.get("frame_id"), w.get("window_id"), w.get("dismiss_id")):
+            return w
+    return None
 
 
 def _parse_window_line(line):
@@ -403,9 +422,8 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
     `action` is one of 'enter' (default), 'escape', 'alt-y', 'alt-n', 'alt-o'.
     Raises RuntimeError on display/X11/lib loading failure.
 
-    When `target_is_explicit=True` (i.e., called from `--dismiss-window <ID>`),
-    `win_id_str` is the caller-provided target and is used directly. Otherwise
-    we resolve the WM frame to its first named child (the actual app window).
+    Explicit ids are resolved through discover_windows first, so callers can pass
+    a WM frame id, app child id, or dismiss_id and still target the actual child.
     """
     if action not in VALID_ACTIONS:
         raise ValueError("action must be one of %s" % (VALID_ACTIONS,))
@@ -422,12 +440,19 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
         raise RuntimeError("cannot open display %s" % display)
 
     try:
-        # If caller passed an explicit window id, use it directly; otherwise
-        # resolve the WM frame to its app child.
+        requested_id_str = win_id_str
+        resolved_title = title
         if target_is_explicit:
-            child_id_str = win_id_str
+            resolved = _find_window_by_id(display, win_id_str)
+            if resolved:
+                win_id_str = resolved.get("frame_id") or win_id_str
+                child_id_str = resolved.get("dismiss_id") or resolved.get("window_id") or win_id_str
+                resolved_title = resolved.get("title") or resolved_title
+            else:
+                child_id_str = _find_app_child(display, win_id_str)
         else:
             child_id_str = _find_app_child(display, win_id_str)
+        action = choose_action(resolved_title, action)
         child_id = int(child_id_str, 16) if child_id_str.startswith("0x") else int(child_id_str)
         xlib.XRaiseWindow(dpy, child_id)
         xlib.XSetInputFocus(dpy, child_id, 1, 0)  # RevertToParent
@@ -442,7 +467,8 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
             xlib.XFlush(dpy)
             time.sleep(0.30)
             return {
-                "dismissed": win_id_str, "child": child_id_str, "title": title,
+                "dismissed": win_id_str, "requested_window_id": requested_id_str,
+                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "enter", "keycode": int(keycode),
                 "still_mapped": _is_window_mapped(child_id_str),
             }
@@ -453,7 +479,8 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
             xlib.XFlush(dpy)
             time.sleep(0.30)
             return {
-                "dismissed": win_id_str, "child": child_id_str, "title": title,
+                "dismissed": win_id_str, "requested_window_id": requested_id_str,
+                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "escape", "keycode": int(keycode),
                 "still_mapped": _is_window_mapped(child_id_str),
             }
@@ -462,7 +489,8 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
             _press_pair(dpy, xlib, xtst, kc_alt, kc_y, "alt-y")
             time.sleep(0.30)
             return {
-                "dismissed": win_id_str, "child": child_id_str, "title": title,
+                "dismissed": win_id_str, "requested_window_id": requested_id_str,
+                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "alt-y", "keycode_alt": int(kc_alt), "keycode_y": int(kc_y),
                 "still_mapped": _is_window_mapped(child_id_str),
             }
@@ -471,7 +499,8 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
             _press_pair(dpy, xlib, xtst, kc_alt, kc_n, "alt-n")
             time.sleep(0.30)
             return {
-                "dismissed": win_id_str, "child": child_id_str, "title": title,
+                "dismissed": win_id_str, "requested_window_id": requested_id_str,
+                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "alt-n", "keycode_alt": int(kc_alt), "keycode_n": int(kc_n),
                 "still_mapped": _is_window_mapped(child_id_str),
             }
@@ -480,7 +509,8 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
             _press_pair(dpy, xlib, xtst, kc_alt, kc_o, "alt-o")
             time.sleep(0.30)
             return {
-                "dismissed": win_id_str, "child": child_id_str, "title": title,
+                "dismissed": win_id_str, "requested_window_id": requested_id_str,
+                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "alt-o", "keycode_alt": int(kc_alt), "keycode_o": int(kc_o),
                 "still_mapped": _is_window_mapped(child_id_str),
             }
