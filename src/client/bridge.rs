@@ -423,15 +423,18 @@ impl VirtuosoClient {
         let skill = format!(
             r#"geOpenCellView(?libName "{lib}" ?cellName "{cell}" ?viewName "{view}" ?mode "{mode}")"#
         );
-        self.execute_skill(&skill, None)
+        // Use unchecked — capability check done at RPC dispatch level
+        self.execute_skill_unchecked(&skill, None)
     }
 
     pub fn save_current_cellview(&self) -> Result<VirtuosoResult> {
-        self.execute_skill("geSaveEdit()", None)
+        // Use unchecked — capability check done at RPC dispatch level
+        self.execute_skill_unchecked("geSaveEdit()", None)
     }
 
     pub fn close_current_cellview(&self) -> Result<VirtuosoResult> {
-        self.execute_skill("geCloseEdit()", None)
+        // Use unchecked — capability check done at RPC dispatch level
+        self.execute_skill_unchecked("geCloseEdit()", None)
     }
 
     pub fn get_current_design(&self) -> Result<(String, String, String)> {

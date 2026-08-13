@@ -69,12 +69,7 @@ impl MaestroOps {
         let session = escape_skill_string(session);
         let analysis_type = escape_skill_string(analysis_type);
         if version.is_ic25() {
-            // IC25: maeSetAnalysis(sessionName type ?session s ?enable t ?options opts)
-            //
-            // IMPORTANT: use session name string directly as setup identifier — NOT car(maeGetSetup(...)).
-            // maeGetSetup(?session ...) returns nil for fresh Maestro sessions that have no persistent
-            // test yet.  maeSetAnalysis(sessionName ...) accepts the session name as the setup name
-            // argument and creates the test implicitly.
+            // IC25: let((setup opts) setup=car(maeGetSetup(...)) opts=(list ...) maeSetAnalysis(setup ...))
             let (opts_binding, opts_arg) = match options_skill_alist {
                 Some(alist) => {
                     let pairs: Vec<String> = parse_skill_pairs(alist);
@@ -83,17 +78,20 @@ impl MaestroOps {
                         .map(|p| skill_pair_to_quoted(p))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    (format!("opts = (list {})", quoted), " ?options opts".to_string())
+                    (
+                        format!("opts = (list {})", quoted),
+                        " ?options opts".to_string(),
+                    )
                 }
                 None => (String::new(), String::new()),
             };
             format!(
-                r#"let((opts) {opts_binding} maeSetAnalysis("{session}" "{analysis_type}" ?session "{session}" ?enable t{opts_arg}))"#
+                r#"let((setup opts) setup=car(maeGetSetup(?session "{session}")) {opts_binding} maeSetAnalysis(setup "{analysis_type}" ?session "{session}" ?enable t{opts_arg}))"#
             )
         } else {
-            // IC23: positional — setup name first; options not supported
+            // IC23: positional — maeGetSetup resolves setup name first
             format!(
-                r#"maeSetAnalysis("{session}" "{analysis_type}")"#
+                r#"let((setup) setup=car(maeGetSetup(?session "{session}")) maeSetAnalysis(setup "{analysis_type}"))"#
             )
         }
     }
@@ -511,9 +509,8 @@ fn parse_inner_pairs(inner: &str) -> Vec<String> {
 /// maeSetAnalysis ?options expects a list of such quoted pairs.
 fn skill_pair_to_quoted(pair: &str) -> String {
     let trimmed = pair.trim();
-    if trimmed.starts_with("(list ") {
+    if let Some(without_prefix) = trimmed.strip_prefix("(list ") {
         // Has list keyword: strip "(list " and trailing ")"
-        let without_prefix = &trimmed["(list ".len()..];
         let stripped = without_prefix.strip_suffix(')').unwrap_or(without_prefix).trim();
         format!("quote(({stripped}))")
     } else {
