@@ -342,7 +342,7 @@ Or run `virtuoso init` to scaffold a `.env` template; check
 `output_dir` is **a non-existent path** — the RPC refuses to overwrite an
 existing directory (`atomic_publish_no_replace`).
 
-### `create_corner_netlist` reaches ssh then fails with sandbox errors
+### `create_corner_netlist` reaches ssh then fails — two stacked locks
 
 **What you see**
 
@@ -354,25 +354,49 @@ ssh error: mkdir remote dir failed:
     Permission denied
 ```
 
-**What this actually means**
+**What this actually means — there are *two* independent locks on top of each other.** Misdiagnosing either one wastes time.
 
-This is a DSH harness sandbox layer, not a vcli defect. `create_corner_netlist`
-boots an ssh ControlMaster socket into `~/.cache/virtuoso_bridge/ssh/` and
-appends to `~/.ssh/known_hosts`. Both paths sit outside the
-`workspace-write` policy allowed set. vcli's ssh transport cannot recover
-from EACCES on the unix listener.
+1. **Remote sshd is `ForceCommand internal-sftp` + `ChrootDirectory <root>`**.
+   Probed 2026-08-14 on session dean-user1-44235 by running `ssh dean 'echo ok'`:
+   it printed `This service allows sftp connections only`. Subsequent
+   `ssh dean '...'` invocations cannot execute arbitrary commands — only
+   sftp operations against a `files/`-style jail are allowed. vcli's
+   `create_corner_netlist` tries to `mkdir` a temp dir on the remote host
+   and put netlist files there; both operations require remote shell
+   access that does not exist on this host. vcli cannot work around this.
 
-If you encounter this on a personal host (no sandbox), the fix is:
+   Detection: `ssh user@host 'echo ok'` returns "allows sftp only".
 
-```bash
-mkdir -p ~/.cache/virtuoso_bridge/ssh 2>/dev/null
-ssh -o StrictHostKeyChecking=accept-new $VB_REMOTE_HOST 'echo ok'   # prime known_hosts
-```
+2. **DSH sandbox then adds a second lock**: vcli's local ssh transport
+   wants to write the ControlMaster socket under
+   `~/.cache/virtuoso_bridge/ssh/<host>-<port>-<user>.<rand>` and append
+   `~/.ssh/known_hosts`. Under DSH sandbox mode `workspace-write` the
+   first path is outside the workspace allow set, so vcli fails
+   *locally* before the remote lock even matters.
 
-If you encounter this under DSH sandbox, you must promote the session to
-`danger-full-access` (requires user approval) or pick another path that
-does not transit ssh (e.g. run `spectre` directly against a netlist file
-already co-located with vcli — see `spectre-netlist-gotchas`).
+   Detection: same command without sandbox → fails only on the remote
+   side; with sandbox → fails both sides.
+
+3. **vcli cannot recover on its own.** Two paths forward:
+
+   | Path                                              | Trade-off                                          |
+   | ------------------------------------------------- | -------------------------------------------------- |
+   | Use a remote host whose sshd permits shell exec   | Requires operator access to remote host sshd_config |
+   | Run `spectre` directly against an already-co-located netlist | Bypasses vcli ssh entirely. See `spectre-netlist-gotchas` for the local-spawn path. |
+   | Promote session to `danger-full-access` (DSH)     | Triggers user approval per session; uses workspace-allowed alternatives below |
+
+   In the DSH sandbox specifically, also test before relying on ssh:
+
+   ```bash
+   ssh -o StrictHostKeyChecking=no -o BatchMode=yes user@host 'echo ok'
+   # do you see "allows sftp only"?  → ssh is disabled
+   # do you see "ok"?                → ssh works, vcli path stays open
+   ```
+
+   To prove a netlist landed without ssh, grep `~/.cache/cds/...` or
+   the equivalent results-tree directory *on the host where vcli runs*
+   for `parameters` blocks — see the `W34 ground-truth diagnostic` entry
+   below.
 
 ### `maeSaveSetup(?session ...)` fails: argument for keyword ?session should be a string (type template = "ttttg")
 
