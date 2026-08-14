@@ -104,410 +104,264 @@ Run `virtuoso doctor` (or `vcli doctor`) for a one-shot summary of what the
 wrapper sees: the binary path it resolved, the version, the log directory,
 and the current `VB_*` environment overrides.
 
-## Diagnostic playbook — when things look broken but aren't
+## Diagnostic playbook — general rules
 
-The wrapper is a thin `exec` shim. When the harness-side observable behaviour
-looks wrong, walk through this checklist before touching code. Each entry
-records a real failure mode that was misdiagnosed at least once during
-integration.
+The wrapper is a thin `exec` shim. The rules below abstract over the
+specific hosts, libraries, session IDs, and cell names that triggered
+them. Each rule names the **observable pattern**, the **invariant in
+the system**, and a **universal recovery** that does not depend on the
+particulars of any one debugging session.
 
-### "session history" is empty, but my commands did execute
+### Rule: vcli's disk-cache writes are silent-on-failure
 
-**What you see**
+**Pattern** — `vcli session history`, `cmd.jsonl`, `~/.cache/virtuoso_bridge/...`
+files appear empty or stale even though the CLI printed success.
 
-```bash
-$ virtuoso --session $ID session history $ID --cmd --format json
-{"cmd": [], "cmd_count": 0, ...}
-```
+**Why** — vcli opens cache files with
+`fs::OpenOptions::new().create(true).append(true).open(path)` and discards
+the resulting `io::Error` (`src/history.rs:36–44, :60–73`). There is no
+stderr noise and no exit-code change when the cache cannot be written.
 
-You also notice `~/.cache/virtuoso_bridge/history/$ID.jsonl` does not exist
-and `cmd.jsonl` mtime hasn't moved since yesterday.
+**Common causes**
 
-**What this actually means**
+- DSH sandbox `workspace-write` blocks writes outside the session workspace.
+- Pre-existing cache directory with wrong ownership or `chmod a-w`.
+- Read-only mount after a previous crash.
 
-The binary did run, but **its `history::append_cmd` write was silently dropped**
-because the host shell process could not open files under
-`~/.cache/virtuoso_bridge/history/` for writing. vcli's writers use
-`fs::OpenOptions::new().create(true).append(true).open(path)` and
-**discard the error** (`src/history.rs:36–44, :60–73`). No stderr noise,
-no exit code change — the command appears to "succeed" without persisting.
-
-This is commonly a **host filesystem permission** issue, not a vcli bug:
-
-- **DSH sandbox = `workspace-write`** (the default). Writing anywhere outside
-  the session workspace — including `~/.cache/`, `/tmp/`, `/var/log/` —
-  returns `EACCES`. The wrapper resolves `VB_LOG_DIR` to `~/.cache/...` which
-  is **outside the sandbox-allowed set**.
-- **Multi-user hosts** where another user `chown -R`'d the cache dir before
-  you.
-- **Read-only mounts**: some EDA farms mount the home cache as read-only when
-  a previous job crashed mid-write.
-
-**Fast test**
+**Probe**
 
 ```bash
-echo "probe" > ~/.cache/virtuoso_bridge/history/__probe.txt && echo OK
-# expected:  OK
-# actual:    bash: ...: Permission denied
+echo probe > "$VB_CACHE_DIR/history/__probe.txt" 2>&1 || echo BLOCKED
 ```
 
-If you see `Permission denied`, the fix is *not* in vcli.
+If `BLOCKED`: the fix is *not* in vcli.
 
-**Fixes (pick one)**
+**Recoveries**
 
 | # | Action                                                                | Trade-off                                                              |
 | - | --------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| A | Set `VB_CACHE_DIR=$WORKSPACE/.cache/vcli` and re-run                  | Pure env override; history now lives inside the sandbox workspace.    |
-| B | Symlink `~/.cache/virtuoso_bridge → $WORKSPACE/.cache/virtuoso_bridge` | Changes the global cache path for *all* vcli invocations on the host. |
-| C | Promote the sandbox to `danger-full-access` (DSH-only)                 | Triggers user approval per session; heavy-weight.                      |
-| D | Accept the loss                                                       | Use `doctor` and live `vcli` stdout as the source of truth in-session. |
+| A | `VB_CACHE_DIR=$WORKSPACE/.cache/vcli && export VB_CACHE_DIR`         | Pure env override; remember to set on every shell.                     |
+| B | Symlink the vcli cache root into the workspace                        | Affects all vcli invocations on the host.                              |
+| C | Promote sandbox to `danger-full-access` (DSH only)                    | Heavy-weight; triggers per-session approval.                           |
+| D | Treat stdout and exit code as ground truth; ignore the cache          | Loss of forensic history; acceptable for short debug sessions.         |
 
-If you go with A, remember `VB_CACHE_DIR` must be set on **every** invocation
-because `doctor` does not read it implicitly — the next agent that runs a
-wrapper command without the override will revert to the unsandboxable default.
+### Rule: ramic_bridge.il is loaded once per CIW window
 
-### Multi-session appears even though I only opened one
+**Pattern** — two or more sessions registered under the same user,
+even though you only opened "your" CIW.
 
-**What you see**
+**Why** — `ramic_bridge.il` auto-spawns a bridge daemon every time CIW
+`load`s the script. Two CIWs means two daemons means two registry entries.
+The registry file list and the actual `list_alive()` set can differ when
+one daemon dies.
 
-```bash
-$ virtuoso skill exec '1+1'
-error: multiple Virtuoso sessions active: dean-A, dean-B
-```
+**Recovery**
 
-**What this actually means**
-
-`ramic_bridge.il` auto-spawns a daemon **every time CIW `load`s the script**.
-If another human (or another agent) loaded it in a separate CIW window, you
-now have two sessions registered. `list_alive()` correctly de-dups by TCP
-port reachability, but `session list` only filters by registry, not by port.
-
-**Fixes**
-
-- Disambiguate: `VB_SESSION=<specific-id>` or `--session <id>`.
-- Reap the orphan: `virtuoso session cleanup --format json` (removes registry
+- Disambiguate: `VB_SESSION=<id>` or `--session <id>`.
+- Reap orphans: `vcli session cleanup --format json` (drops registry
   files for ports that no longer have a listener).
-- Identify which one is yours: `virtuoso session show <id>` — `host` and
-  `created` together usually pin the offender.
+- Identify which one is yours: `vcli session show <id>` plus
+  `host`/`created` together pin the offender.
 
-### Raw SKILL exec is rejected with "use 'vcli rpc call' instead"
+### Rule: the RPC layer is split into two pools by the Admin gate
 
-**What you see**
+**Pattern** — `vcli rpc call` either succeeds without admin or rejects
+the call with `missing required capability`, depending on the method.
 
-```bash
-$ virtuoso skill exec '1+1'
-error: raw SKILL exec is not permitted: use 'vcli rpc call' instead
-```
-
-**What this actually means**
-
-In binary `1.0.0`, the `whitelist` policy in `src/client/bridge.rs:83–84`
-blocks `evalstring` for any caller that does not hold the **Admin**
-capability. Admin is toggled via `VCLI_CAPABILITY=admin`.
-
-**Subtlety (2026-08-14 validation)**: the RPC layer is not a uniform bypass.
-The RPC namespace is split into two pools:
+**Why** — the RPC namespace is not a uniform bypass of the whitelist.
+The binary places every method in one of two pools:
 
 | Pool                              | Examples                                                              | Admin required? |
 | --------------------------------- | --------------------------------------------------------------------- | --------------- |
-| **Typed / whitelisted RPC**       | `cell.info`, `library.list`, `util.ping`, `util.version`, `maestro.*` (read methods), `window.list`, `schematic.*` (reads), `symbol.*`, `tx.*`, `file.*`, `sim.check_license` | **No** |
-| **Raw SKILL RPC**                 | `skill.exec`, `skill.eval` (and any future `skill.<verb>` that resolves to evalstring) | **Yes** — same gate as `vcli skill exec`; error reads `"method 'skill.exec' not permitted: missing required capability"` |
+| **Typed / whitelisted RPC**       | `cell.*`, `library.*`, `util.*`, `maestro.*` (reads), `window.*`, `schematic.*`, `symbol.*`, `tx.*`, `file.*`, `sim.*` | **No** |
+| **Raw SKILL RPC**                 | `skill.exec`, `skill.eval` (any future `skill.<verb>` resolving to `evalstring`) | **Yes** |
 
-So the agent route depends on what you're trying to do:
+**Recovery**
 
-- **Discovery / read-only work**: call any RPC method from the first pool.
-  These run under the typed whitelist and do not require Admin. Example:
-  `virtuoso rpc call --method cell.info --params '{}'`.
-- **Anything that needs an arbitrary SKILL expression** (custom tooling,
-  one-off diagnostics, debugging) — there is no escaping `VCLI_CAPABILITY=admin`,
-  whether you go through `vcli skill exec` or `rpc call --method skill.exec`.
-  Pick the path that's easier to grep later:
-  - `VCLI_CAPABILITY=admin virtuoso skill exec '...'`
-  - `VCLI_CAPABILITY=admin virtuoso rpc call --method skill.exec --params '{"code":"..."}'`
-  - `VCLI_CAPABILITY=admin virtuoso rpc call --method skill.eval --params '{"code":"..."}'`
-    (this last one supports multi-statement SKILL)
+- Read-only / discovery agents: use any first-pool RPC. They do not
+  require Admin.
+- Arbitrary SKILL expressions: there is no escape from
+  `VCLI_CAPABILITY=admin`, whether you go through `vcli skill exec`
+  or `rpc call --method skill.exec`. Pick the form that's easier to
+  grep later:
+  - `vcli skill exec '...'`
+  - `rpc call --method skill.exec --params '{"code":"..."}'`
+  - `rpc call --method skill.eval --params '{"code":"..."}'`
+    (multi-statement).
 
-Neither posture is "the bug". The first is the intended read-only
-production route; the second is a deliberate escape hatch that demands
-explicit operator consent. Pick by role, not by accident.
+Neither posture is "the bug". First pool is the intended production
+route for agents; second is a deliberate escape hatch demanding operator
+consent.
 
-If the agent ever needs to call `skill.exec` repeatedly across many turns,
-export `VCLI_CAPABILITY=admin` once in the shell session rather than
-prefixing every invocation — same effect, less noise.
+### Rule: RPC methods are snake_case with a mandatory subdomain prefix
 
-### RPC method name returned `unknown <domain> method`
+**Pattern** — `unknown <subdomain> method 'X'` even though `X` is the
+verb you want.
 
-**What you see**
+**Why** — RPC names are not arbitrary. They follow `<subdomain>.<verb>`
+in `snake_case`: `maestro.get_analyses`, `schematic.open_cell_view`,
+`library.list`. The subdomain prefix is mandatory — bare verbs are rejected.
 
-```bash
-$ virtuoso rpc call --method maestro.getAnalyses --params '{}'
-unknown maestro method 'getAnalyses'
-```
+**Recovery**
 
-**What this actually means**
+- One-shot dump: `vcli rpc schema --format json`. There is no
+  `--method <name>` filter — only the full dump.
+- Pin the spelling across binary upgrades; the schema is stable until
+  a release notes file announces otherwise.
 
-RPC method names are **`snake_case`**, not `camelCase`. Run
-`virtuoso rpc schema --format json` once and pin the exact spelling. As of
-binary `1.0.0` the schema lists **76** RPC methods, all of the form
-`maestro.get_analyses`, `maestro.list_sessions`, `schematic.open_cell_view`,
-etc. The subdomain prefix (`maestro.`, `schematic.`, `library.`, ...) is
-mandatory; do not pass bare verbs.
+### Rule: Maestro writes are split between UI bookkeeping and the simulator
 
-`vcli rpc schema` does not currently support a `--method <name>` filter;
-it dumps the full schema in one JSON document. Pinning is fine because the
-schema is stable across binary upgrades — once a method lands, it does not
-get renamed silently. Re-run `rpc schema` once per upgrade if you care
-about new additions.
+**Pattern** — a `vcli maestro set-var` (or `rpc maestro.set_var`) call
+returns success but a later `grep <var> input.scs` shows the old value.
 
-### `maestro.set_var` silently returns ok without writing to the netlist
+**Why** — there are two design-variable namespaces under the ADE UI:
 
-**What you see**
+| Namespace                | Owner API                  | Affects netlist? |
+| ------------------------ | -------------------------- | ---------------- |
+| Maestro internal varList | `maeSetVar`                | No               |
+| Ocean / Spectre input    | `asiSetDesignVarList`      | **Yes**          |
 
-```bash
-$ virtuoso rpc call --method maestro.set_var --params '{"name":"W34","value":"16u"}'
-{"status":"ok"}
+`maestro.set_var` resolves to the first row. The variable the
+simulator consumes lives in the second row, owned by `asiSetDesignVarList`
+plus a subsequent `maeSaveSetup` to flush.
 
-$ virtuoso rpc call --method maestro.list_vars --params '{}'
-[{"name":"W34","value":"2u"}, ...]    # unchanged
-```
+**Recovery**
 
-Later you regenerate the netlist, `grep W34 input.scs` and see `W34=2u` —
-the variable did not propagate to simulation.
-
-**What this actually means**
-
-This is `maestro/SKILL.md` line 116-122's two-namespace trap, observed on
-binary `1.0.0` with IC25. `maestro.set_var` resolves to `maeSetVar`,
-which writes to Maestro's **internal varList** — a UI bookkeeping store
-that ADE L/G uses for display, not the variable stream consumed by
-Ocean/netlist generation. The variable the simulator actually consumes
-lives in the **asi session**, owned by `asiSetDesignVarList`.
-
-Confirmed empirically on `dean-user1-44235` (2026-08-14 12:47) — `set_var`
-returns ok, `list_vars` shows the old value, and only `asiSetDesignVarList`
-plus a subsequent `maeSaveSetup` actually drives the change into `input.scs`.
-
-**Fix**
-
-```bash
-VCLI_CAPABILITY=admin virtuoso rpc call --method skill.eval --params '{
-  "code": "let((sess vl) \
-           sess=asiGetCurrentSession() \
-           vl=asiGetDesignVarList(sess) \
-           vl=cons(list(\"W34\" \"16u\") remove(assoc(\"W34\" vl) vl)) \
-           asiSetDesignVarList(sess vl) \
-           maeSaveSetup(?session sess))"
-}'
-```
-
-The `maeSaveSetup` is what forces the variables into the on-disk setup —
-without it, the change lives only in memory and dies on session close.
-
-**Alternative**
-
-Patch the `vcli maestro set-var` command in `src/commands/maestro.rs` so it
-goes through `asiSetDesignVarList` automatically when the variable is in the
-asi namespace. Tracked separately; not a vcli skill-doc fix.
-
-### `create_corner_netlist` fails with VB_REMOTE_HOST error
-
-**What you see**
-
-```bash
-$ virtuoso rpc call --method maestro.create_corner_netlist --params \
-  '{"session":"spectre0","test":"tran","corner":"","output_dir":"/tmp/x/"}'
-config error: VB_REMOTE_HOST is required for `vcli maestro export-netlist`.
-Set it in your profile or .env (e.g. VB_REMOTE_HOST=eda-server).
-```
-
-**What this actually means**
-
-The flow downloads a netlist *from* the Virtuoso server *to* the vcli
-client machine. The CLI uses `VB_REMOTE_HOST` to ssh there, scp the files
-into a remote temp dir, then scp them back. The host running the vcli
-binary may not be the host running Virtuoso (see `AGENTS.md`'s three-host
-model), so the variable is mandatory.
-
-**Fix**
-
-```bash
-export VB_REMOTE_HOST=dean          # or your compute host
-export VB_REMOTE_PORT=22            # if non-default
-export VB_SSH_USER=$USER            # or your service account
-
-virtuoso rpc call --method maestro.create_corner_netlist --params ...
-```
-
-Or run `virtuoso init` to scaffold a `.env` template; check
-`output_dir` is **a non-existent path** — the RPC refuses to overwrite an
-existing directory (`atomic_publish_no_replace`).
-
-### `create_corner_netlist` reaches ssh then fails — two stacked locks
-
-**What you see**
+Use the asi path explicitly via `skill.eval` (Admin):
 
 ```
-ssh error: mkdir remote dir failed:
-  Failed to add the host to the list of known hosts (/home/user1/.ssh/known_hosts).
-  unix_listener: cannot bind to path
-    /home/user1/.cache/virtuoso_bridge/ssh/dean-22-user1.a5biDXW4WnjEjvZ0:
-    Permission denied
+let((sess vl)
+  sess=asiGetCurrentSession()
+  vl=asiGetDesignVarList(sess)
+  vl=cons(list("<var>" "<new>") remove(assoc("<var>" vl) vl))
+  asiSetDesignVarList(sess vl)
+  maeSaveSetup(?session sess~>name))
 ```
 
-**What this actually means — there are *two* independent locks on top of each other.** Misdiagnosing either one wastes time.
+`~>name` extracts the session-name string from the handle (see next
+rule). `maeSaveSetup` without `~>name` fails on IC25 (see Rule "IC25
+SKILL keyword type-template").
 
-1. **Remote sshd is `ForceCommand internal-sftp` + `ChrootDirectory <root>`**.
-   Probed 2026-08-14 on session dean-user1-44235 by running `ssh dean 'echo ok'`:
-   it printed `This service allows sftp connections only`. Subsequent
-   `ssh dean '...'` invocations cannot execute arbitrary commands — only
-   sftp operations against a `files/`-style jail are allowed. vcli's
-   `create_corner_netlist` tries to `mkdir` a temp dir on the remote host
-   and put netlist files there; both operations require remote shell
-   access that does not exist on this host. vcli cannot work around this.
+**Ground-truth check** — after the above, the variable appears in the
+generated `input.scs` as `parameters ... <var>=<new> ...`. Read that
+file directly (on the host where the run completed) to confirm.
 
-   Detection: `ssh user@host 'echo ok'` returns "allows sftp only".
+### Rule: IC25 SKILL keyword arguments are strictly string-quoted
 
-2. **DSH sandbox then adds a second lock**: vcli's local ssh transport
-   wants to write the ControlMaster socket under
-   `~/.cache/virtuoso_bridge/ssh/<host>-<port>-<user>.<rand>` and append
-   `~/.ssh/known_hosts`. Under DSH sandbox mode `workspace-write` the
-   first path is outside the workspace allow set, so vcli fails
-   *locally* before the remote lock even matters.
+**Pattern** — SKILL calls of the form
+`<fname>(?keyword <var-bound-handle>) ...` fail with
+`*Error* <fname>: argument for keyword ?<name> should be a string
+(type template = "...")`.
 
-   Detection: same command without sandbox → fails only on the remote
-   side; with sandbox → fails both sides.
+**Why** — IC23 SKILL accepted handles transparently. IC25 added a
+type-template guard on `?session` and other keyword args that
+requires a literal-or-extracted string. The exact `type template =`
+error code names how many placeholders are mismatched (a useful
+self-check but not stable across versions).
 
-3. **vcli cannot recover on its own.** Two paths forward:
+**Recovery** — extract the string explicitly:
 
-   | Path                                              | Trade-off                                          |
-   | ------------------------------------------------- | -------------------------------------------------- |
-   | Use a remote host whose sshd permits shell exec   | Requires operator access to remote host sshd_config |
-   | Run `spectre` directly against an already-co-located netlist | Bypasses vcli ssh entirely. See `spectre-netlist-gotchas` for the local-spawn path. |
-   | Promote session to `danger-full-access` (DSH)     | Triggers user approval per session; uses workspace-allowed alternatives below |
-
-   In the DSH sandbox specifically, also test before relying on ssh:
-
-   ```bash
-   ssh -o StrictHostKeyChecking=no -o BatchMode=yes user@host 'echo ok'
-   # do you see "allows sftp only"?  → ssh is disabled
-   # do you see "ok"?                → ssh works, vcli path stays open
-   ```
-
-   To prove a netlist landed without ssh, grep `~/.cache/cds/...` or
-   the equivalent results-tree directory *on the host where vcli runs*
-   for `parameters` blocks — see the `W34 ground-truth diagnostic` entry
-   below.
-
-### `maeSaveSetup(?session ...)` fails: argument for keyword ?session should be a string (type template = "ttttg")
-
-**What you see**
-
-```bash
-$ virtuoso rpc call --method skill.eval --params '{
-    "code": "let((sess) sess=asiGetCurrentSession() maeSaveSetup(?session sess) ...)"
-  }'
-*Error* maeSaveSetup: argument for keyword ?session should be a string
-(type template = "ttttg") stdobj@0x...
+```
+<fname>(?keyword <handle>~>name)
 ```
 
-**What this actually means**
+Where `~>name` is the conventional accessor that returns the
+underlying name string. Any SKILL API that has a session-handle form
+plus a name accessor is subject to this on IC25.
 
-On IC25, `maeSaveSetup` rejects the result of `asiGetCurrentSession()`
-(the returned object handle) when it is bound without explicit quotation
-in the SKILL `let`. IC23 accepted the handle transparently; IC25's stricter
-type-check on keyword arguments does not. The error string's `ttttg`
-code is the SKILL type-template showing 4 `t` placeholders and a `g`
-guard mismatch — it complains because SKILL sees the variable through
-`let((sess) ... sess=asiGetCurrentSession() ...)` and complains the slot
-was not populated with a guaranteed string-quoted literal.
+### Rule: `mae*` reads with implicit session resolution fail in ADE Editing mode
 
-**Fix**
+**Pattern** — calls like `get_result_tests`, `get_history_list`, or
+anything that internally `setq`s an `asiSession` return either an
+empty list or `*Error* setq/set: Variable is protected and cannot be
+assigned to`.
 
-Pass the session name as an explicit string, not as a variable dereference:
+**Why** — ADE Editing mode marks `asiSession` as read-only. Functions
+that try to install an implicit session binding at the start of a read
+are blocked. This is a Cadence-side policy, not a vcli policy.
 
-```bash
-virtuoso rpc call --method skill.eval --params '{
-    "code": "let((sess) sess=asiGetCurrentSession() maeSaveSetup(?session sess~>name))"
-  }'
-```
+**Recovery** — bypass the wrapper and call the underlying API
+directly via `skill.eval` (Admin), or pass the session explicitly:
 
-`~>name` extracts the session-name string from the object handle. This
-matches the `mae*` API convention documented in
-`ocean-netlist-regen/SKILL.md` and avoids the IC25 type-template gate.
+- `maeOpenResults(?history "ExplorerRun.<idx>")` — works with `?history`
+  because it does not need `asiSession` resolution.
+- Direct filesystem walk of the results-tree directory:
+  `.../maestro/results/maestro/ExplorerRun.<n>/1/<cell>_sim/psf/`.
+- `maeGetAllExplorerHistoryNames(<session>)` — accepts a session
+  string explicitly and returns the explorer-attached history list
+  (which excludes bypass-mode runs).
 
-Alternatively, set `?session "fnxSession0"` (the literal name from
-`window.list` output) if you know it. Either form produces a real string
-arg and satisfies IC25's type check.
+### Rule: bypass-mode `maestro.run` writes results to disk but not the Explorer history list
 
-### `maestro.run` returns ok but no new entry in `get_history_list`
+**Pattern** — `maestro.run` returns `{"status":"ok"}`, but
+`get_history_list` does not show the new run; the run's data is in
+`<results>/maestro/ExplorerRun.<idx>/...`.
 
-**What you see**
+**Why** — `maeRunSimulation` invoked without going through the
+Explorer dropdown writes the results tree on disk directly. The
+explorer-attached history list (`maeGetAllExplorerHistoryNames`) is a
+GUI-side view of runs the user launched from Explorer; bypass-launched
+runs are not registered there.
 
-```bash
-$ virtuoso rpc call --method maestro.run --params '{"session":"spectre0"}'
-{"status":"ok"}
+**Recovery**
 
-$ virtuoso rpc call --method maestro.get_history_list --params '{}'
-["psf_maestro_ac2", "FT0001A_SH_5T_OTA_D_TO_S_sim_1", "psf_maestro_ac"]
-# ^ unchanged — no "ExplorerRun.0" entry
+1. Open results by direct name (bypasses Explorer):
+   `rpc call --method maestro.open_results --params '{"history":"ExplorerRun.<idx>"}'`
+2. Inspect the `<cell>_sim/psf/` dir on disk to confirm PSF data
+   (`psf`, `wavedb`, `dsWaveforms`, `mappingFile.*`, `exprOutputs.log.*`).
+3. Read waveform values via Ocean / `vcli sim measure` / direct file IO.
 
-$ virtuoso rpc call --method maestro.get_result_tests --params '{}'
-{"error":"*Error* setq/set: Variable is protected and cannot be assigned to"}
-```
+### Rule: `maestro.create_corner_netlist` requires `VB_REMOTE_HOST` plus an ssh-capable target
 
-**What this actually means**
+**Pattern A** — config error: `VB_REMOTE_HOST is required for vcli maestro export-netlist`.
 
-This is not a vcli defect. On IC25, `maeRunSimulation` produces a
-**separately registered** history run whose name (`ExplorerRun.<idx>`)
-lives in the *results tree on disk* rather than the explorer-attach
-session name list. `maeGetAllExplorerHistoryNames` (which is what
-`get_history_list` calls) only returns explorer-attached histories —
-those driven from the ADE Explorer GUI dropdown. Bypassing Explorer
-skips that registration.
+**Why A** — the RPC downloads a netlist from the Virtuoso server to
+the vcli client via ssh scp. The binary defaults `VB_REMOTE_HOST` to
+localhost, which is wrong in any multi-host setup.
 
-The `setq/set: protected` error from `get_result_tests` is the same
-phenomenon expressed inside `maeGetResultTests`: it tries to install a
-default session binding that ADE Editing mode rejects.
+**Recovery A** — set `VB_REMOTE_HOST`, `VB_REMOTE_PORT`, `VB_SSH_USER`
+in `.env` or the active shell. The `output_dir` parameter must be a
+non-existent path — the RPC uses `atomic_publish_no_replace` and
+refuses to overwrite an existing directory.
 
-**Read flow** that actually works
+**Pattern B** — ssh error: `mkdir remote dir failed: ... /home/<user>/.ssh/known_hosts` or
+unix listener `Permission denied`.
 
-1. **Open results by direct history name**:
-   ```bash
-   virtuoso rpc call --method maestro.open_results \
-     --params '{"history":"ExplorerRun.0"}'
-   ```
-   This works because RPC `open_results` walks the results directory and
-   binds the run via `maeOpenResults ?history`, not through Explorer.
+**Why B** — two stacked locks:
 
-2. **Read outputs via direct SKILL** (bypasses the broken RPC):
-   ```bash
-   VCLI_CAPABILITY=admin virtuoso rpc call --method skill.eval --params '{
-     "code": "let((d) d=\"/home/user1/project/ft0001/simulation/<lib>/<cell>_sim/maestro/results/maestro/ExplorerRun.<n>/1/<cell>_sim\" foreach(mapcar f getDirFiles(strcat(d \"/psf\")) printf(\"%L\\n\" f)))"
-   }'
-   ```
-   Confirms PSF dir is present and shows ~25 files (`psf`, `wavedb`,
-   `dsWaveforms`, `mappingFile.*`, etc.) for a successful transient run.
+1. The remote sshd may be configured with `ForceCommand internal-sftp`
+   plus `ChrootDirectory <root>`. Probe with
+   `ssh user@host 'echo ok'`; if the response is "allows sftp connections
+   only", shell exec is denied. Only sftp operations against a
+   chroot are allowed, and the chroot typically excludes the user's
+   home and the project tree. vcli's `create_corner_netlist` requires
+   remote shell exec; it cannot work on an sftp-only host.
+2. DSH sandbox mode `workspace-write` blocks vcli's local
+   ControlMaster socket at `~/.cache/virtuoso_bridge/ssh/<host>-<port>-<user>.<rand>`
+   and appends to `~/.ssh/known_hosts`. Both paths sit outside the
+   workspace allow set.
 
-3. **Inspect waveforms through Ocean** if you need values; vcli does
-   not currently expose a typed ocean-results RPC, but
-   `vcli sim measure --analysis tran --expr ...` or
-   `vcli ocean "<value(getData(...))>"` may route there.
+**Recoveries B** — pick one:
 
-**Summary**: `maestro.run` → `ExplorerRun.<n>` lives on disk, not in the
-Explorer history list. Use direct SKILL `maeOpenResults ?history` to
-attach, then read PSF files via Ocean / direct file IO.
+| Path                                              | Trade-off                                          |
+| ------------------------------------------------- | -------------------------------------------------- |
+| Use a remote host whose sshd permits shell exec   | Requires operator access to sshd_config            |
+| Run `spectre` directly against a co-located netlist | Bypasses vcli ssh entirely; see `spectre-netlist-gotchas` |
+| Promote DSH session to `danger-full-access`       | Per-session user approval; uses workspace-allowed alternatives |
+| Verify netlist content by direct file read on the vcli host | Requires that vcli and the compute host share a file view, or that vcli runs on the compute host. |
 
-### W34 variable silent-drop is a SKILL-level concern
+### Rule: name a Cadence-version before you cite a SKILL signature
 
-Even after `asiSetDesignVarList + maeSaveSetup`, you cannot easily verify
-the variable is in the resulting `input.scs` without either (a) writing
-out the netlist via `maeNetlist`/`create_corner_netlist`, or
-(b) grepping the spectrerun output for the `parameters` block.
-Both require admin paths or sandbox-allowed scp. Practical diagnostic:
+**Pattern** — a SKILL function that worked on one Cadence version
+rejects the same arguments on another. The `type template = "..."`
+error codes change between releases.
 
-- Look at `~/.cache/cds/.../ExplorerRun.<n>/psf/spectre.out` and grep
-  for `parameters` — the seedline `parameters W34=...` is the
-  ground-truth.
-- If `W34` does NOT appear there despite `asiSetDesignVarList` returning
-  `t`, the ADE setup and the asi session are out of sync — re-open
-  the explorer setup, then re-set the variable.
+**Why** — Cadence SKILL is version-typed at the keyword-arg level.
+The same function name can have stricter type checks between IC23,
+IC23.1, IC24, IC25, etc. The `?options` alist format on `maeSetAnalysis`
+and the `?session` keyword on `maeSaveSetup` are two known surfaces
+where IC23-only code breaks on IC25.
+
+**Recovery** — never write a SKILL fragment without naming the
+intended Cadence version. The skill `ocean-netlist-regen` carries
+the per-version deltas as of the last validation pass.
