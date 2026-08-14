@@ -373,3 +373,117 @@ If you encounter this under DSH sandbox, you must promote the session to
 `danger-full-access` (requires user approval) or pick another path that
 does not transit ssh (e.g. run `spectre` directly against a netlist file
 already co-located with vcli — see `spectre-netlist-gotchas`).
+
+### `maeSaveSetup(?session ...)` fails: argument for keyword ?session should be a string (type template = "ttttg")
+
+**What you see**
+
+```bash
+$ virtuoso rpc call --method skill.eval --params '{
+    "code": "let((sess) sess=asiGetCurrentSession() maeSaveSetup(?session sess) ...)"
+  }'
+*Error* maeSaveSetup: argument for keyword ?session should be a string
+(type template = "ttttg") stdobj@0x...
+```
+
+**What this actually means**
+
+On IC25, `maeSaveSetup` rejects the result of `asiGetCurrentSession()`
+(the returned object handle) when it is bound without explicit quotation
+in the SKILL `let`. IC23 accepted the handle transparently; IC25's stricter
+type-check on keyword arguments does not. The error string's `ttttg`
+code is the SKILL type-template showing 4 `t` placeholders and a `g`
+guard mismatch — it complains because SKILL sees the variable through
+`let((sess) ... sess=asiGetCurrentSession() ...)` and complains the slot
+was not populated with a guaranteed string-quoted literal.
+
+**Fix**
+
+Pass the session name as an explicit string, not as a variable dereference:
+
+```bash
+virtuoso rpc call --method skill.eval --params '{
+    "code": "let((sess) sess=asiGetCurrentSession() maeSaveSetup(?session sess~>name))"
+  }'
+```
+
+`~>name` extracts the session-name string from the object handle. This
+matches the `mae*` API convention documented in
+`ocean-netlist-regen/SKILL.md` and avoids the IC25 type-template gate.
+
+Alternatively, set `?session "fnxSession0"` (the literal name from
+`window.list` output) if you know it. Either form produces a real string
+arg and satisfies IC25's type check.
+
+### `maestro.run` returns ok but no new entry in `get_history_list`
+
+**What you see**
+
+```bash
+$ virtuoso rpc call --method maestro.run --params '{"session":"spectre0"}'
+{"status":"ok"}
+
+$ virtuoso rpc call --method maestro.get_history_list --params '{}'
+["psf_maestro_ac2", "FT0001A_SH_5T_OTA_D_TO_S_sim_1", "psf_maestro_ac"]
+# ^ unchanged — no "ExplorerRun.0" entry
+
+$ virtuoso rpc call --method maestro.get_result_tests --params '{}'
+{"error":"*Error* setq/set: Variable is protected and cannot be assigned to"}
+```
+
+**What this actually means**
+
+This is not a vcli defect. On IC25, `maeRunSimulation` produces a
+**separately registered** history run whose name (`ExplorerRun.<idx>`)
+lives in the *results tree on disk* rather than the explorer-attach
+session name list. `maeGetAllExplorerHistoryNames` (which is what
+`get_history_list` calls) only returns explorer-attached histories —
+those driven from the ADE Explorer GUI dropdown. Bypassing Explorer
+skips that registration.
+
+The `setq/set: protected` error from `get_result_tests` is the same
+phenomenon expressed inside `maeGetResultTests`: it tries to install a
+default session binding that ADE Editing mode rejects.
+
+**Read flow** that actually works
+
+1. **Open results by direct history name**:
+   ```bash
+   virtuoso rpc call --method maestro.open_results \
+     --params '{"history":"ExplorerRun.0"}'
+   ```
+   This works because RPC `open_results` walks the results directory and
+   binds the run via `maeOpenResults ?history`, not through Explorer.
+
+2. **Read outputs via direct SKILL** (bypasses the broken RPC):
+   ```bash
+   VCLI_CAPABILITY=admin virtuoso rpc call --method skill.eval --params '{
+     "code": "let((d) d=\"/home/user1/project/ft0001/simulation/<lib>/<cell>_sim/maestro/results/maestro/ExplorerRun.<n>/1/<cell>_sim\" foreach(mapcar f getDirFiles(strcat(d \"/psf\")) printf(\"%L\\n\" f)))"
+   }'
+   ```
+   Confirms PSF dir is present and shows ~25 files (`psf`, `wavedb`,
+   `dsWaveforms`, `mappingFile.*`, etc.) for a successful transient run.
+
+3. **Inspect waveforms through Ocean** if you need values; vcli does
+   not currently expose a typed ocean-results RPC, but
+   `vcli sim measure --analysis tran --expr ...` or
+   `vcli ocean "<value(getData(...))>"` may route there.
+
+**Summary**: `maestro.run` → `ExplorerRun.<n>` lives on disk, not in the
+Explorer history list. Use direct SKILL `maeOpenResults ?history` to
+attach, then read PSF files via Ocean / direct file IO.
+
+### W34 variable silent-drop is a SKILL-level concern
+
+Even after `asiSetDesignVarList + maeSaveSetup`, you cannot easily verify
+the variable is in the resulting `input.scs` without either (a) writing
+out the netlist via `maeNetlist`/`create_corner_netlist`, or
+(b) grepping the spectrerun output for the `parameters` block.
+Both require admin paths or sandbox-allowed scp. Practical diagnostic:
+
+- Look at `~/.cache/cds/.../ExplorerRun.<n>/psf/spectre.out` and grep
+  for `parameters` — the seedline `parameters W34=...` is the
+  ground-truth.
+- If `W34` does NOT appear there despite `asiSetDesignVarList` returning
+  `t`, the ADE setup and the asi session are out of sync — re-open
+  the explorer setup, then re-set the variable.
