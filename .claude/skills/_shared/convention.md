@@ -247,9 +247,129 @@ unknown maestro method 'getAnalyses'
 **What this actually means**
 
 RPC method names are **`snake_case`**, not `camelCase`. Run
-`virtuoso rpc schema --format json` once and pin the exact spelling; the
-schema currently lists 26 `maestro.*` methods, all of the form
-`maestro.get_analyses`, `maestro.list_sessions`, etc.
+`virtuoso rpc schema --format json` once and pin the exact spelling. As of
+binary `1.0.0` the schema lists **76** RPC methods, all of the form
+`maestro.get_analyses`, `maestro.list_sessions`, `schematic.open_cell_view`,
+etc. The subdomain prefix (`maestro.`, `schematic.`, `library.`, ...) is
+mandatory; do not pass bare verbs.
 
-This is a stable API — once a method lands in `rpc schema` it does not get
-renamed silently. Re-check the schema on every binary upgrade.
+`vcli rpc schema` does not currently support a `--method <name>` filter;
+it dumps the full schema in one JSON document. Pinning is fine because the
+schema is stable across binary upgrades — once a method lands, it does not
+get renamed silently. Re-run `rpc schema` once per upgrade if you care
+about new additions.
+
+### `maestro.set_var` silently returns ok without writing to the netlist
+
+**What you see**
+
+```bash
+$ virtuoso rpc call --method maestro.set_var --params '{"name":"W34","value":"16u"}'
+{"status":"ok"}
+
+$ virtuoso rpc call --method maestro.list_vars --params '{}'
+[{"name":"W34","value":"2u"}, ...]    # unchanged
+```
+
+Later you regenerate the netlist, `grep W34 input.scs` and see `W34=2u` —
+the variable did not propagate to simulation.
+
+**What this actually means**
+
+This is `maestro/SKILL.md` line 116-122's two-namespace trap, observed on
+binary `1.0.0` with IC25. `maestro.set_var` resolves to `maeSetVar`,
+which writes to Maestro's **internal varList** — a UI bookkeeping store
+that ADE L/G uses for display, not the variable stream consumed by
+Ocean/netlist generation. The variable the simulator actually consumes
+lives in the **asi session**, owned by `asiSetDesignVarList`.
+
+Confirmed empirically on `dean-user1-44235` (2026-08-14 12:47) — `set_var`
+returns ok, `list_vars` shows the old value, and only `asiSetDesignVarList`
+plus a subsequent `maeSaveSetup` actually drives the change into `input.scs`.
+
+**Fix**
+
+```bash
+VCLI_CAPABILITY=admin virtuoso rpc call --method skill.eval --params '{
+  "code": "let((sess vl) \
+           sess=asiGetCurrentSession() \
+           vl=asiGetDesignVarList(sess) \
+           vl=cons(list(\"W34\" \"16u\") remove(assoc(\"W34\" vl) vl)) \
+           asiSetDesignVarList(sess vl) \
+           maeSaveSetup(?session sess))"
+}'
+```
+
+The `maeSaveSetup` is what forces the variables into the on-disk setup —
+without it, the change lives only in memory and dies on session close.
+
+**Alternative**
+
+Patch the `vcli maestro set-var` command in `src/commands/maestro.rs` so it
+goes through `asiSetDesignVarList` automatically when the variable is in the
+asi namespace. Tracked separately; not a vcli skill-doc fix.
+
+### `create_corner_netlist` fails with VB_REMOTE_HOST error
+
+**What you see**
+
+```bash
+$ virtuoso rpc call --method maestro.create_corner_netlist --params \
+  '{"session":"spectre0","test":"tran","corner":"","output_dir":"/tmp/x/"}'
+config error: VB_REMOTE_HOST is required for `vcli maestro export-netlist`.
+Set it in your profile or .env (e.g. VB_REMOTE_HOST=eda-server).
+```
+
+**What this actually means**
+
+The flow downloads a netlist *from* the Virtuoso server *to* the vcli
+client machine. The CLI uses `VB_REMOTE_HOST` to ssh there, scp the files
+into a remote temp dir, then scp them back. The host running the vcli
+binary may not be the host running Virtuoso (see `AGENTS.md`'s three-host
+model), so the variable is mandatory.
+
+**Fix**
+
+```bash
+export VB_REMOTE_HOST=dean          # or your compute host
+export VB_REMOTE_PORT=22            # if non-default
+export VB_SSH_USER=$USER            # or your service account
+
+virtuoso rpc call --method maestro.create_corner_netlist --params ...
+```
+
+Or run `virtuoso init` to scaffold a `.env` template; check
+`output_dir` is **a non-existent path** — the RPC refuses to overwrite an
+existing directory (`atomic_publish_no_replace`).
+
+### `create_corner_netlist` reaches ssh then fails with sandbox errors
+
+**What you see**
+
+```
+ssh error: mkdir remote dir failed:
+  Failed to add the host to the list of known hosts (/home/user1/.ssh/known_hosts).
+  unix_listener: cannot bind to path
+    /home/user1/.cache/virtuoso_bridge/ssh/dean-22-user1.a5biDXW4WnjEjvZ0:
+    Permission denied
+```
+
+**What this actually means**
+
+This is a DSH harness sandbox layer, not a vcli defect. `create_corner_netlist`
+boots an ssh ControlMaster socket into `~/.cache/virtuoso_bridge/ssh/` and
+appends to `~/.ssh/known_hosts`. Both paths sit outside the
+`workspace-write` policy allowed set. vcli's ssh transport cannot recover
+from EACCES on the unix listener.
+
+If you encounter this on a personal host (no sandbox), the fix is:
+
+```bash
+mkdir -p ~/.cache/virtuoso_bridge/ssh 2>/dev/null
+ssh -o StrictHostKeyChecking=accept-new $VB_REMOTE_HOST 'echo ok'   # prime known_hosts
+```
+
+If you encounter this under DSH sandbox, you must promote the session to
+`danger-full-access` (requires user approval) or pick another path that
+does not transit ssh (e.g. run `spectre` directly against a netlist file
+already co-located with vcli — see `spectre-netlist-gotchas`).
