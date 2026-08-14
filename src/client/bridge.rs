@@ -198,7 +198,6 @@ impl VirtuosoClient {
         skip_whitelist: bool,
     ) -> Result<VirtuosoResult> {
         // Phase 0: evalstring whitelist check — bypassed when caller holds Admin
-        let _ = std::fs::write("/tmp/vcli_bypass_test.txt", format!("skip={}", skip_whitelist));
         if !skip_whitelist {
             if let Some(warning) = self.whitelist.check(skill_code) {
                 return Err(VirtuosoError::Execution(warning));
@@ -348,7 +347,6 @@ impl VirtuosoClient {
         if let Some(warning) = self.check_capability(skill_code) {
             return Err(VirtuosoError::Execution(warning));
         }
-        let _ = std::fs::write("/tmp/vcli_bypass_test.txt", "bypass_called");
         self.execute_skill_with_bypass(skill_code, timeout, true)
     }
 

@@ -140,17 +140,14 @@ pub fn run_with_analysis(
     let client = VirtuosoClient::from_env()?;
 
     let skill = if let Some(dec_val) = dec {
-        let at = analysis_type.ok_or_else(|| {
-            VirtuosoError::Execution("dec requires --analysis".to_string())
-        })?;
+        let at = analysis_type
+            .ok_or_else(|| VirtuosoError::Execution("dec requires --analysis".to_string()))?;
         let alist = match options {
             None => None,
             Some(opts) => {
                 let ver = client.version()?;
                 if !ver.is_ic25() {
-                    eprintln!(
-                        "warning: --options is only supported on IC25; ignoring on IC23"
-                    );
+                    eprintln!("warning: --options is only supported on IC25; ignoring on IC23");
                     None
                 } else {
                     Some(
@@ -160,7 +157,9 @@ pub fn run_with_analysis(
                 }
             }
         };
-        client.maestro.run_with_dec(session, at, alist.as_deref(), *dec_val)
+        client
+            .maestro
+            .run_with_dec(session, at, alist.as_deref(), *dec_val)
     } else {
         // No dec: existing path — set analysis then run
         if let Some(at) = analysis_type {
@@ -171,17 +170,19 @@ pub fn run_with_analysis(
                         .map_err(|e| VirtuosoError::Execution(format!("--options: {e}")))?;
                     let ver = client.version()?;
                     if !ver.is_ic25() {
-                        eprintln!(
-                            "warning: --options is only supported on IC25; ignoring on IC23"
-                        );
+                        eprintln!("warning: --options is only supported on IC25; ignoring on IC23");
                         (None, ver)
                     } else {
                         (Some(a), ver)
                     }
                 }
             };
-            let skill = client.maestro.set_analysis(session, at, alist.as_deref(), version);
-            client.execute_skill(&skill, None)?.ok_or_exec("set analysis")?;
+            let skill = client
+                .maestro
+                .set_analysis(session, at, alist.as_deref(), version);
+            client
+                .execute_skill(&skill, None)?
+                .ok_or_exec("set analysis")?;
         }
         client.maestro.run_simulation(session)
     };
@@ -189,9 +190,13 @@ pub fn run_with_analysis(
     // dec injection uses system(sed) — requires Admin capability + whitelist bypass
     if dec.is_some() {
         let _ = std::fs::write("/tmp/vcli_dec_skill.txt", &skill);
-        client.execute_skill_admin(&skill, None)?.ok_or_exec("run simulation")?;
+        client
+            .execute_skill_admin(&skill, None)?
+            .ok_or_exec("run simulation")?;
     } else {
-        client.execute_skill(&skill, None)?.ok_or_exec("run simulation")?;
+        client
+            .execute_skill(&skill, None)?
+            .ok_or_exec("run simulation")?;
     }
     Ok(json!({
         "status": "launched",

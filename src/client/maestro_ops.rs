@@ -96,7 +96,6 @@ impl MaestroOps {
         }
     }
 
-
     /// Run simulation asynchronously. Returns immediately.
     pub fn run_simulation(&self, session: &str) -> String {
         let session = escape_skill_string(session);
@@ -169,10 +168,7 @@ ok=not(system(cmd))
 when(ok system(sprintf(nil "grep '^ac ' %s" netPath)))
 maeRunSimulation(?session s)))
 vcliDecInject("{}" "{}" (list {}) {}))"#,
-            session_esc,
-            at_esc,
-            opts_inner,
-            dec_u32
+            session_esc, at_esc, opts_inner, dec_u32
         )
     }
 
@@ -511,7 +507,10 @@ fn skill_pair_to_quoted(pair: &str) -> String {
     let trimmed = pair.trim();
     if let Some(without_prefix) = trimmed.strip_prefix("(list ") {
         // Has list keyword: strip "(list " and trailing ")"
-        let stripped = without_prefix.strip_suffix(')').unwrap_or(without_prefix).trim();
+        let stripped = without_prefix
+            .strip_suffix(')')
+            .unwrap_or(without_prefix)
+            .trim();
         format!("quote(({stripped}))")
     } else {
         // Bare pair: `("key" "val")`
@@ -668,10 +667,16 @@ mod tests {
     fn set_analysis_ic25_includes_keywords() {
         // IC25 uses ?session and ?enable t keywords (unlike IC23 positional-only)
         let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC25);
-        assert!(s.contains("?session"), "IC25 must include ?session keyword: {s}");
+        assert!(
+            s.contains("?session"),
+            "IC25 must include ?session keyword: {s}"
+        );
         assert!(s.contains("?enable t"), "IC25 must include ?enable t: {s}");
         assert!(s.contains("maeGetSetup"), "IC25 needs setup name: {s}");
-        assert!(!s.contains("?options"), "IC25 without options must not inject ?options: {s}");
+        assert!(
+            !s.contains("?options"),
+            "IC25 without options must not inject ?options: {s}"
+        );
     }
 
     #[test]
@@ -681,14 +686,35 @@ mod tests {
         // skill_pair_to_quoted wraps each as quote(("stop" "1e10")).
         // Generated: let((setup opts) setup=car(...) opts=(list quote(...)) maeSetAnalysis(...))
         let s = ops().set_analysis(
-            "sess1", "ac", Some(r#"(("stop" "1e10") ("start" "1"))"#), VirtuosoVersion::IC25,
+            "sess1",
+            "ac",
+            Some(r#"(("stop" "1e10") ("start" "1"))"#),
+            VirtuosoVersion::IC25,
         );
-        assert!(s.contains(r#"quote(("stop" "1e10"))"#), "IC25 options must use quote: {s}");
-        assert!(s.contains("?options opts"), "Must pass options via ?options keyword: {s}");
-        assert!(s.contains("let((setup opts)"), "Must use flat let with two bindings: {s}");
-        assert!(s.contains("opts = (list"), "opts must be bound via = form: {s}");
-        assert!(s.contains("maeSetAnalysis(setup"), "Must call maeSetAnalysis directly: {s}");
-        assert!(!s.contains("apply("), "No apply() needed for direct maeSetAnalysis: {s}");
+        assert!(
+            s.contains(r#"quote(("stop" "1e10"))"#),
+            "IC25 options must use quote: {s}"
+        );
+        assert!(
+            s.contains("?options opts"),
+            "Must pass options via ?options keyword: {s}"
+        );
+        assert!(
+            s.contains("let((setup opts)"),
+            "Must use flat let with two bindings: {s}"
+        );
+        assert!(
+            s.contains("opts = (list"),
+            "opts must be bound via = form: {s}"
+        );
+        assert!(
+            s.contains("maeSetAnalysis(setup"),
+            "Must call maeSetAnalysis directly: {s}"
+        );
+        assert!(
+            !s.contains("apply("),
+            "No apply() needed for direct maeSetAnalysis: {s}"
+        );
     }
 
     #[test]

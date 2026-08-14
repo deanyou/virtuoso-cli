@@ -1855,9 +1855,17 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
             test_name,
             expr,
         } => commands::maestro::add_output(&output_name, &test_name, &expr),
-        MaestroCmd::Run { session, analysis, options, dec } => {
-            commands::maestro::run_with_analysis(&session, analysis.as_deref(), options.as_deref(), dec.map(|d| d as u32).as_ref())
-        }
+        MaestroCmd::Run {
+            session,
+            analysis,
+            options,
+            dec,
+        } => commands::maestro::run_with_analysis(
+            &session,
+            analysis.as_deref(),
+            options.as_deref(),
+            dec.map(|d| d as u32).as_ref(),
+        ),
         MaestroCmd::Save { session } => commands::maestro::save(&session),
         MaestroCmd::Export {
             session,
