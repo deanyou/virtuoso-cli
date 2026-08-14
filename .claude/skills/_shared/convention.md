@@ -205,16 +205,35 @@ In binary `1.0.0`, the `whitelist` policy in `src/client/bridge.rs:83–84`
 blocks `evalstring` for any caller that does not hold the **Admin**
 capability. Admin is toggled via `VCLI_CAPABILITY=admin`.
 
-Two paths forward:
+**Subtlety (2026-08-14 validation)**: the RPC layer is not a uniform bypass.
+The RPC namespace is split into two pools:
 
-- **Read-only/SKILL-discovery agents** (harness-level introspection): use
-  `virtuoso rpc call --method <snake_case.method> --params '<json>'`. The
-  RPC layer routes through a typed whitelist that does not require Admin.
-- **Operators running raw SKILL** (debugging, custom flows):
-  `VCLI_CAPABILITY=admin virtuoso skill exec '...'`.
+| Pool                              | Examples                                                              | Admin required? |
+| --------------------------------- | --------------------------------------------------------------------- | --------------- |
+| **Typed / whitelisted RPC**       | `cell.info`, `library.list`, `util.ping`, `util.version`, `maestro.*` (read methods), `window.list`, `schematic.*` (reads), `symbol.*`, `tx.*`, `file.*`, `sim.check_license` | **No** |
+| **Raw SKILL RPC**                 | `skill.exec`, `skill.eval` (and any future `skill.<verb>` that resolves to evalstring) | **Yes** — same gate as `vcli skill exec`; error reads `"method 'skill.exec' not permitted: missing required capability"` |
 
-Neither is "the bug". The first is the intended production posture; the
-second is a deliberate escape hatch. Pick by role, not by accident.
+So the agent route depends on what you're trying to do:
+
+- **Discovery / read-only work**: call any RPC method from the first pool.
+  These run under the typed whitelist and do not require Admin. Example:
+  `virtuoso rpc call --method cell.info --params '{}'`.
+- **Anything that needs an arbitrary SKILL expression** (custom tooling,
+  one-off diagnostics, debugging) — there is no escaping `VCLI_CAPABILITY=admin`,
+  whether you go through `vcli skill exec` or `rpc call --method skill.exec`.
+  Pick the path that's easier to grep later:
+  - `VCLI_CAPABILITY=admin virtuoso skill exec '...'`
+  - `VCLI_CAPABILITY=admin virtuoso rpc call --method skill.exec --params '{"code":"..."}'`
+  - `VCLI_CAPABILITY=admin virtuoso rpc call --method skill.eval --params '{"code":"..."}'`
+    (this last one supports multi-statement SKILL)
+
+Neither posture is "the bug". The first is the intended read-only
+production route; the second is a deliberate escape hatch that demands
+explicit operator consent. Pick by role, not by accident.
+
+If the agent ever needs to call `skill.exec` repeatedly across many turns,
+export `VCLI_CAPABILITY=admin` once in the shell session rather than
+prefixing every invocation — same effect, less noise.
 
 ### RPC method name returned `unknown <domain> method`
 
