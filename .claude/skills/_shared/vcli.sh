@@ -56,17 +56,27 @@ set -euo pipefail
 VCLI_BIN="${VCLI_BIN:-}"
 
 if [[ -z "$VCLI_BIN" ]]; then
-    # Search order: PATH first (lets the user point at a custom install), then
-    # well-known cargo + system locations. This mirrors how the README suggests
-    # installing (`cargo install virtuoso-cli` puts the binary in ~/.cargo/bin).
-    if command -v vcli >/dev/null 2>&1; then
-        VCLI_BIN="$(command -v vcli)"
-    elif [[ -x "$HOME/.cargo/bin/vcli" ]]; then
+    # Search order is deliberately NOT "command -v vcli" first. On hosts where
+    # /opt/cargo/bin appears before ~/.cargo/bin in $PATH (some container
+    # images, some sudo shells), `command -v vcli` returns the system binary
+    # even when ~/.cargo/bin/vcli is the one true build. We therefore prefer:
+    #   1. ~/.../vcli               — user cargo install (`cargo install --path .`)
+    #   2. <repo>/target/release/vcli — in-tree debug binary of this checkout
+    #   3. command -v vcli          — honour pre-set PATH (lets users override)
+    #   4. /opt/cargo/bin/vcli      — system-wide fallback (may be stale)
+    # Encountered 2026-08-14 during validation: PATH shadowing selected vcli
+    # 0.3.18 while the active checkout was 1.0.0, breaking library/maestro/rpc.
+    if [[ -x "$HOME/.cargo/bin/vcli" ]]; then
         VCLI_BIN="$HOME/.cargo/bin/vcli"
+    elif [[ -x "./target/release/vcli" ]]; then
+        VCLI_BIN="./target/release/vcli"
+    elif command -v vcli >/dev/null 2>&1; then
+        VCLI_BIN="$(command -v vcli)"
     elif [[ -x /opt/cargo/bin/vcli ]]; then
         VCLI_BIN="/opt/cargo/bin/vcli"
     else
-        printf 'vcli.sh: ERROR — cannot find vcli binary on PATH or in ~/.cargo/bin\n' >&2
+        printf 'vcli.sh: ERROR — cannot find vcli binary\n' >&2
+        printf '  tried: ~/.cargo/bin/vcli, ./target/release/vcli, $PATH, /opt/cargo/bin/vcli\n' >&2
         printf '  Set VCLI_BIN=/absolute/path/to/vcli and retry.\n' >&2
         exit 127
     fi
