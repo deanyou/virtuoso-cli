@@ -309,7 +309,96 @@ runs are not registered there.
    `rpc call --method maestro.open_results --params '{"history":"ExplorerRun.<idx>"}'`
 2. Inspect the `<cell>_sim/psf/` dir on disk to confirm PSF data
    (`psf`, `wavedb`, `dsWaveforms`, `mappingFile.*`, `exprOutputs.log.*`).
-3. Read waveform values via Ocean / `vcli sim measure` / direct file IO.
+
+### Rule: IC25 PSF is compressed binary by default; raw waveforms are not greppable
+
+**Pattern** — you inspect `<results>/.../psf/tran.tran.tran` or `ac.ac`
+on disk and see `<BINPSF creation time>`, a list of `<ENV_VAR_0..N>`
+index markers, and a final group block listing signal names
+(`VSS`, `VDD`, `VIN+`, `VOUT`, `Iref_in`, `V0:p`, `V2:p`, ...). The
+file is `type = data` per `file(1)`. There are no `<time> <value>`
+rows to grep.
+
+**Why** — IC25's default PSF format writes binary blocks (signaled by
+`*cdnshcompressiontype 26 1` in the `.sig` file). The header text
+gibberish at the top is ASCII because the index is human-readable,
+but the data section is compressed. spectre would have to be invoked
+with `-raw ./psf` and ASCII format headers to produce grep-friendly
+output, and the Maestro-driven runs don't pass that flag.
+
+**Recoveries**
+
+- Read via Ocean / `srrWave` API:
+  ```
+  VCLI_CAPABILITY=admin vcli rpc call --method skill.eval --params '{
+    "code": "let((d) d=getData(\"/VOUT\" ?result \"tran-tran\") printf(\"type=%L\\n\" type(d)))"
+  }'
+  ```
+  Confirms the data is loaded and identifies it as `srrWave`.
+  Numerical access requires the srrWave API rather than
+  `value(getData(...))`.
+- Re-run spectre manually with ASCII PSF if the wrapper can find a
+  `modelFiles`-resolved netlist copy on the vcli host:
+  `spectre -format psfascii -raw ./psf <netlist>` produces text files
+  in `psf/` per the `spectre-netlist-gotchas` skill.
+- Accept the loss; treat PSF signal presence as ground truth and rely
+  on downstream Ocean/Virtuoso plotting instead of harness-side numerics.
+- Write a typed `rpc call --method maestro.get_output_value` to read
+  scalar values, but note that in `ADE Editing` mode it returns `nil`
+  because the underlying `maeGetResult*` family tries to install a
+  default `asiSession` binding that Editing mode rejects. Use
+  `run-async`/`sim measure` instead, or run Ocean from a separate
+  session.
+
+### Rule: only sessions opened by this process can be closed programmatically
+
+**Pattern** — `maestro.close_session` or `maeCloseSession` returns
+`*Error* maeCloseSession: failed to close session 'X' because it has
+been opened from the Virtuoso user interface. maeCloseSession can be
+used to close only those sessions that were opened using maeOpenSetup
+in the SKILL code`.
+
+**Why** — Cadence deliberately prevents programmatic SKILL from
+closing a session the user opened through the GUI. This is a
+safety / consistency guarantee for the active ADE Explorer GUI state.
+
+**Recoveries**
+
+- Do not automate closing GUI-launched sessions. Ask the user to
+  close them from the Explorer window, or call `maeOpenSetup` from
+  your own code if you also want to be able to close them.
+- For sessions your code opened (`maeOpenSetup` / `rpc call
+  --method maestro.open_session`), normal `maeCloseSession` works.
+  This applies to `spectre0`-style simulator-side sessions opened
+  by `maestro.run`, where `maeCloseSession ?session <name>` does
+  succeed even though the ADE-side `fnxSession<n>` may not.
+
+### Rule: IC25 `?session` keyword rejection with `~>name` is not enough
+
+**Pattern** — `maeSaveSetup(?session sess~>name)` still errors with
+`argument for keyword ?session should be a string (type template = ...)`
+even though `sess~>name` returns a string. `*Error*` includes the
+session name in its argument list, indicating the slot was populated
+with a string but the *template* check still failed.
+
+**Why** — IC25's type-template check on `?session` of `maeSaveSetup`
+is stricter than IC23, and accepts only a literal `?session "<name>"`
+form. `~>name` from a variable-bound handle is not equivalent; the
+template guard sees the value chain through `let((sess) ...)` and
+does not unwind it to a literal.
+
+**Recoveries**
+
+- Pass the literal name string explicitly:
+  `maeSaveSetup(?session "<session-name-from-window.list>")`.
+- If you need this from a variable, fetch the name into a literal
+  in your SKILL before calling: `(let((s) s=asiGetCurrentSession()
+  maeSaveSetup(?session s~>name)))` also fails; use the literal-name
+  form unconditionally.
+- This is one of the few `mae*` APIs where the only safe value is
+  the literal session name read from `window.list` output. Keep that
+  pipeline handy.
+
 
 ### Rule: `maestro.create_corner_netlist` requires `VB_REMOTE_HOST` plus an ssh-capable target
 
