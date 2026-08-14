@@ -454,3 +454,79 @@ where IC23-only code breaks on IC25.
 **Recovery** — never write a SKILL fragment without naming the
 intended Cadence version. The skill `ocean-netlist-regen` carries
 the per-version deltas as of the last validation pass.
+
+## Maintenance contract — keep the playbook honest
+
+The rules above are **observations pinned against binary `1.0.0` and
+Cadence IC25** as of the last validation pass. They are not frozen.
+Three forces will erode them:
+
+1. **vcli binary upgrades.** A new binary version may add, rename, or
+   remove RPC methods, change error strings, or shift behavior of
+   `maestro.set_var`, `maeGetSetup`, etc. Re-dump `vcli rpc schema
+   --format json` after every binary upgrade and re-read the rules
+   whose patterns include version-specific strings or method lists.
+2. **Cadence version upgrades.** IC26+ will change SKILL signatures,
+   type-template guard wording, and PSF format. Treat any new
+   *Cadence-version* (IC24, IC26, ...) as a new working assumption.
+3. **Host / wrapper / sandbox policy changes.** `vcli.sh` resolution
+   order, DSH sandbox default mode (`workspace-write` vs
+   `danger-full-access`), and `<root>` sshd ChrootDirectory
+   configuration are all host/runtime-side and can shift without
+   notice.
+
+### How to evolve a rule
+
+You never *delete* a rule; you **supersede** it. The lifecycle is:
+
+1. Observe a new pattern in a live session that contradicts (or
+   refines) an existing rule.
+2. Verify it across at least one more session, host, or PDK before
+   editing convention.md — single-session observations are special
+   cases, not rules.
+3. Edit convention.md in place. The rule that previously held may
+   stay (it was true at a point in time) but mark the change:
+   - Add the new rule below the old one.
+   - If the old rule is *wrong* (not just incomplete), update its
+     `**Recovery**` block to reflect the new fix and note the
+     correction in your commit message.
+4. If the change touches the wrapper (`vcli.sh`) or directory layout
+   (new files in `_shared/`), the rest of the surface is
+   version-controlled alongside it — there is no separate "playbook
+   release" process.
+
+### When to *not* edit convention.md
+
+- Single-encounter traces. If the rule reads like a log entry
+  ("on session X, port Y, library Z, this happened"), it is not a
+  Rule yet. Wait for the second occurrence before promoting.
+- vcli binary bug reports. They belong in the upstream issue
+  tracker, not in the agent's diagnostic playbook. The playbook
+  records behaviour, not bugs.
+- Library/PDK-specific patterns. Move those to
+  `.claude/skills/<pdk-name>/SKILL.md` so they ship with the
+  library's documentation. convention.md is host-and-bridge
+  focused.
+
+## What this conversation produced
+
+Closing summary of the current `main` HEAD state (post-validation):
+
+- 14 playbook rules covering: cache-write failures, multi-session
+  auto-discovery, the RPC Admin gate, RPC naming conventions,
+  Maestro's UI/simulator variable split, IC25 SKILL keyword
+  type-templates, ADE Editing mode read restrictions,
+  bypass-launched runs, PSF binary format, programmatic session
+  close restrictions, IC25 `?session` rejection of `~>name`,
+  `create_corner_netlist` ssh requirements, and Cadence-version
+  style pinning.
+- A bash wrapper (`_shared/vcli.sh`) that resolves the `virtuoso`
+  vs `vcli` naming split without touching any SKILL.md.
+- A README.md and convention.md structure that keeps the
+  rules/rename-contract/diagnostic-playbook in the same directory
+  for one-stop retrieval.
+
+Anyone returning to this repo on a fresh agent host should run
+`virtuoso doctor` first, then read the playbook top-down before
+issuing any SKILL or RPC call. If they hit a new pattern, the
+lifecycle above applies.
