@@ -1,7 +1,7 @@
 ---
 name: sim-measure
 description: Extract waveform measurements from Virtuoso simulation results. Use when measuring voltage, current, gm, gm/Id, bandwidth, settling time, or any simulation metric.
-argument-hint: [measurement target, e.g. "GBW and phase margin from AC"]
+argument-hint: '[measurement target, e.g. "GBW and phase margin from AC"]'
 allowed-tools: Bash(virtuoso *)
 ---
 

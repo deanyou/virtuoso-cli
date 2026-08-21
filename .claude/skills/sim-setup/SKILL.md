@@ -1,7 +1,7 @@
 ---
 name: sim-setup
 description: Set up Virtuoso simulation with Ocean SKILL. Use when configuring simulator, design target, model files, or design variables before running simulation.
-argument-hint: [design target, e.g. "myLib/myOTA schematic for tran"]
+argument-hint: '[design target, e.g. "myLib/myOTA schematic for tran"]'
 allowed-tools: Bash(virtuoso *)
 ---
 

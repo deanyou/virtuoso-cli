@@ -10,7 +10,7 @@ description: |
 author: Claude Code
 version: 1.0.0
 date: 2026-05-02
-argument-hint: [optional: session ID or date range, e.g. "meowu-meow-38371" or "last 7 days"]
+argument-hint: '[optional: session ID or date range, e.g. "meowu-meow-38371" or "last 7 days"]'
 allowed-tools: Bash(cat *) Bash(ls *) Bash(jq *) Bash(grep *) Bash(find *) Read Write Edit
 ---
 

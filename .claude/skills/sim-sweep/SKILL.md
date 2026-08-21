@@ -2,7 +2,7 @@
 name: sim-sweep
 description: Run parameter sweeps and PVT corner simulations on Virtuoso. Use when sweeping design variables, running corner analysis, or characterizing circuits across operating conditions.
 disable-model-invocation: true
-argument-hint: [parameter and range, e.g. "W from 1u to 10u, measure GBW"]
+argument-hint: '[parameter and range, e.g. "W from 1u to 10u, measure GBW"]'
 allowed-tools: Bash(virtuoso *) Read Write
 ---
 

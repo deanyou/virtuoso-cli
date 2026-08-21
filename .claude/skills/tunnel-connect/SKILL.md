@@ -2,7 +2,7 @@
 name: tunnel-connect
 description: Connect to Virtuoso via SSH tunnel or local bridge. Use when setting up Virtuoso connection, starting the bridge, or troubleshooting connectivity issues.
 disable-model-invocation: true
-argument-hint: [host or issue, e.g. "server1.company.com"]
+argument-hint: '[host or issue, e.g. "server1.company.com"]'
 allowed-tools: Bash(virtuoso *) Read
 ---
 
