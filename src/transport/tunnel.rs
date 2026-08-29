@@ -87,22 +87,69 @@ pub fn setup_dir_for_profile(profile: Option<&str>) -> String {
     format!("/tmp/{}", profiled_bridge_leaf(profile))
 }
 
-/// Verify that a PID belongs to an SSH process by checking /proc/<pid>/cmdline.
-/// Returns false if the process doesn't exist or isn't SSH (PID reuse protection).
+/// Whether a binary path is the ssh client (`/usr/bin/ssh`, `ssh.exe`, …).
+///
+/// Deliberately as loose as the Linux check below (`cmdline.contains("ssh")`):
+/// the tunnel is spawned as `ssh -N -L …`, and being wrong here only chooses
+/// between "kill it" and "warn and skip", both of which are recoverable.
+#[cfg(target_os = "macos")]
+fn is_ssh_executable(path: &std::path::Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map(|name| name.contains("ssh"))
+        .unwrap_or(false)
+}
+
+/// Linux: verify via `/proc/<pid>/cmdline`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn verify_ssh_pid(pid: u32) -> bool {
-    #[cfg(unix)]
-    {
-        let cmdline_path = format!("/proc/{pid}/cmdline");
-        if let Ok(cmdline) = std::fs::read_to_string(&cmdline_path) {
-            cmdline.contains("ssh")
-        } else {
-            false
-        }
+    let cmdline_path = format!("/proc/{pid}/cmdline");
+    match std::fs::read_to_string(&cmdline_path) {
+        Ok(cmdline) => cmdline.contains("ssh"),
+        Err(_) => false,
     }
-    #[cfg(not(unix))]
-    {
-        true // no /proc on non-unix, fall back to trusting PID
+}
+
+/// macOS has no `/proc`, so the executable is resolved through `sysctl`
+/// (`KERN_PROCARGS2`) instead.
+///
+/// This branch is not cosmetic: with the `/proc`-only check, `verify_ssh_pid`
+/// returned `false` for every pid on macOS, which made `tunnel stop` skip the
+/// kill entirely and left the ssh process running.
+#[cfg(target_os = "macos")]
+fn verify_ssh_pid(pid: u32) -> bool {
+    match crate::transport::identity::ProcessIdentity::of_pid(pid) {
+        Ok(identity) => is_ssh_executable(&identity.executable_path),
+        Err(_) => false,
     }
+}
+
+/// Everywhere else: unchanged — the PID is trusted because there is no
+/// mechanism here yet. This is the gap the design's "Stop and crash recovery"
+/// calls out; closing it needs a Windows identity implementation.
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+fn verify_ssh_pid(pid: u32) -> bool {
+    let _ = pid;
+    true
+}
+
+/// Non-destructive "is a process with this pid running" probe for Windows.
+///
+/// `tasklist /FI "PID eq <n>" /NH` prints the matching row, or an INFO line
+/// when nothing matches. It must not terminate anything: the previous
+/// implementation ran `taskkill /F` and inferred liveness from the exit
+/// status, so asking whether the tunnel was alive killed it.
+#[cfg(not(unix))]
+fn pid_exists(pid: u32) -> bool {
+    Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+        .output()
+        .map(|out| {
+            let text = String::from_utf8_lossy(&out.stdout);
+            text.lines()
+                .any(|line| line.split_whitespace().nth(1) == Some(&pid.to_string()))
+        })
+        .unwrap_or(false)
 }
 
 /// Whether it is safe to signal the recorded tunnel process.
@@ -277,10 +324,10 @@ impl SSHClient {
             }
             #[cfg(not(unix))]
             {
-                Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .output()
-                    .is_err()
+                // Was `taskkill /F`, which terminated the tunnel as a side
+                // effect of asking whether it was alive, and then reported the
+                // inverse of the truth. Probing must not kill.
+                verify_ssh_pid(pid) && pid_exists(pid)
             }
         } else {
             false
@@ -544,9 +591,11 @@ mod tests {
     //! in the Python bridge; we mirror them in Rust so a future refactor
     //! can't silently regress the multi-profile safety property.
 
+    #[cfg(target_os = "macos")]
+    use super::is_ssh_executable;
     use super::{
         daemon_lifecycle, profiled_bridge_leaf, profiled_env_key, setup_dir_for_profile,
-        stop_decision, StopDecision, TunnelState,
+        stop_decision, verify_ssh_pid, StopDecision, TunnelState,
     };
 
     /// A state carrying no OS identity — what OpenSSH writes today, and what a
@@ -629,6 +678,65 @@ mod tests {
             ),
             other => panic!("must refuse to signal a dead pid, got {other:?}"),
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn ssh_executable_detection() {
+        use std::path::Path;
+        assert!(is_ssh_executable(Path::new("/usr/bin/ssh")));
+        assert!(is_ssh_executable(Path::new("/usr/bin/sshd")));
+        assert!(!is_ssh_executable(Path::new("/usr/bin/python3")));
+        assert!(!is_ssh_executable(Path::new("/")));
+    }
+
+    /// The regression this branch exists for: on macOS there is no /proc, so a
+    /// `/proc`-only check verified nothing and `tunnel stop` could never kill
+    /// the tunnel. Spawn a real process and verify it.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_verifies_a_real_process_by_its_executable() {
+        // A copy of `sleep` whose *name* contains "ssh" stands in for the ssh
+        // client, so the check is exercised without opening a connection.
+        let dir = tempfile::tempdir().unwrap();
+        let ssh_like = dir.path().join("ssh-standin");
+        std::fs::copy("/bin/sleep", &ssh_like).unwrap();
+
+        let mut child = std::process::Command::new(&ssh_like)
+            .arg("10")
+            .spawn()
+            .expect("spawn stand-in");
+        let pid = child.id();
+        assert!(
+            verify_ssh_pid(pid),
+            "a process whose binary is named ssh-* must verify on macOS"
+        );
+        reap(&mut child);
+
+        // Control: the real /bin/sleep is not ssh.
+        let mut other = std::process::Command::new("/bin/sleep")
+            .arg("10")
+            .spawn()
+            .expect("spawn control");
+        assert!(
+            !verify_ssh_pid(other.id()),
+            "/bin/sleep must not verify as ssh"
+        );
+        reap(&mut other);
+    }
+
+    /// Kill and reap a spawned stand-in so the test leaves no zombies.
+    #[cfg(target_os = "macos")]
+    fn reap(child: &mut std::process::Child) {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// A dead pid must verify as false rather than panicking or trusting the pid.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn dead_pid_does_not_verify_as_ssh() {
+        assert!(!verify_ssh_pid(999_999));
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
