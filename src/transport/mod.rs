@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod backend;
 pub mod contract;
+pub mod daemon_lifecycle;
 pub mod host_keys;
 pub mod identity;
 pub mod ipc;

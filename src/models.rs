@@ -377,10 +377,13 @@ pub struct TunnelState {
     /// Absolute path of the tunnel process executable (two-tier PID check).
     #[serde(default)]
     pub executable_path: Option<String>,
-    /// Opaque start identity (e.g. argv hash) used to confirm the live process
-    /// still matches the recorded one before `tunnel stop` kills it.
+    /// OS start marker used to confirm the live process still matches the
+    /// recorded one before `tunnel stop` signals it (PIDs are reused).
+    /// Platform-specific, matching
+    /// [`crate::transport::identity::ProcessIdentity::start_identity`]:
+    /// Linux `/proc` starttime ticks, macOS epoch seconds, Windows creation time.
     #[serde(default)]
-    pub start_identity: Option<String>,
+    pub start_identity: Option<u64>,
     /// IPC endpoint (UDS path / named pipe / TCP addr) the native daemon listens on.
     #[serde(default)]
     pub ipc_endpoint: Option<String>,
@@ -526,7 +529,7 @@ mod tests {
             backend: Some("openssh".into()),
             daemon_nonce: Some("n0nce".into()),
             executable_path: Some("/usr/bin/ssh".into()),
-            start_identity: Some("argv-hash".into()),
+            start_identity: Some(1767225600),
             ipc_endpoint: Some("/run/vb.sock".into()),
             token_path: Some("/run/vb.token".into()),
             local_forward: Some("L*:20023".into()),
@@ -542,7 +545,7 @@ mod tests {
         assert_eq!(back.profile.as_deref(), Some("prod"));
         assert_eq!(back.daemon_nonce.as_deref(), Some("n0nce"));
         assert_eq!(back.executable_path.as_deref(), Some("/usr/bin/ssh"));
-        assert_eq!(back.start_identity.as_deref(), Some("argv-hash"));
+        assert_eq!(back.start_identity, Some(1767225600));
         assert_eq!(back.ipc_endpoint.as_deref(), Some("/run/vb.sock"));
         assert_eq!(back.token_path.as_deref(), Some("/run/vb.token"));
         assert_eq!(back.local_forward.as_deref(), Some("L*:20023"));
