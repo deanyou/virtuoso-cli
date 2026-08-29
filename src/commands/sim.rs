@@ -723,13 +723,17 @@ pub fn job_cancel(id: &str) -> Result<Value> {
 /// Check Spectre license availability on local or remote host.
 /// Queries `spectre -V` for version and `lmstat -a` for license usage.
 pub fn check_license() -> Result<Value> {
+    use crate::transport::contract::{CommandRequest, RemoteTransport};
+    use crate::transport::openssh::OpenSshTransport;
     use std::process::Command;
+    use std::sync::Arc;
+    use std::time::Duration;
 
     let cfg = crate::config::Config::from_env()?;
     let remote = cfg.is_remote();
 
     if remote {
-        let runner = crate::transport::ssh::SSHRunner::from_config(&cfg);
+        let transport: Arc<dyn RemoteTransport> = Arc::new(OpenSshTransport::from_config(&cfg));
 
         let cshrc = cfg.cadence_cshrc.as_deref();
         let cshrc_quoted = cshrc
@@ -750,7 +754,10 @@ pub fn check_license() -> Result<Value> {
             env_setup
         );
 
-        let result = runner.run_command(&check_script, Some(30))?;
+        let result = transport.run_command(&CommandRequest::with_exec_timeout(
+            &check_script,
+            Duration::from_secs(30),
+        ))?;
         let stdout = result.stdout.trim();
         let stderr = result.stderr.trim();
 
