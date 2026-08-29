@@ -112,6 +112,11 @@ pub struct Config {
     pub ssh_key: Option<String>,
     /// Path to a custom SSH config file (VB_SSH_CONFIG). Passed as `-F` to ssh.
     pub ssh_config: Option<String>,
+    /// Which SSH backend to use (VB_SSH_BACKEND): `openssh` (default) or
+    /// `native`. `native` requires the `native-ssh` Cargo feature; without it the
+    /// request is rejected with a structured `UnsupportedBackend` rather than
+    /// silently falling back to OpenSSH.
+    pub ssh_backend: Option<String>,
     /// Disable SSH ControlMaster multiplexing (VB_DISABLE_CONTROL_MASTER=1).
     /// Set this on WSL2/Windows when the CM socket path contains non-ASCII chars.
     pub disable_control_master: bool,
@@ -239,6 +244,7 @@ impl Config {
             ssh_port: Self::env_with_profile("VB_SSH_PORT", profile).and_then(|v| v.parse().ok()),
             ssh_key: Self::env_with_profile("VB_SSH_KEY", profile),
             ssh_config: Self::env_with_profile("VB_SSH_CONFIG", profile),
+            ssh_backend: Self::env_with_profile("VB_SSH_BACKEND", profile),
             disable_control_master: Self::env_with_profile("VB_DISABLE_CONTROL_MASTER", profile)
                 .map(|v| v == "1" || v.to_lowercase() == "true")
                 .unwrap_or(false),

@@ -36,6 +36,7 @@ mod config_tests {
             ssh_port: None,
             ssh_key: None,
             ssh_config: None,
+            ssh_backend: None,
             disable_control_master: false,
             timeout: 30,
             read_timeout: 120,

@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod backend;
 pub mod contract;
 pub mod host_keys;
 pub mod ipc;

@@ -25,6 +25,11 @@ required-features = ["daemon"]
 
 [features]
 daemon = []
+# Native (russh-based) SSH backend. Empty for now: the native client ships with
+# the `russh` dependency, which is added when step 3b lands. Selecting
+# VB_SSH_BACKEND=native on a build without this feature returns structured
+# UnsupportedBackend (see src/transport/backend.rs).
+native-ssh = []
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
