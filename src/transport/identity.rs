@@ -173,7 +173,8 @@ mod imp {
     const KERN_PROC_PID: libc::c_int = 1;
     const KERN_PROCARGS2: libc::c_int = 49;
 
-    fn sysctl_bytes(mib: &mut [libc::c_int], buf: &mut [u8]) -> Result<usize, IdentityError> {
+    /// Returns the number of bytes written, or the raw `errno` on failure.
+    fn sysctl_bytes(mib: &mut [libc::c_int], buf: &mut [u8]) -> Result<usize, i32> {
         let mut len = buf.len();
         // SAFETY: `buf` is a mutable byte slice we own; `mib` is a valid,
         // non-empty int array. `sysctl` writes at most `len` bytes.
@@ -188,10 +189,22 @@ mod imp {
             )
         };
         if ret != 0 {
-            let err = std::io::Error::last_os_error();
-            return Err(IdentityError::Unreadable(format!("sysctl: {err}")));
+            // Return the raw errno so callers can distinguish "no such
+            // process" from a genuine read failure. Matching on the formatted
+            // `io::Error` text would never match: it renders as
+            // "No such process (os error 3)", not "ESRCH".
+            return Err(std::io::Error::last_os_error().raw_os_error().unwrap_or(0));
         }
         Ok(len)
+    }
+
+    /// Map a `sysctl` errno to an [`IdentityError`].
+    fn map_errno(errno: i32, what: &str, pid: u32) -> IdentityError {
+        if errno == libc::ESRCH {
+            IdentityError::NoSuchProcess(pid)
+        } else {
+            IdentityError::Unreadable(format!("sysctl {what}: errno {errno}"))
+        }
     }
 
     /// `kinfo_proc.kp_proc.p_starttime` — the first member of `extern_proc` is
@@ -201,12 +214,14 @@ mod imp {
     fn start_time(pid: u32) -> Result<u64, IdentityError> {
         let mut mib = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid as libc::c_int];
         let mut buf = [0u8; 1024];
-        let len = sysctl_bytes(&mut mib, &mut buf).map_err(|e| match e {
-            IdentityError::Unreadable(ref m) if m.contains("ESRCH") => {
-                IdentityError::NoSuchProcess(pid)
-            }
-            other => other,
-        })?;
+        let len = sysctl_bytes(&mut mib, &mut buf)
+            .map_err(|errno| map_errno(errno, "KERN_PROC_PID", pid))?;
+        // On macOS an absent PID is *not* an error: sysctl succeeds with a
+        // zero-length result (errno ESRCH is not reported). Verified against
+        // pids 41000 / 99999 / 999999, which return ret=0 len=0.
+        if len == 0 {
+            return Err(IdentityError::NoSuchProcess(pid));
+        }
         if len < 16 {
             return Err(IdentityError::Unreadable(
                 "sysctl KERN_PROC_PID returned a short buffer".into(),
@@ -223,12 +238,12 @@ mod imp {
         // subcommand: three elements, not four.
         let mut mib = [CTL_KERN, KERN_PROCARGS2, pid as libc::c_int];
         let mut buf = vec![0u8; 64 * 1024];
-        let len = sysctl_bytes(&mut mib, &mut buf).map_err(|e| match e {
-            IdentityError::Unreadable(ref m) if m.contains("ESRCH") => {
-                IdentityError::NoSuchProcess(pid)
-            }
-            other => other,
-        })?;
+        let len = sysctl_bytes(&mut mib, &mut buf)
+            .map_err(|errno| map_errno(errno, "KERN_PROCARGS2", pid))?;
+        // Same zero-length convention as `start_time`.
+        if len == 0 {
+            return Err(IdentityError::NoSuchProcess(pid));
+        }
         if len <= 4 {
             return Err(IdentityError::Unreadable(
                 "sysctl KERN_PROCARGS2 returned a short buffer".into(),
@@ -435,6 +450,34 @@ mod tests {
             me.executable_path,
             real
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn missing_pid_reports_no_such_process_not_unreadable() {
+        // Regression guard: errno must be mapped by *code* (ESRCH), not by
+        // matching the formatted `io::Error` text, which reads
+        // "No such process (os error 3)" and never contains "ESRCH".
+        // Not `u32::MAX`: as a `c_int` that is -1, which the kernel handles
+        // specially rather than reporting ESRCH. macOS pid_max is 100000.
+        match ProcessIdentity::of_pid(999_999) {
+            Err(IdentityError::NoSuchProcess(_)) => {}
+            other => panic!("expected NoSuchProcess for a dead pid, got {other:?}"),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn authorize_signal_on_dead_pid_reports_process_gone() {
+        let recorded = ProcessIdentity {
+            executable_path: std::path::PathBuf::from("/usr/bin/vcli"),
+            pid: 999_999,
+            start_identity: 1,
+        };
+        match authorize_signal(&recorded) {
+            Err(Refusal::ProcessGone(_)) => {}
+            other => panic!("expected ProcessGone, got {other:?}"),
+        }
     }
 
     #[cfg(target_os = "linux")]
