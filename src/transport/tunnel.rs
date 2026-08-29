@@ -4,6 +4,7 @@ use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
 use crate::models::TunnelState;
 use crate::transport::contract::RemoteTransport;
+use crate::transport::daemon_lifecycle::{self, Verdict};
 use crate::transport::openssh::OpenSshTransport;
 use crate::transport::ssh::SSHRunner;
 use include_dir::{include_dir, Dir};
@@ -104,6 +105,66 @@ fn verify_ssh_pid(pid: u32) -> bool {
     }
 }
 
+/// Whether it is safe to signal the recorded tunnel process.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StopDecision {
+    /// The recorded process was verified (or proven alive) — signal it.
+    Signal,
+    /// Do not signal; the reason is reported to the operator.
+    Skip(String),
+}
+
+/// Decide whether signalling the recorded tunnel process is authorized.
+///
+/// State that records an OS identity (the native daemon) goes through the
+/// two-tier check in [`daemon_lifecycle`]: a process that answers the nonce
+/// challenge, or that is unresponsive but still matches all three recorded
+/// attributes, may be signalled. A stale or unverifiable one may not.
+///
+/// OpenSSH state records **no** identity, so it keeps the pre-existing
+/// `verify_ssh_pid` behaviour byte-for-byte — including the non-Unix fallback
+/// that trusts the PID. Closing that gap needs a Windows identity
+/// implementation (see the design's "Stop and crash recovery") and is not
+/// silently folded into this change.
+fn stop_decision(state: Option<&TunnelState>, pid: u32) -> StopDecision {
+    if let Some(s) = state {
+        if daemon_lifecycle::recorded_identity(s).is_some() {
+            // Tier 1 needs the IPC client that ships with the native daemon.
+            // Until it lands, `challenge` answers false and every recorded
+            // daemon falls through to the Tier 2 identity check — which is the
+            // conservative direction: it can only ever deny, never widen.
+            return match daemon_lifecycle::assess(s, |_nonce| false) {
+                Verdict::Alive | Verdict::UnresponsiveButIdentified => StopDecision::Signal,
+                Verdict::Stale => {
+                    StopDecision::Skip(format!("recorded daemon (pid {pid}) is no longer running"))
+                }
+                Verdict::Unverifiable(reason) => StopDecision::Skip(format!(
+                    "cannot verify recorded daemon (pid {pid}): {reason}"
+                )),
+            };
+        }
+    }
+    openssh_stop_decision(pid)
+}
+
+#[cfg(unix)]
+fn openssh_stop_decision(pid: u32) -> StopDecision {
+    if verify_ssh_pid(pid) {
+        StopDecision::Signal
+    } else {
+        StopDecision::Skip(format!("PID {pid} is not an SSH process"))
+    }
+}
+
+#[cfg(not(unix))]
+fn openssh_stop_decision(pid: u32) -> StopDecision {
+    // Preserved exactly: no /proc here, so the PID is trusted. This is the
+    // known gap the design calls out; it is closed by a Windows identity
+    // implementation, not by this change.
+    let _ = pid;
+    StopDecision::Signal
+}
+
 pub struct SSHClient {
     /// The owned transport. `Arc` so that call sites which have migrated to
     /// the contract and call sites which still need runner-specific behaviour
@@ -170,22 +231,30 @@ impl SSHClient {
     }
 
     pub fn stop(&self) -> Result<()> {
+        // Loaded once, profile-scoped, so the decision sees the same state the
+        // rest of this client uses.
+        let state = TunnelState::load_with_profile(self.profile.as_deref())
+            .ok()
+            .flatten();
         if let Some(pid) = self.tunnel_pid {
-            #[cfg(unix)]
-            {
-                if verify_ssh_pid(pid) {
-                    let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
-                } else {
-                    tracing::warn!("PID {pid} is not an SSH process, skipping kill");
+            match stop_decision(state.as_ref(), pid) {
+                StopDecision::Signal => {
+                    #[cfg(unix)]
+                    {
+                        let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = Command::new("taskkill")
+                            .args(["/PID", &pid.to_string(), "/F"])
+                            .output();
+                    }
+                    tracing::info!("killed tunnel process {}", pid);
+                }
+                StopDecision::Skip(reason) => {
+                    tracing::warn!("{reason}; skipping kill");
                 }
             }
-            #[cfg(not(unix))]
-            {
-                let _ = Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/F"])
-                    .output();
-            }
-            tracing::info!("killed tunnel process {}", pid);
         }
 
         if !self.keep_remote_files {
@@ -475,7 +544,107 @@ mod tests {
     //! in the Python bridge; we mirror them in Rust so a future refactor
     //! can't silently regress the multi-profile safety property.
 
-    use super::{profiled_bridge_leaf, profiled_env_key, setup_dir_for_profile};
+    use super::{
+        daemon_lifecycle, profiled_bridge_leaf, profiled_env_key, setup_dir_for_profile,
+        stop_decision, StopDecision, TunnelState,
+    };
+
+    /// A state carrying no OS identity — what OpenSSH writes today, and what a
+    /// v1 file deserializes to.
+    fn openssh_like_state(pid: u32) -> TunnelState {
+        TunnelState {
+            version: 2,
+            port: 40567,
+            pid,
+            remote_host: "compute-eda-42".into(),
+            setup_path: None,
+            profile: None,
+            backend: Some("openssh".into()),
+            daemon_nonce: None,
+            executable_path: None,
+            start_identity: None,
+            ipc_endpoint: None,
+            token_path: None,
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
+        }
+    }
+
+    /// The safety property: without a recorded identity the old OpenSSH
+    /// behaviour must be preserved exactly, so this change is a no-op for
+    /// every tunnel that exists today.
+    #[test]
+    fn state_without_identity_does_not_take_the_native_path() {
+        // A pid that is certainly not an ssh process: the decision must be the
+        // OpenSSH verdict (Skip on unix, where /proc decides), never a native
+        // one derived from identity.
+        let state = openssh_like_state(999_999);
+        let d = stop_decision(Some(&state), 999_999);
+        #[cfg(unix)]
+        assert_eq!(
+            d,
+            StopDecision::Skip("PID 999999 is not an SSH process".into())
+        );
+        #[cfg(not(unix))]
+        assert_eq!(d, StopDecision::Signal);
+    }
+
+    /// No state at all falls back to the OpenSSH check rather than failing open.
+    #[test]
+    fn missing_state_falls_back_to_openssh_decision() {
+        let d = stop_decision(None, 999_999);
+        #[cfg(unix)]
+        assert_eq!(
+            d,
+            StopDecision::Skip("PID 999999 is not an SSH process".into())
+        );
+        #[cfg(not(unix))]
+        assert_eq!(d, StopDecision::Signal);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn recorded_identity_matching_a_live_process_authorizes_the_signal() {
+        let me = crate::transport::identity::ProcessIdentity::current().unwrap();
+        let mut state = openssh_like_state(me.pid);
+        daemon_lifecycle::record_identity(&mut state, &me);
+        // Tier 1 is not wired yet (challenge answers false), so this exercises
+        // Tier 2: unresponsive but identified → still safe to signal.
+        assert_eq!(stop_decision(Some(&state), me.pid), StopDecision::Signal);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn recorded_identity_for_a_dead_process_is_skipped() {
+        let me = crate::transport::identity::ProcessIdentity::current().unwrap();
+        let mut state = openssh_like_state(me.pid);
+        daemon_lifecycle::record_identity(&mut state, &me);
+        state.pid = 999_999; // nothing is running here
+        match stop_decision(Some(&state), 999_999) {
+            StopDecision::Skip(reason) => assert!(
+                reason.contains("no longer running"),
+                "unexpected reason: {reason}"
+            ),
+            other => panic!("must refuse to signal a dead pid, got {other:?}"),
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn pid_reuse_is_skipped_even_though_the_pid_is_live() {
+        // The case the whole two-tier design exists for: the pid is in use, but
+        // by a different process than the one recorded.
+        let me = crate::transport::identity::ProcessIdentity::current().unwrap();
+        let mut state = openssh_like_state(me.pid);
+        daemon_lifecycle::record_identity(&mut state, &me);
+        state.start_identity = Some(me.start_identity.wrapping_add(1));
+        match stop_decision(Some(&state), me.pid) {
+            StopDecision::Skip(_) => {}
+            other => panic!("must refuse to signal a reused pid, got {other:?}"),
+        }
+    }
 
     #[test]
     fn bridge_leaf_no_profile() {
