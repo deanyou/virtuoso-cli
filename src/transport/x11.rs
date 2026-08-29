@@ -13,12 +13,16 @@
 
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
-use crate::models::RemoteTaskResult;
-use crate::transport::ssh::SSHRunner;
+use crate::transport::contract::{
+    CommandRequest, CommandResult, RemoteTransport, UploadTextRequest,
+};
+use crate::transport::openssh::OpenSshTransport;
 use include_dir::{include_dir, Dir};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
+use std::sync::Arc;
+use std::time::Duration;
 
 static RESOURCES: Dir = include_dir!("$CARGO_MANIFEST_DIR/resources");
 
@@ -150,24 +154,24 @@ fn hash_helper(source: &str) -> String {
 
 /// Upload (or refresh) the helper. The remote path embeds a short hash of the
 /// source so concurrent vcli versions don't overwrite each other.
-pub fn ensure_helper_uploaded(runner: &SSHRunner, client_id: &str) -> Result<String> {
+pub fn ensure_helper_uploaded(runner: &dyn RemoteTransport, client_id: &str) -> Result<String> {
     let source = read_helper_source()?;
     let digest = hash_helper(&source);
     let remote_dir = x11_remote_dir(client_id);
     let remote_path = format!("{remote_dir}/x11_dismiss_dialog_{digest}.py");
 
     let mkdir = format!("mkdir -p {remote_dir}");
-    let _ = runner.run_command(&mkdir, None)?;
+    let _ = runner.run_command(&CommandRequest::untimed(&mkdir))?;
     // Best-effort upload: if the file already exists with the same hash, the
     // hash-suffixed name avoids a write — but we still upload unconditionally
     // on the first call of a session to keep semantics simple. Idempotent.
-    runner.upload_text(&source, &remote_path)?;
+    runner.upload_text(&UploadTextRequest::untimed(&source, &remote_path))?;
     Ok(remote_path)
 }
 
 /// Discover DISPLAY/XAUTHORITY from a running virtuoso process.
 #[allow(dead_code)]
-pub fn detect_env(runner: &SSHRunner, user: Option<&str>) -> Result<X11Env> {
+pub fn detect_env(runner: &dyn RemoteTransport, user: Option<&str>) -> Result<X11Env> {
     Ok(detect_envs(runner, user)?
         .into_iter()
         .next()
@@ -178,7 +182,7 @@ pub fn detect_env(runner: &SSHRunner, user: Option<&str>) -> Result<X11Env> {
 }
 
 /// Discover all interactive Virtuoso DISPLAY/XAUTHORITY pairs.
-pub fn detect_envs(runner: &SSHRunner, user: Option<&str>) -> Result<Vec<X11Env>> {
+pub fn detect_envs(runner: &dyn RemoteTransport, user: Option<&str>) -> Result<Vec<X11Env>> {
     let user_filter = match user {
         Some(u) => format!("-u {u} "),
         None => "".to_string(),
@@ -186,7 +190,10 @@ pub fn detect_envs(runner: &SSHRunner, user: Option<&str>) -> Result<Vec<X11Env>
     let cmd = format!(
         "pgrep {user_filter}-x virtuoso | while read pid; do if tr '\\0' ' ' </proc/$pid/cmdline 2>/dev/null | grep -q -- '-nograph'; then continue; fi; printf '__PID__=%s\\n' \"$pid\"; tr '\\0' '\\n' </proc/$pid/environ 2>/dev/null | grep -E '^(DISPLAY|XAUTHORITY)='; done"
     );
-    let out = runner.run_command(&cmd, Some(10))?;
+    let out = runner.run_command(&CommandRequest::with_exec_timeout(
+        &cmd,
+        Duration::from_secs(10),
+    ))?;
     let mut envs = Vec::new();
     let mut current = X11Env {
         display: None,
@@ -230,7 +237,7 @@ fn push_unique_env(
 
 /// Run the helper in detection-only mode (no dismiss).
 pub fn list_dialogs(
-    runner: &SSHRunner,
+    runner: &dyn RemoteTransport,
     client_id: &str,
     user: Option<&str>,
     explicit_display: Option<&str>,
@@ -246,7 +253,10 @@ pub fn list_dialogs(
     for env in &envs {
         let display = env.display.as_deref().unwrap_or("");
         let cmd = build_helper_cmd(&helper, display, env.xauthority.as_deref(), false, "enter");
-        let out = runner.run_command(&cmd, Some(30))?;
+        let out = runner.run_command(&CommandRequest::with_exec_timeout(
+            &cmd,
+            Duration::from_secs(30),
+        ))?;
         let mut these = parse_helper_output(&out);
         annotate_dialogs(&mut these, display);
         let helper_errors = extract_helper_errors(&out);
@@ -275,7 +285,7 @@ pub fn list_dialogs(
 
 /// Run the helper in dismiss mode.
 pub fn dismiss(
-    runner: &SSHRunner,
+    runner: &dyn RemoteTransport,
     client_id: &str,
     user: Option<&str>,
     explicit_display: Option<&str>,
@@ -297,7 +307,10 @@ pub fn dismiss(
             !dry_run,
             action,
         );
-        let out = runner.run_command(&cmd, Some(30))?;
+        let out = runner.run_command(&CommandRequest::with_exec_timeout(
+            &cmd,
+            Duration::from_secs(30),
+        ))?;
         for line in out.stdout.lines() {
             let line = line.trim();
             if line.is_empty() {
@@ -334,7 +347,7 @@ pub fn dismiss(
 
 /// Enumerate Virtuoso-related X11 windows. No dismiss action.
 pub fn list_windows(
-    runner: &SSHRunner,
+    runner: &dyn RemoteTransport,
     client_id: &str,
     user: Option<&str>,
     explicit_display: Option<&str>,
@@ -347,7 +360,10 @@ pub fn list_windows(
     for env in &envs {
         let display = env.display.as_deref().unwrap_or("");
         let cmd = build_helper_cmd_list_windows(&helper, display, env.xauthority.as_deref());
-        let out = runner.run_command(&cmd, Some(15))?;
+        let out = runner.run_command(&CommandRequest::with_exec_timeout(
+            &cmd,
+            Duration::from_secs(15),
+        ))?;
         let mut these: Vec<WindowInfo> = out
             .stdout
             .lines()
@@ -377,7 +393,7 @@ pub fn list_windows(
 /// the caller is expected to have identified the target via `list_windows`
 /// or by inspecting the X server directly.
 pub fn dismiss_window(
-    runner: &SSHRunner,
+    runner: &dyn RemoteTransport,
     client_id: &str,
     user: Option<&str>,
     explicit_display: Option<&str>,
@@ -408,7 +424,10 @@ pub fn dismiss_window(
             window_id,
             action,
         );
-        let out = runner.run_command(&cmd, Some(15))?;
+        let out = runner.run_command(&CommandRequest::with_exec_timeout(
+            &cmd,
+            Duration::from_secs(15),
+        ))?;
         for line in out.stdout.lines() {
             let line = line.trim();
             if line.is_empty() {
@@ -507,7 +526,7 @@ fn append_still_mapped_errors(errors: &mut Vec<String>, dismissed: &[DialogInfo]
 /// Shared env-resolution: explicit display, else auto-detect from the running
 /// virtuoso process. Returns the resolved env and the display string.
 fn resolve_envs(
-    runner: &SSHRunner,
+    runner: &dyn RemoteTransport,
     user: Option<&str>,
     explicit_display: Option<&str>,
 ) -> Result<Vec<X11Env>> {
@@ -598,7 +617,7 @@ fn shell_escape(s: &str) -> String {
     }
 }
 
-fn parse_helper_output(out: &RemoteTaskResult) -> Vec<DialogInfo> {
+fn parse_helper_output(out: &CommandResult) -> Vec<DialogInfo> {
     let mut dialogs = Vec::new();
     for line in out.stdout.lines() {
         let line = line.trim();
@@ -620,7 +639,7 @@ fn parse_helper_output(out: &RemoteTaskResult) -> Vec<DialogInfo> {
 /// 1. `{"error": "..."}` JSON lines on stdout (helper's structured error)
 /// 2. Non-zero `returncode` (helper crashed, missing libX11, etc.)
 /// 3. Non-empty `stderr` (helper printed to stderr without exit code)
-fn extract_helper_errors(out: &RemoteTaskResult) -> Vec<String> {
+fn extract_helper_errors(out: &CommandResult) -> Vec<String> {
     use std::collections::BTreeSet;
     let mut errors: Vec<String> = Vec::new();
     let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -647,15 +666,15 @@ fn extract_helper_errors(out: &RemoteTaskResult) -> Vec<String> {
     }
 
     // 2. Non-zero returncode (no structured error AND nothing usable on stdout).
-    if out.returncode != 0 && seen.is_empty() {
+    if out.exit_status != 0 && seen.is_empty() {
         let stderr_summary = out.stderr.lines().next().unwrap_or("").trim();
         let msg = if !stderr_summary.is_empty() {
             format!(
                 "x11 helper exited with code {}: {}",
-                out.returncode, stderr_summary
+                out.exit_status, stderr_summary
             )
         } else {
-            format!("x11 helper exited with code {}", out.returncode)
+            format!("x11 helper exited with code {}", out.exit_status)
         };
         push(msg, &mut errors, &mut seen);
     }
@@ -674,7 +693,7 @@ fn extract_helper_errors(out: &RemoteTaskResult) -> Vec<String> {
     errors
 }
 
-fn truncate_log(out: &RemoteTaskResult) -> String {
+fn truncate_log(out: &CommandResult) -> String {
     const LIMIT: usize = 8 * 1024;
     let mut log = format!(
         "--- stdout ---\n{}\n--- stderr ---\n{}",
@@ -687,15 +706,18 @@ fn truncate_log(out: &RemoteTaskResult) -> String {
     log
 }
 
-/// Construct an SSHRunner for a given Config (mirrors `transport::tunnel`).
-pub fn runner_for_config(config: &Config) -> Result<SSHRunner> {
-    let runner = SSHRunner::from_config(config);
+/// Construct the configured remote transport (mirrors `transport::tunnel`).
+///
+/// Returns a trait object rather than a concrete `SSHRunner` so that callers
+/// hold the contract, not a backend. `VB_DISABLE_CONTROL_MASTER` is applied
+/// here, matching what `transport::tunnel::SSHClient::from_env` does — note
+/// that `SSHRunner::from_config` alone does not apply it.
+pub fn transport_for_config(config: &Config) -> Result<Arc<dyn RemoteTransport>> {
+    let mut transport = OpenSshTransport::from_config(config);
     if config.disable_control_master {
-        if let Ok(mut guard) = runner.use_control_master.lock() {
-            *guard = false;
-        }
+        transport = transport.with_control_master_disabled();
     }
-    Ok(runner)
+    Ok(Arc::new(transport))
 }
 
 #[cfg(test)]
@@ -766,14 +788,12 @@ mod tests {
 
     #[test]
     fn parse_helper_output_picks_json_dialogs_only() {
-        let out = RemoteTaskResult {
+        let out = CommandResult {
             stdout: "noise\n{\"window_id\":\"0x1\",\"title\":\"a\",\"x\":0,\"y\":0,\"w\":1,\"h\":1}\nmore noise\n".to_string(),
             stderr: "".to_string(),
             success: true,
-            returncode: 0,
-            remote_dir: None,
-            error: None,
-            timings: Default::default(),
+            exit_status: 0,
+            duration: Duration::ZERO,
         };
         let dialogs = parse_helper_output(&out);
         assert_eq!(dialogs.len(), 1);
@@ -781,15 +801,13 @@ mod tests {
         assert_eq!(dialogs[0].still_mapped, None);
     }
 
-    fn mkresult(stdout: &str, stderr: &str, returncode: i32) -> RemoteTaskResult {
-        RemoteTaskResult {
+    fn mkresult(stdout: &str, stderr: &str, returncode: i32) -> CommandResult {
+        CommandResult {
             stdout: stdout.to_string(),
             stderr: stderr.to_string(),
             success: returncode == 0,
-            returncode,
-            remote_dir: None,
-            error: None,
-            timings: Default::default(),
+            exit_status: returncode,
+            duration: Duration::ZERO,
         }
     }
 
@@ -924,14 +942,12 @@ mod tests {
     #[test]
     fn truncate_log_caps_at_8k() {
         let huge = "x".repeat(20_000);
-        let out = RemoteTaskResult {
+        let out = CommandResult {
             stdout: huge.clone(),
             stderr: "".into(),
             success: true,
-            returncode: 0,
-            remote_dir: None,
-            error: None,
-            timings: Default::default(),
+            exit_status: 0,
+            duration: Duration::ZERO,
         };
         let log = truncate_log(&out);
         assert!(log.len() <= 8 * 1024 + 32);

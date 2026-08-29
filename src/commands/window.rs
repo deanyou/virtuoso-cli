@@ -173,10 +173,10 @@ pub fn list_dialogs_x11(explicit_display: Option<&str>) -> Result<Value> {
             "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target".into(),
         ));
     }
-    let runner = x11::runner_for_config(&config)?;
+    let runner = x11::transport_for_config(&config)?;
     let user = config.remote_user.as_deref();
     let (env, dialogs) = x11::list_dialogs(
-        &runner,
+        runner.as_ref(),
         &x11::client_id_for(&config),
         user,
         explicit_display,
@@ -219,10 +219,10 @@ pub fn dismiss_dialog_x11(
             "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target (or use the SKILL path without --x11)".into(),
         ));
     }
-    let runner = x11::runner_for_config(&config)?;
+    let runner = x11::transport_for_config(&config)?;
     let user = config.remote_user.as_deref();
     let result = x11::dismiss(
-        &runner,
+        runner.as_ref(),
         &x11::client_id_for(&config),
         user,
         explicit_display,
@@ -268,10 +268,10 @@ pub fn list_windows_x11(explicit_display: Option<&str>) -> Result<Value> {
             "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target".into(),
         ));
     }
-    let runner = x11::runner_for_config(&config)?;
+    let runner = x11::transport_for_config(&config)?;
     let user = config.remote_user.as_deref();
     let (env, windows) = x11::list_windows(
-        &runner,
+        runner.as_ref(),
         &x11::client_id_for(&config),
         user,
         explicit_display,
@@ -302,10 +302,10 @@ pub fn dismiss_window_x11(
             "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target".into(),
         ));
     }
-    let runner = x11::runner_for_config(&config)?;
+    let runner = x11::transport_for_config(&config)?;
     let user = config.remote_user.as_deref();
     let result = x11::dismiss_window(
-        &runner,
+        runner.as_ref(),
         &x11::client_id_for(&config),
         user,
         explicit_display,
