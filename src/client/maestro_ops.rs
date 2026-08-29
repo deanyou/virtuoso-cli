@@ -1,6 +1,24 @@
 use crate::client::bridge::escape_skill_string;
 use crate::version::VirtuosoVersion;
 
+/// Parameters for `MaestroOps::export_waveform`.
+///
+/// Bundles the seven caller-supplied strings/integers so the
+/// constructor signature stays inside clippy's argument-count
+/// budget (see `LayoutOps::xstream_out` for the same pattern).
+pub struct ExportWaveformRequest<'a> {
+    pub session: &'a str,
+    pub expression: &'a str,
+    pub analysis: &'a str,
+    /// One of "scientific", "engineering", "automatic".
+    pub number_notation: &'a str,
+    /// `1..=16`.
+    pub precision: u8,
+    /// `>= 4`.
+    pub width: u8,
+    pub output_path: &'a str,
+}
+
 pub struct MaestroOps;
 
 impl MaestroOps {
@@ -285,6 +303,58 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
         };
         format!(
             r#"maeExportOutputView(?session "{session}"{test_name_part}{history_part} ?view "Detail" ?fileName "{file_path}")"#
+        )
+    }
+
+    /// Export a waveform (or expression) to a text file via `ocnPrint`.
+    ///
+    /// `expression` is a Cadence expression like `vout` or
+    /// `VT("/net015")` — passed verbatim to `ocnPrint` (no escape
+    /// because it's not a SKILL string literal; it's a syntax tree).
+    /// `analysis` selects the analysis context (`"tran"`, `"ac"`,
+    /// `"dc"`, ...). `number_notation` must be one of `"scientific"`,
+    /// `"engineering"`, `"automatic"`. `precision` is `1..=16`.
+    /// `width` is `>= 4`.
+    ///
+    /// Panics on invalid arguments — these are programming errors,
+    /// not user errors, since the constructor is meant to be called
+    /// from a clap layer that already validated the inputs.
+    pub fn export_waveform(&self, req: &ExportWaveformRequest<'_>) -> String {
+        // Validate enum + ranges up front — see AGENTS.md "no validation
+        // at system boundaries, trust types internally" rule: these
+        // bounds are part of the type contract for the new command.
+        if !(1..=16).contains(&req.precision) {
+            panic!(
+                "export_waveform: precision must be in 1..=16, got {}",
+                req.precision
+            );
+        }
+        if req.width < 4 {
+            panic!(
+                "export_waveform: width must be >= 4 (enough room for sign + 1 digit + decimal point), got {}",
+                req.width
+            );
+        }
+        match req.number_notation {
+            "scientific" | "engineering" | "automatic" => {}
+            other => panic!(
+                "export_waveform: numberNotation must be one of [scientific, engineering, automatic], got {other:?}"
+            ),
+        }
+
+        let session = escape_skill_string(req.session);
+        let analysis = escape_skill_string(req.analysis);
+        let expression_escaped = escape_skill_string(req.expression);
+        let output_path_escaped = escape_skill_string(req.output_path);
+        let number_notation_escaped = escape_skill_string(req.number_notation);
+        let precision = req.precision;
+        let width = req.width;
+
+        // SKILL string literals for the format parameters; the
+        // expression is itself a SKILL expression tree, escaped so
+        // it can be embedded in a quote() form below.
+        format!(
+            r#"let((v) v = axlWaveformToList(axlGetWaveform(?session "{session}" ?expression "{expression_escaped}" ?analysis "{analysis}")) ocnPrint(?expr v ?numberNotation "{number_notation_escaped}" ?precision {precision} ?width {width} ?outputFile "{output_path_escaped}"))"#
         )
     }
 
@@ -638,6 +708,114 @@ mod tests {
         let s = ops().get_history_list();
         assert!(s.contains("asiGetResultsDir"), "{s}");
         assert!(s.contains("foreach"), "{s}");
+    }
+
+    // === export_waveform tests (RED phase) ===
+    //
+    // Cadence SKILL ocnPrint with numberNotation/precision/width:
+    //   (ocnPrint ?expr <expr> ?numberNotation <notation> ?precision <n>
+    //             ?width <n> ?outputFile <path>)
+    // notation ∈ { "scientific" | "engineering" | "automatic" }
+
+    #[test]
+    fn export_waveform_emits_ocn_print_with_formatting() {
+        let s = ops().export_waveform(&ExportWaveformRequest {
+            session: "sess1",
+            expression: "vout",
+            analysis: "ac",
+            number_notation: "scientific",
+            precision: 12,
+            width: 18,
+            output_path: "/tmp/wave.txt",
+        });
+        assert!(s.contains("ocnPrint"), "must call ocnPrint: {s}");
+        assert!(s.contains("vout"), "expression must appear: {s}");
+        assert!(s.contains("scientific"), "notation must appear: {s}");
+        assert!(s.contains("12"), "precision must appear: {s}");
+        assert!(s.contains("18"), "width must appear: {s}");
+        assert!(s.contains("/tmp/wave.txt"), "output path must appear: {s}");
+    }
+
+    #[test]
+    fn export_waveform_escapes_double_quotes_in_session_and_path() {
+        // escape_skill_string escapes `\`, `"`, and control chars only —
+        // spaces, slashes, and apostrophes are literal in SKILL string
+        // literals. This test pins behavior for the most security-
+        // relevant character: the double quote, which would otherwise
+        // close the string literal early and enable injection.
+        let s = ops().export_waveform(&ExportWaveformRequest {
+            session: "sess\"x",
+            expression: "/tmp/with spaces/wave.txt",
+            analysis: "tran",
+            number_notation: "automatic",
+            precision: 8,
+            width: 10,
+            output_path: "/tmp/dest.txt",
+        });
+        // session and output path go through escape_skill_string;
+        // double-quotes are backslash-escaped.
+        assert!(
+            s.contains(r#"sess\"x"#),
+            "session double-quote must be escaped: {s}"
+        );
+        assert!(s.contains("/tmp/with spaces/wave.txt"));
+        assert!(s.contains("/tmp/dest.txt"));
+    }
+
+    #[test]
+    #[should_panic(expected = "precision must be in 1..=16")]
+    fn export_waveform_rejects_precision_zero() {
+        ops().export_waveform(&ExportWaveformRequest {
+            session: "sess",
+            expression: "vout",
+            analysis: "ac",
+            number_notation: "scientific",
+            precision: 0,
+            width: 18,
+            output_path: "/tmp/x",
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "precision must be in 1..=16")]
+    fn export_waveform_rejects_precision_above_16() {
+        ops().export_waveform(&ExportWaveformRequest {
+            session: "sess",
+            expression: "vout",
+            analysis: "ac",
+            number_notation: "scientific",
+            precision: 17,
+            width: 18,
+            output_path: "/tmp/x",
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "width must be >= 4")]
+    fn export_waveform_rejects_width_below_four() {
+        ops().export_waveform(&ExportWaveformRequest {
+            session: "sess",
+            expression: "vout",
+            analysis: "ac",
+            number_notation: "scientific",
+            precision: 12,
+            width: 3,
+            output_path: "/tmp/x",
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "numberNotation must be one of")]
+    fn export_waveform_rejects_unknown_notation() {
+        ops().export_waveform(&ExportWaveformRequest {
+            session: "sess",
+            expression: "vout",
+            analysis: "ac",
+            number_notation: "hex",
+            precision: 12,
+            width: 18,
+            output_path: "/tmp/x",
+        });
     }
 
     #[test]
