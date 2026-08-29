@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::error::Result;
+use crate::error::{Result, VirtuosoError};
 use crate::models::ScalarValue;
 use regex::Regex;
 use std::collections::HashMap;
@@ -281,6 +281,320 @@ impl SweepPoint {
     pub fn num_samples(&self) -> usize {
         self.signals.values().next().map(|v| v.len()).unwrap_or(0)
     }
+}
+
+/// Strict accessor view over parsed PSF signals.
+#[derive(Debug, Default, Clone)]
+pub struct PsfDataset {
+    signals: HashMap<String, Vec<f64>>,
+}
+
+impl PsfDataset {
+    /// Construct a dataset from a raw signal map.
+    pub fn from_signals(signals: HashMap<String, Vec<f64>>) -> Self {
+        Self { signals }
+    }
+
+    /// Borrow the underlying signal map.
+    pub fn signals(&self) -> &HashMap<String, Vec<f64>> {
+        &self.signals
+    }
+
+    /// Borrow a single finite scalar sample under `key`.
+    pub fn require_scalar(&self, key: &str) -> Result<f64> {
+        let values = self
+            .signals
+            .get(key)
+            .ok_or_else(|| VirtuosoError::NotFound(format!("signal '{}' not found", key)))?;
+        if values.is_empty() {
+            return Err(VirtuosoError::Execution(format!(
+                "signal '{}' has no samples; expected a single scalar",
+                key
+            )));
+        }
+        if values.len() != 1 {
+            return Err(VirtuosoError::Execution(format!(
+                "signal '{}' has {} samples; expected exactly one",
+                key,
+                values.len()
+            )));
+        }
+        let v = values[0];
+        if !v.is_finite() {
+            return Err(VirtuosoError::Execution(format!(
+                "signal '{}' is not finite ({}); expected a finite scalar",
+                key, v
+            )));
+        }
+        Ok(v)
+    }
+
+    /// Borrow a non-empty, all-finite sample vector under `key`.
+    pub fn require_vector(&self, key: &str) -> Result<&[f64]> {
+        let values = self
+            .signals
+            .get(key)
+            .ok_or_else(|| VirtuosoError::NotFound(format!("signal '{}' not found", key)))?;
+        if values.is_empty() {
+            return Err(VirtuosoError::Execution(format!(
+                "signal '{}' has no samples; expected a non-empty vector",
+                key
+            )));
+        }
+        for (idx, v) in values.iter().enumerate() {
+            if !v.is_finite() {
+                return Err(VirtuosoError::Execution(format!(
+                    "signal '{}' has non-finite sample at index {} ({})",
+                    key, idx, v
+                )));
+            }
+        }
+        Ok(values)
+    }
+
+    /// Borrow a strictly-increasing, non-negative frequency axis under `key`.
+    pub fn require_frequency_hz(&self, key: &str) -> Result<&[f64]> {
+        let values = self
+            .signals
+            .get(key)
+            .ok_or_else(|| VirtuosoError::NotFound(format!("signal '{}' not found", key)))?;
+        if values.is_empty() {
+            return Err(VirtuosoError::Execution(format!(
+                "signal '{}' has no samples; expected a non-empty frequency axis",
+                key
+            )));
+        }
+        for (idx, v) in values.iter().enumerate() {
+            if !v.is_finite() {
+                return Err(VirtuosoError::Execution(format!(
+                    "signal '{}' has non-finite frequency sample at index {} ({})",
+                    key, idx, v
+                )));
+            }
+            if *v < 0.0 {
+                return Err(VirtuosoError::Execution(format!(
+                    "signal '{}' has negative frequency at index {} ({})",
+                    key, idx, v
+                )));
+            }
+        }
+        for pair in values.windows(2) {
+            if pair[1] <= pair[0] {
+                return Err(VirtuosoError::Execution(format!(
+                    "signal '{}' is not strictly increasing ({} -> {})",
+                    key, pair[0], pair[1]
+                )));
+            }
+        }
+        Ok(values)
+    }
+}
+
+/// Strict single-file PSF ASCII reader.
+///
+/// Reads exactly one regular file at `path` and returns its data
+/// wrapped in a `PsfDataset`. The dataset's sole key is the file's
+/// `file_stem()`. The reader accepts two formats:
+///
+/// 1. **Simple format** — every non-empty, non-`#`-comment line is a
+///    whitespace-trimmed `f64`.
+/// 2. **SWEEP section** — the first line is the literal token
+///    `SWEEP`. Data follows, optionally preceded by a single quoted
+///    header line (e.g. `"frequency"`). Parsing ends at the first
+///    `TRACE`, `VALUE`, or `END` line.
+///
+/// Every candidate data line must parse as a finite `f64`. Empty
+/// content, malformed lines, non-finite values, missing/empty file
+/// stems, and non-regular-file inputs surface as
+/// `VirtuosoError::Execution`. Filesystem I/O errors propagate as
+/// `VirtuosoError::Io`.
+pub fn read_psf_ascii_strict(path: &Path) -> Result<PsfDataset> {
+    let meta = fs::metadata(path)?;
+    if !meta.is_file() {
+        return Err(VirtuosoError::Execution(format!(
+            "PSF path '{}' is not a regular file",
+            path.display()
+        )));
+    }
+
+    let content = fs::read_to_string(path)?;
+
+    let key = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| {
+            VirtuosoError::Execution(format!(
+                "PSF file '{}' has no valid UTF-8 file stem",
+                path.display()
+            ))
+        })?
+        .to_string();
+
+    let values = parse_psf_ascii_strict_content(&content)?;
+
+    let mut signals = HashMap::new();
+    signals.insert(key, values);
+    Ok(PsfDataset { signals })
+}
+
+/// Dispatch to either the SWEEP-section or simple-float branch.
+fn parse_psf_ascii_strict_content(content: &str) -> Result<Vec<f64>> {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return Err(VirtuosoError::Execution("PSF file content is empty".into()));
+    }
+
+    let first_line = trimmed.lines().next().unwrap_or("").trim();
+    if first_line == "SWEEP" {
+        parse_sweep_section_strict(trimmed)
+    } else {
+        parse_simple_floats_strict(trimmed)
+    }
+}
+
+/// Parse every non-empty, non-`#`-comment line as a finite `f64`.
+fn parse_simple_floats_strict(content: &str) -> Result<Vec<f64>> {
+    let mut values = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let v = trimmed.parse::<f64>().map_err(|_| {
+            VirtuosoError::Execution(format!("invalid float '{}' in PSF data", trimmed))
+        })?;
+        if !v.is_finite() {
+            return Err(VirtuosoError::Execution(format!(
+                "non-finite value '{}' in PSF data",
+                v
+            )));
+        }
+        values.push(v);
+    }
+    if values.is_empty() {
+        return Err(VirtuosoError::Execution(
+            "PSF data contains no finite samples".into(),
+        ));
+    }
+    Ok(values)
+}
+
+/// Parse a `SWEEP` ... `TRACE`/`VALUE`/`END` block.
+///
+/// The optional first quoted-header line after `SWEEP` is skipped.
+/// Every remaining non-empty line until the section terminator must
+/// parse as a finite `f64`.
+fn parse_sweep_section_strict(content: &str) -> Result<Vec<f64>> {
+    let mut lines = content.lines();
+    // First line is "SWEEP" — already validated by caller.
+    let _ = lines.next();
+
+    let mut values = Vec::new();
+    let mut header_consumed = false;
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed == "TRACE" || trimmed == "VALUE" || trimmed == "END" {
+            break;
+        }
+        if !header_consumed && trimmed.contains('"') {
+            header_consumed = true;
+            continue;
+        }
+        header_consumed = true;
+        let v = trimmed.parse::<f64>().map_err(|_| {
+            VirtuosoError::Execution(format!("invalid float '{}' in SWEEP section", trimmed))
+        })?;
+        if !v.is_finite() {
+            return Err(VirtuosoError::Execution(format!(
+                "non-finite value '{}' in SWEEP section",
+                v
+            )));
+        }
+        values.push(v);
+    }
+
+    if values.is_empty() {
+        return Err(VirtuosoError::Execution(
+            "SWEEP section contains no finite samples".into(),
+        ));
+    }
+    Ok(values)
+}
+
+/// Locate a single result file under a canonical root with strict
+/// containment checks.
+///
+/// `relative_name` must be a relative path whose components are only
+/// `Normal` or `CurDir`. Absolute paths and components like
+/// `ParentDir`, `RootDir`, or `Prefix` are rejected as
+/// `VirtuosoError::Config` so callers cannot escape `root`. The
+/// returned path is the canonical form of the resolved target and is
+/// guaranteed to be a regular file contained within the canonical
+/// root. Symlinks and directories are also rejected as
+/// `VirtuosoError::Config`. Missing targets surface as
+/// `VirtuosoError::NotFound`.
+pub fn find_exact_result_file(root: &Path, relative_name: &Path) -> Result<PathBuf> {
+    if relative_name.is_absolute() {
+        return Err(VirtuosoError::Config(format!(
+            "relative_name must be relative, got absolute path '{}'",
+            relative_name.display()
+        )));
+    }
+
+    for component in relative_name.components() {
+        match component {
+            std::path::Component::Normal(_) | std::path::Component::CurDir => {}
+            other => {
+                return Err(VirtuosoError::Config(format!(
+                    "relative_name '{}' contains disallowed path component {:?}",
+                    relative_name.display(),
+                    other
+                )));
+            }
+        }
+    }
+
+    let canonical_root = fs::canonicalize(root)?;
+    let candidate = canonical_root.join(relative_name);
+
+    let meta = match fs::symlink_metadata(&candidate) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(VirtuosoError::NotFound(format!(
+                "result file '{}' not found under root '{}'",
+                relative_name.display(),
+                canonical_root.display()
+            )));
+        }
+        Err(e) => return Err(VirtuosoError::Io(e)),
+    };
+
+    if meta.file_type().is_symlink() {
+        return Err(VirtuosoError::Config(format!(
+            "result file '{}' is a symlink",
+            relative_name.display()
+        )));
+    }
+    if !meta.is_file() {
+        return Err(VirtuosoError::Config(format!(
+            "result file '{}' is not a regular file",
+            relative_name.display()
+        )));
+    }
+
+    let canonical_target = fs::canonicalize(&candidate)?;
+    if !canonical_target.starts_with(&canonical_root) {
+        return Err(VirtuosoError::Config(format!(
+            "result file '{}' escapes canonical root '{}'",
+            canonical_target.display(),
+            canonical_root.display()
+        )));
+    }
+
+    Ok(canonical_target)
 }
 
 /// Parse sweep output and return structured sweep points.
@@ -585,6 +899,7 @@ fn parse_scalar(token: &str) -> Option<ScalarValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::VirtuosoError;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -967,5 +1282,343 @@ END"#;
 
         let i = ScalarValue::Integer(42);
         assert_eq!(i.as_f64(), Some(42.0));
+    }
+
+    // === PsfDataset accessor tests (RED phase) ===
+    //
+    // These tests pin the contract for future PsfDataset accessors
+    // (`require_scalar`, `require_vector`, `require_frequency_hz`).
+    // They are intentionally expected to fail to compile until the
+    // production type and methods exist. Construction uses struct
+    // literals with private fields because tests live in the same
+    // module as the production code.
+
+    #[test]
+    fn require_scalar_returns_value_for_single_finite_sample() {
+        let mut signals = HashMap::new();
+        signals.insert("vdd".to_string(), vec![1.8]);
+        let dataset = PsfDataset { signals };
+
+        let v = dataset.require_scalar("vdd").unwrap();
+        assert_eq!(v, 1.8);
+    }
+
+    #[test]
+    fn require_scalar_missing_key_returns_not_found() {
+        let dataset = PsfDataset {
+            signals: HashMap::new(),
+        };
+
+        let err = dataset.require_scalar("nope").unwrap_err();
+        assert!(matches!(err, VirtuosoError::NotFound(_)));
+    }
+
+    #[test]
+    fn require_scalar_empty_vector_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("empty".to_string(), vec![]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_scalar("empty").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn require_scalar_multiple_samples_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("mul".to_string(), vec![1.0, 2.0]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_scalar("mul").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn require_scalar_non_finite_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("nan".to_string(), vec![f64::NAN]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_scalar("nan").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn require_vector_returns_all_finite_samples() {
+        let mut signals = HashMap::new();
+        signals.insert("time".to_string(), vec![0.0, 0.1, 0.2, 0.3]);
+        let dataset = PsfDataset { signals };
+
+        let v = dataset.require_vector("time").unwrap();
+        assert_eq!(v, vec![0.0, 0.1, 0.2, 0.3]);
+    }
+
+    #[test]
+    fn require_vector_missing_key_returns_not_found() {
+        let dataset = PsfDataset {
+            signals: HashMap::new(),
+        };
+
+        let err = dataset.require_vector("nope").unwrap_err();
+        assert!(matches!(err, VirtuosoError::NotFound(_)));
+    }
+
+    #[test]
+    fn require_vector_empty_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("empty".to_string(), vec![]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_vector("empty").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn require_vector_non_finite_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("nan".to_string(), vec![0.0, f64::INFINITY, 2.0]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_vector("nan").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn require_frequency_hz_returns_nonnegative_strictly_increasing() {
+        let mut signals = HashMap::new();
+        signals.insert("freq".to_string(), vec![0.0, 1.0, 10.0, 100.0, 1.0e6]);
+        let dataset = PsfDataset { signals };
+
+        let v = dataset.require_frequency_hz("freq").unwrap();
+        assert_eq!(v, vec![0.0, 1.0, 10.0, 100.0, 1.0e6]);
+    }
+
+    #[test]
+    fn require_frequency_hz_missing_key_returns_not_found() {
+        let dataset = PsfDataset {
+            signals: HashMap::new(),
+        };
+
+        let err = dataset.require_frequency_hz("nope").unwrap_err();
+        assert!(matches!(err, VirtuosoError::NotFound(_)));
+    }
+
+    #[test]
+    fn require_frequency_hz_empty_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("empty".to_string(), vec![]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_frequency_hz("empty").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn require_frequency_hz_non_finite_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("nan".to_string(), vec![0.0, f64::NAN, 1.0]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_frequency_hz("nan").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn require_frequency_hz_negative_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("neg".to_string(), vec![1.0, -1.0, 2.0]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_frequency_hz("neg").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn require_frequency_hz_duplicate_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("dup".to_string(), vec![1.0, 2.0, 2.0, 3.0]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_frequency_hz("dup").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn require_frequency_hz_decreasing_returns_execution() {
+        let mut signals = HashMap::new();
+        signals.insert("dec".to_string(), vec![3.0, 2.0, 4.0]);
+        let dataset = PsfDataset { signals };
+
+        let err = dataset.require_frequency_hz("dec").unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    // === read_psf_ascii_strict tests (RED phase) ===
+    //
+    // Pin the contract for the future
+    // `read_psf_ascii_strict(path: &Path) -> Result<PsfDataset>`.
+    // Tests are intentionally expected to fail to compile until the
+    // production function exists. The file stem becomes the dataset key;
+    // malformed, empty, NaN, and infinity data each surface as
+    // VirtuosoError::Execution.
+
+    #[test]
+    fn read_psf_ascii_strict_simple_floats_uses_file_stem_as_key() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("vdd.tran");
+        fs::write(&path, "# header\n0.0\n1.0\n2.0\n").unwrap();
+
+        let dataset = read_psf_ascii_strict(&path).unwrap();
+        let v = dataset.require_vector("vdd").unwrap();
+        assert_eq!(v, vec![0.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn read_psf_ascii_strict_sweep_section_with_quoted_header_succeeds() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("freq.ac");
+        let content = "SWEEP\n\"frequency\"\n1.0\n10.0\n100.0\nTRACE\nVALUE\nEND\n";
+        fs::write(&path, content).unwrap();
+
+        let dataset = read_psf_ascii_strict(&path).unwrap();
+        let v = dataset.require_vector("freq").unwrap();
+        assert_eq!(v, vec![1.0, 10.0, 100.0]);
+    }
+
+    #[test]
+    fn read_psf_ascii_strict_malformed_data_returns_execution() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("bad.tran");
+        fs::write(&path, "0.0\nnot_a_number\n2.0\n").unwrap();
+
+        let err = read_psf_ascii_strict(&path).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn read_psf_ascii_strict_empty_data_returns_execution() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("empty.tran");
+        fs::write(&path, "").unwrap();
+
+        let err = read_psf_ascii_strict(&path).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn read_psf_ascii_strict_nan_returns_execution() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("nan.tran");
+        fs::write(&path, "0.0\nNaN\n1.0\n").unwrap();
+
+        let err = read_psf_ascii_strict(&path).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    #[test]
+    fn read_psf_ascii_strict_infinity_returns_execution() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("inf.tran");
+        fs::write(&path, "0.0\nInf\n1.0\n").unwrap();
+
+        let err = read_psf_ascii_strict(&path).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)));
+    }
+
+    // === find_exact_result_file tests (RED phase) ===
+    //
+    // Pin the contract for the future
+    // `find_exact_result_file(root: &Path, relative_name: &Path) -> Result<PathBuf>`.
+    // Tests are intentionally expected to fail to compile until the
+    // production function exists. The function must reject absolute paths,
+    // `..` traversal, directory targets, and (on Unix) symlinks whose
+    // resolved target escapes the canonical root; it must return the
+    // canonical path of a regular nested file inside the canonical root.
+
+    #[test]
+    fn find_exact_result_file_returns_canonical_path_for_nested_file() {
+        let tmp = TempDir::new().unwrap();
+        let nested = tmp.path().join("a").join("b");
+        fs::create_dir_all(&nested).unwrap();
+        let target = nested.join("c.txt");
+        fs::write(&target, "hello").unwrap();
+
+        let result = find_exact_result_file(tmp.path(), Path::new("a/b/c.txt")).unwrap();
+        let expected = fs::canonicalize(&target).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn find_exact_result_file_missing_returns_not_found() {
+        let tmp = TempDir::new().unwrap();
+
+        let err = find_exact_result_file(tmp.path(), Path::new("nope.txt")).unwrap_err();
+        assert!(matches!(err, VirtuosoError::NotFound(_)));
+    }
+
+    #[test]
+    fn find_exact_result_file_absolute_relative_name_returns_config() {
+        let tmp = TempDir::new().unwrap();
+        let outside = tmp.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        let absolute = outside.join("evil.txt");
+        fs::write(&absolute, "x").unwrap();
+
+        let err =
+            find_exact_result_file(tmp.path(), Path::new(absolute.to_str().unwrap())).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Config(_)));
+    }
+
+    #[test]
+    fn find_exact_result_file_parent_traversal_returns_config() {
+        let tmp = TempDir::new().unwrap();
+
+        let err = find_exact_result_file(tmp.path(), Path::new("../escape.txt")).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Config(_)));
+    }
+
+    #[test]
+    fn find_exact_result_file_directory_target_returns_config() {
+        let tmp = TempDir::new().unwrap();
+        let subdir = tmp.path().join("subdir");
+        fs::create_dir_all(&subdir).unwrap();
+
+        let err = find_exact_result_file(tmp.path(), Path::new("subdir")).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Config(_)));
+    }
+
+    #[test]
+    fn find_exact_result_file_result_is_contained_in_canonical_root() {
+        let tmp = TempDir::new().unwrap();
+        let target = tmp.path().join("leaf.txt");
+        fs::write(&target, "x").unwrap();
+
+        let result = find_exact_result_file(tmp.path(), Path::new("leaf.txt")).unwrap();
+        let canonical_root = fs::canonicalize(tmp.path()).unwrap();
+        assert!(
+            result.starts_with(&canonical_root),
+            "result {:?} should be contained in canonical root {:?}",
+            result,
+            canonical_root
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn find_exact_result_file_symlink_target_returns_config() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let real = outside.path().join("real.txt");
+        fs::write(&real, "x").unwrap();
+
+        // Symlink lives inside the root but resolves outside it — the
+        // containment check must catch this.
+        let link = tmp.path().join("escape.txt");
+        symlink(&real, &link).unwrap();
+
+        let err = find_exact_result_file(tmp.path(), Path::new("escape.txt")).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Config(_)));
     }
 }
