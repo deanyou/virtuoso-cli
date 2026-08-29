@@ -4,7 +4,11 @@ use crate::error::{Result, VirtuosoError};
 use crate::models::{ExecutionStatus, SimulationResult};
 use crate::spectre::jobs::{Job, JobStatus};
 use crate::streaming::{JobEvent, JobEventSink};
-use crate::transport::ssh::{shell_quote, SSHRunner};
+use crate::transport::contract::{
+    CommandRequest, CommandResult, DownloadDirRequest, RemoteTransport, UploadTextRequest,
+};
+use crate::transport::openssh::OpenSshTransport;
+use crate::transport::ssh::shell_quote;
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
@@ -76,7 +80,19 @@ pub struct SpectreSimulator {
     pub work_dir: PathBuf,
     pub output_format: String,
     pub remote: bool,
-    pub ssh_runner: Option<SSHRunner>,
+    /// Shared transport handle. `Arc` matters here: `run_parallel` clones this
+    /// simulator once and every worker borrows it, so all workers reach the
+    /// same transport (and therefore the same ControlMaster state) rather than
+    /// a per-thread snapshot of it.
+    pub transport: Option<Arc<dyn RemoteTransport>>,
+    /// `user@host` label recorded on job metadata.
+    ///
+    /// Derived from configuration at construction rather than read back from
+    /// the transport: connection identity belongs in the planned
+    /// `ConnectionKey`, not in the transport contract. Keeping it here keeps
+    /// the contract free of endpoint-formatting methods that every backend
+    /// would otherwise have to duplicate.
+    pub remote_target: Option<String>,
     pub remote_work_dir: Option<String>,
     pub keep_remote_files: bool,
     pub max_workers: u32,
@@ -103,7 +119,8 @@ impl Clone for SpectreSimulator {
             work_dir: self.work_dir.clone(),
             output_format: self.output_format.clone(),
             remote: self.remote,
-            ssh_runner: self.ssh_runner.clone(),
+            transport: self.transport.clone(),
+            remote_target: self.remote_target.clone(),
             remote_work_dir: self.remote_work_dir.clone(),
             keep_remote_files: self.keep_remote_files,
             max_workers: self.max_workers,
@@ -229,17 +246,21 @@ fn parse_simulation_output(
 /// Combines the simulation SSH streams with the actual Spectre log.  A failed
 /// log read is an operational failure: without spectre.out we cannot make a
 /// trustworthy outcome decision.
-fn combined_remote_log(
-    simulation: &crate::models::RemoteTaskResult,
-    log_read: &crate::models::RemoteTaskResult,
-) -> Result<String> {
+fn combined_remote_log(simulation: &CommandResult, log_read: &CommandResult) -> Result<String> {
     if !log_read.success {
+        // `CommandResult` carries no pre-summarised `error` field: the contract
+        // expresses cause through `TransportError`, not through message text.
+        // The exit status is reported alongside stderr so the message stays
+        // diagnostic without reinstating a summarised-error string.
+        let detail = log_read.stderr.trim();
         return Err(VirtuosoError::Ssh(format!(
-            "failed to read remote spectre.out: {}",
-            log_read
-                .error
-                .as_deref()
-                .unwrap_or_else(|| log_read.stderr.trim())
+            "failed to read remote spectre.out (exit {}): {}",
+            log_read.exit_status,
+            if detail.is_empty() {
+                "no stderr"
+            } else {
+                detail
+            }
         )));
     }
     Ok(format!(
@@ -248,8 +269,8 @@ fn combined_remote_log(
     ))
 }
 
-fn remote_directory_exists(result: &crate::models::RemoteTaskResult) -> Result<bool> {
-    match result.returncode {
+fn remote_directory_exists(result: &CommandResult) -> Result<bool> {
+    match result.exit_status {
         0 => Ok(true),
         1 => Ok(false),
         code => Err(VirtuosoError::Ssh(format!(
@@ -667,8 +688,13 @@ impl SpectreSimulator {
         let cfg = crate::config::Config::from_env()?;
         let remote = cfg.is_remote();
 
-        let ssh_runner = if remote {
-            let mut runner = SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
+        // Built the same way it always was, then wrapped: this deliberately
+        // does NOT use `SSHRunner::from_config`, which would additionally pick
+        // up ssh_port / ssh_key / ssh_config. Adding those here would change
+        // behaviour, so the discrepancy is recorded rather than silently fixed.
+        let transport = if remote {
+            let mut runner =
+                crate::transport::ssh::SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
             if let Some(ref user) = cfg.remote_user {
                 runner = runner.with_user(user);
             }
@@ -680,9 +706,17 @@ impl SpectreSimulator {
                 runner = r;
             }
             runner.timeout = cfg.timeout;
-            Some(runner)
+            let target = runner.remote_target();
+            Some((
+                Arc::new(OpenSshTransport::new(runner)) as Arc<dyn RemoteTransport>,
+                Some(target),
+            ))
         } else {
             None
+        };
+        let (transport, remote_target) = match transport {
+            Some(pair) => (Some(pair.0), pair.1),
+            None => (None, None),
         };
 
         Ok(Self {
@@ -692,7 +726,8 @@ impl SpectreSimulator {
             work_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             output_format: "psfascii".into(),
             remote,
-            ssh_runner,
+            transport,
+            remote_target,
             remote_work_dir: None,
             keep_remote_files: cfg.keep_remote_files,
             max_workers: cfg.spectre_max_workers,
@@ -794,17 +829,19 @@ impl SpectreSimulator {
     /// Each entry is `(label, netlist)` — results are returned with the same label.
     /// Worker count is capped at `self.max_workers` and `num_cpus::get()`.
     ///
-    /// All workers share **one** cloned simulator, and therefore one
-    /// `SSHRunner`: `sim` is cloned once below and each scoped thread borrows
-    /// it by reference. Each worker drains its own chunk sequentially, so peak
+    /// All workers share **one** cloned simulator, and therefore one transport:
+    /// `sim` is cloned once below and each scoped thread borrows it by
+    /// reference, and the `Arc<dyn RemoteTransport>` inside it is cloned rather
+    /// than rebuilt. Each worker drains its own chunk sequentially, so peak
     /// concurrent remote operations is bounded by the worker count, not by the
     /// number of commands a single job issues.
     ///
-    /// Consequence: `use_control_master` is shared across workers rather than
-    /// isolated per thread. `SSHRunner` guards it with a `Mutex<bool>`, so a
-    /// ControlMaster failure observed by any worker flips the flag for all of
-    /// them. That is safe (no data race) but it is not per-thread isolation —
-    /// do not assume otherwise when reasoning about fallback behaviour.
+    /// Consequence: backend state is shared across workers rather than isolated
+    /// per thread. The OpenSSH backend guards its ControlMaster flag with a
+    /// `Mutex<bool>`, so a ControlMaster failure observed by any worker flips
+    /// the flag for all of them. That is safe (no data race) but it is not
+    /// per-thread isolation — do not assume otherwise when reasoning about
+    /// fallback behaviour.
     ///
     /// # Example
     ///
@@ -923,9 +960,9 @@ impl SpectreSimulator {
 
     pub fn check_license(&self) -> Result<String> {
         let spectre = self.spectre_command();
-        if let Some(ref runner) = self.ssh_runner {
+        if let Some(ref runner) = self.transport {
             let command = build_remote_license_command(self.cadence_cshrc.as_deref(), spectre);
-            let result = runner.run_command(&command, None)?;
+            let result = runner.run_command(&CommandRequest::untimed(&command))?;
             Ok(result.stdout.trim().to_string())
         } else {
             let output = build_local_license_command(spectre)
@@ -1000,21 +1037,30 @@ impl SpectreSimulator {
     }
 
     fn run_async_remote(&self, netlist: &str) -> Result<Job> {
-        let runner = self.ssh_runner.as_ref().ok_or_else(|| {
-            VirtuosoError::Execution("no SSH runner for remote async simulation".into())
+        let runner = self.transport.as_ref().ok_or_else(|| {
+            VirtuosoError::Execution("no remote transport for remote async simulation".into())
         })?;
 
         let run_id = Uuid::new_v4().to_string()[..8].to_string();
         let remote_dir = format!("/tmp/virtuoso_bridge/spectre/{run_id}");
 
         // Create dir + upload netlist
-        runner.run_command(&format!("mkdir -p {}", shell_quote(&remote_dir)), None)?;
-        runner.upload_text(netlist, &format!("{remote_dir}/input.scs"))?;
+        runner.run_command(&CommandRequest::untimed(format!(
+            "mkdir -p {}",
+            shell_quote(&remote_dir)
+        )))?;
+        runner.upload_text(&UploadTextRequest::untimed(
+            netlist,
+            format!("{remote_dir}/input.scs"),
+        ))?;
 
         let spectre_cmd = self.remote_spectre_command(&remote_dir, true);
 
         // Launch and capture PID
-        let result = runner.run_command(&spectre_cmd, Some(10))?;
+        let result = runner.run_command(&CommandRequest::with_exec_timeout(
+            &spectre_cmd,
+            Duration::from_secs(10),
+        ))?;
         let pid: u32 = result
             .stdout
             .trim()
@@ -1030,7 +1076,7 @@ impl SpectreSimulator {
             created: chrono::Local::now().to_rfc3339(),
             finished: None,
             error: None,
-            remote_host: Some(runner.remote_target()),
+            remote_host: self.remote_target.clone(),
             remote_dir: Some(remote_dir),
         };
         job.save()?;
@@ -1186,44 +1232,56 @@ impl SpectreSimulator {
         netlist: &str,
         _params: Option<&HashMap<String, String>>,
     ) -> Result<SimulationResult> {
-        let runner = self.ssh_runner.as_ref().ok_or_else(|| {
-            VirtuosoError::Execution("no SSH runner available for remote simulation".into())
+        let runner = self.transport.as_ref().ok_or_else(|| {
+            VirtuosoError::Execution("no remote transport available for remote simulation".into())
         })?;
 
         let run_id = Uuid::new_v4().to_string();
         let remote_dir = format!("/tmp/virtuoso_bridge/spectre/{run_id}");
 
-        runner.run_command(&format!("mkdir -p {}", shell_quote(&remote_dir)), None)?;
+        runner.run_command(&CommandRequest::untimed(format!(
+            "mkdir -p {}",
+            shell_quote(&remote_dir)
+        )))?;
 
         let netlist_content = netlist.to_string();
-        runner.upload_text(&netlist_content, &format!("{remote_dir}/input.scs"))?;
+        runner.upload_text(&UploadTextRequest::untimed(
+            netlist_content,
+            format!("{remote_dir}/input.scs"),
+        ))?;
 
         let sim_cmd = self.remote_spectre_command(&remote_dir, false);
-        let result = runner.run_command(&sim_cmd, Some(self.timeout * 2))?;
+        let result = runner.run_command(&CommandRequest::with_exec_timeout(
+            &sim_cmd,
+            Duration::from_secs(self.timeout * 2),
+        ))?;
 
         // SSH stdout/stderr often omit diagnostic details because Spectre writes
         // them to +log.  Reading that log is required before classification.
         // Do not clean up remote artifacts on any retrieval failure.
-        let remote_log = runner.run_command(
-            &format!("cat {}", shell_quote(&format!("{remote_dir}/spectre.out"))),
-            Some(self.timeout),
-        )?;
+        let remote_log = runner.run_command(&CommandRequest::with_exec_timeout(
+            format!("cat {}", shell_quote(&format!("{remote_dir}/spectre.out"))),
+            Duration::from_secs(self.timeout),
+        ))?;
         let combined_output = combined_remote_log(&result, &remote_log)?;
 
         // Missing raw output is classifier input, not a transfer failure. A
         // directory that exists but cannot be transferred remains an SSH error.
         let remote_raw = format!("{remote_dir}/raw");
-        let raw_check = runner.run_command(
-            &format!("test -d {}", shell_quote(&remote_raw)),
-            Some(self.timeout),
-        )?;
+        let raw_check = runner.run_command(&CommandRequest::with_exec_timeout(
+            format!("test -d {}", shell_quote(&remote_raw)),
+            Duration::from_secs(self.timeout),
+        ))?;
         let local_raw = self.work_dir.join(&run_id).join("raw");
         let (data, operating_points) = if remote_directory_exists(&raw_check)? {
-            runner.download_dir(&remote_raw, &local_raw).map_err(|e| {
-                VirtuosoError::Ssh(format!(
-                    "failed to retrieve remote Spectre raw results from {remote_dir}: {e}"
-                ))
-            })?;
+            runner
+                .download_dir(&DownloadDirRequest::untimed(&remote_raw, &local_raw))
+                .map_err(|e| {
+                    VirtuosoError::Ssh(format!(
+                        "{}: failed to retrieve remote Spectre raw results from {remote_dir}: {e}",
+                        e.code()
+                    ))
+                })?;
             parse_simulation_output(&local_raw, self.strict_psf)?
         } else {
             (HashMap::new(), HashMap::new())
@@ -1250,7 +1308,10 @@ impl SpectreSimulator {
         // Keep failed/partial artifacts for diagnosis.  Cleanup is allowed only
         // once retrieval completed and classification confirmed a usable run.
         if should_cleanup_remote(&outcome, self.keep_remote_files) {
-            runner.run_command(&format!("rm -rf {}", shell_quote(&remote_dir)), None)?;
+            runner.run_command(&CommandRequest::untimed(format!(
+                "rm -rf {}",
+                shell_quote(&remote_dir)
+            )))?;
         }
 
         Ok(SimulationResult {
@@ -1416,7 +1477,8 @@ pub(crate) mod tests {
             work_dir: PathBuf::from("/tmp"),
             output_format: "psfascii".to_string(),
             remote: false,
-            ssh_runner: None,
+            transport: None,
+            remote_target: None,
             remote_work_dir: None,
             keep_remote_files: false,
             max_workers: 1,
@@ -1827,36 +1889,30 @@ pub(crate) mod tests {
 
     #[test]
     fn combined_remote_log_includes_spectre_out_and_propagates_read_failure() {
-        let simulation = crate::models::RemoteTaskResult {
+        let simulation = CommandResult {
             success: true,
-            returncode: 0,
+            exit_status: 0,
             stdout: "ssh stdout".to_string(),
             stderr: "ssh stderr".to_string(),
-            remote_dir: None,
-            error: None,
-            timings: HashMap::new(),
+            duration: Duration::ZERO,
         };
-        let log = crate::models::RemoteTaskResult {
+        let log = CommandResult {
             success: true,
-            returncode: 0,
+            exit_status: 0,
             stdout: "ERROR (SFE-23): only in spectre.out".to_string(),
             stderr: String::new(),
-            remote_dir: None,
-            error: None,
-            timings: HashMap::new(),
+            duration: Duration::ZERO,
         };
         assert!(combined_remote_log(&simulation, &log)
             .unwrap()
             .contains("ERROR (SFE-23)"));
 
-        let failed_log = crate::models::RemoteTaskResult {
+        let failed_log = CommandResult {
             success: false,
-            returncode: 1,
+            exit_status: 1,
             stdout: String::new(),
             stderr: "cat: spectre.out: No such file".to_string(),
-            remote_dir: None,
-            error: None,
-            timings: HashMap::new(),
+            duration: Duration::ZERO,
         };
         assert!(matches!(
             combined_remote_log(&simulation, &failed_log),
@@ -1866,14 +1922,12 @@ pub(crate) mod tests {
 
     #[test]
     fn missing_remote_raw_directory_is_not_a_transfer_error() {
-        let missing = crate::models::RemoteTaskResult {
+        let missing = CommandResult {
             success: false,
-            returncode: 1,
+            exit_status: 1,
             stdout: String::new(),
             stderr: String::new(),
-            remote_dir: None,
-            error: None,
-            timings: HashMap::new(),
+            duration: Duration::ZERO,
         };
         assert!(!remote_directory_exists(&missing).unwrap());
 
@@ -1888,14 +1942,12 @@ pub(crate) mod tests {
 
     #[test]
     fn remote_raw_inspection_failure_is_propagated() {
-        let failed = crate::models::RemoteTaskResult {
+        let failed = CommandResult {
             success: false,
-            returncode: 255,
+            exit_status: 255,
             stdout: String::new(),
             stderr: "connection lost".to_string(),
-            remote_dir: None,
-            error: Some("connection lost".to_string()),
-            timings: HashMap::new(),
+            duration: Duration::ZERO,
         };
         assert!(matches!(
             remote_directory_exists(&failed),
