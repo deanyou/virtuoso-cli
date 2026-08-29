@@ -1,4 +1,5 @@
 use crate::error::{Result, VirtuosoError};
+use crate::transport::contract::{CommandRequest, RemoteTransport};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -257,10 +258,10 @@ impl SessionInfo {
 
     /// List sessions on a remote host via SSH.
     /// Reads all session JSON files from `~/.cache/virtuoso_bridge/sessions/`.
-    pub fn list_remote(runner: &crate::transport::ssh::SSHRunner) -> std::io::Result<Vec<Self>> {
+    pub fn list_remote(runner: &dyn RemoteTransport) -> std::io::Result<Vec<Self>> {
         let script = r#"for f in "$HOME"/.cache/virtuoso_bridge/sessions/*.json; do [ -f "$f" ] && echo "---SESSION---" && cat "$f"; done"#;
         let result = runner
-            .run_command(script, None)
+            .run_command(&CommandRequest::untimed(script))
             .map_err(|e| std::io::Error::other(e.to_string()))?;
 
         let mut sessions = Vec::new();
@@ -279,7 +280,7 @@ impl SessionInfo {
 
     /// Fetch remote sessions and sync them to the local sessions directory.
     /// Returns the number of sessions synced.
-    pub fn sync_from_remote(runner: &crate::transport::ssh::SSHRunner) -> std::io::Result<usize> {
+    pub fn sync_from_remote(runner: &dyn RemoteTransport) -> std::io::Result<usize> {
         let remote = Self::list_remote(runner)?;
         let dir = Self::sessions_dir();
         std::fs::create_dir_all(&dir)?;

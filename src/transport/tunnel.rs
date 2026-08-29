@@ -3,12 +3,15 @@
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
 use crate::models::TunnelState;
+use crate::transport::contract::RemoteTransport;
+use crate::transport::openssh::OpenSshTransport;
 use crate::transport::ssh::SSHRunner;
 use include_dir::{include_dir, Dir};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 
 static RESOURCES: Dir = include_dir!("$CARGO_MANIFEST_DIR/resources");
 
@@ -102,7 +105,12 @@ fn verify_ssh_pid(pid: u32) -> bool {
 }
 
 pub struct SSHClient {
-    pub runner: SSHRunner,
+    /// The owned transport. `Arc` so that call sites which have migrated to
+    /// the contract and call sites which still need runner-specific behaviour
+    /// reach the *same* backend state rather than two divergent copies —
+    /// `SSHRunner::clone` snapshots its ControlMaster flag instead of sharing
+    /// it, so handing out a second runner would silently break the fallback.
+    transport: Arc<OpenSshTransport>,
     pub port: u16,
     pub keep_remote_files: bool,
     pub profile: Option<String>,
@@ -110,6 +118,20 @@ pub struct SSHClient {
 }
 
 impl SSHClient {
+    /// Borrow the underlying OpenSSH runner.
+    ///
+    /// Provided for behaviour the contract deliberately does not model:
+    /// host-key hint strings, ControlMaster bookkeeping, and remote
+    /// environment probing. New code should prefer [`Self::transport`].
+    pub fn runner(&self) -> &SSHRunner {
+        self.transport.runner()
+    }
+
+    /// The transport contract, for call sites that have migrated.
+    pub fn transport(&self) -> Arc<dyn RemoteTransport> {
+        self.transport.clone()
+    }
+
     pub fn from_env(keep_remote_files: bool) -> Result<Self> {
         let cfg = Config::from_env()?;
         let mut runner = SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
@@ -131,7 +153,7 @@ impl SSHClient {
         }
 
         Ok(Self {
-            runner,
+            transport: Arc::new(OpenSshTransport::new(runner)),
             port: cfg.port,
             keep_remote_files,
             profile: cfg.profile,
@@ -197,26 +219,26 @@ impl SSHClient {
     }
 
     pub fn upload_file(&self, local: &str, remote: &str) -> Result<()> {
-        self.runner.upload(local, remote)
+        self.runner().upload(local, remote)
     }
 
     pub fn download_file(&self, remote: &str, local: &str) -> Result<()> {
-        self.runner.download(remote, local)
+        self.runner().download(remote, local)
     }
 
     pub fn upload_text(&self, text: &str, remote: &str) -> Result<()> {
-        self.runner.upload_text(text, remote)
+        self.runner().upload_text(text, remote)
     }
 
     pub fn run_command(&self, cmd: &str) -> Result<crate::models::RemoteTaskResult> {
-        self.runner.run_command(cmd, None)
+        self.runner().run_command(cmd, None)
     }
 
     fn ensure_remote_setup(&self) -> Result<String> {
-        let python = self.runner.detect_python()?;
+        let python = self.runner().detect_python()?;
 
         let setup_dir = setup_dir_for_profile(self.profile.as_deref());
-        self.runner
+        self.runner()
             .run_command(&format!("mkdir -p {setup_dir}"), None)?;
 
         let daemon_path = if let Some(ref py) = python {
@@ -249,12 +271,12 @@ impl SSHClient {
         }
         Err(VirtuosoError::Ssh(format!(
             "failed to establish tunnel on any port; verify SSH: `{}`",
-            self.runner.verify_cmd_hint()
+            self.runner().verify_cmd_hint()
         )))
     }
 
     fn try_ssh_tunnel(&mut self, port: u16) -> Result<()> {
-        let target = self.runner.remote_target();
+        let target = self.runner().remote_target();
         let mut cmd = Command::new("ssh");
         cmd.args([
             "-o",
@@ -273,7 +295,7 @@ impl SSHClient {
 
         // Conditionally add ControlMaster options — disabled when CM has been
         // found to fail at runtime (WSL2/Windows named pipe issues).
-        if *self.runner.use_control_master.lock().unwrap() {
+        if *self.runner().use_control_master.lock().unwrap() {
             let control_dir = crate::runtime_paths::cache_subdir(&["ssh"]);
             let _ = std::fs::create_dir_all(&control_dir);
             let control_path = control_dir.join("%h-%p-%r");
@@ -287,16 +309,16 @@ impl SSHClient {
             ]);
         }
 
-        if let Some(p) = self.runner.ssh_port {
+        if let Some(p) = self.runner().ssh_port {
             cmd.arg("-p").arg(p.to_string());
         }
-        if let Some(ref key) = self.runner.ssh_key_path {
+        if let Some(ref key) = self.runner().ssh_key_path {
             cmd.arg("-i").arg(key);
         }
-        if let Some(ref config) = self.runner.ssh_config_path {
+        if let Some(ref config) = self.runner().ssh_config_path {
             cmd.arg("-F").arg(config);
         }
-        if let Some(ref jump) = self.runner.jump_host {
+        if let Some(ref jump) = self.runner().jump_host {
             cmd.arg("-J").arg(jump);
         }
         cmd.arg(&target);
@@ -325,7 +347,7 @@ impl SSHClient {
             version: 1,
             port: self.port,
             pid: self.tunnel_pid.unwrap_or(0),
-            remote_host: self.runner.host.clone(),
+            remote_host: self.runner().host.clone(),
             setup_path: Some(setup_dir_for_profile(self.profile.as_deref())),
         };
         state.save().map_err(|e| VirtuosoError::Ssh(e.to_string()))
@@ -340,7 +362,7 @@ impl SSHClient {
                 VirtuosoError::Ssh("ramic_bridge_daemon_3.py not found in resources".into())
             })?;
 
-        self.runner.upload_text(content, &path)?;
+        self.runner().upload_text(content, &path)?;
         Ok(path)
     }
 
@@ -353,12 +375,12 @@ impl SSHClient {
                 VirtuosoError::Ssh("ramic_bridge_daemon_27.py not found in resources".into())
             })?;
 
-        self.runner.upload_text(content, &path)?;
+        self.runner().upload_text(content, &path)?;
         Ok(path)
     }
 
     fn deploy_rust_daemon(&self, setup_dir: &str) -> Result<String> {
-        let arch = self.runner.detect_arch()?;
+        let arch = self.runner().detect_arch()?;
         let binary_name = match arch.as_str() {
             "x86_64" => "virtuoso-daemon-x86_64",
             "aarch64" => "virtuoso-daemon-aarch64",
@@ -384,8 +406,9 @@ impl SSHClient {
             .write_all(content)
             .map_err(|e| VirtuosoError::Ssh(format!("write temp failed: {e}")))?;
 
-        self.runner.upload(tmp.path().to_str().unwrap(), &path)?;
-        self.runner.run_command(&format!("chmod +x {path}"), None)?;
+        self.runner().upload(tmp.path().to_str().unwrap(), &path)?;
+        self.runner()
+            .run_command(&format!("chmod +x {path}"), None)?;
 
         Ok(path)
     }
@@ -406,7 +429,7 @@ impl SSHClient {
             .replace("__PYTHON_CMD__", python.unwrap_or(""));
 
         let path = format!("{setup_dir}/ramic_bridge.il");
-        self.runner.upload_text(&il_content, &path)?;
+        self.runner().upload_text(&il_content, &path)?;
         Ok(path)
     }
 
@@ -416,7 +439,7 @@ impl SSHClient {
         // This was the bug upstream PR #86 fixed in the Python bridge
         // and that we mirror here.
         let setup_dir = setup_dir_for_profile(self.profile.as_deref());
-        self.runner
+        self.runner()
             .run_command(&format!("rm -rf {setup_dir}"), None)?;
         Ok(())
     }

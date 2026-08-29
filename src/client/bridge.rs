@@ -6,6 +6,7 @@ use crate::client::whitelist::EvalstringWhitelist;
 use crate::client::window_ops::WindowOps;
 use crate::error::{Result, VirtuosoError};
 use crate::models::{ExecutionStatus, SessionInfo, VirtuosoResult};
+use crate::transport::contract::CommandRequest;
 use crate::transport::tunnel::SSHClient;
 use crate::version::VirtuosoVersion;
 use crate::SchematicDiff;
@@ -578,10 +579,10 @@ impl VirtuosoClient {
     /// user-controlled path, the quoting still prevents shell injection.
     pub fn ensure_remote_dir(&self, dir: &str) -> Result<()> {
         if let Some(ref tunnel) = self.tunnel {
-            let runner = &tunnel.runner;
+            let transport = tunnel.transport();
             let quoted = crate::transport::ssh::shell_quote(dir);
-            runner
-                .run_command(&format!("mkdir -p {quoted}"), None)
+            transport
+                .run_command(&CommandRequest::untimed(format!("mkdir -p {quoted}")))
                 .map_err(|e| VirtuosoError::Connection(format!("mkdir {dir}: {e}")))?;
         } else {
             // Local mode: std::fs::copy does NOT create parent dirs. Create

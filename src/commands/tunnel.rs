@@ -28,7 +28,8 @@ pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
     // Auto-discover remote sessions and sync them to local cache.
     // This allows `vcli skill exec` to find the Virtuoso daemon port
     // without manual docker cp or session file copying.
-    let sessions_synced = SessionInfo::sync_from_remote(&client.runner).unwrap_or(0);
+    let transport = client.transport();
+    let sessions_synced = SessionInfo::sync_from_remote(transport.as_ref()).unwrap_or(0);
 
     let vc = crate::client::bridge::VirtuosoClient::from_env()?;
     let daemon_ok = matches!(vc.test_connection(Some(cfg.timeout)), Ok(true));

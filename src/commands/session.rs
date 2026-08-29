@@ -12,7 +12,7 @@ pub fn list(format: OutputFormat) -> Result<Value> {
     if let Ok(cfg) = Config::from_env() {
         if cfg.is_remote() {
             if let Ok(client) = SSHClient::from_env(cfg.keep_remote_files) {
-                let _ = SessionInfo::sync_from_remote(&client.runner);
+                let _ = SessionInfo::sync_from_remote(client.transport().as_ref());
             }
         }
     }
