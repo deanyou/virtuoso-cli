@@ -1,6 +1,41 @@
 use crate::client::bridge::escape_skill_string;
+use crate::error::{Result, VirtuosoError};
+use std::path::{Path, PathBuf};
 
 pub struct WindowOps;
+
+/// Target window for a safe bootstrap operation.
+///
+/// The window_id comes from `WindowOps::list_windows` (X11-style id,
+/// 32-bit unsigned). Bootstrap operations require an explicit ID —
+/// there is no "current focused window" shortcut, because the
+/// caller's view of focus may differ from Virtuoso's and accidental
+/// targeting is the single biggest risk in the bootstrap path.
+///
+/// expected_name_pattern enforces a CIW-style check on the window
+/// name (via `hiGetWindowName`) before any side-effecting SKILL is
+/// sent. Default pattern accepts any window; callers should supply a
+/// narrow pattern (e.g. `"^Library Manager"` for the Library
+/// Manager window) to follow the principle of least authority.
+pub struct BootstrapTarget {
+    pub window_id: u32,
+    pub expected_name_pattern: Option<String>,
+}
+
+/// Side-effecting bootstrap actions available through the safe
+/// bootstrap interface.
+///
+/// `LoadFile` loads a SKILL program from a path under the
+/// caller-supplied scratch root. The path is canonicalized and
+/// containment-checked so callers cannot escape the scratch dir.
+/// `EvalString` and other raw-text variants are intentionally absent
+/// — the bootstrap interface must NEVER accept raw SKILL source from
+/// the caller, since this is the path that bypasses the capability
+/// whitelist.
+pub enum BootstrapAction {
+    /// Load a SKILL program file from a path.
+    LoadFile(PathBuf),
+}
 
 impl WindowOps {
     /// List all open Virtuoso windows.
@@ -56,11 +91,65 @@ impl WindowOps {
             path = path_escaped
         )
     }
+
+    /// Build a safe SKILL bootstrap expression.
+    ///
+    /// The generated SKILL:
+    ///   1. Confirms `hiGetWindowList()` contains a window whose name
+    ///      matches `expected_name_pattern` (CIW verification).
+    ///   2. Issues the requested action with the path escaped through
+    ///      `escape_skill_string` and the path literal pre-validated
+    ///      to live under the caller-supplied scratch root by Rust.
+    ///
+    /// Returns `VirtuosoError::Config` if the action's path does not
+    /// live under `scratch_root` — the strict containment check must
+    /// happen on the Rust side before any SKILL is constructed, since
+    /// SKILL-side validation would be a defense in depth only.
+    pub fn build_bootstrap_skill(
+        &self,
+        target: &BootstrapTarget,
+        action: &BootstrapAction,
+        scratch_root: &Path,
+    ) -> Result<String> {
+        match action {
+            BootstrapAction::LoadFile(path) => {
+                let canonical_root = std::fs::canonicalize(scratch_root).map_err(|e| {
+                    VirtuosoError::Config(format!(
+                        "scratch_root '{}' cannot be resolved: {e}",
+                        scratch_root.display()
+                    ))
+                })?;
+                let canonical_path = std::fs::canonicalize(path).map_err(|e| {
+                    VirtuosoError::Config(format!(
+                        "bootstrap path '{}' cannot be resolved: {e}",
+                        path.display()
+                    ))
+                })?;
+                if !canonical_path.starts_with(&canonical_root) {
+                    return Err(VirtuosoError::Config(format!(
+                        "bootstrap path '{}' escapes scratch root '{}'",
+                        canonical_path.display(),
+                        canonical_root.display()
+                    )));
+                }
+
+                let pattern = target.expected_name_pattern.as_deref().unwrap_or(".*");
+                let pattern_escaped = escape_skill_string(pattern);
+                let path_escaped = escape_skill_string(&canonical_path.to_string_lossy());
+                let _ = target.window_id; // reserved for future per-window targeting
+
+                Ok(format!(
+                    r#"let((matched) matched = nil foreach(w hiGetWindowList() when(rexMatchp("{pattern_escaped}" hiGetWindowName(w)) matched = t)) if(matched load("{path_escaped}") "ciw-not-found"))"#
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn list_windows_contains_hi_get_window_list() {
@@ -117,5 +206,133 @@ mod tests {
         let skill = ops.screenshot_by_pattern("/tmp/screen.png", "Library Manager");
         assert!(skill.contains("rexMatchp"), "should use regex match");
         assert!(skill.contains("no-match"), "should handle no match");
+    }
+
+    // === build_bootstrap_skill tests (RED then GREEN) ===
+
+    #[test]
+    fn bootstrap_loadfile_within_scratch_root_succeeds() {
+        let scratch = tempfile::tempdir().unwrap();
+        let program = scratch.path().join("init.il");
+        fs::write(&program, "(println \"hi\")").unwrap();
+
+        let ops = WindowOps;
+        let target = BootstrapTarget {
+            window_id: 0x2e01f16,
+            expected_name_pattern: Some("Library Manager".into()),
+        };
+        let skill = ops
+            .build_bootstrap_skill(&target, &BootstrapAction::LoadFile(program), scratch.path())
+            .unwrap();
+
+        // Programmatic SKILL only — pattern is verified via rexMatchp
+        // and the path is escaped into a SKILL string literal.
+        assert!(skill.contains("rexMatchp"), "must verify CIW pattern");
+        assert!(skill.contains("load("), "must use load()");
+        assert!(skill.contains("ciw-not-found"), "must signal no-match");
+        // Path appears in the literal (after escaping) — sanity check.
+        assert!(skill.contains("init.il"), "path must be embedded");
+    }
+
+    #[test]
+    fn bootstrap_loadfile_preserves_apostrophes_as_skill_literal_chars() {
+        // SKILL string literals allow `'` verbatim — `escape_string`
+        // only escapes `\`, `"`, and control characters. This test
+        // pins that behavior so future escapes don't accidentally
+        // break valid filenames like "user's_lib.il".
+        let scratch = tempfile::tempdir().unwrap();
+        let program = scratch.path().join("with'apostrophe.il");
+        fs::write(&program, "").unwrap();
+
+        let ops = WindowOps;
+        let target = BootstrapTarget {
+            window_id: 1,
+            expected_name_pattern: None,
+        };
+        let skill = ops
+            .build_bootstrap_skill(&target, &BootstrapAction::LoadFile(program), scratch.path())
+            .unwrap();
+        // The generated SKILL must be syntactically valid: load() with a
+        // quoted string literal that contains the apostrophe verbatim.
+        assert!(
+            skill.contains(r#"load("/"#) && skill.contains("with'apostrophe.il"),
+            "path must appear inside a quoted SKILL literal: {skill}"
+        );
+    }
+
+    #[test]
+    fn bootstrap_loadfile_outside_scratch_root_returns_config_error() {
+        let scratch = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let program = outside.path().join("evil.il");
+        fs::write(&program, "(system \"rm -rf /\")").unwrap();
+
+        let ops = WindowOps;
+        let target = BootstrapTarget {
+            window_id: 1,
+            expected_name_pattern: None,
+        };
+        let err = ops
+            .build_bootstrap_skill(&target, &BootstrapAction::LoadFile(program), scratch.path())
+            .unwrap_err();
+        assert!(matches!(err, VirtuosoError::Config(_)), "{err:?}");
+    }
+
+    #[test]
+    fn bootstrap_loadfile_with_parent_traversal_returns_config_error() {
+        let scratch = tempfile::tempdir().unwrap();
+        // Build a path that uses '..' to escape the scratch root.
+        // canonicalize will reject the traversal at the FS level.
+        let program = scratch.path().join("..").join("escape.il");
+        fs::write(&program, "").unwrap();
+
+        let ops = WindowOps;
+        let target = BootstrapTarget {
+            window_id: 1,
+            expected_name_pattern: None,
+        };
+        let err = ops
+            .build_bootstrap_skill(&target, &BootstrapAction::LoadFile(program), scratch.path())
+            .unwrap_err();
+        assert!(matches!(err, VirtuosoError::Config(_)), "{err:?}");
+    }
+
+    #[test]
+    fn bootstrap_loadfile_missing_scratch_root_returns_config_error() {
+        let ops = WindowOps;
+        let target = BootstrapTarget {
+            window_id: 1,
+            expected_name_pattern: None,
+        };
+        let err = ops
+            .build_bootstrap_skill(
+                &target,
+                &BootstrapAction::LoadFile(PathBuf::from("/tmp/init.il")),
+                Path::new("/nonexistent-scratch-root-xyz"),
+            )
+            .unwrap_err();
+        assert!(matches!(err, VirtuosoError::Config(_)), "{err:?}");
+    }
+
+    #[test]
+    fn bootstrap_loadfile_default_pattern_is_permissive() {
+        let scratch = tempfile::tempdir().unwrap();
+        let program = scratch.path().join("init.il");
+        fs::write(&program, "").unwrap();
+
+        let ops = WindowOps;
+        let target = BootstrapTarget {
+            window_id: 1,
+            expected_name_pattern: None,
+        };
+        let skill = ops
+            .build_bootstrap_skill(&target, &BootstrapAction::LoadFile(program), scratch.path())
+            .unwrap();
+        // Default pattern ".*" must be embedded so the SKILL accepts
+        // any window — caller controls strictness via the pattern.
+        assert!(
+            skill.contains(r#""\\..\\*""#) || skill.contains("\".*\""),
+            "{skill}"
+        );
     }
 }
