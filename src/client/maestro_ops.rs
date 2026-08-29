@@ -146,8 +146,22 @@ impl MaestroOps {
         // After injection: " dec=N stop=" preserves spacing before stop=.
         format!(
             r#"progn(
+procedure(vcliShellQuote(value)
+; Return a POSIX single-quoted shell word, escaping embedded apostrophes.
+; Apostrophe in input becomes '"'"' (close sq, add dq-sq-dq, reopen sq).
+let((out i c len)
+out = "'"
+len = strlen(value)
+i = 0
+while(i < len
+c = substring(value i 1)
+if(c == "'"
+out = strcat(out "'\"'\"'")
+out = strcat(out c))
+i = add1(i))
+strcat(out "'")))
 procedure(vcliDecInject(s a o d)
-let((setupName cellView netDir netPath cmd ok ds)
+let((setupName cellView netDir netPath netPathQuoted cmd ok ds)
 ; Derive netlist path from getWorkingDir + maeGetSetup
 ; IC25 Maestro writes netlist to:
 ;   <wd>/simulation/<cellview>/maestro/results/maestro/.tmpADEDir_user1/<setupName>/<cellview>_schematic_spectre/netlist/input.scs
@@ -155,6 +169,7 @@ setupName=car(maeGetSetup(?session s))
 cellView=substring(setupName 1 sub1(strlen(setupName)))
 netDir=sprintf(nil "%s/simulation/%s/maestro/results/maestro/.tmpADEDir_user1/%s/%s_schematic_spectre/netlist" getWorkingDir() cellView setupName cellView)
 netPath=strcat(netDir "/input.scs")
+netPathQuoted=vcliShellQuote(netPath)
 ; Build dec="N" string for sed
 ds=sprintf(nil "dec=%d" d)
 ; Set analysis with dec=0 (placeholder, sed will replace it)
@@ -163,9 +178,9 @@ maeSetAnalysis(setupName a ?session s ?enable t ?options o)
 maeSaveSetup(?session s)
 ; Primary sed: replace " stop=" → " dec=N stop=" on the ac line
 ; Uses /0/.../0/ address to match only the first occurrence
-cmd=sprintf(nil "sed -i '0,/ stop=/s/ stop=/ %s stop=/' %s %s" ds netPath netPath)
+cmd=sprintf(nil "sed -i '0,/ stop=/s/ stop=/ %s stop=/' %s %s" ds netPathQuoted netPathQuoted)
 ok=not(system(cmd))
-when(ok system(sprintf(nil "grep '^ac ' %s" netPath)))
+when(ok system(sprintf(nil "grep '^ac ' %s" netPathQuoted)))
 maeRunSimulation(?session s)))
 vcliDecInject("{}" "{}" (list {}) {}))"#,
             session_esc, at_esc, opts_inner, dec_u32
@@ -901,5 +916,66 @@ mod tests {
         let s = ops().get_sim_status("sess1");
         assert!(s.contains("asiGetSession"), "{s}");
         assert!(s.contains("~>status"), "{s}");
+    }
+
+    #[test]
+    fn run_with_dec_quotes_netpath_for_shell() {
+        // The generated SKILL must protect netPath for POSIX shell-word use in sed/grep.
+        // netPath is derived at runtime from getWorkingDir() — we cannot assume it is safe.
+        // Required: a local sh_quote procedure defined before use, a quoted binding
+        // (netPathQuoted), and that quoted binding used in the sprintf argument lists for
+        // sed and grep.  The sed command template keeps %s placeholders; SKILL's sprintf
+        // fills them with the shell-quoted strings from the argument list.
+        // Without this, a path containing spaces or single-quotes causes shell injection
+        // or argument-splitting errors at runtime inside Virtuoso's system() call.
+        let s = ops().run_with_dec("sess1", "ac", None, 11);
+
+        // 1. A local quoting helper must be defined inside the procedure.
+        assert!(
+            s.contains("procedure(vcliShellQuote"),
+            "SKILL must define a local vcliShellQuote procedure: {s}"
+        );
+
+        // 2. netPath must be shell-quoted before use in system() commands.
+        assert!(
+            s.contains("netPathQuoted"),
+            "SKILL must assign a quoted netPath (netPathQuoted): {s}"
+        );
+
+        // 3. vcliShellQuote must handle embedded single-quotes via the standard
+        //    single-quote / double-quote / single-quote sequence.
+        assert!(
+            s.contains("'\"'\"'"),
+            "vcliShellQuote must escape embedded apostrophes via '\\'\"'\"'' pattern: {s}"
+        );
+
+        // 4. The sed sprintf argument list must pass netPathQuoted (not raw netPath)
+        //    so SKILL fills the %s placeholders with the shell-safe string.
+        //    Old form: sprintf(nil "sed ... %s %s" ds netPath netPath)  ← raw netPath
+        //    Fixed form: sprintf(nil "sed ... %s %s" ds netPathQuoted netPathQuoted)
+        assert!(
+            s.contains("ds netPathQuoted netPathQuoted"),
+            "sed sprintf args must use netPathQuoted, not bare netPath: {s}"
+        );
+
+        // 5. Negative: the old raw netPath sed form must be absent.
+        assert!(
+            !s.contains("ds netPath netPath"),
+            "raw 'ds netPath netPath' must not appear — use netPathQuoted: {s}"
+        );
+
+        // 6. The grep sprintf argument list must also use netPathQuoted.
+        //    Old form ends with: sprintf(nil "grep '^ac ' %s" netPath)
+        assert!(
+            s.contains("\"grep '^ac ' %s\" netPathQuoted")
+                || (s.contains("\"grep '^ac ' %s\"") && s.contains("netPathQuoted")),
+            "grep sprintf args must use netPathQuoted, not bare netPath: {s}"
+        );
+
+        // 7. Negative: bare netPath after grep pattern must not appear.
+        assert!(
+            !s.contains("\"grep '^ac ' %s\" netPath)"),
+            "bare netPath must not follow grep pattern — use netPathQuoted: {s}"
+        );
     }
 }

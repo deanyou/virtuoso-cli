@@ -1864,7 +1864,7 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
             &session,
             analysis.as_deref(),
             options.as_deref(),
-            dec.map(|d| d as u32).as_ref(),
+            dec.as_ref(),
         ),
         MaestroCmd::Save { session } => commands::maestro::save(&session),
         MaestroCmd::Export {

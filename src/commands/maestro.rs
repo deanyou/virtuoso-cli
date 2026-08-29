@@ -189,7 +189,6 @@ pub fn run_with_analysis(
 
     // dec injection uses system(sed) — requires Admin capability + whitelist bypass
     if dec.is_some() {
-        let _ = std::fs::write("/tmp/vcli_dec_skill.txt", &skill);
         client
             .execute_skill_admin(&skill, None)?
             .ok_or_exec("run simulation")?;
