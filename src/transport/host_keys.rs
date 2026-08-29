@@ -21,6 +21,7 @@
 // then some variants/branches are unreferenced. Mirrors `contract.rs`.
 #![allow(dead_code)]
 
+use base64::Engine;
 use std::path::{Path, PathBuf};
 
 /// SSH public-key algorithm as it appears in a `known_hosts` line.
@@ -243,7 +244,7 @@ impl KnownHosts {
                         None => host.clone(),
                     },
                     HostPattern::Hashed { salt, hash } => {
-                        format!("|1|{}|{}", base64_encode(salt), base64_encode(hash))
+                        format!("|1|{}|{}", b64_encode(salt), b64_encode(hash))
                     }
                 })
                 .collect();
@@ -296,8 +297,8 @@ fn parse_host_pattern(s: &str) -> HostPattern {
     if let Some(rest) = s.strip_prefix("|1|") {
         // |1|base64salt|base64hash
         let mut it = rest.split('|');
-        let salt = it.next().and_then(|s| base64_decode(s).ok());
-        let hash = it.next().and_then(|s| base64_decode(s).ok());
+        let salt = it.next().and_then(b64_decode);
+        let hash = it.next().and_then(b64_decode);
         if let (Some(salt), Some(hash)) = (salt, hash) {
             return HostPattern::Hashed { salt, hash };
         }
@@ -405,56 +406,17 @@ fn hmac_sha1(key: &[u8], message: &[u8]) -> Vec<u8> {
     sha1(&outer).to_vec()
 }
 
-// Minimal base64 (OpenSSH uses standard alphabet, no padding in known_hosts
-// hashed fields — but we accept both). Kept tiny and dependency-free.
-fn base64_encode(input: &[u8]) -> String {
-    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::new();
-    for chunk in input.chunks(3) {
-        let b = [
-            chunk[0],
-            *chunk.get(1).unwrap_or(&0),
-            *chunk.get(2).unwrap_or(&0),
-        ];
-        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | (b[2] as u32);
-        out.push(A[((n >> 18) & 63) as usize] as char);
-        out.push(A[((n >> 12) & 63) as usize] as char);
-        if chunk.len() > 1 {
-            out.push(A[((n >> 6) & 63) as usize] as char);
-        }
-        if chunk.len() > 2 {
-            out.push(A[(n & 63) as usize] as char);
-        }
-    }
-    out
+// Base64 for hashed known_hosts fields. Uses the `base64` crate (already a
+// dependency) rather than a hand-rolled codec. OpenSSH writes these fields
+// *without* '=' padding, so encoding is unpadded; decoding tolerates both.
+fn b64_encode(bytes: &[u8]) -> String {
+    base64::engine::general_purpose::STANDARD_NO_PAD.encode(bytes)
 }
 
-fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
-    const INV: i16 = -1;
-    let mut map = [INV; 256];
-    let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    for (i, &c) in alphabet.iter().enumerate() {
-        map[c as usize] = i as i16;
-    }
-    let mut out = Vec::new();
-    let mut buf = 0u32;
-    let mut bits = 0u8;
-    for &c in input.as_bytes() {
-        if c == b'=' {
-            break;
-        }
-        let v = map[c as usize];
-        if v < 0 {
-            continue; // skip whitespace / unknown
-        }
-        buf = (buf << 6) | (v as u32);
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buf >> bits) as u8);
-        }
-    }
-    Ok(out)
+fn b64_decode(s: &str) -> Option<Vec<u8>> {
+    base64::engine::general_purpose::STANDARD_NO_PAD
+        .decode(s.trim_end_matches('='))
+        .ok()
 }
 
 #[cfg(test)]
@@ -559,8 +521,8 @@ mod tests {
         let hash = hmac_sha1(&salt, host_string.as_bytes());
         let line = format!(
             "|1|{}|{} ssh-ed25519 KEYXYZ\n",
-            base64_encode(&salt),
-            base64_encode(&hash)
+            b64_encode(&salt),
+            b64_encode(&hash)
         );
         let kh = KnownHosts {
             path: None,
