@@ -48,6 +48,10 @@ fn sanitize_preserves_leading_dots_and_dashes() {
 // resolve_client_id + remote_scratch_root (with env-var precedence)
 // ----------------------------------------------------------------------------
 
+/// This binary's env lock. Integration tests run in their own process (env is
+/// not shared with the lib/unit-test binaries), so a lock local to this file is
+/// sufficient — but every env-touching test here must take it, and it must
+/// recover from poisoning so a single panic doesn't cascade into six failures.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 /// Clean all env vars that influence client_id resolution.
@@ -59,7 +63,7 @@ fn clear_client_id_env() {
 
 #[test]
 fn client_id_uses_explicit_override() {
-    let _g = ENV_LOCK.lock().unwrap();
+    let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
     env::set_var("VB_CLIENT_ID", "explicit-id");
     env::set_var("VB_PROFILE", "profile-x");
@@ -71,7 +75,7 @@ fn client_id_uses_explicit_override() {
 
 #[test]
 fn client_id_uses_profile_when_no_explicit() {
-    let _g = ENV_LOCK.lock().unwrap();
+    let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
     env::set_var("VB_PROFILE", "profile-y");
     assert_eq!(resolve_client_id(), "profile-y");
@@ -81,7 +85,7 @@ fn client_id_uses_profile_when_no_explicit() {
 
 #[test]
 fn client_id_empty_explicit_falls_through() {
-    let _g = ENV_LOCK.lock().unwrap();
+    let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
     env::set_var("VB_CLIENT_ID", "  ");
     env::set_var("VB_PROFILE", "profile-fallback");
@@ -92,7 +96,7 @@ fn client_id_empty_explicit_falls_through() {
 
 #[test]
 fn client_id_falls_back_to_hostname() {
-    let _g = ENV_LOCK.lock().unwrap();
+    let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
     env::set_var("HOSTNAME", "test-host-9");
     // No VB_CLIENT_ID, no VB_PROFILE → use hostname
@@ -102,7 +106,7 @@ fn client_id_falls_back_to_hostname() {
 
 #[test]
 fn client_id_sanitizes_hostname() {
-    let _g = ENV_LOCK.lock().unwrap();
+    let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
     env::set_var("HOSTNAME", "weird/host\\name");
     // Hostname with path separators should be sanitized
@@ -112,7 +116,7 @@ fn client_id_sanitizes_hostname() {
 
 #[test]
 fn client_id_no_env_falls_back_to_default() {
-    let _g = ENV_LOCK.lock().unwrap();
+    let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
     // Set HOSTNAME to empty to force the inner None branch
     env::set_var("HOSTNAME", "");

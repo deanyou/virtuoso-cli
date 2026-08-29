@@ -14,11 +14,12 @@ fn cmd_args(cmd: &std::process::Command) -> Vec<String> {
 mod config_tests {
     use crate::config::Config;
     use std::env;
-    use std::sync::Mutex;
 
     // Serialize env-var tests to prevent races (env is global process state).
-    // Shared with config_tests_ext — both modules must hold this lock when touching env vars.
-    pub(super) static ENV_LOCK: Mutex<()> = Mutex::new(());
+    // This re-exports the *shared* crate-level lock so `config_tests`,
+    // `config_tests_ext` and every other env-touching module in this binary
+    // serialize against each other; a module-local static would not.
+    pub(super) use crate::test_env::ENV_LOCK;
 
     fn make_config(
         remote_host: Option<&str>,
@@ -159,7 +160,7 @@ mod config_tests {
 
     #[test]
     fn spectre_args_parsed_correctly() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         env::set_var("VB_SPECTRE_ARGS", "-64 +aps +mt=4");
         env::remove_var("VB_REMOTE_HOST");
         env::remove_var("VB_PORT");

@@ -20,6 +20,8 @@ mod runtime_paths;
 mod skill_finder;
 mod spectre;
 mod streaming;
+#[cfg(test)]
+mod test_env;
 mod transaction;
 mod transport;
 mod tui;

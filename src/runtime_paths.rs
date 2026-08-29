@@ -196,12 +196,12 @@ pub fn legacy_state_file(profile: Option<&str>) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    /// Process-wide lock for env-var-mutating tests. cargo test runs unit
-    /// tests in parallel by default; without this lock, tests that set
-    /// `XDG_*` or `VB_*` race each other and intermittently fail.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    /// Shared crate-level env lock (`crate::test_env`). Not module-local:
+    /// `runtime_paths` is compiled into the lib and both binaries, and a
+    /// per-module static would not serialize against other test modules
+    /// running in the same process.
+    use crate::test_env::lock as env_lock;
 
     /// Apply a test-scoped env override, run `f`, then restore. Holds
     /// `ENV_LOCK` for the duration of the override so concurrent tests
@@ -214,7 +214,7 @@ mod tests {
     /// restore. Use this instead of nesting `with_env` — `std::sync::Mutex`
     /// is not reentrant, so nested locks would deadlock.
     fn with_env_many<F: FnOnce()>(overrides: &[(&str, Option<&str>)], f: F) {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = env_lock();
         let originals: Vec<_> = overrides
             .iter()
             .map(|(var, _)| (var, std::env::var_os(var)))
