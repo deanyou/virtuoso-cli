@@ -282,7 +282,7 @@ pub enum TransportError {
         request: RequestId,
     },
     RestartRequired(String),
-    UnsupportedOperation(&'static str),
+    UnsupportedOperation(String),
     /// The selected backend was not compiled into this binary.
     UnsupportedBackend,
 }
@@ -469,19 +469,23 @@ pub trait RemoteTransport: Send + Sync {
     /// it in here is a later increment. Implementations report the gap rather
     /// than panicking, so a caller can detect it structurally.
     fn start_local_forward(&self, _req: &ForwardRequest) -> Result<ForwardHandle, TransportError> {
-        Err(TransportError::UnsupportedOperation("start_local_forward"))
+        Err(TransportError::UnsupportedOperation(
+            "start_local_forward".to_string(),
+        ))
     }
 
     fn stop_local_forward(&self, _id: &ForwardId) -> Result<(), TransportError> {
-        Err(TransportError::UnsupportedOperation("stop_local_forward"))
+        Err(TransportError::UnsupportedOperation(
+            "stop_local_forward".to_string(),
+        ))
     }
 
     fn health(&self) -> Result<TransportHealth, TransportError> {
-        Err(TransportError::UnsupportedOperation("health"))
+        Err(TransportError::UnsupportedOperation("health".to_string()))
     }
 
     fn shutdown(&self) -> Result<(), TransportError> {
-        Err(TransportError::UnsupportedOperation("shutdown"))
+        Err(TransportError::UnsupportedOperation("shutdown".to_string()))
     }
 }
 
@@ -768,7 +772,7 @@ mod tests {
                 request: RequestId::new(),
             },
             TransportError::RestartRequired("x".into()),
-            TransportError::UnsupportedOperation("x"),
+            TransportError::UnsupportedOperation("x".to_string()),
             TransportError::UnsupportedBackend,
         ];
         let codes: Vec<&str> = variants.iter().map(|v| v.code()).collect();

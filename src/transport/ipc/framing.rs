@@ -9,6 +9,8 @@
 //! `std::io::Read` / `std::io::Write`, so the same code serves Unix domain
 //! sockets, named pipes, and loopback TCP.
 
+#![allow(dead_code)]
+
 use std::io::{self, Read, Write};
 
 /// Hard ceiling on a single IPC frame, in bytes (8 MiB).
