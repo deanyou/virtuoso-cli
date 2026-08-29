@@ -15,7 +15,8 @@
 use crate::error::VirtuosoError;
 use crate::exit_codes;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // ───────────────────────── request identity & timing ─────────────────────────
 
@@ -59,6 +60,52 @@ impl Deadline {
     pub fn remaining_secs(&self) -> u64 {
         self.remaining().as_secs().max(1)
     }
+
+    /// Absolute wall-clock representation (milliseconds since the Unix epoch).
+    ///
+    /// `Instant` cannot cross a process boundary, so any transport that talks
+    /// over IPC (the native backend) carries the deadline as absolute unix
+    /// milliseconds and reconstructs it on the other side with
+    /// [`Deadline::from_unix_ms`]. The conversion is anchored to a single
+    /// process-local `(Instant, unix_ms)` pair captured once, which is exact
+    /// within one process and close enough across processes that share a clock.
+    #[allow(clippy::wrong_self_convention)]
+    pub fn to_unix_ms(&self) -> u64 {
+        let (anchor_instant, anchor_ms) = clock_anchor();
+        let offset = self
+            .0
+            .saturating_duration_since(*anchor_instant)
+            .as_millis() as u64;
+        anchor_ms.saturating_add(offset)
+    }
+
+    /// Inverse of [`Deadline::to_unix_ms`]. Reconstructs the `Instant` closest
+    /// to the original within the current process's clock anchor.
+    pub fn from_unix_ms(unix_ms: u64) -> Self {
+        let (anchor_instant, anchor_ms) = clock_anchor();
+        let offset = unix_ms.saturating_sub(*anchor_ms);
+        let dur = Duration::from_millis(offset);
+        Self(
+            anchor_instant
+                .checked_add(dur)
+                .unwrap_or(*anchor_instant + dur),
+        )
+    }
+}
+
+/// Process-local anchor mapping a monotonic `Instant` to a wall-clock unix
+/// millisecond value. Captured once, lazily, so `Deadline` ↔ unix-ms conversion
+/// is stable for the lifetime of the process.
+fn clock_anchor() -> &'static (Instant, u64) {
+    static ANCHOR: OnceLock<(Instant, u64)> = OnceLock::new();
+    ANCHOR.get_or_init(|| {
+        let instant = Instant::now();
+        let unix_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        (instant, unix_ms)
+    })
 }
 
 // ───────────────────────────────── requests ─────────────────────────────────

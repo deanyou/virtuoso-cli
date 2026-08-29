@@ -5,5 +5,6 @@
 //! daemon-internal types. See [`framing`] for the byte layout and [`messages`]
 //! for the request/response vocabulary.
 
+pub mod daemon;
 pub mod framing;
 pub mod messages;
