@@ -3,9 +3,12 @@ use crate::client::skill_runtime::decode_json;
 use crate::commands::schematic::parse_skill_json;
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
-use crate::transport::ssh::{shell_quote, SSHRunner};
+use crate::transport::contract::{CommandRequest, DownloadDirRequest, RemoteTransport};
+use crate::transport::openssh::OpenSshTransport;
+use crate::transport::ssh::shell_quote;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 pub fn open(lib: &str, cell: &str, view: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
@@ -1402,7 +1405,7 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
 ///      side effect.)
 ///   3. Initialize the VirtuosoClient early so a connection/timeout
 ///      error surfaces with its original variant (not flattened into
-///      `Execution`). Then build the SSHRunner from the same Config.
+///      `Execution`). Then build the remote transport from the same Config.
 ///   4. Generate an unpredictable, fixed-prefix remote temp dir.
 ///   5. `mkdir -p` on the remote via SSH (quoted).
 ///   6. Execute the `maeCreateNetlistForCorner` SKILL builder against the
@@ -1475,8 +1478,8 @@ pub fn create_corner_netlist(
     //    side effects until step 5.
     let client = VirtuosoClient::from_env()?;
 
-    // 4. Build SSH runner from the same Config
-    let ssh = SSHRunner::from_config(&cfg);
+    // 4. Build the remote transport from the same Config
+    let ssh: Arc<dyn RemoteTransport> = Arc::new(OpenSshTransport::from_config(&cfg));
 
     // 5. Generate a unique remote temp dir (fixed prefix + UUIDv4 suffix)
     let remote_dir = corner_netlist_remote_path();
@@ -1486,11 +1489,16 @@ pub fn create_corner_netlist(
 
     // 6. mkdir on remote (quoted, never fails because of special chars in path)
     let mkdir_q = corner_netlist_mkdir_command(&remote_dir);
-    let mkdir_r = ssh.run_command(&mkdir_q, None).map_err(|e| {
-        VirtuosoError::Ssh(format!(
-            "{e}; netlist artifacts preserved at remote_dir={remote_dir}"
-        ))
-    })?;
+    let mkdir_r = ssh
+        .run_command(&CommandRequest::untimed(&mkdir_q))
+        .map_err(|e| {
+            // Prefix with the structured code so a consumer can classify the
+            // failure without substring-matching the message.
+            VirtuosoError::Ssh(format!(
+                "{}: {e}; netlist artifacts preserved at remote_dir={remote_dir}",
+                e.code()
+            ))
+        })?;
     if !mkdir_r.success {
         return Err(VirtuosoError::Ssh(format!(
             "mkdir remote dir failed: stderr={}; remote_dir={remote_dir}",
@@ -1518,11 +1526,14 @@ pub fn create_corner_netlist(
     //    `find <quoted> -mindepth 1 -type f -size +0c -print -quit`
     //    (NOT `ls -la`.) Empty → preserve the remote dir for forensics.
     let verify_q = corner_netlist_verify_command(&remote_dir);
-    let verify_r = ssh.run_command(&verify_q, None).map_err(|e| {
-        VirtuosoError::Ssh(format!(
-            "{e}; netlist artifacts preserved at remote_dir={remote_dir}"
-        ))
-    })?;
+    let verify_r = ssh
+        .run_command(&CommandRequest::untimed(&verify_q))
+        .map_err(|e| {
+            VirtuosoError::Ssh(format!(
+                "{}: {e}; netlist artifacts preserved at remote_dir={remote_dir}",
+                e.code()
+            ))
+        })?;
     if !verify_r.success {
         return Err(VirtuosoError::Ssh(format!(
             "verify remote dir failed: stderr={}; remote_dir={remote_dir}",
@@ -1556,9 +1567,10 @@ pub fn create_corner_netlist(
     // 10. Stream the remote dir into the staging path (NOT output_dir).
     //     On failure the RAII guard removes staging; the remote dir is
     //     preserved upstream.
-    if let Err(e) = ssh.download_dir(&remote_dir, &staging_path) {
+    if let Err(e) = ssh.download_dir(&DownloadDirRequest::untimed(&remote_dir, &staging_path)) {
         return Err(VirtuosoError::Ssh(format!(
-            "{e}; netlist artifacts preserved at remote_dir={remote_dir}"
+            "{}: {e}; netlist artifacts preserved at remote_dir={remote_dir}",
+            e.code()
         )));
     }
 
@@ -1594,16 +1606,19 @@ pub fn create_corner_netlist(
     //     drop. Existing contract: never pretend full success if the
     //     remote cleanup itself failed.
     let cleanup_q = corner_netlist_cleanup_command(&remote_dir);
-    let cleanup_outcome = match ssh.run_command(&cleanup_q, None) {
+    let cleanup_outcome = match ssh.run_command(&CommandRequest::untimed(&cleanup_q)) {
         Ok(r) if r.success => (true, None),
         Ok(r) => (
             false,
             Some(format!(
                 "remote temp dir not cleaned (rc={}, stderr={})",
-                r.returncode, r.stderr
+                r.exit_status, r.stderr
             )),
         ),
-        Err(e) => (false, Some(format!("remote temp dir not cleaned: {e}"))),
+        Err(e) => (
+            false,
+            Some(format!("remote temp dir not cleaned: {}: {e}", e.code())),
+        ),
     };
 
     if cleanup_outcome.0 {
