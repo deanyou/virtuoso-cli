@@ -236,6 +236,18 @@ pub fn status(format: OutputFormat) -> Result<Value> {
         }
     });
 
+    // Multi-host role split. Each role is independently resolvable; when
+    // all four collapse to remote_host the JSON shows the same value four
+    // times (no-op for legacy single-host setups).
+    let fb = cfg.remote_host.as_deref();
+    result["config"]["roles"] = json!({
+        "gui_host": cfg.roles.gui_host(fb),
+        "deploy_host": cfg.roles.deploy_host(fb),
+        "daemon_host": cfg.roles.daemon_host(fb),
+        "spectre_host": cfg.roles.spectre_host(fb),
+        "scratch_root": cfg.roles.scratch_root(),
+    });
+
     let tunnel_info = if let Some(state) = TunnelState::load()? {
         let port_open = std::net::TcpStream::connect(format!("127.0.0.1:{}", state.port)).is_ok();
         let host_match = !cfg.is_remote() || Some(&state.remote_host) == cfg.remote_host.as_ref();
@@ -298,6 +310,22 @@ pub fn status(format: OutputFormat) -> Result<Value> {
         if let Some(config) = obj.get("config") {
             println!("config:");
             for (k, v) in config.as_object().unwrap() {
+                if k == "roles" {
+                    // Render roles as nested keys; the same string repeated
+                    // four times when roles collapse onto remote_host is
+                    // the expected behavior of the legacy single-host setup.
+                    if let Some(roles) = v.as_object() {
+                        for (rk, rv) in roles {
+                            let display = match rv {
+                                Value::String(s) if s.is_empty() => "(unset)".to_string(),
+                                Value::Null => "(unset)".to_string(),
+                                other => other.to_string(),
+                            };
+                            println!("  {rk}: {display}");
+                        }
+                    }
+                    continue;
+                }
                 println!("  {k}: {v}");
             }
             println!();
