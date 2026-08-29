@@ -344,11 +344,25 @@ impl SSHClient {
 
     fn save_state(&self) -> Result<()> {
         let state = TunnelState {
-            version: 1,
+            version: crate::models::CURRENT_STATE_VERSION,
             port: self.port,
             pid: self.tunnel_pid.unwrap_or(0),
             remote_host: self.runner().host.clone(),
             setup_path: Some(setup_dir_for_profile(self.profile.as_deref())),
+            // v2 fields: the OpenSSH backend records its backend + profile; the
+            // remaining v2 fields (daemon nonce, IPC endpoint, executable path,
+            // start identity, …) are populated by the native daemon when it ships.
+            profile: self.profile.clone(),
+            backend: Some("openssh".to_string()),
+            daemon_nonce: None,
+            executable_path: None,
+            start_identity: None,
+            ipc_endpoint: None,
+            token_path: None,
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
         };
         state.save().map_err(|e| VirtuosoError::Ssh(e.to_string()))
     }

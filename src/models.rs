@@ -335,17 +335,90 @@ impl SessionInfo {
     }
 }
 
+/// State of the SSH/tunnel process, persisted to `state.json` (see
+/// [`TunnelState::state_path`]). Both the OpenSSH backend and the planned
+/// native backend write this file; `tunnel stop`, `tunnel status`,
+/// `tunnel diagnose`, and the TUI read it.
+///
+/// # Versioning
+///
+/// * **v1** (legacy): `{version, port, pid, remote_host, setup_path}`. A v1
+///   file on disk is always treated as the OpenSSH backend, because the native
+///   backend did not exist when v1 was the only shape.
+/// * **v2** (this revision): adds the optional fields below. Every write made
+///   after this change is v2 — including writes from the OpenSSH backend — so
+///   the file never oscillates between shapes. Fields that the OpenSSH backend
+///   does not yet populate (`daemon_nonce`, `ipc_endpoint`, `token_path`,
+///   `executable_path`, `start_identity`, …) stay `None`; the native daemon
+///   fills them in when it ships. All new fields are `Option`-typed with
+///   `#[serde(default)]` so a v1 file still deserializes without a custom
+///   deserializer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TunnelState {
+    /// Schema version. Defaults to 1 for legacy files that predate this field.
     #[serde(default = "default_version")]
     pub version: u32,
     pub port: u16,
     pub pid: u32,
     pub remote_host: String,
     pub setup_path: Option<String>,
+
+    // --- v2 fields (all optional for v1 backward compatibility) ---
+    /// Profile this tunnel belongs to (`None` for the default profile).
+    #[serde(default)]
+    pub profile: Option<String>,
+    /// Selected transport backend. `None` on a v1 file means OpenSSH.
+    #[serde(default)]
+    pub backend: Option<String>,
+    /// Per-daemon nonce issued at Hello; rotating it invalidates stale clients.
+    /// Native daemon only; `None` under OpenSSH.
+    #[serde(default)]
+    pub daemon_nonce: Option<String>,
+    /// Absolute path of the tunnel process executable (two-tier PID check).
+    #[serde(default)]
+    pub executable_path: Option<String>,
+    /// Opaque start identity (e.g. argv hash) used to confirm the live process
+    /// still matches the recorded one before `tunnel stop` kills it.
+    #[serde(default)]
+    pub start_identity: Option<String>,
+    /// IPC endpoint (UDS path / named pipe / TCP addr) the native daemon listens on.
+    #[serde(default)]
+    pub ipc_endpoint: Option<String>,
+    /// Path to the current-user-only auth-token file.
+    #[serde(default)]
+    pub token_path: Option<String>,
+    /// Human-readable summary of the forward endpoints (e.g. `L*:<port>`).
+    #[serde(default)]
+    pub local_forward: Option<String>,
+    /// Unix epoch milliseconds when the tunnel was established.
+    #[serde(default)]
+    pub start_time_unix_ms: Option<u64>,
+    /// Last health-probe result string.
+    #[serde(default)]
+    pub health: Option<String>,
+    /// Digest of the resolved config, for `tunnel status` drift detection.
+    #[serde(default)]
+    pub config_digest: Option<String>,
 }
 
+/// Current `TunnelState` schema version written by this build.
+pub const CURRENT_STATE_VERSION: u32 = 2;
+
 impl TunnelState {
+    /// Backend this state file describes. A v1 file (no `backend` field) is
+    /// always OpenSSH, because the native backend did not exist when v1 was
+    /// the only shape on disk.
+    #[allow(dead_code)]
+    pub fn backend_or_openssh(&self) -> &str {
+        self.backend.as_deref().unwrap_or("openssh")
+    }
+
+    /// Whether this is a v2 (or newer) state file.
+    #[allow(dead_code)]
+    pub fn is_v2(&self) -> bool {
+        self.version >= CURRENT_STATE_VERSION
+    }
+
     fn state_path(profile: Option<&str>) -> std::path::PathBuf {
         // Default to state_root (XDG_STATE_HOME) and fall back to the legacy
         // ~/.cache/virtuoso_bridge/state_*.json path so older daemon
@@ -404,5 +477,110 @@ impl TunnelState {
 
     pub fn clear() -> std::io::Result<()> {
         Self::clear_with_profile(std::env::var("VB_PROFILE").ok().as_deref())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A v1 state file written by an older build: no `version` field, no
+    /// `backend` field, and no v2 fields at all. It must parse, be treated as
+    /// the OpenSSH backend, and preserve the four original fields.
+    const V1_JSON: &str = r#"{
+        "port": 20022,
+        "pid": 4242,
+        "remote_host": "eda-host",
+        "setup_path": "/home/u/.cache/virtuoso_bridge/setup"
+    }"#;
+
+    #[test]
+    fn v1_file_parses_and_defaults_to_openssh() {
+        let s: TunnelState = serde_json::from_str(V1_JSON).unwrap();
+        assert_eq!(s.version, 1, "legacy file without `version` defaults to 1");
+        assert_eq!(s.port, 20022);
+        assert_eq!(s.pid, 4242);
+        assert_eq!(s.remote_host, "eda-host");
+        assert_eq!(
+            s.setup_path.as_deref(),
+            Some("/home/u/.cache/virtuoso_bridge/setup")
+        );
+        // v1 has no backend field → OpenSSH, and is not v2.
+        assert_eq!(s.backend_or_openssh(), "openssh");
+        assert!(!s.is_v2());
+        // v2-only fields default to None so v1 never fails to deserialize.
+        assert!(s.daemon_nonce.is_none());
+        assert!(s.ipc_endpoint.is_none());
+        assert!(s.executable_path.is_none());
+    }
+
+    #[test]
+    fn v2_round_trips_with_backend_and_new_fields() {
+        let s = TunnelState {
+            version: CURRENT_STATE_VERSION,
+            port: 20023,
+            pid: 9999,
+            remote_host: "eda-host-2".into(),
+            setup_path: Some("/p/setup".into()),
+            profile: Some("prod".into()),
+            backend: Some("openssh".into()),
+            daemon_nonce: Some("n0nce".into()),
+            executable_path: Some("/usr/bin/ssh".into()),
+            start_identity: Some("argv-hash".into()),
+            ipc_endpoint: Some("/run/vb.sock".into()),
+            token_path: Some("/run/vb.token".into()),
+            local_forward: Some("L*:20023".into()),
+            start_time_unix_ms: Some(1_700_000_000_000),
+            health: Some("ok".into()),
+            config_digest: Some("deadbeef".into()),
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let back: TunnelState = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.version, CURRENT_STATE_VERSION);
+        assert!(back.is_v2());
+        assert_eq!(back.backend_or_openssh(), "openssh");
+        assert_eq!(back.profile.as_deref(), Some("prod"));
+        assert_eq!(back.daemon_nonce.as_deref(), Some("n0nce"));
+        assert_eq!(back.executable_path.as_deref(), Some("/usr/bin/ssh"));
+        assert_eq!(back.start_identity.as_deref(), Some("argv-hash"));
+        assert_eq!(back.ipc_endpoint.as_deref(), Some("/run/vb.sock"));
+        assert_eq!(back.token_path.as_deref(), Some("/run/vb.token"));
+        assert_eq!(back.local_forward.as_deref(), Some("L*:20023"));
+        assert_eq!(back.start_time_unix_ms, Some(1_700_000_000_000));
+        assert_eq!(back.health.as_deref(), Some("ok"));
+        assert_eq!(back.config_digest.as_deref(), Some("deadbeef"));
+    }
+
+    /// The OpenSSH backend writes v2 with `backend = "openssh"`; unknown v2
+    /// fields on a v1 reader are ignored, so an old binary still sees the
+    /// original four fields. This mirrors the `SSHClient::save_state` contract.
+    #[test]
+    fn openssh_save_shape_is_v2_with_openssh_backend() {
+        let s = TunnelState {
+            version: CURRENT_STATE_VERSION,
+            port: 20024,
+            pid: 0,
+            remote_host: "h".into(),
+            setup_path: Some("/p".into()),
+            profile: None,
+            backend: Some("openssh".into()),
+            daemon_nonce: None,
+            executable_path: None,
+            start_identity: None,
+            ipc_endpoint: None,
+            token_path: None,
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        // An old reader that only knows v1 fields must still accept it.
+        let legacy: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(legacy["port"], 20024);
+        assert_eq!(legacy["pid"], 0);
+        assert_eq!(legacy["remote_host"], "h");
+        assert_eq!(legacy["backend"], "openssh");
+        assert!(legacy.get("daemon_nonce").unwrap().is_null());
     }
 }
