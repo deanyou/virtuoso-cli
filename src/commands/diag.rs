@@ -10,11 +10,13 @@
 use crate::client::bridge::VirtuosoClient;
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
-use crate::transport::ssh::SSHRunner;
+use crate::transport::contract::{CommandRequest, RemoteTransport};
+use crate::transport::openssh::OpenSshTransport;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// One .cdslck entry, as returned by `cdslck()`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,12 +84,15 @@ pub fn cdslck(lib: &str, view_filter: Option<&str>) -> Result<Value> {
             "VB_REMOTE_HOST is not set; cdslck needs SSH to enumerate locks".into(),
         ));
     }
-    let runner = SSHRunner::from_config(&config);
+    let transport: Arc<dyn RemoteTransport> = Arc::new(OpenSshTransport::from_config(&config));
     let find_cmd = format!(
         "find {} -name .cdslck -print 2>/dev/null",
         shell_quote(&lib_path)
     );
-    let out = runner.run_command(&find_cmd, Some(60))?;
+    let out = transport.run_command(&CommandRequest::with_exec_timeout(
+        &find_cmd,
+        Duration::from_secs(60),
+    ))?;
     let lock_paths: Vec<String> = out
         .stdout
         .lines()
@@ -97,7 +102,7 @@ pub fn cdslck(lib: &str, view_filter: Option<&str>) -> Result<Value> {
         .collect();
 
     // Step 3: per-lock cat + stat, batched in one SSH round-trip.
-    let locks = batch_read_locks(&runner, &lock_paths)?;
+    let locks = batch_read_locks(transport.as_ref(), &lock_paths)?;
     let locks = match view_filter {
         Some(v) => locks
             .into_iter()
@@ -142,7 +147,7 @@ pub fn cdslck(lib: &str, view_filter: Option<&str>) -> Result<Value> {
     }))
 }
 
-fn batch_read_locks(runner: &SSHRunner, paths: &[String]) -> Result<Vec<CdsLockInfo>> {
+fn batch_read_locks(transport: &dyn RemoteTransport, paths: &[String]) -> Result<Vec<CdsLockInfo>> {
     if paths.is_empty() {
         return Ok(Vec::new());
     }
@@ -158,7 +163,10 @@ fn batch_read_locks(runner: &SSHRunner, paths: &[String]) -> Result<Vec<CdsLockI
              printf '\\n---END---\\n';"
         ));
     }
-    let out = runner.run_command(&script, Some(60))?;
+    let out = transport.run_command(&CommandRequest::with_exec_timeout(
+        &script,
+        Duration::from_secs(60),
+    ))?;
     Ok(parse_batch_output(&out.stdout, paths))
 }
 
