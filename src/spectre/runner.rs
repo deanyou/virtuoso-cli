@@ -86,6 +86,11 @@ pub struct SpectreSimulator {
     /// Absolute path to Spectre binary (VB_SPECTRE_BIN).
     /// When set, this path is used directly instead of relying on PATH.
     pub spectre_bin: Option<String>,
+    /// Opt-in to strict PSF parsing (VB_STRICT_PSF=1).
+    /// When enabled, `parse_simulation_output` uses the strict directory
+    /// parser which propagates errors instead of silently dropping
+    /// malformed files. Default false preserves legacy behavior.
+    pub strict_psf: bool,
     sink: Arc<dyn JobEventSink>,
 }
 
@@ -104,6 +109,7 @@ impl Clone for SpectreSimulator {
             max_workers: self.max_workers,
             cadence_cshrc: self.cadence_cshrc.clone(),
             spectre_bin: self.spectre_bin.clone(),
+            strict_psf: self.strict_psf,
             sink: Arc::clone(&self.sink),
         }
     }
@@ -192,7 +198,10 @@ fn classify_simulation_output(
     .classify()
 }
 
-fn parse_simulation_output(raw_dir: &std::path::Path) -> Result<ParsedSimulationOutput> {
+fn parse_simulation_output(
+    raw_dir: &std::path::Path,
+    strict_psf: bool,
+) -> Result<ParsedSimulationOutput> {
     let sweep = crate::spectre::parsers::parse_sweep_psf_directory(raw_dir)?;
     let data = if !sweep.is_empty() {
         let mut flat = HashMap::new();
@@ -205,7 +214,11 @@ fn parse_simulation_output(raw_dir: &std::path::Path) -> Result<ParsedSimulation
         }
         flat
     } else if raw_dir.join("psf").exists() || raw_dir.join("results").exists() {
-        crate::spectre::parsers::parse_psf_ascii(raw_dir)?
+        if strict_psf {
+            crate::spectre::parsers::parse_psf_ascii_strict_directory(raw_dir)?
+        } else {
+            crate::spectre::parsers::parse_psf_ascii(raw_dir)?
+        }
     } else {
         HashMap::new()
     };
@@ -685,6 +698,9 @@ impl SpectreSimulator {
             max_workers: cfg.spectre_max_workers,
             cadence_cshrc: cfg.cadence_cshrc,
             spectre_bin: cfg.spectre_bin,
+            strict_psf: std::env::var("VB_STRICT_PSF")
+                .map(|v| v == "1" || v.to_lowercase() == "true")
+                .unwrap_or(false),
             sink: Arc::new(crate::streaming::NullSink),
         })
     }
@@ -1101,7 +1117,7 @@ impl SpectreSimulator {
 
         // Parse before classification so an empty directory or an empty parse does
         // not masquerade as usable output.  OP-only output is valid data too.
-        let (data, operating_points) = parse_simulation_output(&raw_dir)?;
+        let (data, operating_points) = parse_simulation_output(&raw_dir, self.strict_psf)?;
         let outcome =
             classify_simulation_output(status.success(), &log_content, &data, &operating_points);
 
@@ -1199,7 +1215,7 @@ impl SpectreSimulator {
                     "failed to retrieve remote Spectre raw results from {remote_dir}: {e}"
                 ))
             })?;
-            parse_simulation_output(&local_raw)?
+            parse_simulation_output(&local_raw, self.strict_psf)?
         } else {
             (HashMap::new(), HashMap::new())
         };
@@ -1397,6 +1413,7 @@ pub(crate) mod tests {
             max_workers: 1,
             cadence_cshrc: None,
             spectre_bin: None,
+            strict_psf: false,
             sink: Arc::new(crate::streaming::NullSink),
         }
     }
@@ -1751,9 +1768,36 @@ pub(crate) mod tests {
         fs::create_dir(&psf_dir).unwrap();
         fs::write(psf_dir.join("tran.tran"), "0\n1e-9\n").unwrap();
 
-        let (data, operating_points) = parse_simulation_output(temp.path()).unwrap();
+        let (data, operating_points) = parse_simulation_output(temp.path(), false).unwrap();
         assert_eq!(data.get("tran").unwrap(), &vec![0.0, 1e-9]);
         assert!(operating_points.is_empty());
+    }
+
+    #[test]
+    fn parse_output_strict_true_propagates_malformed_psf_error() {
+        // Legacy parse_psf_ascii silently skips unparseable lines within
+        // an otherwise-parseable file, leaving the file stem in the
+        // HashMap with a partial vector — callers have no way to know
+        // anything was wrong. The strict variant must surface the parse
+        // failure as VirtuosoError::Execution so callers don't mistake
+        // parse failure for empty/partial data.
+        let temp = tempfile::tempdir().unwrap();
+        let psf_dir = temp.path().join("psf");
+        fs::create_dir(&psf_dir).unwrap();
+        // bad.tran: legacy keeps the file but only with [1.0] (silent skip);
+        // strict fails.
+        fs::write(psf_dir.join("bad.tran"), "1.0\nnot-a-number\n").unwrap();
+
+        let legacy = parse_simulation_output(temp.path(), false).unwrap();
+        let legacy_bad = legacy.0.get("bad").expect("legacy keeps the file stem");
+        assert_eq!(
+            legacy_bad.as_slice(),
+            &[1.0],
+            "legacy silently drops the bad line"
+        );
+
+        let err = parse_simulation_output(temp.path(), true).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)), "{err:?}");
     }
 
     #[test]

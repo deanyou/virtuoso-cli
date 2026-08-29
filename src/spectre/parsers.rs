@@ -597,6 +597,66 @@ pub fn find_exact_result_file(root: &Path, relative_name: &Path) -> Result<PathB
     Ok(canonical_target)
 }
 
+/// Strict directory-level mirror of `parse_psf_ascii`.
+///
+/// Scans `<raw_dir>/psf/` and `<raw_dir>/results/` for files and reads each
+/// one through `find_exact_result_file` + `read_psf_ascii_strict`. File
+/// stems become keys in the returned `HashMap`. Missing `psf/` or
+/// `results/` subdirectories yield an empty map and do not error.
+///
+/// Unlike the legacy parser, malformed numeric data, non-finite values,
+/// path traversal, and other unsafe paths surface as explicit
+/// `VirtuosoError` variants instead of silently empty results.
+pub fn parse_psf_ascii_strict_directory(raw_dir: &Path) -> Result<HashMap<String, Vec<f64>>> {
+    let mut data: HashMap<String, Vec<f64>> = HashMap::new();
+
+    let psf_dir = raw_dir.join("psf");
+    let results_dir = raw_dir.join("results");
+
+    for dir in [&psf_dir, &results_dir] {
+        if !dir.exists() {
+            continue;
+        }
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            // Skip non-files (subdirectories, symlinks, sockets) without
+            // invoking the strict reader, which would error on them. This
+            // mirrors the legacy behavior of "only consider regular files".
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+            if !file_type.is_file() {
+                continue;
+            }
+
+            // Build a relative name from the canonical parent (psf/ or
+            // results/) so find_exact_result_file's containment check
+            // applies to the file under its containing subdir, not the
+            // raw_dir root.
+            let file_name = match path.file_name() {
+                Some(n) => n,
+                None => continue,
+            };
+            let canonical_dir = match fs::canonicalize(dir) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            let contained = find_exact_result_file(&canonical_dir, Path::new(file_name))?;
+
+            let dataset = read_psf_ascii_strict(&contained)?;
+            // Strict reader keys the dataset by file_stem; merge its
+            // single entry into the aggregate.
+            for (key, values) in dataset.signals() {
+                data.insert(key.clone(), values.clone());
+            }
+        }
+    }
+
+    Ok(data)
+}
+
 /// Parse sweep output and return structured sweep points.
 pub fn parse_sweep_flat(output_dir: &Path) -> Result<Vec<SweepPoint>> {
     let sweep_data = parse_sweep_psf_directory(output_dir)?;
@@ -1620,5 +1680,90 @@ END"#;
 
         let err = find_exact_result_file(tmp.path(), Path::new("escape.txt")).unwrap_err();
         assert!(matches!(err, VirtuosoError::Config(_)));
+    }
+
+    // === parse_psf_ascii_strict_directory tests (RED phase) ===
+    //
+    // The directory-level strict entry point must mirror the legacy
+    // `parse_psf_ascii` contract (scan psf/ and results/, key by file
+    // stem, return HashMap<String, Vec<f64>>) while propagating strict
+    // errors instead of silently dropping malformed files. Tests below
+    // are expected to FAIL TO COMPILE until the entry point exists.
+
+    #[test]
+    fn parse_psf_ascii_strict_directory_aggregates_psf_and_results() {
+        let tmp = TempDir::new().unwrap();
+        let psf_dir = tmp.path().join("psf");
+        let results_dir = tmp.path().join("results");
+        fs::create_dir_all(&psf_dir).unwrap();
+        fs::create_dir_all(&results_dir).unwrap();
+        fs::write(psf_dir.join("vdd.tran"), "1.0\n2.0\n3.0\n").unwrap();
+        fs::write(results_dir.join("current.tran"), "0.5\n0.6\n").unwrap();
+
+        let data = parse_psf_ascii_strict_directory(tmp.path()).unwrap();
+        assert_eq!(data.get("vdd"), Some(&vec![1.0, 2.0, 3.0]));
+        assert_eq!(data.get("current"), Some(&vec![0.5, 0.6]));
+    }
+
+    #[test]
+    fn parse_psf_ascii_strict_directory_missing_dirs_return_empty() {
+        let tmp = TempDir::new().unwrap();
+        // No psf/ or results/ subdirs — must not error.
+        let data = parse_psf_ascii_strict_directory(tmp.path()).unwrap();
+        assert!(data.is_empty());
+    }
+
+    #[test]
+    fn parse_psf_ascii_strict_directory_malformed_file_propagates_error() {
+        let tmp = TempDir::new().unwrap();
+        let psf_dir = tmp.path().join("psf");
+        fs::create_dir_all(&psf_dir).unwrap();
+        fs::write(psf_dir.join("bad.tran"), "1.0\nnot-a-number\n").unwrap();
+
+        let err = parse_psf_ascii_strict_directory(tmp.path()).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)), "{err:?}");
+    }
+
+    #[test]
+    fn parse_psf_ascii_strict_directory_path_traversal_returns_config() {
+        let tmp = TempDir::new().unwrap();
+        // Layout: tmp/psf/normal.tran (OK) + tmp/escape.txt (outside psf)
+        // and we manually craft a symlink-style escape inside psf/.
+        // The directory scanner must never surface files outside psf/.
+        let psf_dir = tmp.path().join("psf");
+        fs::create_dir_all(&psf_dir).unwrap();
+        let outside = tmp.path().join("secret.txt");
+        fs::write(&outside, "1.0").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let link = psf_dir.join("escape.tran");
+            symlink(&outside, &link).unwrap();
+        }
+
+        // Either we discover no psf-files at all (no entries to scan)
+        // or the traversal is rejected as Config — never as Execution
+        // with leaked path contents.
+        let result = parse_psf_ascii_strict_directory(tmp.path());
+        if let Err(err) = result {
+            assert!(matches!(err, VirtuosoError::Config(_)), "{err:?}");
+        }
+    }
+
+    #[test]
+    fn parse_psf_ascii_strict_directory_sweep_file_uses_strict_branch() {
+        let tmp = TempDir::new().unwrap();
+        let psf_dir = tmp.path().join("psf");
+        fs::create_dir_all(&psf_dir).unwrap();
+        // SWEEP file with malformed second value should be Execution,
+        // not silently dropped (as legacy would do).
+        fs::write(
+            psf_dir.join("freq.ac"),
+            "SWEEP\n\"frequency\"\n1.0\nbogus\n",
+        )
+        .unwrap();
+
+        let err = parse_psf_ascii_strict_directory(tmp.path()).unwrap_err();
+        assert!(matches!(err, VirtuosoError::Execution(_)), "{err:?}");
     }
 }
