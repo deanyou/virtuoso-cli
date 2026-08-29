@@ -794,8 +794,17 @@ impl SpectreSimulator {
     /// Each entry is `(label, netlist)` — results are returned with the same label.
     /// Worker count is capped at `self.max_workers` and `num_cpus::get()`.
     ///
-    /// For remote mode, each worker gets its own `SSHRunner` clone so that
-    /// `use_control_master` state is isolated per thread (avoids CM fallback races).
+    /// All workers share **one** cloned simulator, and therefore one
+    /// `SSHRunner`: `sim` is cloned once below and each scoped thread borrows
+    /// it by reference. Each worker drains its own chunk sequentially, so peak
+    /// concurrent remote operations is bounded by the worker count, not by the
+    /// number of commands a single job issues.
+    ///
+    /// Consequence: `use_control_master` is shared across workers rather than
+    /// isolated per thread. `SSHRunner` guards it with a `Mutex<bool>`, so a
+    /// ControlMaster failure observed by any worker flips the flag for all of
+    /// them. That is safe (no data race) but it is not per-thread isolation —
+    /// do not assume otherwise when reasoning about fallback behaviour.
     ///
     /// # Example
     ///
