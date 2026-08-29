@@ -53,20 +53,31 @@ mod tests {
 
     #[test]
     fn xstream_out_escapes_all_paths_and_disables_dialog() {
-        let s = ops().xstream_out(
-            "lib\"x",
-            "top",
-            "layout",
-            "/tmp/out.gds",
-            "/tmp/map",
-            "/tmp/log",
-            "/tmp/run",
-        );
+        let req = XstreamOutRequest {
+            library: "lib\"x",
+            top_cell: "top",
+            view: "layout",
+            stream_file: "/tmp/out.gds",
+            layer_map: "/tmp/map",
+            log_file: "/tmp/log",
+            run_dir: "/tmp/run",
+        };
+        let s = ops().xstream_out(&req);
         assert!(s.contains("xstOutDoTranslate()"));
         assert!(s.contains("xstSetField(\"showCompletionMsgBox\" \"false\")"));
         assert!(s.contains("lib\\\"x"));
         assert!(s.contains("xstSetField(\"strmFile\" \"/tmp/out.gds\")"));
     }
+}
+
+pub struct XstreamOutRequest<'a> {
+    pub library: &'a str,
+    pub top_cell: &'a str,
+    pub view: &'a str,
+    pub stream_file: &'a str,
+    pub layer_map: &'a str,
+    pub log_file: &'a str,
+    pub run_dir: &'a str,
 }
 
 #[derive(Default)]
@@ -80,24 +91,15 @@ impl LayoutOps {
     /// Build a non-interactive XStream Out request.  The caller is expected
     /// to provide execution-host paths (typically profile-scoped temporary
     /// paths) and to validate/publish the resulting GDS file separately.
-    pub fn xstream_out(
-        &self,
-        library: &str,
-        top_cell: &str,
-        view: &str,
-        stream_file: &str,
-        layer_map: &str,
-        log_file: &str,
-        run_dir: &str,
-    ) -> String {
+    pub fn xstream_out(&self, req: &XstreamOutRequest<'_>) -> String {
         let values = [
-            library,
-            top_cell,
-            view,
-            stream_file,
-            layer_map,
-            log_file,
-            run_dir,
+            req.library,
+            req.top_cell,
+            req.view,
+            req.stream_file,
+            req.layer_map,
+            req.log_file,
+            req.run_dir,
         ]
         .into_iter()
         .map(escape_skill_string)

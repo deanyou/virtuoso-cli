@@ -7,8 +7,7 @@ use serde_json::{json, Value};
 pub fn list() -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     // Use unchecked — capability check already passed at RPC dispatch level
-    let r = client
-        .execute_skill_unchecked(&LibraryOps::default().list(), Some(client.read_timeout()))?;
+    let r = client.execute_skill_unchecked(&LibraryOps.list(), Some(client.read_timeout()))?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
             "library list failed: {}",

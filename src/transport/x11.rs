@@ -364,13 +364,11 @@ pub fn list_windows(
     }
     // If the helper died and produced no windows, surface the error so callers
     // can distinguish "no Virtuoso windows" from "x11 helper crashed".
-    if windows.is_empty() {
-        if !helper_errors.is_empty() {
-            return Err(VirtuosoError::Execution(format!(
-                "x11 helper failed: {}",
-                helper_errors.join("; ")
-            )));
-        }
+    if windows.is_empty() && !helper_errors.is_empty() {
+        return Err(VirtuosoError::Execution(format!(
+            "x11 helper failed: {}",
+            helper_errors.join("; ")
+        )));
     }
     Ok((primary_env, windows))
 }

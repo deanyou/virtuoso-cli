@@ -1822,7 +1822,7 @@ pub(crate) mod tests {
             error: None,
             timings: HashMap::new(),
         };
-        assert_eq!(remote_directory_exists(&missing).unwrap(), false);
+        assert!(!remote_directory_exists(&missing).unwrap());
 
         let outcome = classify_simulation_output(
             true,
