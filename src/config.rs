@@ -2,6 +2,103 @@ use crate::error::{Result, VirtuosoError};
 use std::env;
 use std::path::PathBuf;
 
+/// Functional role split for the multi-host EDA layout.
+///
+/// A single EDA environment may have several distinct hosts:
+///   - **GUI host**: where Virtuoso CIW/GUI runs (used for X11, bootstrap)
+///   - **deploy host**: where bridge files are pushed (often the same as GUI)
+///   - **daemon host**: where the RAMIC/HBridge daemon listens (compute node)
+///   - **spectre host**: where Spectre executes (compute node, possibly
+///     on HPC batch queues)
+///
+/// For the common single-host setup, all roles collapse onto
+/// `VB_REMOTE_HOST`. When roles diverge (CIW on bastion, daemon on
+/// compute-42, Spectre on hpc-7), each can be set independently via
+/// `VB_GUI_HOST` / `VB_DEPLOY_HOST` / `VB_DAEMON_HOST` / `VB_SPECTRE_HOST`.
+/// SSH topology (jump host, ssh user/key) is shared across all roles.
+///
+/// `VB_REMOTE_SCRATCH_ROOT` is an absolute path visible from BOTH the GUI
+/// and daemon hosts so they can exchange files without round-tripping
+/// through the local box.
+#[derive(Debug, Clone, Default)]
+pub struct RemoteRoles {
+    pub gui_host: Option<String>,
+    pub deploy_host: Option<String>,
+    pub daemon_host: Option<String>,
+    pub spectre_host: Option<String>,
+    pub scratch_root: Option<String>,
+}
+
+impl RemoteRoles {
+    /// Resolve a role to its configured value, falling back to the
+    /// legacy `remote_host` default. Returns `None` only when no
+    /// fallback is available (local mode).
+    fn resolve(role: Option<String>, fallback: Option<&str>) -> Option<String> {
+        match role {
+            Some(v) if !v.is_empty() => Some(v),
+            _ => fallback.map(|s| s.to_string()),
+        }
+    }
+
+    /// Resolve with the role's own configured value, ignoring fallback.
+    fn own(&self, role: &Option<String>) -> Option<String> {
+        role.as_ref().filter(|v| !v.is_empty()).cloned()
+    }
+
+    /// GUI host (Virtuoso CIW/X11) — `None` in local mode.
+    pub fn gui_host_opt(&self) -> Option<String> {
+        self.own(&self.gui_host)
+    }
+
+    /// Deploy host (bridge file push target).
+    pub fn deploy_host_opt(&self) -> Option<String> {
+        self.own(&self.deploy_host)
+    }
+
+    /// Daemon host (RAMIC bridge listener).
+    pub fn daemon_host_opt(&self) -> Option<String> {
+        self.own(&self.daemon_host)
+    }
+
+    /// Spectre compute host.
+    pub fn spectre_host_opt(&self) -> Option<String> {
+        self.own(&self.spectre_host)
+    }
+
+    /// Shared scratch path visible to both GUI and daemon hosts. No
+    /// fallback — only meaningful when explicitly set.
+    pub fn scratch_root(&self) -> Option<&str> {
+        self.scratch_root.as_deref()
+    }
+
+    /// Resolved string for a role with the provided fallback
+    /// (`remote_host`). Empty string when neither is set; callers
+    /// must gate on `Config::is_remote()` for meaningful use.
+    pub fn resolve_with(&self, role: &Option<String>, fallback: Option<&str>) -> String {
+        Self::resolve(role.clone(), fallback).unwrap_or_default()
+    }
+
+    /// GUI host with fallback to the legacy `remote_host`.
+    pub fn gui_host(&self, fallback: Option<&str>) -> String {
+        self.resolve_with(&self.gui_host, fallback)
+    }
+
+    /// Deploy host with fallback.
+    pub fn deploy_host(&self, fallback: Option<&str>) -> String {
+        self.resolve_with(&self.deploy_host, fallback)
+    }
+
+    /// Daemon host with fallback.
+    pub fn daemon_host(&self, fallback: Option<&str>) -> String {
+        self.resolve_with(&self.daemon_host, fallback)
+    }
+
+    /// Spectre host with fallback.
+    pub fn spectre_host(&self, fallback: Option<&str>) -> String {
+        self.resolve_with(&self.spectre_host, fallback)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     #[allow(dead_code)]
@@ -34,6 +131,9 @@ pub struct Config {
     /// When set, this path is used directly instead of relying on PATH.
     /// Useful when Spectre is not in PATH or multiple versions exist.
     pub spectre_bin: Option<String>,
+    /// Multi-host role split. When empty (the common case), all roles
+    /// resolve to `remote_host`. See [`RemoteRoles`].
+    pub roles: RemoteRoles,
 }
 
 impl Config {
@@ -167,6 +267,13 @@ impl Config {
                 .unwrap_or(8),
             cadence_cshrc: Self::env_with_profile("VB_CADENCE_CSHRC", profile),
             spectre_bin: Self::env_with_profile("VB_SPECTRE_BIN", profile),
+            roles: RemoteRoles {
+                gui_host: Self::env_with_profile("VB_GUI_HOST", profile),
+                deploy_host: Self::env_with_profile("VB_DEPLOY_HOST", profile),
+                daemon_host: Self::env_with_profile("VB_DAEMON_HOST", profile),
+                spectre_host: Self::env_with_profile("VB_SPECTRE_HOST", profile),
+                scratch_root: Self::env_with_profile("VB_REMOTE_SCRATCH_ROOT", profile),
+            },
         })
     }
 

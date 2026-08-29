@@ -45,6 +45,7 @@ mod config_tests {
             spectre_max_workers: 8,
             cadence_cshrc: None,
             spectre_bin: None,
+            roles: crate::config::RemoteRoles::default(),
         }
     }
 
@@ -103,6 +104,11 @@ mod config_tests {
         env::remove_var("VB_PROFILE");
         env::remove_var("VB_SSH_CONFIG");
         env::remove_var("VB_DISABLE_CONTROL_MASTER");
+        env::remove_var("VB_GUI_HOST");
+        env::remove_var("VB_DEPLOY_HOST");
+        env::remove_var("VB_DAEMON_HOST");
+        env::remove_var("VB_SPECTRE_HOST");
+        env::remove_var("VB_REMOTE_SCRATCH_ROOT");
     }
 
     #[test]
@@ -159,6 +165,86 @@ mod config_tests {
         let cfg = Config::from_env().unwrap();
         env::remove_var("VB_SPECTRE_ARGS");
         assert_eq!(cfg.spectre_args, vec!["-64", "+aps", "+mt=4"]);
+    }
+
+    // === RemoteRoles tests (RED phase) ===
+    //
+    // RemoteRoles splits a single remote_host into four functional roles:
+    // GUI/CIW, bridge file deploy, daemon bridge, and Spectre compute.
+    // Each role can be set independently via VB_<ROLE>_HOST; when unset,
+    // the role falls back to VB_REMOTE_HOST so the simple one-host setup
+    // keeps working.
+
+    #[test]
+    fn remote_roles_all_unset_fall_back_to_remote_host() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_env();
+        env::set_var("VB_REMOTE_HOST", "eda-1");
+        let cfg = Config::from_env().unwrap();
+        clean_env();
+        let fb = cfg.remote_host.as_deref();
+        assert_eq!(cfg.roles.gui_host(fb), "eda-1");
+        assert_eq!(cfg.roles.deploy_host(fb), "eda-1");
+        assert_eq!(cfg.roles.daemon_host(fb), "eda-1");
+        assert_eq!(cfg.roles.spectre_host(fb), "eda-1");
+        assert!(cfg.roles.scratch_root().is_none());
+    }
+
+    #[test]
+    fn remote_roles_individual_overrides_take_precedence_over_remote_host() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_env();
+        env::set_var("VB_REMOTE_HOST", "eda-1");
+        env::set_var("VB_DAEMON_HOST", "compute-42");
+        env::set_var("VB_SPECTRE_HOST", "hpc-7");
+        let cfg = Config::from_env().unwrap();
+        clean_env();
+        let fb = cfg.remote_host.as_deref();
+        assert_eq!(cfg.roles.gui_host(fb), "eda-1");
+        assert_eq!(cfg.roles.deploy_host(fb), "eda-1");
+        assert_eq!(cfg.roles.daemon_host(fb), "compute-42");
+        assert_eq!(cfg.roles.spectre_host(fb), "hpc-7");
+    }
+
+    #[test]
+    fn remote_roles_unset_when_remote_host_unset() {
+        // Local mode — no remote_host, no roles. Resolves to None.
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_env();
+        env::set_var("VB_REMOTE_HOST", "");
+        let cfg = Config::from_env().unwrap();
+        clean_env();
+        assert!(!cfg.is_remote());
+        // In local mode all role resolvers return None; consumers must
+        // gate on cfg.is_remote() before using any role.
+        assert_eq!(cfg.roles.gui_host_opt(), None);
+        assert_eq!(cfg.roles.daemon_host_opt(), None);
+    }
+
+    #[test]
+    fn remote_roles_scratch_root_captured_independently() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_env();
+        env::set_var("VB_REMOTE_HOST", "eda-1");
+        env::set_var("VB_REMOTE_SCRATCH_ROOT", "/shared/scratch/eda");
+        let cfg = Config::from_env().unwrap();
+        clean_env();
+        assert_eq!(cfg.roles.scratch_root().unwrap(), "/shared/scratch/eda");
+    }
+
+    #[test]
+    fn remote_roles_profile_specific_env_var_wins_over_base() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clean_env();
+        env::set_var("VB_REMOTE_HOST", "eda-base");
+        env::set_var("VB_DAEMON_HOST_prod", "compute-prod-42");
+        env::set_var("VB_PROFILE", "prod");
+        let cfg = Config::from_env_with_profile(Some("prod")).unwrap();
+        clean_env();
+        env::remove_var("VB_PROFILE");
+        let fb = cfg.remote_host.as_deref();
+        assert_eq!(cfg.roles.daemon_host(fb), "compute-prod-42");
+        assert_eq!(cfg.roles.gui_host(fb), "eda-base");
     }
 }
 
