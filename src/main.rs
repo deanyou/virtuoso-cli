@@ -381,6 +381,34 @@ enum TunnelCmd {
 
     /// Run full connection diagnostics
     Diagnose,
+
+    /// Connect to an existing Virtuoso daemon (does not deploy or clean up)
+    #[command(long_about = "Discover an already-running Virtuoso daemon via \
+            `~/.cache/virtuoso_bridge/sessions/*.json` and open an SSH tunnel to it.\n\n\
+            Unlike `tunnel start`, this does **not** deploy a fresh daemon or \
+            bridge.il — the remote daemon is owned by Virtuoso and is left \
+            running. Use `tunnel detach` to drop the local side of the connection.\n\n\
+            Examples:\n  \
+            virtuoso tunnel attach\n  \
+            virtuoso tunnel attach --dry-run --format json")]
+    Attach {
+        /// Preview without opening the tunnel or writing state
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Disconnect a tunnel opened by `tunnel attach` (does not stop the remote daemon)
+    #[command(
+        long_about = "Kill the local SSH tunnel opened by `tunnel attach` and clear state. \
+            The remote Virtuoso daemon is **not** stopped — it belongs to Virtuoso \
+            and keeps listening. Use `tunnel attach` again to reconnect.\n\n\
+            If the recorded tunnel was opened by `tunnel start` (deployed mode), \
+            this command refuses: use `tunnel stop` instead, which also cleans up \
+            the remote setup directory.\n\n\
+            Examples:\n  \
+            virtuoso tunnel detach"
+    )]
+    Detach,
 }
 
 #[derive(Subcommand)]
@@ -1523,6 +1551,8 @@ fn dispatch_tunnel(cmd: TunnelCmd, format: OutputFormat) -> error::Result<serde_
         TunnelCmd::Restart { timeout } => commands::tunnel::restart(Some(timeout)),
         TunnelCmd::Status => commands::tunnel::status(format),
         TunnelCmd::Diagnose => commands::tunnel::diagnose(),
+        TunnelCmd::Attach { dry_run } => commands::tunnel::attach(dry_run),
+        TunnelCmd::Detach => commands::tunnel::detach(),
     }
 }
 

@@ -380,6 +380,13 @@ impl SSHClient {
         TunnelState::load().ok().flatten().map(|s| s.port)
     }
 
+    /// OS PID of the SSH tunnel process spawned by [`Self::open_tunnel`]
+    /// (or by `warm()`), if any. Used by `tunnel attach` to record the
+    /// tunnel pid into `TunnelState` so `tunnel detach` / `stop` can signal it.
+    pub fn tunnel_pid(&self) -> Option<u32> {
+        self.tunnel_pid
+    }
+
     pub fn is_tunnel_alive(&self) -> bool {
         if let Some(pid) = self.tunnel_pid {
             #[cfg(unix)]
@@ -453,6 +460,15 @@ impl SSHClient {
             "failed to establish tunnel on any port; verify SSH: `{}`",
             self.runner().verify_cmd_hint()
         )))
+    }
+
+    /// Open an SSH tunnel forwarding the local port to the remote host.
+    ///
+    /// Used by `tunnel attach` to plug into a pre-existing daemon at a port
+    /// discovered from session metadata — no port walk, since the OS-assigned
+    /// port we want to reach is known up front.
+    pub fn open_tunnel(&mut self, port: u16) -> Result<()> {
+        self.try_ssh_tunnel(port)
     }
 
     fn try_ssh_tunnel(&mut self, port: u16) -> Result<()> {
@@ -543,6 +559,9 @@ impl SSHClient {
             start_time_unix_ms: None,
             health: None,
             config_digest: None,
+            mode: Some(crate::models::TUNNEL_MODE_DEPLOYED.into()),
+            attached_remote_port: None,
+            attached_session_id: None,
         };
         state.save().map_err(|e| VirtuosoError::Ssh(e.to_string()))
     }
@@ -682,6 +701,9 @@ mod tests {
             start_time_unix_ms: None,
             health: None,
             config_digest: None,
+            mode: None,
+            attached_remote_port: None,
+            attached_session_id: None,
         }
     }
 

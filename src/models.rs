@@ -402,7 +402,32 @@ pub struct TunnelState {
     /// Digest of the resolved config, for `tunnel status` drift detection.
     #[serde(default)]
     pub config_digest: Option<String>,
+
+    // --- v2.1 fields: tunnel lifecycle mode ---
+    /// `"deployed"` (a fresh daemon was started via `tunnel start`) or
+    /// `"attached"` (the tunnel piggybacks on a daemon launched by Virtuoso).
+    /// `None` on legacy v2 files — treated as `"deployed"` for backwards
+    /// compatibility. Plain string instead of an enum because `==` on a
+    /// literal is simpler than a serde-tagged variant and the surface is
+    /// narrow enough that a typo would be caught by a test.
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Remote daemon port this tunnel forwards to. Populated only when
+    /// `mode == "attached"`; `None` for deployed tunnels (the port there is
+    /// the daemon's own listening port, identical to `port`).
+    #[serde(default)]
+    pub attached_remote_port: Option<u16>,
+    /// Bridge session id this attach resolved to. Mirrors
+    /// `SessionInfo::id` for the daemon we discovered via
+    /// `~/.cache/virtuoso_bridge/sessions/*.json`.
+    #[serde(default)]
+    pub attached_session_id: Option<String>,
 }
+
+/// Mode value written to [`TunnelState::mode`] by `tunnel start`.
+pub const TUNNEL_MODE_DEPLOYED: &str = "deployed";
+/// Mode value written to [`TunnelState::mode`] by `tunnel attach`.
+pub const TUNNEL_MODE_ATTACHED: &str = "attached";
 
 /// Current `TunnelState` schema version written by this build.
 pub const CURRENT_STATE_VERSION: u32 = 2;
@@ -536,6 +561,9 @@ mod tests {
             start_time_unix_ms: Some(1_700_000_000_000),
             health: Some("ok".into()),
             config_digest: Some("deadbeef".into()),
+            mode: None,
+            attached_remote_port: None,
+            attached_session_id: None,
         };
         let json = serde_json::to_string(&s).unwrap();
         let back: TunnelState = serde_json::from_str(&json).unwrap();
@@ -576,6 +604,9 @@ mod tests {
             start_time_unix_ms: None,
             health: None,
             config_digest: None,
+            mode: None,
+            attached_remote_port: None,
+            attached_session_id: None,
         };
         let json = serde_json::to_string(&s).unwrap();
         // An old reader that only knows v1 fields must still accept it.

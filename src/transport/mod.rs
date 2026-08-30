@@ -6,6 +6,7 @@ pub mod host_keys;
 pub mod identity;
 pub mod ipc;
 pub mod openssh;
+pub mod session_discovery;
 pub mod ssh;
 #[cfg(test)]
 pub mod testutil;
