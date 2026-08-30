@@ -136,6 +136,9 @@ mod tests {
             start_time_unix_ms: None,
             health: None,
             config_digest: None,
+            mode: None,
+            attached_remote_port: None,
+            attached_session_id: None,
         }
     }
 

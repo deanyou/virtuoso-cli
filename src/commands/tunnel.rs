@@ -1,8 +1,9 @@
 use crate::client::bridge::VirtuosoClient;
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
-use crate::models::{SessionInfo, TunnelState};
+use crate::models::{SessionInfo, TunnelState, TUNNEL_MODE_ATTACHED, TUNNEL_MODE_DEPLOYED};
 use crate::output::OutputFormat;
+use crate::transport::session_discovery::pick_live_session;
 use crate::transport::tunnel::SSHClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -43,6 +44,129 @@ pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
     }))
 }
 
+/// Connect to a Virtuoso daemon that already exists on the remote host.
+///
+/// This is the non-destructive counterpart to [`start`]: instead of deploying
+/// a fresh daemon + bridge.il via `tunnel start`, `tunnel attach` discovers
+/// an existing daemon (written by `bridge.il` to
+/// `~/.cache/virtuoso_bridge/sessions/*.json`), verifies its TCP listener,
+/// and opens a single-port SSH tunnel to it.
+///
+/// The remote daemon is **not** touched — it belongs to Virtuoso and must
+/// outlive this command. To drop the local side of the connection, run
+/// `tunnel detach` (which kills the tunnel SSH process and clears state).
+///
+/// Returns `Err(NotFound)` if no live daemon can be discovered.
+pub fn attach(dry_run: bool) -> Result<Value> {
+    let cfg = Config::from_env()?;
+
+    // Refuse if a tunnel of any mode is already up. The user can pick the
+    // matching verb to clean up (`detach` for attached, `stop` for deployed).
+    if let Some(existing) = TunnelState::load()? {
+        let mode = existing.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
+        let verb = if mode == TUNNEL_MODE_ATTACHED {
+            "detach"
+        } else {
+            "stop"
+        };
+        return Err(VirtuosoError::Execution(format!(
+            "tunnel already exists on port {} (mode={}); run `vcli tunnel {verb}` first",
+            existing.port, mode
+        )));
+    }
+
+    // SSHClient here is used purely as a transport wrapper — we don't call
+    // warm() (which would deploy a fresh daemon). The runner is configured
+    // by from_env() but no remote command runs until we explicitly call one.
+    let mut client = SSHClient::from_env(cfg.keep_remote_files)?;
+    let transport = client.transport();
+
+    let sessions = SessionInfo::list_remote(transport.as_ref())?;
+    if sessions.is_empty() {
+        return Err(VirtuosoError::NotFound(
+            "no Virtuoso sessions found on remote; run `vcli tunnel start` to deploy a fresh daemon".into()
+        ));
+    }
+
+    let host_hint = cfg.remote_host.as_deref();
+    let live = pick_live_session(sessions, transport.as_ref(), host_hint)?.ok_or_else(|| {
+        VirtuosoError::NotFound(
+            "found session(s) on remote but no live daemons (port not listening); \
+                 check that Virtuoso is running and the daemon process is alive"
+                .into(),
+        )
+    })?;
+
+    if dry_run {
+        return Ok(json!({
+            "action": "attach",
+            "resource": "tunnel",
+            "discovered": {
+                "session_id": live.id,
+                "remote_port": live.port,
+                "remote_host": live.host,
+                "created": live.created,
+                "user": live.user,
+            },
+            "dry_run": true,
+        }));
+    }
+
+    // Use the same port locally as the remote daemon listens on. Same-port
+    // forwarding keeps scripts that bind to the canonical daemon port
+    // working without reconfiguration. `open_tunnel` runs `ssh -L
+    // 127.0.0.1:<port>:127.0.0.1:<port>`, so this forwards to the
+    // discovered listener exactly.
+    let local_port = live.port;
+    client.open_tunnel(local_port)?;
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    let state = TunnelState {
+        version: crate::models::CURRENT_STATE_VERSION,
+        port: local_port,
+        pid: client.tunnel_pid().unwrap_or(0),
+        remote_host: live.host.clone(),
+        setup_path: None,
+        profile: cfg.profile.clone(),
+        backend: Some("openssh".to_string()),
+        daemon_nonce: None,
+        executable_path: None,
+        start_identity: None,
+        ipc_endpoint: None,
+        token_path: None,
+        local_forward: Some(format!("L*:{local_port}")),
+        start_time_unix_ms: Some(now_ms),
+        health: None,
+        config_digest: None,
+        mode: Some(TUNNEL_MODE_ATTACHED.into()),
+        attached_remote_port: Some(live.port),
+        attached_session_id: Some(live.id.clone()),
+    };
+    state
+        .save()
+        .map_err(|e| VirtuosoError::Ssh(format!("save tunnel state: {e}")))?;
+
+    // Mirror the remote session metadata into the local cache so subsequent
+    // `vcli session show` works without another SSH round-trip.
+    let transport = client.transport();
+    let sessions_synced = SessionInfo::sync_from_remote(transport.as_ref()).unwrap_or(0);
+
+    Ok(json!({
+        "status": "attached",
+        "mode": TUNNEL_MODE_ATTACHED,
+        "session_id": live.id,
+        "remote_port": live.port,
+        "local_port": local_port,
+        "remote_host": live.host,
+        "pid": client.tunnel_pid().unwrap_or(0),
+        "sessions_synced": sessions_synced,
+    }))
+}
+
 pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
     let cfg = Config::from_env()?;
 
@@ -52,6 +176,8 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
         None => return Err(VirtuosoError::NotFound("no running tunnel found".into())),
     };
 
+    let mode = state.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
+
     if dry_run {
         return Ok(json!({
             "action": "stop",
@@ -60,16 +186,19 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
                 "port": state.port,
                 "pid": state.pid,
                 "remote_host": state.remote_host,
+                "mode": mode,
             },
-            "will_cleanup_remote": !cfg.keep_remote_files,
+            // Attached daemons belong to Virtuoso — stop must not rm -rf them.
+            "will_cleanup_remote": !cfg.keep_remote_files && mode == TUNNEL_MODE_DEPLOYED,
             "dry_run": true,
         }));
     }
 
-    // Clean up remote files BEFORE killing tunnel.
-    // The cleanup path is profile-scoped (see transport::tunnel::setup_dir_for_profile)
-    // so stopping profile A's tunnel doesn't wipe profile B's setup.
-    if !cfg.keep_remote_files {
+    // Remote cleanup is gated on mode:
+    //   - deployed: we own the setup dir under /tmp/, safe to rm -rf
+    //   - attached: Virtuoso owns the daemon, the setup dir may be in use;
+    //     use `vcli tunnel detach` instead, which only touches local state
+    if !cfg.keep_remote_files && mode == TUNNEL_MODE_DEPLOYED {
         match SSHClient::from_env(cfg.keep_remote_files) {
             Ok(client) => {
                 let setup_dir =
@@ -80,41 +209,59 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
             }
             Err(e) => tracing::warn!("could not connect for cleanup: {e}"),
         }
+    } else if mode == TUNNEL_MODE_ATTACHED {
+        tracing::info!(
+            "attached mode: skipping remote cleanup (daemon belongs to Virtuoso; \
+             use `vcli tunnel detach` if you only want to disconnect)"
+        );
     }
 
-    #[cfg(unix)]
-    {
-        let cmdline_path = format!("/proc/{}/cmdline", state.pid);
-        let is_ssh = std::fs::read_to_string(&cmdline_path)
-            .map(|c| c.contains("ssh"))
-            .unwrap_or(false);
-
-        if is_ssh || force {
-            let result = unsafe { libc::kill(state.pid as i32, libc::SIGTERM) };
-            if result != 0 && !force {
-                tracing::warn!("could not kill process {}", state.pid);
-            }
-        } else {
-            tracing::warn!(
-                "PID {} is not an SSH process, skipping kill (use --force to override)",
-                state.pid
-            );
-        }
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/PID", &state.pid.to_string(), "/F"])
-            .output();
-    }
+    kill_tunnel_pid(state.pid, force);
 
     TunnelState::clear()?;
 
     Ok(json!({
         "status": "stopped",
+        "mode": mode,
         "port": state.port,
         "pid": state.pid,
+    }))
+}
+
+/// Disconnect a tunnel that was opened by [`attach`].
+///
+/// Unlike [`stop`], `detach` never touches the remote daemon: it kills the
+/// local SSH tunnel process and clears state. The remote Virtuoso session
+/// keeps running and its daemon keeps listening; users reconnect with
+/// `vcli tunnel attach` (or the daemon is shut down independently by Virtuoso).
+///
+/// Returns `Err(NotFound)` when there is no tunnel, and
+/// `Err(Execution)` when the recorded tunnel is in `deployed` mode (use
+/// `tunnel stop` instead, since deployed tunnels own a setup dir that
+/// needs cleanup).
+pub fn detach() -> Result<Value> {
+    let state = TunnelState::load()?
+        .ok_or_else(|| VirtuosoError::NotFound("no attached tunnel found".into()))?;
+
+    let mode = state.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
+    if mode != TUNNEL_MODE_ATTACHED {
+        return Err(VirtuosoError::Execution(format!(
+            "this is a {mode} tunnel, not attached; use `vcli tunnel stop` instead"
+        )));
+    }
+
+    kill_tunnel_pid(state.pid, false);
+
+    TunnelState::clear()?;
+
+    Ok(json!({
+        "status": "detached",
+        "mode": TUNNEL_MODE_ATTACHED,
+        "port": state.port,
+        "pid": state.pid,
+        "session_id": state.attached_session_id,
+        "remote_port": state.attached_remote_port,
+        "remote_host": state.remote_host,
     }))
 }
 
@@ -495,6 +642,30 @@ impl HostnameCheck {
             "mismatch": self.mismatch,
         })
     }
+}
+
+#[cfg(unix)]
+fn kill_tunnel_pid(pid: u32, force: bool) {
+    let cmdline_path = format!("/proc/{pid}/cmdline");
+    let is_ssh = std::fs::read_to_string(&cmdline_path)
+        .map(|c| c.contains("ssh"))
+        .unwrap_or(false);
+
+    if is_ssh || force {
+        let result = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        if result != 0 && !force {
+            tracing::warn!("could not kill process {pid}");
+        }
+    } else {
+        tracing::warn!("PID {pid} is not an SSH process, skipping kill (use --force to override)");
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_tunnel_pid(pid: u32, _force: bool) {
+    let _ = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/F"])
+        .output();
 }
 
 #[cfg(test)]
