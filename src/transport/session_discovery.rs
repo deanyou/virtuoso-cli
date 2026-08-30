@@ -22,24 +22,29 @@ use crate::error::Result;
 use crate::models::SessionInfo;
 use crate::transport::contract::{CommandRequest, RemoteTransport};
 
-/// `ss` invocation that returns listening sockets on a single port.
-/// Empty output ⇒ the port is not listening. `-H` suppresses the header,
-/// `-l` filters to listening sockets, `-t` to TCP. The `sport = :N` filter
-/// is portable across iproute2 versions shipped with RHEL 8/9, Debian 11+,
-/// Ubuntu 20.04+.
-const SS_PROBE_TEMPLATE: &str = "ss -tlnH 'sport = :{port}' 2>/dev/null";
+/// TCP-connect probe that reports whether `127.0.0.1:{port}` accepts a
+/// connection. Empty output ⇒ the port is not listening.
+///
+/// Uses bash's `/dev/tcp/{host}/{port}` pseudo-device rather than `ss`,
+/// `netstat`, or `nc -z`. `ss` ships with iproute2 (RHEL/Alma/Debian/Ubuntu
+/// in normal installs) but is missing from minimal images like the
+/// cadence-rocky test container, and a probe that fails silently to "port
+/// dead" is the worst kind of probe — it lies to the caller. Bash's
+/// `/dev/tcp` is built into bash itself, so the script works on every
+/// Linux image that ships bash (the only realistic Virtuoso host).
+const PORT_PROBE_TEMPLATE: &str = "(exec 3<>/dev/tcp/127.0.0.1/{port}) 2>/dev/null && echo alive";
 
 /// Probe the remote host for a listening socket on `port`.
 ///
-/// Returns `Ok(true)` when `ss` reports at least one matching line. Any
-/// error invoking `ss` (binary missing, permission denied, etc.) is folded
-/// into `Ok(false)` — for the purposes of session selection, "could not
+/// Returns `Ok(true)` when the probe prints `alive`. Any error invoking
+/// the probe (binary missing, permission denied, etc.) is folded into
+/// `Ok(false)` — for the purposes of session selection, "could not
 /// verify" is the same outcome as "not listening": we move on to the next
 /// candidate. The connection-level error from the runner itself
 /// (SSH failure, host unreachable) is propagated as `Err` because that
 /// affects every candidate and is the user's real problem.
 pub fn remote_port_alive(runner: &dyn RemoteTransport, port: u16) -> Result<bool> {
-    let script = SS_PROBE_TEMPLATE.replace("{port}", &port.to_string());
+    let script = PORT_PROBE_TEMPLATE.replace("{port}", &port.to_string());
     let result = runner.run_command(&CommandRequest::untimed(&script))?;
     Ok(!result.stdout.trim().is_empty())
 }
@@ -158,13 +163,13 @@ mod tests {
                 });
             }
             self.commands.lock().unwrap().push(req.command.clone());
-            // Parse the port out of `ss -tlnH 'sport = :NNN'`. The template
-            // emits exactly one colon immediately before the port, so
-            // splitting on `:` and taking the segment right after it is
-            // unambiguous.
+            // Parse the port out of the bash /dev/tcp probe. The template
+            // emits `127.0.0.1/<port>)`, so splitting on `127.0.0.1/` and
+            // taking the segment right after it gets us `<port>)`; the
+            // trailing `)` and any non-digit characters are then stripped.
             let port = req
                 .command
-                .split(':')
+                .split("127.0.0.1/")
                 .nth(1)
                 .and_then(|s: &str| s.split(|c: char| !c.is_ascii_digit()).next())
                 .and_then(|s: &str| s.parse::<u16>().ok());
@@ -172,7 +177,7 @@ mod tests {
             Ok(CommandResult {
                 exit_status: 0,
                 stdout: if listening {
-                    "LISTEN 0  128  *:1234  *:*\n".into()
+                    "alive\n".into()
                 } else {
                     String::new()
                 },
