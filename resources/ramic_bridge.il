@@ -51,14 +51,17 @@ unless(boundp('RBIpc) RBIpc = 'unbound)
 unless(boundp('RBSessionId)   RBSessionId   = "")
 ; hostname-user prefix; RBIpcErrHandler appends the OS-assigned port to form the final unique ID
 unless(boundp('RBSessionBase) RBSessionBase = "")
-; SSH port for tunnel connection — read from env or default to 2222
+; SSH port for tunnel connection — read from env, default 22 (host network mode).
+; cadence-rocky runs in host network mode so container port 22 = host port 22;
+; bridge-mode + port-mapping users can override by setting RB_SSH_PORT in their
+; Virtuoso CIW env before loading ramic_bridge.il.
 unless(boundp('RBsshPort)
     RBsshPort = let((envPort)
         envPort = getShellEnvVar("RB_SSH_PORT")
         if(envPort then
             atoi(envPort)
         else
-            2222
+            22
         )
     )
 )
@@ -168,7 +171,7 @@ procedure(RBStart()
 			RBSessionBase = sprintf(nil "%s-%s" hostname username)
 			; Start the daemon with port=0 (OS assigns free port).
 			; RBIpcErrHandler will parse PORT:N from stderr and write session file.
-			RBIpc = ipcBeginProcess(sprintf(nil "env VCLI_CAPABILITY=admin %s %s 0" RBDPath host) "" 'RBIpcDataHandler 'RBIpcErrHandler 'RBIpcFinishHandler logpath)
+			RBIpc = ipcBeginProcess(sprintf(nil "env RB_SSH_PORT=%d VCLI_CAPABILITY=admin %s %s 0" RBsshPort RBDPath host) "" 'RBIpcDataHandler 'RBIpcErrHandler 'RBIpcFinishHandler logpath)
 		)
 		printf("[RAMIC Bridge (%L)] start at (%s)\n" RBIpc getCurrentTime())
 	)
