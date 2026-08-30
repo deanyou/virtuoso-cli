@@ -280,13 +280,130 @@ mod imp {
 mod imp {
     use super::*;
 
-    pub(super) fn of_pid(pid: u32) -> Result<ProcessIdentity, IdentityError> {
-        // Not implemented yet (`OpenProcess` / `GetModuleFileNameEx` /
-        // `GetProcessTimes`). Refusing is deliberate: the current OpenSSH path
-        // issues `taskkill /F` unconditionally on Windows, and the design calls
-        // closing that gap part of this work. Failing closed is the safe state.
-        Err(IdentityError::UnsupportedPlatform("windows"))
+    /// Minimal Win32 surface, declared here so no Windows crate is needed.
+    ///
+    /// `QueryFullProcessImageNameW` (Vista+) is used instead of
+    /// `GetModuleFileNameExW` because it needs only
+    /// `PROCESS_QUERY_LIMITED_INFORMATION` — no `psapi` link, and it succeeds
+    /// on processes we do not own.
+    mod ffi {
+        use std::os::raw::{c_int, c_void};
+
+        pub type HANDLE = *mut c_void;
+        pub type BOOL = c_int;
+        pub type DWORD = u32;
+
+        pub const PROCESS_QUERY_LIMITED_INFORMATION: DWORD = 0x1000;
+        pub const ERROR_INVALID_PARAMETER: DWORD = 87;
+
+        #[repr(C)]
+        pub struct FILETIME {
+            pub dw_low_date_time: DWORD,
+            pub dw_high_date_time: DWORD,
+        }
+
+        extern "system" {
+            pub fn OpenProcess(desired_access: DWORD, inherit: BOOL, process_id: DWORD) -> HANDLE;
+            pub fn CloseHandle(object: HANDLE) -> BOOL;
+            pub fn GetProcessTimes(
+                process: HANDLE,
+                creation: *mut FILETIME,
+                exit: *mut FILETIME,
+                kernel: *mut FILETIME,
+                user: *mut FILETIME,
+            ) -> BOOL;
+            pub fn QueryFullProcessImageNameW(
+                process: HANDLE,
+                flags: DWORD,
+                buffer: *mut u16,
+                size: *mut DWORD,
+            ) -> BOOL;
+            pub fn GetLastError() -> DWORD;
+        }
     }
+
+    pub(super) fn of_pid(pid: u32) -> Result<ProcessIdentity, IdentityError> {
+        use ffi::*;
+
+        // All fallible Win32 calls are written out sequentially rather than
+        // inside a closure: an `unsafe` block does not extend into a closure
+        // body, and this module cannot be compiled off-Windows to catch that.
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if handle.is_null() {
+                let err = GetLastError();
+                // A pid that is not in use fails this way; anything else
+                // (access denied on a protected process) is a read failure.
+                return if err == ERROR_INVALID_PARAMETER {
+                    Err(IdentityError::NoSuchProcess(pid))
+                } else {
+                    Err(IdentityError::Unreadable(format!(
+                        "OpenProcess({pid}) failed: {err}"
+                    )))
+                };
+            }
+
+            let mut creation = FILETIME {
+                dw_low_date_time: 0,
+                dw_high_date_time: 0,
+            };
+            let mut exit = FILETIME {
+                dw_low_date_time: 0,
+                dw_high_date_time: 0,
+            };
+            let mut kernel = FILETIME {
+                dw_low_date_time: 0,
+                dw_high_date_time: 0,
+            };
+            let mut user = FILETIME {
+                dw_low_date_time: 0,
+                dw_high_date_time: 0,
+            };
+            if GetProcessTimes(handle, &mut creation, &mut exit, &mut kernel, &mut user) == 0 {
+                let err = GetLastError();
+                CloseHandle(handle);
+                return Err(IdentityError::Unreadable(format!(
+                    "GetProcessTimes({pid}) failed: {err}"
+                )));
+            }
+
+            let mut buffer = [0u16; 32_768];
+            let mut size = buffer.len() as DWORD;
+            if QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut size) == 0 {
+                let err = GetLastError();
+                CloseHandle(handle);
+                return Err(IdentityError::Unreadable(format!(
+                    "QueryFullProcessImageNameW({pid}) failed: {err}"
+                )));
+            }
+            // `size` is the written length in u16 code units.
+            let path = String::from_utf16_lossy(&buffer[..size as usize]);
+            CloseHandle(handle);
+
+            if path.is_empty() {
+                return Err(IdentityError::Unreadable(format!(
+                    "empty image name for pid {pid}"
+                )));
+            }
+
+            Ok(ProcessIdentity {
+                executable_path: PathBuf::from(path),
+                pid,
+                start_identity: filetime_to_u64(
+                    creation.dw_high_date_time,
+                    creation.dw_low_date_time,
+                ),
+            })
+        }
+    }
+}
+
+/// Combine the two halves of a Windows `FILETIME` into its 100 ns tick count.
+///
+/// Compiled (and tested) on every platform: the Windows module above cannot be
+/// type-checked off-Windows, so the arithmetic is kept pure and separate.
+pub fn filetime_to_u64(high: u32, low: u32) -> u64 {
+    ((high as u64) << 32) | (low as u64)
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
@@ -450,6 +567,22 @@ mod tests {
             me.executable_path,
             real
         );
+    }
+
+    /// The Windows module cannot be type-checked off-Windows, so the one piece
+    /// of real logic in it is a pure function tested here.
+    #[test]
+    fn filetime_combines_high_and_low_halves() {
+        assert_eq!(filetime_to_u64(0, 0), 0);
+        assert_eq!(filetime_to_u64(0, 1), 1);
+        assert_eq!(filetime_to_u64(1, 0), 1 << 32);
+        assert_eq!(
+            filetime_to_u64(0x0000_0002, 0x0000_0003),
+            0x0000_0002_0000_0003
+        );
+        assert_eq!(filetime_to_u64(u32::MAX, u32::MAX), u64::MAX);
+        // Distinct processes must produce distinct markers.
+        assert_ne!(filetime_to_u64(1, 2), filetime_to_u64(1, 3));
     }
 
     #[cfg(target_os = "macos")]

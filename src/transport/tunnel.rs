@@ -92,7 +92,7 @@ pub fn setup_dir_for_profile(profile: Option<&str>) -> String {
 /// Deliberately as loose as the Linux check below (`cmdline.contains("ssh")`):
 /// the tunnel is spawned as `ssh -N -L …`, and being wrong here only chooses
 /// between "kill it" and "warn and skip", both of which are recoverable.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn is_ssh_executable(path: &std::path::Path) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())
@@ -124,10 +124,29 @@ fn verify_ssh_pid(pid: u32) -> bool {
     }
 }
 
-/// Everywhere else: unchanged — the PID is trusted because there is no
-/// mechanism here yet. This is the gap the design's "Stop and crash recovery"
-/// calls out; closing it needs a Windows identity implementation.
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+/// Windows: verify through the process's executable, resolved by
+/// `identity::ProcessIdentity` (`OpenProcess` + `QueryFullProcessImageNameW`).
+///
+/// This closes the gap the design's "Stop and crash recovery" calls out: the
+/// previous behaviour trusted the PID unconditionally, so `tunnel stop` would
+/// `taskkill /F` whatever happened to be using it.
+#[cfg(target_os = "windows")]
+fn verify_ssh_pid(pid: u32) -> bool {
+    match crate::transport::identity::ProcessIdentity::of_pid(pid) {
+        Ok(identity) => is_ssh_executable(&identity.executable_path),
+        Err(_) => false,
+    }
+}
+
+/// Genuinely unknown platforms: no mechanism exists, so the PID is still
+/// trusted. Every platform the design targets now has a real check; this arm
+/// only covers targets outside that set.
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "windows"
+)))]
 fn verify_ssh_pid(pid: u32) -> bool {
     let _ = pid;
     true
@@ -213,13 +232,17 @@ fn verdict_to_decision(verdict: Verdict, pid: u32) -> StopDecision {
     }
 }
 
-#[cfg(unix)]
+/// Every platform with a verification mechanism verifies.
+///
+/// This used to trust the PID unconditionally on non-Unix; Windows now has an
+/// identity implementation, so it verifies like the rest.
+#[cfg(any(unix, target_os = "windows"))]
 fn openssh_stop_decision(pid: u32) -> StopDecision {
     if verify_ssh_pid(pid) {
         StopDecision::Signal
     } else {
-        // Preserves today's behaviour: the state file is still cleared, since a
-        // pid that is not ssh means the recorded tunnel is not there.
+        // A pid that is not ssh means the recorded tunnel is not there, so the
+        // state file is stale and may still be cleared.
         StopDecision::Skip {
             reason: format!("PID {pid} is not an SSH process"),
             clear_state: true,
@@ -227,11 +250,9 @@ fn openssh_stop_decision(pid: u32) -> StopDecision {
     }
 }
 
-#[cfg(not(unix))]
+/// Targets with no identity mechanism at all: unchanged, the PID is trusted.
+#[cfg(not(any(unix, target_os = "windows")))]
 fn openssh_stop_decision(pid: u32) -> StopDecision {
-    // Preserved exactly: no /proc here, so the PID is trusted. This is the
-    // known gap the design calls out; it is closed by a Windows identity
-    // implementation, not by this change.
     let _ = pid;
     StopDecision::Signal
 }
@@ -670,11 +691,13 @@ mod tests {
     #[test]
     fn state_without_identity_does_not_take_the_native_path() {
         // A pid that is certainly not an ssh process: the decision must be the
-        // OpenSSH verdict (Skip on unix, where /proc decides), never a native
+        // OpenSSH verdict (Skip wherever a mechanism exists), never a native
         // one derived from identity.
         let state = openssh_like_state(999_999);
         let d = stop_decision(Some(&state), 999_999);
-        #[cfg(unix)]
+        // Platforms with a verification mechanism refuse; unverifiable targets
+        // still trust the pid, which is the documented remaining gap.
+        #[cfg(any(unix, target_os = "windows"))]
         assert_eq!(
             d,
             StopDecision::Skip {
@@ -682,7 +705,7 @@ mod tests {
                 clear_state: true,
             }
         );
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, target_os = "windows")))]
         assert_eq!(d, StopDecision::Signal);
     }
 
@@ -690,7 +713,7 @@ mod tests {
     #[test]
     fn missing_state_falls_back_to_openssh_decision() {
         let d = stop_decision(None, 999_999);
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "windows"))]
         assert_eq!(
             d,
             StopDecision::Skip {
@@ -698,7 +721,7 @@ mod tests {
                 clear_state: true,
             }
         );
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, target_os = "windows")))]
         assert_eq!(d, StopDecision::Signal);
     }
 
