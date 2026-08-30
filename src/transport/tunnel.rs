@@ -158,7 +158,10 @@ enum StopDecision {
     /// The recorded process was verified (or proven alive) — signal it.
     Signal,
     /// Do not signal; the reason is reported to the operator.
-    Skip(String),
+    ///
+    /// `clear_state` distinguishes *proven* staleness from a mere failure to
+    /// verify: only the former justifies discarding the state file.
+    Skip { reason: String, clear_state: bool },
 }
 
 /// Decide whether signalling the recorded tunnel process is authorized.
@@ -180,18 +183,34 @@ fn stop_decision(state: Option<&TunnelState>, pid: u32) -> StopDecision {
             // Until it lands, `challenge` answers false and every recorded
             // daemon falls through to the Tier 2 identity check — which is the
             // conservative direction: it can only ever deny, never widen.
-            return match daemon_lifecycle::assess(s, |_nonce| false) {
-                Verdict::Alive | Verdict::UnresponsiveButIdentified => StopDecision::Signal,
-                Verdict::Stale => {
-                    StopDecision::Skip(format!("recorded daemon (pid {pid}) is no longer running"))
-                }
-                Verdict::Unverifiable(reason) => StopDecision::Skip(format!(
-                    "cannot verify recorded daemon (pid {pid}): {reason}"
-                )),
-            };
+            return verdict_to_decision(daemon_lifecycle::assess(s, |_nonce| false), pid);
         }
     }
     openssh_stop_decision(pid)
+}
+
+/// Translate a two-tier verdict into what `stop` should do.
+///
+/// Split out from [`stop_decision`] so the mapping is testable on every
+/// platform: reaching `Unverifiable` through a real pid is not deterministic
+/// (on macOS an absent pid is provably gone, i.e. `Stale`).
+fn verdict_to_decision(verdict: Verdict, pid: u32) -> StopDecision {
+    match verdict {
+        Verdict::Alive | Verdict::UnresponsiveButIdentified => StopDecision::Signal,
+        // Proven gone (or the pid now belongs to something else): the state
+        // file is stale and may be discarded.
+        Verdict::Stale => StopDecision::Skip {
+            reason: format!("recorded daemon (pid {pid}) is no longer running"),
+            clear_state: true,
+        },
+        // Not proof of absence — only of our inability to check. The design
+        // requires evidence before discarding state, so the file is left for
+        // the operator.
+        Verdict::Unverifiable(reason) => StopDecision::Skip {
+            reason: format!("cannot verify recorded daemon (pid {pid}): {reason}"),
+            clear_state: false,
+        },
+    }
 }
 
 #[cfg(unix)]
@@ -199,7 +218,12 @@ fn openssh_stop_decision(pid: u32) -> StopDecision {
     if verify_ssh_pid(pid) {
         StopDecision::Signal
     } else {
-        StopDecision::Skip(format!("PID {pid} is not an SSH process"))
+        // Preserves today's behaviour: the state file is still cleared, since a
+        // pid that is not ssh means the recorded tunnel is not there.
+        StopDecision::Skip {
+            reason: format!("PID {pid} is not an SSH process"),
+            clear_state: true,
+        }
     }
 }
 
@@ -283,6 +307,7 @@ impl SSHClient {
         let state = TunnelState::load_with_profile(self.profile.as_deref())
             .ok()
             .flatten();
+        let mut may_clear_state = true;
         if let Some(pid) = self.tunnel_pid {
             match stop_decision(state.as_ref(), pid) {
                 StopDecision::Signal => {
@@ -298,17 +323,35 @@ impl SSHClient {
                     }
                     tracing::info!("killed tunnel process {}", pid);
                 }
-                StopDecision::Skip(reason) => {
+                StopDecision::Skip {
+                    reason,
+                    clear_state,
+                } => {
                     tracing::warn!("{reason}; skipping kill");
+                    may_clear_state = clear_state;
                 }
             }
+        }
+
+        if !may_clear_state {
+            // Nothing was proven, so nothing is destroyed. Clearing the state
+            // file here would discard the only record of a daemon we could not
+            // identify, and wiping the remote scratch dir could break one that
+            // is still running.
+            tracing::warn!(
+                "leaving tunnel state and remote files in place; \
+                 remove the state file manually once the daemon is known to be gone"
+            );
+            return Ok(());
         }
 
         if !self.keep_remote_files {
             self.cleanup_remote()?;
         }
 
-        TunnelState::clear().ok();
+        // Same profile scope as the load above, so state written for a profile
+        // is cleared for that profile rather than for whatever VB_PROFILE says.
+        TunnelState::clear_with_profile(self.profile.as_deref()).ok();
         Ok(())
     }
 
@@ -595,7 +638,7 @@ mod tests {
     use super::is_ssh_executable;
     use super::{
         daemon_lifecycle, profiled_bridge_leaf, profiled_env_key, setup_dir_for_profile,
-        stop_decision, verify_ssh_pid, StopDecision, TunnelState,
+        stop_decision, verdict_to_decision, verify_ssh_pid, StopDecision, TunnelState, Verdict,
     };
 
     /// A state carrying no OS identity — what OpenSSH writes today, and what a
@@ -634,7 +677,10 @@ mod tests {
         #[cfg(unix)]
         assert_eq!(
             d,
-            StopDecision::Skip("PID 999999 is not an SSH process".into())
+            StopDecision::Skip {
+                reason: "PID 999999 is not an SSH process".into(),
+                clear_state: true,
+            }
         );
         #[cfg(not(unix))]
         assert_eq!(d, StopDecision::Signal);
@@ -647,7 +693,10 @@ mod tests {
         #[cfg(unix)]
         assert_eq!(
             d,
-            StopDecision::Skip("PID 999999 is not an SSH process".into())
+            StopDecision::Skip {
+                reason: "PID 999999 is not an SSH process".into(),
+                clear_state: true,
+            }
         );
         #[cfg(not(unix))]
         assert_eq!(d, StopDecision::Signal);
@@ -672,12 +721,61 @@ mod tests {
         daemon_lifecycle::record_identity(&mut state, &me);
         state.pid = 999_999; // nothing is running here
         match stop_decision(Some(&state), 999_999) {
-            StopDecision::Skip(reason) => assert!(
-                reason.contains("no longer running"),
-                "unexpected reason: {reason}"
-            ),
+            StopDecision::Skip {
+                reason,
+                clear_state,
+            } => {
+                assert!(
+                    reason.contains("no longer running"),
+                    "unexpected reason: {reason}"
+                );
+                // Proven gone, so the stale state file may be discarded.
+                assert!(clear_state);
+            }
             other => panic!("must refuse to signal a dead pid, got {other:?}"),
         }
+    }
+
+    /// The "cleanup requires proof" half of the design. Exercised through
+    /// `verdict_to_decision` because reaching `Unverifiable` via a real pid is
+    /// not deterministic: on macOS an absent pid is provably gone (`Stale`).
+    #[test]
+    fn unverifiable_identity_keeps_the_state_file() {
+        match verdict_to_decision(Verdict::Unverifiable("no mechanism".into()), 42) {
+            StopDecision::Skip {
+                clear_state: false,
+                reason,
+            } => assert!(reason.contains("no mechanism"), "reason: {reason}"),
+            other => panic!("unverifiable must not clear state, got {other:?}"),
+        }
+    }
+
+    /// Every verdict maps to exactly one decision, and only provable staleness
+    /// permits discarding the state file.
+    #[test]
+    fn verdict_mapping_is_total_and_conservative() {
+        assert_eq!(
+            verdict_to_decision(Verdict::Alive, 42),
+            StopDecision::Signal
+        );
+        assert_eq!(
+            verdict_to_decision(Verdict::UnresponsiveButIdentified, 42),
+            StopDecision::Signal
+        );
+        assert_eq!(
+            verdict_to_decision(Verdict::Stale, 42),
+            StopDecision::Skip {
+                reason: "recorded daemon (pid 42) is no longer running".into(),
+                clear_state: true,
+            }
+        );
+        assert_eq!(
+            verdict_to_decision(Verdict::Unverifiable("x".into()), 42),
+            StopDecision::Skip {
+                reason: "cannot verify recorded daemon (pid 42): x".into(),
+                clear_state: false,
+            }
+        );
     }
 
     #[cfg(target_os = "macos")]
@@ -749,7 +847,11 @@ mod tests {
         daemon_lifecycle::record_identity(&mut state, &me);
         state.start_identity = Some(me.start_identity.wrapping_add(1));
         match stop_decision(Some(&state), me.pid) {
-            StopDecision::Skip(_) => {}
+            StopDecision::Skip { clear_state, .. } => {
+                // The pid now belongs to a different process, so the recorded
+                // daemon is proven gone and its state is stale.
+                assert!(clear_state);
+            }
             other => panic!("must refuse to signal a reused pid, got {other:?}"),
         }
     }
