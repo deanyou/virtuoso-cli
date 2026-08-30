@@ -36,6 +36,7 @@ Control Cadence Virtuoso from anywhere — locally or remotely. Designed for AI 
 - **Three programming modes** — Raw SKILL expressions, high-level API, or load `.il` files directly
 - **Local + remote modes** — Direct local connection or SSH tunnel with ControlMaster multiplexing
 - **Native cross-arch tunnel deploy** — `vcli tunnel start` detects remote CPU arch and uploads the matching `resources/daemons/virtuoso-daemon-{x86_64,aarch64}` binary — no need to build on the remote
+- **Non-destructive tunnel attach** — `vcli tunnel attach` connects to a daemon already running inside Virtuoso via SSH session discovery, without deploying a new one; `tunnel detach` drops the local tunnel while leaving the remote daemon untouched (4-verb model: start/stop are destructive, attach/detach are not)
 - **Per-client scratch scoping** — Concurrent vcli invocations from different `VB_CLIENT_ID` / `VB_PROFILE` env values get isolated `/tmp/virtuoso_bridge/<client>/` scratch dirs, so two operators on the same host never collide
 - **Skill Finder** — Fuzzy / prefix / suffix / exact / regex search over Cadence's `~/.cdsinit` and `/opt/cadence/.../finder/SKILL/*.fnd` files (`vcli skill find query --mode fuzzy`)
 - **Admin capability gate** — `VCLI_CAPABILITY=admin` unlocks `vcli skill broadcast` and raw SKILL exec for system-wide operations
@@ -86,13 +87,16 @@ Output:
 ├─────────────────────────────────────────┤
 │  Session : eda-meow-1                   │
 │  Port    : 42109                        │
-│  Version : 0.4.0-alpha.7                  │
+│  SSH     : 22                           │
+│  Version : 1.0.0                        │
 │  Daemon  : ~/.cargo/bin/virtuoso-daemon │
 ├─────────────────────────────────────────┤
 │  Terminal: vcli skill exec 'version()'  │
 │  Sessions: vcli session list            │
 └─────────────────────────────────────────┘
 ```
+
+`SSH` is the port used for SSH tunnel connections (host network mode → 22; bridge mode with port mapping users can override via `RB_SSH_PORT` in the Virtuoso shell env before `load`). `Port` is the daemon's own TCP listener (OS-assigned, never collides).
 
 Add to `~/.cdsinit` for automatic loading on Virtuoso startup:
 ```skill
@@ -107,7 +111,7 @@ vcli skill exec 'getCurrentTime()'                       # auto-connects if sing
 vcli --session eda-meow-2 skill exec 'getCurrentTime()' # specify session explicitly
 ```
 
-**Remote mode:**
+**Remote mode (deploy new daemon):**
 ```bash
 vcli init           # generate .env template
 # edit .env: set VB_REMOTE_HOST, VB_SPECTRE_CMD (absolute path)
@@ -115,6 +119,25 @@ vcli tunnel start
 vcli skill exec 'getCurrentTime()'
 vcli tunnel stop
 ```
+
+**Remote mode (connect to existing Virtuoso daemon — non-destructive):**
+```bash
+# Virtuoso + daemon already running on the remote host
+vcli tunnel attach                       # discover + connect; does NOT deploy a new daemon
+vcli skill exec 'getCurrentTime()'
+vcli tunnel detach                       # drop the SSH tunnel; daemon keeps listening
+```
+
+The 4-verb tunnel model:
+
+| Verb | Lifecycle | Remote effect |
+|------|-----------|---------------|
+| `tunnel start`  | Deploy    | uploads daemon binary, starts daemon on remote, builds tunnel |
+| `tunnel stop`   | Destroy   | kills daemon + tunnel, removes `/tmp/virtuoso_bridge_*/` |
+| `tunnel attach` | Connect   | scans `~/.cache/virtuoso_bridge/sessions/*.json`, builds tunnel to live daemon |
+| `tunnel detach` | Disconnect | kills tunnel only; daemon stays alive |
+
+`start`/`stop` are destructive (you own what you deployed); `attach`/`detach` are non-destructive (Virtuoso owns the daemon). Use `attach` when Virtuoso is already running and you just want CLI access.
 
 **Remote async simulation:**
 ```bash
@@ -163,9 +186,11 @@ vcli [--profile P] [--session S] [--format json|table]
 │   ├── cleanup                           Remove stale session files for dead daemons
 │   └── history <id> [--skill] [--cmd] [--limit N]   SKILL + CLI history for a session
 ├── tunnel                            Manage SSH tunnel
-│   ├── start [--timeout N] [--dry-run]
-│   ├── stop [--force] [--dry-run]
+│   ├── start [--timeout N] [--dry-run]    Deploy new daemon + tunnel (destructive)
+│   ├── stop [--force] [--dry-run]         Destroy what start created
 │   ├── restart [--timeout N]
+│   ├── attach [--dry-run]                 Connect to an existing Virtuoso daemon (non-destructive)
+│   ├── detach                             Drop attach tunnel; daemon keeps listening
 │   ├── status
 │   └── diagnose                          Full connection diagnostics
 ├── skill                             Execute SKILL code
@@ -209,6 +234,7 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_REMOTE_USER` | current user | SSH login username |
 | `VB_JUMP_HOST` | — | Bastion/jump host address |
 | `VB_TIMEOUT` | `30` | Connection/execution timeout (seconds) |
+| `VB_SSH_PORT` | `22` | SSH port on the remote host (used by `vcli tunnel`); distinct from `VB_PORT` which is the daemon's TCP listener |
 | `VB_PROFILE` | — | Config profile (reads `VB_*_<profile>` vars) |
 | `VB_CLIENT_ID` | `$VB_PROFILE` or `gethostname()` | Per-client remote scratch scoping (e.g. `vcli-A`, `vcli-B`); isolates `/tmp/virtuoso_bridge/<client>/` paths between concurrent operators |
 | `VCLI_CAPABILITY` | `user` | Set to `admin` to unlock `vcli skill broadcast` and raw SKILL exec |
@@ -268,6 +294,7 @@ vcli skill exec    # connects to port N
 - **三种编程方式** — 原始 SKILL 表达式、高阶 API、或直接加载 .il 文件
 - **本地+远程模式** — 支持本地直连或 SSH 隧道（ControlMaster 连接复用）
 - **隧道跨架构原生部署** — `vcli tunnel start` 自动检测远端 CPU 架构，并上传对应的 `resources/daemons/virtuoso-daemon-{x86_64,aarch64}` 二进制，无需在远端 build
+- **非破坏性隧道连接** — `vcli tunnel attach` 通过 SSH session 发现机制连接 Virtuoso 内已运行的 daemon，不部署新 daemon；`tunnel detach` 仅断开本地隧道，远端 daemon 保持运行（4 动词模型：start/stop 破坏性，attach/detach 非破坏性）
 - **每客户端 scratch 隔离** — 不同 `VB_CLIENT_ID` / `VB_PROFILE` 环境变量下的并发 vcli 调用拥有独立的 `/tmp/virtuoso_bridge/<client>/` 目录，多个操作员在同一主机操作时互不冲突
 - **Skill Finder** — 模糊 / 前缀 / 后缀 / 精确 / 正则 五种模式搜索 Cadence `~/.cdsinit` 与 `/opt/cadence/.../finder/SKILL/*.fnd` 文件（`vcli skill find query --mode fuzzy`）
 - **Admin 权限门** — `VCLI_CAPABILITY=admin` 解锁 `vcli skill broadcast` 与原始 SKILL 执行权限
@@ -318,13 +345,16 @@ load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
 ├─────────────────────────────────────────┤
 │  Session : eda-meow-1                   │
 │  Port    : 42109                        │
-│  Version : 0.4.0-alpha.7                  │
+│  SSH     : 22                           │
+│  Version : 1.0.0                        │
 │  Daemon  : ~/.cargo/bin/virtuoso-daemon │
 ├─────────────────────────────────────────┤
 │  Terminal: vcli skill exec 'version()'  │
 │  Sessions: vcli session list            │
 └─────────────────────────────────────────┘
 ```
+
+`SSH` 是 SSH 隧道连接用的端口（host 网络模式下为 22；bridge 模式 + 端口映射的用户可在 `load` 前通过 Virtuoso shell 环境变量 `RB_SSH_PORT` 覆盖）。`Port` 是 daemon 自身的 TCP 监听端口（由 OS 分配，永不冲突）。
 
 在 `~/.cdsinit` 中加入以下内容，实现 Virtuoso 启动时自动加载：
 ```skill
@@ -339,7 +369,7 @@ vcli skill exec 'getCurrentTime()'                       # 单 session 时自动
 vcli --session eda-meow-2 skill exec 'getCurrentTime()' # 多 session 时指定目标
 ```
 
-**远程模式：**
+**远程模式（部署新 daemon）：**
 ```bash
 vcli init           # 生成 .env 配置模板
 # 编辑 .env：设置 VB_REMOTE_HOST、VB_SPECTRE_CMD（绝对路径）
@@ -347,6 +377,25 @@ vcli tunnel start
 vcli skill exec 'getCurrentTime()'
 vcli tunnel stop
 ```
+
+**远程模式（连接已存在的 Virtuoso daemon — 非破坏性）：**
+```bash
+# Virtuoso + daemon 已在远端主机运行
+vcli tunnel attach                       # 自动发现 + 连接；不会部署新 daemon
+vcli skill exec 'getCurrentTime()'
+vcli tunnel detach                       # 断开 SSH 隧道；daemon 继续监听
+```
+
+隧道 4-动词模型：
+
+| 动词 | 生命周期 | 远端副作用 |
+|------|---------|-----------|
+| `tunnel start`  | 部署   | 上传 daemon 二进制，远端启动 daemon，建隧道 |
+| `tunnel stop`   | 销毁   | 杀 daemon + 隧道，删除 `/tmp/virtuoso_bridge_*/` |
+| `tunnel attach` | 连接   | 扫描 `~/.cache/virtuoso_bridge/sessions/*.json`，建隧道到活跃 daemon |
+| `tunnel detach` | 断开   | 仅杀隧道；daemon 保持运行 |
+
+`start`/`stop` 是破坏性的（你部署的你能清）；`attach`/`detach` 是非破坏性的（daemon 归 Virtuoso 所有）。当 Virtuoso 已在跑、你只想用 CLI 连进去时，用 `attach`。
 
 **远程异步仿真：**
 ```bash
@@ -395,7 +444,12 @@ vcli [--profile P] [--session S] [--format json|table]
 │   ├── cleanup                           删除已死亡 daemon 的 session 文件
 │   └── history <id> [--skill] [--cmd] [--limit N]   查看 SKILL + CLI 历史
 ├── tunnel                            管理 SSH 隧道
-│   ├── start / stop / restart / status
+│   ├── start [--timeout N] [--dry-run]    部署新 daemon + 隧道（破坏性）
+│   ├── stop [--force] [--dry-run]         销毁 start 创建的内容
+│   ├── restart [--timeout N]
+│   ├── attach [--dry-run]                 连接已存在的 Virtuoso daemon（非破坏性）
+│   ├── detach                             断开 attach 隧道；daemon 继续监听
+│   ├── status
 │   └── diagnose                          完整连接诊断
 ├── skill                             执行 SKILL 代码
 │   ├── exec <code> [--timeout N]
@@ -433,6 +487,7 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_REMOTE_USER` | 当前用户 | SSH 登录用户名 |
 | `VB_JUMP_HOST` | - | 跳板机/堡垒机地址 |
 | `VB_TIMEOUT` | `30` | 连接/执行超时（秒） |
+| `VB_SSH_PORT` | `22` | 远端主机 SSH 端口（`vcli tunnel` 使用）；与 `VB_PORT`（daemon TCP 监听端口）不同 |
 | `VB_PROFILE` | - | 配置 profile（读取 `VB_*_<profile>` 变量） |
 | `VB_CLIENT_ID` | `$VB_PROFILE` 或 `gethostname()` | 每客户端远端 scratch 隔离标识（如 `vcli-A`、`vcli-B`）；隔离 `/tmp/virtuoso_bridge/<client>/` 路径，避免多操作员并发冲突 |
 | `VCLI_CAPABILITY` | `user` | 设为 `admin` 解锁 `vcli skill broadcast` 与原始 SKILL 执行权限 |
