@@ -190,6 +190,26 @@ enum Commands {
     /// Show or edit connection profile bindings
     #[command(subcommand)]
     Profile(ProfileCmd),
+
+    /// Internal entry point: run as the native transport daemon.
+    ///
+    /// Hidden from help, and **absent entirely** from builds without the
+    /// `native-ssh` feature (the design requires the subcommand not to exist
+    /// there, rather than exist and fail). It is spawned by `vcli` itself, never
+    /// typed by a user.
+    #[cfg(feature = "native-ssh")]
+    #[command(name = "__transport-daemon", hide = true)]
+    TransportDaemon {
+        /// IPC endpoint the daemon should listen on (UDS path or named pipe).
+        #[arg(long)]
+        ipc_endpoint: String,
+        /// File holding the daemon's auth token.
+        #[arg(long)]
+        token_path: String,
+        /// Instance nonce, echoed in Hello/HelloAck to invalidate stale clients.
+        #[arg(long)]
+        daemon_nonce: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2121,6 +2141,14 @@ fn main() {
 
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
+        // Compiled only with `native-ssh`; other builds have no such subcommand
+        // at all, so there is nothing to dispatch.
+        #[cfg(feature = "native-ssh")]
+        Commands::TransportDaemon {
+            ipc_endpoint,
+            token_path,
+            daemon_nonce,
+        } => commands::transport_daemon::run(&ipc_endpoint, &token_path, &daemon_nonce),
         Commands::Tunnel(cmd) => dispatch_tunnel(cmd, format),
         Commands::Profile(cmd) => dispatch_profile(cmd),
         Commands::Skill(cmd) => dispatch_skill(cmd),
