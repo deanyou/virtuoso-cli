@@ -51,18 +51,21 @@ unless(boundp('RBIpc) RBIpc = 'unbound)
 unless(boundp('RBSessionId)   RBSessionId   = "")
 ; hostname-user prefix; RBIpcErrHandler appends the OS-assigned port to form the final unique ID
 unless(boundp('RBSessionBase) RBSessionBase = "")
-; SSH port for tunnel connection — read from env, default 22 (host network mode).
+; SSH port for tunnel connection — re-read from env on every load. This is
+; env-derived config, NOT session state, so the unless(boundp(...)) guard
+; that protects RBSessionId/RBSessionBase does NOT apply here. Without the
+; unconditional reassignment, reloads would preserve a stale value bound by
+; an earlier load (the original bug — banner kept showing 2222 after fallback
+; changed to 22). Falls back to 22 for host network mode.
 ; cadence-rocky runs in host network mode so container port 22 = host port 22;
 ; bridge-mode + port-mapping users can override by setting RB_SSH_PORT in their
 ; Virtuoso CIW env before loading ramic_bridge.il.
-unless(boundp('RBsshPort)
-    RBsshPort = let((envPort)
-        envPort = getShellEnvVar("RB_SSH_PORT")
-        if(envPort then
-            atoi(envPort)
-        else
-            22
-        )
+RBsshPort = let((envPort)
+    envPort = getShellEnvVar("RB_SSH_PORT")
+    if(envPort then
+        atoi(envPort)
+    else
+        22
     )
 )
 
