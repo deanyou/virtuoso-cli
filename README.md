@@ -235,10 +235,93 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_JUMP_HOST` | — | Bastion/jump host address |
 | `VB_TIMEOUT` | `30` | Connection/execution timeout (seconds) |
 | `VB_SSH_PORT` | `22` | SSH port on the remote host (used by `vcli tunnel`); distinct from `VB_PORT` which is the daemon's TCP listener |
+| `VB_SSH_KEY` | — | Identity file, passed to ssh as `-i <path>` |
+| `VB_SSH_CONFIG` | — | Custom SSH config file, passed to ssh as `-F <path>` |
+| `VB_SSH_BACKEND` | `openssh` | SSH backend: `openssh` (default) or `native` |
 | `VB_PROFILE` | — | Config profile (reads `VB_*_<profile>` vars) |
 | `VB_CLIENT_ID` | `$VB_PROFILE` or `gethostname()` | Per-client remote scratch scoping (e.g. `vcli-A`, `vcli-B`); isolates `/tmp/virtuoso_bridge/<client>/` paths between concurrent operators |
 | `VCLI_CAPABILITY` | `user` | Set to `admin` to unlock `vcli skill broadcast` and raw SKILL exec |
 | `RB_DAEMON_PATH` | auto-detected | Override daemon binary path |
+
+### SSH Remote Connection Setup
+
+`vcli tunnel start` needs a working SSH path to the compute host first.
+
+**1. Generate an SSH key (optional):**
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_vcli
+ssh-copy-id -i ~/.ssh/id_ed25519_vcli user@remote-host
+```
+
+**2. Configure `~/.ssh/config`:**
+
+```ssh-config
+Host my-server
+    HostName 192.168.1.100
+    User username
+    IdentityFile ~/.ssh/id_ed25519_vcli
+    StrictHostKeyChecking accept-new
+    ConnectTimeout 10
+    # Important: bypass a local HTTP proxy (Clash / Surge) for SSH
+    ProxyCommand none
+```
+
+> **Host key checking**: `accept-new` trusts a host on first contact but still
+> refuses to connect if its key later changes, so MITM protection is preserved.
+> Only downgrade to `StrictHostKeyChecking no` on a trusted internal network —
+> never in production.
+
+> **Proxy**: if a system proxy (macOS Network Preferences) intercepts SSH,
+> `ProxyCommand none` is required to bypass it.
+
+**3. Test the SSH connection:**
+```bash
+ssh my-server "uname -m"   # expect x86_64 or aarch64
+```
+
+**4. Connect with vcli:**
+```bash
+# Option 1 — use the Host alias from ~/.ssh/config
+VB_REMOTE_HOST=my-server vcli tunnel start
+
+# Option 2 — address the host directly (set the user separately, NOT as user@host)
+VB_REMOTE_HOST=192.168.1.100 VB_REMOTE_USER=username vcli tunnel start
+
+# Option 3 — point at a specific key or SSH config file
+VB_SSH_KEY=~/.ssh/id_ed25519_vcli VB_REMOTE_HOST=my-server vcli tunnel start
+VB_SSH_CONFIG=~/.ssh/config_vcli VB_REMOTE_HOST=my-server vcli tunnel start
+```
+
+> `VB_REMOTE_HOST` and `VB_REMOTE_USER` are combined into `user@host`, so do
+> **not** put `user@` in `VB_REMOTE_HOST` while also setting `VB_REMOTE_USER` —
+> that yields `user@user@host`. Use one form or the other.
+
+> `VB_REMOTE_HOST` must name the host **running Virtuoso** (the compute host),
+> not the bastion — the bastion goes in `VB_JUMP_HOST`. `vcli tunnel status`
+> reports a mismatch between the configured and actual hostname.
+
+**5. Fallback — run vcli directly on the remote host:**
+```bash
+# If the tunnel hits a permission problem, invoke the remote vcli over SSH
+ssh my-server 'vcli skill exec "version()"'
+ssh my-server 'vcli session list'
+
+# Handy alias
+alias rvcli='ssh my-server vcli'
+rvcli session list
+```
+
+**Troubleshooting:**
+```bash
+# Inspect proxy settings (macOS)
+networksetup -getwebproxy "Wi-Fi"
+
+# Test a direct connection, bypassing the proxy
+ssh -o "ProxyCommand=none" my-server "echo ok"
+
+# Verbose vcli logging
+vcli tunnel start -v
+```
 
 ### How It Works
 
@@ -488,10 +571,91 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_JUMP_HOST` | - | 跳板机/堡垒机地址 |
 | `VB_TIMEOUT` | `30` | 连接/执行超时（秒） |
 | `VB_SSH_PORT` | `22` | 远端主机 SSH 端口（`vcli tunnel` 使用）；与 `VB_PORT`（daemon TCP 监听端口）不同 |
+| `VB_SSH_KEY` | - | 密钥文件，以 `-i <path>` 传给 ssh |
+| `VB_SSH_CONFIG` | - | 自定义 SSH config 文件，以 `-F <path>` 传给 ssh |
+| `VB_SSH_BACKEND` | `openssh` | SSH 后端：`openssh`（默认）或 `native` |
 | `VB_PROFILE` | - | 配置 profile（读取 `VB_*_<profile>` 变量） |
 | `VB_CLIENT_ID` | `$VB_PROFILE` 或 `gethostname()` | 每客户端远端 scratch 隔离标识（如 `vcli-A`、`vcli-B`）；隔离 `/tmp/virtuoso_bridge/<client>/` 路径，避免多操作员并发冲突 |
 | `VCLI_CAPABILITY` | `user` | 设为 `admin` 解锁 `vcli skill broadcast` 与原始 SKILL 执行权限 |
 | `RB_DAEMON_PATH` | 自动检测 | 覆盖 daemon 二进制路径 |
+
+### SSH 远程连接配置
+
+执行 `vcli tunnel start` 之前，需要先打通到计算主机的 SSH 通路。
+
+**1. 生成 SSH 密钥（可选）：**
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_vcli
+ssh-copy-id -i ~/.ssh/id_ed25519_vcli user@remote-host
+```
+
+**2. 配置 SSH Config (`~/.ssh/config`)：**
+
+```ssh-config
+Host my-server
+    HostName 192.168.1.100
+    User username
+    IdentityFile ~/.ssh/id_ed25519_vcli
+    StrictHostKeyChecking accept-new
+    ConnectTimeout 10
+    # 重要：如果本地有代理软件（如 Clash / Surge），需要让 SSH 绕过代理
+    ProxyCommand none
+```
+
+> **主机密钥校验**：`accept-new` 表示首次连接自动信任，但之后主机密钥一旦变更即拒绝连接，
+> 因此仍保留 MITM 防护。只有在受信内网才可降级为 `StrictHostKeyChecking no`，
+> 生产环境不要使用。
+
+> **代理**：如果系统代理（macOS 网络偏好设置中的代理）拦截了 SSH 连接，
+> 必须加 `ProxyCommand none` 来绕过它。
+
+**3. 测试 SSH 连接：**
+```bash
+ssh my-server "uname -m"   # 应返回 x86_64 或 aarch64
+```
+
+**4. 使用 vcli 连接：**
+```bash
+# 方式一：使用 ~/.ssh/config 里的 Host 别名
+VB_REMOTE_HOST=my-server vcli tunnel start
+
+# 方式二：直接指定主机（用户名单独设置，不要写成 user@host）
+VB_REMOTE_HOST=192.168.1.100 VB_REMOTE_USER=username vcli tunnel start
+
+# 方式三：指定密钥或 SSH config 文件
+VB_SSH_KEY=~/.ssh/id_ed25519_vcli VB_REMOTE_HOST=my-server vcli tunnel start
+VB_SSH_CONFIG=~/.ssh/config_vcli VB_REMOTE_HOST=my-server vcli tunnel start
+```
+
+> `VB_REMOTE_HOST` 与 `VB_REMOTE_USER` 会被拼成 `user@host`，所以**不要**在
+> `VB_REMOTE_HOST` 里写 `user@` 的同时又设置 `VB_REMOTE_USER` —— 那会拼出
+> `user@user@host`。两种写法只用其一。
+
+> `VB_REMOTE_HOST` 必须指向**运行 Virtuoso 的那台机器**（计算主机），不是跳板机；
+> 跳板机填 `VB_JUMP_HOST`。`vcli tunnel status` 会报告配置主机名与实际主机名是否不一致。
+
+**5. 备选方案：直接在远端主机上执行 vcli：**
+```bash
+# 如果 tunnel 有权限问题，可通过 SSH 直接调用远端的 vcli
+ssh my-server 'vcli skill exec "version()"'
+ssh my-server 'vcli session list'
+
+# 设置别名方便使用
+alias rvcli='ssh my-server vcli'
+rvcli session list
+```
+
+**常见问题排查：**
+```bash
+# 检查代理设置（macOS）
+networksetup -getwebproxy "Wi-Fi"
+
+# 测试直连（绕过代理）
+ssh -o "ProxyCommand=none" my-server "echo ok"
+
+# 查看 vcli 详细日志
+vcli tunnel start -v
+```
 
 ### 工作原理
 
