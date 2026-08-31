@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-08-31
+
+Complete stable cut for the tunnel-lifecycle hardening. `1.1.0` was published from a
+feature branch that predated 9 `main` commits, so this release folds those in and adds the
+merge-time fix below.
+
+### Added (from `main`, missing in `1.1.0`)
+- **`session_discovery` module**: locate live Virtuoso sessions without a saved state file.
+- **`vcli tunnel attach` / `vcli tunnel detach`** subcommands (attached vs deployed mode).
+- **`ramic_bridge` SSH port fix**: correct port forwarding for the ramic bridge path.
+
+### Fixed
+- **Attached/deployed mode gating on stop**: `stop_saved_tunnel` now honours the tunnel
+  `mode` — an `attached` daemon (owned by Virtuoso) is never `rm -rf`'d on the remote;
+  only a `deployed` tunnel whose stop decision authorizes clearing wipes its scratch dir.
+
 ## [1.1.0] - 2026-08-31
 
 ### Added
