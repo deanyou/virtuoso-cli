@@ -477,10 +477,6 @@ impl TunnelState {
         }
         Ok(())
     }
-
-    pub fn clear() -> std::io::Result<()> {
-        Self::clear_with_profile(std::env::var("VB_PROFILE").ok().as_deref())
-    }
 }
 
 #[cfg(test)]
