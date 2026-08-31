@@ -148,6 +148,10 @@ impl EvalstringWhitelist {
     pub fn enable_sandbox(&mut self) {
         self.sandbox = true;
     }
+
+    pub(crate) fn is_sandbox(&self) -> bool {
+        self.sandbox
+    }
 }
 
 #[cfg(test)]

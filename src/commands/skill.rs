@@ -114,15 +114,12 @@ pub fn broadcast(code: &str, timeout: u64) -> Result<Value> {
 pub fn load(file: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
-    if !std::path::Path::new(file).exists() {
-        return Err(VirtuosoError::NotFound(format!("file not found: {file}")));
-    }
-
     let result = client.load_il(file)?;
 
     Ok(json!({
-        "status": if result.ok() { "success" } else { "error" },
+        "status": "success",
         "file": file,
+        "loaded_path": result.metadata.get("loaded_path"),
         "output": result.output,
         "errors": result.errors,
     }))

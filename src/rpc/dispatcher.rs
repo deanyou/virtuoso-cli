@@ -807,7 +807,10 @@ impl RpcDispatcher {
             "load" => {
                 let path = json_str(params.get("path"), "path")?;
                 let r = client.load_il(&path)?;
-                Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
+                Ok(serde_json::json!({
+                    "status": "ok", "output": r.output.trim(),
+                    "loaded_path": r.metadata.get("loaded_path")
+                }))
             }
             "eval" => {
                 let code = params

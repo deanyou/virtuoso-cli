@@ -922,14 +922,14 @@ pub fn standard_schema() -> RpcSchema {
         },
         Method {
             name: "skill.load".into(),
-            summary: "Load a SKILL (.il) file".into(),
+            summary: "Load a SKILL (.il/.ils) file (Admin only)".into(),
             params: vec![Param {
                 name: "path".into(),
                 ptype: "string".into(),
-                description: "Path to .il file".into(),
+                description: "Local file path; uploaded when using an SSH tunnel".into(),
                 required: true,
             }],
-            returns: "null on success".into(),
+            returns: "status, output, loaded_path; error if loading fails".into(),
         },
         Method {
             name: "skill.eval".into(),

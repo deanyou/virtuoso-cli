@@ -198,7 +198,9 @@ impl VirtuosoClient {
         timeout: Option<u64>,
         skip_whitelist: bool,
     ) -> Result<VirtuosoResult> {
-        // Phase 0: evalstring whitelist check — bypassed when caller holds Admin
+        // Explicit readonly mode takes precedence even on Admin execution paths.
+        let skip_whitelist = skip_whitelist && !self.whitelist.is_sandbox();
+        // Phase 0: evalstring whitelist check — bypassed only by authorized callers.
         if !skip_whitelist {
             if let Some(warning) = self.whitelist.check(skill_code) {
                 return Err(VirtuosoError::Execution(warning));
@@ -316,39 +318,36 @@ impl VirtuosoClient {
         ))
     }
 
-    /// Execute a SKILL expression (public API — checks capability + whitelist).
+    /// Execute raw SKILL as Admin. Explicit readonly mode retains pattern checks.
     /// External callers should use this; internal callers use `execute_skill_unchecked`.
     pub fn execute_skill(&self, skill_code: &str, timeout: Option<u64>) -> Result<VirtuosoResult> {
+        self.require_raw_skill_access()?;
+        self.execute_skill_with_bypass(skill_code, timeout, true)
+    }
+
+    fn require_raw_skill_access(&self) -> Result<()> {
         // Auth check — validate API key if auth is enabled
         crate::auth::Auth::init();
         crate::auth::check_auth(None)?;
 
         // Capability check — block raw SKILL exec unless Admin
-        if let Some(warning) = self.check_capability(skill_code) {
+        if let Some(warning) = self.check_capability("") {
             return Err(VirtuosoError::Execution(warning));
         }
-        self.execute_skill_unchecked(skill_code, timeout)
+        Ok(())
     }
 
-    /// Execute a SKILL expression bypassing the client-side whitelist.
+    /// Compatibility entry point for authorized raw SKILL execution.
     ///
     /// Used internally for ops that legitimately need `system()` (e.g. sed-based
-    /// netlist injection). Requires Admin capability — callers must enforce this
-    /// precondition by only exposing this method to code paths gated by `VCLI_CAPABILITY=admin`.
+    /// netlist injection). Requires Admin capability, checked here as well as at
+    /// the caller. Explicit readonly mode remains active.
     pub fn execute_skill_admin(
         &self,
         skill_code: &str,
         timeout: Option<u64>,
     ) -> Result<VirtuosoResult> {
-        // Auth check — validate API key if auth is enabled
-        crate::auth::Auth::init();
-        crate::auth::check_auth(None)?;
-
-        // Capability check — must have Admin to bypass whitelist
-        if let Some(warning) = self.check_capability(skill_code) {
-            return Err(VirtuosoError::Execution(warning));
-        }
-        self.execute_skill_with_bypass(skill_code, timeout, true)
+        self.execute_skill(skill_code, timeout)
     }
 
     /// Batch-fetch object slots from a SKILL list expression in a single RTT.
@@ -539,24 +538,43 @@ impl VirtuosoClient {
     }
 
     pub fn load_il(&self, local_path: &str) -> Result<VirtuosoResult> {
-        let filename = std::path::Path::new(local_path)
-            .file_name()
-            .ok_or_else(|| VirtuosoError::Config(format!("invalid path: {local_path}")))?
-            .to_string_lossy();
-        // Scope remote scratch by client_id to avoid name collisions when
-        // multiple local machines share one remote Unix account.
-        let client_id = resolve_client_id();
-        let remote_path = format!("/tmp/virtuoso_bridge/{client_id}/{filename}");
+        // Loading executes arbitrary code: authorize before filesystem/SSH side effects.
+        self.require_raw_skill_access()?;
+        if self.whitelist.is_sandbox() {
+            return Err(VirtuosoError::Execution(
+                "SKILL file loading is not permitted in readonly mode".into(),
+            ));
+        }
 
-        // Best-effort: ensure the per-client dir exists on the remote host
-        // (no-op for local mode since upload_file uses std::fs::copy).
-        self.ensure_remote_dir(&format!("/tmp/virtuoso_bridge/{client_id}"))?;
+        // Do not resolve the final symlink: its .ils suffix selects SKILL++ mode.
+        let path = std::path::absolute(local_path)?;
+        let metadata = std::fs::metadata(&path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                VirtuosoError::NotFound(format!("SKILL file not found: {local_path}"))
+            } else {
+                VirtuosoError::Io(error)
+            }
+        })?;
+        if !metadata.is_file() {
+            return Err(VirtuosoError::Config(format!(
+                "SKILL path is not a file: {local_path}"
+            )));
+        }
 
-        self.upload_file(local_path, &remote_path)?;
-
-        let remote_path_escaped = escape_skill_string(&remote_path);
-        let skill = format!(r#"(load "{remote_path_escaped}")"#);
-        self.execute_skill(&skill, None)
+        let loaded_path = if let Some(tunnel) = &self.tunnel {
+            let transport = tunnel.transport();
+            super::skill_loading::stage_remote_file(transport.as_ref(), &path)?
+        } else {
+            path.to_str()
+                .ok_or_else(|| VirtuosoError::Config("SKILL path must be UTF-8".into()))?
+                .to_owned()
+        };
+        let skill = format!(r#"load("{}")"#, escape_skill_string(&loaded_path));
+        let mut result = self
+            .execute_skill(&skill, None)?
+            .ok_or_exec(&format!("load SKILL file {loaded_path}"))?;
+        result.metadata.insert("loaded_path".into(), loaded_path);
+        Ok(result)
     }
 
     pub fn upload_file(&self, local: &str, remote: &str) -> Result<()> {
@@ -569,9 +587,7 @@ impl VirtuosoClient {
         }
     }
 
-    /// Best-effort mkdir of a remote directory. In local mode the std::fs::copy
-    /// in `upload_file` will create the parent implicitly; this just no-ops.
-    /// Over SSH it issues a `mkdir -p` via the tunnel's SSH runner.
+    /// Create a directory on the execution host, propagating creation failures.
     ///
     /// The `dir` argument is shell-quoted defensively even though current
     /// callers only ever pass a `sanitize_client_id()`-output path
@@ -581,15 +597,18 @@ impl VirtuosoClient {
         if let Some(ref tunnel) = self.tunnel {
             let transport = tunnel.transport();
             let quoted = crate::transport::ssh::shell_quote(dir);
-            transport
+            let result = transport
                 .run_command(&CommandRequest::untimed(format!("mkdir -p {quoted}")))
                 .map_err(|e| VirtuosoError::Connection(format!("mkdir {dir}: {e}")))?;
+            if !result.success || result.exit_status != 0 {
+                return Err(VirtuosoError::Ssh(format!(
+                    "mkdir {dir} failed (exit {}): {}",
+                    result.exit_status,
+                    result.stderr.trim()
+                )));
+            }
         } else {
-            // Local mode: std::fs::copy does NOT create parent dirs. Create
-            // the per-client directory locally so load_il() can copy the IL
-            // file into it. Failure is non-fatal — the subsequent copy will
-            // surface the real error.
-            let _ = std::fs::create_dir_all(dir);
+            std::fs::create_dir_all(dir)?;
         }
         Ok(())
     }

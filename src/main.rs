@@ -431,14 +431,16 @@ enum SkillCmd {
         readonly: bool,
     },
 
-    /// Upload and load an IL script file into Virtuoso
+    /// Load a SKILL file into Virtuoso (upload first when using an SSH tunnel)
     #[command(
-        long_about = "Upload a SKILL/IL file to the remote host and load it.\n\n\
+        long_about = "Load a SKILL/IL file with Admin capability. Local mode uses the original \
+            absolute path; an SSH tunnel uploads to a private remote temporary directory. \
+            The JSON loaded_path field identifies the executed file.\n\n\
             Examples:\n  \
             virtuoso skill load my_script.il"
     )]
     Load {
-        /// Path to .il file
+        /// Local path to a .il or .ils file
         file: String,
     },
 

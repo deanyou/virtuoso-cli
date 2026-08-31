@@ -139,6 +139,32 @@ The 4-verb tunnel model:
 
 `start`/`stop` are destructive (you own what you deployed); `attach`/`detach` are non-destructive (Virtuoso owns the daemon). Use `attach` when Virtuoso is already running and you just want CLI access.
 
+**Reloading SKILL without typing in CIW:**
+```bash
+export VCLI_CAPABILITY=admin
+vcli skill load ./my_script.il
+vcli skill exec "isCallable('myFunction)"
+vcli skill exec 'myFunction()'
+```
+
+On the Virtuoso host (including `ssh host 'vcli ...'`), `skill load` loads the
+original absolute path. With a vcli-managed SSH tunnel, it uploads into a private,
+unique `${TMPDIR:-/tmp}/vcli-skill-*` directory on the remote host. It preserves
+the filename and `.ils` language suffix; dependencies must also be accessible on
+that host. The JSON `loaded_path` identifies the source retained for debugging;
+uploaded sources are not removed by `tunnel detach`.
+
+Raw `skill exec`, `skill eval`, and `skill load` require Admin. Explicit
+`skill exec --readonly` retains the existing pattern restrictions even for Admin;
+it is not a complete SKILL interpreter sandbox. A failed file load returns a
+nonzero exit/error for both CLI and RPC, including a SKILL `nil` result. In
+contrast, a raw expression returning `nil` is valid query data.
+
+If you manage SSH forwarding yourself and use `VB_REMOTE_HOST=localhost` on your
+laptop, vcli has no SSH file-transfer channel. Run vcli on the Virtuoso host, or
+use `tunnel attach` with `VB_REMOTE_HOST` set to the compute host before loading
+local files. Use `--session <id>` to select an existing session explicitly.
+
 **Remote async simulation:**
 ```bash
 vcli sim run-async --netlist my_tb.scs   # launch on remote server, return immediately
