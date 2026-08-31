@@ -4,7 +4,6 @@ use crate::commands::schematic::parse_skill_json;
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
 use crate::transport::contract::{CommandRequest, DownloadDirRequest, RemoteTransport};
-use crate::transport::openssh::OpenSshTransport;
 use crate::transport::ssh::shell_quote;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -1479,7 +1478,7 @@ pub fn create_corner_netlist(
     let client = VirtuosoClient::from_env()?;
 
     // 4. Build the remote transport from the same Config
-    let ssh: Arc<dyn RemoteTransport> = Arc::new(OpenSshTransport::from_config(&cfg));
+    let ssh: Arc<dyn RemoteTransport> = crate::transport::backend::open_transport(&cfg)?;
 
     // 5. Generate a unique remote temp dir (fixed prefix + UUIDv4 suffix)
     let remote_dir = corner_netlist_remote_path();

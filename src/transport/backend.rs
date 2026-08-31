@@ -14,9 +14,6 @@
 //!
 //! There is no automatic backend migration: OpenSSH stays the default.
 
-// Consumed once call sites are migrated; mirrors `contract.rs`.
-#![allow(dead_code)]
-
 use std::sync::Arc;
 
 use crate::config::Config;
@@ -62,6 +59,7 @@ impl SshBackend {
 
     /// Whether this *build* was compiled with support for the backend. Tracks
     /// the `native-ssh` feature, which is the switch the design specifies.
+    #[allow(dead_code)] // consumed by tests and the future `native-ssh` increment
     pub fn supported_in_this_build(&self) -> bool {
         match self {
             SshBackend::OpenSsh => true,
@@ -99,6 +97,23 @@ pub fn open_transport(config: &Config) -> Result<Arc<dyn RemoteTransport>, Trans
         // The native client ships with the `russh` dependency, which is added
         // when that increment lands. Until then every build reports the
         // structured error instead of silently using OpenSSH.
+        SshBackend::Native => Err(TransportError::UnsupportedBackend),
+    }
+}
+
+/// Gate an OpenSSH-only code path on the selected backend.
+///
+/// Some call sites build a concrete `SSHRunner` directly (the dedicated tunnel
+/// child, the Spectre simulator's reduced configuration, the SKILL Finder's raw
+/// `ssh`/`scp` sync) rather than going through [`open_transport`]. They are
+/// inherently OpenSSH and cannot carry a native client, so an explicit
+/// `native` request must fail loudly here instead of being silently ignored.
+///
+/// OpenSSH (and an unset backend) pass through untouched, preserving the
+/// existing behaviour for purely local operations that never reach a backend.
+pub fn require_openssh(config: &Config) -> Result<(), TransportError> {
+    match SshBackend::from_config(config)? {
+        SshBackend::OpenSsh => Ok(()),
         SshBackend::Native => Err(TransportError::UnsupportedBackend),
     }
 }
@@ -178,11 +193,12 @@ mod tests {
 
     #[test]
     fn native_request_reports_unsupported_backend_not_a_fallback() {
-        // `.err()` rather than `.unwrap_err()`: `Arc<dyn RemoteTransport>` is
-        // not `Debug`, and `unwrap_err` would require it.
-        let err = open_transport(&config_with(Some("native")))
-            .err()
-            .expect("native must not silently fall back to OpenSSH");
+        // `Arc<dyn RemoteTransport>` is not `Debug`, so neither `unwrap_err`
+        // nor `expect_err` applies; match on the result instead.
+        let err = match open_transport(&config_with(Some("native"))) {
+            Ok(_) => panic!("native must not silently fall back to OpenSSH"),
+            Err(e) => e,
+        };
         assert!(
             matches!(err, TransportError::UnsupportedBackend),
             "native must report UnsupportedBackend, got {err:?}"
@@ -208,6 +224,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn require_openssh_passes_for_default_and_openssh() {
+        assert!(require_openssh(&config_with(None)).is_ok());
+        assert!(require_openssh(&config_with(Some("openssh"))).is_ok());
+    }
+
+    #[test]
+    fn require_openssh_rejects_native_on_unsupported_build() {
+        let err = require_openssh(&config_with(Some("native")))
+            .expect_err("native must be rejected on an OpenSSH-only code path");
+        assert!(
+            matches!(err, TransportError::UnsupportedBackend),
+            "got {err:?}"
+        );
+        assert!(!err.retryable());
+    }
+
+    #[test]
+    fn require_openssh_surfaces_configuration_error_for_unknown_backend() {
+        let err = require_openssh(&config_with(Some("banana")))
+            .expect_err("unknown backend must not slip through the guard");
+        assert!(matches!(err, TransportError::Configuration(_)));
+    }
     #[test]
     fn display_matches_the_env_value() {
         assert_eq!(SshBackend::OpenSsh.to_string(), "openssh");

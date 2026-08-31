@@ -466,6 +466,9 @@ impl SSHClient {
 
     pub fn from_env(keep_remote_files: bool) -> Result<Self> {
         let cfg = Config::from_env()?;
+        // The tunnel child is a dedicated OpenSSH-only lifecycle. An explicit
+        // `native` request must fail here rather than be silently ignored.
+        crate::transport::backend::require_openssh(&cfg)?;
         let mut runner = SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
         if let Some(ref user) = cfg.remote_user {
             runner = runner.with_user(user);
@@ -821,6 +824,33 @@ mod tests {
         StopDecision, TunnelState, Verdict,
     };
     use crate::config::Config;
+
+    #[test]
+    fn sshclient_from_env_rejects_unsupported_native_backend() {
+        // The tunnel child is OpenSSH-only; an explicit `native` request must
+        // fail before any SSH child is spawned, never silently fall back.
+        let _lock = crate::test_env::lock();
+        let saved = std::env::var_os("VB_SSH_BACKEND");
+        std::env::set_var("VB_SSH_BACKEND", "native");
+        let result = super::SSHClient::from_env(false);
+        if let Some(v) = saved {
+            std::env::set_var("VB_SSH_BACKEND", v);
+        } else {
+            std::env::remove_var("VB_SSH_BACKEND");
+        }
+        assert!(
+            result.is_err(),
+            "native backend must be rejected on an OpenSSH-only build"
+        );
+        let msg = match result {
+            Ok(_) => panic!("native backend must be rejected on an OpenSSH-only build"),
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            msg.to_lowercase().contains("backend"),
+            "error should name the unsupported backend, got: {msg}"
+        );
+    }
 
     /// A state carrying no OS identity — what OpenSSH writes today, and what a
     /// v1 file deserializes to.

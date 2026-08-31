@@ -11,7 +11,6 @@ use crate::client::bridge::VirtuosoClient;
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
 use crate::transport::contract::{CommandRequest, RemoteTransport};
-use crate::transport::openssh::OpenSshTransport;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::Path;
@@ -84,7 +83,7 @@ pub fn cdslck(lib: &str, view_filter: Option<&str>) -> Result<Value> {
             "VB_REMOTE_HOST is not set; cdslck needs SSH to enumerate locks".into(),
         ));
     }
-    let transport: Arc<dyn RemoteTransport> = Arc::new(OpenSshTransport::from_config(&config));
+    let transport: Arc<dyn RemoteTransport> = crate::transport::backend::open_transport(&config)?;
     let find_cmd = format!(
         "find {} -name .cdslck -print 2>/dev/null",
         shell_quote(&lib_path)

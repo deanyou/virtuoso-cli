@@ -693,6 +693,9 @@ impl SpectreSimulator {
         // up ssh_port / ssh_key / ssh_config. Adding those here would change
         // behaviour, so the discrepancy is recorded rather than silently fixed.
         let transport = if remote {
+            // OpenSSH-only lifecycle: reject an explicit `native` request so it
+            // is never silently downgraded to OpenSSH.
+            crate::transport::backend::require_openssh(&cfg)?;
             let mut runner =
                 crate::transport::ssh::SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
             if let Some(ref user) = cfg.remote_user {

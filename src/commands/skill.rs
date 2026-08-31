@@ -210,7 +210,9 @@ pub fn find(
     let mut finder = SKILLFinder::new();
 
     if cfg.is_remote() {
-        // Remote mode: use cache or sync
+        // Remote mode: use cache or sync. Reject an explicit `native` backend
+        // before any ssh/scp sync runs, so the mismatch is never swallowed.
+        crate::transport::backend::require_openssh(&cfg)?;
         let host = cfg.remote_host.clone().unwrap_or_default();
         let target = cfg.ssh_target();
         let cshrc = cfg.cadence_cshrc.as_deref();
@@ -412,6 +414,7 @@ exit 1"#,
 /// Sync SKILL Finder cache from remote server.
 pub fn sync_cache(host: Option<&str>, cshrc: Option<&str>, verbose: bool) -> Result<Value> {
     let cfg = Config::from_env()?;
+    crate::transport::backend::require_openssh(&cfg)?;
     let target_host = host
         .map(String::from)
         .or(cfg.remote_host.clone())

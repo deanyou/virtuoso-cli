@@ -16,7 +16,6 @@ use crate::error::{Result, VirtuosoError};
 use crate::transport::contract::{
     CommandRequest, CommandResult, RemoteTransport, UploadTextRequest,
 };
-use crate::transport::openssh::OpenSshTransport;
 use include_dir::{include_dir, Dir};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -709,15 +708,12 @@ fn truncate_log(out: &CommandResult) -> String {
 /// Construct the configured remote transport (mirrors `transport::tunnel`).
 ///
 /// Returns a trait object rather than a concrete `SSHRunner` so that callers
-/// hold the contract, not a backend. `VB_DISABLE_CONTROL_MASTER` is applied
-/// here, matching what `transport::tunnel::SSHClient::from_env` does — note
-/// that `SSHRunner::from_config` alone does not apply it.
+/// hold the contract, not a backend. Backend selection (OpenSSH today, native
+/// once compiled in) and `VB_DISABLE_CONTROL_MASTER` are both honoured by
+/// [`crate::transport::backend::open_transport`], so the choice is never
+/// silently ignored — an unsupported `native` request fails here.
 pub fn transport_for_config(config: &Config) -> Result<Arc<dyn RemoteTransport>> {
-    let mut transport = OpenSshTransport::from_config(config);
-    if config.disable_control_master {
-        transport = transport.with_control_master_disabled();
-    }
-    Ok(Arc::new(transport))
+    Ok(crate::transport::backend::open_transport(config)?)
 }
 
 #[cfg(test)]
