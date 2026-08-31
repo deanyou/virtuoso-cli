@@ -94,9 +94,13 @@ pub fn open_transport(config: &Config) -> Result<Arc<dyn RemoteTransport>, Trans
             };
             Ok(Arc::new(transport))
         }
-        // The native client ships with the `russh` dependency, which is added
-        // when that increment lands. Until then every build reports the
+        #[cfg(feature = "native-ssh")]
+        SshBackend::Native => Ok(Arc::new(
+            crate::transport::native::NativeTransport::from_config(config)?,
+        )),
+        // Without the feature, `native` is not compiled in — report the
         // structured error instead of silently using OpenSSH.
+        #[cfg(not(feature = "native-ssh"))]
         SshBackend::Native => Err(TransportError::UnsupportedBackend),
     }
 }
@@ -195,16 +199,32 @@ mod tests {
     fn native_request_reports_unsupported_backend_not_a_fallback() {
         // `Arc<dyn RemoteTransport>` is not `Debug`, so neither `unwrap_err`
         // nor `expect_err` applies; match on the result instead.
-        let err = match open_transport(&config_with(Some("native"))) {
-            Ok(_) => panic!("native must not silently fall back to OpenSSH"),
-            Err(e) => e,
-        };
-        assert!(
-            matches!(err, TransportError::UnsupportedBackend),
-            "native must report UnsupportedBackend, got {err:?}"
-        );
-        // And it must not be retryable / not silently succeed.
-        assert!(!err.retryable());
+        let res = open_transport(&config_with(Some("native")));
+        #[cfg(not(feature = "native-ssh"))]
+        {
+            // Without the feature, `native` is not compiled in.
+            // `Arc<dyn RemoteTransport>` is not `Debug`, so `unwrap_err` does
+            // not compile; match on the result instead.
+            let err = match res {
+                Ok(_) => panic!("native must not silently fall back to OpenSSH"),
+                Err(e) => e,
+            };
+            assert!(
+                matches!(err, TransportError::UnsupportedBackend),
+                "native must report UnsupportedBackend, got {err:?}"
+            );
+            assert!(!err.retryable());
+        }
+        #[cfg(feature = "native-ssh")]
+        {
+            // With the feature, `native` builds a real transport (this test
+            // config has no key, so it errors on config — but crucially it must
+            // never silently become an OpenSSH transport).
+            assert!(
+                res.is_err(),
+                "native must not silently fall back to OpenSSH when the feature is enabled"
+            );
+        }
     }
 
     #[test]

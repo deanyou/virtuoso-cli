@@ -25,11 +25,13 @@ required-features = ["daemon"]
 
 [features]
 daemon = []
-# Native (russh-based) SSH backend. Empty for now: the native client ships with
-# the `russh` dependency, which is added when step 3b lands. Selecting
-# VB_SSH_BACKEND=native on a build without this feature returns structured
-# UnsupportedBackend (see src/transport/backend.rs).
-native-ssh = []
+# Native (russh-based) SSH backend. Enabling this feature compiles the pure-Rust
+# native SSH client; selecting VB_SSH_BACKEND=native on a build *without* this
+# feature returns a structured UnsupportedBackend (see src/transport/backend.rs).
+# This is step 3 of the native-transport delivery sequence: a single-hop direct
+# connection with host-key verification and public-key auth. Connection pooling,
+# SOCKS5, jump-host routing, and the RAMIC forward daemon are later increments.
+native-ssh = ["russh"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -60,6 +62,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"] }
 regex = "1"
 toml = "0.8"
 num_cpus = "1"
+russh = { version = "0.63.1", optional = true }
 
 [profile.release]
 lto = true
