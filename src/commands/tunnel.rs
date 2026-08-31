@@ -82,31 +82,28 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
         }
     }
 
-    #[cfg(unix)]
-    {
-        let cmdline_path = format!("/proc/{}/cmdline", state.pid);
-        let is_ssh = std::fs::read_to_string(&cmdline_path)
-            .map(|c| c.contains("ssh"))
-            .unwrap_or(false);
-
-        if is_ssh || force {
-            let result = unsafe { libc::kill(state.pid as i32, libc::SIGTERM) };
-            if result != 0 && !force {
-                tracing::warn!("could not kill process {}", state.pid);
-            }
-        } else {
-            tracing::warn!(
-                "PID {} is not an SSH process, skipping kill (use --force to override)",
-                state.pid
-            );
+    // Signal the recorded process only when verification authorizes it.
+    //
+    // Behaviour fix (delta vs. the old code): the inline `/proc`-based check
+    // always failed on macOS (no `/proc`), so `tunnel stop` skipped the kill
+    // yet still unconditionally cleared the state file — every stop on macOS
+    // leaked the ssh tunnel while discarding its record. The classification
+    // now comes from the cross-platform `classify_ssh_pid`: a proven-dead PID
+    // clears the stale state, an alive-but-unverifiable one refuses and KEEPS
+    // the state file (`--force` retains its override semantics).
+    let verdict = crate::transport::tunnel::classify_ssh_pid(state.pid);
+    match plan_stop(verdict, force) {
+        StopAction::Signal => signal_pid(state.pid),
+        StopAction::ClearStale => {
+            tracing::info!("tunnel pid {} is gone; clearing stale state", state.pid);
         }
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/PID", &state.pid.to_string(), "/F"])
-            .output();
+        StopAction::Refuse { reason } => {
+            tracing::warn!("refusing to stop tunnel: {reason}");
+            return Err(VirtuosoError::Conflict(format!(
+                "pid {} could not be verified as the tunnel process; state preserved (use --force to override)",
+                state.pid
+            )));
+        }
     }
 
     TunnelState::clear()?;
@@ -116,6 +113,64 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
         "port": state.port,
         "pid": state.pid,
     }))
+}
+
+/// What `tunnel stop` will do with the recorded process and state file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StopAction {
+    /// Signal the recorded PID, then clear the state file.
+    Signal,
+    /// Nothing to signal — the recorded PID is proven dead. Clear the stale
+    /// state file without signalling.
+    ClearStale,
+    /// Refuse: the recorded PID is alive but cannot be verified as our ssh
+    /// tunnel. The state file is preserved so the operator can investigate.
+    Refuse { reason: String },
+}
+
+/// Pure decision for `tunnel stop`, split out so it is testable on every
+/// platform.
+///
+/// `--force` keeps its pre-existing meaning: signal regardless of
+/// verification (it never skips clearing the state file either).
+fn plan_stop(verdict: crate::transport::tunnel::PidVerdict, force: bool) -> StopAction {
+    if force {
+        return StopAction::Signal;
+    }
+    match verdict {
+        crate::transport::tunnel::PidVerdict::VerifiedSsh => StopAction::Signal,
+        crate::transport::tunnel::PidVerdict::Gone => StopAction::ClearStale,
+        crate::transport::tunnel::PidVerdict::NotVerifiable { reason } => {
+            StopAction::Refuse { reason }
+        }
+    }
+}
+
+/// Signal the recorded tunnel process (unix: `SIGTERM` via `kill`).
+#[cfg(unix)]
+fn signal_pid(pid: u32) {
+    let result = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+    if result != 0 {
+        tracing::warn!("could not kill process {pid}");
+    }
+}
+
+/// Signal the recorded tunnel process (windows: `taskkill /F`).
+/// The result is logged — never silently ignored (the old `let _ =` discarded
+/// even a failed kill and still reported the tunnel stopped).
+#[cfg(not(unix))]
+fn signal_pid(pid: u32) {
+    match std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/F"])
+        .output()
+    {
+        Ok(out) if out.status.success() => {}
+        Ok(out) => tracing::warn!(
+            "taskkill for pid {pid} failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ),
+        Err(e) => tracing::warn!("failed to run taskkill for pid {pid}: {e}"),
+    }
 }
 
 pub fn restart(timeout: Option<u64>) -> Result<Value> {
@@ -500,6 +555,64 @@ impl HostnameCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ─── plan_stop: the stop decision table ───────────────────────────────
+    //
+    // The behaviour fix under test: an alive-but-unverifiable PID must REFUSE
+    // and preserve the state file. The old code skipped the kill yet still
+    // cleared the state — on macOS (no /proc) every stop silently leaked the
+    // ssh tunnel while discarding its record.
+
+    fn verdict(v: crate::transport::tunnel::PidVerdict) -> crate::transport::tunnel::PidVerdict {
+        v
+    }
+
+    #[test]
+    fn verified_ssh_pid_is_signalled() {
+        assert_eq!(
+            plan_stop(
+                verdict(crate::transport::tunnel::PidVerdict::VerifiedSsh),
+                false
+            ),
+            StopAction::Signal
+        );
+    }
+
+    #[test]
+    fn proven_dead_pid_clears_stale_state_without_signalling() {
+        assert_eq!(
+            plan_stop(verdict(crate::transport::tunnel::PidVerdict::Gone), false),
+            StopAction::ClearStale
+        );
+    }
+
+    #[test]
+    fn alive_but_unverifiable_pid_refuses_and_preserves_state() {
+        match plan_stop(
+            verdict(crate::transport::tunnel::PidVerdict::NotVerifiable {
+                reason: "pid 42 is alive but its executable is /bin/sleep, not ssh".into(),
+            }),
+            false,
+        ) {
+            StopAction::Refuse { reason } => {
+                assert!(reason.contains("/bin/sleep"), "reason: {reason}");
+            }
+            other => panic!("must refuse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn force_signals_regardless_of_verdict() {
+        // `--force` keeps its pre-existing override semantics for every
+        // verdict, including proven-dead (the old code also killed on force).
+        for v in [
+            crate::transport::tunnel::PidVerdict::VerifiedSsh,
+            crate::transport::tunnel::PidVerdict::Gone,
+            crate::transport::tunnel::PidVerdict::NotVerifiable { reason: "x".into() },
+        ] {
+            assert_eq!(plan_stop(verdict(v), true), StopAction::Signal);
+        }
+    }
 
     fn check(configured: &str, actual: &str) -> HostnameCheck {
         HostnameCheck {

@@ -152,6 +152,71 @@ fn verify_ssh_pid(pid: u32) -> bool {
     true
 }
 
+/// Command-layer classification of a recorded tunnel PID.
+///
+/// Broader than [`verify_ssh_pid`] (alive-and-ssh yes/no): it also separates
+/// *proven dead* — the state file is stale and may be cleared — from *alive
+/// but not verifiable* — the state file must be preserved and the operator
+/// decides (`--force`). This mirrors the `StopDecision::Skip.clear_state`
+/// distinction used by [`SSHClient::stop`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PidVerdict {
+    /// Process is alive and verified to be an ssh process.
+    VerifiedSsh,
+    /// The process no longer exists (proven dead).
+    Gone,
+    /// Process is alive but cannot be confirmed as our ssh tunnel.
+    NotVerifiable { reason: String },
+}
+
+/// Classify a recorded tunnel PID for the command layer.
+///
+/// Platform logic is split per-target like [`verify_ssh_pid`]; both must stay
+/// in agreement (same mechanism, coarser verdict).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) fn classify_ssh_pid(pid: u32) -> PidVerdict {
+    match std::fs::read_to_string(format!("/proc/{pid}/cmdline")) {
+        Ok(cmdline) if cmdline.contains("ssh") => PidVerdict::VerifiedSsh,
+        Ok(_) => PidVerdict::NotVerifiable {
+            reason: format!("pid {pid} is running but its command line is not ssh"),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => PidVerdict::Gone,
+        Err(e) => PidVerdict::NotVerifiable {
+            reason: format!("pid {pid}: {e}"),
+        },
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn classify_ssh_pid(pid: u32) -> PidVerdict {
+    match crate::transport::identity::ProcessIdentity::of_pid(pid) {
+        Ok(identity) if is_ssh_executable(&identity.executable_path) => PidVerdict::VerifiedSsh,
+        Ok(identity) => PidVerdict::NotVerifiable {
+            reason: format!(
+                "pid {pid} is alive but its executable is {}, not ssh",
+                identity.executable_path.display()
+            ),
+        },
+        Err(crate::transport::identity::IdentityError::NoSuchProcess(_)) => PidVerdict::Gone,
+        Err(e) => PidVerdict::NotVerifiable {
+            reason: e.to_string(),
+        },
+    }
+}
+
+/// Genuinely unknown platforms have no mechanism; keep the same trust
+/// posture as [`verify_ssh_pid`].
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "windows"
+)))]
+pub(crate) fn classify_ssh_pid(pid: u32) -> PidVerdict {
+    let _ = pid;
+    PidVerdict::VerifiedSsh
+}
+
 /// Non-destructive "is a process with this pid running" probe for Windows.
 ///
 /// `tasklist /FI "PID eq <n>" /NH` prints the matching row, or an INFO line
@@ -581,7 +646,7 @@ impl SSHClient {
             _ => {
                 return Err(VirtuosoError::Ssh(format!(
                     "unsupported architecture: {arch}"
-                )))
+                )));
             }
         };
 
@@ -658,8 +723,9 @@ mod tests {
     #[cfg(target_os = "macos")]
     use super::is_ssh_executable;
     use super::{
-        daemon_lifecycle, profiled_bridge_leaf, profiled_env_key, setup_dir_for_profile,
-        stop_decision, verdict_to_decision, verify_ssh_pid, StopDecision, TunnelState, Verdict,
+        classify_ssh_pid, daemon_lifecycle, profiled_bridge_leaf, profiled_env_key,
+        setup_dir_for_profile, stop_decision, verdict_to_decision, verify_ssh_pid, PidVerdict,
+        StopDecision, TunnelState, Verdict,
     };
 
     /// A state carrying no OS identity — what OpenSSH writes today, and what a
@@ -858,6 +924,47 @@ mod tests {
     #[test]
     fn dead_pid_does_not_verify_as_ssh() {
         assert!(!verify_ssh_pid(999_999));
+    }
+
+    /// The command layer's coarser verdict must agree: a proven-dead PID is
+    /// `Gone` (state may be cleared), not `NotVerifiable` (state preserved).
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn classify_reports_gone_for_a_dead_pid() {
+        assert_eq!(classify_ssh_pid(999_999), PidVerdict::Gone);
+    }
+
+    /// A live process that is not ssh must be `NotVerifiable` — never `Gone`
+    /// (which would authorize clearing the state) and never `VerifiedSsh`.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn classify_reports_alive_non_ssh_as_not_verifiable() {
+        // This test process is alive and its executable is the test binary,
+        // which does not contain "ssh" in its file name.
+        let me = crate::transport::identity::ProcessIdentity::current().unwrap();
+        match classify_ssh_pid(me.pid) {
+            PidVerdict::NotVerifiable { reason } => {
+                assert!(reason.contains("not ssh"), "reason: {reason}");
+            }
+            other => panic!("self must not verify as ssh, got {other:?}"),
+        }
+    }
+
+    /// `classify_ssh_pid` must stay in agreement with `verify_ssh_pid` for a
+    /// live ssh-named process: both recognize the stand-in as ssh.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn classify_agrees_with_verify_for_ssh_named_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let ssh_like = dir.path().join("ssh-standin");
+        std::fs::copy("/bin/sleep", &ssh_like).unwrap();
+
+        let mut child = std::process::Command::new(&ssh_like)
+            .arg("10")
+            .spawn()
+            .expect("spawn stand-in");
+        assert_eq!(classify_ssh_pid(child.id()), PidVerdict::VerifiedSsh);
+        reap(&mut child);
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
