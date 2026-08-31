@@ -64,6 +64,16 @@ toml = "0.8"
 num_cpus = "1"
 russh = { version = "0.63.1", optional = true }
 
+[dev-dependencies]
+# `#[serial]` marks a test as needing exclusive access to the process-global
+# environment (and any other state keyed to it). Cargo runs tests in parallel
+# by default; without this, two tests that read or write the same env var race
+# each other, even though writers hold the legacy `crate::test_env` lock. The
+# lock only serializes *writers*, so an unlocked reader can still observe a
+# half-written env while another test holds it. `#[serial]` covers both sides
+# with one mechanism.
+serial_test = "3"
+
 [profile.release]
 lto = true
 strip = true

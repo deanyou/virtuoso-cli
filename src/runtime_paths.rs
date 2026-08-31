@@ -196,25 +196,20 @@ pub fn legacy_state_file(profile: Option<&str>) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
-    /// Shared crate-level env lock (`crate::test_env`). Not module-local:
-    /// `runtime_paths` is compiled into the lib and both binaries, and a
-    /// per-module static would not serialize against other test modules
-    /// running in the same process.
-    use crate::test_env::lock as env_lock;
-
-    /// Apply a test-scoped env override, run `f`, then restore. Holds
-    /// `ENV_LOCK` for the duration of the override so concurrent tests
-    /// in the same process can't observe the in-flight value.
+    /// Apply a test-scoped env override, run `f`, then restore.
+    ///
+    /// The caller must be marked `#[serial]`. Snapshot/restore keeps
+    /// overrides from leaking past a single test body; `#[serial]` keeps the
+    /// rest of the suite from observing a half-applied set during the run.
     fn with_env<F: FnOnce()>(var: &str, value: Option<&str>, f: F) {
         with_env_many(&[(var, value)], f);
     }
 
-    /// Apply multiple env-var overrides in a single critical section, then
-    /// restore. Use this instead of nesting `with_env` — `std::sync::Mutex`
-    /// is not reentrant, so nested locks would deadlock.
+    /// Apply multiple env-var overrides, run `f`, then restore. Caller must
+    /// be marked `#[serial]`.
     fn with_env_many<F: FnOnce()>(overrides: &[(&str, Option<&str>)], f: F) {
-        let _guard = env_lock();
         let originals: Vec<_> = overrides
             .iter()
             .map(|(var, _)| (var, std::env::var_os(var)))
@@ -235,6 +230,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cache_subdir_includes_app_dir() {
         with_env("VB_CACHE_DIR", None, || {
             let p = cache_subdir(&["sessions"]);
@@ -244,6 +240,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cache_subdir_respects_vb_cache_dir() {
         with_env("VB_CACHE_DIR", Some("/tmp/test-vb-cache-1"), || {
             let p = cache_subdir(&["sessions", "abc.json"]);
@@ -255,6 +252,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cache_subdir_respects_vb_home() {
         with_env("VB_HOME", Some("/tmp/test-vb-home"), || {
             let p = cache_subdir(&["x", "y"]);
@@ -266,6 +264,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cache_subdir_vb_cache_dir_takes_priority_over_vb_home() {
         with_env_many(
             &[
@@ -280,6 +279,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn log_root_respects_vb_log_dir() {
         with_env("VB_LOG_DIR", Some("/tmp/test-vb-logs"), || {
             assert_eq!(log_root(), PathBuf::from("/tmp/test-vb-logs"));
@@ -287,6 +287,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn command_log_file_under_log_root() {
         with_env("VB_LOG_DIR", Some("/tmp/test-vb-logs2"), || {
             assert_eq!(
@@ -297,6 +298,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn legacy_state_file_with_profile() {
         with_env("VB_CACHE_DIR", Some("/tmp/test-vb-legacy"), || {
             assert_eq!(
@@ -307,6 +309,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn legacy_state_file_without_profile() {
         with_env("VB_CACHE_DIR", Some("/tmp/test-vb-legacy2"), || {
             assert_eq!(
@@ -317,6 +320,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn artifact_root_respects_vb_output_dir() {
         with_env("VB_OUTPUT_DIR", Some("/tmp/test-vb-out"), || {
             assert_eq!(artifact_root(), PathBuf::from("/tmp/test-vb-out"));
@@ -324,6 +328,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn tmp_root_respects_vb_tmp_dir() {
         with_env("VB_TMP_DIR", Some("/tmp/test-vb-tmp"), || {
             assert_eq!(tmp_root(), PathBuf::from("/tmp/test-vb-tmp"));
@@ -331,6 +336,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn state_root_respects_vb_state_dir() {
         with_env("VB_STATE_DIR", Some("/tmp/test-vb-state"), || {
             assert_eq!(state_root(), PathBuf::from("/tmp/test-vb-state"));
@@ -338,6 +344,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn env_var_with_blank_value_is_ignored() {
         with_env("VB_CACHE_DIR", Some(""), || {
             // Blank env var should not produce an empty path
@@ -347,6 +354,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cache_subdir_nested_components() {
         with_env("VB_CACHE_DIR", Some("/tmp/test-nested"), || {
             let p = cache_subdir(&["a", "b", "c.json"]);
@@ -362,6 +370,7 @@ mod tests {
     // ----------------------------------------------------------------
 
     #[test]
+    #[serial]
     fn cache_root_respects_vb_cache_dir() {
         with_env("VB_CACHE_DIR", Some("/tmp/test-cr-1"), || {
             assert_eq!(cache_root(), PathBuf::from("/tmp/test-cr-1"));
@@ -369,6 +378,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cache_root_respects_vb_home_cache_subpath() {
         with_env_many(
             &[("VB_HOME", Some("/tmp/test-cr-2")), ("VB_CACHE_DIR", None)],
@@ -379,6 +389,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cache_root_respects_xdg_cache_home() {
         with_env_many(
             &[
@@ -393,6 +404,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cache_root_vb_home_cache_takes_priority_over_xdg_cache_home() {
         // Actual precedence: VB_CACHE_DIR > VB_HOME/cache > XDG_CACHE_HOME > dirs.
         // Documenting this with an explicit test so a future refactor that
@@ -410,6 +422,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cache_root_blank_vb_cache_dir_falls_through() {
         with_env_many(
             &[
@@ -428,6 +441,7 @@ mod tests {
     // ----------------------------------------------------------------
 
     #[test]
+    #[serial]
     fn log_root_respects_vb_home_logs() {
         with_env_many(
             &[("VB_HOME", Some("/tmp/test-lr-1")), ("VB_LOG_DIR", None)],
@@ -438,6 +452,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn log_root_vb_log_dir_takes_priority_over_vb_home() {
         with_env_many(
             &[
@@ -455,6 +470,7 @@ mod tests {
     // ----------------------------------------------------------------
 
     #[test]
+    #[serial]
     fn state_root_respects_vb_home_state() {
         with_env_many(
             &[("VB_HOME", Some("/tmp/test-sr-1")), ("VB_STATE_DIR", None)],
@@ -465,6 +481,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn state_root_respects_xdg_state_home() {
         with_env_many(
             &[
@@ -479,6 +496,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn state_root_vb_home_state_takes_priority_over_xdg_state_home() {
         // Actual precedence: VB_STATE_DIR > VB_HOME/state > XDG_STATE_HOME > cache_root.
         // Documenting this with an explicit test so a future refactor that
@@ -496,6 +514,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn state_root_falls_back_to_cache_root() {
         // Back-compat: when nothing is set, state_root() should still produce
         // a path inside the cache root (legacy state.json location).
@@ -521,6 +540,7 @@ mod tests {
     // ----------------------------------------------------------------
 
     #[test]
+    #[serial]
     fn config_root_respects_vb_config_dir() {
         with_env("VB_CONFIG_DIR", Some("/tmp/test-cfg-1"), || {
             assert_eq!(config_root(), PathBuf::from("/tmp/test-cfg-1"));
@@ -528,6 +548,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn config_root_respects_vb_home_config() {
         with_env_many(
             &[
@@ -541,6 +562,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn config_root_respects_xdg_config_home() {
         with_env_many(
             &[
@@ -555,6 +577,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn config_subdir_includes_vcli_prefix() {
         with_env("VB_CONFIG_DIR", Some("/tmp/test-cfgsub-1"), || {
             let p = config_subdir(&["plugins"]);
@@ -563,6 +586,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn config_subdir_nested_components() {
         with_env("VB_CONFIG_DIR", Some("/tmp/test-cfgsub-2"), || {
             let p = config_subdir(&["plugins", "subdir", "x.json"]);
@@ -578,6 +602,7 @@ mod tests {
     // ----------------------------------------------------------------
 
     #[test]
+    #[serial]
     fn tmp_root_respects_vb_home_tmp() {
         with_env_many(
             &[
@@ -592,6 +617,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn tmp_root_respects_tmpdir_env() {
         with_env_many(
             &[
@@ -606,6 +632,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn tmp_root_vb_tmp_dir_takes_priority_over_vb_home() {
         with_env_many(
             &[
@@ -619,6 +646,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn tmp_root_falls_back_to_absolute_path() {
         with_env_many(
             &[("VB_TMP_DIR", None), ("VB_HOME", None), ("TMPDIR", None)],
@@ -635,6 +663,7 @@ mod tests {
     // ----------------------------------------------------------------
 
     #[test]
+    #[serial]
     fn artifact_root_respects_vb_home_artifacts() {
         with_env_many(
             &[
@@ -649,6 +678,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn artifact_root_respects_xdg_state_home_artifacts() {
         with_env_many(
             &[
@@ -663,6 +693,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn artifact_root_falls_back_to_cache_root_with_artifacts() {
         with_env_many(
             &[
@@ -687,6 +718,7 @@ mod tests {
     // ----------------------------------------------------------------
 
     #[test]
+    #[serial]
     fn legacy_cache_file_with_profile_appends_underscore() {
         with_env("VB_CACHE_DIR", Some("/tmp/test-legacy-1"), || {
             assert_eq!(
@@ -697,6 +729,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn legacy_cache_file_without_profile_uses_bare_name() {
         with_env("VB_CACHE_DIR", Some("/tmp/test-legacy-2"), || {
             assert_eq!(
@@ -707,6 +740,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn legacy_cache_file_tracks_cache_root_changes() {
         // legacy_cache_file should follow VB_CACHE_DIR / VB_HOME / XDG
         // because it delegates to cache_root().

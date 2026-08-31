@@ -824,12 +824,13 @@ mod tests {
         StopDecision, TunnelState, Verdict,
     };
     use crate::config::Config;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn sshclient_from_env_rejects_unsupported_native_backend() {
         // The tunnel child is OpenSSH-only; an explicit `native` request must
         // fail before any SSH child is spawned, never silently fall back.
-        let _lock = crate::test_env::lock();
         let saved = std::env::var_os("VB_SSH_BACKEND");
         std::env::set_var("VB_SSH_BACKEND", "native");
         let result = super::SSHClient::from_env(false);
@@ -1081,13 +1082,13 @@ mod tests {
     /// ssh process, so `classify_ssh_pid` cannot verify it as ssh.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     #[test]
+    #[serial]
     fn stop_saved_tunnel_refuses_unverifiable_live_process() {
         let mut child = std::process::Command::new("/bin/sleep")
             .arg("30")
             .spawn()
             .unwrap();
         let pid = child.id();
-        let _lock = crate::test_env::lock();
         let saved_cache = std::env::var_os("VB_CACHE_DIR");
         let saved_keep = std::env::var_os("VB_KEEP_REMOTE_FILES");
         let tmp = tempfile::tempdir().unwrap();
@@ -1122,8 +1123,8 @@ mod tests {
     /// A proven-dead pid authorizes clearing the stale state file (no signal).
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
+    #[serial]
     fn stop_saved_tunnel_clears_proven_dead_state() {
-        let _lock = crate::test_env::lock();
         let saved_cache = std::env::var_os("VB_CACHE_DIR");
         let saved_keep = std::env::var_os("VB_KEEP_REMOTE_FILES");
         let tmp = tempfile::tempdir().unwrap();
@@ -1149,13 +1150,13 @@ mod tests {
     /// remote cleanup is skipped because `VB_KEEP_REMOTE_FILES=1`.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     #[test]
+    #[serial]
     fn stop_saved_tunnel_force_signals_unverified_process() {
         let mut child = std::process::Command::new("/bin/sleep")
             .arg("30")
             .spawn()
             .unwrap();
         let pid = child.id();
-        let _lock = crate::test_env::lock();
         let saved_cache = std::env::var_os("VB_CACHE_DIR");
         let saved_keep = std::env::var_os("VB_KEEP_REMOTE_FILES");
         let tmp = tempfile::tempdir().unwrap();

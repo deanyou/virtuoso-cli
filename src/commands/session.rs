@@ -317,13 +317,7 @@ fn check_cross_user(
 mod tests {
     use super::*;
     use crate::models::SessionInfo;
-
-    // `std::env::set_var` is process-wide and not thread-safe; cargo test runs
-    // tests in parallel by default. This is the *shared* crate-level lock
-    // (`crate::test_env`), not a module-local one: a per-module static is a
-    // different mutex and would not serialize against `client::bridge` or
-    // `runtime_paths`, which mutate `VB_PROFILE` and friends too.
-    use crate::test_env::lock as env_lock;
+    use serial_test::serial;
 
     fn session() -> SessionInfo {
         SessionInfo {
@@ -348,8 +342,8 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cross_user_match_returns_none() {
-        let _g = env_lock();
         clear_remote_user_env();
         std::env::set_var("VB_REMOTE_USER", "meow");
         let r = check_cross_user(&session(), Some("meow"));
@@ -358,8 +352,8 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cross_user_mismatch_returns_warning() {
-        let _g = env_lock();
         clear_remote_user_env();
         std::env::set_var("VB_REMOTE_USER", "alice");
         let r = check_cross_user(&session(), Some("bob"));
@@ -384,8 +378,8 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cross_user_mismatch_suppressed_by_override() {
-        let _g = env_lock();
         clear_remote_user_env();
         std::env::set_var("VB_REMOTE_USER", "alice");
         std::env::set_var("VB_ALLOW_CROSS_USER_DAEMON", "1");
@@ -395,9 +389,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cross_user_mismatch_override_truthy_values() {
         for v in ["true", "yes", "on", "TRUE", "Yes", "  on  "] {
-            let _g = env_lock();
             clear_remote_user_env();
             std::env::set_var("VB_REMOTE_USER", "alice");
             std::env::set_var("VB_ALLOW_CROSS_USER_DAEMON", v);
@@ -408,8 +402,8 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cross_user_no_env_var_returns_none() {
-        let _g = env_lock();
         clear_remote_user_env();
         // No VB_REMOTE_USER set
         let r = check_cross_user(&session(), Some("anyone"));
@@ -417,8 +411,8 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cross_user_no_daemon_user_returns_none() {
-        let _g = env_lock();
         clear_remote_user_env();
         std::env::set_var("VB_REMOTE_USER", "meow");
         // daemon_user is None — we don't know, so don't warn
@@ -427,8 +421,8 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cross_user_profile_scoped_env_var() {
-        let _g = env_lock();
         clear_remote_user_env();
         std::env::set_var("VB_PROFILE", "testprofile");
         std::env::set_var("VB_REMOTE_USER_testprofile", "alice");
@@ -443,8 +437,8 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn cross_user_empty_env_var_is_treated_as_unset() {
-        let _g = env_lock();
         clear_remote_user_env();
         std::env::set_var("VB_REMOTE_USER", "   ");
         let r = check_cross_user(&session(), Some("bob"));

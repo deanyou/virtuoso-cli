@@ -1199,13 +1199,7 @@ pub fn remote_scratch_root() -> String {
 #[cfg(test)]
 mod client_id_tests {
     use super::*;
-
-    // `std::env::set_var` is process-wide; serialize these tests with the
-    // *shared* crate-level lock (`crate::test_env`), not a module-local one.
-    // A per-module static is a different mutex, so it would not serialize
-    // against `commands::session`, which reads `VB_PROFILE` while these tests
-    // clear and set it.
-    use crate::test_env::lock as env_lock;
+    use serial_test::serial;
 
     fn clear_env() {
         std::env::remove_var("VB_CLIENT_ID");
@@ -1235,8 +1229,8 @@ mod client_id_tests {
     }
 
     #[test]
+    #[serial]
     fn remote_scratch_root_format() {
-        let _g = env_lock();
         clear_env();
         std::env::set_var("VB_CLIENT_ID", "test-client");
         let root = remote_scratch_root();
@@ -1245,8 +1239,8 @@ mod client_id_tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_client_id_precedence() {
-        let _g = env_lock();
         clear_env();
         std::env::set_var("VB_PROFILE", "myprofile");
         // No VB_CLIENT_ID, has VB_PROFILE → use profile
@@ -1258,8 +1252,8 @@ mod client_id_tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_client_id_empty_falls_through() {
-        let _g = env_lock();
         clear_env();
         std::env::set_var("VB_CLIENT_ID", "  ");
         std::env::set_var("VB_PROFILE", "fallback-prof");
@@ -1269,8 +1263,8 @@ mod client_id_tests {
     }
 
     #[test]
+    #[serial]
     fn from_env_rejects_unknown_bridge_session() {
-        let _g = env_lock();
         clear_env();
         std::env::set_var(
             "VB_SESSION",

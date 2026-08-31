@@ -13,13 +13,8 @@ fn cmd_args(cmd: &std::process::Command) -> Vec<String> {
 #[cfg(test)]
 mod config_tests {
     use crate::config::Config;
+    use serial_test::serial;
     use std::env;
-
-    // Serialize env-var tests to prevent races (env is global process state).
-    // This re-exports the *shared* crate-level lock so `config_tests`,
-    // `config_tests_ext` and every other env-touching module in this binary
-    // serialize against each other; a module-local static would not.
-    pub(super) use crate::test_env::ENV_LOCK;
 
     fn make_config(
         remote_host: Option<&str>,
@@ -114,8 +109,8 @@ mod config_tests {
     }
 
     #[test]
+    #[serial]
     fn vb_port_zero_is_error() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_env();
         env::set_var("VB_PORT", "0");
         let result = Config::from_env();
@@ -128,8 +123,8 @@ mod config_tests {
     }
 
     #[test]
+    #[serial]
     fn vb_port_default_when_unset() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_env();
         let cfg = Config::from_env().unwrap();
         clean_env();
@@ -138,8 +133,8 @@ mod config_tests {
     }
 
     #[test]
+    #[serial]
     fn vb_port_custom() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_env();
         env::set_var("VB_PORT", "12345");
         let cfg = Config::from_env().unwrap();
@@ -148,8 +143,8 @@ mod config_tests {
     }
 
     #[test]
+    #[serial]
     fn vb_remote_host_empty_means_local() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_env();
         env::set_var("VB_REMOTE_HOST", "");
         let cfg = Config::from_env().unwrap();
@@ -159,8 +154,8 @@ mod config_tests {
     }
 
     #[test]
+    #[serial]
     fn spectre_args_parsed_correctly() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         env::set_var("VB_SPECTRE_ARGS", "-64 +aps +mt=4");
         env::remove_var("VB_REMOTE_HOST");
         env::remove_var("VB_PORT");
@@ -178,8 +173,8 @@ mod config_tests {
     // keeps working.
 
     #[test]
+    #[serial]
     fn remote_roles_all_unset_fall_back_to_remote_host() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_env();
         env::set_var("VB_REMOTE_HOST", "eda-1");
         let cfg = Config::from_env().unwrap();
@@ -193,8 +188,8 @@ mod config_tests {
     }
 
     #[test]
+    #[serial]
     fn remote_roles_individual_overrides_take_precedence_over_remote_host() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_env();
         env::set_var("VB_REMOTE_HOST", "eda-1");
         env::set_var("VB_DAEMON_HOST", "compute-42");
@@ -209,9 +204,9 @@ mod config_tests {
     }
 
     #[test]
+    #[serial]
     fn remote_roles_unset_when_remote_host_unset() {
         // Local mode — no remote_host, no roles. Resolves to None.
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_env();
         env::set_var("VB_REMOTE_HOST", "");
         let cfg = Config::from_env().unwrap();
@@ -224,8 +219,8 @@ mod config_tests {
     }
 
     #[test]
+    #[serial]
     fn remote_roles_scratch_root_captured_independently() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_env();
         env::set_var("VB_REMOTE_HOST", "eda-1");
         env::set_var("VB_REMOTE_SCRATCH_ROOT", "/shared/scratch/eda");
@@ -235,8 +230,8 @@ mod config_tests {
     }
 
     #[test]
+    #[serial]
     fn remote_roles_profile_specific_env_var_wins_over_base() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_env();
         env::set_var("VB_REMOTE_HOST", "eda-base");
         env::set_var("VB_DAEMON_HOST_prod", "compute-prod-42");
@@ -773,7 +768,7 @@ mod cm_tests {
 #[cfg(test)]
 mod config_tests_ext {
     use crate::config::Config;
-    use crate::tests::config_tests::ENV_LOCK;
+    use serial_test::serial;
     use std::env;
 
     fn clean_ext_env() {
@@ -784,8 +779,8 @@ mod config_tests_ext {
     }
 
     #[test]
+    #[serial]
     fn vb_ssh_config_sets_field() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_ext_env();
         env::set_var("VB_SSH_CONFIG", "/home/meow/.ssh/custom_config");
         let cfg = Config::from_env().unwrap();
@@ -797,8 +792,8 @@ mod config_tests_ext {
     }
 
     #[test]
+    #[serial]
     fn vb_ssh_config_unset_is_none() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_ext_env();
         let cfg = Config::from_env().unwrap();
         clean_ext_env();
@@ -806,8 +801,8 @@ mod config_tests_ext {
     }
 
     #[test]
+    #[serial]
     fn vb_disable_control_master_one() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_ext_env();
         env::set_var("VB_DISABLE_CONTROL_MASTER", "1");
         let cfg = Config::from_env().unwrap();
@@ -816,8 +811,8 @@ mod config_tests_ext {
     }
 
     #[test]
+    #[serial]
     fn vb_disable_control_master_true() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_ext_env();
         env::set_var("VB_DISABLE_CONTROL_MASTER", "true");
         let cfg = Config::from_env().unwrap();
@@ -826,8 +821,8 @@ mod config_tests_ext {
     }
 
     #[test]
+    #[serial]
     fn vb_disable_control_master_default_false() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean_ext_env();
         let cfg = Config::from_env().unwrap();
         clean_ext_env();
@@ -1231,7 +1226,7 @@ mod schematic_tests {
 #[cfg(test)]
 mod config_extra_tests {
     use crate::config::Config;
-    use crate::tests::config_tests::ENV_LOCK;
+    use serial_test::serial;
     use std::env;
 
     fn clean() {
@@ -1243,8 +1238,8 @@ mod config_extra_tests {
     }
 
     #[test]
+    #[serial]
     fn default_port_in_expected_range() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean();
         let cfg = Config::from_env().unwrap();
         clean();
@@ -1252,8 +1247,8 @@ mod config_extra_tests {
     }
 
     #[test]
+    #[serial]
     fn default_port_deterministic_for_same_user() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean();
         env::set_var("USER", "testuser");
         env::remove_var("VB_PORT");
@@ -1264,8 +1259,8 @@ mod config_extra_tests {
     }
 
     #[test]
+    #[serial]
     fn env_with_profile_prefers_profile_key() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean();
         env::set_var("VB_REMOTE_HOST", "generic-host");
         env::set_var("VB_REMOTE_HOST_prod", "prod-host");
@@ -1275,8 +1270,8 @@ mod config_extra_tests {
     }
 
     #[test]
+    #[serial]
     fn env_with_profile_falls_back_to_base_key() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean();
         env::set_var("VB_REMOTE_HOST", "generic-host");
         let cfg = Config::from_env_with_profile(Some("staging")).unwrap();
@@ -1285,8 +1280,8 @@ mod config_extra_tests {
     }
 
     #[test]
+    #[serial]
     fn env_with_profile_empty_value_treated_as_unset() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clean();
         env::set_var("VB_REMOTE_HOST_prod", "");
         env::set_var("VB_REMOTE_HOST", "generic-host");
