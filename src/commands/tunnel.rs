@@ -194,31 +194,16 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
         }));
     }
 
-    // Remote cleanup is gated on mode:
-    //   - deployed: we own the setup dir under /tmp/, safe to rm -rf
-    //   - attached: Virtuoso owns the daemon, the setup dir may be in use;
-    //     use `vcli tunnel detach` instead, which only touches local state
-    if !cfg.keep_remote_files && mode == TUNNEL_MODE_DEPLOYED {
-        match SSHClient::from_env(cfg.keep_remote_files) {
-            Ok(client) => {
-                let setup_dir =
-                    crate::transport::tunnel::setup_dir_for_profile(cfg.profile.as_deref());
-                if let Err(e) = client.run_command(&format!("rm -rf {setup_dir}")) {
-                    tracing::warn!("remote cleanup failed: {e}");
-                }
-            }
-            Err(e) => tracing::warn!("could not connect for cleanup: {e}"),
-        }
-    } else if mode == TUNNEL_MODE_ATTACHED {
-        tracing::info!(
-            "attached mode: skipping remote cleanup (daemon belongs to Virtuoso; \
-             use `vcli tunnel detach` if you only want to disconnect)"
-        );
-    }
-
-    kill_tunnel_pid(state.pid, force);
-
-    TunnelState::clear()?;
+    // Single, authoritative stop path. Cross-platform pid verification, the
+    // native two-tier assessment, remote scratch cleanup and state clearing all
+    // live in one place, so nothing here duplicates (or can drift from) them.
+    //
+    // Both cleanup gates are enforced inside stop_saved_tunnel:
+    //   1. authorization — cleanup only after the verdict says the recorded
+    //      tunnel is ours or proven gone (a live/unverifiable daemon is kept)
+    //   2. ownership — only a `deployed` tunnel owns its remote setup dir; an
+    //      `attached` daemon belongs to Virtuoso and is never rm -rf'd
+    crate::transport::tunnel::stop_saved_tunnel(&cfg, &state, force)?;
 
     Ok(json!({
         "status": "stopped",

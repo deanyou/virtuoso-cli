@@ -503,6 +503,12 @@ impl TunnelState {
         Ok(())
     }
 
+    /// Clear the state file for the ambient profile taken from `VB_PROFILE`.
+    ///
+    /// For callers that hold no [`crate::config::Config`] — currently
+    /// `tunnel detach`, which only drops the local side of an attached tunnel.
+    /// Anything that already has a `Config` should prefer
+    /// [`Self::clear_with_profile`] with `cfg.profile`.
     pub fn clear() -> std::io::Result<()> {
         Self::clear_with_profile(std::env::var("VB_PROFILE").ok().as_deref())
     }

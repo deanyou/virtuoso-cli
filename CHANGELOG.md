@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-08-31
+
+### Added
+- **Two-tier daemon lifecycle assessment** (`src/transport/daemon_lifecycle.rs`).
+  Native daemons record their OS process identity at startup; `tunnel stop`
+  now runs a `Verdict::{Alive, UnresponsiveButIdentified, Stale, Unverifiable}`
+  check and maps it to `StopDecision::{Signal, Skip{clear_state}}`. `--force`
+  never bypasses the identity verification for a recorded native daemon.
+- **Cross-platform `ProcessIdentity`** (`src/transport/identity.rs`): macOS
+  via `sysctl`, Linux via `/proc`, Windows via `OpenProcess` /
+  `QueryFullProcessImageNameW` / `GetProcessTimes`. Replaces the macOS
+  `/proc`-only check that was silently always-false.
+- **`classify_ssh_pid`** three-way verdict (`VerifiedSsh` / `Gone` /
+  `NotVerifiable`) so an OpenSSH/native tunnel pid is classified without
+  assuming `/proc` exists.
+
+### Fixed
+- **macOS `vcli tunnel stop` leaked the tunnel**: the old command path read
+  `/proc/{pid}/cmdline` (absent on macOS → always "not ssh" → skip kill) yet
+  *unconditionally* cleared the state file. The unified `stop_saved_tunnel()`
+  now clears state only when the process is proven gone or the decision
+  authorizes it; an unverifiable live process is refused and its state
+  preserved.
+- **Unified stop path**: `vcli tunnel stop` and `SSHClient::stop` now both
+  delegate to `stop_saved_tunnel()`, removing a duplicate command-layer
+  kill/cleanup that had become dead code after the 8/30 lifecycle hardening.
+  Remote scratch cleanup runs only after the decision authorizes clearing,
+  so a still-running daemon is never wiped.
+
+## [1.0.0] - 2026-08-29
+
+First stable release. (Changelog entries were not maintained between
+`0.4.0-alpha.11` and this cut; see git history for the full change list.)
+
 ## [0.4.0-alpha.11] - 2026-06-18
 
 ### Added

@@ -2,7 +2,7 @@
 
 use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
-use crate::models::TunnelState;
+use crate::models::{TunnelState, TUNNEL_MODE_ATTACHED, TUNNEL_MODE_DEPLOYED};
 use crate::transport::contract::RemoteTransport;
 use crate::transport::daemon_lifecycle::{self, Verdict};
 use crate::transport::openssh::OpenSshTransport;
@@ -152,6 +152,71 @@ fn verify_ssh_pid(pid: u32) -> bool {
     true
 }
 
+/// Command-layer classification of a recorded tunnel PID.
+///
+/// Broader than [`verify_ssh_pid`] (alive-and-ssh yes/no): it also separates
+/// *proven dead* — the state file is stale and may be cleared — from *alive
+/// but not verifiable* — the state file must be preserved and the operator
+/// decides (`--force`). This mirrors the `StopDecision::Skip.clear_state`
+/// distinction used by [`SSHClient::stop`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PidVerdict {
+    /// Process is alive and verified to be an ssh process.
+    VerifiedSsh,
+    /// The process no longer exists (proven dead).
+    Gone,
+    /// Process is alive but cannot be confirmed as our ssh tunnel.
+    NotVerifiable { reason: String },
+}
+
+/// Classify a recorded tunnel PID for the command layer.
+///
+/// Platform logic is split per-target like [`verify_ssh_pid`]; both must stay
+/// in agreement (same mechanism, coarser verdict).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) fn classify_ssh_pid(pid: u32) -> PidVerdict {
+    match std::fs::read_to_string(format!("/proc/{pid}/cmdline")) {
+        Ok(cmdline) if cmdline.contains("ssh") => PidVerdict::VerifiedSsh,
+        Ok(_) => PidVerdict::NotVerifiable {
+            reason: format!("pid {pid} is running but its command line is not ssh"),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => PidVerdict::Gone,
+        Err(e) => PidVerdict::NotVerifiable {
+            reason: format!("pid {pid}: {e}"),
+        },
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn classify_ssh_pid(pid: u32) -> PidVerdict {
+    match crate::transport::identity::ProcessIdentity::of_pid(pid) {
+        Ok(identity) if is_ssh_executable(&identity.executable_path) => PidVerdict::VerifiedSsh,
+        Ok(identity) => PidVerdict::NotVerifiable {
+            reason: format!(
+                "pid {pid} is alive but its executable is {}, not ssh",
+                identity.executable_path.display()
+            ),
+        },
+        Err(crate::transport::identity::IdentityError::NoSuchProcess(_)) => PidVerdict::Gone,
+        Err(e) => PidVerdict::NotVerifiable {
+            reason: e.to_string(),
+        },
+    }
+}
+
+/// Genuinely unknown platforms have no mechanism; keep the same trust
+/// posture as [`verify_ssh_pid`].
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "windows"
+)))]
+pub(crate) fn classify_ssh_pid(pid: u32) -> PidVerdict {
+    let _ = pid;
+    PidVerdict::VerifiedSsh
+}
+
 /// Non-destructive "is a process with this pid running" probe for Windows.
 ///
 /// `tasklist /FI "PID eq <n>" /NH` prints the matching row, or an INFO line
@@ -195,22 +260,9 @@ enum StopDecision {
 /// that trusts the PID. Closing that gap needs a Windows identity
 /// implementation (see the design's "Stop and crash recovery") and is not
 /// silently folded into this change.
-fn stop_decision(state: Option<&TunnelState>, pid: u32) -> StopDecision {
-    if let Some(s) = state {
-        if daemon_lifecycle::recorded_identity(s).is_some() {
-            // Tier 1 needs the IPC client that ships with the native daemon.
-            // Until it lands, `challenge` answers false and every recorded
-            // daemon falls through to the Tier 2 identity check — which is the
-            // conservative direction: it can only ever deny, never widen.
-            return verdict_to_decision(daemon_lifecycle::assess(s, |_nonce| false), pid);
-        }
-    }
-    openssh_stop_decision(pid)
-}
-
 /// Translate a two-tier verdict into what `stop` should do.
 ///
-/// Split out from [`stop_decision`] so the mapping is testable on every
+/// Split out from [`stop_saved_tunnel`] so the mapping is testable on every
 /// platform: reaching `Unverifiable` through a real pid is not deterministic
 /// (on macOS an absent pid is provably gone, i.e. `Stale`).
 fn verdict_to_decision(verdict: Verdict, pid: u32) -> StopDecision {
@@ -232,29 +284,152 @@ fn verdict_to_decision(verdict: Verdict, pid: u32) -> StopDecision {
     }
 }
 
-/// Every platform with a verification mechanism verifies.
+/// Pure decision for the unified stop path, split out so it is testable on
+/// every platform without signalling or touching the state file.
 ///
-/// This used to trust the PID unconditionally on non-Unix; Windows now has an
-/// identity implementation, so it verifies like the rest.
-#[cfg(any(unix, target_os = "windows"))]
-fn openssh_stop_decision(pid: u32) -> StopDecision {
-    if verify_ssh_pid(pid) {
+/// Native daemons (recorded OS identity) go through the two-tier
+/// [`daemon_lifecycle`] assessment; `--force` never bypasses that. OpenSSH /
+/// no-identity states are classified cross-platform by [`classify_ssh_pid`]:
+/// proven-dead clears, alive-but-unverifiable refuses, and `--force` may
+/// signal without the ssh check.
+fn decide_stop(state: &TunnelState, force: bool) -> StopDecision {
+    if daemon_lifecycle::recorded_identity(state).is_some() {
+        verdict_to_decision(daemon_lifecycle::assess(state, |_nonce| false), state.pid)
+    } else if force {
         StopDecision::Signal
     } else {
-        // A pid that is not ssh means the recorded tunnel is not there, so the
-        // state file is stale and may still be cleared.
-        StopDecision::Skip {
-            reason: format!("PID {pid} is not an SSH process"),
-            clear_state: true,
+        match classify_ssh_pid(state.pid) {
+            PidVerdict::VerifiedSsh => StopDecision::Signal,
+            PidVerdict::Gone => StopDecision::Skip {
+                reason: format!("tunnel pid {} is gone; clearing stale state", state.pid),
+                clear_state: true,
+            },
+            PidVerdict::NotVerifiable { reason } => StopDecision::Skip {
+                reason,
+                clear_state: false,
+            },
         }
     }
 }
 
-/// Targets with no identity mechanism at all: unchanged, the PID is trusted.
-#[cfg(not(any(unix, target_os = "windows")))]
-fn openssh_stop_decision(pid: u32) -> StopDecision {
-    let _ = pid;
-    StopDecision::Signal
+/// The single, authoritative `tunnel stop` path.
+///
+/// Both the CLI command (`commands::tunnel::stop`) and the programmatic
+/// [`SSHClient::stop`] delegate here, so the recorded state is the sole target
+/// and the verification/authorization logic is never duplicated.
+///
+/// Decision policy (per the P1 hardening plan, Task 2):
+/// - A native daemon that recorded an OS identity goes through the two-tier
+///   [`daemon_lifecycle`] assessment. Identity verification is mandatory there,
+///   so `--force` never bypasses it.
+/// - OpenSSH / no-identity states are classified cross-platform by
+///   [`classify_ssh_pid`]: a proven-dead pid clears the stale state, an
+///   alive-but-unverifiable one is *refused* and the state file is preserved,
+///   and `--force` may signal the recorded pid without the ssh check.
+/// - A pid of 0 is rejected outright (never a valid target).
+///
+/// Remote scratch cleanup happens only after the decision authorizes clearing,
+/// so a still-running or unverifiable daemon is never wiped. It is gated a second
+/// time on ownership: only a `deployed` tunnel owns its remote setup dir, so an
+/// `attached` tunnel (daemon owned by Virtuoso) never has its remote files
+/// removed regardless of `keep_remote_files`.
+pub(crate) fn stop_saved_tunnel(cfg: &Config, state: &TunnelState, force: bool) -> Result<()> {
+    let pid = state.pid;
+    if pid == 0 {
+        return Err(VirtuosoError::Conflict(
+            "refusing to stop: recorded tunnel pid is 0".into(),
+        ));
+    }
+
+    let decision = decide_stop(state, force);
+
+    let mut may_clear = true;
+    match decision {
+        StopDecision::Signal => {
+            if let Err(e) = signal_tunnel_pid(pid) {
+                // Never report stopped, never clear, when the signal failed.
+                return Err(VirtuosoError::Ssh(format!(
+                    "failed to signal tunnel pid {pid}: {e}"
+                )));
+            }
+            tracing::info!("signalled tunnel process {pid}");
+        }
+        StopDecision::Skip {
+            reason,
+            clear_state,
+        } => {
+            tracing::warn!("{reason}; skipping kill");
+            may_clear = clear_state;
+        }
+    }
+
+    if !may_clear {
+        // The recorded process could not be verified, so neither the state
+        // file nor the remote scratch dir is touched. The operator decides.
+        tracing::warn!(
+            "leaving tunnel state and remote files in place; \
+             remove the state file manually once the daemon is known to be gone"
+        );
+        return Ok(());
+    }
+
+    // Remote cleanup only after we have decided the recorded tunnel is ours
+    // (or proven gone). Never wipes a still-running daemon's scratch dir.
+    //
+    // Ownership is the second gate: only a `deployed` tunnel owns the setup dir
+    // that vcli created under /tmp. An `attached` tunnel points at a daemon that
+    // belongs to Virtuoso, whose setup dir may still be in use — removing it
+    // would break a session we did not start. `vcli tunnel detach` is the verb
+    // for dropping only the local side of an attached tunnel.
+    let mode = state.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
+    if mode == TUNNEL_MODE_ATTACHED {
+        tracing::info!(
+            "attached mode: skipping remote cleanup (daemon belongs to Virtuoso; \
+             use `vcli tunnel detach` if you only want to disconnect)"
+        );
+    } else if !cfg.keep_remote_files {
+        match SSHClient::from_env(cfg.keep_remote_files) {
+            Ok(client) => {
+                let setup_dir = setup_dir_for_profile(cfg.profile.as_deref());
+                if let Err(e) = client.run_command(&format!("rm -rf {setup_dir}")) {
+                    tracing::warn!("remote cleanup failed: {e}");
+                }
+            }
+            Err(e) => tracing::warn!("could not connect for cleanup: {e}"),
+        }
+    }
+
+    TunnelState::clear_with_profile(cfg.profile.as_deref()).ok();
+    Ok(())
+}
+
+/// Signal the recorded tunnel process. Cross-platform; the result is
+/// propagated so a failed signal is never silently reported as stopped.
+#[cfg(unix)]
+fn signal_tunnel_pid(pid: u32) -> std::io::Result<()> {
+    // SAFETY: `pid` is a process id handed to us by the OS via a prior spawn;
+    // `kill` with SIGTERM is the documented, non-reentrant-but-safe call.
+    let result = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(unix))]
+fn signal_tunnel_pid(pid: u32) -> std::io::Result<()> {
+    let out = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/F"])
+        .output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ))
+    }
 }
 
 pub struct SSHClient {
@@ -267,6 +442,10 @@ pub struct SSHClient {
     pub port: u16,
     pub keep_remote_files: bool,
     pub profile: Option<String>,
+    /// Set by [`Self::warm`] once the tunnel child is spawned; carried so
+    /// liveness probes and state saving agree on the target. `stop` prefers
+    /// the recorded `TunnelState` pid as the sole target (see
+    /// [`stop_saved_tunnel`]).
     tunnel_pid: Option<u32>,
 }
 
@@ -323,57 +502,17 @@ impl SSHClient {
     }
 
     pub fn stop(&self) -> Result<()> {
-        // Loaded once, profile-scoped, so the decision sees the same state the
-        // rest of this client uses.
+        // Delegate to the single stop path so the CLI and the programmatic API
+        // never diverge. `force` is not exposed here: identity verification is
+        // mandatory for an in-process client.
+        let cfg = Config::from_env()?;
         let state = TunnelState::load_with_profile(self.profile.as_deref())
             .ok()
             .flatten();
-        let mut may_clear_state = true;
-        if let Some(pid) = self.tunnel_pid {
-            match stop_decision(state.as_ref(), pid) {
-                StopDecision::Signal => {
-                    #[cfg(unix)]
-                    {
-                        let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
-                    }
-                    #[cfg(not(unix))]
-                    {
-                        let _ = Command::new("taskkill")
-                            .args(["/PID", &pid.to_string(), "/F"])
-                            .output();
-                    }
-                    tracing::info!("killed tunnel process {}", pid);
-                }
-                StopDecision::Skip {
-                    reason,
-                    clear_state,
-                } => {
-                    tracing::warn!("{reason}; skipping kill");
-                    may_clear_state = clear_state;
-                }
-            }
+        match state {
+            Some(s) => stop_saved_tunnel(&cfg, &s, false),
+            None => Err(VirtuosoError::NotFound("no running tunnel found".into())),
         }
-
-        if !may_clear_state {
-            // Nothing was proven, so nothing is destroyed. Clearing the state
-            // file here would discard the only record of a daemon we could not
-            // identify, and wiping the remote scratch dir could break one that
-            // is still running.
-            tracing::warn!(
-                "leaving tunnel state and remote files in place; \
-                 remove the state file manually once the daemon is known to be gone"
-            );
-            return Ok(());
-        }
-
-        if !self.keep_remote_files {
-            self.cleanup_remote()?;
-        }
-
-        // Same profile scope as the load above, so state written for a profile
-        // is cleared for that profile rather than for whatever VB_PROFILE says.
-        TunnelState::clear_with_profile(self.profile.as_deref()).ok();
-        Ok(())
     }
 
     pub fn saved_port(&self) -> Option<u16> {
@@ -600,7 +739,7 @@ impl SSHClient {
             _ => {
                 return Err(VirtuosoError::Ssh(format!(
                     "unsupported architecture: {arch}"
-                )))
+                )));
             }
         };
 
@@ -677,9 +816,11 @@ mod tests {
     #[cfg(target_os = "macos")]
     use super::is_ssh_executable;
     use super::{
-        daemon_lifecycle, profiled_bridge_leaf, profiled_env_key, setup_dir_for_profile,
-        stop_decision, verdict_to_decision, verify_ssh_pid, StopDecision, TunnelState, Verdict,
+        classify_ssh_pid, daemon_lifecycle, decide_stop, profiled_bridge_leaf, profiled_env_key,
+        setup_dir_for_profile, stop_saved_tunnel, verdict_to_decision, verify_ssh_pid, PidVerdict,
+        StopDecision, TunnelState, Verdict,
     };
+    use crate::config::Config;
 
     /// A state carrying no OS identity — what OpenSSH writes today, and what a
     /// v1 file deserializes to.
@@ -712,39 +853,26 @@ mod tests {
     /// every tunnel that exists today.
     #[test]
     fn state_without_identity_does_not_take_the_native_path() {
-        // A pid that is certainly not an ssh process: the decision must be the
-        // OpenSSH verdict (Skip wherever a mechanism exists), never a native
-        // one derived from identity.
+        // No recorded identity → the OpenSSH/classify branch, never native.
         let state = openssh_like_state(999_999);
-        let d = stop_decision(Some(&state), 999_999);
-        // Platforms with a verification mechanism refuse; unverifiable targets
-        // still trust the pid, which is the documented remaining gap.
-        #[cfg(any(unix, target_os = "windows"))]
+        assert!(daemon_lifecycle::recorded_identity(&state).is_none());
+        // A dead pid is proven gone (not merely "not ssh"), so its stale state
+        // clears — the OpenSSH behaviour is preserved for today's tunnels.
         assert_eq!(
-            d,
+            decide_stop(&state, false),
             StopDecision::Skip {
-                reason: "PID 999999 is not an SSH process".into(),
+                reason: "tunnel pid 999999 is gone; clearing stale state".into(),
                 clear_state: true,
             }
         );
-        #[cfg(not(any(unix, target_os = "windows")))]
-        assert_eq!(d, StopDecision::Signal);
     }
 
-    /// No state at all falls back to the OpenSSH check rather than failing open.
+    /// `--force` bypasses the ssh identity check for OpenSSH / no-identity
+    /// states, signalling the recorded pid regardless of verification.
     #[test]
-    fn missing_state_falls_back_to_openssh_decision() {
-        let d = stop_decision(None, 999_999);
-        #[cfg(any(unix, target_os = "windows"))]
-        assert_eq!(
-            d,
-            StopDecision::Skip {
-                reason: "PID 999999 is not an SSH process".into(),
-                clear_state: true,
-            }
-        );
-        #[cfg(not(any(unix, target_os = "windows")))]
-        assert_eq!(d, StopDecision::Signal);
+    fn force_signals_without_identity_check() {
+        let state = openssh_like_state(999_999);
+        assert_eq!(decide_stop(&state, true), StopDecision::Signal);
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -755,7 +883,10 @@ mod tests {
         daemon_lifecycle::record_identity(&mut state, &me);
         // Tier 1 is not wired yet (challenge answers false), so this exercises
         // Tier 2: unresponsive but identified → still safe to signal.
-        assert_eq!(stop_decision(Some(&state), me.pid), StopDecision::Signal);
+        assert_eq!(
+            verdict_to_decision(daemon_lifecycle::assess(&state, |_nonce| false), me.pid),
+            StopDecision::Signal
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -765,7 +896,7 @@ mod tests {
         let mut state = openssh_like_state(me.pid);
         daemon_lifecycle::record_identity(&mut state, &me);
         state.pid = 999_999; // nothing is running here
-        match stop_decision(Some(&state), 999_999) {
+        match verdict_to_decision(daemon_lifecycle::assess(&state, |_nonce| false), 999_999) {
             StopDecision::Skip {
                 reason,
                 clear_state,
@@ -882,6 +1013,160 @@ mod tests {
         assert!(!verify_ssh_pid(999_999));
     }
 
+    /// The command layer's coarser verdict must agree: a proven-dead PID is
+    /// `Gone` (state may be cleared), not `NotVerifiable` (state preserved).
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn classify_reports_gone_for_a_dead_pid() {
+        assert_eq!(classify_ssh_pid(999_999), PidVerdict::Gone);
+    }
+
+    /// A live process that is not ssh must be `NotVerifiable` — never `Gone`
+    /// (which would authorize clearing the state) and never `VerifiedSsh`.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn classify_reports_alive_non_ssh_as_not_verifiable() {
+        // This test process is alive and its executable is the test binary,
+        // which does not contain "ssh" in its file name.
+        let me = crate::transport::identity::ProcessIdentity::current().unwrap();
+        match classify_ssh_pid(me.pid) {
+            PidVerdict::NotVerifiable { reason } => {
+                assert!(reason.contains("not ssh"), "reason: {reason}");
+            }
+            other => panic!("self must not verify as ssh, got {other:?}"),
+        }
+    }
+
+    // ─── stop_saved_tunnel: the unified stop path ──────────────────────────
+    //
+    // Both the CLI command and `SSHClient::stop` delegate here. These pin the
+    // hardening: an unverifiable live process is refused (state preserved), a
+    // proven-dead pid clears the stale state, and `--force` may signal without
+    // the ssh identity check.
+
+    /// An unverifiable live process must be refused: no SIGTERM is sent and
+    /// the state file is left in place. This is the macOS `/proc`-absent
+    /// regression — the old code skipped the kill yet still cleared the state,
+    /// leaking the tunnel. Here we spawn a real child that is alive but not an
+    /// ssh process, so `classify_ssh_pid` cannot verify it as ssh.
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn stop_saved_tunnel_refuses_unverifiable_live_process() {
+        let mut child = std::process::Command::new("/bin/sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let _lock = crate::test_env::lock();
+        let saved_cache = std::env::var_os("VB_CACHE_DIR");
+        let saved_keep = std::env::var_os("VB_KEEP_REMOTE_FILES");
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("VB_CACHE_DIR", tmp.path());
+        std::env::set_var("VB_KEEP_REMOTE_FILES", "1");
+        let cfg = Config::from_env().unwrap();
+        let state = openssh_like_state(pid);
+        // `false` (no --force): an unverifiable live process is refused.
+        let result = stop_saved_tunnel(&cfg, &state, false);
+        if let Some(v) = saved_cache {
+            std::env::set_var("VB_CACHE_DIR", v);
+        } else {
+            std::env::remove_var("VB_CACHE_DIR");
+        }
+        if let Some(v) = saved_keep {
+            std::env::set_var("VB_KEEP_REMOTE_FILES", v);
+        } else {
+            std::env::remove_var("VB_KEEP_REMOTE_FILES");
+        }
+        // The operation succeeds (graceful no-op); it is *not* an error.
+        result.expect("refusing an unverifiable live process must not error");
+        // The proof of refusal: the live child was never signalled.
+        assert!(
+            crate::transport::identity::ProcessIdentity::of_pid(pid).is_ok(),
+            "unverifiable live process must not have been signalled"
+        );
+        // Reap the still-running child so it does not linger as a zombie.
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// A proven-dead pid authorizes clearing the stale state file (no signal).
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn stop_saved_tunnel_clears_proven_dead_state() {
+        let _lock = crate::test_env::lock();
+        let saved_cache = std::env::var_os("VB_CACHE_DIR");
+        let saved_keep = std::env::var_os("VB_KEEP_REMOTE_FILES");
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("VB_CACHE_DIR", tmp.path());
+        std::env::set_var("VB_KEEP_REMOTE_FILES", "1");
+        let cfg = Config::from_env().unwrap();
+        let state = openssh_like_state(999_999);
+        let result = stop_saved_tunnel(&cfg, &state, false);
+        if let Some(v) = saved_cache {
+            std::env::set_var("VB_CACHE_DIR", v);
+        } else {
+            std::env::remove_var("VB_CACHE_DIR");
+        }
+        if let Some(v) = saved_keep {
+            std::env::set_var("VB_KEEP_REMOTE_FILES", v);
+        } else {
+            std::env::remove_var("VB_KEEP_REMOTE_FILES");
+        }
+        result.unwrap();
+    }
+
+    /// `--force` signals the recorded pid without the ssh identity check;
+    /// remote cleanup is skipped because `VB_KEEP_REMOTE_FILES=1`.
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn stop_saved_tunnel_force_signals_unverified_process() {
+        let mut child = std::process::Command::new("/bin/sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let _lock = crate::test_env::lock();
+        let saved_cache = std::env::var_os("VB_CACHE_DIR");
+        let saved_keep = std::env::var_os("VB_KEEP_REMOTE_FILES");
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("VB_CACHE_DIR", tmp.path());
+        std::env::set_var("VB_KEEP_REMOTE_FILES", "1");
+        let cfg = Config::from_env().unwrap();
+        let state = openssh_like_state(pid);
+        let result = stop_saved_tunnel(&cfg, &state, true);
+        if let Some(v) = saved_cache {
+            std::env::set_var("VB_CACHE_DIR", v);
+        } else {
+            std::env::remove_var("VB_CACHE_DIR");
+        }
+        if let Some(v) = saved_keep {
+            std::env::set_var("VB_KEEP_REMOTE_FILES", v);
+        } else {
+            std::env::remove_var("VB_KEEP_REMOTE_FILES");
+        }
+        // Reap the signalled child so it does not linger.
+        let _ = child.kill();
+        let _ = child.wait();
+        result.unwrap();
+    }
+
+    /// `classify_ssh_pid` must stay in agreement with `verify_ssh_pid` for a
+    /// live ssh-named process: both recognize the stand-in as ssh.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn classify_agrees_with_verify_for_ssh_named_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let ssh_like = dir.path().join("ssh-standin");
+        std::fs::copy("/bin/sleep", &ssh_like).unwrap();
+
+        let mut child = std::process::Command::new(&ssh_like)
+            .arg("10")
+            .spawn()
+            .expect("spawn stand-in");
+        assert_eq!(classify_ssh_pid(child.id()), PidVerdict::VerifiedSsh);
+        reap(&mut child);
+    }
+
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn pid_reuse_is_skipped_even_though_the_pid_is_live() {
@@ -891,7 +1176,7 @@ mod tests {
         let mut state = openssh_like_state(me.pid);
         daemon_lifecycle::record_identity(&mut state, &me);
         state.start_identity = Some(me.start_identity.wrapping_add(1));
-        match stop_decision(Some(&state), me.pid) {
+        match verdict_to_decision(daemon_lifecycle::assess(&state, |_nonce| false), me.pid) {
             StopDecision::Skip { clear_state, .. } => {
                 // The pid now belongs to a different process, so the recorded
                 // daemon is proven gone and its state is stale.
