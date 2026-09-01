@@ -482,20 +482,7 @@ async fn upload_via_sftp(
                 request: RequestId::new(),
                 reason: format!("sftp create {remote_str}: {e}"),
             })?;
-    for chunk in data.chunks(SFTP_CHUNK) {
-        AsyncWriteExt::write_all(&mut file, chunk)
-            .await
-            .map_err(|e| TransportError::TransferInterrupted {
-                request: RequestId::new(),
-                reason: format!("sftp write {remote_str}: {e}"),
-            })?;
-    }
-    AsyncWriteExt::shutdown(&mut file)
-        .await
-        .map_err(|e| TransportError::TransferInterrupted {
-            request: RequestId::new(),
-            reason: format!("sftp flush {remote_str}: {e}"),
-        })?;
+    sftp_write_all(&mut file, &data).await?;
     Ok(())
 }
 
@@ -515,14 +502,49 @@ async fn download_via_sftp(
                 request: RequestId::new(),
                 reason: format!("sftp open {remote_str}: {e}"),
             })?;
-    let mut buf = Vec::new();
-    let mut window = vec![0u8; SFTP_CHUNK];
-    loop {
-        let n = AsyncReadExt::read(&mut file, &mut window)
+    let buf = sftp_read_all(&mut file).await?;
+    Ok(buf)
+}
+
+/// Stream `data` to an open SFTP `File` in [`SFTP_CHUNK`] windows and flush.
+///
+/// Extracted from `upload_via_sftp` so the in-process integration test can drive
+/// the *exact* production write path (chunking + shutdown) against a real SFTP
+/// server — `upload_via_sftp` only differs by how the `File` is opened.
+async fn sftp_write_all(
+    file: &mut russh_sftp::client::fs::File,
+    data: &[u8],
+) -> Result<(), TransportError> {
+    for chunk in data.chunks(SFTP_CHUNK) {
+        file.write_all(chunk)
             .await
             .map_err(|e| TransportError::TransferInterrupted {
                 request: RequestId::new(),
-                reason: format!("sftp read {remote_str}: {e}"),
+                reason: format!("sftp write: {e}"),
+            })?;
+    }
+    file.shutdown()
+        .await
+        .map_err(|e| TransportError::TransferInterrupted {
+            request: RequestId::new(),
+            reason: format!("sftp flush: {e}"),
+        })?;
+    Ok(())
+}
+
+/// Stream an open SFTP `File` into a local buffer in [`SFTP_CHUNK`] windows,
+/// stopping at EOF. Mirrors the production read path; `download_via_sftp` is the
+/// only caller besides the integration test.
+async fn sftp_read_all(file: &mut russh_sftp::client::fs::File) -> Result<Vec<u8>, TransportError> {
+    let mut buf = Vec::new();
+    let mut window = vec![0u8; SFTP_CHUNK];
+    loop {
+        let n = file
+            .read(&mut window)
+            .await
+            .map_err(|e| TransportError::TransferInterrupted {
+                request: RequestId::new(),
+                reason: format!("sftp read: {e}"),
             })?;
         if n == 0 {
             break;
@@ -944,5 +966,223 @@ mod tests {
             NativeTransport::from_config(&c),
             Err(TransportError::Configuration(_))
         ));
+    }
+
+    // --- step 7b: real SFTP protocol roundtrip against an in-process server ---
+    //
+    // This is the end-to-end verification step 4's single-file SFTP was waiting
+    // for. We do NOT need a real sshd: russh-sftp ships both client and server,
+    // so we connect a `SftpSession` to a minimal in-memory `Handler` over a
+    // `tokio::io::duplex` pair. `sftp_write_all` / `sftp_read_all` are the exact
+    // helpers `upload_via_sftp` / `download_via_sftp` use, so this exercises the
+    // production chunked streaming (and the >64 KiB multi-chunk path) against a
+    // genuine SFTP implementation. Runs on every platform via the step 7 matrix.
+
+    use russh_sftp::protocol::{
+        Attrs, Data, File, FileAttributes, Handle, Name, OpenFlags, Status, StatusCode, Version,
+    };
+    use russh_sftp::server::Handler;
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    /// Minimal in-memory SFTP server: file contents live in a `HashMap`, open
+    /// handles reference a filename. Only the operations the russh-sftp client
+    /// actually issues (init/open/write/read/close, plus fstat/stat/realpath for
+    /// completeness) are implemented.
+    #[derive(Default)]
+    struct MemFs {
+        files: Mutex<HashMap<String, Vec<u8>>>,
+        handles: Mutex<HashMap<String, String>>,
+        next_handle: Mutex<u32>,
+    }
+
+    impl Handler for MemFs {
+        type Error = StatusCode;
+
+        fn unimplemented(&self) -> Self::Error {
+            StatusCode::OpUnsupported
+        }
+
+        async fn init(
+            &mut self,
+            _version: u32,
+            _extensions: HashMap<String, String>,
+        ) -> Result<Version, Self::Error> {
+            Ok(Version::new())
+        }
+
+        async fn open(
+            &mut self,
+            id: u32,
+            filename: String,
+            pflags: OpenFlags,
+            _attrs: FileAttributes,
+        ) -> Result<Handle, Self::Error> {
+            if pflags.contains(OpenFlags::WRITE) {
+                self.files
+                    .lock()
+                    .unwrap()
+                    .insert(filename.clone(), Vec::new());
+            } else if !self.files.lock().unwrap().contains_key(&filename) {
+                return Err(StatusCode::NoSuchFile);
+            }
+            let mut n = self.next_handle.lock().unwrap();
+            *n += 1;
+            let hid = format!("h{id}-{}", *n);
+            self.handles.lock().unwrap().insert(hid.clone(), filename);
+            Ok(Handle { id, handle: hid })
+        }
+
+        async fn write(
+            &mut self,
+            id: u32,
+            handle: String,
+            offset: u64,
+            data: Vec<u8>,
+        ) -> Result<Status, Self::Error> {
+            let filename = self
+                .handles
+                .lock()
+                .unwrap()
+                .get(&handle)
+                .ok_or(StatusCode::Failure)?
+                .clone();
+            let mut files = self.files.lock().unwrap();
+            let contents = files.get_mut(&filename).ok_or(StatusCode::Failure)?;
+            let off = offset as usize;
+            if contents.len() < off + data.len() {
+                contents.resize(off + data.len(), 0);
+            }
+            contents[off..off + data.len()].copy_from_slice(&data);
+            Ok(Status {
+                id,
+                status_code: StatusCode::Ok,
+                error_message: "Ok".into(),
+                language_tag: "en-US".into(),
+            })
+        }
+
+        async fn read(
+            &mut self,
+            id: u32,
+            handle: String,
+            offset: u64,
+            len: u32,
+        ) -> Result<Data, Self::Error> {
+            let filename = self
+                .handles
+                .lock()
+                .unwrap()
+                .get(&handle)
+                .ok_or(StatusCode::Failure)?
+                .clone();
+            let files = self.files.lock().unwrap();
+            let contents = files.get(&filename).ok_or(StatusCode::Failure)?;
+            let off = offset as usize;
+            if off >= contents.len() {
+                return Err(StatusCode::Eof);
+            }
+            let end = (off + len as usize).min(contents.len());
+            Ok(Data {
+                id,
+                data: contents[off..end].to_vec(),
+            })
+        }
+
+        async fn close(&mut self, id: u32, handle: String) -> Result<Status, Self::Error> {
+            self.handles.lock().unwrap().remove(&handle);
+            Ok(Status {
+                id,
+                status_code: StatusCode::Ok,
+                error_message: "Ok".into(),
+                language_tag: "en-US".into(),
+            })
+        }
+
+        async fn fstat(&mut self, id: u32, handle: String) -> Result<Attrs, Self::Error> {
+            let filename = self
+                .handles
+                .lock()
+                .unwrap()
+                .get(&handle)
+                .ok_or(StatusCode::Failure)?
+                .clone();
+            let len = self
+                .files
+                .lock()
+                .unwrap()
+                .get(&filename)
+                .map(|c| c.len() as u64)
+                .unwrap_or(0);
+            let attrs = FileAttributes {
+                size: Some(len),
+                ..Default::default()
+            };
+            Ok(Attrs { id, attrs })
+        }
+
+        async fn stat(&mut self, id: u32, path: String) -> Result<Attrs, Self::Error> {
+            let len = self
+                .files
+                .lock()
+                .unwrap()
+                .get(&path)
+                .map(|c| c.len() as u64)
+                .unwrap_or(0);
+            let attrs = FileAttributes {
+                size: Some(len),
+                ..Default::default()
+            };
+            Ok(Attrs { id, attrs })
+        }
+
+        async fn realpath(&mut self, id: u32, path: String) -> Result<Name, Self::Error> {
+            Ok(Name {
+                id,
+                files: vec![File::dummy(path)],
+            })
+        }
+    }
+
+    #[test]
+    fn sftp_roundtrip_against_in_process_server() {
+        // tokio's `macros` feature is not enabled, so drive the async test on the
+        // module's own current-thread runtime (same one production uses).
+        let rt = make_runtime().expect("runtime");
+        rt.block_on(async {
+            let (client_stream, server_stream) = tokio::io::duplex(64 * 1024);
+            tokio::spawn(russh_sftp::server::run(server_stream, MemFs::default()));
+            // Let the server task reach its read loop before the client speaks.
+            tokio::task::yield_now().await;
+
+            let sftp = SftpSession::new(client_stream)
+                .await
+                .expect("sftp session init");
+
+            // Larger than SFTP_CHUNK (64 KiB) so the chunked streaming path is
+            // actually exercised (multiple writes + multiple reads).
+            let payload: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+            let remote = "roundtrip.bin".to_string();
+
+            // upload — mirrors `upload_via_sftp`'s path through the shared helper
+            {
+                let mut file = sftp.create(&remote).await.expect("sftp create");
+                super::sftp_write_all(&mut file, &payload)
+                    .await
+                    .expect("sftp upload stream");
+                // dropping `file` sends the CLOSE to the server
+            }
+
+            // download — mirrors `download_via_sftp`'s path
+            let got = {
+                let mut file = sftp.open(&remote).await.expect("sftp open");
+                super::sftp_read_all(&mut file)
+                    .await
+                    .expect("sftp download stream")
+                // drop sends CLOSE
+            };
+
+            assert_eq!(got, payload, "SFTP roundtrip must preserve every byte");
+        });
     }
 }
