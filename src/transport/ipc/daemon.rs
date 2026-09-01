@@ -27,8 +27,8 @@ use crate::transport::ipc::messages::{
 // import disappears in builds where the server is absent.
 #[cfg(all(unix, any(test, feature = "native-ssh")))]
 pub(crate) use crate::transport::ipc::server::{
-    WireCommand, WireCommandResult, WireDownloadDir, WireDownloadFile, WireUploadFile,
-    WireUploadText,
+    ChallengeAck, WireCommand, WireCommandResult, WireDownloadDir, WireDownloadFile,
+    WireUploadFile, WireUploadText,
 };
 use serde_json::Value;
 use std::path::Path;
@@ -60,6 +60,13 @@ impl NativeTransportClient {
     ) -> Result<Self, TransportError> {
         let stream =
             UnixStream::connect(socket_path).map_err(|_| TransportError::DaemonUnavailable)?;
+        // Bound every socket operation by a short timeout so a hung peer
+        // cannot block the caller indefinitely. The Tier-1 challenge is the
+        // tightest case — `challenge()` wraps the read with a 2-second
+        // deadline — but applying the timeout at the socket level means the
+        // shared `exchange()` path also respects it without each call site
+        // having to remember.
+        apply_socket_timeouts(&stream, Duration::from_secs(5));
         let conn = Mutex::new(stream);
         let nonce = do_handshake(&conn, profile, auth_token)?;
         Ok(Self {
@@ -68,6 +75,32 @@ impl NativeTransportClient {
             auth_token: auth_token.to_string(),
             daemon_nonce: nonce,
         })
+    }
+
+    /// Tier-1 liveness probe: ask the daemon to echo its nonce.
+    ///
+    /// Per the design's [Stop and crash recovery] contract, the parent CLI
+    /// uses this to prove that the process on the other end of the IPC
+    /// socket is the recorded daemon — a correct answer proves the daemon
+    /// is reachable *and* still knows the nonce it was issued at startup.
+    /// This is the normal path; Tier 2 (OS identity) is only consulted when
+    /// this call returns `false`.
+    ///
+    /// [Stop and crash recovery]: ../../../docs/superpowers/specs/2026-08-29-native-remote-transport-design.md
+    pub fn challenge(&self) -> Result<ChallengeAck, TransportError> {
+        // Tier-1 is a one-shot probe, not a long-running operation. A short
+        // deadline keeps `tunnel stop` responsive even when the daemon has
+        // hung the socket open without serving.
+        let resp = self.exchange(
+            Operation::Challenge,
+            Value::Null,
+            Deadline::from_now(Duration::from_secs(2)),
+        )?;
+        match resp.result {
+            ResponseResult::Ok(v) => serde_json::from_value(v)
+                .map_err(|e| TransportError::LocalIo(format!("ipc decode: {e}"))),
+            ResponseResult::Err(e) => Err(TransportError::from(e)),
+        }
     }
 
     fn exchange(
@@ -158,6 +191,45 @@ fn frame_err_to_transport(e: FrameError) -> TransportError {
         FrameError::Truncated | FrameError::TooLarge(_) => {
             TransportError::LocalIo(format!("ipc framing: {e}"))
         }
+    }
+}
+
+/// Apply `SO_RCVTIMEO` and `SO_SNDTIMEO` on `stream` so every read/write
+/// becomes a timed call. The kernel returns `EAGAIN`/`EWOULDBLOCK` once the
+/// timer elapses, which surfaces as `FrameError::Io` and is mapped to
+/// [`TransportError::DaemonUnavailable`] — the same code as a peer that
+/// hung up. Without this a wedged daemon would block the parent CLI
+/// forever on a single I/O call.
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
+fn apply_socket_timeouts(stream: &UnixStream, timeout: Duration) {
+    use std::os::unix::io::AsRawFd;
+    let fd = stream.as_raw_fd();
+    let secs = timeout.as_secs() as libc::time_t;
+    let extra_nanos = timeout.subsec_nanos() as libc::c_long;
+    let tv = libc::timeval {
+        tv_sec: secs,
+        tv_usec: (extra_nanos / 1000) as libc::suseconds_t,
+    };
+    // SAFETY: `fd` is a valid open socket; `tv` is a fully-initialised
+    // `timeval`. Both `setsockopt` calls write the kernel's timeout into
+    // the socket's receive/send side; failures are logged but ignored —
+    // a missing timeout just leaves the prior (blocking) behaviour, which
+    // is what the caller would have seen before this code existed.
+    unsafe {
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_RCVTIMEO,
+            &tv as *const _ as *const libc::c_void,
+            std::mem::size_of::<libc::timeval>() as libc::socklen_t,
+        );
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_SNDTIMEO,
+            &tv as *const _ as *const libc::c_void,
+            std::mem::size_of::<libc::timeval>() as libc::socklen_t,
+        );
     }
 }
 

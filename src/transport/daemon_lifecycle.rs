@@ -30,6 +30,57 @@ use std::path::PathBuf;
 use crate::models::TunnelState;
 use crate::transport::identity::{self, ProcessIdentity, Refusal};
 
+/// Tier-1 liveness probe: connect to the recorded IPC endpoint, complete the
+/// `Hello` handshake, send `Operation::Challenge`, and confirm the daemon
+/// answered with the nonce the state file recorded.
+///
+/// Returns `true` only when every step succeeds *and* the daemon's echoed
+/// nonce equals `state.daemon_nonce`. Any failure — missing fields, refused
+/// connection, token mismatch, nonce mismatch — returns `false`, which lets
+/// `assess` fall through to Tier 2 (the OS identity check) instead of
+/// claiming the daemon is alive when it may not be.
+///
+/// Gated to the native backend on Unix: an OpenSSH tunnel has no daemon to
+/// challenge, and a Windows native build will reach this through the named
+/// pipe path in a later increment. The fallback to Tier 2 is the same on
+/// every platform — refuse, do not guess.
+#[cfg(all(unix, feature = "native-ssh"))]
+pub fn challenge_via_ipc(state: &TunnelState) -> bool {
+    use crate::transport::ipc::daemon::NativeTransportClient;
+
+    let endpoint = match state.ipc_endpoint.as_deref() {
+        Some(p) if !p.is_empty() => p,
+        _ => return false,
+    };
+    let token_path = match state.token_path.as_deref() {
+        Some(p) if !p.is_empty() => p,
+        _ => return false,
+    };
+    let expected_nonce = match state.daemon_nonce.as_deref() {
+        Some(n) if !n.is_empty() => n,
+        _ => return false,
+    };
+
+    // Read the auth token the daemon was given at startup. Trimming mirrors
+    // `commands::transport_daemon::run_with` on the daemon side.
+    let token = match std::fs::read_to_string(token_path) {
+        Ok(s) => s.trim().to_string(),
+        Err(_) => return false,
+    };
+    let profile = state.profile.as_deref().unwrap_or("");
+
+    let client =
+        match NativeTransportClient::connect(std::path::Path::new(endpoint), profile, &token) {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+
+    match client.challenge() {
+        Ok(ack) => ack.daemon_nonce == expected_nonce,
+        Err(_) => false,
+    }
+}
+
 /// What the recorded state still describes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verdict {
@@ -262,4 +313,217 @@ mod tests {
             assert!(!(signals && clears), "{v:?} must not allow both");
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tier-1 challenge tests: only meaningful on Unix with the `native-ssh`
+// feature, because the helper talks to a Unix domain socket owned by the
+// daemon subcommand. On every other platform the helper is absent and Tier 1
+// is a structural no-op that falls through to Tier 2.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(all(unix, feature = "native-ssh"))]
+#[cfg(test)]
+mod challenge_tests {
+    use super::*;
+    use crate::transport::ipc::server::{self, ChallengeAck};
+    use std::io::Write;
+    use std::os::unix::net::UnixListener;
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+
+    /// Spawn a one-shot daemon that accepts exactly one connection, completes
+    /// the Hello handshake with `server_nonce`, and answers one `Challenge`
+    /// request with the same nonce. Returns the socket path and a token file
+    /// path the parent can hand to `challenge_via_ipc`.
+    ///
+    /// The socket lives under `/tmp` (not `std::env::temp_dir()`, which on
+    /// macOS resolves under `/var/folders/...` and easily exceeds the 104-byte
+    /// `sun_path` limit the kernel enforces on `bind`). The token file uses
+    /// the same rule.
+    fn spawn_challenge_daemon(
+        server_nonce: &str,
+        token: &str,
+    ) -> (std::path::PathBuf, std::path::PathBuf) {
+        let tag = uuid::Uuid::new_v4().simple().to_string();
+        let socket = std::path::PathBuf::from(format!("/tmp/vcli-c-{tag}.sock"));
+        let token_path = std::path::PathBuf::from(format!("/tmp/vcli-c-{tag}.tok"));
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&token_path);
+        let listener = UnixListener::bind(&socket).expect("bind");
+        listener.set_nonblocking(false).expect("blocking listener");
+
+        // Write the token to a single-line file with mode 0600.
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&token_path)
+                .expect("create token");
+            f.write_all(token.as_bytes()).expect("write token");
+        }
+
+        // Serve one connection. The transport is irrelevant — Challenge
+        // doesn't touch it — but the server API requires one.
+        let listener_for_thread = listener.try_clone().expect("clone listener");
+        let token_owned = token.to_string();
+        let nonce_owned = server_nonce.to_string();
+        thread::spawn(move || {
+            if let Ok((stream, _)) = listener_for_thread.accept() {
+                let transport: Arc<dyn crate::transport::contract::RemoteTransport> =
+                    Arc::new(crate::transport::contract::test_support::FakeTransport::ok());
+                server::serve_one(stream, transport, &token_owned, &nonce_owned);
+            }
+        });
+
+        (socket, token_path)
+    }
+
+    fn state_with(nonce: &str, endpoint: Option<&str>, token_path: Option<&str>) -> TunnelState {
+        TunnelState {
+            version: 2,
+            port: 40567,
+            pid: 999_999,
+            remote_host: "compute-eda-42".into(),
+            setup_path: None,
+            profile: None,
+            backend: Some("native".into()),
+            daemon_nonce: Some(nonce.into()),
+            executable_path: None,
+            start_identity: None,
+            ipc_endpoint: endpoint.map(String::from),
+            token_path: token_path.map(String::from),
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
+            mode: None,
+            attached_remote_port: None,
+            attached_session_id: None,
+        }
+    }
+
+    #[test]
+    fn challenge_answers_true_when_daemon_returns_recorded_nonce() {
+        let (socket, token_path) = spawn_challenge_daemon("recorded-nonce", "secret-token");
+        let st = state_with(
+            "recorded-nonce",
+            Some(socket.to_str().unwrap()),
+            Some(&token_path.to_string_lossy()),
+        );
+        assert!(challenge_via_ipc(&st));
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&token_path);
+    }
+
+    #[test]
+    fn challenge_answers_false_on_nonce_mismatch() {
+        // The daemon answers its *own* nonce; the state file recorded
+        // something else, so this must fail.
+        let (socket, token_path) = spawn_challenge_daemon("real-nonce", "secret-token");
+        let st = state_with(
+            "WRONG-nonce",
+            Some(socket.to_str().unwrap()),
+            Some(&token_path.to_string_lossy()),
+        );
+        assert!(!challenge_via_ipc(&st));
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&token_path);
+    }
+
+    #[test]
+    fn challenge_answers_false_when_auth_token_is_wrong() {
+        let (socket, token_path) = spawn_challenge_daemon("recorded-nonce", "good-token");
+        // Rewrite the token file with a different token — the daemon will
+        // reject the Hello, and the challenge returns false.
+        std::fs::write(&token_path, "different-token\n").unwrap();
+        let st = state_with(
+            "recorded-nonce",
+            Some(socket.to_str().unwrap()),
+            Some(&token_path.to_string_lossy()),
+        );
+        assert!(!challenge_via_ipc(&st));
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&token_path);
+    }
+
+    #[test]
+    fn challenge_returns_false_when_recorded_endpoint_is_missing() {
+        let st = state_with("recorded-nonce", None, None);
+        assert!(!challenge_via_ipc(&st));
+    }
+
+    #[test]
+    fn challenge_returns_false_when_recorded_nonce_is_missing() {
+        let (_socket, token_path) = spawn_challenge_daemon("x", "secret-token");
+        let st = state_with(
+            "",
+            Some("/tmp/whatever.sock"),
+            Some(&token_path.to_string_lossy()),
+        );
+        assert!(!challenge_via_ipc(&st));
+        let _ = std::fs::remove_file(&token_path);
+    }
+
+    #[test]
+    fn challenge_returns_false_when_endpoint_does_not_exist() {
+        // A path that is syntactically valid but no daemon is bound there.
+        let st = state_with("x", Some("/tmp/vcli-does-not-exist-1234567890.sock"), None);
+        assert!(!challenge_via_ipc(&st));
+    }
+
+    #[test]
+    fn challenge_endpoint_uses_a_short_deadline_so_stuck_daemon_does_not_hang_stop() {
+        // A daemon that never replies must not block `tunnel stop` longer
+        // than the IPC challenge deadline. The deadline is encoded in
+        // `NativeTransportClient::challenge` and is bounded to a couple of
+        // seconds; this test guards against accidentally removing it.
+        //
+        // We exercise it by pointing at a socket whose accept loop never
+        // writes back: a listener that accepts and then idles.
+        let tag = uuid::Uuid::new_v4().simple().to_string();
+        let socket = std::path::PathBuf::from(format!("/tmp/vcli-ch-{tag}.sock"));
+        let token_path = std::path::PathBuf::from(format!("/tmp/vcli-ch-{tag}.tok"));
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind");
+        let listener_for_thread = listener.try_clone().expect("clone listener");
+        thread::spawn(move || {
+            // Accept and hold the stream open without responding.
+            if let Ok((stream, _)) = listener_for_thread.accept() {
+                std::thread::sleep(Duration::from_secs(30));
+                drop(stream);
+            }
+        });
+        // Drop our listener so the accept loop terminates.
+        drop(listener);
+
+        std::fs::write(&token_path, "t").unwrap();
+
+        let st = state_with(
+            "x",
+            Some(socket.to_str().unwrap()),
+            Some(&token_path.to_string_lossy()),
+        );
+        let start = std::time::Instant::now();
+        assert!(!challenge_via_ipc(&st));
+        // Generous bound — a stuck daemon must not block stop beyond a few
+        // seconds; we allow up to 10s for slow CI, far below the 30s sleep.
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "challenge took too long: {:?}",
+            start.elapsed()
+        );
+
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&token_path);
+    }
+
+    // Silence the unused-import lint for `ChallengeAck` — re-exported so
+    // downstream callers can name the payload type without reaching into
+    // `server::*`.
+    #[allow(dead_code)]
+    fn _ack_alias(_: ChallengeAck) {}
 }

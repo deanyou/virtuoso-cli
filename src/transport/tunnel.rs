@@ -294,7 +294,24 @@ fn verdict_to_decision(verdict: Verdict, pid: u32) -> StopDecision {
 /// signal without the ssh check.
 fn decide_stop(state: &TunnelState, force: bool) -> StopDecision {
     if daemon_lifecycle::recorded_identity(state).is_some() {
-        verdict_to_decision(daemon_lifecycle::assess(state, |_nonce| false), state.pid)
+        // Recorded native daemon: two-tier assessment. Tier 1 is a real IPC
+        // nonce probe when the binary carries the native backend and the
+        // state file has the IPC endpoint recorded; otherwise Tier 1
+        // unconditionally fails and we fall through to the OS identity check.
+        #[cfg(all(unix, feature = "native-ssh"))]
+        let verdict = {
+            // `assess` passes the recorded nonce into the closure, but
+            // `challenge_via_ipc` reads endpoint + token from the state
+            // record. The nonce-argument is therefore ignored — the helper
+            // compares against `state.daemon_nonce` itself.
+            let st_for_challenge = state;
+            daemon_lifecycle::assess(state, |_nonce| {
+                daemon_lifecycle::challenge_via_ipc(st_for_challenge)
+            })
+        };
+        #[cfg(not(all(unix, feature = "native-ssh")))]
+        let verdict = daemon_lifecycle::assess(state, |_nonce| false);
+        verdict_to_decision(verdict, state.pid)
     } else if force {
         StopDecision::Signal
     } else {
