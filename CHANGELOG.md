@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-09-01
+
+Closes the native-transport delivery sequence through step 3 (direct russh
+client) and the first useful cut of the step 6 daemon. Step 4 (channel pool)
+and step 6 reconnect/lifecycle/cancellation remain ahead, but the protocol
+surface, the IPC server, and the host-key / public-key-auth path are now real
+on Unix builds with `native-ssh`.
+
+### Added
+- **Native russh SSH backend** (`src/transport/native.rs`, `native-ssh`
+  feature). Single-hop direct connection with `known_hosts` host-key
+  verification and public-key authentication. Command exec plus file/text/dir
+  transfer over the exec channel (`tar -cf -` for directories, matching the
+  OpenSSH backend so the two backends do not diverge in remote toolchain
+  requirements). `backend::open_transport` wires it in for
+  `VB_SSH_BACKEND=native`. The OpenSSH backend stays the default.
+- **Real `__transport-daemon`** (`src/commands/transport_daemon.rs`,
+  `src/transport/ipc/server.rs`). The hidden subcommand now binds the Unix
+  domain socket at the recorded endpoint (mode `0600`), completes the `Hello`
+  handshake, and dispatches every operation onto a `RemoteTransport` built
+  from `Config::from_env()`. The wire-payload types and the dispatch loop
+  extracted from the old in-test `serve_one` into a `pub(crate)` server
+  module so production and the shared contract suite exercise the same code
+  path.
+- **`Operation::Challenge`** (`src/transport/ipc/messages.rs`). The Tier-1
+  liveness probe described in the design's "Stop and crash recovery"
+  section: the daemon echoes its nonce, the parent CLI compares the answer
+  to its recorded `daemon_nonce`, and equality proves the process on the
+  other end of the socket is the recorded daemon — no PID, no platform
+  identity check.
+
+### Changed (test infrastructure)
+- **`#[serial]`** on every env-touching test (`Cargo.toml`,
+  `src/tests.rs`, `src/client/bridge.rs`, `src/commands/session.rs`,
+  `src/runtime_paths.rs`, `src/transport/tunnel.rs`). The previous
+  `crate::test_env::ENV_LOCK` mutex only serialized env *writers*; tests that
+  read env (`Config::from_env()` in particular) raced against held locks
+  because they were never inside the critical section. `serial_test`'s
+  `#[serial]` covers both sides with one mechanism. The `test_env` module is
+  reduced to a placeholder.
+
 ## [1.1.1] - 2026-08-31
 
 Complete stable cut for the tunnel-lifecycle hardening. `1.1.0` was published from a
