@@ -131,7 +131,7 @@ def make_step(step_id="s1", operation="WINDOW_ACTIVATE", arguments=None,
         id=step_id,
         operation=operation,
         arguments=MappingProxyType(arguments or {}),
-        verifier=MappingProxyType(verifier or {"predicate": "exists", "expected": True}),
+        verifier=MappingProxyType(verifier or {"predicate": "window_exists", "expected": True}),
         timeout_seconds=timeout_seconds,
         max_retries=max_retries,
         rollback=MappingProxyType(rollback) if rollback else None,
@@ -251,6 +251,17 @@ class TestPrecheck(unittest.TestCase):
                  res(stdout=windows_no_pid)], tmp
             )
             self.assertIsNotNone(err)
+
+    def test_pid_binding_mismatch_rejected(self):
+        """When session reports a positive PID, scenario must match it."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            MISMATCH_SESSION = sessions_json([(SESSION, PORT, 99999)])
+            _, err, _ = self._precheck([res(stdout=MISMATCH_SESSION)], tmp)
+            self.assertIsNotNone(err)
+            # Must short-circuit BEFORE window list — no second call expected
+            self.assertIn("PID binding", err["error"])
 
     def test_display_mismatch(self):
         import tempfile
@@ -461,8 +472,8 @@ class TestVerify(unittest.TestCase):
             self.assertIsNone(ex.precheck(make_scenario()))
             step = make_step(
                 operation="VERIFY",
-                arguments={"predicate": "window_visible", "expected": True},
-                verifier={"predicate": "window_visible", "expected": True},
+                arguments={"predicate": "window_exists", "expected": True},
+                verifier={"predicate": "window_exists", "expected": True},
             )
             err = ex.verify(step, 0)
             self.assertIsNone(err, f"verify failed: {err}")
@@ -481,8 +492,8 @@ class TestVerify(unittest.TestCase):
             self.assertIsNone(ex.precheck(make_scenario()))
             step = make_step(
                 operation="VERIFY",
-                arguments={"predicate": "exists", "expected": True},
-                verifier={"predicate": "exists", "expected": True},
+                arguments={"predicate": "window_exists", "expected": True},
+                verifier={"predicate": "window_exists", "expected": True},
             )
             err = ex.verify(step, 0)
             self.assertIsNotNone(err)

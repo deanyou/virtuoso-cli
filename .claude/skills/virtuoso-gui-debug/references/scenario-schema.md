@@ -51,7 +51,7 @@ Call a VCLI function.
 
 ### WINDOW_WAIT
 Wait for a window to reach a state.
-- **Required arguments:** `window_title` (string), `state` (string)
+- **Required arguments:** `window_title` (string), `state` (string, must be `visible` or `hidden`)
 
 ### WINDOW_ACTIVATE
 Activate a window by title.
@@ -79,7 +79,7 @@ Capture a screenshot.
 
 ### VERIFY
 Verify a condition.
-- **Required arguments:** `predicate` (string), `expected` (any JSON value)
+- **Required arguments:** `predicate` (string, must be `window_exists` or `state_matches`), `expected` (any JSON value)
 
 ### RECOVER
 Perform a recovery action.
@@ -89,10 +89,10 @@ Perform a recovery action.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `predicate` | string | Yes | Non-empty predicate identifier |
-| `expected` | any JSON | Yes | Expected value (string, number, boolean, null, array, object) |
+| `predicate` | string | Yes | Supported predicates: `window_exists` (window is in the X11 window list), `state_matches` (window visible flag equals expected) |
+| `expected` | any JSON | Yes | Expected value (boolean for `window_exists`, boolean for `state_matches`) |
 
-Verifier must be a non-empty object. Unknown keys are rejected.
+Verifier must be a non-empty object. Unknown keys are rejected. Any predicate other than `window_exists` or `state_matches` is rejected at parse time.
 
 ## Rollback Object
 
@@ -116,11 +116,12 @@ Other top-level fields on the rollback object are rejected. The chosen operation
 7. **Timeout bounds** — Must be 1–300 seconds (bool rejected).
 8. **Retry bounds** — Must be 0 or 1 only (bool rejected).
 9. **Duplicate step IDs** — Each step must have a unique id.
-10. **Verifier** — Non-empty object containing `predicate` (non-empty string) and `expected` (any JSON value); unknown keys rejected.
+10. **Verifier** — Non-empty object containing `predicate` (must be `window_exists` or `state_matches`) and `expected` (any JSON value); unknown keys rejected.
 11. **Operation arguments** — Required arguments must be present; unknown arguments are rejected; types checked per the per-operation rules.
-12. **CLICK_REL / DRAG_REL** — Coordinates are strict integers; `button` must be a positive integer. Bool rejected.
-13. **Non-JSON values** — Argument, verifier, and rollback values that are not JSON-serializable are rejected.
-14. **Rollback** — Must have `operation` (allowed op) and `arguments` (validated by the same rules).
+12. **WINDOW_WAIT state** — Must be `visible` or `hidden`. Any other value is rejected at parse time.
+13. **CLICK_REL / DRAG_REL** — Coordinates are strict integers; `button` must be a positive integer. Bool rejected.
+14. **Non-JSON values** — Argument, verifier, and rollback values that are not JSON-serializable are rejected.
+15. **Rollback** — Must have `operation` (allowed op) and `arguments` (validated by the same rules).
 16. **Deep immutability** — All parsed values are recursively frozen: lists become tuples, dicts become `MappingProxyType`, scalars pass through.
 
 ## Complete Example

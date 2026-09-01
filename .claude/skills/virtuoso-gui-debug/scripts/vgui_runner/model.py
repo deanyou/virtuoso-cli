@@ -50,6 +50,14 @@ INT_ARG_KEYS = {
     Operation.DRAG_REL: {"x1", "y1", "x2", "y2", "button"},
 }
 
+# WINDOW_WAIT state allowlist — only these explicit states are supported.
+# Any other value (including typos like "visibile") is rejected at parse time.
+WINDOW_WAIT_ALLOWED_STATES = {"visible", "hidden"}
+
+# Supported verifier predicates. Each maps to a concrete vcli query in the
+# LiveExecutor verify phase. Unknown predicates fail closed at parse time.
+SUPPORTED_PREDICATES = {"window_exists", "state_matches"}
+
 # String-typed argument keys
 STR_ARG_KEYS = {
     Operation.VCLI_LOAD: {"command"},
@@ -224,6 +232,16 @@ class Step:
                     path,
                 )
 
+        # WINDOW_WAIT state allowlist — reject typos and unknown states
+        if operation == Operation.WINDOW_WAIT and "state" in args:
+            state_val = args["state"]
+            if state_val not in WINDOW_WAIT_ALLOWED_STATES:
+                raise ScenarioValidationError(
+                    f"WINDOW_WAIT state must be one of "
+                    f"{sorted(WINDOW_WAIT_ALLOWED_STATES)}; got '{state_val}'",
+                    path,
+                )
+
         # Reject non-JSON values in any argument
         for key, val in args.items():
             if not _is_json_value(val):
@@ -256,9 +274,16 @@ class Step:
                 "missing required verifier key: expected",
                 path,
             )
-        if not isinstance(verifier["predicate"], str) or not verifier["predicate"]:
+        predicate = verifier["predicate"]
+        if not isinstance(predicate, str) or not predicate:
             raise ScenarioValidationError(
                 "verifier.predicate must be a non-empty string",
+                path,
+            )
+        if predicate not in SUPPORTED_PREDICATES:
+            raise ScenarioValidationError(
+                f"verifier.predicate '{predicate}' is not supported; "
+                f"allowed: {sorted(SUPPORTED_PREDICATES)}",
                 path,
             )
         if not _is_json_value(verifier["expected"]):

@@ -209,9 +209,20 @@ class LiveExecutor(Executor):
             if session_pid < 0:
                 return {"error": f"session PID must be positive, got {session_pid}"}
 
+            # Bind scenario PID to session PID: when session metadata reports a
+            # positive PID, the scenario must declare the same PID. Only fall
+            # back to scenario.pid for old metadata that reports PID=0.
+            if session_pid > 0 and session_pid != scenario.pid:
+                return {
+                    "error": (
+                        f"PID binding violation: session PID {session_pid} "
+                        f"!= scenario PID {scenario.pid}"
+                    )
+                }
+
             # 2. window list: DISPLAY must match exactly, PID binding unique.
-            #    When the bridge reports PID zero (old metadata), fall back to
-            #    the scenario PID for discovery — if no window matches, reject.
+            #    effective_pid is session_pid when positive, else scenario.pid
+            #    (old metadata fallback). If no window matches, reject.
             windows_data = self._run_json(
                 self._vcli_argv(
                     "window", "list-windows-x11", "--display", scenario.display
@@ -317,8 +328,33 @@ class LiveExecutor(Executor):
         predicate = step.verifier.get("predicate", "")
         expected = step.verifier.get("expected")
         try:
-            # Database-first: only visibility predicates fall back to X11.
-            if predicate in ("window_visible", "exists"):
+            # Both supported predicates are window-visibility checks resolved
+            # via the vcli list-windows-x11 query (database-first path).
+            if predicate == "window_exists":
+                windows_data = self._run_json(
+                    self._vcli_argv(
+                        "window",
+                        "list-windows-x11",
+                        "--display",
+                        self._scenario_display or ":0",
+                    ),
+                    _TIMEOUT_PRECHECK,
+                )
+                windows = windows_data.get("windows", [])
+                found = any(
+                    (w.get("dismiss_id") or w.get("window_id")) == self.window_id
+                    for w in windows
+                )
+                if found != bool(expected):
+                    return {
+                        "error": (
+                            f"predicate window_exists: expected {expected}, "
+                            f"got {found}"
+                        )
+                    }
+                return None
+            if predicate == "state_matches":
+                # state_matches uses expected ∈ {True, False} as visibility
                 windows_data = self._run_json(
                     self._vcli_argv(
                         "window",
@@ -337,7 +373,7 @@ class LiveExecutor(Executor):
                 if visible != bool(expected):
                     return {
                         "error": (
-                            f"predicate {predicate}: expected {expected}, "
+                            f"predicate state_matches: expected visible={expected}, "
                             f"got {visible}"
                         )
                     }

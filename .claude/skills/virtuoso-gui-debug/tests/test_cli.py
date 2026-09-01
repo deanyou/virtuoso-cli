@@ -53,7 +53,7 @@ VALID_SCENARIO = {
         "id": "s1",
         "operation": "VCLI_LOAD",
         "arguments": {"command": "test"},
-        "verifier": {"predicate": "exists", "expected": True},
+        "verifier": {"predicate": "window_exists", "expected": True},
         "timeout_seconds": 30,
         "max_retries": 0,
     }],

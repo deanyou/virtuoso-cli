@@ -497,7 +497,7 @@ class TestOperationArgumentTypes(unittest.TestCase):
         # Strings, ints, floats, bools, null, lists, dicts should all be accepted
         for expected in ["string", 42, 3.14, True, False, None, [1, 2], {"k": "v"}]:
             data = self._make_step(operation="VERIFY",
-                                   arguments={"predicate": "p", "expected": expected})
+                                   arguments={"predicate": "window_exists", "expected": expected})
             scenario = Scenario.from_dict(data)
             frozen = scenario.steps[0].arguments["expected"]
             if isinstance(expected, list):
@@ -545,14 +545,14 @@ class TestVerifierValidation(unittest.TestCase):
         self.assertIn("predicate", str(ctx.exception))
 
     def test_verifier_missing_expected_rejected(self):
-        data = self._make_step(verifier={"predicate": "p"})
+        data = self._make_step(verifier={"predicate": "window_exists"})
         with self.assertRaises(ScenarioValidationError) as ctx:
             Scenario.from_dict(data)
         self.assertIn("verifier", str(ctx.exception))
         self.assertIn("expected", str(ctx.exception))
 
     def test_verifier_unknown_key_rejected(self):
-        data = self._make_step(verifier={"predicate": "p", "expected": True, "extra": "x"})
+        data = self._make_step(verifier={"predicate": "window_exists", "expected": True, "extra": "x"})
         with self.assertRaises(ScenarioValidationError) as ctx:
             Scenario.from_dict(data)
         self.assertIn("verifier", str(ctx.exception))
@@ -576,6 +576,49 @@ class TestVerifierValidation(unittest.TestCase):
         with self.assertRaises(ScenarioValidationError) as ctx:
             Scenario.from_dict(data)
         self.assertIn("verifier", str(ctx.exception))
+
+    def test_verifier_unsupported_predicate_rejected(self):
+        """Only whitelisted predicates are accepted — arbitrary strings fail."""
+        for bad in ["p", "exists", "window_visible", "state_match", "visibile"]:
+            data = self._make_step(verifier={"predicate": bad, "expected": True})
+            with self.assertRaises(ScenarioValidationError) as ctx:
+                Scenario.from_dict(data)
+            self.assertIn("not supported", str(ctx.exception))
+
+    def test_verifier_supported_predicate_accepted(self):
+        for good in ["window_exists", "state_matches"]:
+            data = self._make_step(verifier={"predicate": good, "expected": True})
+            scenario = Scenario.from_dict(data)  # should not raise
+            self.assertEqual(scenario.steps[0].verifier["predicate"], good)
+
+
+class TestWindowWaitStateValidation(unittest.TestCase):
+    def _make_step(self, state):
+        data = dict(VALID_SCENARIO)
+        data["steps"] = [{
+            "id": "s1",
+            "operation": "WINDOW_WAIT",
+            "arguments": {"window_title": "Virtuoso", "state": state},
+            "verifier": {"predicate": "window_exists", "expected": True},
+            "timeout_seconds": 30,
+            "max_retries": 0,
+        }]
+        return data
+
+    def test_window_wait_visible_accepted(self):
+        Scenario.from_dict(self._make_step("visible"))
+
+    def test_window_wait_hidden_accepted(self):
+        Scenario.from_dict(self._make_step("hidden"))
+
+    def test_window_wait_unknown_state_rejected(self):
+        for bad in ["visibile", "shown", "visible ", "", "true"]:
+            data = self._make_step(bad)
+            with self.assertRaises(ScenarioValidationError) as ctx:
+                Scenario.from_dict(data)
+            err = str(ctx.exception)
+            self.assertIn("WINDOW_WAIT", err)
+            self.assertIn("state", err)
 
 
 class TestRollbackValidation(unittest.TestCase):

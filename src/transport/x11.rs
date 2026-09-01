@@ -2119,7 +2119,7 @@ mod tests {
     #[test]
     fn x11_remote_dir_sanitizes_special_chars_in_client() {
         let dir = x11_remote_dir_with_user("user", "client!@#$");
-        let client_part = dir.split('/').filter(|s| !s.is_empty()).skip(2).next();
+        let client_part = dir.split('/').filter(|s| !s.is_empty()).nth(2);
         if let Some(part) = client_part {
             assert!(
                 part.chars()
