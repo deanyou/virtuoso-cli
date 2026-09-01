@@ -46,6 +46,7 @@ use crate::transport::contract::{
     RemoteTransport, RequestId, TransportError, UploadFileRequest, UploadTextRequest,
 };
 use crate::transport::host_keys::{KeyType, KnownHosts, Verification};
+use crate::transport::lifecycle::{FailureClass, KeepalivePolicy, ReconnectPolicy};
 
 /// Resolved, backend-local view of the SSH endpoint.
 #[derive(Clone, Debug)]
@@ -61,6 +62,16 @@ pub struct NativeTransportConfig {
     pub known_hosts: Vec<KnownHosts>,
     /// TCP + SSH handshake budget.
     pub connect_timeout: Duration,
+    /// Liveness probing for the established connection
+    /// (`VB_SSH_KEEPALIVE_INTERVAL` / `_FAILURES`). A dead NAT or a silently
+    /// dropped path becomes observable as a transient failure instead of a
+    /// hang; russh then drops the session and the next operation reconnects.
+    pub keepalive: KeepalivePolicy,
+    /// Bounded backoff for re-establishing the *connection*
+    /// (`VB_SSH_RECONNECT_MAX_ATTEMPTS` / `_MAX_DELAY`). Applies to the
+    /// connect+auth phase only — never to an operation that may have reached
+    /// the remote host (the design's no-replay invariant).
+    pub reconnect: ReconnectPolicy,
 }
 
 /// Outcome of the host-key callback, captured so `establish` can surface a
@@ -248,7 +259,15 @@ async fn establish(
         verification: verification.clone(),
     };
 
-    let client_cfg = Arc::new(client::Config::default());
+    // Map the design's keepalive policy onto russh: probe every `interval`,
+    // declare the connection dead after `max_failures` consecutive misses.
+    // russh then surfaces it as `KeepaliveTimeout`, which classifies as a
+    // transient failure and reconnects on the next operation.
+    let client_cfg = Arc::new(client::Config {
+        keepalive_interval: Some(cfg.keepalive.interval),
+        keepalive_max: cfg.keepalive.max_failures as usize,
+        ..Default::default()
+    });
     let addrs = (cfg.host.clone(), cfg.ssh_port);
     let connect_fut = client::connect(client_cfg, addrs, handler);
 
@@ -297,13 +316,68 @@ async fn establish(
     Ok(session)
 }
 
+/// Establish a session with bounded reconnect backoff.
+///
+/// Only the *establishment* is retried — TCP connect, SSH handshake, and
+/// public-key auth. No channel has been opened and no operation bytes have
+/// been sent at that point, so a retry can never replay remote work: this is
+/// the design's invariant that reconnection re-establishes the path without
+/// re-issuing it. Errors that are permanent (host key, auth rejection,
+/// configuration) or request-level are returned immediately.
+async fn establish_with_retry(
+    cfg: &NativeTransportConfig,
+    deadline: Deadline,
+) -> Result<client::Handle<NativeClientHandler>, TransportError> {
+    let policy = &cfg.reconnect;
+    let mut attempt: u32 = 1;
+    loop {
+        match establish(cfg).await {
+            Ok(session) => return Ok(session),
+            // Only a network-path failure is worth re-establishing for. A
+            // request-level error cannot occur during establishment (nothing
+            // was sent), but the match keeps the classification authoritative.
+            Err(e) if FailureClass::of(&e) == FailureClass::Transient => {
+                if !policy.may_retry(attempt) || deadline.is_expired() {
+                    return Err(e);
+                }
+                // Spread retries with jitter, but never wait past the
+                // caller's deadline: a bounded budget must not grow because
+                // the network is flaky.
+                let seed = establishment_seed();
+                let wait = policy
+                    .jittered_delay(attempt, seed)
+                    .min(deadline.remaining());
+                if !wait.is_zero() {
+                    tokio::time::sleep(wait).await;
+                }
+                if deadline.is_expired() {
+                    return Err(e);
+                }
+                attempt += 1;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// Jitter seed for reconnect backoff. Not cryptographic — it only needs to
+/// decorrelate concurrent establishments; nanos plus the pid suffice.
+fn establishment_seed() -> u64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(0);
+    nanos ^ ((std::process::id() as u64) << 32)
+}
+
 /// Open an exec channel, optionally feed `stdin`, and drain stdout/stderr/status.
 async fn exec_command(
     cfg: &NativeTransportConfig,
     command: &str,
     stdin: Option<Vec<u8>>,
+    deadline: Deadline,
 ) -> Result<RawOutput, TransportError> {
-    let session = establish(cfg).await?;
+    let session = establish_with_retry(cfg, deadline).await?;
     let mut channel = session
         .channel_open_session()
         .await
@@ -404,6 +478,12 @@ impl NativeTransport {
             "/etc/ssh/ssh_known_hosts",
         )));
 
+        // Lifecycle policies come from the same env surface; zero values are
+        // rejected here so a bad env fails loudly at construction, not on the
+        // first operation.
+        let keepalive = KeepalivePolicy::from_config(config)?;
+        let reconnect = ReconnectPolicy::from_config(config)?;
+
         Ok(NativeTransport {
             config: NativeTransportConfig {
                 host,
@@ -413,6 +493,8 @@ impl NativeTransport {
                 key_path: Some(key_path),
                 known_hosts: stores,
                 connect_timeout: Duration::from_secs(config.timeout.max(5)),
+                keepalive,
+                reconnect,
             },
         })
     }
@@ -428,7 +510,9 @@ impl RemoteTransport for NativeTransport {
         }
         let cfg = self.config.clone();
         block_with_deadline(deadline, RequestId::new(), move || async move {
-            match establish(&cfg).await {
+            // test_connection is an explicit idempotent probe, so re-establishing
+            // the path within the deadline is allowed here.
+            match establish_with_retry(&cfg, deadline).await {
                 Ok(_) => Ok(true),
                 // A connection-level failure means the host is not reachable;
                 // host-key / auth failures are real errors, not "unreachable".
@@ -455,7 +539,7 @@ impl RemoteTransport for NativeTransport {
         let cmd = req.command.clone();
         let req_id = req.id.clone();
         block_with_deadline(req.deadline, req_id, move || async move {
-            let raw = exec_command(&cfg, &cmd, None).await?;
+            let raw = exec_command(&cfg, &cmd, None, req.deadline).await?;
             Ok(CommandResult {
                 exit_status: raw.exit_status,
                 stdout: String::from_utf8_lossy(&raw.stdout).into_owned(),
@@ -481,7 +565,7 @@ impl RemoteTransport for NativeTransport {
             let bytes = std::fs::read(&local)
                 .map_err(|e| TransportError::LocalIo(format!("read {}: {e}", local.display())))?;
             let cmd = format!("cat > {}", shell_quote(&remote));
-            let raw = exec_command(&cfg, &cmd, Some(bytes)).await?;
+            let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
             if raw.exit_status != 0 {
                 return Err(TransportError::TransferInterrupted {
                     request: req.id.clone(),
@@ -505,7 +589,7 @@ impl RemoteTransport for NativeTransport {
         let req_id = req.id.clone();
         block_with_deadline(req.deadline, req_id, move || async move {
             let cmd = format!("cat > {}", shell_quote(&remote));
-            let raw = exec_command(&cfg, &cmd, Some(bytes)).await?;
+            let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
             if raw.exit_status != 0 {
                 return Err(TransportError::TransferInterrupted {
                     request: req.id.clone(),
@@ -529,7 +613,7 @@ impl RemoteTransport for NativeTransport {
         let req_id = req.id.clone();
         block_with_deadline(req.deadline, req_id, move || async move {
             let cmd = format!("cat {}", shell_quote(&remote));
-            let raw = exec_command(&cfg, &cmd, None).await?;
+            let raw = exec_command(&cfg, &cmd, None, req.deadline).await?;
             if raw.exit_status != 0 {
                 return Err(TransportError::TransferInterrupted {
                     request: req.id.clone(),
@@ -555,7 +639,7 @@ impl RemoteTransport for NativeTransport {
         let req_id = req.id.clone();
         block_with_deadline(req.deadline, req_id, move || async move {
             let cmd = format!("tar -cf - -C {} .", shell_quote(&remote));
-            let raw = exec_command(&cfg, &cmd, None).await?;
+            let raw = exec_command(&cfg, &cmd, None, req.deadline).await?;
             if raw.exit_status != 0 {
                 return Err(TransportError::TransferInterrupted {
                     request: req.id.clone(),
@@ -665,5 +749,39 @@ mod tests {
     fn is_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<NativeTransport>();
+    }
+
+    #[test]
+    fn from_config_wires_lifecycle_policies() {
+        let mut c = cfg_with("h", Some("/tmp/k"), None);
+        c.ssh_keepalive_interval = 15;
+        c.ssh_keepalive_failures = 5;
+        c.ssh_reconnect_max_attempts = 3;
+        c.ssh_reconnect_max_delay = 9;
+        let t = NativeTransport::from_config(&c).unwrap();
+        assert_eq!(t.config.keepalive.interval, Duration::from_secs(15));
+        assert_eq!(t.config.keepalive.max_failures, 5);
+        assert_eq!(t.config.reconnect.max_attempts, 3);
+        assert_eq!(t.config.reconnect.max_delay, Duration::from_secs(9));
+    }
+
+    #[test]
+    fn from_config_rejects_a_zero_keepalive_interval() {
+        let mut c = cfg_with("h", Some("/tmp/k"), None);
+        c.ssh_keepalive_interval = 0;
+        assert!(matches!(
+            NativeTransport::from_config(&c),
+            Err(TransportError::Configuration(_))
+        ));
+    }
+
+    #[test]
+    fn from_config_rejects_zero_reconnect_attempts() {
+        let mut c = cfg_with("h", Some("/tmp/k"), None);
+        c.ssh_reconnect_max_attempts = 0;
+        assert!(matches!(
+            NativeTransport::from_config(&c),
+            Err(TransportError::Configuration(_))
+        ));
     }
 }
