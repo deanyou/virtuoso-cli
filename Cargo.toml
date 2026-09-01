@@ -60,7 +60,7 @@ crossterm = "0.28"
 unicode-width = "0.2"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "io-util"] }
 regex = "1"
-toml = "0.8"
+toml = "1.1"
 num_cpus = "1"
 russh = { version = "0.63.1", optional = true }
 russh-sftp = { version = "2", optional = true }
