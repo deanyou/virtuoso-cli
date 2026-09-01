@@ -107,26 +107,43 @@ impl FailureClass {
 #[derive(Debug, Clone)]
 pub struct ReconnectPolicy {
     /// Total attempts before giving up and degrading the endpoint
-    /// (`VB_SSH_RECONNECT_MAX_ATTEMPTS`, default 8).
+    /// (`VB_SSH_RECONNECT_MAX_ATTEMPTS` default, 8).
     pub max_attempts: u32,
-    /// Upper bound on a single wait (`VB_SSH_RECONNECT_MAX_DELAY`, default 30 s).
+    /// Upper bound on a single wait (`VB_SSH_RECONNECT_MAX_DELAY` default,
+    /// 30 s).
     pub max_delay: Duration,
     /// First wait, before any growth. Not env-configurable in the design;
     /// one second keeps the first retry snappy without hot-looping.
     pub base: Duration,
 }
 
-impl Default for ReconnectPolicy {
-    fn default() -> Self {
-        Self {
-            max_attempts: 8,
-            max_delay: Duration::from_secs(30),
-            base: Duration::from_secs(1),
-        }
-    }
-}
-
 impl ReconnectPolicy {
+    /// Default for `VB_SSH_RECONNECT_MAX_ATTEMPTS` (design: 8).
+    pub const DEFAULT_MAX_ATTEMPTS: u32 = 8;
+    /// Default for `VB_SSH_RECONNECT_MAX_DELAY`, in seconds (design: 30).
+    pub const DEFAULT_MAX_DELAY: u64 = 30;
+
+    /// Build a policy from a resolved [`crate::config::Config`], converting
+    /// the raw seconds the env layer carries into durations.
+    pub fn from_config(config: &crate::config::Config) -> Result<Self, TransportError> {
+        let max_delay = Duration::from_secs(config.ssh_reconnect_max_delay);
+        if max_delay.is_zero() {
+            return Err(TransportError::Configuration(
+                "VB_SSH_RECONNECT_MAX_DELAY must be at least 1".into(),
+            ));
+        }
+        if config.ssh_reconnect_max_attempts == 0 {
+            return Err(TransportError::Configuration(
+                "VB_SSH_RECONNECT_MAX_ATTEMPTS must be at least 1".into(),
+            ));
+        }
+        Ok(Self {
+            max_attempts: config.ssh_reconnect_max_attempts,
+            max_delay,
+            base: Duration::from_secs(1),
+        })
+    }
+
     /// Whether `attempt` (1-based) may still be made.
     pub fn may_retry(&self, attempt: u32) -> bool {
         attempt <= self.max_attempts
@@ -235,6 +252,48 @@ impl CircuitBreaker {
     }
 }
 
+/// Keepalive probing policy for the native SSH connection.
+///
+/// A dead NAT or a silently dropped TCP path looks identical to an idle
+/// connection. The keepalive probe (sent every `interval` seconds) is what
+/// makes the difference observable: after `max_failures` consecutive missed
+/// acknowledgements the connection is declared dead, which classifies as a
+/// transient failure and hands control to [`ReconnectPolicy`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeepalivePolicy {
+    /// Seconds between probes (`VB_SSH_KEEPALIVE_INTERVAL`, default 30).
+    pub interval: Duration,
+    /// Consecutive missed acknowledgements before the connection is declared
+    /// dead (`VB_SSH_KEEPALIVE_FAILURES`, default 3).
+    pub max_failures: u32,
+}
+
+impl KeepalivePolicy {
+    /// Default for `VB_SSH_KEEPALIVE_INTERVAL`, in seconds (design: 30).
+    pub const DEFAULT_INTERVAL: u64 = 30;
+    /// Default for `VB_SSH_KEEPALIVE_FAILURES` (design: 3).
+    pub const DEFAULT_FAILURES: u32 = 3;
+
+    /// Build from a resolved [`crate::config::Config`]. The interval must be
+    /// positive; a zero interval would busy-loop the connection.
+    pub fn from_config(config: &crate::config::Config) -> Result<Self, TransportError> {
+        if config.ssh_keepalive_interval == 0 {
+            return Err(TransportError::Configuration(
+                "VB_SSH_KEEPALIVE_INTERVAL must be at least 1".into(),
+            ));
+        }
+        if config.ssh_keepalive_failures == 0 {
+            return Err(TransportError::Configuration(
+                "VB_SSH_KEEPALIVE_FAILURES must be at least 1".into(),
+            ));
+        }
+        Ok(Self {
+            interval: Duration::from_secs(config.ssh_keepalive_interval),
+            max_failures: config.ssh_keepalive_failures,
+        })
+    }
+}
+
 /// Cooperative cancellation flag for sync code.
 ///
 /// Operations poll [`Self::is_cancelled`] between units of work (channel
@@ -273,17 +332,18 @@ pub struct ShutdownCoordinator {
     grace: Duration,
 }
 
-impl Default for ShutdownCoordinator {
-    fn default() -> Self {
-        Self {
-            grace: Duration::from_secs(10),
-        }
-    }
-}
-
 impl ShutdownCoordinator {
+    /// Default for `VB_TRANSPORT_SHUTDOWN_GRACE`, in seconds (design: 10).
+    pub const DEFAULT_GRACE: u64 = 10;
+
     pub fn new(grace: Duration) -> Self {
         Self { grace }
+    }
+
+    /// Build from a resolved [`crate::config::Config`]. A zero grace is
+    /// accepted — it means "cancel immediately" — but only explicitly.
+    pub fn from_config(config: &crate::config::Config) -> Self {
+        Self::new(Duration::from_secs(config.transport_shutdown_grace))
     }
 
     pub fn grace(&self) -> Duration {
@@ -315,6 +375,95 @@ impl ShutdownCoordinator {
 mod tests {
     use super::*;
     use crate::transport::contract::RequestId;
+
+    /// A `Config` with the design's documented defaults, overridable per test.
+    /// Built field-by-field because the test module owns no shared fixture and
+    /// `Config` has no `Default` impl by design (defaults live in `from_env`).
+    fn config_with(
+        attempts: u32,
+        max_delay: u64,
+        keepalive_interval: u64,
+        keepalive_failures: u32,
+        grace: u64,
+    ) -> crate::config::Config {
+        crate::config::Config {
+            profile: None,
+            remote_host: None,
+            remote_user: None,
+            port: 22,
+            jump_host: None,
+            jump_user: None,
+            ssh_port: None,
+            ssh_key: None,
+            ssh_config: None,
+            ssh_backend: None,
+            disable_control_master: false,
+            timeout: 30,
+            read_timeout: 120,
+            keep_remote_files: false,
+            spectre_cmd: "spectre".into(),
+            spectre_args: vec![],
+            spectre_max_workers: 8,
+            ssh_max_sessions: 10,
+            ssh_max_bulk_sessions: 2,
+            ssh_reconnect_max_attempts: attempts,
+            ssh_reconnect_max_delay: max_delay,
+            ssh_keepalive_interval: keepalive_interval,
+            ssh_keepalive_failures: keepalive_failures,
+            transport_shutdown_grace: grace,
+            cadence_cshrc: None,
+            spectre_bin: None,
+            roles: Default::default(),
+        }
+    }
+
+    #[test]
+    fn documented_defaults_round_trip_through_from_config() {
+        let cfg = config_with(8, 30, 30, 3, 10);
+        let p = ReconnectPolicy::from_config(&cfg).unwrap();
+        assert_eq!(p.max_attempts, 8);
+        assert_eq!(p.max_delay, Duration::from_secs(30));
+        let k = KeepalivePolicy::from_config(&cfg).unwrap();
+        assert_eq!(k.interval, Duration::from_secs(30));
+        assert_eq!(k.max_failures, 3);
+        assert_eq!(
+            ShutdownCoordinator::from_config(&cfg).grace(),
+            Duration::from_secs(10)
+        );
+    }
+
+    #[test]
+    fn reconnect_policy_rejects_a_zero_max_delay() {
+        let cfg = config_with(8, 0, 30, 3, 10);
+        let err = ReconnectPolicy::from_config(&cfg).expect_err("zero delay is a misconfig");
+        assert!(matches!(err, TransportError::Configuration(_)), "{err:?}");
+    }
+
+    #[test]
+    fn reconnect_policy_rejects_zero_attempts() {
+        let cfg = config_with(0, 30, 30, 3, 10);
+        let err = ReconnectPolicy::from_config(&cfg).expect_err("zero attempts is a misconfig");
+        assert!(matches!(err, TransportError::Configuration(_)), "{err:?}");
+    }
+
+    #[test]
+    fn keepalive_policy_rejects_zero_interval_and_zero_failures() {
+        let err = KeepalivePolicy::from_config(&config_with(8, 30, 0, 3, 10))
+            .expect_err("zero interval busy-loops");
+        assert!(matches!(err, TransportError::Configuration(_)), "{err:?}");
+        let err = KeepalivePolicy::from_config(&config_with(8, 30, 30, 0, 10))
+            .expect_err("zero failures declares dead instantly");
+        assert!(matches!(err, TransportError::Configuration(_)), "{err:?}");
+    }
+
+    #[test]
+    fn shutdown_coordinator_accepts_an_explicit_zero_grace() {
+        // Zero means "cancel immediately" — a deliberate operator choice, not
+        // a misconfiguration, so unlike the reconnect/keepalive values it is
+        // accepted.
+        let c = ShutdownCoordinator::from_config(&config_with(8, 30, 30, 3, 0));
+        assert_eq!(c.grace(), Duration::ZERO);
+    }
 
     // ── FailureClass ──
 
@@ -619,7 +768,8 @@ mod tests {
     #[test]
     fn grace_default_matches_the_design() {
         assert_eq!(
-            ShutdownCoordinator::default().grace(),
+            ShutdownCoordinator::new(Duration::from_secs(ShutdownCoordinator::DEFAULT_GRACE))
+                .grace(),
             Duration::from_secs(10)
         );
     }

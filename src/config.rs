@@ -136,6 +136,21 @@ pub struct Config {
     /// How many of those sessions bulk transfers may occupy
     /// (VB_SSH_MAX_BULK_SESSIONS, default 2). Native backend only.
     pub ssh_max_bulk_sessions: usize,
+    /// Reconnect attempts before the endpoint is marked Degraded
+    /// (VB_SSH_RECONNECT_MAX_ATTEMPTS, default 8). Native backend only.
+    pub ssh_reconnect_max_attempts: u32,
+    /// Upper bound on a single reconnect wait in seconds
+    /// (VB_SSH_RECONNECT_MAX_DELAY, default 30). Native backend only.
+    pub ssh_reconnect_max_delay: u64,
+    /// Seconds between native SSH keepalive probes
+    /// (VB_SSH_KEEPALIVE_INTERVAL, default 30). Native backend only.
+    pub ssh_keepalive_interval: u64,
+    /// Consecutive missed keepalives before the connection is declared dead
+    /// (VB_SSH_KEEPALIVE_FAILURES, default 3). Native backend only.
+    pub ssh_keepalive_failures: u32,
+    /// Grace period in seconds that `tunnel stop` grants running work before
+    /// cancelling it (VB_TRANSPORT_SHUTDOWN_GRACE, default 10).
+    pub transport_shutdown_grace: u64,
     /// Path to Cadence environment setup file (VB_CADENCE_CSHRC).
     /// Used to load Spectre environment for remote SSH execution.
     pub cadence_cshrc: Option<String>,
@@ -288,6 +303,27 @@ impl Config {
             ssh_max_bulk_sessions: Self::env_with_profile("VB_SSH_MAX_BULK_SESSIONS", profile)
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(crate::transport::scheduler::SchedulerLimits::DEFAULT_BULK),
+            ssh_reconnect_max_attempts: Self::env_with_profile(
+                "VB_SSH_RECONNECT_MAX_ATTEMPTS",
+                profile,
+            )
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_ATTEMPTS),
+            ssh_reconnect_max_delay: Self::env_with_profile("VB_SSH_RECONNECT_MAX_DELAY", profile)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_DELAY),
+            ssh_keepalive_interval: Self::env_with_profile("VB_SSH_KEEPALIVE_INTERVAL", profile)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(crate::transport::lifecycle::KeepalivePolicy::DEFAULT_INTERVAL),
+            ssh_keepalive_failures: Self::env_with_profile("VB_SSH_KEEPALIVE_FAILURES", profile)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(crate::transport::lifecycle::KeepalivePolicy::DEFAULT_FAILURES),
+            transport_shutdown_grace: Self::env_with_profile(
+                "VB_TRANSPORT_SHUTDOWN_GRACE",
+                profile,
+            )
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(crate::transport::lifecycle::ShutdownCoordinator::DEFAULT_GRACE),
             cadence_cshrc: Self::env_with_profile("VB_CADENCE_CSHRC", profile),
             spectre_bin: Self::env_with_profile("VB_SPECTRE_BIN", profile),
             roles: RemoteRoles {
