@@ -10,8 +10,10 @@
 //! - ✅ host-key verification via the existing `host_keys` module (plaintext +
 //!   hashed `known_hosts`, port-qualified entries);
 //! - ✅ public-key auth (`VB_SSH_KEY`);
-//! - ✅ command exec + file/text/dir transfer over the exec channel
-//!   (tar-over-exec for directories, matching the OpenSSH backend);
+//! - ✅ command exec + file/text/dir transfer; single files stream over the
+//!   SFTP subsystem (design step 4) with an exec `cat` fallback for remotes
+//!   that do not advertise sftp, and directories keep tar-over-exec
+//!   (matching the OpenSSH backend);
 //! - ❌ connection pooling / channel scheduling — each operation reconnects
 //!   (the design's reuse requirement is step 4's daemon);
 //! - ❌ `ProxyJump` / jump-host routing, SOCKS5, RAMIC `direct-tcpip` forward,
@@ -47,6 +49,8 @@ use crate::transport::contract::{
 };
 use crate::transport::host_keys::{KeyType, KnownHosts, Verification};
 use crate::transport::lifecycle::{FailureClass, KeepalivePolicy, ReconnectPolicy};
+use russh_sftp::client::SftpSession;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// Resolved, backend-local view of the SSH endpoint.
 #[derive(Clone, Debug)]
@@ -415,6 +419,119 @@ async fn exec_command(
     })
 }
 
+/// 64 KiB SFTP write/read windows — small enough to stay beneath the SSH
+/// channel's max packet size while streaming large files without buffering
+/// them entirely in memory (design: "the daemon streams the local file
+/// itself", never the whole buffer across one frame).
+const SFTP_CHUNK: usize = 64 * 1024;
+
+/// Whether an SFTP attempt failed because the remote did not advertise the
+/// sftp subsystem (vs a connection/auth failure that must not be retried
+/// through the exec pipe). Callers use this to fall back to the exec `cat`
+/// transfer that directories already rely on.
+fn sftp_unavailable(e: &TransportError) -> bool {
+    matches!(e, TransportError::UnsupportedOperation(_))
+}
+
+/// Establish a session and open the SFTP subsystem channel.
+///
+/// Returns the russh handle (kept alive for the duration of the file op) and a
+/// high-level [`SftpSession`]. A server that does not advertise sftp surfaces
+/// as [`TransportError::UnsupportedOperation`].
+async fn open_sftp(
+    cfg: &NativeTransportConfig,
+    deadline: Deadline,
+) -> Result<(client::Handle<NativeClientHandler>, SftpSession), TransportError> {
+    let session = establish_with_retry(cfg, deadline).await?;
+    let channel = session
+        .channel_open_session()
+        .await
+        .map_err(map_russh_error)?;
+    // A server that rejects the subsystem returns an error here; map it to
+    // `UnsupportedOperation` so the caller can fall back to exec transfer.
+    channel.request_subsystem(true, "sftp").await.map_err(|e| {
+        TransportError::UnsupportedOperation(format!(
+            "sftp subsystem unavailable on {}: {e}",
+            cfg.host
+        ))
+    })?;
+    let stream = channel.into_stream();
+    let sftp = SftpSession::new(stream).await.map_err(|e| {
+        TransportError::UnsupportedOperation(format!(
+            "sftp session init failed on {}: {e}",
+            cfg.host
+        ))
+    })?;
+    Ok((session, sftp))
+}
+
+/// Upload `data` to `remote` over the SFTP subsystem, streaming in 64 KiB
+/// windows. A missing sftp subsystem surfaces as `UnsupportedOperation`.
+async fn upload_via_sftp(
+    cfg: &NativeTransportConfig,
+    remote: &Path,
+    data: Vec<u8>,
+    deadline: Deadline,
+) -> Result<(), TransportError> {
+    let (_session, sftp) = open_sftp(cfg, deadline).await?;
+    let remote_str = remote.to_string_lossy().into_owned();
+    let mut file =
+        sftp.create(&remote_str)
+            .await
+            .map_err(|e| TransportError::TransferInterrupted {
+                request: RequestId::new(),
+                reason: format!("sftp create {remote_str}: {e}"),
+            })?;
+    for chunk in data.chunks(SFTP_CHUNK) {
+        AsyncWriteExt::write_all(&mut file, chunk)
+            .await
+            .map_err(|e| TransportError::TransferInterrupted {
+                request: RequestId::new(),
+                reason: format!("sftp write {remote_str}: {e}"),
+            })?;
+    }
+    AsyncWriteExt::shutdown(&mut file)
+        .await
+        .map_err(|e| TransportError::TransferInterrupted {
+            request: RequestId::new(),
+            reason: format!("sftp flush {remote_str}: {e}"),
+        })?;
+    Ok(())
+}
+
+/// Download `remote` over the SFTP subsystem, streaming in 64 KiB windows into
+/// a local buffer. A missing sftp subsystem surfaces as `UnsupportedOperation`.
+async fn download_via_sftp(
+    cfg: &NativeTransportConfig,
+    remote: &Path,
+    deadline: Deadline,
+) -> Result<Vec<u8>, TransportError> {
+    let (_session, sftp) = open_sftp(cfg, deadline).await?;
+    let remote_str = remote.to_string_lossy().into_owned();
+    let mut file =
+        sftp.open(&remote_str)
+            .await
+            .map_err(|e| TransportError::TransferInterrupted {
+                request: RequestId::new(),
+                reason: format!("sftp open {remote_str}: {e}"),
+            })?;
+    let mut buf = Vec::new();
+    let mut window = vec![0u8; SFTP_CHUNK];
+    loop {
+        let n = AsyncReadExt::read(&mut file, &mut window)
+            .await
+            .map_err(|e| TransportError::TransferInterrupted {
+                request: RequestId::new(),
+                reason: format!("sftp read {remote_str}: {e}"),
+            })?;
+        if n == 0 {
+            break;
+        }
+        buf.extend_from_slice(&window[..n]);
+    }
+    Ok(buf)
+}
+
 /// Run `fut` on a fresh runtime, bounding it by `deadline`. A timeout surfaces as
 /// `ExecutionTimeout` carrying `req_id` (termination unproven — conservative).
 fn block_with_deadline<F, Fut, T>(
@@ -564,15 +681,26 @@ impl RemoteTransport for NativeTransport {
         block_with_deadline(req.deadline, req_id, move || async move {
             let bytes = std::fs::read(&local)
                 .map_err(|e| TransportError::LocalIo(format!("read {}: {e}", local.display())))?;
-            let cmd = format!("cat > {}", shell_quote(&remote));
-            let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
-            if raw.exit_status != 0 {
-                return Err(TransportError::TransferInterrupted {
-                    request: req.id.clone(),
-                    reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
-                });
+            // Single files stream over the SFTP subsystem (design step 4). Where
+            // the remote does not advertise sftp, fall back to the exec `cat`
+            // pipe that directories already rely on.
+            // Clone for the SFTP attempt; the exec fallback still needs the
+            // original bytes if the remote lacks the sftp subsystem.
+            match upload_via_sftp(&cfg, Path::new(&remote), bytes.clone(), req.deadline).await {
+                Ok(()) => Ok(()),
+                Err(e) if sftp_unavailable(&e) => {
+                    let cmd = format!("cat > {}", shell_quote(&remote));
+                    let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
+                    if raw.exit_status != 0 {
+                        return Err(TransportError::TransferInterrupted {
+                            request: req.id.clone(),
+                            reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
+                        });
+                    }
+                    Ok(())
+                }
+                Err(e) => Err(e),
             }
-            Ok(())
         })
     }
 
@@ -612,17 +740,31 @@ impl RemoteTransport for NativeTransport {
         let local = req.local.clone();
         let req_id = req.id.clone();
         block_with_deadline(req.deadline, req_id, move || async move {
-            let cmd = format!("cat {}", shell_quote(&remote));
-            let raw = exec_command(&cfg, &cmd, None, req.deadline).await?;
-            if raw.exit_status != 0 {
-                return Err(TransportError::TransferInterrupted {
-                    request: req.id.clone(),
-                    reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
-                });
+            // Single files stream over the SFTP subsystem (design step 4); a
+            // remote without sftp falls back to the exec `cat` pipe.
+            match download_via_sftp(&cfg, Path::new(&remote), req.deadline).await {
+                Ok(bytes) => {
+                    std::fs::write(&local, &bytes).map_err(|e| {
+                        TransportError::LocalIo(format!("write {}: {e}", local.display()))
+                    })?;
+                    Ok(())
+                }
+                Err(e) if sftp_unavailable(&e) => {
+                    let cmd = format!("cat {}", shell_quote(&remote));
+                    let raw = exec_command(&cfg, &cmd, None, req.deadline).await?;
+                    if raw.exit_status != 0 {
+                        return Err(TransportError::TransferInterrupted {
+                            request: req.id.clone(),
+                            reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
+                        });
+                    }
+                    std::fs::write(&local, &raw.stdout).map_err(|e| {
+                        TransportError::LocalIo(format!("write {}: {e}", local.display()))
+                    })?;
+                    Ok(())
+                }
+                Err(e) => Err(e),
             }
-            std::fs::write(&local, &raw.stdout)
-                .map_err(|e| TransportError::LocalIo(format!("write {}: {e}", local.display())))?;
-            Ok(())
         })
     }
 
@@ -730,6 +872,25 @@ mod tests {
             NativeTransport::from_config(&cfg_with("h", None, None)),
             Err(TransportError::Configuration(_))
         ));
+    }
+
+    #[test]
+    fn sftp_unavailable_routes_only_to_the_exec_fallback() {
+        // The exec fallback for single-file transfer must trigger only when the
+        // remote lacks the sftp subsystem, never on a connection/auth failure.
+        assert!(sftp_unavailable(&TransportError::UnsupportedOperation(
+            "sftp subsystem unavailable".into()
+        )));
+        assert!(!sftp_unavailable(&TransportError::ConnectionFailed(
+            "down".into()
+        )));
+        assert!(!sftp_unavailable(&TransportError::AuthenticationFailed(
+            "no".into()
+        )));
+        assert!(!sftp_unavailable(&TransportError::TransferInterrupted {
+            request: RequestId::new(),
+            reason: "boom".into()
+        }));
     }
 
     #[test]
