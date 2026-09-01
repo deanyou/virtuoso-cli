@@ -143,7 +143,11 @@ pub struct Config {
 
 impl Config {
     /// Read a config variable, checking profile-specific first (e.g. VB_REMOTE_HOST_prod).
-    fn env_with_profile(key: &str, profile: Option<&str>) -> Option<String> {
+    ///
+    /// `pub(crate)` so transport submodules can resolve their own settings with
+    /// the *same* precedence rule instead of re-implementing it — a second copy
+    /// of this lookup would drift the moment one side changed.
+    pub(crate) fn env_with_profile(key: &str, profile: Option<&str>) -> Option<String> {
         if let Some(p) = profile {
             if let Ok(v) = env::var(format!("{key}_{p}")) {
                 if !v.is_empty() {

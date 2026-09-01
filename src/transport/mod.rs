@@ -8,6 +8,7 @@ pub mod ipc;
 #[cfg(feature = "native-ssh")]
 pub mod native;
 pub mod openssh;
+pub mod scheduler;
 pub mod session_discovery;
 pub mod ssh;
 #[cfg(test)]
