@@ -1185,4 +1185,52 @@ mod tests {
             assert_eq!(got, payload, "SFTP roundtrip must preserve every byte");
         });
     }
+
+    #[test]
+    fn establish_rejects_jump_host_with_unsupported_operation() {
+        // Step 5 (ProxyJump / jump-host routing) is deferred. The native backend
+        // must fail closed with a clear UnsupportedOperation at connect time
+        // rather than silently attempting a single-hop connection. The guard
+        // returns before any russh connect, so no network is touched.
+        let rt = make_runtime().expect("runtime");
+        rt.block_on(async {
+            let t = NativeTransport::from_config(&cfg_with("h", Some("/tmp/k"), Some("jump")))
+                .expect("from_config accepts a jump host (deferred, not rejected at construction)");
+            let err = establish(&t.config).await;
+            assert!(
+                matches!(err, Err(TransportError::UnsupportedOperation(_))),
+                "jump host must surface as UnsupportedOperation"
+            );
+        });
+    }
+
+    #[test]
+    fn native_transport_does_not_implement_local_forward() {
+        // Step 6's RAMIC / X11 direct-tcpip forward is not implemented. The
+        // RemoteTransport trait default reports the gap as UnsupportedOperation
+        // so callers detect it structurally instead of panicking. This locks the
+        // documented scope boundary (design doc Status: step 6 ⚠️ Partial).
+        let t = NativeTransport::from_config(&cfg_with("h", Some("/tmp/k"), None))
+            .expect("from_config builds without a jump host");
+        let req = crate::transport::contract::ForwardRequest {
+            id: crate::transport::contract::RequestId::new(),
+            listen: "127.0.0.1:0".into(),
+            remote_host: "remote".into(),
+            remote_port: 80,
+        };
+        assert!(
+            matches!(
+                t.start_local_forward(&req),
+                Err(TransportError::UnsupportedOperation(_))
+            ),
+            "start_local_forward must be UnsupportedOperation on the native backend"
+        );
+        assert!(
+            matches!(
+                t.stop_local_forward(&crate::transport::contract::ForwardId("x".into())),
+                Err(TransportError::UnsupportedOperation(_))
+            ),
+            "stop_local_forward must be UnsupportedOperation on the native backend"
+        );
+    }
 }
