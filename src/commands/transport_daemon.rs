@@ -58,12 +58,15 @@ pub fn run(_ipc_endpoint: &str, _token_path: &str, _daemon_nonce: &str) -> Resul
 pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Result<Value> {
     use crate::transport::backend::open_transport;
     use crate::transport::ipc::server;
+    use crate::transport::lifecycle::ShutdownCoordinator;
+
+    let config = crate::config::Config::from_env()?;
 
     // `open_transport` already hands back a shared, boxed transport; the
     // server takes that same `Arc` so every connection thread shares one
     // backend instead of opening its own.
     let transport: Arc<dyn RemoteTransport> =
-        open_transport(&crate::config::Config::from_env()?).map_err(transport_to_virtuoso)?;
+        open_transport(&config).map_err(transport_to_virtuoso)?;
 
     let token = std::fs::read_to_string(Path::new(token_path)).map_err(|e| {
         VirtuosoError::Io(std::io::Error::other(format!(
@@ -74,8 +77,11 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
     // add — the token file is single-line.
     let token = token.trim().to_string();
 
+    // Grace period for `Operation::Shutdown` (VB_TRANSPORT_SHUTDOWN_GRACE).
+    let shutdown = ShutdownCoordinator::from_config(&config);
+
     let socket = Path::new(ipc_endpoint);
-    server::run(socket, transport, &token, daemon_nonce).map_err(|e| {
+    server::run(socket, transport, &token, daemon_nonce, shutdown).map_err(|e| {
         VirtuosoError::Io(std::io::Error::other(format!(
             "transport daemon exited unexpectedly: {e}"
         )))

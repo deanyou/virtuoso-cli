@@ -23,8 +23,12 @@
 
 use std::collections::BTreeSet;
 use std::os::unix::net::UnixStream;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
+// Used only by `run`, which is feature-gated; the test module imports its own.
+#[cfg(feature = "native-ssh")]
+use std::time::Duration;
 
 // `run` is the only consumer of these, and it is feature-gated, so the imports
 // must carry the same gate — ungated, a feature-off build reports them unused.
@@ -45,6 +49,52 @@ use crate::transport::ipc::framing::{
 use crate::transport::ipc::messages::{
     Hello, HelloAck, IpcError, Operation, RequestEnvelope, ResponseEnvelope, ResponseResult,
 };
+// `ShutdownCoordinator` is consumed only by the feature-gated `run` and
+// `ShutdownState::coordinator`; gate the import to match.
+use crate::transport::lifecycle::CancellationToken;
+#[cfg(feature = "native-ssh")]
+use crate::transport::lifecycle::ShutdownCoordinator;
+
+/// Shared shutdown bookkeeping for the running daemon.
+///
+/// Consumes the step-6 lifecycle primitives: a [`CancellationToken`] that any
+/// connection's `Shutdown` request fires, and an [`AtomicUsize`] counting the
+/// connections currently inside their dispatch loop. [`ShutdownCoordinator`]
+/// turns those into the design's three phases (stop admission → grace →
+/// cancel remaining).
+pub struct ShutdownState {
+    /// Fired by the first `Shutdown` request; breaks the accept loop.
+    pub token: CancellationToken,
+    /// Connections currently dispatching requests. Phase 2 waits for this
+    /// to reach zero (within the grace) before the daemon exits.
+    pub active: AtomicUsize,
+    /// Owns the grace period (`VB_TRANSPORT_SHUTDOWN_GRACE`). Only the
+    /// production `run` loop consumes it, hence the feature gate.
+    #[cfg(feature = "native-ssh")]
+    pub coordinator: ShutdownCoordinator,
+}
+
+impl ShutdownState {
+    #[cfg(feature = "native-ssh")]
+    pub fn new(coordinator: ShutdownCoordinator) -> Self {
+        Self {
+            token: CancellationToken::new(),
+            active: AtomicUsize::new(0),
+            coordinator,
+        }
+    }
+}
+
+/// Decrements [`ShutdownState::active`] when the dispatch loop ends, whether
+/// by peer close, cancellation, or error — a drop guard, because panics and
+/// early returns must not leak a count that phase 2 would wait on.
+struct ActiveGuard(Arc<ShutdownState>);
+
+impl Drop for ActiveGuard {
+    fn drop(&mut self) {
+        self.0.active.fetch_sub(1, Ordering::SeqCst);
+    }
+}
 
 /// Wire payload for `Operation::RunCommand`. Mirrors `CommandRequest` but
 /// projects the deadline as unix-ms (the envelope field) and exposes the
@@ -224,11 +274,33 @@ where
 /// `auth_token` is the secret stored in the daemon's state file. Clients
 /// that connect must present it in their `Hello` envelope; a mismatched
 /// token is rejected with `AuthenticationFailed` and the socket is closed.
+///
+/// Convenience wrapper without shutdown participation. Production enters
+/// through [`run`] → [`serve_one_with_shutdown`], so this wrapper is only
+/// referenced from tests (and compiles to nothing in a feature-on release
+/// build).
+#[cfg(any(test, not(feature = "native-ssh")))]
 pub fn serve_one(
     stream: UnixStream,
     transport: Arc<dyn RemoteTransport>,
     auth_token: &str,
     server_nonce: &str,
+) {
+    serve_one_with_shutdown(stream, transport, auth_token, server_nonce, None)
+}
+
+/// [`serve_one`] with participation in the daemon's cooperative shutdown.
+///
+/// The connection counts towards [`ShutdownState::active`] while it dispatches
+/// (phase 2 waits on that), and a `Shutdown` request is answered with an ack,
+/// fires the token, and closes the connection — the accept loop in [`run`]
+/// observes the token and stops admitting.
+pub fn serve_one_with_shutdown(
+    stream: UnixStream,
+    transport: Arc<dyn RemoteTransport>,
+    auth_token: &str,
+    server_nonce: &str,
+    shutdown: Option<&Arc<ShutdownState>>,
 ) {
     let read_stream = match stream.try_clone() {
         Ok(s) => s,
@@ -264,8 +336,19 @@ pub fn serve_one(
         return;
     }
 
-    // Dispatch loop.
+    // Dispatch loop. The connection is "active work" from the shutdown
+    // coordinator's perspective for as long as this loop runs.
+    let _guard = shutdown.map(|s| {
+        s.active.fetch_add(1, Ordering::SeqCst);
+        ActiveGuard(Arc::clone(s))
+    });
     while let Ok(Some(frame)) = reader.read_frame() {
+        // Phase 1 has fired: stop taking new work on this connection too.
+        if let Some(s) = shutdown {
+            if s.token.is_cancelled() {
+                break;
+            }
+        }
         let env: RequestEnvelope = match serde_json::from_slice(&frame) {
             Ok(env) => env,
             Err(e) => {
@@ -278,6 +361,24 @@ pub fn serve_one(
                 continue;
             }
         };
+        // Fire the token BEFORE writing the ack: once the client observes the
+        // ack, "shutdown was accepted" is already true everywhere. The
+        // reverse order would let a client act on the ack while the accept
+        // loop is still serving. In-flight requests on *other* connections
+        // keep running until the grace expires.
+        if env.operation == Operation::Shutdown {
+            if let Some(s) = shutdown {
+                s.token.cancel();
+            }
+            let resp = ResponseEnvelope {
+                request_id: env.request_id.clone(),
+                result: ResponseResult::Ok(Value::Null),
+            };
+            if let Ok(body) = serde_json::to_vec(&resp) {
+                let _ = writer.write_frame(&body);
+            }
+            break;
+        }
         let resp = ResponseEnvelope {
             request_id: env.request_id.clone(),
             result: dispatch(&*transport, &env, server_nonce),
@@ -439,12 +540,19 @@ pub fn dispatch(
 
 /// Bind a Unix domain socket at `socket_path`, set its mode to `0600`, and
 /// spawn one OS thread per accepted connection. Each thread runs
-/// [`serve_one`] until the peer closes.
+/// [`serve_one_with_shutdown`] until the peer closes.
 ///
-/// Blocks for as long as the listener is alive. Step 6 owns the
-/// graceful-shutdown contract (`SIGTERM`/`SIGINT`), so under normal use this
-/// function never returns — it only returns `Err` if the socket cannot be
-/// bound or the mode cannot be tightened to `0600`.
+/// Returns cleanly when a connection sends `Operation::Shutdown`: the
+/// [`ShutdownCoordinator`] runs the design's three phases —
+///
+/// 1. stop admission: the accept loop breaks and the listener is dropped;
+/// 2. grace: in-flight connections finish their dispatch loops (bounded by
+///    `VB_TRANSPORT_SHUTDOWN_GRACE`);
+/// 3. cancel remaining: the function returns, and the process exit reaps any
+///    thread still stuck in a transport call.
+///
+/// It only returns `Err` if the socket cannot be bound or the mode cannot be
+/// tightened to `0600`.
 ///
 /// Gated to `native-ssh` because it is the production entry point: it is
 /// only called by the daemon subcommand, which is itself feature-gated. The
@@ -457,6 +565,7 @@ pub fn run(
     transport: Arc<dyn RemoteTransport>,
     auth_token: &str,
     server_nonce: &str,
+    shutdown: ShutdownCoordinator,
 ) -> Result<(), String> {
     if let Some(parent) = socket_path.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
@@ -483,16 +592,37 @@ pub fn run(
             ));
         }
     }
-    for stream in listener.incoming() {
-        match stream {
-            Ok(s) => {
+    let state = Arc::new(ShutdownState::new(shutdown));
+    // Non-blocking accept + poll: the token is fired from a worker thread (a
+    // connection that sent `Shutdown`), and a blocking accept would never see
+    // it until the next connection arrived.
+    listener
+        .set_nonblocking(true)
+        .map_err(|e| format!("failed to set non-blocking accept: {e}"))?;
+    loop {
+        if state.token.is_cancelled() {
+            break;
+        }
+        match listener.accept() {
+            Ok((s, _)) => {
+                // Restore blocking mode on the accepted stream: on macOS an
+                // accepted socket inherits O_NONBLOCK from the listener, and
+                // a non-blocking stream would make every frame read return
+                // `WouldBlock` immediately.
+                let _ = s.set_nonblocking(false);
                 let transport = transport.clone();
                 let token = auth_token.to_string();
                 let nonce = server_nonce.to_string();
+                let state = Arc::clone(&state);
                 thread::Builder::new()
                     .name("vcli-ipc".to_string())
-                    .spawn(move || serve_one(s, transport, &token, &nonce))
+                    .spawn(move || {
+                        serve_one_with_shutdown(s, transport, &token, &nonce, Some(&state))
+                    })
                     .map_err(|e| format!("failed to spawn ipc worker: {e}"))?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(25));
             }
             Err(e) => {
                 // A spurious accept error is not fatal: the listener is still
@@ -503,6 +633,16 @@ pub fn run(
             }
         }
     }
+    // Three-phase shutdown: admission is already stopped (the loop broke);
+    // wait for in-flight connections within the grace, then return — the
+    // daemon process exits and reaps any straggler stuck in a transport call.
+    let phase2_state = Arc::clone(&state);
+    state.coordinator.execute(
+        || drop(listener),
+        || phase2_state.active.load(Ordering::SeqCst) == 0,
+        || {},
+    );
+    let _ = std::fs::remove_file(socket_path);
     Ok(())
 }
 
@@ -668,5 +808,86 @@ mod tests {
         assert_eq!(answer.daemon_nonce, "the-recorded-nonce");
 
         let _ = std::fs::remove_file(&socket);
+    }
+
+    /// Cooperative shutdown end-to-end: a client's `Shutdown` request is
+    /// acked, the accept loop stops, and `run` returns cleanly within the
+    /// grace. This is the step-6c consumption of `ShutdownCoordinator`.
+    #[cfg(feature = "native-ssh")]
+    #[test]
+    fn shutdown_request_acks_and_stops_the_run_loop() {
+        let transport: Arc<dyn RemoteTransport> = Arc::new(FakeTransport::ok());
+        let socket = std::env::temp_dir().join(format!("vcli-shut-{}.sock", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&socket);
+        // Short grace so the test does not sit through the 10 s default.
+        let coordinator =
+            crate::transport::lifecycle::ShutdownCoordinator::new(Duration::from_millis(200));
+
+        let transport_for_run = Arc::clone(&transport);
+        let path = socket.clone();
+        let runner =
+            thread::spawn(move || run(&path, transport_for_run, "secret-token", "n", coordinator));
+
+        // Wait for the socket to appear (bind happens on the other thread).
+        let mut client = None;
+        for _ in 0..100 {
+            if let Ok(c) = NativeTransportClient::connect(&socket, "p", "secret-token") {
+                client = Some(c);
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        let client = client.expect("daemon did not come up");
+
+        client.request_shutdown().expect("shutdown ack");
+
+        // `run` must return Ok on its own — no process exit, no SIGKILL.
+        let started = std::time::Instant::now();
+        loop {
+            if runner.is_finished() {
+                break;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "run did not terminate after a shutdown ack"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        let result = runner.join().expect("run thread panicked");
+        assert!(result.is_ok(), "run returned an error: {result:?}");
+
+        // Clean exit also unlinks the socket.
+        assert!(!socket.exists(), "socket must be unlinked on clean exit");
+    }
+
+    /// Before shutdown fires, the daemon keeps serving; after the ack, the
+    /// same connection must not accept further requests (phase 1 closes the
+    /// dispatch loop).
+    #[cfg(feature = "native-ssh")]
+    #[test]
+    fn dispatch_loop_stops_taking_work_once_shutdown_is_fired() {
+        use crate::transport::lifecycle::ShutdownCoordinator;
+        let state = Arc::new(ShutdownState::new(ShutdownCoordinator::new(
+            Duration::from_millis(50),
+        )));
+
+        let socket = std::env::temp_dir().join(format!("vcli-disp-{}.sock", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind");
+        let listener_for_thread = listener.try_clone().expect("clone");
+        let st = Arc::clone(&state);
+        thread::spawn(move || {
+            if let Ok((stream, _)) = listener_for_thread.accept() {
+                serve_one_with_shutdown(stream, Arc::new(FakeTransport::ok()), "t", "n", Some(&st));
+            }
+        });
+
+        let client = NativeTransportClient::connect(&socket, "p", "t").expect("connect");
+        client.request_shutdown().expect("shutdown ack");
+        assert!(state.token.is_cancelled());
+
+        drop(client);
+        let _ = std::fs::remove_file(&socket);
+        let _ = listener;
     }
 }
