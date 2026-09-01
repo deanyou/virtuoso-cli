@@ -1498,6 +1498,40 @@ enum WindowCmd {
         #[arg(long)]
         window: Option<String>,
     },
+
+    /// Execute a fixed-semantics X11 action on a specific window.
+    ///
+    /// Requires exact window-id, positive PID, and exact DISPLAY.
+    /// Re-validates the window via resolve_unique_window before each action.
+    ActionX11 {
+        /// Window id (dismiss_id from list-windows-x11, e.g. 0x2e01f16)
+        #[arg(long)]
+        window_id: String,
+        /// Process ID of the window (must be positive)
+        #[arg(long)]
+        pid: u32,
+        /// DISPLAY value (e.g. :0, :1)
+        #[arg(long)]
+        display: String,
+        /// Operation: activate | key | type | click-rel | drag-rel | screenshot | wait
+        #[arg(long)]
+        operation: String,
+        /// Relative X coordinate (for click-rel, drag-rel)
+        #[arg(long)]
+        x: Option<i32>,
+        /// Relative Y coordinate (for click-rel, drag-rel)
+        #[arg(long)]
+        y: Option<i32>,
+        /// Text or key chord (for key, type, wait)
+        #[arg(long)]
+        text: Option<String>,
+        /// Output directory for screenshots
+        #[arg(long)]
+        output_dir: Option<String>,
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display_override: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2074,6 +2108,27 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
         WindowCmd::Screenshot { path, window } => {
             commands::window::screenshot(&path, window.as_deref())
         }
+        WindowCmd::ActionX11 {
+            window_id,
+            pid,
+            display,
+            operation,
+            x,
+            y,
+            text,
+            output_dir,
+            display_override,
+        } => commands::window::action_x11(
+            &window_id,
+            pid,
+            &display,
+            &operation,
+            x,
+            y,
+            text.as_deref(),
+            output_dir.as_deref(),
+            display_override.as_deref(),
+        ),
     }
 }
 

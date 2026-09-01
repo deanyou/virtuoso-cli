@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use crate::client::bridge::VirtuosoClient;
 use crate::error::{Result, VirtuosoError};
+use crate::transport::contract::RemoteTransport;
 use regex::Regex;
 use serde_json::{json, Value};
 
@@ -159,20 +162,16 @@ pub fn dismiss_dialog(action: &str, dry_run: bool) -> Result<Value> {
     }))
 }
 
-/// List blocking dialog(s) via the X11 SSH bypass (no keypress sent).
+/// List blocking dialog(s) via the X11 bypass (no keypress sent).
 ///
 /// Useful as a "dry-run" alternative when SKILL is deadlocked and you want
 /// to see what dialogs are present before deciding which action to send.
+/// Works locally when VB_REMOTE_HOST is absent, otherwise via SSH.
 pub fn list_dialogs_x11(explicit_display: Option<&str>) -> Result<Value> {
     use crate::config::Config;
     use crate::transport::x11;
 
     let config = Config::from_env()?;
-    if config.remote_host.as_deref().unwrap_or("").is_empty() {
-        return Err(VirtuosoError::Config(
-            "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target".into(),
-        ));
-    }
     let runner = x11::transport_for_config(&config)?;
     let user = config.remote_user.as_deref();
     let (env, dialogs) = x11::list_dialogs(
@@ -189,13 +188,13 @@ pub fn list_dialogs_x11(explicit_display: Option<&str>) -> Result<Value> {
     }))
 }
 
-/// Dismiss blocking dialog(s) via the X11 SSH bypass.
+/// Dismiss blocking dialog(s) via the X11 bypass.
 ///
 /// This is the deadlock-resistant alternative to `dismiss_dialog`: it
-/// SSHes into the same host Virtuoso is running on, finds modal dialogs
-/// with `xwininfo`, and sends keypresses (`enter`/`escape`/`alt-y`/`alt-n`/`alt-o`)
-/// via `XTest`. The SKILL channel cannot be used when a modal has stalled
-/// the CIW, so this path is independent of the SKILL bridge.
+/// finds modal dialogs with `xwininfo`, and sends keypresses
+/// (`enter`/`escape`/`alt-y`/`alt-n`/`alt-o`) via `XTest`. The SKILL channel
+/// cannot be used when a modal has stalled the CIW, so this path is independent
+/// of the SKILL bridge. Works locally when VB_REMOTE_HOST is absent.
 ///
 /// Adopted from <https://github.com/Arcadia-1/virtuoso-bridge-lite>
 /// (MIT, 2026-05; helper vendored in resources/x11_dismiss_dialog.py).
@@ -214,11 +213,6 @@ pub fn dismiss_dialog_x11(
         )));
     }
     let config = Config::from_env()?;
-    if config.remote_host.as_deref().unwrap_or("").is_empty() {
-        return Err(VirtuosoError::Config(
-            "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target (or use the SKILL path without --x11)".into(),
-        ));
-    }
     let runner = x11::transport_for_config(&config)?;
     let user = config.remote_user.as_deref();
     let result = x11::dismiss(
@@ -257,17 +251,13 @@ pub fn dismiss_dialog_x11(
 /// Unlike `list_dialogs_x11` (which only returns dialogs matching the
 /// geometric modal test), this enumerates every mapped Virtuoso window
 /// along with its WM frame and dismiss id. Use this when you want to see
-/// what's on screen before picking a target.
+/// what's on screen before picking a target. Works locally when VB_REMOTE_HOST
+/// is absent.
 pub fn list_windows_x11(explicit_display: Option<&str>) -> Result<Value> {
     use crate::config::Config;
     use crate::transport::x11;
 
     let config = Config::from_env()?;
-    if config.remote_host.as_deref().unwrap_or("").is_empty() {
-        return Err(VirtuosoError::Config(
-            "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target".into(),
-        ));
-    }
     let runner = x11::transport_for_config(&config)?;
     let user = config.remote_user.as_deref();
     let (env, windows) = x11::list_windows(
@@ -287,7 +277,8 @@ pub fn list_windows_x11(explicit_display: Option<&str>) -> Result<Value> {
 /// Dismiss a SPECIFIC X11 window by id. Use `list_windows_x11` to find the id first.
 ///
 /// The window id is the `dismiss_id` field returned by `--list-windows`
-/// (typically an X resource id like `0x2e01f16`).
+/// (typically an X resource id like `0x2e01f16`). Works locally when VB_REMOTE_HOST
+/// is absent.
 pub fn dismiss_window_x11(
     window_id: &str,
     action: &str,
@@ -297,11 +288,6 @@ pub fn dismiss_window_x11(
     use crate::transport::x11;
 
     let config = Config::from_env()?;
-    if config.remote_host.as_deref().unwrap_or("").is_empty() {
-        return Err(VirtuosoError::Config(
-            "VB_REMOTE_HOST is not set; X11 bypass requires a remote SSH target".into(),
-        ));
-    }
     let runner = x11::transport_for_config(&config)?;
     let user = config.remote_user.as_deref();
     let result = x11::dismiss_window(
@@ -362,6 +348,54 @@ pub fn screenshot(path: &str, window_pattern: Option<&str>) -> Result<Value> {
         "status": "saved",
         "path": path,
     }))
+}
+
+/// Execute a fixed-semantics X11 action on a specific window.
+///
+/// This is the CLI-facing wrapper around `transport::x11::action_x11`.
+/// It validates parameters, calls the transport layer, and returns structured JSON.
+#[allow(clippy::too_many_arguments)]
+pub fn action_x11(
+    window_id: &str,
+    pid: u32,
+    display: &str,
+    operation: &str,
+    x: Option<i32>,
+    y: Option<i32>,
+    text: Option<&str>,
+    output_dir: Option<&str>,
+    explicit_display: Option<&str>,
+) -> Result<Value> {
+    use crate::config::Config;
+    use crate::transport::x11;
+
+    let op = x11::X11Operation::from_str(operation)?;
+    let _details =
+        x11::validate_action_params(window_id, pid, display, operation, x, y, text, output_dir)?;
+
+    let config = Config::from_env()?;
+    let runner: Arc<dyn RemoteTransport> = x11::transport_for_config(&config)?;
+    let user = config.remote_user.as_deref();
+    let actual_display = explicit_display.unwrap_or(display);
+
+    let client_id = x11::client_id_for(&config);
+    let inputs = x11::ActionX11Inputs {
+        window_id,
+        pid,
+        display: actual_display,
+        operation: op,
+        x,
+        y,
+        text,
+        output_dir,
+        timeout_secs: 30,
+    };
+    let result = x11::action_x11(runner.as_ref(), &client_id, user, &inputs)?;
+
+    let out = serde_json::to_value(&result).map_err(|e| {
+        VirtuosoError::Execution(format!("failed to serialize X11 action result: {e}"))
+    })?;
+    Ok(out)
 }
 
 /// Derive a mode string from a Virtuoso window name.
