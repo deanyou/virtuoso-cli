@@ -192,11 +192,40 @@ impl VirtuosoClient {
     /// Execute a SKILL expression with optional whitelist bypass.
     /// `skip_whitelist` should only be true when the caller holds Admin capability —
     /// it is the caller's responsibility to enforce that precondition.
+    ///
+    /// Uses [`RetryPolicy::Never`]: the request is transmitted exactly once.
+    /// Explicitly idempotent callers use [`Self::execute_skill_idempotent_probe`].
     pub(crate) fn execute_skill_with_bypass(
         &self,
         skill_code: &str,
         timeout: Option<u64>,
         skip_whitelist: bool,
+    ) -> Result<VirtuosoResult> {
+        self.execute_skill_with_policy(skill_code, timeout, skip_whitelist, RetryPolicy::Never)
+    }
+
+    /// Execute a SKILL expression that the caller has *proven* idempotent —
+    /// a read-only health probe such as `1+1` or `getVersion()`.
+    ///
+    /// This is the only path allowed to observe a queued-ticket marker
+    /// (`sync_N`) and transmit again, and only within the original timeout
+    /// budget. Anything that can mutate state (transaction commit above all)
+    /// must go through [`Self::execute_skill`], which returns
+    /// [`VirtuosoError::OutcomeUnknown`] instead of resending.
+    pub(crate) fn execute_skill_idempotent_probe(
+        &self,
+        skill_code: &str,
+        timeout: Option<u64>,
+    ) -> Result<VirtuosoResult> {
+        self.execute_skill_with_policy(skill_code, timeout, true, RetryPolicy::IdempotentProbe)
+    }
+
+    fn execute_skill_with_policy(
+        &self,
+        skill_code: &str,
+        timeout: Option<u64>,
+        skip_whitelist: bool,
+        policy: RetryPolicy,
     ) -> Result<VirtuosoResult> {
         // Explicit readonly mode takes precedence even on Admin execution paths.
         let skip_whitelist = skip_whitelist && !self.whitelist.is_sandbox();
@@ -269,10 +298,35 @@ impl VirtuosoClient {
             let status_byte = data[0];
             let payload = String::from_utf8_lossy(&data[1..]).into_owned();
 
-            // Stale sync_N: queued response from a previous session's command.
-            // Discard and retry with the same command on a fresh connection.
+            // A queued-ticket marker: the daemon answered with `sync_N`. The
+            // client cannot prove whether the ticket belongs to *this*
+            // request or is stale from a previous session — so whether it may
+            // transmit again is a policy decision, not an implementation
+            // detail (design: "SKILL request retry policy").
             if status_byte == STX && is_stale_sync(&payload) {
-                continue;
+                match policy {
+                    RetryPolicy::Never => {
+                        // Transmitted once; outcome unproven. Never resent —
+                        // a non-idempotent SKILL (commit!) must not replay.
+                        return Err(VirtuosoError::OutcomeUnknown(
+                            "observed a queued-ticket marker (sync_N); the request was \
+                             transmitted once and will not be resent because it is not \
+                             marked idempotent"
+                                .into(),
+                        ));
+                    }
+                    RetryPolicy::IdempotentProbe => {
+                        // Explicitly idempotent: resending cannot corrupt
+                        // state. Still bounded by the original timeout
+                        // budget — one logical probe must not open an
+                        // unbounded number of connections.
+                        let budget = std::time::Duration::from_secs(timeout);
+                        if start.elapsed() >= budget {
+                            return Err(VirtuosoError::Timeout(timeout));
+                        }
+                        continue;
+                    }
+                }
             }
 
             let elapsed = start.elapsed().as_secs_f64();
@@ -403,7 +457,9 @@ impl VirtuosoClient {
     }
 
     pub fn test_connection(&self, timeout: Option<u64>) -> Result<bool> {
-        let result = self.execute_skill("1+1", timeout)?;
+        // `1+1` is a read-only probe: idempotent by construction, so it may
+        // drain a stale ticket and retry within the budget.
+        let result = self.execute_skill_idempotent_probe("1+1", timeout)?;
         Ok(result.output.trim() == "2")
     }
 
@@ -481,7 +537,8 @@ impl VirtuosoClient {
         // the RBDVersion default initializer).
         const SKILL: &str = r#"let((v) v = if(boundp('RBDVersion) then RBDVersion else nil) \
             if(v && v != "" && v != "?" then v else nil))"#;
-        let r = self.execute_skill_unchecked(SKILL, Some(5))?;
+        // Idempotent probe: fixed read-only literal, may drain a stale ticket.
+        let r = self.execute_skill_idempotent_probe(SKILL, Some(5))?;
         if !r.skill_ok() {
             return Ok(None);
         }
@@ -507,7 +564,8 @@ impl VirtuosoClient {
     pub fn get_daemon_user(&self) -> Result<Option<String>> {
         const SKILL: &str =
             r#"let((u) u = getShellEnvVar("USER") if(u && u != "" then u else nil))"#;
-        let r = self.execute_skill_unchecked(SKILL, Some(5))?;
+        // Idempotent probe: fixed read-only literal, may drain a stale ticket.
+        let r = self.execute_skill_idempotent_probe(SKILL, Some(5))?;
         if !r.skill_ok() {
             // nil/empty = no USER env var on daemon — treat as unknown, not error
             return Ok(None);
@@ -531,7 +589,9 @@ impl VirtuosoClient {
     /// (falsy) when called without one.
     pub fn daemon_alive(&self) -> bool {
         const SKILL: &str = r#"plus(1 1)"#;
-        match self.execute_skill_unchecked(SKILL, Some(3)) {
+        // Explicitly idempotent probe: it must survive a stale queued ticket,
+        // which is exactly the stuck-state it exists to detect.
+        match self.execute_skill_idempotent_probe(SKILL, Some(3)) {
             Ok(r) => r.skill_ok(),
             Err(_) => false,
         }
@@ -828,6 +888,22 @@ fn check_blocking_skill(code: &str) -> Option<String> {
     None
 }
 
+/// Whether, and under which proof, the client may transmit a SKILL request
+/// again after observing a queued-ticket marker (`sync_N`).
+///
+/// Design invariant ("SKILL request retry policy"): a request is transmitted
+/// once. Only callers that have *proven* the request idempotent may observe a
+/// ticket and send again, and only within the original timeout budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RetryPolicy {
+    /// Default. One transmission; an unprovable outcome returns
+    /// [`VirtuosoError::OutcomeUnknown`].
+    Never,
+    /// Callers may re-transmit: the request is a read-only probe, so a
+    /// resend cannot change remote state.
+    IdempotentProbe,
+}
+
 /// Returns true for stale `"sync_N"` responses queued from a previous session.
 fn is_stale_sync(payload: &str) -> bool {
     let p = payload.trim().trim_matches('"');
@@ -1031,6 +1107,76 @@ mod tests {
     fn stale_sync_numeric() {
         assert!(is_stale_sync("sync_123"));
         assert!(is_stale_sync("\"sync_0\""));
+    }
+
+    /// Mock daemon that answers `answers[i]` on the i-th connection. Each
+    /// answer is the raw response bytes (status byte + payload). Returns the
+    /// bound port and a handle whose drop shuts the listener down.
+    fn spawn_mock_daemon(answers: Vec<Vec<u8>>) -> (u16, std::sync::Arc<()>) {
+        use std::io::Write;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let handle = std::sync::Arc::new(());
+        let h2 = std::sync::Arc::clone(&handle);
+        std::thread::spawn(move || {
+            let _keep = h2;
+            for (i, stream) in listener.incoming().enumerate() {
+                let Ok(mut stream) = stream else { break };
+                let answer = answers.get(i).cloned();
+                // Drain the request (bounded) so the client's write succeeds.
+                let mut buf = [0u8; 4096];
+                let _ = std::io::Read::read(&mut stream, &mut buf);
+                match answer {
+                    Some(bytes) => {
+                        let _ = stream.write_all(&bytes);
+                    }
+                    None => break, // no more scripted answers
+                }
+                let _ = stream.shutdown(std::net::Shutdown::Write);
+            }
+        });
+        (port, handle)
+    }
+
+    #[test]
+    fn never_policy_returns_outcome_unknown_on_a_ticket_marker() {
+        let (port, _keep) = spawn_mock_daemon(vec![vec![STX]
+            .into_iter()
+            .chain(b"sync_1".iter().copied())
+            .collect()]);
+        let client = VirtuosoClient::new("127.0.0.1", port, 5);
+        // Bypass the auth gate directly (the policy under test lives below
+        // it); this is the exact path `execute_skill` takes after its check.
+        let err = client
+            .execute_skill_with_bypass("hiSetPoint(1 2)", Some(5), true)
+            .expect_err("non-idempotent request must not be resent");
+        assert!(
+            matches!(err, VirtuosoError::OutcomeUnknown(_)),
+            "got {err:?}"
+        );
+        // And it must not look retryable to generic retry machinery.
+        assert!(!err.retryable());
+    }
+
+    #[test]
+    fn idempotent_probe_may_resend_within_the_budget() {
+        let ticket = [vec![STX], b"sync_1".to_vec()].concat();
+        let ok = [vec![STX], b"2".to_vec()].concat();
+        let (port, _keep) = spawn_mock_daemon(vec![ticket, ok]);
+        let client = VirtuosoClient::new("127.0.0.1", port, 5);
+        let r = client
+            .execute_skill_idempotent_probe("1+1", Some(5))
+            .expect("idempotent probe may drain a stale ticket and resend");
+        assert_eq!(r.output, "2");
+    }
+
+    #[test]
+    fn outcome_unknown_is_not_a_connection_error() {
+        // The error_type must be distinct so operators (and scripts keyed on
+        // JSON error_type) can tell "unproven" from "transport down".
+        let e = VirtuosoError::OutcomeUnknown("x".into());
+        assert_eq!(e.error_type(), "outcome_unknown");
+        assert_eq!(e.exit_code(), crate::exit_codes::GENERAL_ERROR);
     }
 
     #[test]

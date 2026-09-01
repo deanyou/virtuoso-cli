@@ -283,13 +283,18 @@ pub fn diagnose() -> Result<Value> {
             Ok(true) => {
                 let lat = start.elapsed().as_millis();
                 // Try to get Virtuoso version
-                let ver = vc.execute_skill("getVersion()", None).ok().and_then(|r| {
-                    if r.skill_ok() {
-                        Some(r.output.trim_matches('"').to_string())
-                    } else {
-                        None
-                    }
-                });
+                // getVersion() is a fixed read-only probe; idempotent, so it
+                // may drain a stale queued ticket.
+                let ver = vc
+                    .execute_skill_idempotent_probe("getVersion()", None)
+                    .ok()
+                    .and_then(|r| {
+                        if r.skill_ok() {
+                            Some(r.output.trim_matches('"').to_string())
+                        } else {
+                            None
+                        }
+                    });
                 (true, Some(lat as u64), ver)
             }
             _ => (false, None, None),
@@ -301,7 +306,8 @@ pub fn diagnose() -> Result<Value> {
     // SKILL eval test
     let skill_ok = if daemon_ok {
         let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
-        vc.execute_skill("1+1", None)
+        // Idempotent health probe — same expression test_connection uses.
+        vc.execute_skill_idempotent_probe("1+1", None)
             .map(|r| r.output.trim() == "2")
             .unwrap_or(false)
     } else {
@@ -543,10 +549,10 @@ impl HostnameCheck {
             _ => return Ok(None),
         };
 
-        // Use execute_skill_unchecked because tunnel status / diagnose are
-        // diagnostic commands — they must work without Admin capability.
-        // getHostName() is read-only; the worst it can leak is the host name.
-        let result = vc.execute_skill_unchecked("getHostName()", timeout)?;
+        // Use the idempotent probe path because tunnel status / diagnose are
+        // diagnostic commands — they must work without Admin capability, and
+        // getHostName() is read-only (the worst it can leak is the host name).
+        let result = vc.execute_skill_idempotent_probe("getHostName()", timeout)?;
         if !result.skill_ok() {
             return Err(VirtuosoError::Execution(format!(
                 "getHostName() failed: {}",

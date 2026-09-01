@@ -42,6 +42,18 @@ pub enum VirtuosoError {
 
     #[error("auth error: {0}")]
     Auth(String),
+
+    /// The request may or may not have reached the remote bridge: the client
+    /// observed a queued-ticket marker (`sync_N`) but the SKILL request is not
+    /// marked idempotent, so it is never resent (design: "SKILL request retry
+    /// policy" — a request is transmitted once). The caller may resubmit only
+    /// when it *knows* the operation is idempotent; this error is deliberately
+    /// not `retryable()` so generic retry loops cannot replay non-idempotent
+    /// SKILL (transaction commit above all).
+    #[error(
+        "outcome unknown: request was transmitted once and its result could not be proven: {0}"
+    )]
+    OutcomeUnknown(String),
 }
 
 impl VirtuosoError {
@@ -55,6 +67,7 @@ impl VirtuosoError {
             | Self::Timeout(_)
             | Self::TimeoutWithContext(_, _) => exit_codes::GENERAL_ERROR,
             Self::Execution(_) | Self::Io(_) | Self::Json(_) => exit_codes::GENERAL_ERROR,
+            Self::OutcomeUnknown(_) => exit_codes::GENERAL_ERROR,
         }
     }
 
@@ -70,6 +83,7 @@ impl VirtuosoError {
             Self::NotFound(_) => "not_found",
             Self::Conflict(_) => "conflict",
             Self::Auth(_) => "auth_error",
+            Self::OutcomeUnknown(_) => "outcome_unknown",
         }
     }
 
@@ -78,6 +92,8 @@ impl VirtuosoError {
             self,
             Self::Connection(_) | Self::Timeout(_) | Self::TimeoutWithContext(_, _)
         )
+        // OutcomeUnknown is deliberately absent: an unproven outcome must not
+        // look resubmittable to generic retry machinery.
     }
 
     pub fn suggestion(&self) -> Option<String> {
@@ -85,6 +101,9 @@ impl VirtuosoError {
             Self::Config(msg) if msg.contains("VB_REMOTE_HOST") => {
                 Some("Run: virtuoso init".into())
             }
+            Self::OutcomeUnknown(_) => Some(
+                "The request may have executed. Re-run only if it is idempotent (a read-only probe); never re-run a commit.".into(),
+            ),
             Self::Connection(_) => Some("Run: virtuoso tunnel start".into()),
             Self::Timeout(secs) => Some(format!("Retry with --timeout {}", secs * 2)),
             Self::TimeoutWithContext(secs, _) => Some(format!("Retry with --timeout {}", secs * 2)),
