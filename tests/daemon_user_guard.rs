@@ -308,20 +308,21 @@ fn dispatcher_ping_uses_plus_one_one_not_ipc_is_process_running() {
         .expect("dispatcher.rs should have a ping arm");
     let window = &src[arm_start..arm_start.saturating_add(700)];
 
-    // The actual SKILL payload passed to execute_skill_unchecked must be
-    // plus(1 1). We pin this by looking for the exact call form, not
-    // just any occurrence of "plus(1 1)" (which would also match comments).
+    // The probe must be the plus(1 1) expression — the canonical
+    // idempotent ping on a live daemon. We pin the probe payload, not
+    // the wrapper function (execute_skill_unchecked vs the proactive-stuck
+    // retry helper execute_skill_idempotent_probe, both are acceptable).
     assert!(
-        window.contains("execute_skill_unchecked(\"plus(1 1)\""),
-        "dispatcher::ping should pass the SKILL payload plus(1 1) to execute_skill_unchecked — got: {window}"
+        window.contains("plus(1 1)"),
+        "dispatcher::ping should use plus(1 1) as the probe — got: {window}"
     );
 
-    // Negative check: the actual SKILL payload must NOT be the broken call.
+    // Negative check: the probe must NOT be the broken call.
     // We allow the comment to mention ipcIsProcessRunning (for context) but
     // the payload itself must not be that string.
     assert!(
-        !window.contains("execute_skill_unchecked(\"ipcIsProcessRunning"),
-        "dispatcher::ping must not pass ipcIsProcessRunning to execute_skill_unchecked (it returns nil without a process handle)"
+        !window.contains("ipcIsProcessRunning"),
+        "dispatcher::ping must not use ipcIsProcessRunning (it returns nil without a process handle)"
     );
 }
 

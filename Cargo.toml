@@ -1,6 +1,6 @@
 [package]
 name = "virtuoso-cli"
-version = "1.1.2"
+version = "1.2.0"
 edition = "2021"
 description = "CLI tool to control Cadence Virtuoso from anywhere, locally or remotely"
 license = "MIT"
@@ -31,7 +31,7 @@ daemon = []
 # This is step 3 of the native-transport delivery sequence: a single-hop direct
 # connection with host-key verification and public-key auth. Connection pooling,
 # SOCKS5, jump-host routing, and the RAMIC forward daemon are later increments.
-native-ssh = ["russh"]
+native-ssh = ["russh", "russh-sftp"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -58,11 +58,12 @@ libc = "0.2"
 ratatui = "0.29"
 crossterm = "0.28"
 unicode-width = "0.2"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "io-util"] }
 regex = "1"
 toml = "0.8"
 num_cpus = "1"
 russh = { version = "0.63.1", optional = true }
+russh-sftp = { version = "2", optional = true }
 
 [dev-dependencies]
 # `#[serial]` marks a test as needing exclusive access to the process-global
