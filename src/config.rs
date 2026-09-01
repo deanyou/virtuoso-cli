@@ -129,6 +129,13 @@ pub struct Config {
     pub spectre_args: Vec<String>,
     /// Maximum parallel Spectre compute threads (VB_SPECTRE_MAX_WORKERS, default: 8)
     pub spectre_max_workers: u32,
+    /// Total concurrent exec/SFTP sessions per endpoint (VB_SSH_MAX_SESSIONS,
+    /// default 10). Native backend only — the OpenSSH backend multiplexes
+    /// through ControlMaster and has no such ceiling.
+    pub ssh_max_sessions: usize,
+    /// How many of those sessions bulk transfers may occupy
+    /// (VB_SSH_MAX_BULK_SESSIONS, default 2). Native backend only.
+    pub ssh_max_bulk_sessions: usize,
     /// Path to Cadence environment setup file (VB_CADENCE_CSHRC).
     /// Used to load Spectre environment for remote SSH execution.
     pub cadence_cshrc: Option<String>,
@@ -275,6 +282,12 @@ impl Config {
             spectre_max_workers: Self::env_with_profile("VB_SPECTRE_MAX_WORKERS", profile)
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(8),
+            ssh_max_sessions: Self::env_with_profile("VB_SSH_MAX_SESSIONS", profile)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(crate::transport::scheduler::SchedulerLimits::DEFAULT_TOTAL),
+            ssh_max_bulk_sessions: Self::env_with_profile("VB_SSH_MAX_BULK_SESSIONS", profile)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(crate::transport::scheduler::SchedulerLimits::DEFAULT_BULK),
             cadence_cshrc: Self::env_with_profile("VB_CADENCE_CSHRC", profile),
             spectre_bin: Self::env_with_profile("VB_SPECTRE_BIN", profile),
             roles: RemoteRoles {

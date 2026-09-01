@@ -95,9 +95,15 @@ pub fn open_transport(config: &Config) -> Result<Arc<dyn RemoteTransport>, Trans
             Ok(Arc::new(transport))
         }
         #[cfg(feature = "native-ssh")]
-        SshBackend::Native => Ok(Arc::new(
-            crate::transport::native::NativeTransport::from_config(config)?,
-        )),
+        SshBackend::Native => {
+            // The capacity invariant is checked here rather than in
+            // `Config::from_env` because only the native backend has a
+            // per-endpoint session ceiling — see `scheduler::validate_capacity`.
+            crate::transport::scheduler::validate_capacity(config)?;
+            Ok(Arc::new(
+                crate::transport::native::NativeTransport::from_config(config)?,
+            ))
+        }
         // Without the feature, `native` is not compiled in — report the
         // structured error instead of silently using OpenSSH.
         #[cfg(not(feature = "native-ssh"))]
@@ -153,6 +159,8 @@ mod tests {
             spectre_cmd: "spectre".into(),
             spectre_args: vec![],
             spectre_max_workers: 8,
+            ssh_max_sessions: 10,
+            ssh_max_bulk_sessions: 2,
             cadence_cshrc: None,
             spectre_bin: None,
             roles: crate::config::RemoteRoles::default(),
@@ -224,6 +232,42 @@ mod tests {
                 res.is_err(),
                 "native must not silently fall back to OpenSSH when the feature is enabled"
             );
+        }
+    }
+
+    #[test]
+    fn openssh_path_is_not_subject_to_the_session_invariant() {
+        // OpenSSH multiplexes over ControlMaster and has no per-endpoint
+        // session ceiling, so a worker count that would violate the native
+        // capacity invariant must not break the default backend. Validating it
+        // here would turn configurations that work today into startup errors.
+        let mut cfg = config_with(Some("openssh"));
+        cfg.spectre_max_workers = 64;
+        assert!(open_transport(&cfg).is_ok());
+    }
+
+    #[test]
+    fn native_path_enforces_the_capacity_invariant() {
+        // `Arc<dyn RemoteTransport>` is not `Debug`, so `expect_err` does not
+        // apply here — match on the result, as the other tests in this file do.
+        let mut cfg = config_with(Some("native"));
+        cfg.spectre_max_workers = 32;
+        let err = match open_transport(&cfg) {
+            Ok(_) => panic!("32 workers need 34 sessions; the invariant must be enforced"),
+            Err(e) => e,
+        };
+        #[cfg(feature = "native-ssh")]
+        assert!(
+            matches!(err, TransportError::Configuration(_)),
+            "the invariant must be reported as a configuration error, got {err:?}"
+        );
+        #[cfg(not(feature = "native-ssh"))]
+        {
+            // Without the feature the backend error comes first, which is the
+            // right precedence: there is nothing to size until the backend
+            // exists.
+            let _ = err;
+            assert!(matches!(err, TransportError::UnsupportedBackend));
         }
     }
 

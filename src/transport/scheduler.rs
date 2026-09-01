@@ -164,6 +164,68 @@ impl SchedulerLimits {
         limits.validate()?;
         Ok(limits)
     }
+
+    /// Build limits from a resolved [`crate::config::Config`], enforcing the
+    /// capacity invariant on the way.
+    pub fn from_config(config: &crate::config::Config) -> Result<Self, TransportError> {
+        validate_capacity(config)?;
+        Ok(Self {
+            total: config.ssh_max_sessions,
+            bulk: config.ssh_max_bulk_sessions,
+            urgent_reserve: Self::DEFAULT_URGENT_RESERVE,
+            bulk_starvation_grace: Self::DEFAULT_BULK_STARVATION_GRACE,
+        })
+    }
+}
+
+/// Sessions that must stay available for control traffic while a Spectre sweep
+/// saturates an endpoint.
+///
+/// The design states the invariant as:
+///
+/// ```text
+/// VB_SSH_MAX_SESSIONS >= VB_SPECTRE_MAX_WORKERS + control_reserve
+/// ```
+///
+/// > where `control_reserve` covers the urgent slot plus ordinary foreground
+/// > commands issued while a sweep is running. The defaults satisfy this with
+/// > room to spare (`10 >= 8 + 2`), because each Spectre worker issues its
+/// > commands sequentially and therefore occupies at most one exec session at
+/// > a time.
+pub const CONTROL_RESERVE: usize = 2;
+
+/// Reject a session/worker combination that cannot work, as the design
+/// requires:
+///
+/// > Configuration validation rejects a combination that violates the
+/// > invariant rather than degrading later into spurious `QueueTimeout`
+/// > errors. The preferred remedy for saturation is reserving capacity for
+/// > urgent and control work, not raising the session total.
+///
+/// Only the native backend is checked. OpenSSH multiplexes over ControlMaster
+/// and has no per-endpoint session ceiling, so applying this there would turn
+/// configurations that work today into startup errors for no reason.
+pub fn validate_capacity(config: &crate::config::Config) -> Result<(), TransportError> {
+    let workers = config.spectre_max_workers as usize;
+    let needed = workers.saturating_add(CONTROL_RESERVE);
+    if config.ssh_max_sessions < needed {
+        return Err(TransportError::Configuration(format!(
+            "VB_SSH_MAX_SESSIONS={} is too small for VB_SPECTRE_MAX_WORKERS={}: it must be at \
+             least {workers} + {CONTROL_RESERVE} = {needed}, so urgent and foreground work still \
+             has a session while a sweep is running",
+            config.ssh_max_sessions, config.spectre_max_workers
+        )));
+    }
+    // Built directly rather than via `Self::from_config`, which calls back
+    // into this function.
+    SchedulerLimits {
+        total: config.ssh_max_sessions,
+        bulk: config.ssh_max_bulk_sessions,
+        urgent_reserve: SchedulerLimits::DEFAULT_URGENT_RESERVE,
+        bulk_starvation_grace: SchedulerLimits::DEFAULT_BULK_STARVATION_GRACE,
+    }
+    .validate()?;
+    Ok(())
 }
 
 fn parse_usize(key: &str, raw: &str) -> Result<usize, TransportError> {
@@ -591,6 +653,93 @@ mod tests {
         unsafe { std::env::set_var("VB_SSH_MAX_BULK_SESSIONS", "0") };
         assert!(SchedulerLimits::from_env_with_profile(None).is_err());
         unsafe { std::env::remove_var("VB_SSH_MAX_BULK_SESSIONS") };
+    }
+
+    // ── capacity invariant ──
+
+    fn config_with(workers: u32, sessions: usize, bulk: usize) -> crate::config::Config {
+        crate::config::Config {
+            profile: None,
+            remote_host: Some("compute-eda-42".into()),
+            remote_user: None,
+            port: 65432,
+            jump_host: None,
+            jump_user: None,
+            ssh_port: Some(22),
+            ssh_key: None,
+            ssh_config: None,
+            ssh_backend: Some("native".into()),
+            disable_control_master: false,
+            timeout: 30,
+            read_timeout: 120,
+            keep_remote_files: false,
+            spectre_cmd: "spectre".into(),
+            spectre_args: vec![],
+            spectre_max_workers: workers,
+            ssh_max_sessions: sessions,
+            ssh_max_bulk_sessions: bulk,
+            cadence_cshrc: None,
+            spectre_bin: None,
+            roles: Default::default(),
+        }
+    }
+
+    #[test]
+    fn the_documented_defaults_satisfy_the_capacity_invariant() {
+        // The design: "10 >= 8 + 2".
+        assert_eq!(SchedulerLimits::DEFAULT_TOTAL, 10);
+        assert_eq!(CONTROL_RESERVE, 2);
+        validate_capacity(&config_with(8, 10, 2)).expect("defaults must validate");
+    }
+
+    #[test]
+    fn too_few_sessions_for_the_worker_count_is_rejected() {
+        // The design requires this to be caught at configuration time rather
+        // than degrading into spurious QueueTimeouts during a sweep.
+        let err = validate_capacity(&config_with(16, 10, 2)).expect_err("16 + 2 > 10");
+        assert!(matches!(err, TransportError::Configuration(_)), "{err:?}");
+        assert!(err.to_string().contains("16"), "must name the worker count");
+        assert!(
+            err.to_string().contains("10"),
+            "must name the session count"
+        );
+    }
+
+    #[test]
+    fn the_invariant_is_a_bound_not_an_equality() {
+        // More headroom than the minimum is fine.
+        validate_capacity(&config_with(8, 12, 2)).expect("extra headroom is allowed");
+        // Exactly at the bound is fine.
+        validate_capacity(&config_with(8, 10, 2)).expect("exactly at the bound");
+        // One below the bound is not.
+        assert!(validate_capacity(&config_with(8, 9, 2)).is_err());
+    }
+
+    #[test]
+    fn from_config_carries_the_resolved_limits_and_validates() {
+        let l = SchedulerLimits::from_config(&config_with(4, 8, 3)).unwrap();
+        assert_eq!(l.total, 8);
+        assert_eq!(l.bulk, 3);
+        assert_eq!(l.urgent_reserve, 1);
+        // The capacity invariant is enforced on the way through.
+        assert!(SchedulerLimits::from_config(&config_with(32, 8, 3)).is_err());
+    }
+
+    #[test]
+    fn a_scheduler_built_from_a_validated_config_admits_a_full_worker_complement() {
+        // End-to-end: 8 workers must be able to hold 8 sessions at once and
+        // still leave the reserve free for urgent work.
+        let cfg = config_with(8, 10, 2);
+        let s = SessionScheduler::new(SchedulerLimits::from_config(&cfg).unwrap()).unwrap();
+        let held: Vec<_> = (0..8)
+            .map(|_| s.try_acquire(Priority::Normal).unwrap())
+            .collect();
+        assert_eq!(s.stats().active, 8);
+        assert!(
+            s.try_acquire(Priority::Urgent).is_some(),
+            "control work must still get through at full worker load"
+        );
+        drop(held);
     }
 
     #[test]

@@ -615,6 +615,8 @@ mod tests {
             spectre_cmd: "spectre".into(),
             spectre_args: vec![],
             spectre_max_workers: 8,
+            ssh_max_sessions: 10,
+            ssh_max_bulk_sessions: 2,
             cadence_cshrc: None,
             spectre_bin: None,
             roles: Default::default(),
