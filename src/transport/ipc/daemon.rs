@@ -1,15 +1,14 @@
-//! Fake IPC daemon and the synchronous `NativeTransportClient`.
+//! The synchronous `NativeTransportClient` and the integration test that
+//! proves the IPC wiring end-to-end.
 //!
-//! This module proves the IPC wiring end-to-end: a `NativeTransportClient`
-//! (the business-side client the native backend will use) talks the framed,
-//! versioned protocol to a daemon that dispatches onto an in-memory
-//! `FakeTransport`. The same `shared_contract_suite` that runs against the
-//! OpenSSH backend therefore also runs against the IPC path, which is the gate
-//! for step 2.
+//! The client is Unix-only because the first transport is a Unix domain
+//! socket. Named-pipe (Windows) and TCP variants share this code through
+//! the transport-agnostic [`framing`] layer.
 //!
-//! The client is Unix-only because the first transport is a Unix domain socket.
-//! Named-pipe (Windows) and TCP variants share this code through the
-//! transport-agnostic [`framing`] layer.
+//! Wire payload shapes and the request dispatcher live in
+//! [`crate::transport::ipc::server`], which is the production daemon. This
+//! module owns the client half plus a test that round-trips through the
+//! real server.
 
 #![allow(dead_code)]
 
@@ -23,91 +22,25 @@ use crate::transport::ipc::framing::{
 use crate::transport::ipc::messages::{
     Hello, HelloAck, Operation, RequestEnvelope, ResponseEnvelope, ResponseResult,
 };
-use serde::{Deserialize, Serialize};
+// The wire payload types live in `ipc::server`, which is gated on
+// `(unix, any(test, feature = "native-ssh"))`. Mirror that gate here so the
+// import disappears in builds where the server is absent.
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
+pub(crate) use crate::transport::ipc::server::{
+    WireCommand, WireCommandResult, WireDownloadDir, WireDownloadFile, WireUploadFile,
+    WireUploadText,
+};
 use serde_json::Value;
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
 
-// ───────────────────── wire payloads (id/deadline live in the envelope) ─────────────────────
-
-#[derive(Serialize, Deserialize)]
-struct WireCommand {
-    command: String,
-    /// Execution timeout in seconds, carried separately because `Deadline` is
-    /// not serializable; the envelope carries the absolute deadline instead.
-    timeout: Option<u64>,
-}
-
-/// Wire mirror of [`CommandResult`].
-///
-/// `CommandResult` carries a `std::time::Duration`, which this build's serde
-/// configuration does not serialize, so the daemon and client translate through
-/// this millisecond-based projection instead of deriving `Serialize` on the
-/// contract type.
-#[derive(Serialize, Deserialize)]
-struct WireCommandResult {
-    exit_status: i32,
-    stdout: String,
-    stderr: String,
-    success: bool,
-    duration_ms: u128,
-}
-
-impl From<&CommandResult> for WireCommandResult {
-    fn from(r: &CommandResult) -> Self {
-        Self {
-            exit_status: r.exit_status,
-            stdout: r.stdout.clone(),
-            stderr: r.stderr.clone(),
-            success: r.success,
-            duration_ms: r.duration.as_millis(),
-        }
-    }
-}
-
-impl From<WireCommandResult> for CommandResult {
-    fn from(w: WireCommandResult) -> Self {
-        Self {
-            exit_status: w.exit_status,
-            stdout: w.stdout,
-            stderr: w.stderr,
-            success: w.success,
-            duration: Duration::from_millis(w.duration_ms as u64),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct WireUploadFile {
-    local: String,
-    remote: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct WireUploadText {
-    text: String,
-    remote: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct WireDownloadFile {
-    remote: String,
-    local: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct WireDownloadDir {
-    remote: String,
-    local: String,
-}
-
 // ───────────────────────────── client (production-shaped) ─────────────────────────────
 
-#[cfg(unix)]
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
 use std::os::unix::net::UnixStream;
 
-#[cfg(unix)]
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
 pub struct NativeTransportClient {
     conn: Mutex<UnixStream>,
     profile: String,
@@ -117,7 +50,7 @@ pub struct NativeTransportClient {
     daemon_nonce: String,
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
 impl NativeTransportClient {
     /// Connect to a daemon's Unix socket and complete the `Hello` handshake.
     pub fn connect(
@@ -173,7 +106,7 @@ impl NativeTransportClient {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
 fn do_handshake(
     conn: &Mutex<UnixStream>,
     profile: &str,
@@ -218,7 +151,7 @@ fn do_handshake(
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
 fn frame_err_to_transport(e: FrameError) -> TransportError {
     match e {
         FrameError::Io(_) => TransportError::DaemonUnavailable,
@@ -228,7 +161,7 @@ fn frame_err_to_transport(e: FrameError) -> TransportError {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
 impl RemoteTransport for NativeTransportClient {
     fn test_connection(&self, deadline: Deadline) -> Result<bool, TransportError> {
         let resp = self.exchange(Operation::TestConnection, Value::Null, deadline)?;
@@ -309,151 +242,29 @@ impl RemoteTransport for NativeTransportClient {
     }
 }
 
-// ───────────────────────────── fake daemon + integration test ─────────────────────────────
+// ───────────────────────────── end-to-end test (over IPC, against the real server) ─────────────────────────────
 
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use crate::transport::contract::test_support::{shared_contract_suite, FakeTransport};
-    use crate::transport::ipc::messages::IpcError;
-    use std::collections::BTreeSet;
-    use std::os::unix::net::{UnixListener, UnixStream};
+    use crate::transport::ipc::server as real_server;
+    use std::os::unix::net::UnixListener;
     use std::sync::Arc;
     use std::thread;
+    use std::time::Duration;
 
     /// Serve one connection: Hello handshake, then dispatch every request onto
     /// `transport` until the client closes.
-    fn serve_one(stream: UnixStream, transport: Arc<dyn RemoteTransport>) {
-        // Two independent handles to the same socket: reads and writes don't
-        // fight over a single borrowed stream.
-        let read_stream = stream.try_clone().unwrap();
-        let mut reader = FrameReader::new(read_stream);
-        let mut writer = FrameWriter::new(stream);
-
-        // Hello handshake.
-        let hello_frame = reader.read_frame().unwrap().unwrap();
-        let hello_env: RequestEnvelope = serde_json::from_slice(&hello_frame).unwrap();
-        assert_eq!(hello_env.operation, Operation::Hello);
-        let ack = HelloAck {
-            server_major: PROTOCOL_MAJOR,
-            server_minor: PROTOCOL_MINOR,
-            daemon_nonce: "fake-daemon-nonce".to_string(),
-            capabilities: BTreeSet::new(),
-        };
-        let ack_env = ResponseEnvelope {
-            request_id: hello_env.request_id,
-            result: ResponseResult::Ok(serde_json::to_value(&ack).unwrap()),
-        };
-        writer
-            .write_frame(&serde_json::to_vec(&ack_env).unwrap())
-            .unwrap();
-
-        // Dispatch loop.
-        while let Some(frame) = reader.read_frame().unwrap() {
-            let env: RequestEnvelope = serde_json::from_slice(&frame).unwrap();
-            let result = dispatch(&*transport, &env);
-            let resp = ResponseEnvelope {
-                request_id: env.request_id.clone(),
-                result,
-            };
-            writer
-                .write_frame(&serde_json::to_vec(&resp).unwrap())
-                .unwrap();
-        }
-    }
-
-    fn dispatch(transport: &dyn RemoteTransport, env: &RequestEnvelope) -> ResponseResult {
-        let deadline = Deadline::from_unix_ms(env.deadline_unix_ms);
-        let request_id = env.request_id.clone();
-        match &env.operation {
-            Operation::RunCommand => {
-                let w: WireCommand = match serde_json::from_value(env.payload.clone()) {
-                    Ok(w) => w,
-                    Err(e) => return ResponseResult::Err(IpcError::Configuration(e.to_string())),
-                };
-                let req = CommandRequest {
-                    id: RequestId(request_id),
-                    deadline,
-                    command: w.command,
-                    timeout: w.timeout.map(Duration::from_secs),
-                };
-                match transport.run_command(&req) {
-                    Ok(r) => ResponseResult::Ok(
-                        serde_json::to_value(WireCommandResult::from(&r)).unwrap(),
-                    ),
-                    Err(e) => ResponseResult::Err(IpcError::from(e)),
-                }
-            }
-            Operation::TestConnection => match transport.test_connection(deadline) {
-                Ok(b) => ResponseResult::Ok(serde_json::to_value(b).unwrap()),
-                Err(e) => ResponseResult::Err(IpcError::from(e)),
-            },
-            Operation::UploadFile => {
-                let w: WireUploadFile = match serde_json::from_value(env.payload.clone()) {
-                    Ok(w) => w,
-                    Err(e) => return ResponseResult::Err(IpcError::Configuration(e.to_string())),
-                };
-                let req = UploadFileRequest {
-                    id: RequestId(request_id),
-                    deadline,
-                    local: std::path::PathBuf::from(w.local),
-                    remote: w.remote,
-                };
-                match transport.upload_file(&req) {
-                    Ok(()) => ResponseResult::Ok(Value::Null),
-                    Err(e) => ResponseResult::Err(IpcError::from(e)),
-                }
-            }
-            Operation::UploadText => {
-                let w: WireUploadText = match serde_json::from_value(env.payload.clone()) {
-                    Ok(w) => w,
-                    Err(e) => return ResponseResult::Err(IpcError::Configuration(e.to_string())),
-                };
-                let req = UploadTextRequest {
-                    id: RequestId(request_id),
-                    deadline,
-                    text: w.text,
-                    remote: w.remote,
-                };
-                match transport.upload_text(&req) {
-                    Ok(()) => ResponseResult::Ok(Value::Null),
-                    Err(e) => ResponseResult::Err(IpcError::from(e)),
-                }
-            }
-            Operation::DownloadFile => {
-                let w: WireDownloadFile = match serde_json::from_value(env.payload.clone()) {
-                    Ok(w) => w,
-                    Err(e) => return ResponseResult::Err(IpcError::Configuration(e.to_string())),
-                };
-                let req = DownloadFileRequest {
-                    id: RequestId(request_id),
-                    deadline,
-                    remote: w.remote,
-                    local: std::path::PathBuf::from(w.local),
-                };
-                match transport.download_file(&req) {
-                    Ok(()) => ResponseResult::Ok(Value::Null),
-                    Err(e) => ResponseResult::Err(IpcError::from(e)),
-                }
-            }
-            Operation::DownloadDir => {
-                let w: WireDownloadDir = match serde_json::from_value(env.payload.clone()) {
-                    Ok(w) => w,
-                    Err(e) => return ResponseResult::Err(IpcError::Configuration(e.to_string())),
-                };
-                let req = DownloadDirRequest {
-                    id: RequestId(request_id),
-                    deadline,
-                    remote: w.remote,
-                    local: std::path::PathBuf::from(w.local),
-                };
-                match transport.download_dir(&req) {
-                    Ok(()) => ResponseResult::Ok(Value::Null),
-                    Err(e) => ResponseResult::Err(IpcError::from(e)),
-                }
-            }
-            other => ResponseResult::Err(IpcError::UnsupportedOperation(format!("{other:?}"))),
-        }
+    fn serve_one_via_real_server(
+        listener: std::os::unix::net::UnixListener,
+        transport: Arc<dyn RemoteTransport>,
+    ) {
+        // The real `server` module is the source of truth — this test exists
+        // only to verify the client (NativeTransportClient) still round-trips
+        // through a server that uses it.
+        let (stream, _) = listener.accept().unwrap();
+        real_server::serve_one(stream, transport, "", "fake-daemon-nonce");
     }
 
     #[test]
@@ -467,8 +278,7 @@ mod tests {
         let listener = UnixListener::bind(&socket).unwrap();
 
         let handle = thread::spawn(move || {
-            let (stream, _) = listener.accept().unwrap();
-            serve_one(stream, Arc::new(FakeTransport::ok()));
+            serve_one_via_real_server(listener, Arc::new(FakeTransport::ok()));
         });
 
         let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();

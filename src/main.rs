@@ -2174,13 +2174,15 @@ fn main() {
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
         // Compiled only with `native-ssh`; other builds have no such subcommand
-        // at all, so there is nothing to dispatch.
+        // at all, so there is nothing to dispatch. `run_with` blocks forever
+        // (it is the daemon process); returning here is fine because nothing
+        // useful follows in the daemon's lifetime.
         #[cfg(feature = "native-ssh")]
         Commands::TransportDaemon {
             ipc_endpoint,
             token_path,
             daemon_nonce,
-        } => commands::transport_daemon::run(&ipc_endpoint, &token_path, &daemon_nonce),
+        } => commands::transport_daemon::run_with(&ipc_endpoint, &token_path, &daemon_nonce),
         Commands::Tunnel(cmd) => dispatch_tunnel(cmd, format),
         Commands::Profile(cmd) => dispatch_profile(cmd),
         Commands::Skill(cmd) => dispatch_skill(cmd),

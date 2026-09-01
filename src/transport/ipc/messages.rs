@@ -57,6 +57,10 @@ pub enum Operation {
     Health,
     Shutdown,
     Cancel,
+    /// Tier-1 liveness proof: ask the daemon to echo its nonce so the parent
+    /// CLI can verify the process on the other end of the socket is the
+    /// recorded daemon instance. See `transport::ipc::server::ChallengeAck`.
+    Challenge,
     Unknown(String),
 }
 
@@ -75,6 +79,7 @@ impl Operation {
             Operation::Health => "health",
             Operation::Shutdown => "shutdown",
             Operation::Cancel => "cancel",
+            Operation::Challenge => "challenge",
             Operation::Unknown(s) => s.as_str(),
         }
     }
@@ -102,6 +107,7 @@ impl<'de> Deserialize<'de> for Operation {
             "health" => Operation::Health,
             "shutdown" => Operation::Shutdown,
             "cancel" => Operation::Cancel,
+            "challenge" => Operation::Challenge,
             other => Operation::Unknown(other.to_string()),
         })
     }
