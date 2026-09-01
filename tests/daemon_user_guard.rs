@@ -317,12 +317,14 @@ fn dispatcher_ping_uses_plus_one_one_not_ipc_is_process_running() {
         "dispatcher::ping should use plus(1 1) as the probe — got: {window}"
     );
 
-    // Negative check: the probe must NOT be the broken call.
-    // We allow the comment to mention ipcIsProcessRunning (for context) but
-    // the payload itself must not be that string.
+    // Negative check: the payload itself must not be the broken call.
+    // We allow comments in the arm to *name* ipcIsProcessRunning for
+    // historical context, but neither wrapper should pass it as the SKILL
+    // string.
     assert!(
-        !window.contains("ipcIsProcessRunning"),
-        "dispatcher::ping must not use ipcIsProcessRunning (it returns nil without a process handle)"
+        !window.contains("execute_skill_unchecked(\"ipcIsProcessRunning")
+            && !window.contains("execute_skill_idempotent_probe(\"ipcIsProcessRunning"),
+        "dispatcher::ping must not pass ipcIsProcessRunning as a probe payload (it returns nil without a process handle)"
     );
 }
 
