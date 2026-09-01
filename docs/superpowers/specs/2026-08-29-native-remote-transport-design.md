@@ -1,5 +1,42 @@
 # Native Remote Transport Design
 
+## Status — ✅ Delivered, published as `v1.2.0` (stable)
+
+The native (russh-based) SSH backend reached **stable** status and shipped in
+`virtuoso-cli v1.2.0` (git tag `v1.2.0`; published to crates.io and as a GitHub
+release). OpenSSH remains the runtime default backend; the native backend is
+selected explicitly via `VB_SSH_BACKEND=native`. There is **no automatic backend
+migration**.
+
+### Per-step delivery
+
+| Step | Scope | Status | Key commits / notes |
+|------|-------|--------|----------------------|
+| 0 | Contract test harness against OpenSSH | ✅ Delivered | Gate established before any native code |
+| 1 | `RemoteTransport` extraction (zero OpenSSH behaviour change) | ✅ Delivered | `Arc<dyn RemoteTransport>` handoff |
+| 2 | Versioned IPC, state model, fake daemon, `NativeTransportClient`, `Challenge` | ✅ Delivered | `1428336` |
+| 3 | Single-hop SSH fixture + native direct connect + host-key verification + public-key auth | ✅ Delivered | `c69811e` |
+| 4 | Endpoint pooling, channel scheduler, SFTP streaming, transfer contracts | ✅ Delivered | scheduler/pool `8a61848`/`097eabc`/`f09641a`; SFTP `134ba36` |
+| 5 | SOCKS5 + one-hop jump routing | ❌ Deferred | **Delta from design** — native is single-hop only; `ProxyJump` returns `UnsupportedOperation`; SOCKS5 documented as "planned". OpenSSH still serves these paths. |
+| 6 | RAMIC forward + reconnect + lifecycle + SKILL retry policy | ⚠️ Partial | reconnect/lifecycle/SKILL-no-replay ✅ (`2d13710`/`165942f`/`6cd8eeb`/`f342240`); **RAMIC/X11 forward deferred** (native returns no — see README capability matrix) |
+| 7 | Linux / macOS / Windows integration matrices | ✅ Delivered | `integration.yml` `04a1f5e`; in-process SFTP roundtrip `7a0f589` |
+| 8 | Diagnostics + migration documentation + stable status publish | ✅ Delivered | `15c5ce6`/`8fb4422`/`121309c`; multi-platform release binaries `3c03a09` |
+
+### Explicit deltas from this design
+
+- **SOCKS5 + jump (step 5)** were scoped out of the first stable cut. This
+  design (line 535) lists SOCKS5 among the first stable release's must-haves,
+  but the shipped `v1.2.0` keeps the native backend single-hop + public-key
+  auth to bound the verification surface. They remain planned increments; users
+  needing `ProxyJump` / SOCKS5 / agent / password stay on the OpenSSH backend.
+- **RAMIC / X11 forwarding (step 6)** is not implemented in the native backend
+  (returns no / `UnsupportedOperation`); `virtuoso-daemon`'s RAMIC reach is
+  still provided by the OpenSSH path.
+- Consequently the design's Purpose requirement 3 — *route the complete remote
+  path through an application-level SOCKS5 proxy* — is **not met by the native
+  backend**; it is met by OpenSSH. This is reflected in the README capability
+  matrix (SSH Backend Selection).
+
 ## Purpose and scope
 
 `virtuoso-cli` will retain its existing OpenSSH transport and add a runtime-selectable, pure-Rust native SSH backend. The native backend must solve three requirements in its first stable release:
