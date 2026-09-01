@@ -1,0 +1,33 @@
+name: Security audit
+
+# Dependency vulnerability scan for the published crate. Surfaces RUSTSEC
+# advisories on every dependency change and on a weekly schedule, so a
+# newly-disclosed vulnerability is caught without waiting for a release.
+#
+# On push/PR the check turns red if any (non-informational) advisory is found.
+# On the scheduled run it additionally opens an issue per new advisory.
+
+on:
+  push:
+    paths:
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+  schedule:
+    # Weekly, off-peak (avoid the :00 UTC stampede). Monday ~03:37 UTC.
+    - cron: '37 3 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+  checks: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run cargo-audit
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
