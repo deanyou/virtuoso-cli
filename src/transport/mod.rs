@@ -5,6 +5,7 @@ pub mod daemon_lifecycle;
 pub mod host_keys;
 pub mod identity;
 pub mod ipc;
+pub mod lifecycle;
 #[cfg(feature = "native-ssh")]
 pub mod native;
 pub mod openssh;
