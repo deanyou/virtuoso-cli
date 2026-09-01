@@ -302,26 +302,35 @@ fn dispatcher_ping_uses_plus_one_one_not_ipc_is_process_running() {
     )
     .expect("read dispatcher.rs");
 
-    // Find the `"ping"` arm
+    // Slice the `"ping"` arm up to the next match arm. Dispatcher arms are
+    // indented 12 spaces, while the payload/comment lines inside an arm are
+    // deeper, so this boundary cannot leak into the following arm — and it
+    // stays correct no matter how long the comment block above the call grows.
     let arm_start = src
         .find("\"ping\" =>")
         .expect("dispatcher.rs should have a ping arm");
-    let window = &src[arm_start..arm_start.saturating_add(700)];
+    let arm_end = src[arm_start..]
+        .find("\n            \"")
+        .map_or(src.len(), |offset| arm_start + offset);
+    let window = &src[arm_start..arm_end];
 
-    // The actual SKILL payload passed to execute_skill_unchecked must be
-    // plus(1 1). We pin this by looking for the exact call form, not
-    // just any occurrence of "plus(1 1)" (which would also match comments).
+    // The actual SKILL payload must be `plus(1 1)`, pinned by exact call form
+    // rather than by any occurrence (the comments above also mention it).
+    // Since step 6c-2 the ping goes through `execute_skill_idempotent_probe`
+    // so that it survives a stale queued ticket — pinning the probe form also
+    // guards against silently reverting to the non-idempotent call.
     assert!(
-        window.contains("execute_skill_unchecked(\"plus(1 1)\""),
-        "dispatcher::ping should pass the SKILL payload plus(1 1) to execute_skill_unchecked — got: {window}"
+        window.contains("execute_skill_idempotent_probe(\"plus(1 1)\""),
+        "dispatcher::ping should pass the SKILL payload plus(1 1) to execute_skill_idempotent_probe — got: {window}"
     );
 
-    // Negative check: the actual SKILL payload must NOT be the broken call.
-    // We allow the comment to mention ipcIsProcessRunning (for context) but
-    // the payload itself must not be that string.
+    // Negative check: the SKILL payload must NOT be the broken call. We allow
+    // the comment to mention ipcIsProcessRunning (for context); the payload is
+    // a quoted string literal, so matching the leading quote keeps this from
+    // firing on the comment.
     assert!(
-        !window.contains("execute_skill_unchecked(\"ipcIsProcessRunning"),
-        "dispatcher::ping must not pass ipcIsProcessRunning to execute_skill_unchecked (it returns nil without a process handle)"
+        !window.contains("\"ipcIsProcessRunning"),
+        "dispatcher::ping must not pass ipcIsProcessRunning as its SKILL payload (it returns nil without a process handle) — got: {window}"
     );
 }
 
