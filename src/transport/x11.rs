@@ -549,9 +549,16 @@ pub fn list_windows(
             Duration::from_secs(15),
         ))?;
         let these = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
-        if these.is_empty() {
-            helper_errors.extend(extract_helper_errors(&out));
-        }
+        // The helper exits with code 1 + empty output to signal "no Virtuoso
+        // windows" (healthy), same semantics as list_dialogs. Don't surface
+        // that as a helper failure, otherwise `list-windows-x11` errors out
+        // whenever the display simply has no Virtuoso windows.
+        let env_helper_errors = if helper_exited_no_dialogs(&out, these.is_empty()) {
+            Vec::new()
+        } else {
+            extract_helper_errors(&out)
+        };
+        helper_errors.extend(env_helper_errors);
         windows.extend(these);
     }
     // If the helper died and produced no windows, surface the error so callers
@@ -2748,6 +2755,47 @@ mod tests {
         assert_eq!(dialogs.len(), 1);
         assert_eq!(dialogs[0].window_id, "helper-error");
         assert!(dialogs[0].title.contains("x11 helper error"));
+    }
+
+    #[test]
+    fn list_windows_exit1_empty_means_no_windows_not_error() {
+        // The helper exits 1 with no output to signal "no Virtuoso windows".
+        // This is the healthy state and must come back as an empty list, not a
+        // helper failure (same semantics as list_dialogs).
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 1)); // helper: no windows → exit 1
+        let (_, windows) = list_windows(&transport, "client1", Some("user1"), Some(":99"))
+            .expect("list_windows should succeed");
+        assert!(windows.is_empty(), "expected no windows, got {windows:?}");
+    }
+
+    #[test]
+    fn list_windows_with_window_exit0_returns_window() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result(
+            r#"{"frame_id":"0x1","window_id":"0x2","dismiss_id":"0x2","title":"Virtuoso","class":["virtuoso"],"geometry":{"x":0,"y":0,"w":800,"h":600},"pid":12345,"visible":true}"#,
+            "",
+            0,
+        ));
+        let (_, windows) = list_windows(&transport, "client1", Some("user1"), Some(":99"))
+            .expect("list_windows should succeed");
+        assert_eq!(windows.len(), 1);
+        assert_eq!(windows[0].window_id, "0x2");
+    }
+
+    #[test]
+    fn list_windows_real_failure_exit2_surfaces_helper_error() {
+        // A genuine failure (exit 2, stderr) must still be surfaced as an
+        // error so callers can distinguish "no Virtuoso windows" from "x11
+        // helper crashed".
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "xwininfo: unable to open display", 2));
+        let err = list_windows(&transport, "client1", Some("user1"), Some(":99"))
+            .expect_err("expected an error for real helper failure");
+        assert!(err.to_string().contains("x11 helper failed"));
     }
 
     #[test]
