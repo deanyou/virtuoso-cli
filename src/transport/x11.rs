@@ -20,6 +20,7 @@ use include_dir::{include_dir, Dir};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
+use uuid::Uuid;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -911,10 +912,15 @@ pub fn action_x11(
         )));
     }
 
-    // Step 4: Check geometry bounds for click/drag operations
+    // Step 4: Check geometry bounds for click/drag operations.
+    // A zero-sized geometry means the window bounds are unknown (unparsed or
+    // abnormal); don't blanket-reject — trust the caller's coordinates instead.
     if let (Some(op_x), Some(op_y)) = (*x, *y) {
         let geom = &resolved.geometry;
-        if op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h {
+        if geom.w > 0
+            && geom.h > 0
+            && (op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h)
+        {
             return Err(VirtuosoError::Config(format!(
                 "coordinates ({op_x}, {op_y}) out of bounds for window size {}x{}",
                 geom.w, geom.h
@@ -948,7 +954,7 @@ pub fn action_x11(
             .ok_or_else(|| VirtuosoError::Config("screenshot requires --output-dir".into()))?;
         // Use a random temp name on the GUI host to avoid colliding with
         // prior runs or concurrent agents targeting the same DISPLAY.
-        let token = std::process::id() ^ (start.elapsed().as_nanos() as u32);
+        let token = Uuid::new_v4();
         let safe_name = format!("vcli_shot_{token}.png");
         let remote_path = format!("/tmp/{safe_name}");
         let remote_cmd = format!(
@@ -972,8 +978,12 @@ pub fn action_x11(
         match runner.fetch_file(&remote_path, dir, Duration::from_secs(*timeout_secs)) {
             Ok(()) => {}
             Err(e) => {
-                // LocalTransport doesn't support fetch_file; the import wrote
-                // directly to the local /tmp which was then renamed by caller.
+                // The import already wrote the PNG to remote_path on the GUI
+                // host; since the fetch failed, clean it up there. Best-effort.
+                let _ = runner.run_command(&CommandRequest::untimed(format!(
+                    "rm -f {}",
+                    shell_escape(&remote_path)
+                )));
                 return Err(VirtuosoError::Execution(format!(
                     "screenshot fetch failed: {e}"
                 )));
@@ -983,7 +993,12 @@ pub fn action_x11(
         let local_path_buf = std::path::PathBuf::from(dir).join(&safe_name);
         match validate_png_artifact(&local_path_buf) {
             Ok((size, hash)) => {
-                let _ = std::fs::remove_file(&remote_path); // best-effort remote cleanup
+                // Best-effort cleanup of the temp PNG on the GUI host (remote
+                // or local — the runner abstracts the host).
+                let _ = runner.run_command(&CommandRequest::untimed(format!(
+                    "rm -f {}",
+                    shell_escape(&remote_path)
+                )));
                 (
                     vec![out],
                     Some(ArtifactInfo {
@@ -996,6 +1011,11 @@ pub fn action_x11(
             }
             Err(e) => {
                 let _ = std::fs::remove_file(&local_path_buf); // cleanup invalid file
+                // Also remove the temp PNG left on the GUI host.
+                let _ = runner.run_command(&CommandRequest::untimed(format!(
+                    "rm -f {}",
+                    shell_escape(&remote_path)
+                )));
                 return Err(e);
             }
         }
@@ -1337,7 +1357,9 @@ fn validate_png_artifact(
 ) -> std::result::Result<(u64, String), VirtuosoError> {
     use std::io::{Read, Seek};
 
-    let metadata = std::fs::metadata(path).map_err(|e| {
+    // Use symlink_metadata so the check does not follow the link — a plain
+    // `metadata` would resolve the target and never report a symlink.
+    let metadata = std::fs::symlink_metadata(path).map_err(|e| {
         VirtuosoError::Execution(format!("cannot stat screenshot path {:?}: {e}", path))
     })?;
 
