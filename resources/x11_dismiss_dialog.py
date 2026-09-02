@@ -560,12 +560,23 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
     try:
         requested_id_str = win_id_str
         resolved_title = title
+        # Geometry for the dismissed output; populated from discover_windows
+        # when an explicit id is resolved, otherwise left at zero (callers
+        # that go through find_dialogs backfill it from the dialog dict).
+        geo = {"x": 0, "y": 0, "w": 0, "h": 0}
         if target_is_explicit:
             resolved = _find_window_by_id(display, win_id_str)
             if resolved:
                 win_id_str = resolved.get("frame_id") or win_id_str
                 child_id_str = resolved.get("dismiss_id") or resolved.get("window_id") or win_id_str
                 resolved_title = resolved.get("title") or resolved_title
+                rgeo = resolved.get("geometry") or {}
+                geo = {
+                    "x": int(rgeo.get("x") or 0),
+                    "y": int(rgeo.get("y") or 0),
+                    "w": int(rgeo.get("w") or 0),
+                    "h": int(rgeo.get("h") or 0),
+                }
             else:
                 child_id_str = _find_app_child(display, win_id_str)
         else:
@@ -589,6 +600,7 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
                 "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "enter", "keycode": int(keycode),
                 "still_mapped": _is_window_mapped(child_id_str),
+                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
             }
         if action == "escape":
             keycode = xlib.XKeysymToKeycode(dpy, KEYSYM_ESCAPE)
@@ -601,6 +613,7 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
                 "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "escape", "keycode": int(keycode),
                 "still_mapped": _is_window_mapped(child_id_str),
+                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
             }
         if action == "alt-y":
             kc_y = xlib.XKeysymToKeycode(dpy, KEYSYM_Y)
@@ -611,6 +624,7 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
                 "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "alt-y", "keycode_alt": int(kc_alt), "keycode_y": int(kc_y),
                 "still_mapped": _is_window_mapped(child_id_str),
+                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
             }
         if action == "alt-n":
             kc_n = xlib.XKeysymToKeycode(dpy, KEYSYM_N)
@@ -621,6 +635,7 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
                 "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "alt-n", "keycode_alt": int(kc_alt), "keycode_n": int(kc_n),
                 "still_mapped": _is_window_mapped(child_id_str),
+                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
             }
         if action == "alt-o":
             kc_o = xlib.XKeysymToKeycode(dpy, KEYSYM_O)
@@ -631,6 +646,7 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
                 "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
                 "action": "alt-o", "keycode_alt": int(kc_alt), "keycode_o": int(kc_o),
                 "still_mapped": _is_window_mapped(child_id_str),
+                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
             }
         raise AssertionError("unreachable: action=%r" % action)
     finally:
