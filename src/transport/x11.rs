@@ -494,6 +494,28 @@ pub fn dismiss(
     })
 }
 
+/// Parse the helper's `--list-windows` stdout into `WindowInfo`s.
+///
+/// The helper emits only per-window properties (frame_id/window_id/title/
+/// class/pid/geometry). `display`/`xauthority` are properties of the DISPLAY
+/// that was *queried*, not of the window, so they are backfilled here.
+///
+/// Backfilling is mandatory, not cosmetic: `resolve_unique_window` requires an
+/// exact DISPLAY match and treats `None` as a mismatch, so a caller that skips
+/// this step fails every resolution with `not_found`. Both `list_windows` and
+/// `action_x11` go through this function so they cannot drift apart again.
+fn parse_window_list(stdout: &str, display: &str, xauthority: Option<&String>) -> Vec<WindowInfo> {
+    stdout
+        .lines()
+        .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
+        .map(|mut w| {
+            w.display = Some(display.to_string());
+            w.xauthority = xauthority.cloned();
+            w
+        })
+        .collect()
+}
+
 /// Enumerate Virtuoso-related X11 windows. No dismiss action.
 pub fn list_windows(
     runner: &dyn RemoteTransport,
@@ -513,15 +535,7 @@ pub fn list_windows(
             &cmd,
             Duration::from_secs(15),
         ))?;
-        let mut these: Vec<WindowInfo> = out
-            .stdout
-            .lines()
-            .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
-            .collect();
-        for w in &mut these {
-            w.display = Some(display.to_string());
-            w.xauthority = env.xauthority.clone();
-        }
+        let these = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
         if these.is_empty() {
             helper_errors.extend(extract_helper_errors(&out));
         }
@@ -892,11 +906,7 @@ pub fn action_x11(
         Duration::from_secs(*timeout_secs),
     ))?;
 
-    let windows: Vec<WindowInfo> = out
-        .stdout
-        .lines()
-        .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
-        .collect();
+    let windows = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
 
     // Step 2: Resolve unique window with strict PID + DISPLAY matching
     let resolved = resolve_unique_window(&windows, *pid, display, None)?;
@@ -2435,6 +2445,33 @@ mod tests {
         let result = resolve_unique_window(&windows, 12345, ":0", Some("ADE Assembler"));
         let win = result.expect("expected Ok");
         assert_eq!(win.window_id, "0x1");
+    }
+
+    #[test]
+    fn parse_window_list_backfills_display_and_xauthority() {
+        // Regression: the helper emits NO display/xauthority fields (see
+        // resources/x11_dismiss_dialog.py::discover_windows). If a caller
+        // forgets to backfill them, resolve_unique_window's exact DISPLAY
+        // match compares against None and every action returns not_found.
+        let line = r#"{"frame_id":"0x1","window_id":"0x2","dismiss_id":"0x2","title":"ADE Explorer","class":["virtuoso"],"geometry":{"x":0,"y":0,"w":800,"h":600},"pid":12345,"visible":true}"#;
+        let windows = parse_window_list(line, ":99", Some(&"/tmp/.Xauthority".to_string()));
+
+        assert_eq!(windows.len(), 1, "helper line must parse");
+        assert_eq!(windows[0].display.as_deref(), Some(":99"));
+        assert_eq!(windows[0].xauthority.as_deref(), Some("/tmp/.Xauthority"));
+
+        // The backfilled window must survive the strict PID+DISPLAY check that
+        // `action_x11` performs before running any xdotool command.
+        let resolved = resolve_unique_window(&windows, 12345, ":99", None)
+            .expect("backfilled display must satisfy resolve_unique_window");
+        assert_eq!(resolved.window_id, "0x2");
+    }
+
+    #[test]
+    fn parse_window_list_skips_unparsable_lines() {
+        let stdout = "not json\n{}\n";
+        let windows = parse_window_list(stdout, ":99", None);
+        assert!(windows.is_empty(), "malformed lines must be dropped");
     }
 
     // =============================================================================
