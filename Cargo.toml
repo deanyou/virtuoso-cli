@@ -73,7 +73,7 @@ russh-sftp = { version = "2", optional = true }
 # lock only serializes *writers*, so an unlocked reader can still observe a
 # half-written env while another test holds it. `#[serial]` covers both sides
 # with one mechanism.
-serial_test = "3"
+serial_test = "4"
 
 [profile.release]
 lto = true
