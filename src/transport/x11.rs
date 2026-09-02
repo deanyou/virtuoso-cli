@@ -976,6 +976,10 @@ pub fn action_x11(
     // Drag uses a MouseButtonGuard so that if the intermediate mousemove
     // fails (SSH disconnect, timeout, NAK), a best-effort mouseup is still
     // issued to release the held button.
+    // `wait` polls list-windows until the --text pattern matches a window title
+    // or the timeout expires; success is driven by that outcome, not by the
+    // individual helper runs.
+    let mut wait_succeeded = false;
     let (results, artifact) = if operation == X11Operation::Screenshot {
         let dir = output_dir
             .ok_or_else(|| VirtuosoError::Config("screenshot requires --output-dir".into()))?;
@@ -1047,7 +1051,23 @@ pub fn action_x11(
             }
         }
     } else if operation == X11Operation::Wait {
-        (vec![], None)
+        // Wait for a window whose title contains the --text pattern to appear.
+        // Polls a fresh list-windows snapshot until a match or the timeout
+        // expires (default 30s). Returns success only when a match is observed.
+        let pattern = text.ok_or_else(|| {
+            VirtuosoError::Config("wait operation requires --text window-title pattern".into())
+        })?;
+        let (matched, outs) = wait_for_window_pattern(
+            runner,
+            &helper,
+            display,
+            env.xauthority.as_deref(),
+            pattern,
+            Duration::from_secs(*timeout_secs),
+            &windows,
+        )?;
+        wait_succeeded = matched;
+        (outs, None)
     } else if operation == X11Operation::DragRel {
         // Drag needs a MouseButtonGuard: mousedown -> mousemove -> mouseup.
         // If mousemove fails mid-drag (SSH drop, timeout), the guard's Drop
@@ -1112,7 +1132,13 @@ pub fn action_x11(
     };
 
     let duration_ms = start.elapsed().as_millis() as u64;
-    let success = results.last().map(|r| r.success).unwrap_or(true);
+    // wait's success is the match outcome (matched within timeout), not the
+    // exit status of the last polling helper run.
+    let success = if operation == X11Operation::Wait {
+        wait_succeeded
+    } else {
+        results.last().map(|r| r.success).unwrap_or(true)
+    };
 
     // Build sanitized details
     let details = match operation {
@@ -1128,7 +1154,11 @@ pub fn action_x11(
             button.unwrap_or(1)
         )),
         X11Operation::Screenshot => Some(format!("output_dir: {}", output_dir.unwrap_or(""))),
-        X11Operation::Wait => None,
+        X11Operation::Wait => Some(format!(
+            "pattern: {:?}, matched: {}",
+            text.unwrap_or(""),
+            wait_succeeded
+        )),
     };
 
     Ok(X11ActionResult {
@@ -1578,6 +1608,39 @@ fn build_helper_cmd_list_windows(
         s.push_str(xa);
     }
     s
+}
+
+/// Poll `--list-windows` until a window whose title contains `pattern` appears,
+/// or until `timeout` elapses (default 30s via the caller).
+///
+/// `initial` is the snapshot already fetched by the caller (polled once before
+/// the first refresh). Returns `(matched, helper_outputs)` — `matched` drives
+/// the action's success status, since a helper exit 0 alone does not mean the
+/// window appeared.
+fn wait_for_window_pattern(
+    runner: &dyn RemoteTransport,
+    helper: &str,
+    display: &str,
+    xauthority: Option<&str>,
+    pattern: &str,
+    timeout: Duration,
+    initial: &[WindowInfo],
+) -> Result<(bool, Vec<CommandResult>)> {
+    let deadline = std::time::Instant::now() + timeout;
+    let mut matched = initial.iter().any(|w| w.title.contains(pattern));
+    let mut outs = Vec::new();
+    while !matched && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(500));
+        let cmd = build_helper_cmd_list_windows(helper, display, xauthority);
+        let out = runner.run_command(&CommandRequest::with_exec_timeout(
+            &cmd,
+            Duration::from_secs(30),
+        ))?;
+        let fresh = parse_window_list(&out.stdout, display, xauthority.map(String::from).as_ref());
+        outs.push(out);
+        matched = fresh.iter().any(|w| w.title.contains(pattern));
+    }
+    Ok((matched, outs))
 }
 
 /// Build `python3 <helper> <display> --dismiss-window <id> --action <a>` command.
@@ -3232,6 +3295,84 @@ mod tests {
             None,
         );
         assert!(result.is_ok(), "wait with condition should be ok");
+    }
+
+    fn wait_win_json(id: &str, title: &str) -> String {
+        serde_json::json!({
+            "frame_id": id,
+            "window_id": id,
+            "dismiss_id": id,
+            "display": ":0",
+            "title": title,
+            "class": [],
+            "geometry": {"x": 0, "y": 0, "w": 100, "h": 100},
+            "pid": 123,
+            "visible": true
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn wait_for_window_pattern_initial_snapshot_matches() {
+        let transport = RecordingTransport::new();
+        let initial = parse_window_list(
+            &wait_win_json("0x100", "Schematic Editor bandgap"),
+            ":0",
+            None,
+        );
+        let (matched, outs) = wait_for_window_pattern(
+            &transport,
+            "/tmp/helper.py",
+            ":0",
+            None,
+            "Schematic",
+            Duration::from_secs(1),
+            &initial,
+        )
+        .expect("wait should succeed");
+        assert!(matched, "initial snapshot already matches");
+        assert!(outs.is_empty(), "no polling needed when initial matches");
+    }
+
+    #[test]
+    fn wait_for_window_pattern_matches_after_poll() {
+        let transport = RecordingTransport::new();
+        // First poll returns a window that does NOT match.
+        transport.enqueue_response(mk_result(&wait_win_json("0x100", "CIW Log"), "", 0));
+        // Second poll returns the matching window.
+        transport.enqueue_response(mk_result(&wait_win_json("0x200", "Dialog: Save As"), "", 0));
+        let initial = parse_window_list("", ":0", None);
+        let (matched, outs) = wait_for_window_pattern(
+            &transport,
+            "/tmp/helper.py",
+            ":0",
+            None,
+            "Save As",
+            Duration::from_secs(5),
+            &initial,
+        )
+        .expect("wait should succeed");
+        assert!(matched, "poll should observe the matching window");
+        assert_eq!(outs.len(), 2, "two polling rounds expected");
+    }
+
+    #[test]
+    fn wait_for_window_pattern_timeout_returns_unmatched() {
+        let transport = RecordingTransport::new();
+        // Even with a helper success, no window matches -> timeout -> false.
+        transport.enqueue_response(mk_result(&wait_win_json("0x100", "CIW Log"), "", 0));
+        let initial = parse_window_list("", ":0", None);
+        let (matched, _outs) = wait_for_window_pattern(
+            &transport,
+            "/tmp/helper.py",
+            ":0",
+            None,
+            "NoSuchWindow",
+            Duration::from_millis(50),
+            &initial,
+        )
+        .expect("wait should return without error");
+        assert!(!matched, "timeout with no match must report unmatched");
     }
 
     #[test]
