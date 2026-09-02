@@ -1193,11 +1193,16 @@ fn build_xdotool_actions(
         }
         X11Operation::Key => {
             // xdotool key --window <id> <key>...
+            // xdotool separates chord modifiers/keys with `+` (e.g. `ctrl+s`).
+            // Older xdotool releases (e.g. 3.20200624.1) reject the hyphenated
+            // form `ctrl-s`, and no X11 keysym name contains a hyphen, so
+            // normalizing `-` to `+` is safe and makes `key --text "ctrl-s"`
+            // work across xdotool versions.
             let t =
                 text.ok_or_else(|| VirtuosoError::Config("key operation requires --text".into()))?;
             let mut argv = vec!["key".into(), "--window".into(), wid];
             for key in t.split_whitespace() {
-                argv.push(key.to_string());
+                argv.push(key.replace('-', "+"));
             }
             Ok(vec![("key".into(), argv)])
         }
@@ -3398,10 +3403,32 @@ mod tests {
         assert_eq!(action.len(), 1);
         let (sub, argv) = &action[0];
         assert_eq!(sub, "key");
-        assert_eq!(argv, &["key", "--window", "0x400002", "ctrl-s"]);
+        // Hyphenated chords (`ctrl-s`) are normalized to xdotool's `+` form.
+        assert_eq!(argv, &["key", "--window", "0x400002", "ctrl+s"]);
         assert!(
             !argv.windows(2).any(|w| w[0] == "--window" && w[1] == "key"),
             "regression: --window must come AFTER subcommand"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_key_normalizes_hyphen_chords_across_tokens() {
+        // `ctrl-s Return` and `ctrl-shift-x` (multi-token + hyphen chord) both
+        // normalize `-` → `+`; keysyms with underscores (KP_Subtract) are
+        // untouched since they contain no hyphen.
+        let action = build_xdotools_actions_key("0x400002", "ctrl-shift-x Return KP_Subtract");
+        let (sub, argv) = &action[0];
+        assert_eq!(sub, "key");
+        assert_eq!(
+            argv,
+            &[
+                "key",
+                "--window",
+                "0x400002",
+                "ctrl+shift+x",
+                "Return",
+                "KP_Subtract"
+            ]
         );
     }
 
