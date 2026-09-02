@@ -1873,13 +1873,22 @@ impl RemoteTransport for LocalTransport {
 
     fn download_file(
         &self,
-        _req: &crate::transport::contract::DownloadFileRequest,
+        req: &crate::transport::contract::DownloadFileRequest,
     ) -> std::result::Result<(), crate::transport::contract::TransportError> {
-        Err(
-            crate::transport::contract::TransportError::UnsupportedOperation(
-                "download_file not supported on LocalTransport".into(),
-            ),
-        )
+        if req.deadline.is_expired() {
+            return Err(crate::transport::contract::TransportError::QueueTimeout {
+                request: req.id.clone(),
+                after_secs: 0,
+            });
+        }
+        // LocalTransport runs on the same host as vcli, so the "remote" and
+        // "local" paths live on the same filesystem — a plain copy is correct.
+        std::fs::copy(&req.remote, &req.local).map_err(|e| {
+            crate::transport::contract::TransportError::LocalIo(format!(
+                "local file copy failed: {e}"
+            ))
+        })?;
+        Ok(())
     }
 
     fn download_dir(
