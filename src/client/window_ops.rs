@@ -253,9 +253,13 @@ mod tests {
             .build_bootstrap_skill(&target, &BootstrapAction::LoadFile(program), scratch.path())
             .unwrap();
         // The generated SKILL must be syntactically valid: load() with a
-        // quoted string literal that contains the apostrophe verbatim.
+        // quoted string literal that contains the apostrophe verbatim. The
+        // check is restricted to `load("` rather than `load("/` because on
+        // Windows the path may use the `\\?\` UNC prefix or backslashes; the
+        // thing the test is actually pinning — that the apostrophe survives
+        // `escape_string` — is checked by the `with'apostrophe.il` substring.
         assert!(
-            skill.contains(r#"load("/"#) && skill.contains("with'apostrophe.il"),
+            skill.contains(r#"load("#) && skill.contains("with'apostrophe.il"),
             "path must appear inside a quoted SKILL literal: {skill}"
         );
     }

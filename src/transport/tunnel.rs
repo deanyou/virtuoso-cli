@@ -1246,7 +1246,7 @@ mod tests {
     /// regression — the old code skipped the kill yet still cleared the state,
     /// leaking the tunnel. Here we spawn a real child that is alive but not an
     /// ssh process, so `classify_ssh_pid` cannot verify it as ssh.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(unix)]
     #[test]
     #[serial]
     fn stop_saved_tunnel_refuses_unverifiable_live_process() {
@@ -1314,7 +1314,7 @@ mod tests {
 
     /// `--force` signals the recorded pid without the ssh identity check;
     /// remote cleanup is skipped because `VB_KEEP_REMOTE_FILES=1`.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(unix)]
     #[test]
     #[serial]
     fn stop_saved_tunnel_force_signals_unverified_process() {
