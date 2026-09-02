@@ -49,5 +49,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-audit
-      - run: cargo audit
+      # Pinned (no moving target), --locked for reproducibility.
+      # RUSTSEC-2023-0071 (rsa 0.10.0-rc.18, Marvin) is ignored: rsa is only
+      # reachable via ssh-key -> russh under the `native-ssh` feature; the
+      # default build does not link rsa, upstream has no fixed release, and
+      # Marvin needs an RSA private-key decryption oracle we never expose.
+      # See audit.toml for the full rationale.
+      - run: cargo install cargo-audit --version 0.22.2 --locked
+      - run: cargo audit --ignore RUSTSEC-2023-0071
