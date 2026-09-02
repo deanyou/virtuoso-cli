@@ -22,6 +22,7 @@ use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
+use uuid::Uuid;
 
 static RESOURCES: Dir = include_dir!("$CARGO_MANIFEST_DIR/resources");
 
@@ -911,10 +912,12 @@ pub fn action_x11(
         )));
     }
 
-    // Step 4: Check geometry bounds for click/drag operations
+    // Step 4: Check geometry bounds for click/drag operations.
+    // A zero-sized geometry means the window bounds are unknown (unparsed or
+    // abnormal); don't blanket-reject — trust the caller's coordinates instead.
     if let (Some(op_x), Some(op_y)) = (*x, *y) {
         let geom = &resolved.geometry;
-        if op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h {
+        if geom.w > 0 && geom.h > 0 && (op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h) {
             return Err(VirtuosoError::Config(format!(
                 "coordinates ({op_x}, {op_y}) out of bounds for window size {}x{}",
                 geom.w, geom.h
@@ -948,7 +951,7 @@ pub fn action_x11(
             .ok_or_else(|| VirtuosoError::Config("screenshot requires --output-dir".into()))?;
         // Use a random temp name on the GUI host to avoid colliding with
         // prior runs or concurrent agents targeting the same DISPLAY.
-        let token = std::process::id() ^ (start.elapsed().as_nanos() as u32);
+        let token = Uuid::new_v4();
         let safe_name = format!("vcli_shot_{token}.png");
         let remote_path = format!("/tmp/{safe_name}");
         let remote_cmd = format!(
@@ -972,8 +975,12 @@ pub fn action_x11(
         match runner.fetch_file(&remote_path, dir, Duration::from_secs(*timeout_secs)) {
             Ok(()) => {}
             Err(e) => {
-                // LocalTransport doesn't support fetch_file; the import wrote
-                // directly to the local /tmp which was then renamed by caller.
+                // The import already wrote the PNG to remote_path on the GUI
+                // host; since the fetch failed, clean it up there. Best-effort.
+                let _ = runner.run_command(&CommandRequest::untimed(format!(
+                    "rm -f {}",
+                    shell_escape(&remote_path)
+                )));
                 return Err(VirtuosoError::Execution(format!(
                     "screenshot fetch failed: {e}"
                 )));
@@ -983,7 +990,12 @@ pub fn action_x11(
         let local_path_buf = std::path::PathBuf::from(dir).join(&safe_name);
         match validate_png_artifact(&local_path_buf) {
             Ok((size, hash)) => {
-                let _ = std::fs::remove_file(&remote_path); // best-effort remote cleanup
+                // Best-effort cleanup of the temp PNG on the GUI host (remote
+                // or local — the runner abstracts the host).
+                let _ = runner.run_command(&CommandRequest::untimed(format!(
+                    "rm -f {}",
+                    shell_escape(&remote_path)
+                )));
                 (
                     vec![out],
                     Some(ArtifactInfo {
@@ -996,6 +1008,11 @@ pub fn action_x11(
             }
             Err(e) => {
                 let _ = std::fs::remove_file(&local_path_buf); // cleanup invalid file
+                                                               // Also remove the temp PNG left on the GUI host.
+                let _ = runner.run_command(&CommandRequest::untimed(format!(
+                    "rm -f {}",
+                    shell_escape(&remote_path)
+                )));
                 return Err(e);
             }
         }
@@ -1337,7 +1354,9 @@ fn validate_png_artifact(
 ) -> std::result::Result<(u64, String), VirtuosoError> {
     use std::io::{Read, Seek};
 
-    let metadata = std::fs::metadata(path).map_err(|e| {
+    // Use symlink_metadata so the check does not follow the link — a plain
+    // `metadata` would resolve the target and never report a symlink.
+    let metadata = std::fs::symlink_metadata(path).map_err(|e| {
         VirtuosoError::Execution(format!("cannot stat screenshot path {:?}: {e}", path))
     })?;
 
@@ -1873,13 +1892,22 @@ impl RemoteTransport for LocalTransport {
 
     fn download_file(
         &self,
-        _req: &crate::transport::contract::DownloadFileRequest,
+        req: &crate::transport::contract::DownloadFileRequest,
     ) -> std::result::Result<(), crate::transport::contract::TransportError> {
-        Err(
-            crate::transport::contract::TransportError::UnsupportedOperation(
-                "download_file not supported on LocalTransport".into(),
-            ),
-        )
+        if req.deadline.is_expired() {
+            return Err(crate::transport::contract::TransportError::QueueTimeout {
+                request: req.id.clone(),
+                after_secs: 0,
+            });
+        }
+        // LocalTransport runs on the same host as vcli, so the "remote" and
+        // "local" paths live on the same filesystem — a plain copy is correct.
+        std::fs::copy(&req.remote, &req.local).map_err(|e| {
+            crate::transport::contract::TransportError::LocalIo(format!(
+                "local file copy failed: {e}"
+            ))
+        })?;
+        Ok(())
     }
 
     fn download_dir(
@@ -2910,6 +2938,128 @@ mod tests {
             result.is_err(),
             "screenshot path with .. should be rejected"
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // validate_png_artifact: rejection branches (review #1 / #5)
+    // ---------------------------------------------------------------------------
+
+    fn write_temp_png(bytes: &[u8], name: &str) -> std::path::PathBuf {
+        let p = std::env::temp_dir().join(name);
+        std::fs::write(&p, bytes).expect("write temp png");
+        p
+    }
+
+    #[test]
+    fn validate_png_artifact_accepts_valid_png() {
+        let mut data = Vec::new();
+        data.extend_from_slice(super::PNG_MAGIC);
+        data.resize(128, 0); // >= 64 bytes
+        let p = write_temp_png(&data, "vcli_test_png_valid.png");
+        let res = super::validate_png_artifact(&p);
+        assert!(res.is_ok(), "valid PNG should pass: {res:?}");
+        let (size, hash) = res.unwrap();
+        assert_eq!(size, 128);
+        assert_eq!(hash.len(), 64);
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn validate_png_artifact_rejects_tiny_file() {
+        let data = vec![0u8; 10];
+        let p = write_temp_png(&data, "vcli_test_png_tiny.png");
+        let res = super::validate_png_artifact(&p);
+        assert!(res.is_err(), "file < 64 bytes must be rejected");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn validate_png_artifact_rejects_wrong_magic() {
+        let mut data = vec![0u8; 128];
+        data[0..4].copy_from_slice(b"NOPE");
+        let p = write_temp_png(&data, "vcli_test_png_badmagic.png");
+        let res = super::validate_png_artifact(&p);
+        assert!(res.is_err(), "wrong magic must be rejected");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn validate_png_artifact_rejects_symlink() {
+        // Locks review #1: symlink_metadata (not metadata) must make the
+        // is_symlink() branch reachable.
+        let mut data = Vec::new();
+        data.extend_from_slice(super::PNG_MAGIC);
+        data.resize(128, 0);
+        let target = write_temp_png(&data, "vcli_test_png_symlink_target.png");
+        let link = std::env::temp_dir().join("vcli_test_png_symlink.png");
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&target, &link).expect("create symlink");
+        let res = super::validate_png_artifact(&link);
+        assert!(res.is_err(), "symlink must be rejected");
+        let _ = std::fs::remove_file(&link);
+        let _ = std::fs::remove_file(&target);
+    }
+
+    // ---------------------------------------------------------------------------
+    // MouseButtonGuard: best-effort mouseup on drop (review #5)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn mouse_button_guard_drops_best_effort_mouseup_when_armed() {
+        let win = WindowInfo {
+            frame_id: "0x1".into(),
+            window_id: "0x2".into(),
+            dismiss_id: "0x3".into(),
+            display: Some(":0".into()),
+            xauthority: None,
+            title: "t".into(),
+            class: vec![],
+            geometry: Geometry {
+                x: 0,
+                y: 0,
+                w: 100,
+                h: 100,
+            },
+            pid: Some(12345),
+            visible: true,
+        };
+        let t = RecordingTransport::new();
+        {
+            let mut g = super::MouseButtonGuard::new(&t, "env DISPLAY=:0 ", &win, Some(1));
+            g.arm();
+            // guard dropped at end of scope
+        }
+        let cmds = t.commands.lock().unwrap();
+        assert!(
+            cmds.iter().any(|c| c.contains("mouseup")),
+            "armed MouseButtonGuard must issue best-effort mouseup on drop; got {cmds:?}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // LocalTransport::download_file (review #3)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn local_transport_download_file_copies_local_file() {
+        let src = std::env::temp_dir().join("vcli_test_dl_src.png");
+        let dst = std::env::temp_dir().join("vcli_test_dl_dst.png");
+        let _ = std::fs::remove_file(&dst);
+        std::fs::write(&src, b"hello-world-png-contents").expect("write src");
+        let req = crate::transport::contract::DownloadFileRequest::untimed(
+            src.display().to_string(),
+            dst.clone(),
+        );
+        let res = super::LocalTransport::new().download_file(&req);
+        assert!(
+            res.is_ok(),
+            "LocalTransport::download_file should copy: {res:?}"
+        );
+        let copied = std::fs::read(&dst).expect("read dst");
+        assert_eq!(copied, b"hello-world-png-contents");
+        let _ = std::fs::remove_file(&src);
+        let _ = std::fs::remove_file(&dst);
     }
 
     #[test]
