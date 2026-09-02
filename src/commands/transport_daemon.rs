@@ -20,14 +20,14 @@
 use crate::error::{Result, VirtuosoError};
 use serde_json::Value;
 
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 use std::path::Path;
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 use std::sync::Arc;
 
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 use crate::transport::contract::RemoteTransport;
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 use crate::transport::contract::TransportError;
 
 /// The "this build has no daemon" answer.
@@ -54,7 +54,7 @@ pub fn run(_ipc_endpoint: &str, _token_path: &str, _daemon_nonce: &str) -> Resul
 /// Production body of the daemon. Only compiled when `native-ssh` is on, so
 /// the subcommand stays absent from feature-stripped builds (the design's
 /// hard requirement).
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Result<Value> {
     use crate::transport::backend::open_transport;
     use crate::transport::ipc::server;
@@ -89,11 +89,27 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
     Ok(Value::Null)
 }
 
+/// Non-Unix counterpart of [`run_with`].
+///
+/// [`crate::transport::ipc::server`] is Unix-only — it binds a Unix domain
+/// socket — so a `native-ssh` build elsewhere has no daemon to run. `main.rs`
+/// still dispatches the subcommand whenever the feature is on, so this has to
+/// answer with a structured Config error rather than be absent: the same
+/// contract `run` upholds for feature-off builds.
+#[cfg(all(feature = "native-ssh", not(unix)))]
+pub fn run_with(_ipc_endpoint: &str, _token_path: &str, _daemon_nonce: &str) -> Result<Value> {
+    Err(VirtuosoError::Config(
+        "native transport daemon requires a Unix domain socket: no daemon is \
+         available on this platform"
+            .into(),
+    ))
+}
+
 /// Map a transport error onto the daemon's CLI error path. Config and
 /// unsupported-backend failures are usage errors (exit code per the design);
 /// every other failure stays a general error so the parent process learns
 /// the daemon failed to start without parsing message text.
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 fn transport_to_virtuoso(e: TransportError) -> VirtuosoError {
     use crate::transport::contract::TransportError as T;
     match e {
