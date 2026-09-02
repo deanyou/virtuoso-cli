@@ -112,6 +112,7 @@ fn vcli_profile_subcommand_runs() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn vcli_profile_bind_user_then_clear() {
     // End-to-end: bind a profile to user-level, observe it via show,
