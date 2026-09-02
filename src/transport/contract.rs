@@ -509,6 +509,31 @@ pub trait RemoteTransport: Send + Sync {
 
     fn download_dir(&self, req: &DownloadDirRequest) -> Result<(), TransportError>;
 
+    /// Fetch a single remote file to a local path, deriving a deadline from a
+    /// caller-supplied timeout. Thin ergonomic wrapper over
+    /// [`download_file`](Self::download_file) so a caller does not have to
+    /// hand-build a `Deadline` for a one-shot pull (e.g. post-screenshot).
+    fn fetch_file(
+        &self,
+        remote: &str,
+        local_dir: &str,
+        timeout: Duration,
+    ) -> Result<(), TransportError> {
+        let mut local = PathBuf::from(local_dir);
+        local.push(
+            PathBuf::from(remote)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("fetched"),
+        );
+        self.download_file(&DownloadFileRequest {
+            id: RequestId::new(),
+            deadline: Deadline::from_now(timeout + STARTUP_ALLOWANCE),
+            remote: remote.into(),
+            local,
+        })
+    }
+
     /// Open a local listener that reaches a remote endpoint.
     ///
     /// Deliberately unsupported by default: the OpenSSH backend establishes its

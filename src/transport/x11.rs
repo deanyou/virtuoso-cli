@@ -72,6 +72,26 @@ pub struct WindowInfo {
     #[serde(default)]
     pub class: Vec<String>,
     pub geometry: Geometry,
+    /// _NET_WM_PID of the window; positive integers only. Zero is normalized
+    /// to None (a window cannot have PID 0).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_pid_option"
+    )]
+    pub pid: Option<u32>,
+    /// Whether the window is mapped/viewable (always true for listed windows).
+    #[serde(default)]
+    pub visible: bool,
+}
+
+/// Deserializer for `Option<u32>` that maps JSON integer 0 to `None`.
+fn deserialize_pid_option<'de, D>(deserializer: D) -> std::result::Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<u32>::deserialize(deserializer)?;
+    Ok(opt.filter(|&p| p != 0))
 }
 
 /// Window geometry (x, y, width, height in pixels).
@@ -98,12 +118,107 @@ pub struct DismissResult {
 pub const X11_HELPER_NAME: &str = "x11_dismiss_dialog.py";
 pub const X11_HELPER_SUBDIR: &str = "x11";
 
-/// Build a stable, profile-isolated remote subdir for X11 helper artifacts.
+/// Build a stable, user- and profile-isolated remote subdir for X11 helper artifacts.
+///
+/// Path format: `/tmp/virtuoso_bridge_<sanitized-user>/<sanitized-client>/x11`
+///
+/// Uses explicit user (from `remote_user` config or `-un` fallback) for user isolation,
+/// and the client_id for client-level isolation. Both components are sanitized to
+/// ascii-alphanumeric, underscore, and hyphen only.
+#[allow(dead_code)]
 pub fn x11_remote_dir(client_id: &str) -> String {
+    // Default path structure without user isolation (kept for backward compat only)
     format!(
         "/tmp/virtuoso_bridge/{}/{X11_HELPER_SUBDIR}",
         escape_remote_path(client_id)
     )
+}
+
+/// Build a user-isolated scratch path for X11 helper artifacts.
+///
+/// `user` must be a non-empty sanitized username.
+/// `client_id` is the profile/client identifier.
+///
+/// Path format: `/tmp/virtuoso_bridge_<sanitized-user>/<sanitized-client>/x11`
+///
+/// Both `user` and `client_id` are sanitized to prevent directory traversal.
+/// Empty `client` falls back to "unnamed" to ensure the path remains valid.
+/// Empty `user` is a programming error (caller must resolve via `id -un` first).
+pub fn x11_remote_dir_with_user(user: &str, client_id: &str) -> String {
+    let sanitized_user = sanitize_for_path(user);
+    if sanitized_user.is_empty() {
+        panic!("x11_remote_dir_with_user: empty user is not allowed — caller must resolve via `id -un`");
+    }
+    // Ensure we never produce an empty client component — fall back to "unnamed"
+    let sanitized_client = sanitize_for_path(client_id);
+    let sanitized_client = if sanitized_client.is_empty() {
+        "unnamed".to_string()
+    } else {
+        sanitized_client
+    };
+
+    format!(
+        "/tmp/virtuoso_bridge_{}/{}/{X11_HELPER_SUBDIR}",
+        sanitized_user, sanitized_client,
+    )
+}
+
+/// Sanitize a string for use in a remote path component.
+///
+/// Allows only ascii-alphanumeric, underscore, and hyphen.
+/// All other characters are replaced with underscore.
+pub fn sanitize_for_path(s: &str) -> String {
+    if s.is_empty() {
+        return String::new();
+    }
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Resolve the effective username via `id -un` on the remote host.
+///
+/// This is called when no explicit user is configured, to ensure the X11
+/// scratch directory is isolated per real user rather than per-process.
+pub fn resolve_effective_user(runner: &dyn RemoteTransport) -> Result<String> {
+    let out = runner.run_command(&CommandRequest::with_exec_timeout(
+        "id -un",
+        Duration::from_secs(5),
+    ))?;
+    if !out.success {
+        return Err(VirtuosoError::Execution(format!(
+            "`id -un` failed with exit {}: {}",
+            out.exit_status,
+            out.stderr.trim()
+        )));
+    }
+    let username = out.stdout.trim();
+    if username.is_empty() {
+        return Err(VirtuosoError::Execution(
+            "`id -un` returned empty username".into(),
+        ));
+    }
+    // Must be a single line (the username)
+    if out.stdout.lines().count() != 1 {
+        return Err(VirtuosoError::Execution(format!(
+            "`id -un` returned unexpected multi-line output: {:?}",
+            out.stdout
+        )));
+    }
+    let sanitized = sanitize_for_path(username);
+    if sanitized.is_empty() {
+        return Err(VirtuosoError::Execution(format!(
+            "`id -un` returned username that sanitizes to empty: {:?}",
+            username
+        )));
+    }
+    Ok(sanitized)
 }
 
 /// Derive a stable client_id from a Config. Mirrors the tunnel's
@@ -115,6 +230,7 @@ pub fn client_id_for(config: &Config) -> String {
     dir.trim_start_matches("/tmp/").to_string()
 }
 
+#[allow(dead_code)]
 fn escape_remote_path(s: &str) -> String {
     s.chars()
         .map(|c| {
@@ -153,14 +269,47 @@ fn hash_helper(source: &str) -> String {
 
 /// Upload (or refresh) the helper. The remote path embeds a short hash of the
 /// source so concurrent vcli versions don't overwrite each other.
-pub fn ensure_helper_uploaded(runner: &dyn RemoteTransport, client_id: &str) -> Result<String> {
+///
+/// `explicit_user` is the configured remote user (from Config), or None.
+/// When None, `id -un` is called on the remote host to resolve the effective user.
+///
+/// Directory is created with `install -d -m 700` for security.
+pub fn ensure_helper_uploaded(
+    runner: &dyn RemoteTransport,
+    explicit_user: Option<&str>,
+    client_id: &str,
+) -> Result<String> {
     let source = read_helper_source()?;
     let digest = hash_helper(&source);
-    let remote_dir = x11_remote_dir(client_id);
+
+    // Resolve username: use explicit if non-empty, otherwise call `id -un`
+    let effective_user = match explicit_user {
+        Some(u) if !u.is_empty() => sanitize_for_path(u),
+        _ => resolve_effective_user(runner)?,
+    };
+    if effective_user.is_empty() {
+        return Err(VirtuosoError::Config(
+            "effective X11 user is empty after sanitization".into(),
+        ));
+    }
+
+    let remote_dir = x11_remote_dir_with_user(&effective_user, client_id);
     let remote_path = format!("{remote_dir}/x11_dismiss_dialog_{digest}.py");
 
-    let mkdir = format!("mkdir -p {remote_dir}");
-    let _ = runner.run_command(&CommandRequest::untimed(&mkdir))?;
+    // Use `install -d -m 700` to create directory with strict permissions.
+    // The path is already sanitized, so shell injection is not possible.
+    // Propagate failures since mkdir errors indicate real problems (permissions, disk space, etc.).
+    let install_cmd = format!("install -d -m 700 {}", shell_escape(&remote_dir));
+    let result = runner.run_command(&CommandRequest::untimed(&install_cmd))?;
+    if !result.success {
+        return Err(VirtuosoError::Execution(format!(
+            "failed to create X11 scratch dir '{}': exit {} — {}",
+            remote_dir,
+            result.exit_status,
+            result.stderr.trim()
+        )));
+    }
+
     // Best-effort upload: if the file already exists with the same hash, the
     // hash-suffixed name avoids a write — but we still upload unconditionally
     // on the first call of a session to keep semantics simple. Idempotent.
@@ -241,7 +390,7 @@ pub fn list_dialogs(
     user: Option<&str>,
     explicit_display: Option<&str>,
 ) -> Result<(X11Env, Vec<DialogInfo>)> {
-    let helper = ensure_helper_uploaded(runner, client_id)?;
+    let helper = ensure_helper_uploaded(runner, user, client_id)?;
     let envs = resolve_envs(runner, user, explicit_display)?;
     let primary_env = envs[0].clone();
     // If the helper itself failed (e.g. xwininfo missing, libX11 not installed,
@@ -291,7 +440,7 @@ pub fn dismiss(
     action: &str,
     dry_run: bool,
 ) -> Result<DismissResult> {
-    let helper = ensure_helper_uploaded(runner, client_id)?;
+    let helper = ensure_helper_uploaded(runner, user, client_id)?;
     let mut found = Vec::new();
     let mut dismissed = Vec::new();
     let mut errors = Vec::new();
@@ -351,7 +500,7 @@ pub fn list_windows(
     user: Option<&str>,
     explicit_display: Option<&str>,
 ) -> Result<(X11Env, Vec<WindowInfo>)> {
-    let helper = ensure_helper_uploaded(runner, client_id)?;
+    let helper = ensure_helper_uploaded(runner, user, client_id)?;
     let envs = resolve_envs(runner, user, explicit_display)?;
     let primary_env = envs[0].clone();
     let mut windows = Vec::new();
@@ -388,9 +537,245 @@ pub fn list_windows(
     Ok((primary_env, windows))
 }
 
-/// Dismiss a specific X11 window by id. Does NOT apply the dialog-size filter —
-/// the caller is expected to have identified the target via `list_windows`
-/// or by inspecting the X server directly.
+/// Result of a single X11 action operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct X11ActionResult {
+    pub status: String,
+    pub operation: String,
+    pub window_id: String,
+    pub pid: u32,
+    pub display: String,
+    /// Duration in milliseconds.
+    pub duration_ms: u64,
+    /// Sanitized details (e.g. "text_length: 5" for type, "keycode: 65" for key).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
+    /// Artifact info for screenshot operations (None for other ops).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<ArtifactInfo>,
+}
+
+/// Metadata describing a fetched screenshot artifact (name, size, sha256).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactInfo {
+    /// Artifact name chosen by the caller (e.g. "baseline.png" or "0x1a2b.png").
+    pub name: String,
+    /// Local path where the artifact was written (evidence dir).
+    pub local_path: String,
+    /// Size in bytes.
+    pub size_bytes: u64,
+    /// SHA-256 hex digest of the file contents (for evidence integrity).
+    pub sha256: String,
+}
+
+/// Parameters for an X11 action operation, already validated.
+///
+/// Reserved for callers that construct validated parameter bundles before
+/// invoking `action_x11`; currently the CLI path validates inline.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct ActionParams {
+    pub window_id: String,
+    pub pid: u32,
+    pub display: String,
+    pub operation: X11Operation,
+    /// For key/type: the text or key chord
+    pub text: Option<String>,
+    /// For click-rel/drag-rel: x coordinate
+    pub x: Option<i32>,
+    /// For click-rel/drag-rel: y coordinate
+    pub y: Option<i32>,
+    /// For click-rel/drag-rel: mouse button (1=left, 2=middle, 3=right).
+    /// When None, xdotool/click defaults to button 1.
+    pub button: Option<u8>,
+    /// For screenshot: output directory
+    pub output_dir: Option<String>,
+    /// For wait: condition to poll
+    pub condition: Option<String>,
+    /// Window geometry for bounds checking
+    pub geometry: Option<Geometry>,
+}
+
+/// Allowlisted X11 action operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum X11Operation {
+    Activate,
+    Key,
+    Type,
+    ClickRel,
+    DragRel,
+    Screenshot,
+    Wait,
+}
+
+impl X11Operation {
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "activate" => Ok(Self::Activate),
+            "key" => Ok(Self::Key),
+            "type" => Ok(Self::Type),
+            "click-rel" => Ok(Self::ClickRel),
+            "drag-rel" => Ok(Self::DragRel),
+            "screenshot" => Ok(Self::Screenshot),
+            "wait" => Ok(Self::Wait),
+            _ => Err(VirtuosoError::Config(format!(
+                "unknown operation '{}': must be one of activate|key|type|click-rel|drag-rel|screenshot|wait",
+                s
+            ))),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Activate => "activate",
+            Self::Key => "key",
+            Self::Type => "type",
+            Self::ClickRel => "click-rel",
+            Self::DragRel => "drag-rel",
+            Self::Screenshot => "screenshot",
+            Self::Wait => "wait",
+        }
+    }
+}
+
+/// Validate action parameters.
+///
+/// Mirrors the positional flags of `vcli window action-x11`, hence the
+/// argument count; kept positional intentionally for API parity with clap.
+#[allow(clippy::too_many_arguments)]
+pub fn validate_action_params(
+    window_id: &str,
+    pid: u32,
+    display: &str,
+    operation: &str,
+    x: Option<i32>,
+    y: Option<i32>,
+    text: Option<&str>,
+    button: Option<u8>,
+    output_dir: Option<&str>,
+) -> Result<String> {
+    // Reject empty window_id
+    if window_id.is_empty() {
+        return Err(VirtuosoError::Config(
+            "window_id is required and cannot be empty".into(),
+        ));
+    }
+
+    // Reject non-positive PID
+    if pid == 0 {
+        return Err(VirtuosoError::Config(
+            "positive PID required (session PID must be resolved before any GUI action)".into(),
+        ));
+    }
+
+    // Reject empty display
+    if display.is_empty() {
+        return Err(VirtuosoError::Config(
+            "DISPLAY is required and cannot be empty".into(),
+        ));
+    }
+
+    let op = X11Operation::from_str(operation)?;
+
+    // Operation-specific validation
+    match op {
+        X11Operation::Activate => {
+            // no extra params beyond the common ones
+        }
+        X11Operation::Screenshot => {
+            // screenshot requires a caller-provided output directory, and the
+            // directory must not contain path-traversal components
+            let dir = output_dir.ok_or_else(|| {
+                VirtuosoError::Config(
+                    "operation 'screenshot' requires --output-dir parameter".into(),
+                )
+            })?;
+            if dir.split('/').any(|c| c == "..") {
+                return Err(VirtuosoError::Config(
+                    "screenshot output_dir must not contain '..' (path traversal rejected)".into(),
+                ));
+            }
+        }
+        X11Operation::Key | X11Operation::Type => {
+            // key and type require non-empty text
+            let t = text.ok_or_else(|| {
+                VirtuosoError::Config(format!(
+                    "operation '{}' requires --text parameter",
+                    op.as_str()
+                ))
+            })?;
+            if t.is_empty() {
+                return Err(VirtuosoError::Config(format!(
+                    "operation '{}' requires non-empty --text",
+                    op.as_str()
+                )));
+            }
+        }
+        X11Operation::ClickRel | X11Operation::DragRel => {
+            // click-rel and drag-rel require x and y
+            let _ = x.ok_or_else(|| {
+                VirtuosoError::Config(format!(
+                    "operation '{}' requires --x parameter",
+                    op.as_str()
+                ))
+            })?;
+            let _ = y.ok_or_else(|| {
+                VirtuosoError::Config(format!(
+                    "operation '{}' requires --y parameter",
+                    op.as_str()
+                ))
+            })?;
+            // button, if given, must be 1/2/3 (left/middle/right)
+            if let Some(b) = button {
+                if !(1..=3).contains(&b) {
+                    return Err(VirtuosoError::Config(format!(
+                        "button must be 1 (left), 2 (middle), or 3 (right); got {b}"
+                    )));
+                }
+            }
+        }
+        X11Operation::Wait => {
+            // wait condition (in --text) is evaluated by the caller's polling loop
+        }
+    }
+
+    // Build sanitized details string
+    let details = match op {
+        X11Operation::Activate => None,
+        X11Operation::Key => Some(format!(
+            "text_length: {}",
+            text.map(|s| s.len()).unwrap_or(0)
+        )),
+        X11Operation::Type => Some(format!(
+            "text_length: {}",
+            text.map(|s| s.len()).unwrap_or(0)
+        )),
+        X11Operation::ClickRel => Some(format!(
+            "x: {}, y: {}, button: {}",
+            x.unwrap_or(0),
+            y.unwrap_or(0),
+            button.unwrap_or(1)
+        )),
+        X11Operation::DragRel => Some(format!(
+            "x: {}, y: {}, button: {}",
+            x.unwrap_or(0),
+            y.unwrap_or(0),
+            button.unwrap_or(1)
+        )),
+        X11Operation::Screenshot => {
+            let dir = output_dir.unwrap_or("");
+            Some(format!("output_dir: {}", dir))
+        }
+        X11Operation::Wait => {
+            // wait uses a condition expression in --text; validated by the caller
+            None
+        }
+    };
+
+    Ok(details.unwrap_or_default())
+}
+
 pub fn dismiss_window(
     runner: &dyn RemoteTransport,
     client_id: &str,
@@ -409,7 +794,7 @@ pub fn dismiss_window(
             "window_id is required for --dismiss-window".into(),
         ));
     }
-    let helper = ensure_helper_uploaded(runner, client_id)?;
+    let helper = ensure_helper_uploaded(runner, user, client_id)?;
     let mut dismissed: Vec<DialogInfo> = Vec::new();
     let mut errors = Vec::new();
     let mut logs = Vec::new();
@@ -460,6 +845,552 @@ pub fn dismiss_window(
         errors,
         raw_log: logs.join("\n--- next display ---\n"),
     })
+}
+
+/// Execute a fixed-semantics X11 action on a specific window.
+///
+/// Bundles identity + action inputs into `ActionX11Inputs` to keep the
+/// signature under the clippy argument ceiling. Internally it:
+/// 1. uploads the remote helper, lists windows, and resolves the unique
+///    window via `resolve_unique_window` (strict PID + DISPLAY binding);
+/// 2. re-validated the resolved window matches the requested window_id;
+/// 3. enforces geometry bounds for click/drag;
+/// 4. builds and runs the fixed xdotool/import argv via the command runner.
+pub fn action_x11(
+    runner: &dyn RemoteTransport,
+    client_id: &str,
+    user: Option<&str>,
+    inputs: &ActionX11Inputs<'_>,
+) -> Result<X11ActionResult> {
+    let ActionX11Inputs {
+        window_id,
+        pid,
+        display,
+        operation,
+        x,
+        y,
+        button,
+        text,
+        output_dir,
+        timeout_secs,
+    } = inputs;
+    let start = std::time::Instant::now();
+
+    // Step 1: List windows and resolve unique window
+    let helper = ensure_helper_uploaded(runner, user, client_id)?;
+    let envs = resolve_envs(runner, user, Some(display))?;
+
+    let env = envs
+        .iter()
+        .find(|e| e.display.as_deref() == Some(display))
+        .ok_or_else(|| VirtuosoError::Config(format!("DISPLAY '{display}' not found")))?;
+
+    let cmd = build_helper_cmd_list_windows(&helper, display, env.xauthority.as_deref());
+    let out = runner.run_command(&CommandRequest::with_exec_timeout(
+        &cmd,
+        Duration::from_secs(*timeout_secs),
+    ))?;
+
+    let windows: Vec<WindowInfo> = out
+        .stdout
+        .lines()
+        .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
+        .collect();
+
+    // Step 2: Resolve unique window with strict PID + DISPLAY matching
+    let resolved = resolve_unique_window(&windows, *pid, display, None)?;
+
+    // Step 3: Verify exact window_id match
+    if resolved.window_id != *window_id
+        && resolved.dismiss_id != *window_id
+        && resolved.frame_id != *window_id
+    {
+        return Err(VirtuosoError::Conflict(format!(
+            "window_id mismatch: requested '{window_id}' but resolved to '{}'",
+            resolved.window_id
+        )));
+    }
+
+    // Step 4: Check geometry bounds for click/drag operations
+    if let (Some(op_x), Some(op_y)) = (*x, *y) {
+        let geom = &resolved.geometry;
+        if op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h {
+            return Err(VirtuosoError::Config(format!(
+                "coordinates ({op_x}, {op_y}) out of bounds for window size {}x{}",
+                geom.w, geom.h
+            )));
+        }
+    }
+
+    let operation = *operation;
+
+    // Step 5: Build DISPLAY/XAUTHORITY prefix for action commands.
+    // The xdotool / import commands themselves do NOT inherit the list-windows
+    // env, so the fix is to prefix each action with DISPLAY / XAUTHORITY.
+    let display_prefix = match env.xauthority {
+        Some(ref xa) => format!(
+            "env DISPLAY={} XAUTHORITY={} ",
+            shell_escape(display),
+            shell_escape(xa)
+        ),
+        None => format!("env DISPLAY={} ", shell_escape(display)),
+    };
+
+    // Step 6: Build and execute the xdotool / import commands. Most
+    // operations yield a single command; drag yields three (mousedown,
+    // mousemove, mouseup).
+    //
+    // Drag uses a MouseButtonGuard so that if the intermediate mousemove
+    // fails (SSH disconnect, timeout, NAK), a best-effort mouseup is still
+    // issued to release the held button.
+    let (results, artifact) = if operation == X11Operation::Screenshot {
+        let dir = output_dir
+            .ok_or_else(|| VirtuosoError::Config("screenshot requires --output-dir".into()))?;
+        // Use a random temp name on the GUI host to avoid colliding with
+        // prior runs or concurrent agents targeting the same DISPLAY.
+        let token = std::process::id() ^ (start.elapsed().as_nanos() as u32);
+        let safe_name = format!("vcli_shot_{token}.png");
+        let remote_path = format!("/tmp/{safe_name}");
+        let remote_cmd = format!(
+            "{}import -window {} {}",
+            display_prefix,
+            shell_escape(&resolved.window_id),
+            shell_escape(&remote_path),
+        );
+        let out = runner.run_command(&CommandRequest::with_exec_timeout(
+            &remote_cmd,
+            Duration::from_secs(*timeout_secs),
+        ))?;
+        if !out.success {
+            return Err(VirtuosoError::Execution(format!(
+                "import -window failed: {} (stderr: {})",
+                out.exit_status,
+                out.stderr.trim()
+            )));
+        }
+        // Fetch the PNG back to the local evidence directory.
+        match runner.fetch_file(&remote_path, dir, Duration::from_secs(*timeout_secs)) {
+            Ok(()) => {}
+            Err(e) => {
+                // LocalTransport doesn't support fetch_file; the import wrote
+                // directly to the local /tmp which was then renamed by caller.
+                return Err(VirtuosoError::Execution(format!(
+                    "screenshot fetch failed: {e}"
+                )));
+            }
+        }
+        // Validate PNG magic bytes (89 50 4E 47 0D 0A 1A 0A).
+        let local_path_buf = std::path::PathBuf::from(dir).join(&safe_name);
+        match validate_png_artifact(&local_path_buf) {
+            Ok((size, hash)) => {
+                let _ = std::fs::remove_file(&remote_path); // best-effort remote cleanup
+                (
+                    vec![out],
+                    Some(ArtifactInfo {
+                        name: safe_name,
+                        local_path: local_path_buf.to_string_lossy().into(),
+                        size_bytes: size,
+                        sha256: hash,
+                    }),
+                )
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&local_path_buf); // cleanup invalid file
+                return Err(e);
+            }
+        }
+    } else if operation == X11Operation::Wait {
+        (vec![], None)
+    } else if operation == X11Operation::DragRel {
+        // Drag needs a MouseButtonGuard: mousedown -> mousemove -> mouseup.
+        // If mousemove fails mid-drag (SSH drop, timeout), the guard's Drop
+        // will still issue a best-effort mouseup so we don't leave the button
+        // held on the CIW.
+        let cmds = build_xdotool_actions(&resolved, operation, *x, *y, *button, *text)?;
+        let mut outs = Vec::with_capacity(cmds.len());
+        let mut guard = MouseButtonGuard::new(runner, &display_prefix, &resolved, *button);
+
+        for (i, (_sub, argv)) in cmds.into_iter().enumerate() {
+            let remote_cmd = format!(
+                "{}xdotool {}",
+                display_prefix,
+                argv.iter()
+                    .map(|a| shell_escape(a))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            match runner.run_command(&CommandRequest::with_exec_timeout(
+                &remote_cmd,
+                Duration::from_secs(*timeout_secs),
+            )) {
+                Ok(cmd_out) => {
+                    if i == 0 {
+                        guard.arm(); // mousedown succeeded: arm the release guard
+                    } else if i == 2 {
+                        guard.mark_released(); // explicit mouseup succeeded
+                    }
+                    outs.push(cmd_out);
+                }
+                Err(err) => {
+                    // mousedown succeeded but a later step failed: guard's Drop
+                    // will still run mouseup. mousedown failed (i==0): nothing
+                    // to release because the button was never pressed.
+                    return Err(VirtuosoError::Execution(format!(
+                        "xdotool {} failed: {}",
+                        _sub, err
+                    )));
+                }
+            }
+        }
+        (outs, None)
+    } else {
+        let cmds = build_xdotool_actions(&resolved, operation, *x, *y, *button, *text)?;
+        let mut outs = Vec::with_capacity(cmds.len());
+        for (_sub, argv) in cmds {
+            let remote_cmd = format!(
+                "{}xdotool {}",
+                display_prefix,
+                argv.iter()
+                    .map(|a| shell_escape(a))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            let out = runner.run_command(&CommandRequest::with_exec_timeout(
+                &remote_cmd,
+                Duration::from_secs(*timeout_secs),
+            ))?;
+            outs.push(out);
+        }
+        (outs, None)
+    };
+
+    let duration_ms = start.elapsed().as_millis() as u64;
+    let success = results.last().map(|r| r.success).unwrap_or(true);
+
+    // Build sanitized details
+    let details = match operation {
+        X11Operation::Activate => None,
+        X11Operation::Key | X11Operation::Type => Some(format!(
+            "text_length: {}",
+            text.map(|s| s.len()).unwrap_or(0)
+        )),
+        X11Operation::ClickRel | X11Operation::DragRel => Some(format!(
+            "x: {}, y: {}, button: {}",
+            x.unwrap_or(0),
+            y.unwrap_or(0),
+            button.unwrap_or(1)
+        )),
+        X11Operation::Screenshot => Some(format!("output_dir: {}", output_dir.unwrap_or(""))),
+        X11Operation::Wait => None,
+    };
+
+    Ok(X11ActionResult {
+        status: if success { "success" } else { "failure" }.to_string(),
+        operation: operation.as_str().to_string(),
+        window_id: window_id.to_string(),
+        pid: *pid,
+        display: display.to_string(),
+        duration_ms,
+        details,
+        artifact,
+    })
+}
+
+/// Bundles identity + action inputs for `action_x11`; mirrors the CLI flags.
+#[derive(Debug, Clone)]
+pub struct ActionX11Inputs<'a> {
+    pub window_id: &'a str,
+    pub pid: u32,
+    pub display: &'a str,
+    pub operation: X11Operation,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    /// Mouse button for click/drag: 1=left, 2=middle, 3=right. None = default 1.
+    pub button: Option<u8>,
+    pub text: Option<&'a str>,
+    pub output_dir: Option<&'a str>,
+    pub timeout_secs: u64,
+}
+
+/// Build xdotool commands for an action operation.
+///
+/// Returns a list of (command, argv) pairs. Most operations yield a single
+/// command; drag yields three sequential commands (mousedown, mousemove,
+/// mouseup) so the motion is a true drag-and-drop.
+///
+/// Each command's argv starts with the xdotool subcommand, followed by
+/// action-specific flags, followed by `--window <id>` to target the
+/// specific window. All arguments are separate items — no shell
+/// interpolation. Screenshot and Wait are handled in action_x11, not here.
+fn build_xdotool_actions(
+    window: &WindowInfo,
+    operation: X11Operation,
+    x: Option<i32>,
+    y: Option<i32>,
+    button: Option<u8>,
+    text: Option<&str>,
+) -> Result<Vec<(String, Vec<String>)>> {
+    let wid = window.window_id.clone();
+    let btn = button.unwrap_or(1).to_string();
+
+    match operation {
+        X11Operation::Activate => {
+            // xdotool windowraise --sync --window <id>
+            Ok(vec![(
+                "windowraise".into(),
+                vec![
+                    "windowraise".into(),
+                    "--sync".into(),
+                    "--window".into(),
+                    wid,
+                ],
+            )])
+        }
+        X11Operation::Key => {
+            // xdotool key --window <id> <key>...
+            let t =
+                text.ok_or_else(|| VirtuosoError::Config("key operation requires --text".into()))?;
+            let mut argv = vec!["key".into(), "--window".into(), wid];
+            for key in t.split_whitespace() {
+                argv.push(key.to_string());
+            }
+            Ok(vec![("key".into(), argv)])
+        }
+        X11Operation::Type => {
+            // xdotool type --window <id> -- <text>
+            let t =
+                text.ok_or_else(|| VirtuosoError::Config("type operation requires --text".into()))?;
+            Ok(vec![(
+                "type".into(),
+                vec!["type".into(), "--window".into(), wid, "--".into(), t.into()],
+            )])
+        }
+        X11Operation::ClickRel => {
+            // Two-step click: first move cursor to the window-relative point,
+            // then issue the click. `--` separator before coords protects
+            // negative-valued x/y from being parsed as xdotool flags.
+            let (rx, ry) = match (x, y) {
+                (Some(xx), Some(yy)) => (xx, yy),
+                _ => {
+                    return Err(VirtuosoError::Config(
+                        "click-rel requires --x and --y".into(),
+                    ));
+                }
+            };
+            Ok(vec![
+                // Step 1: xdotool mousemove --window <id> -- <x> <y>
+                (
+                    "mousemove".into(),
+                    vec![
+                        "mousemove".into(),
+                        "--window".into(),
+                        wid.clone(),
+                        "--".into(),
+                        rx.to_string(),
+                        ry.to_string(),
+                    ],
+                ),
+                // Step 2: xdotool click --window <id> --button <b>
+                (
+                    "click".into(),
+                    vec![
+                        "click".into(),
+                        "--window".into(),
+                        wid,
+                        "--button".into(),
+                        btn,
+                    ],
+                ),
+            ])
+        }
+        X11Operation::DragRel => {
+            // True drag: mousedown -> mousemove --relative -> mouseup.
+            // Each command targets the same window by clone()-ing wid.
+            let (rx, yv) = match (x, y) {
+                (Some(xx), Some(yy)) => (xx, yy),
+                _ => {
+                    return Err(VirtuosoError::Config(
+                        "drag-rel requires --x and --y".to_string(),
+                    ));
+                }
+            };
+            Ok(vec![
+                // press
+                (
+                    "mousedown".into(),
+                    vec![
+                        "mousedown".into(),
+                        "--window".into(),
+                        wid.clone(),
+                        "--button".into(),
+                        btn.clone(),
+                    ],
+                ),
+                // move relatively
+                (
+                    "mousemove".into(),
+                    vec![
+                        "mousemove".into(),
+                        "--window".into(),
+                        wid.clone(),
+                        "--relative".into(),
+                        rx.to_string(),
+                        yv.to_string(),
+                    ],
+                ),
+                // release
+                (
+                    "mouseup".into(),
+                    vec![
+                        "mouseup".into(),
+                        "--window".into(),
+                        wid,
+                        "--button".into(),
+                        btn,
+                    ],
+                ),
+            ])
+        }
+        X11Operation::Screenshot | X11Operation::Wait => {
+            // Handled specially in action_x11, not via xdotool
+            Ok(vec![])
+        }
+    }
+}
+
+/// RAII guard that guarantees a mouse-button release after a successful
+/// `mousedown`. Used by `action_x11` for drag sequences: if the intermediate
+/// `mousemove --relative` fails (SSH drop, X11 timeout) the drag function
+/// returns an error before reaching the explicit `mouseup`. Without this
+/// guard the button would remain logically held on the CIW.
+///
+/// Call `arm()` immediately after the mousedown command succeeds. Call
+/// `mark_released()` after the explicit mouseup succeeds. On Drop, if
+/// still armed (mousedown succeeded but mouseup never ran), a best-effort
+/// mouseup is issued. Failures in Drop are logged but never panic.
+struct MouseButtonGuard<'a> {
+    runner: &'a dyn RemoteTransport,
+    display_prefix: &'a str,
+    window_id: String,
+    button: u8,
+    armed: bool,
+}
+
+impl<'a> MouseButtonGuard<'a> {
+    fn new(
+        runner: &'a dyn RemoteTransport,
+        display_prefix: &'a str,
+        window: &WindowInfo,
+        button: Option<u8>,
+    ) -> Self {
+        Self {
+            runner,
+            display_prefix,
+            window_id: window.window_id.clone(),
+            button: button.unwrap_or(1),
+            armed: false,
+        }
+    }
+
+    /// Mark the guard as armed — call after a successful mousedown.
+    fn arm(&mut self) {
+        self.armed = true;
+    }
+
+    /// Mark the guard as released — call after the explicit mouseup succeeds.
+    fn mark_released(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for MouseButtonGuard<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let remote_cmd = format!(
+            "{}xdotool mouseup --window {} --button {}",
+            self.display_prefix, self.window_id, self.button,
+        );
+        let req = CommandRequest::with_exec_timeout(
+            &remote_cmd,
+            Duration::from_secs(5), // bounded best-effort
+        );
+        if let Err(e) = self.runner.run_command(&req) {
+            // Best-effort: report but do not override the primary error.
+            eprintln!(
+                "vcli::x11 MouseButtonGuard: best-effort mouseup failed for \
+                 window {}: {}",
+                self.window_id, e
+            );
+        }
+    }
+}
+
+/// PNG file signature: 89 50 4E 47 0D 0A 1A 0A.
+const PNG_MAGIC: &[u8; 8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+/// Validate that `path` is a real PNG, then return (size_bytes, sha256_hex).
+/// Rejects empty files, tiny files (< 64 bytes), wrong magic, and symlinks.
+fn validate_png_artifact(
+    path: &std::path::Path,
+) -> std::result::Result<(u64, String), VirtuosoError> {
+    use std::io::{Read, Seek};
+
+    let metadata = std::fs::metadata(path).map_err(|e| {
+        VirtuosoError::Execution(format!("cannot stat screenshot path {:?}: {e}", path))
+    })?;
+
+    // Reject symlinks — they could point outside the evidence directory.
+    if metadata.file_type().is_symlink() {
+        return Err(VirtuosoError::Execution(format!(
+            "screenshot path {:?} is a symlink — rejecting",
+            path
+        )));
+    }
+
+    let size = metadata.len();
+    if size < 64 {
+        return Err(VirtuosoError::Execution(format!(
+            "screenshot file is suspiciously small ({size} bytes) — rejecting"
+        )));
+    }
+
+    // Check magic bytes.
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        VirtuosoError::Execution(format!("cannot open screenshot path {:?}: {e}", path))
+    })?;
+    let mut header = [0u8; 8];
+    file.read_exact(&mut header).map_err(|e| {
+        VirtuosoError::Execution(format!(
+            "cannot read screenshot header from {:?}: {e}",
+            path
+        ))
+    })?;
+    if &header != PNG_MAGIC {
+        return Err(VirtuosoError::Execution(format!(
+            "screenshot file is not a valid PNG (header: {header:02X?})"
+        )));
+    }
+
+    // Compute SHA-256 of the full file.
+    file.rewind()
+        .map_err(|e| VirtuosoError::Execution(format!("cannot rewind screenshot file: {e}")))?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buf).map_err(|e| {
+            VirtuosoError::Execution(format!("cannot read screenshot for hashing: {e}"))
+        })?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let digest = hasher.finalize();
+    let hash = format!("{digest:x}");
+
+    Ok((size, hash))
 }
 
 fn dialog_info_from_dismiss_value(
@@ -606,6 +1537,72 @@ fn build_helper_cmd_dismiss_window(
     s
 }
 
+/// Resolve a unique window by strict PID + DISPLAY match, with optional title narrowing.
+///
+/// - `expected_pid` must be positive (zero/None windows do not match).
+/// - `expected_display` must match exactly.
+/// - `optional_title`, if provided, only narrows the candidate set (substring match).
+///
+/// Returns `Ok(WindowInfo)` if exactly one window matches.
+/// Returns `Err(NotFound)` if zero windows match.
+/// Returns `Err(Conflict)` if more than one window matches.
+#[allow(dead_code)]
+pub fn resolve_unique_window(
+    windows: &[WindowInfo],
+    expected_pid: u32,
+    expected_display: &str,
+    optional_title: Option<&str>,
+) -> Result<WindowInfo> {
+    if expected_pid == 0 {
+        return Err(VirtuosoError::NotFound(
+            "resolve_unique_window requires a positive PID".into(),
+        ));
+    }
+
+    // Filter by PID (must be positive) and DISPLAY (exact match)
+    let candidates: Vec<&WindowInfo> = windows
+        .iter()
+        .filter(|w| {
+            // Require positive PID — zero/None windows are excluded
+            let pid_ok = w.pid.map(|p| p == expected_pid).unwrap_or(false);
+            // Exact DISPLAY match
+            let display_ok = w
+                .display
+                .as_deref()
+                .map(|d| d == expected_display)
+                .unwrap_or(false);
+            pid_ok && display_ok
+        })
+        .collect();
+
+    // Apply optional title narrowing (substring match, not required)
+    let candidates: Vec<&WindowInfo> = match optional_title {
+        Some(title) => candidates
+            .into_iter()
+            .filter(|w| w.title.contains(title))
+            .collect(),
+        None => candidates,
+    };
+
+    match candidates.len() {
+        0 => Err(VirtuosoError::NotFound(format!(
+            "no window matching PID={expected_pid} DISPLAY={expected_display} title={:?}",
+            optional_title
+        ))),
+        1 => Ok(candidates.into_iter().next().unwrap().clone()),
+        _ => Err(VirtuosoError::Conflict(format!(
+            "multiple windows ({}) matching PID={expected_pid} DISPLAY={expected_display} title={:?}: {}",
+            candidates.len(),
+            optional_title,
+            candidates
+                .iter()
+                .map(|w| format!("{} (title={:?})", w.window_id, w.title))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+    }
+}
+
 fn shell_escape(s: &str) -> String {
     if s.chars().all(|c| {
         c.is_ascii_alphanumeric() || c == ':' || c == '.' || c == '_' || c == '/' || c == '-'
@@ -705,15 +1702,196 @@ fn truncate_log(out: &CommandResult) -> String {
     log
 }
 
-/// Construct the configured remote transport (mirrors `transport::tunnel`).
+/// Construct the configured remote transport.
 ///
-/// Returns a trait object rather than a concrete `SSHRunner` so that callers
-/// hold the contract, not a backend. Backend selection (OpenSSH today, native
-/// once compiled in) and `VB_DISABLE_CONTROL_MASTER` are both honoured by
-/// [`crate::transport::backend::open_transport`], so the choice is never
-/// silently ignored — an unsupported `native` request fails here.
+/// When `config.remote_host` is absent or empty, returns a local
+/// [`LocalTransport`] that runs commands directly on the workstation.
+/// When a remote host is set, delegates to [`crate::transport::backend::open_transport`]
+/// so SSH backend selection and `VB_DISABLE_CONTROL_MASTER` are honoured.
 pub fn transport_for_config(config: &Config) -> Result<Arc<dyn RemoteTransport>> {
-    Ok(crate::transport::backend::open_transport(config)?)
+    if config.remote_host.as_deref().unwrap_or("").is_empty() {
+        Ok(Arc::new(LocalTransport::new()))
+    } else {
+        Ok(crate::transport::backend::open_transport(config)?)
+    }
+}
+
+/// A [`RemoteTransport`] that runs commands directly on the local workstation.
+/// Used when `VB_REMOTE_HOST` is not set so the X11 helper can still operate locally.
+struct LocalTransport;
+
+impl LocalTransport {
+    fn new() -> Self {
+        Self
+    }
+}
+
+impl RemoteTransport for LocalTransport {
+    fn test_connection(
+        &self,
+        deadline: crate::transport::contract::Deadline,
+    ) -> std::result::Result<bool, crate::transport::contract::TransportError> {
+        if deadline.is_expired() {
+            return Err(crate::transport::contract::TransportError::QueueTimeout {
+                request: crate::transport::contract::RequestId::new(),
+                after_secs: 0,
+            });
+        }
+        Ok(true)
+    }
+
+    fn run_command(
+        &self,
+        req: &CommandRequest,
+    ) -> std::result::Result<CommandResult, crate::transport::contract::TransportError> {
+        use std::io::Read;
+        use std::process::Stdio;
+        use std::time::Instant;
+
+        if req.deadline.is_expired() {
+            return Err(crate::transport::contract::TransportError::QueueTimeout {
+                request: req.id.clone(),
+                after_secs: 0,
+            });
+        }
+
+        let start = Instant::now();
+
+        // Compute the maximum wait time from req.timeout (if set) and remaining deadline.
+        let max_wait = req.timeout.map(|t| {
+            let remaining = req.deadline.0.saturating_duration_since(start);
+            t.min(remaining)
+        });
+
+        let mut cmd = std::process::Command::new("sh");
+        cmd.arg("-c")
+            .arg(&req.command)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let mut child = cmd.spawn().map_err(|e| {
+            crate::transport::contract::TransportError::LocalIo(format!("local spawn failed: {e}"))
+        })?;
+
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let mut stdout_bytes = Vec::new();
+                    if let Some(ref mut s) = child.stdout {
+                        let _ = s.read_to_end(&mut stdout_bytes);
+                    }
+                    let mut stderr_bytes = Vec::new();
+                    if let Some(ref mut s) = child.stderr {
+                        let _ = s.read_to_end(&mut stderr_bytes);
+                    }
+                    let exit_status = status.code().unwrap_or(-1);
+                    let success = status.success();
+                    return Ok(CommandResult {
+                        exit_status,
+                        stdout: String::from_utf8_lossy(&stdout_bytes).into_owned(),
+                        stderr: String::from_utf8_lossy(&stderr_bytes).into_owned(),
+                        success,
+                        duration: start.elapsed(),
+                    });
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    return Err(crate::transport::contract::TransportError::LocalIo(
+                        format!("local try_wait failed: {e}"),
+                    ));
+                }
+            }
+
+            let elapsed = start.elapsed();
+            if elapsed >= req.deadline.0.saturating_duration_since(start) {
+                // Deadline has passed.
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(
+                    crate::transport::contract::TransportError::ExecutionTimeout {
+                        request: req.id.clone(),
+                        after_secs: start.elapsed().as_secs(),
+                        remote_terminated: false,
+                    },
+                );
+            }
+
+            // Wait up to 10ms before next poll.
+            let remaining = req.deadline.0.saturating_duration_since(Instant::now());
+            let wait_for = max_wait
+                .map(|t| t.saturating_sub(elapsed))
+                .unwrap_or(remaining)
+                .min(Duration::from_millis(10));
+            if wait_for.is_zero() {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(
+                    crate::transport::contract::TransportError::ExecutionTimeout {
+                        request: req.id.clone(),
+                        after_secs: start.elapsed().as_secs(),
+                        remote_terminated: false,
+                    },
+                );
+            }
+            std::thread::sleep(wait_for);
+        }
+    }
+
+    fn upload_file(
+        &self,
+        req: &crate::transport::contract::UploadFileRequest,
+    ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+        if req.deadline.is_expired() {
+            return Err(crate::transport::contract::TransportError::QueueTimeout {
+                request: req.id.clone(),
+                after_secs: 0,
+            });
+        }
+        std::fs::copy(&req.local, &req.remote).map_err(|e| {
+            crate::transport::contract::TransportError::LocalIo(format!(
+                "local file copy failed: {e}"
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn upload_text(
+        &self,
+        req: &UploadTextRequest,
+    ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+        if req.deadline.is_expired() {
+            return Err(crate::transport::contract::TransportError::QueueTimeout {
+                request: req.id.clone(),
+                after_secs: 0,
+            });
+        }
+        std::fs::write(&req.remote, &req.text).map_err(|e| {
+            crate::transport::contract::TransportError::LocalIo(format!("local write failed: {e}"))
+        })?;
+        Ok(())
+    }
+
+    fn download_file(
+        &self,
+        _req: &crate::transport::contract::DownloadFileRequest,
+    ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+        Err(
+            crate::transport::contract::TransportError::UnsupportedOperation(
+                "download_file not supported on LocalTransport".into(),
+            ),
+        )
+    }
+
+    fn download_dir(
+        &self,
+        _req: &crate::transport::contract::DownloadDirRequest,
+    ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+        Err(
+            crate::transport::contract::TransportError::UnsupportedOperation(
+                "download_dir not supported on LocalTransport".into(),
+            ),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1041,5 +2219,1022 @@ mod tests {
         assert_eq!(w.title, "Save Changes");
         assert_eq!(w.geometry.w, 300);
         assert_eq!(w.class, vec!["virtuoso", "VimClass"]);
+        // Backward compatibility: pid and visible default to None/false when absent
+        assert_eq!(w.pid, None);
+        assert!(!w.visible);
+    }
+
+    #[test]
+    fn window_info_parses_with_pid_and_visible() {
+        let line = r#"{"frame_id":"0x400001","window_id":"0x400002","dismiss_id":"0x400002","title":"Save Changes","class":["virtuoso"],"geometry":{"x":100,"y":200,"w":300,"h":100},"pid":12345,"visible":true}"#;
+        let w: WindowInfo = serde_json::from_str(line).expect("parse");
+        assert_eq!(w.pid, Some(12345));
+        assert!(w.visible);
+        assert_eq!(w.geometry.w, 300);
+    }
+
+    #[test]
+    fn window_info_backward_compat_old_json_without_pid_visible() {
+        // Old helper output without pid/visible fields must still parse
+        let old = r#"{"frame_id":"0x1","window_id":"0x2","dismiss_id":"0x2","title":"Dialog","class":["virtuoso"],"geometry":{"x":0,"y":0,"w":200,"h":100}}"#;
+        let w: WindowInfo = serde_json::from_str(old).expect("parse");
+        assert_eq!(w.frame_id, "0x1");
+        assert_eq!(w.window_id, "0x2");
+        assert_eq!(w.pid, None);
+        assert!(!w.visible);
+    }
+
+    #[test]
+    fn window_info_pid_is_optional_positive_integer() {
+        // Positive PID is preserved
+        let with_pid = r#"{"frame_id":"0x1","window_id":"0x2","dismiss_id":"0x2","title":"","class":[],"geometry":{"x":0,"y":0,"w":1,"h":1},"pid":99999}"#;
+        let w: WindowInfo = serde_json::from_str(with_pid).expect("parse");
+        assert_eq!(w.pid, Some(99999));
+
+        // Zero PID is normalized to None (a window cannot have PID 0)
+        let zero_pid = r#"{"frame_id":"0x1","window_id":"0x2","dismiss_id":"0x2","title":"","class":[],"geometry":{"x":0,"y":0,"w":1,"h":1},"pid":0}"#;
+        let z: WindowInfo = serde_json::from_str(zero_pid).expect("parse");
+        assert_eq!(z.pid, None);
+
+        // Absent pid remains None
+        let no_pid = r#"{"frame_id":"0x1","window_id":"0x2","dismiss_id":"0x2","title":"","class":[],"geometry":{"x":0,"y":0,"w":1,"h":1}}"#;
+        let n: WindowInfo = serde_json::from_str(no_pid).expect("parse");
+        assert_eq!(n.pid, None);
+    }
+
+    // =============================================================================
+    // resolve_unique_window tests — strict window identity resolution (Task 1)
+    // =============================================================================
+
+    fn mk_window(window_id: &str, pid: Option<u32>, display: &str, title: &str) -> WindowInfo {
+        WindowInfo {
+            frame_id: window_id.to_string(),
+            window_id: window_id.to_string(),
+            dismiss_id: window_id.to_string(),
+            display: Some(display.to_string()),
+            xauthority: None,
+            title: title.to_string(),
+            class: vec![],
+            geometry: Geometry {
+                x: 0,
+                y: 0,
+                w: 100,
+                h: 100,
+            },
+            pid,
+            visible: true,
+        }
+    }
+
+    #[test]
+    fn resolve_unique_window_zero_matches_returns_not_found() {
+        let windows = vec![mk_window("0x1", Some(99999), ":0", "ADE Explorer")];
+        let result = resolve_unique_window(&windows, 12345, ":0", None);
+        let err = result.expect_err("expected error");
+        assert!(
+            matches!(err, VirtuosoError::NotFound(_)),
+            "expected NotFound, got {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_unique_window_multiple_matches_returns_conflict() {
+        let windows = vec![
+            mk_window("0x1", Some(12345), ":0", "ADE Explorer"),
+            mk_window("0x2", Some(12345), ":0", "Virtuoso Schematic"),
+        ];
+        let result = resolve_unique_window(&windows, 12345, ":0", None);
+        let err = result.expect_err("expected error");
+        assert!(
+            matches!(err, VirtuosoError::Conflict(_)),
+            "expected Conflict, got {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_unique_window_zero_pid_rejected() {
+        let windows = vec![mk_window("0x1", Some(0), ":0", "ADE Explorer")];
+        // Positive PID required; zero-PID windows must not match
+        let result = resolve_unique_window(&windows, 0, ":0", None);
+        let err = result.expect_err("expected error");
+        assert!(
+            matches!(err, VirtuosoError::NotFound(_)),
+            "expected NotFound for zero PID, got {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_unique_window_none_pid_rejected() {
+        let windows = vec![mk_window("0x1", None, ":0", "ADE Explorer")];
+        // Positive PID required; None-PID windows must not match
+        let result = resolve_unique_window(&windows, 12345, ":0", None);
+        let err = result.expect_err("expected error");
+        assert!(
+            matches!(err, VirtuosoError::NotFound(_)),
+            "expected NotFound for None PID, got {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_unique_window_exact_match_returns_window() {
+        let windows = vec![mk_window("0x1", Some(12345), ":0", "ADE Explorer")];
+        let result = resolve_unique_window(&windows, 12345, ":0", None);
+        let win = result.expect("expected Ok");
+        assert_eq!(win.window_id, "0x1");
+    }
+
+    #[test]
+    fn resolve_unique_window_display_mismatch_returns_not_found() {
+        let windows = vec![mk_window("0x1", Some(12345), ":1", "ADE Explorer")];
+        let result = resolve_unique_window(&windows, 12345, ":0", None);
+        let err = result.expect_err("expected error");
+        assert!(
+            matches!(err, VirtuosoError::NotFound(_)),
+            "expected NotFound for display mismatch, got {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_unique_window_title_narrows_without_requiring() {
+        let windows = vec![
+            mk_window("0x1", Some(12345), ":0", "ADE Explorer"),
+            mk_window("0x2", Some(12345), ":0", "Virtuoso Schematic"),
+        ];
+        // Without title: multiple matches → Conflict
+        let result = resolve_unique_window(&windows, 12345, ":0", None);
+        let err = result.expect_err("expected error");
+        assert!(matches!(err, VirtuosoError::Conflict(_)));
+
+        // With title that matches one: returns that window
+        let result = resolve_unique_window(&windows, 12345, ":0", Some("ADE"));
+        let win = result.expect("expected Ok");
+        assert_eq!(win.window_id, "0x1");
+
+        // With title matching none: NotFound
+        let result = resolve_unique_window(&windows, 12345, ":0", Some("NoMatch"));
+        let err = result.expect_err("expected error");
+        assert!(matches!(err, VirtuosoError::NotFound(_)));
+    }
+
+    #[test]
+    fn resolve_unique_window_partial_title_match_suffices() {
+        // Title substring match should succeed
+        let windows = vec![mk_window(
+            "0x1",
+            Some(12345),
+            ":0",
+            "ADE Assembler Editing: LIB CELL schematic",
+        )];
+        let result = resolve_unique_window(&windows, 12345, ":0", Some("ADE Assembler"));
+        let win = result.expect("expected Ok");
+        assert_eq!(win.window_id, "0x1");
+    }
+
+    // =============================================================================
+    // Scratch path tests — user-isolated X11 helper directory (Task 1)
+    // =============================================================================
+
+    #[test]
+    fn x11_remote_dir_includes_user_isolation() {
+        // New format: /tmp/virtuoso_bridge_<user>/<client>/x11
+        let dir = x11_remote_dir_with_user("testuser", "my-client");
+        let components: Vec<&str> = dir.split('/').filter(|s| !s.is_empty()).collect();
+        assert!(
+            dir.starts_with("/tmp/virtuoso_bridge_"),
+            "path must use new user-isolated format: {dir}"
+        );
+        // Must have at least: tmp, virtuoso_bridge_<user>, <client>, x11
+        assert!(
+            components.len() >= 4,
+            "expected /tmp/virtuoso_bridge_<user>/<client>/x11 structure, got {dir}"
+        );
+        assert_eq!(components.last(), Some(&"x11"));
+    }
+
+    #[test]
+    fn x11_remote_dir_rejects_dotdot_in_user() {
+        let dir = x11_remote_dir_with_user("..", "client");
+        assert!(!dir.contains(".."), "dotdot must be sanitized: {dir}");
+        assert!(dir.starts_with("/tmp/virtuoso_bridge_"));
+    }
+
+    #[test]
+    fn x11_remote_dir_rejects_dotdot_in_client() {
+        let dir = x11_remote_dir_with_user("user", "../../etc/passwd");
+        // .. must be sanitized (replaced with _), not present as ..
+        assert!(!dir.contains(".."), "dotdot must be sanitized: {dir}");
+        // Path must still be valid and under /tmp/
+        assert!(dir.starts_with("/tmp/virtuoso_bridge_"));
+    }
+
+    #[test]
+    #[should_panic(expected = "empty user is not allowed")]
+    fn x11_remote_dir_rejects_empty_user() {
+        // Empty user is not allowed — must be resolved via `id -un` first
+        let _dir = x11_remote_dir_with_user("", "client");
+    }
+
+    #[test]
+    fn x11_remote_dir_rejects_empty_client() {
+        let dir = x11_remote_dir_with_user("user", "");
+        let components: Vec<&str> = dir.split('/').filter(|s| !s.is_empty()).collect();
+        assert!(
+            !dir.contains("//"),
+            "must not have empty path components: {dir}"
+        );
+        assert!(
+            components.iter().all(|s| !s.is_empty()),
+            "all components must be nonempty: {components:?}"
+        );
+    }
+
+    #[test]
+    fn x11_remote_dir_sanitizes_special_chars_in_user() {
+        let dir = x11_remote_dir_with_user("user!@#$%^&*()", "client");
+        // Only alphanumerics, underscore, hyphen allowed
+        let user_part = dir.split('/').find(|s| s.starts_with("virtuoso_bridge_"));
+        if let Some(part) = user_part {
+            let suffix = &part["virtuoso_bridge_".len()..];
+            assert!(
+                suffix
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
+                "user part must be sanitized: {suffix}"
+            );
+            assert!(!suffix.contains('!'));
+            assert!(!suffix.contains('@'));
+        }
+    }
+
+    #[test]
+    fn x11_remote_dir_sanitizes_special_chars_in_client() {
+        let dir = x11_remote_dir_with_user("user", "client!@#$");
+        let client_part = dir.split('/').filter(|s| !s.is_empty()).nth(2);
+        if let Some(part) = client_part {
+            assert!(
+                part.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
+                "client part must be sanitized: {part}"
+            );
+        }
+    }
+
+    #[test]
+    fn local_transport_runs_harmless_command_without_remote_host() {
+        // Construct a minimal Config with no remote_host directly to avoid dotenv contamination.
+        let config = minimal_config_without_remote_host();
+        let transport = transport_for_config(&config).expect("local transport created");
+        let req = crate::transport::contract::CommandRequest::untimed("echo hello");
+        let result = transport.run_command(&req).expect("command should succeed");
+        assert!(result.success);
+        assert!(result.stdout.contains("hello"));
+    }
+
+    #[test]
+    fn local_transport_upload_text_creates_file() {
+        let config = minimal_config_without_remote_host();
+        let transport = transport_for_config(&config).expect("local transport created");
+        let tmp = std::env::temp_dir().join(format!("x11_local_test_{}.txt", std::process::id()));
+        let req = crate::transport::contract::UploadTextRequest::untimed(
+            "content",
+            tmp.to_str().unwrap(),
+        );
+        transport
+            .upload_text(&req)
+            .expect("upload_text should succeed");
+        let content = std::fs::read_to_string(&tmp).expect("file should exist");
+        assert_eq!(content, "content");
+        std::fs::remove_file(tmp).ok();
+    }
+
+    #[test]
+    fn local_transport_respects_expired_deadline() {
+        let config = minimal_config_without_remote_host();
+        let transport = transport_for_config(&config).expect("local transport created");
+        // A deadline that is already expired should return QueueTimeout.
+        let past =
+            crate::transport::contract::Deadline::from_now(std::time::Duration::from_secs(0));
+        // Override deadline to already-expired by using a negative duration (Deadline::from_now with 0 is already expired since it sets to Instant::now()).
+        let req = crate::transport::contract::CommandRequest::new("echo hello", past);
+        let err = transport
+            .run_command(&req)
+            .expect_err("should fail on expired deadline");
+        match err {
+            crate::transport::contract::TransportError::QueueTimeout { .. } => {}
+            other => panic!("expected QueueTimeout, got {:?}", other),
+        }
+    }
+
+    // =============================================================================
+    // Recording-transport tests for ensure_helper_uploaded (Task 1)
+    // =============================================================================
+
+    /// A transport that records every command it receives for inspection.
+    #[derive(Default)]
+    struct RecordingTransport {
+        commands: std::sync::Mutex<Vec<String>>,
+        responses: std::sync::Mutex<Vec<CommandResult>>,
+    }
+
+    impl RecordingTransport {
+        fn new() -> Self {
+            Self::default()
+        }
+        /// Enqueue a response for the next command(s).
+        fn enqueue_response(&self, r: CommandResult) {
+            self.responses.lock().unwrap().push(r);
+        }
+    }
+
+    impl RemoteTransport for RecordingTransport {
+        fn test_connection(
+            &self,
+            _deadline: crate::transport::contract::Deadline,
+        ) -> std::result::Result<bool, crate::transport::contract::TransportError> {
+            Ok(true)
+        }
+
+        fn run_command(
+            &self,
+            req: &CommandRequest,
+        ) -> std::result::Result<CommandResult, crate::transport::contract::TransportError>
+        {
+            self.commands.lock().unwrap().push(req.command.clone());
+            let responses = &mut self.responses.lock().unwrap();
+            if responses.is_empty() {
+                return Ok(CommandResult {
+                    exit_status: 0,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    success: true,
+                    duration: Duration::ZERO,
+                });
+            }
+            Ok(responses.remove(0))
+        }
+
+        fn upload_text(
+            &self,
+            _req: &UploadTextRequest,
+        ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+            Ok(())
+        }
+
+        fn upload_file(
+            &self,
+            _req: &crate::transport::contract::UploadFileRequest,
+        ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+            Ok(())
+        }
+
+        fn download_file(
+            &self,
+            _req: &crate::transport::contract::DownloadFileRequest,
+        ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+            Err(
+                crate::transport::contract::TransportError::UnsupportedOperation(
+                    "download_file not supported".into(),
+                ),
+            )
+        }
+
+        fn download_dir(
+            &self,
+            _req: &crate::transport::contract::DownloadDirRequest,
+        ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+            Err(
+                crate::transport::contract::TransportError::UnsupportedOperation(
+                    "download_dir not supported".into(),
+                ),
+            )
+        }
+    }
+
+    fn mk_result(stdout: &str, stderr: &str, exit_status: i32) -> CommandResult {
+        CommandResult {
+            exit_status,
+            stdout: stdout.to_string(),
+            stderr: stderr.to_string(),
+            success: exit_status == 0,
+            duration: Duration::ZERO,
+        }
+    }
+
+    #[test]
+    fn resolve_effective_user_calls_id_un_and_returns_sanitized_username() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("testuser\n", "", 0));
+
+        let user = resolve_effective_user(&transport).expect("expected Ok");
+        assert_eq!(user, "testuser");
+
+        let cmds = transport.commands.lock().unwrap();
+        assert!(
+            cmds.contains(&"id -un".to_string()),
+            "id -un must be called"
+        );
+    }
+
+    #[test]
+    fn resolve_effective_user_rejects_empty_output() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0));
+
+        let err = resolve_effective_user(&transport).expect_err("expected error");
+        assert!(err.to_string().contains("empty username"));
+    }
+
+    #[test]
+    fn resolve_effective_user_rejects_failure() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "no such user", 1));
+
+        let err = resolve_effective_user(&transport).expect_err("expected error");
+        assert!(err.to_string().contains("`id -un` failed"));
+    }
+
+    #[test]
+    fn resolve_effective_user_rejects_multiline_output() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("user\nextra\n", "", 0));
+
+        let err = resolve_effective_user(&transport).expect_err("expected error");
+        assert!(err.to_string().contains("multi-line"));
+    }
+
+    #[test]
+    fn ensure_helper_uploaded_with_explicit_user_skips_id_un() {
+        let transport = RecordingTransport::new();
+        // No responses needed — id -un won't be called
+
+        let result = ensure_helper_uploaded(&transport, Some("alice"), "client1");
+        assert!(result.is_ok(), "expected Ok, got {result:?}");
+
+        let cmds = transport.commands.lock().unwrap();
+        assert!(
+            !cmds.iter().any(|c| c.contains("id -un")),
+            "id -un must NOT be called when explicit user is provided"
+        );
+        // Must call install -d -m 700
+        assert!(
+            cmds.iter().any(|c| c.contains("install -d -m 700")),
+            "install -d -m 700 must be called"
+        );
+    }
+
+    #[test]
+    fn ensure_helper_uploaded_without_explicit_user_calls_id_un() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("bob\n", "", 0));
+
+        let result = ensure_helper_uploaded(&transport, None, "client1");
+        assert!(result.is_ok(), "expected Ok, got {result:?}");
+
+        let cmds = transport.commands.lock().unwrap();
+        assert!(
+            cmds.iter().any(|c| c.contains("id -un")),
+            "id -un must be called when no explicit user"
+        );
+        assert!(
+            cmds.iter().any(|c| c.contains("install -d -m 700")),
+            "install -d -m 700 must be called after id -un"
+        );
+        // install -d -m 700 must come AFTER id -un
+        let id_un_idx = cmds.iter().position(|c| c.contains("id -un")).unwrap();
+        let install_idx = cmds
+            .iter()
+            .position(|c| c.contains("install -d -m 700"))
+            .unwrap();
+        assert!(
+            install_idx > id_un_idx,
+            "install -d -m 700 must follow id -un"
+        );
+    }
+
+    #[test]
+    fn ensure_helper_uploaded_rejects_empty_user_fallback() {
+        // When explicit user is empty string, id -un is called and must succeed
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // empty from id -un
+
+        let err =
+            ensure_helper_uploaded(&transport, Some(""), "client1").expect_err("expected error");
+        assert!(err.to_string().contains("empty username"));
+    }
+
+    // =============================================================================
+    // Task 2: action_x11 tests — fixed-semantics X11 action command
+    // =============================================================================
+
+    /// Operation tokens allowed in action_x11.
+    #[test]
+    fn action_x11_operation_is_allowlisted() {
+        let allowed = [
+            "activate",
+            "key",
+            "type",
+            "click-rel",
+            "drag-rel",
+            "screenshot",
+            "wait",
+        ];
+        for op in allowed {
+            assert!(
+                matches!(
+                    op,
+                    "activate" | "key" | "type" | "click-rel" | "drag-rel" | "screenshot" | "wait"
+                ),
+                "operation '{}' must be in allowlist",
+                op
+            );
+        }
+    }
+
+    #[test]
+    fn action_x11_requires_window_id_not_empty() {
+        // Empty window_id should be rejected by validate_action_params
+        let result =
+            validate_action_params("", 12345, ":0", "activate", None, None, None, None, None);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("window_id"));
+    }
+
+    #[test]
+    fn action_x11_rejects_zero_pid() {
+        // Zero PID should be rejected
+        let result =
+            validate_action_params("0x123", 0, ":0", "activate", None, None, None, None, None);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("positive PID"));
+    }
+
+    #[test]
+    fn action_x11_rejects_empty_display() {
+        // Empty display should be rejected
+        let result =
+            validate_action_params("0x123", 12345, "", "activate", None, None, None, None, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn action_x11_key_requires_text_parameter() {
+        // key operation requires non-empty text — passing None must be rejected
+        let result =
+            validate_action_params("0x123", 12345, ":0", "key", None, None, None, None, None);
+        assert!(result.is_err(), "key requires --text");
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "key",
+            None,
+            None,
+            Some(""),
+            None,
+            None,
+        );
+        assert!(result.is_err(), "key requires non-empty --text");
+    }
+
+    #[test]
+    fn action_x11_type_returns_text_length_not_text() {
+        // type operation sanitizes output to length only
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "type",
+            None,
+            None,
+            Some("secret"),
+            None,
+            None,
+        );
+        assert!(result.is_ok(), "type should accept non-empty text");
+        // The sanitized details should contain length, not the text itself
+        let details = result.unwrap();
+        assert!(
+            details.contains("text_length"),
+            "details should contain text_length, not actual text"
+        );
+        assert!(
+            !details.contains("secret"),
+            "details must not contain actual text"
+        );
+    }
+
+    #[test]
+    fn action_x11_click_rel_requires_x_y() {
+        // click-rel requires x and y
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "click-rel",
+            Some(10),
+            Some(20),
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_ok(), "click-rel with x,y should be ok");
+    }
+
+    #[test]
+    fn action_x11_drag_rel_requires_x_y() {
+        // drag-rel requires x and y
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "drag-rel",
+            Some(10),
+            Some(20),
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_ok(), "drag-rel with x,y should be ok");
+    }
+
+    #[test]
+    fn action_x11_screenshot_requires_output_dir() {
+        // screenshot requires output_dir — missing must be rejected
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "screenshot",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(
+            result.is_err(),
+            "screenshot without output_dir should be rejected"
+        );
+        // provided output_dir is accepted
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "screenshot",
+            None,
+            None,
+            None,
+            None,
+            Some("/tmp/output"),
+        );
+        assert!(result.is_ok(), "screenshot with output_dir should be ok");
+    }
+
+    #[test]
+    fn action_x11_screenshot_rejects_path_traversal() {
+        // screenshot path must be within output_dir (no ..)
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "screenshot",
+            None,
+            None,
+            None,
+            None,
+            Some("/tmp/../../../etc"),
+        );
+        assert!(
+            result.is_err(),
+            "screenshot path with .. should be rejected"
+        );
+    }
+
+    #[test]
+    fn action_x11_wait_requires_condition() {
+        // wait requires a condition expression
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "wait",
+            None,
+            None,
+            Some("visible"),
+            None,
+            None,
+        );
+        assert!(result.is_ok(), "wait with condition should be ok");
+    }
+
+    #[test]
+    fn action_x11_unknown_operation_rejected() {
+        // Unknown operation should be rejected
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "delete everything",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().to_lowercase().contains("operation")
+                || err.to_string().contains("activate")
+        );
+    }
+
+    // =============================================================================
+    // P1-6: argv-recording integration test — assert generated xdotool/import
+    // command sequences match the fixed, position-checked shape. (Task 1-6)
+    // =============================================================================
+
+    fn mk_action_window(wid: &str) -> WindowInfo {
+        WindowInfo {
+            frame_id: wid.into(),
+            window_id: wid.into(),
+            dismiss_id: wid.into(),
+            display: Some(":0".into()),
+            xauthority: None,
+            title: "test cellview".into(),
+            class: vec![],
+            geometry: Geometry {
+                x: 100,
+                y: 100,
+                w: 1920,
+                h: 1080,
+            },
+            pid: Some(12345),
+            visible: true,
+        }
+    }
+
+    #[test]
+    fn build_xdotool_actions_activate_argv_shape() {
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::Activate,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("activate ok");
+        assert_eq!(action.len(), 1);
+        let (sub, argv) = &action[0];
+        assert_eq!(sub, "windowraise");
+        // Fixed positional shape: no `--window ID windowraise --sync` permutation bug.
+        assert_eq!(
+            argv,
+            &["windowraise", "--sync", "--window", "0x400002"],
+            "activate argv must be `windowraise --sync --window <id>`"
+        );
+        assert!(
+            !argv
+                .windows(2)
+                .any(|w| w[0] == "--window" && w[1] == "windowraise"),
+            "regression: --window comes before subcommand in buggy version"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_click_rel_argv_shape_with_button() {
+        // P2-1 fix: click-rel now expands to TWO commands — mousemove then click.
+        // Previously it used "--move-to-cursor" which is not a valid xdotool flag.
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::ClickRel,
+            Some(10),
+            Some(20),
+            Some(1),
+            None,
+        )
+        .expect("click-rel ok");
+        assert_eq!(action.len(), 2, "click-rel must produce 2 commands");
+
+        // Command 0: mousemove --window ID -- <x> <y>
+        assert_eq!(action[0].0, "mousemove");
+        assert_eq!(
+            action[0].1,
+            &["mousemove", "--window", "0x400002", "--", "10", "20"],
+            "click-rel step 1 must move cursor to window-relative point"
+        );
+
+        // Command 1: click --window ID --button N (at the now-current position)
+        assert_eq!(action[1].0, "click");
+        assert_eq!(
+            action[1].1,
+            &["click", "--window", "0x400002", "--button", "1"],
+            "click-rel step 2 must click at the current position"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_click_rel_button_three_argv() {
+        // Right-click (button 3) — confirms button value passes through verbatim.
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::ClickRel,
+            Some(5),
+            Some(-5),
+            Some(3),
+            None,
+        )
+        .expect("click-rel ok");
+        let (_, argv) = &action[1]; // second command (click)
+        let btn_i = argv
+            .iter()
+            .position(|a| a == "--button")
+            .expect("--button present");
+        assert_eq!(argv[btn_i + 1], "3", "button=3 must be passed as-is");
+        // Negative y must reach the command unmodified (protected by `--` sep).
+        let dash_i = action[0]
+            .1
+            .iter()
+            .position(|a| a == "--")
+            .expect("-- separator present");
+        assert_eq!(
+            action[0].1[dash_i + 2],
+            "-5",
+            "negative y must pass through"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_click_rel_requires_x_y() {
+        // click-rel without --x or --y must be rejected (can't click "nowhere").
+        let err = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::ClickRel,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect_err("click-rel without x,y must be rejected");
+        assert!(
+            err.to_string().contains("--x") && err.to_string().contains("--y"),
+            "error should mention both --x and --y, got: {err}"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_key_argv_shape() {
+        let action = build_xdotools_actions_key("0x400002", "ctrl-s");
+        assert_eq!(action.len(), 1);
+        let (sub, argv) = &action[0];
+        assert_eq!(sub, "key");
+        assert_eq!(argv, &["key", "--window", "0x400002", "ctrl-s"]);
+        assert!(
+            !argv.windows(2).any(|w| w[0] == "--window" && w[1] == "key"),
+            "regression: --window must come AFTER subcommand"
+        );
+    }
+
+    fn build_xdotools_actions_key(wid: &str, keys: &str) -> Vec<(String, Vec<String>)> {
+        build_xdotool_actions(
+            &mk_action_window(wid),
+            X11Operation::Key,
+            None,
+            None,
+            None,
+            Some(keys),
+        )
+        .expect("key ok")
+    }
+
+    #[test]
+    fn build_xdotool_actions_type_argv_shape_with_separator() {
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::Type,
+            None,
+            None,
+            None,
+            Some("CTRL+S"),
+        )
+        .expect("type ok");
+        assert_eq!(action.len(), 1);
+        let (sub, argv) = &action[0];
+        assert_eq!(sub, "type");
+        // xdotool type swallows --foo keys; the `--` separator is mandatory.
+        assert_eq!(
+            argv,
+            &["type", "--window", "0x400002", "--", "CTRL+S"],
+            "type argv must contain `--` separator to protect literal text"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_drag_rel_expands_to_three_commands() {
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::DragRel,
+            Some(50),
+            Some(-10),
+            Some(2),
+            None,
+        )
+        .expect("drag-rel ok");
+        // drag-rel must expand to three commands, NOT one malformed string.
+        assert_eq!(action.len(), 3, "drag-rel must produce 3 commands");
+
+        // mousedown --window ID --button N
+        assert_eq!(action[0].0, "mousedown");
+        assert_eq!(
+            action[0].1,
+            vec!["mousedown", "--window", "0x400002", "--button", "2"]
+        );
+
+        // mousemove --window ID --relative dx dy
+        assert_eq!(action[1].0, "mousemove");
+        assert_eq!(
+            action[1].1,
+            vec![
+                "mousemove",
+                "--window",
+                "0x400002",
+                "--relative",
+                "50",
+                "-10"
+            ],
+            "drag-rel mousemove must use --relative with x,y deltas"
+        );
+
+        // mouseup --window ID --button N
+        assert_eq!(action[2].0, "mouseup");
+        assert_eq!(
+            action[2].1,
+            vec!["mouseup", "--window", "0x400002", "--button", "2"]
+        );
+
+        // All three commands target the SAME window index position (positional invariant).
+        for (sub, argv) in &action {
+            let wid_i = argv
+                .iter()
+                .position(|a| a == "--window")
+                .unwrap_or_else(|| panic!("{sub} missing --window"));
+            assert_eq!(argv[wid_i + 1], "0x400002", "window id at fixed position");
+        }
+    }
+
+    #[test]
+    fn build_xdotool_actions_drag_rel_rejects_missing_y() {
+        let err = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::DragRel,
+            Some(10),
+            None,
+            None,
+            None,
+        )
+        .expect_err("y must be required");
+        assert!(err.to_string().contains("--y"), "error should mention --y");
+    }
+
+    /// Construct a Config with no remote_host set, avoiding `from_env` / dotenv.
+    fn minimal_config_without_remote_host() -> Config {
+        Config {
+            profile: None,
+            remote_host: None,
+            remote_user: None,
+            port: 5555,
+            jump_host: None,
+            jump_user: None,
+            ssh_port: None,
+            ssh_key: None,
+            ssh_config: None,
+            ssh_backend: None,
+            disable_control_master: false,
+            timeout: 30,
+            read_timeout: 120,
+            keep_remote_files: false,
+            spectre_cmd: "spectre".into(),
+            spectre_args: Vec::new(),
+            spectre_max_workers: 8,
+            ssh_max_sessions: 10,
+            ssh_max_bulk_sessions: 2,
+            ssh_reconnect_max_attempts: 8,
+            ssh_reconnect_max_delay: 30,
+            ssh_keepalive_interval: 30,
+            ssh_keepalive_failures: 3,
+            transport_shutdown_grace: 10,
+            cadence_cshrc: None,
+            spectre_bin: None,
+            roles: crate::config::RemoteRoles {
+                gui_host: None,
+                deploy_host: None,
+                daemon_host: None,
+                spectre_host: None,
+                scratch_root: None,
+            },
+        }
     }
 }

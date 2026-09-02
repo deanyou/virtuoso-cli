@@ -1400,7 +1400,7 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
                 dst.display()
             )));
         }
-        return Err(VirtuosoError::Ssh(format!(
+        Err(VirtuosoError::Ssh(format!(
             "atomic publish failed (renameat2 RENAME_NOREPLACE) for staging '{}' → destination '{}': \
              errno={} ({}); \
              netlist artifacts preserved at remote_dir={remote_dir}",
@@ -1408,7 +1408,7 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
             dst.display(),
             errno,
             err
-        )));
+        )))
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]

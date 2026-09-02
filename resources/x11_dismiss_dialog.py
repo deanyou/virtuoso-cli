@@ -25,6 +25,7 @@ import ctypes
 import ctypes.util
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -230,28 +231,61 @@ def _find_window_by_id(display, win_id_str):
     return None
 
 
+_WIN_ID_RE = re.compile(r"^(0x[0-9a-fA-F]+)")
+_QUOTED_RE = re.compile(r'"([^"]*)"')
+_PAREN_RE = re.compile(r"\(([^)]*)\)")
+
+
 def _parse_window_line(line):
     """Parse a line from `xwininfo -root -children` or `-tree`.
 
     Returns a dict {id, title, class} or None if the line doesn't look
     like a window row.
+
+    Real titles contain spaces ("Save Changes", "Update and Run"), so the
+    title must be extracted as a full quoted string, not as a whitespace
+    token. WM classes live in the parenthesized group, either
+    ("class" "instance") or ("Class:Subclass").
     """
     line = line.strip()
-    if not line.startswith("0x"):
+    id_match = _WIN_ID_RE.match(line)
+    if not id_match:
         return None
-    parts = line.split()
-    win_id = parts[0]
-    title = ""
+    win_id = id_match.group(1)
+
+    paren = _PAREN_RE.search(line)
     classes = []
-    for token in parts:
-        if token.startswith('"') and token.endswith('"') and len(token) > 2:
-            # "Title" or "Class:Subclass"
-            inner = token[1:-1]
-            if ":" in inner and " " not in inner:
-                classes.extend(inner.split(":"))
-            else:
-                title = inner
+    if paren:
+        for quoted in _QUOTED_RE.findall(paren.group(1)):
+            classes.extend(quoted.split(":"))
+
+    # The title is the first quoted string before the class group.
+    head = line[: paren.start()] if paren else line
+    head_quoted = _QUOTED_RE.findall(head)
+    title = head_quoted[0] if head_quoted else ""
+
     return {"id": win_id, "title": title, "class": classes}
+
+
+def _read_net_wm_pid(win_id):
+    """Read _NET_WM_PID from a window. Returns positive int or None if unavailable."""
+    try:
+        out = subprocess.check_output(
+            ["xprop", "-id", win_id, "_NET_WM_PID"],
+            stderr=subprocess.PIPE,
+        ).decode("utf-8", "replace")
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("_NET_WM_PID") and " = " in line:
+                try:
+                    pid = int(line.split("=", 1)[1].strip())
+                    if pid > 0:
+                        return pid
+                except ValueError:
+                    pass
+    except (subprocess.CalledProcessError, OSError):
+        pass
+    return None
 
 
 def _read_window_geometry(win_id):
@@ -363,7 +397,7 @@ def _is_dialog_sized(geometry):
 def discover_windows(display):
     """Enumerate Virtuoso-related X11 windows with frame + child details.
 
-    Returns a list of dicts: {frame_id, window_id, dismiss_id, title, class, geometry}.
+    Returns a list of dicts: {frame_id, window_id, dismiss_id, title, class, pid, visible, geometry}.
     Each Virtuoso-associated child window is one entry, with the parent frame_id
     recorded alongside so callers can dismiss via the child id directly.
 
@@ -378,6 +412,8 @@ def discover_windows(display):
         geometry = _read_window_geometry(frame_id)
         if not geometry.get("mapped", False):
             continue
+        # Read frame PID once; children will fall back to it if they lack their own.
+        frame_pid = _read_net_wm_pid(frame_id)
         children = _frame_children(frame_id)
         virt_children = [c for c in children if _is_virtuoso_class(c.get("class"))]
         if _is_virtuoso_class(frame.get("class")):
@@ -388,12 +424,18 @@ def discover_windows(display):
             if key in seen:
                 continue
             seen.add(key)
+            # Read PID from child first; fall back to frame if unavailable.
+            child_pid = _read_net_wm_pid(dismiss_id)
+            if child_pid is None:
+                child_pid = frame_pid
             windows.append({
                 "frame_id": frame_id,
                 "window_id": dismiss_id,
                 "dismiss_id": dismiss_id,
                 "title": child.get("title") or frame.get("title") or "",
                 "class": child.get("class") or frame.get("class") or [],
+                "pid": child_pid,
+                "visible": True,
                 "geometry": {
                     "w": int(geometry.get("w") or 0),
                     "h": int(geometry.get("h") or 0),

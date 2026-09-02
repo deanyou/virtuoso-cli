@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "task_id": "fail-task-001",
+  "session_id": "sess-fail-xyz789",
+  "pid": 12345,
+  "display": ":0",
+  "cellview": {
+    "lib": "testLib",
+    "cell": "testCell",
+    "view": "schematic"
+  },
+  "steps": [
+    {
+      "id": "step1",
+      "operation": "VCLI_LOAD",
+      "arguments": {
+        "command": "nonexistentCommand"
+      },
+      "verifier": {
+        "predicate": "window_exists",
+        "expected": false
+      },
+      "timeout_seconds": 5,
+      "max_retries": 0
+    }
+  ]
+}
