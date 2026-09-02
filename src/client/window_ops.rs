@@ -85,9 +85,16 @@ impl WindowOps {
 
     /// SKILL fragment: run X11 import and return path on success, nil on failure.
     /// This uses `import` from ImageMagick, which is always available on Linux.
+    ///
+    /// `path_escaped` is the raw (quote-escaped) path from
+    /// `escape_skill_string`; it must be wrapped in SKILL string quotes here
+    /// (as `load("{path}")` does), otherwise `/path/x.png` parses as an
+    /// invalid identifier. The success check uses the 3-arg `if(cond t e)`
+    /// form — SKILL rejects `if(cond t else e)` with a `lineread/read: syntax
+    /// error`.
     fn skill_capture(path_escaped: &str) -> String {
         format!(
-            r#"let((cmd ok) cmd = strcat("import -window root -silent " {path}) ok = fileexists({path}) system(cmd) if(ok {path} else nil)"#,
+            r#"let((cmd ok) cmd = strcat("import -window root -silent " "{path}") ok = fileexists("{path}") system(cmd) if(ok "{path}" nil)"#,
             path = path_escaped
         )
     }
@@ -198,6 +205,30 @@ mod tests {
             "should use import"
         );
         assert!(skill.contains("fileexists"), "should verify file");
+    }
+
+    #[test]
+    fn screenshot_skill_uses_three_arg_if_and_quoted_path() {
+        // Regression: skill_capture previously emitted `if(ok {path} else nil)`
+        // (mixing the 3-arg if form with the `else` keyword) AND left {path}
+        // unquoted (`escape_skill_string` returns a bare escaped string).
+        // Both make Virtuoso fail with "lineread/read: syntax error" when the
+        // SKILL is evaluated. The correct form quotes the path and uses the
+        // 3-arg if without the `else` keyword.
+        let ops = WindowOps;
+        let skill = ops.screenshot("/tmp/screen.png");
+        assert!(
+            skill.contains("fileexists(\"/tmp/screen.png\")"),
+            "path must be quoted as a SKILL string literal, got: {skill}"
+        );
+        assert!(
+            skill.contains("if(ok \"/tmp/screen.png\" nil)"),
+            "must use 3-arg if form without else keyword, got: {skill}"
+        );
+        assert!(
+            !skill.contains("else nil"),
+            "must not emit `else` in 3-arg if, got: {skill}"
+        );
     }
 
     #[test]
