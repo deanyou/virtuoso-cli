@@ -608,6 +608,18 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
             child_id_str = _find_app_child(display, win_id_str)
         action = choose_action(resolved_title, action)
         child_id = int(child_id_str, 16) if child_id_str.startswith("0x") else int(child_id_str)
+        # If the window was resolved via the xdotool fallback (minimized or
+        # unmapped), XSetInputFocus will fail with BadMatch. Restore it first
+        # via xdotool windowactivate, which maps and raises the window.
+        if target_is_explicit and resolved and not resolved.get("visible", True):
+            try:
+                subprocess.check_output(
+                    ["xdotool", "windowactivate", child_id_str],
+                    stderr=subprocess.PIPE,
+                )
+                time.sleep(0.15)
+            except (subprocess.CalledProcessError, OSError):
+                pass
         xlib.XRaiseWindow(dpy, child_id)
         xlib.XSetInputFocus(dpy, child_id, 1, 0)  # RevertToParent
         xlib.XFlush(dpy)
