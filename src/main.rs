@@ -1445,8 +1445,8 @@ enum WindowCmd {
 
     /// Dismiss the currently active blocking dialog
     DismissDialog {
-        /// Action to take: cancel (default) or ok
-        #[arg(long, default_value = "cancel")]
+        /// Action to send: enter | escape | alt-y | alt-n | alt-o (default: escape)
+        #[arg(long, default_value = "escape")]
         action: String,
         /// Report dialog name without clicking
         #[arg(long)]
@@ -1513,7 +1513,7 @@ enum WindowCmd {
         /// DISPLAY value (e.g. :0, :1)
         #[arg(long)]
         display: String,
-        /// Operation: activate | key | type | click-rel | drag-rel | screenshot | wait
+        /// Operation: activate | key | type | click-rel | drag-rel | screenshot | wait | close
         #[arg(long)]
         operation: String,
         /// Relative X coordinate (for click-rel, drag-rel). Negative values are
@@ -1534,6 +1534,10 @@ enum WindowCmd {
         /// Output directory for screenshots
         #[arg(long)]
         output_dir: Option<String>,
+        /// Timeout in seconds for the operation (default: 30). For `wait`, this
+        /// is the maximum time to poll for the title pattern before giving up.
+        #[arg(long, default_value = "30")]
+        timeout: u64,
         /// Override the detected DISPLAY
         #[arg(long)]
         display_override: Option<String>,
@@ -2124,6 +2128,7 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             button,
             text,
             output_dir,
+            timeout,
             display_override,
         } => commands::window::action_x11(
             &window_id,
@@ -2135,6 +2140,7 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             text.as_deref(),
             button,
             output_dir.as_deref(),
+            timeout,
             display_override.as_deref(),
         ),
     }
