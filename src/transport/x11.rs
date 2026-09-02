@@ -384,6 +384,14 @@ fn push_unique_env(
     }
 }
 
+/// The X11 helper exits with code 1 to signal "no dialogs found"
+/// (`x11_dismiss_dialog.py`: `if not dialogs: sys.exit(1)`). In detection-only
+/// mode an empty result is the healthy state, so it must not be surfaced as a
+/// helper failure.
+fn helper_exited_no_dialogs(out: &CommandResult, parsed_empty: bool) -> bool {
+    out.exit_status == 1 && parsed_empty
+}
+
 /// Run the helper in detection-only mode (no dismiss).
 pub fn list_dialogs(
     runner: &dyn RemoteTransport,
@@ -408,7 +416,12 @@ pub fn list_dialogs(
         ))?;
         let mut these = parse_helper_output(&out);
         annotate_dialogs(&mut these, display);
-        let helper_errors = extract_helper_errors(&out);
+        // exit code 1 + empty output means "no dialogs" (healthy), not failure.
+        let helper_errors = if helper_exited_no_dialogs(&out, these.is_empty()) {
+            Vec::new()
+        } else {
+            extract_helper_errors(&out)
+        };
         if these.is_empty() && !helper_errors.is_empty() {
             for e in &helper_errors {
                 these.push(DialogInfo {
@@ -2694,6 +2707,47 @@ mod tests {
             success: exit_status == 0,
             duration: Duration::ZERO,
         }
+    }
+
+    #[test]
+    fn list_dialogs_exit1_empty_means_no_dialogs_not_error() {
+        // The helper exits 1 with no output to signal "no dialogs". This is the
+        // healthy state and must come back as an empty list, not a helper error.
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 1)); // helper: no dialogs → exit 1
+        let (_, dialogs) = list_dialogs(&transport, "client1", Some("user1"), Some(":99"))
+            .expect("list_dialogs should succeed");
+        assert!(dialogs.is_empty(), "expected no dialogs, got {dialogs:?}");
+    }
+
+    #[test]
+    fn list_dialogs_with_dialog_exit0_returns_dialog() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result(
+            "{\"window_id\":\"0x1\",\"title\":\"Save?\",\"x\":10,\"y\":10,\"w\":300,\"h\":120}\n",
+            "",
+            0,
+        ));
+        let (_, dialogs) = list_dialogs(&transport, "client1", Some("user1"), Some(":99"))
+            .expect("list_dialogs should succeed");
+        assert_eq!(dialogs.len(), 1);
+        assert_eq!(dialogs[0].window_id, "0x1");
+    }
+
+    #[test]
+    fn list_dialogs_real_failure_exit2_surfaces_helper_error() {
+        // A genuine failure (exit 2, stderr) must still surface as helper-error
+        // so callers can distinguish it from the healthy "no dialogs" state.
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "xwininfo: unable to open display", 2));
+        let (_, dialogs) = list_dialogs(&transport, "client1", Some("user1"), Some(":99"))
+            .expect("list_dialogs should succeed");
+        assert_eq!(dialogs.len(), 1);
+        assert_eq!(dialogs[0].window_id, "helper-error");
+        assert!(dialogs[0].title.contains("x11 helper error"));
     }
 
     #[test]
