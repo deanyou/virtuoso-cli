@@ -243,10 +243,35 @@ def _find_app_child(display, frame_id_str):
 
 
 def _find_window_by_id(display, win_id_str):
-    """Resolve a frame/app/child id to the canonical discover_windows entry."""
+    """Resolve a frame/app/child id to the canonical discover_windows entry.
+
+    Falls back to xdotool getwindowname for minimized/unmapped windows that
+    discover_windows filters out (it skips windows with mapped=False). This
+    lets dismiss-window target windows that were minimized between the
+    list-windows snapshot and the dismiss call.
+    """
     for w in discover_windows(display):
         if win_id_str in (w.get("frame_id"), w.get("window_id"), w.get("dismiss_id")):
             return w
+    # xdotool fallback for minimized/unmapped windows.
+    try:
+        title = subprocess.check_output(
+            ["xdotool", "getwindowname", win_id_str],
+            stderr=subprocess.PIPE,
+        ).decode("utf-8", "replace").strip()
+        if title:
+            return {
+                "frame_id": win_id_str,
+                "window_id": win_id_str,
+                "dismiss_id": win_id_str,
+                "title": title,
+                "class": [],
+                "pid": None,
+                "visible": False,
+                "geometry": {"x": 0, "y": 0, "w": 0, "h": 0},
+            }
+    except (subprocess.CalledProcessError, OSError):
+        pass
     return None
 
 
