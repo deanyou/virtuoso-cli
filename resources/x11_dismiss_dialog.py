@@ -508,11 +508,23 @@ def discover_windows(display):
             child_pid = _read_net_wm_pid(dismiss_id)
             if child_pid is None:
                 child_pid = frame_pid
+            # Title: xwininfo often reports "(has no name)" for windows whose
+            # WM_NAME was set via xdotool or non-ICCCM clients. Fall back to
+            # xdotool getwindowname, which reads _NET_WM_NAME / WM_NAME directly.
+            title = child.get("title") or frame.get("title") or ""
+            if not title:
+                try:
+                    title = subprocess.check_output(
+                        ["xdotool", "getwindowname", dismiss_id],
+                        stderr=subprocess.PIPE,
+                    ).decode("utf-8", "replace").strip()
+                except (subprocess.CalledProcessError, OSError):
+                    title = ""
             windows.append({
                 "frame_id": frame_id,
                 "window_id": dismiss_id,
                 "dismiss_id": dismiss_id,
-                "title": child.get("title") or frame.get("title") or "",
+                "title": title,
                 "class": child.get("class") or frame.get("class") or [],
                 "pid": child_pid,
                 "visible": True,
