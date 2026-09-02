@@ -20,9 +20,9 @@ use include_dir::{include_dir, Dir};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
-use uuid::Uuid;
 use std::sync::Arc;
 use std::time::Duration;
+use uuid::Uuid;
 
 static RESOURCES: Dir = include_dir!("$CARGO_MANIFEST_DIR/resources");
 
@@ -917,10 +917,7 @@ pub fn action_x11(
     // abnormal); don't blanket-reject — trust the caller's coordinates instead.
     if let (Some(op_x), Some(op_y)) = (*x, *y) {
         let geom = &resolved.geometry;
-        if geom.w > 0
-            && geom.h > 0
-            && (op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h)
-        {
+        if geom.w > 0 && geom.h > 0 && (op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h) {
             return Err(VirtuosoError::Config(format!(
                 "coordinates ({op_x}, {op_y}) out of bounds for window size {}x{}",
                 geom.w, geom.h
@@ -1011,7 +1008,7 @@ pub fn action_x11(
             }
             Err(e) => {
                 let _ = std::fs::remove_file(&local_path_buf); // cleanup invalid file
-                // Also remove the temp PNG left on the GUI host.
+                                                               // Also remove the temp PNG left on the GUI host.
                 let _ = runner.run_command(&CommandRequest::untimed(format!(
                     "rm -f {}",
                     shell_escape(&remote_path)
@@ -2941,6 +2938,128 @@ mod tests {
             result.is_err(),
             "screenshot path with .. should be rejected"
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // validate_png_artifact: rejection branches (review #1 / #5)
+    // ---------------------------------------------------------------------------
+
+    fn write_temp_png(bytes: &[u8], name: &str) -> std::path::PathBuf {
+        let p = std::env::temp_dir().join(name);
+        std::fs::write(&p, bytes).expect("write temp png");
+        p
+    }
+
+    #[test]
+    fn validate_png_artifact_accepts_valid_png() {
+        let mut data = Vec::new();
+        data.extend_from_slice(super::PNG_MAGIC);
+        data.resize(128, 0); // >= 64 bytes
+        let p = write_temp_png(&data, "vcli_test_png_valid.png");
+        let res = super::validate_png_artifact(&p);
+        assert!(res.is_ok(), "valid PNG should pass: {res:?}");
+        let (size, hash) = res.unwrap();
+        assert_eq!(size, 128);
+        assert_eq!(hash.len(), 64);
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn validate_png_artifact_rejects_tiny_file() {
+        let data = vec![0u8; 10];
+        let p = write_temp_png(&data, "vcli_test_png_tiny.png");
+        let res = super::validate_png_artifact(&p);
+        assert!(res.is_err(), "file < 64 bytes must be rejected");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn validate_png_artifact_rejects_wrong_magic() {
+        let mut data = vec![0u8; 128];
+        data[0..4].copy_from_slice(b"NOPE");
+        let p = write_temp_png(&data, "vcli_test_png_badmagic.png");
+        let res = super::validate_png_artifact(&p);
+        assert!(res.is_err(), "wrong magic must be rejected");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn validate_png_artifact_rejects_symlink() {
+        // Locks review #1: symlink_metadata (not metadata) must make the
+        // is_symlink() branch reachable.
+        let mut data = Vec::new();
+        data.extend_from_slice(super::PNG_MAGIC);
+        data.resize(128, 0);
+        let target = write_temp_png(&data, "vcli_test_png_symlink_target.png");
+        let link = std::env::temp_dir().join("vcli_test_png_symlink.png");
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&target, &link).expect("create symlink");
+        let res = super::validate_png_artifact(&link);
+        assert!(res.is_err(), "symlink must be rejected");
+        let _ = std::fs::remove_file(&link);
+        let _ = std::fs::remove_file(&target);
+    }
+
+    // ---------------------------------------------------------------------------
+    // MouseButtonGuard: best-effort mouseup on drop (review #5)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn mouse_button_guard_drops_best_effort_mouseup_when_armed() {
+        let win = WindowInfo {
+            frame_id: "0x1".into(),
+            window_id: "0x2".into(),
+            dismiss_id: "0x3".into(),
+            display: Some(":0".into()),
+            xauthority: None,
+            title: "t".into(),
+            class: vec![],
+            geometry: Geometry {
+                x: 0,
+                y: 0,
+                w: 100,
+                h: 100,
+            },
+            pid: Some(12345),
+            visible: true,
+        };
+        let t = RecordingTransport::new();
+        {
+            let mut g = super::MouseButtonGuard::new(&t, "env DISPLAY=:0 ", &win, Some(1));
+            g.arm();
+            // guard dropped at end of scope
+        }
+        let cmds = t.commands.lock().unwrap();
+        assert!(
+            cmds.iter().any(|c| c.contains("mouseup")),
+            "armed MouseButtonGuard must issue best-effort mouseup on drop; got {cmds:?}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // LocalTransport::download_file (review #3)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn local_transport_download_file_copies_local_file() {
+        let src = std::env::temp_dir().join("vcli_test_dl_src.png");
+        let dst = std::env::temp_dir().join("vcli_test_dl_dst.png");
+        let _ = std::fs::remove_file(&dst);
+        std::fs::write(&src, b"hello-world-png-contents").expect("write src");
+        let req = crate::transport::contract::DownloadFileRequest::untimed(
+            src.display().to_string(),
+            dst.clone(),
+        );
+        let res = super::LocalTransport::new().download_file(&req);
+        assert!(
+            res.is_ok(),
+            "LocalTransport::download_file should copy: {res:?}"
+        );
+        let copied = std::fs::read(&dst).expect("read dst");
+        assert_eq!(copied, b"hello-world-png-contents");
+        let _ = std::fs::remove_file(&src);
+        let _ = std::fs::remove_file(&dst);
     }
 
     #[test]
