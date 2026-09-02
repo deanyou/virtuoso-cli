@@ -48,7 +48,7 @@ sha2 = "0.10"
 hex = "0.4"
 base64 = "0.23"
 tempfile = "3"
-shlex = "1"
+shlex = "2"
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }
