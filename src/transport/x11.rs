@@ -1375,10 +1375,29 @@ fn validate_png_artifact(
         )));
     }
 
+    // Open the file. On Unix, refuse to follow a symlink (O_NOFOLLOW) so a
+    // race between the symlink_metadata check above and this open cannot swap
+    // in a symlink pointing outside the evidence directory.
+    let mut file = {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_NOFOLLOW)
+                .open(path)
+                .map_err(|e| {
+                    VirtuosoError::Execution(format!("cannot open screenshot path {:?}: {e}", path))
+                })?
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::File::open(path).map_err(|e| {
+                VirtuosoError::Execution(format!("cannot open screenshot path {:?}: {e}", path))
+            })?
+        }
+    };
     // Check magic bytes.
-    let mut file = std::fs::File::open(path).map_err(|e| {
-        VirtuosoError::Execution(format!("cannot open screenshot path {:?}: {e}", path))
-    })?;
     let mut header = [0u8; 8];
     file.read_exact(&mut header).map_err(|e| {
         VirtuosoError::Execution(format!(
