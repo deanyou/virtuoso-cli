@@ -709,6 +709,7 @@ def main():
     # Verify the X display is actually reachable before enumerating or acting.
     # Without this, xwininfo failures inside discover_windows are swallowed and
     # the caller sees an empty window list — indistinguishable from "no windows".
+    os.environ["DISPLAY"] = display
     try:
         subprocess.check_output(
             ["xwininfo", "-root"],
