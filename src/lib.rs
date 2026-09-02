@@ -22,6 +22,8 @@ pub mod spectre;
 pub mod streaming;
 #[cfg(test)]
 pub mod test_env;
+#[cfg(target_os = "linux")]
+pub mod sys;
 pub mod transaction;
 pub mod transport;
 pub mod tui;
