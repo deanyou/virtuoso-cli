@@ -1522,6 +1522,9 @@ enum WindowCmd {
         /// Relative Y coordinate (for click-rel, drag-rel)
         #[arg(long)]
         y: Option<i32>,
+        /// Mouse button (1=left, 2=middle, 3=right); click-rel, drag-rel only
+        #[arg(long)]
+        button: Option<u8>,
         /// Text or key chord (for key, type, wait)
         #[arg(long)]
         text: Option<String>,
@@ -2115,6 +2118,7 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             operation,
             x,
             y,
+            button,
             text,
             output_dir,
             display_override,
@@ -2126,6 +2130,7 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             x,
             y,
             text.as_deref(),
+            button,
             output_dir.as_deref(),
             display_override.as_deref(),
         ),

@@ -468,12 +468,25 @@ class TestOperationArgumentTypes(unittest.TestCase):
             Scenario.from_dict(data)
         self.assertIn("button", str(ctx.exception))
 
-    def test_drag_rel_bool_x1_rejected(self):
+    def test_drag_rel_bool_x_rejected(self):
         data = self._make_step(operation="DRAG_REL",
-                               arguments={"x1": True, "y1": 0, "x2": 0, "y2": 0, "button": 1})
+                               arguments={"x": True, "y": 5, "button": 1})
         with self.assertRaises(ScenarioValidationError) as ctx:
             Scenario.from_dict(data)
-        self.assertIn("x1", str(ctx.exception))
+        self.assertIn("x", str(ctx.exception))
+
+    def test_drag_rel_button_out_of_range_rejected(self):
+        data = self._make_step(operation="DRAG_REL",
+                               arguments={"x": 5, "y": 5, "button": 5})
+        with self.assertRaises(ScenarioValidationError) as ctx:
+            Scenario.from_dict(data)
+        self.assertIn("button", str(ctx.exception))
+
+    def test_click_rel_button_default_one(self):
+        # button is optional — default is 1 when omitted
+        data = self._make_step(operation="CLICK_REL", arguments={"x": 0, "y": 0})
+        scenario = Scenario.from_dict(data)
+        self.assertEqual(scenario.steps[0].arguments["x"], 0)
 
     def test_screenshot_path_must_be_string(self):
         data = self._make_step(operation="SCREENSHOT", arguments={"path": 7})

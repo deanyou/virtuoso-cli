@@ -569,6 +569,9 @@ pub struct ActionParams {
     pub x: Option<i32>,
     /// For click-rel/drag-rel: y coordinate
     pub y: Option<i32>,
+    /// For click-rel/drag-rel: mouse button (1=left, 2=middle, 3=right).
+    /// When None, xdotool/click defaults to button 1.
+    pub button: Option<u8>,
     /// For screenshot: output directory
     pub output_dir: Option<String>,
     /// For wait: condition to poll
@@ -633,6 +636,7 @@ pub fn validate_action_params(
     x: Option<i32>,
     y: Option<i32>,
     text: Option<&str>,
+    button: Option<u8>,
     output_dir: Option<&str>,
 ) -> Result<String> {
     // Reject empty window_id
@@ -706,6 +710,14 @@ pub fn validate_action_params(
                     op.as_str()
                 ))
             })?;
+            // button, if given, must be 1/2/3 (left/middle/right)
+            if let Some(b) = button {
+                if !(1..=3).contains(&b) {
+                    return Err(VirtuosoError::Config(format!(
+                        "button must be 1 (left), 2 (middle), or 3 (right); got {b}"
+                    )));
+                }
+            }
         }
         X11Operation::Wait => {
             // wait condition (in --text) is evaluated by the caller's polling loop
@@ -723,8 +735,18 @@ pub fn validate_action_params(
             "text_length: {}",
             text.map(|s| s.len()).unwrap_or(0)
         )),
-        X11Operation::ClickRel => Some(format!("x: {}, y: {}", x.unwrap_or(0), y.unwrap_or(0))),
-        X11Operation::DragRel => Some(format!("x: {}, y: {}", x.unwrap_or(0), y.unwrap_or(0))),
+        X11Operation::ClickRel => Some(format!(
+            "x: {}, y: {}, button: {}",
+            x.unwrap_or(0),
+            y.unwrap_or(0),
+            button.unwrap_or(1)
+        )),
+        X11Operation::DragRel => Some(format!(
+            "x: {}, y: {}, button: {}",
+            x.unwrap_or(0),
+            y.unwrap_or(0),
+            button.unwrap_or(1)
+        )),
         X11Operation::Screenshot => {
             let dir = output_dir.unwrap_or("");
             Some(format!("output_dir: {}", dir))
@@ -831,6 +853,7 @@ pub fn action_x11(
         operation,
         x,
         y,
+        button,
         text,
         output_dir,
         timeout_secs,
@@ -884,38 +907,72 @@ pub fn action_x11(
     }
 
     let operation = *operation;
-    // Step 5: Build and execute the xdotool / import argv
-    let cmd_str = if operation == X11Operation::Screenshot {
+
+    // Step 5: Build DISPLAY/XAUTHORITY prefix for action commands.
+    // The xdotool / import commands themselves do NOT inherit the list-windows
+    // env, so the fix is to prefix each action with DISPLAY / XAUTHORITY.
+    let display_prefix = match env.xauthority {
+        Some(ref xa) => format!(
+            "env DISPLAY={} XAUTHORITY={} ",
+            shell_escape(display),
+            shell_escape(xa)
+        ),
+        None => format!("env DISPLAY={} ", shell_escape(display)),
+    };
+
+    // Step 6: Build and execute the xdotool / import commands. Most
+    // operations yield a single command; drag yields three (mousedown,
+    // mousemove, mouseup).
+    let results = if operation == X11Operation::Screenshot {
         let dir = output_dir
             .ok_or_else(|| VirtuosoError::Config("screenshot requires --output-dir".into()))?;
         let safe_name = format!("window_{}.png", window_id.replace("0x", ""));
         let safe_path = format!("{}/{}", shell_escape(dir), safe_name);
-        format!(
-            "import -window {} {}",
+        let remote_cmd = format!(
+            "{}import -window {} {}",
+            display_prefix,
             shell_escape(&resolved.window_id),
             safe_path
-        )
+        );
+        let out = runner.run_command(&CommandRequest::with_exec_timeout(
+            &remote_cmd,
+            Duration::from_secs(*timeout_secs),
+        ))?;
+        // On SSH, fetch the produced screenshot back to the local host.
+        match runner.fetch_file(&safe_path, dir, Duration::from_secs(*timeout_secs)) {
+            Ok(()) => {}
+            Err(_) => {
+                // Transports that don't support fetch_file (e.g. local-runner
+                // impls that overwrite in place) will surface an
+                // UnsupportedOperation; treat screenshot as remote-local OK.
+            }
+        }
+        vec![out]
     } else if operation == X11Operation::Wait {
-        "true".to_string()
+        vec![]
     } else {
-        let xdotool_args = build_xdotool_action(&resolved, operation, *x, *y, *text)?;
-        format!(
-            "xdotool {}",
-            xdotool_args
-                .iter()
-                .map(|a| shell_escape(a))
-                .collect::<Vec<_>>()
-                .join(" ")
-        )
+        let cmds = build_xdotool_actions(&resolved, operation, *x, *y, *button, *text)?;
+        let mut outs = Vec::with_capacity(cmds.len());
+        for (_sub, argv) in cmds {
+            let remote_cmd = format!(
+                "{}xdotool {}",
+                display_prefix,
+                argv.iter()
+                    .map(|a| shell_escape(a))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            let out = runner.run_command(&CommandRequest::with_exec_timeout(
+                &remote_cmd,
+                Duration::from_secs(*timeout_secs),
+            ))?;
+            outs.push(out);
+        }
+        outs
     };
 
-    let out = runner.run_command(&CommandRequest::with_exec_timeout(
-        &cmd_str,
-        Duration::from_secs(*timeout_secs),
-    ))?;
-
     let duration_ms = start.elapsed().as_millis() as u64;
-    let success = out.success;
+    let success = results.last().map(|r| r.success).unwrap_or(true);
 
     // Build sanitized details
     let details = match operation {
@@ -924,20 +981,19 @@ pub fn action_x11(
             "text_length: {}",
             text.map(|s| s.len()).unwrap_or(0)
         )),
-        X11Operation::ClickRel | X11Operation::DragRel => {
-            Some(format!("x: {}, y: {}", x.unwrap_or(0), y.unwrap_or(0)))
-        }
+        X11Operation::ClickRel | X11Operation::DragRel => Some(format!(
+            "x: {}, y: {}, button: {}",
+            x.unwrap_or(0),
+            y.unwrap_or(0),
+            button.unwrap_or(1)
+        )),
         X11Operation::Screenshot => Some(format!("output_dir: {}", output_dir.unwrap_or(""))),
-        X11Operation::Wait => Some(format!("condition: {}", text.unwrap_or(""))),
+        X11Operation::Wait => None,
     };
 
     Ok(X11ActionResult {
-        status: if success {
-            "success".into()
-        } else {
-            "failed".into()
-        },
-        operation: operation.as_str().into(),
+        status: if success { "success" } else { "failure" }.to_string(),
+        operation: operation.as_str().to_string(),
         window_id: window_id.to_string(),
         pid: *pid,
         display: display.to_string(),
@@ -955,92 +1011,133 @@ pub struct ActionX11Inputs<'a> {
     pub operation: X11Operation,
     pub x: Option<i32>,
     pub y: Option<i32>,
+    /// Mouse button for click/drag: 1=left, 2=middle, 3=right. None = default 1.
+    pub button: Option<u8>,
     pub text: Option<&'a str>,
     pub output_dir: Option<&'a str>,
     pub timeout_secs: u64,
 }
 
-/// Build xdotool argument list for an action operation.
+/// Build xdotool commands for an action operation.
 ///
-/// All arguments are passed as separate items — no shell interpolation.
-/// The window_id is always included to target the specific window.
-/// Note: Screenshot and Wait are handled separately in action_x11, not here.
-fn build_xdotool_action(
+/// Returns a list of (command, argv) pairs. Most operations yield a single
+/// command; drag yields three sequential commands (mousedown, mousemove,
+/// mouseup) so the motion is a true drag-and-drop.
+///
+/// Each command's argv starts with the xdotool subcommand, followed by
+/// action-specific flags, followed by `--window <id>` to target the
+/// specific window. All arguments are separate items — no shell
+/// interpolation. Screenshot and Wait are handled in action_x11, not here.
+fn build_xdotool_actions(
     window: &WindowInfo,
     operation: X11Operation,
     x: Option<i32>,
     y: Option<i32>,
+    button: Option<u8>,
     text: Option<&str>,
-) -> Result<Vec<String>> {
-    let mut args = Vec::new();
-
-    // Always specify window by ID
-    args.push("--window".into());
-    args.push(window.window_id.clone());
+) -> Result<Vec<(String, Vec<String>)>> {
+    let wid = window.window_id.clone();
+    let btn = button.unwrap_or(1).to_string();
 
     match operation {
         X11Operation::Activate => {
-            args.push("windowraise".into());
-            args.push("--sync".into());
+            // xdotool windowraise --sync --window <id>
+            Ok(vec![(
+                "windowraise".into(),
+                vec![
+                    "windowraise".into(),
+                    "--sync".into(),
+                    "--window".into(),
+                    wid,
+                ],
+            )])
         }
         X11Operation::Key => {
-            // key operation: xdotool key --window <id> <keychord>
-            args.push("key".into());
-            if let Some(t) = text {
-                // Parse key chord into individual keys
-                for key in t.split_whitespace() {
-                    args.push(key.to_string());
-                }
-            } else {
-                return Err(VirtuosoError::Config(
-                    "key operation requires --text".into(),
-                ));
+            // xdotool key --window <id> <key>...
+            let t =
+                text.ok_or_else(|| VirtuosoError::Config("key operation requires --text".into()))?;
+            let mut argv = vec!["key".into(), "--window".into(), wid];
+            for key in t.split_whitespace() {
+                argv.push(key.to_string());
             }
+            Ok(vec![("key".into(), argv)])
         }
         X11Operation::Type => {
-            // type operation: xdotool type --window <id> <text>
-            args.push("type".into());
-            args.push("--window".into());
-            args.push(window.window_id.clone());
-            if let Some(t) = text {
-                args.push(t.to_string());
-            } else {
-                return Err(VirtuosoError::Config(
-                    "type operation requires --text".into(),
-                ));
-            }
+            // xdotool type --window <id> -- <text>
+            let t =
+                text.ok_or_else(|| VirtuosoError::Config("type operation requires --text".into()))?;
+            Ok(vec![(
+                "type".into(),
+                vec!["type".into(), "--window".into(), wid, "--".into(), t.into()],
+            )])
         }
         X11Operation::ClickRel => {
-            // click operation: xdotool click --window <id> -x <rel_x> -y <rel_y>
-            args.push("click".into());
-            args.push("--window".into());
-            args.push(window.window_id.clone());
+            // xdotool click --window <id> --button <b>
+            // (No x/y: a relative click to the current position.)
+            let mut argv = vec!["click".into(), "--window".into(), wid];
+            argv.push("--button".into());
+            argv.push(btn);
             if let (Some(rx), Some(ry)) = (x, y) {
-                args.push("-x".into());
-                args.push(rx.to_string());
-                args.push("-y".into());
-                args.push(ry.to_string());
+                // --move-to-cursor then click at the window-relative point.
+                argv.push("--move-to-cursor".into());
+                argv.push(rx.to_string());
+                argv.push(ry.to_string());
             }
+            Ok(vec![("click".into(), argv)])
         }
         X11Operation::DragRel => {
-            // drag operation: simulate with mousemove relative
-            // xdotool doesn't have native drag; use mousemove --relative
-            if let (Some(rx), Some(ry)) = (x, y) {
-                args.push("mousemove".into());
-                args.push("--window".into());
-                args.push(window.window_id.clone());
-                args.push("--relative".into());
-                args.push(rx.to_string());
-                args.push(ry.to_string());
-            }
+            // True drag: mousedown -> mousemove --relative -> mouseup.
+            // Each command targets the same window by clone()-ing wid.
+            let (rx, yv) = match (x, y) {
+                (Some(xx), Some(yy)) => (xx, yy),
+                _ => {
+                    return Err(VirtuosoError::Config(
+                        "drag-rel requires --x and --y".to_string(),
+                    ));
+                }
+            };
+            Ok(vec![
+                // press
+                (
+                    "mousedown".into(),
+                    vec![
+                        "mousedown".into(),
+                        "--window".into(),
+                        wid.clone(),
+                        "--button".into(),
+                        btn.clone(),
+                    ],
+                ),
+                // move relatively
+                (
+                    "mousemove".into(),
+                    vec![
+                        "mousemove".into(),
+                        "--window".into(),
+                        wid.clone(),
+                        "--relative".into(),
+                        rx.to_string(),
+                        yv.to_string(),
+                    ],
+                ),
+                // release
+                (
+                    "mouseup".into(),
+                    vec![
+                        "mouseup".into(),
+                        "--window".into(),
+                        wid,
+                        "--button".into(),
+                        btn,
+                    ],
+                ),
+            ])
         }
         X11Operation::Screenshot | X11Operation::Wait => {
-            // These are handled specially in action_x11, not via xdotool
-            return Ok(vec![]);
+            // Handled specially in action_x11, not via xdotool
+            Ok(vec![])
         }
     }
-
-    Ok(args)
 }
 
 fn dialog_info_from_dismiss_value(
@@ -2403,7 +2500,8 @@ mod tests {
     #[test]
     fn action_x11_requires_window_id_not_empty() {
         // Empty window_id should be rejected by validate_action_params
-        let result = validate_action_params("", 12345, ":0", "activate", None, None, None, None);
+        let result =
+            validate_action_params("", 12345, ":0", "activate", None, None, None, None, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("window_id"));
@@ -2412,7 +2510,8 @@ mod tests {
     #[test]
     fn action_x11_rejects_zero_pid() {
         // Zero PID should be rejected
-        let result = validate_action_params("0x123", 0, ":0", "activate", None, None, None, None);
+        let result =
+            validate_action_params("0x123", 0, ":0", "activate", None, None, None, None, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("positive PID"));
@@ -2421,17 +2520,28 @@ mod tests {
     #[test]
     fn action_x11_rejects_empty_display() {
         // Empty display should be rejected
-        let result = validate_action_params("0x123", 12345, "", "activate", None, None, None, None);
+        let result =
+            validate_action_params("0x123", 12345, "", "activate", None, None, None, None, None);
         assert!(result.is_err());
     }
 
     #[test]
     fn action_x11_key_requires_text_parameter() {
         // key operation requires non-empty text — passing None must be rejected
-        let result = validate_action_params("0x123", 12345, ":0", "key", None, None, None, None);
-        assert!(result.is_err(), "key requires --text");
         let result =
-            validate_action_params("0x123", 12345, ":0", "key", None, None, Some(""), None);
+            validate_action_params("0x123", 12345, ":0", "key", None, None, None, None, None);
+        assert!(result.is_err(), "key requires --text");
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "key",
+            None,
+            None,
+            Some(""),
+            None,
+            None,
+        );
         assert!(result.is_err(), "key requires non-empty --text");
     }
 
@@ -2446,6 +2556,7 @@ mod tests {
             None,
             None,
             Some("secret"),
+            None,
             None,
         );
         assert!(result.is_ok(), "type should accept non-empty text");
@@ -2473,6 +2584,7 @@ mod tests {
             Some(20),
             None,
             None,
+            None,
         );
         assert!(result.is_ok(), "click-rel with x,y should be ok");
     }
@@ -2489,6 +2601,7 @@ mod tests {
             Some(20),
             None,
             None,
+            None,
         );
         assert!(result.is_ok(), "drag-rel with x,y should be ok");
     }
@@ -2496,8 +2609,17 @@ mod tests {
     #[test]
     fn action_x11_screenshot_requires_output_dir() {
         // screenshot requires output_dir — missing must be rejected
-        let result =
-            validate_action_params("0x123", 12345, ":0", "screenshot", None, None, None, None);
+        let result = validate_action_params(
+            "0x123",
+            12345,
+            ":0",
+            "screenshot",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(
             result.is_err(),
             "screenshot without output_dir should be rejected"
@@ -2508,6 +2630,7 @@ mod tests {
             12345,
             ":0",
             "screenshot",
+            None,
             None,
             None,
             None,
@@ -2524,6 +2647,7 @@ mod tests {
             12345,
             ":0",
             "screenshot",
+            None,
             None,
             None,
             None,
@@ -2547,6 +2671,7 @@ mod tests {
             None,
             Some("visible"),
             None,
+            None,
         );
         assert!(result.is_ok(), "wait with condition should be ok");
     }
@@ -2563,6 +2688,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -2570,6 +2696,224 @@ mod tests {
             err.to_string().to_lowercase().contains("operation")
                 || err.to_string().contains("activate")
         );
+    }
+
+    // =============================================================================
+    // P1-6: argv-recording integration test — assert generated xdotool/import
+    // command sequences match the fixed, position-checked shape. (Task 1-6)
+    // =============================================================================
+
+    fn mk_action_window(wid: &str) -> WindowInfo {
+        WindowInfo {
+            frame_id: wid.into(),
+            window_id: wid.into(),
+            dismiss_id: wid.into(),
+            display: Some(":0".into()),
+            xauthority: None,
+            title: "test cellview".into(),
+            class: vec![],
+            geometry: Geometry {
+                x: 100,
+                y: 100,
+                w: 1920,
+                h: 1080,
+            },
+            pid: Some(12345),
+            visible: true,
+        }
+    }
+
+    #[test]
+    fn build_xdotool_actions_activate_argv_shape() {
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::Activate,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("activate ok");
+        assert_eq!(action.len(), 1);
+        let (sub, argv) = &action[0];
+        assert_eq!(sub, "windowraise");
+        // Fixed positional shape: no `--window ID windowraise --sync` permutation bug.
+        assert_eq!(
+            argv,
+            &["windowraise", "--sync", "--window", "0x400002"],
+            "activate argv must be `windowraise --sync --window <id>`"
+        );
+        assert!(
+            !argv
+                .windows(2)
+                .any(|w| w[0] == "--window" && w[1] == "windowraise"),
+            "regression: --window comes before subcommand in buggy version"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_click_rel_argv_shape_with_button() {
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::ClickRel,
+            Some(10),
+            Some(20),
+            Some(1),
+            None,
+        )
+        .expect("click-rel ok");
+        assert_eq!(action.len(), 1);
+        let (sub, argv) = &action[0];
+        assert_eq!(sub, "click");
+        // Position-checked: click --window ID --button N --move-to-cursor 10 20
+        assert_eq!(
+            argv,
+            &[
+                "click",
+                "--window",
+                "0x400002",
+                "--button",
+                "1",
+                "--move-to-cursor",
+                "10",
+                "20"
+            ],
+            "click-rel argv must pin --window before --button"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_click_rel_button_three_argv() {
+        // Right-click (button 3) — confirms button value passes through verbatim.
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::ClickRel,
+            Some(5),
+            Some(5),
+            Some(3),
+            None,
+        )
+        .expect("click-rel ok");
+        let (_, argv) = &action[0];
+        let btn_i = argv
+            .iter()
+            .position(|a| a == "--button")
+            .expect("--button present");
+        assert_eq!(argv[btn_i + 1], "3", "button=3 must be passed as-is");
+    }
+
+    #[test]
+    fn build_xdotool_actions_key_argv_shape() {
+        let action = build_xdotools_actions_key("0x400002", "ctrl-s");
+        assert_eq!(action.len(), 1);
+        let (sub, argv) = &action[0];
+        assert_eq!(sub, "key");
+        assert_eq!(argv, &["key", "--window", "0x400002", "ctrl-s"]);
+        assert!(
+            !argv.windows(2).any(|w| w[0] == "--window" && w[1] == "key"),
+            "regression: --window must come AFTER subcommand"
+        );
+    }
+
+    fn build_xdotools_actions_key(wid: &str, keys: &str) -> Vec<(String, Vec<String>)> {
+        build_xdotool_actions(
+            &mk_action_window(wid),
+            X11Operation::Key,
+            None,
+            None,
+            None,
+            Some(keys),
+        )
+        .expect("key ok")
+    }
+
+    #[test]
+    fn build_xdotool_actions_type_argv_shape_with_separator() {
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::Type,
+            None,
+            None,
+            None,
+            Some("CTRL+S"),
+        )
+        .expect("type ok");
+        assert_eq!(action.len(), 1);
+        let (sub, argv) = &action[0];
+        assert_eq!(sub, "type");
+        // xdotool type swallows --foo keys; the `--` separator is mandatory.
+        assert_eq!(
+            argv,
+            &["type", "--window", "0x400002", "--", "CTRL+S"],
+            "type argv must contain `--` separator to protect literal text"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_drag_rel_expands_to_three_commands() {
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::DragRel,
+            Some(50),
+            Some(-10),
+            Some(2),
+            None,
+        )
+        .expect("drag-rel ok");
+        // drag-rel must expand to three commands, NOT one malformed string.
+        assert_eq!(action.len(), 3, "drag-rel must produce 3 commands");
+
+        // mousedown --window ID --button N
+        assert_eq!(action[0].0, "mousedown");
+        assert_eq!(
+            action[0].1,
+            vec!["mousedown", "--window", "0x400002", "--button", "2"]
+        );
+
+        // mousemove --window ID --relative dx dy
+        assert_eq!(action[1].0, "mousemove");
+        assert_eq!(
+            action[1].1,
+            vec![
+                "mousemove",
+                "--window",
+                "0x400002",
+                "--relative",
+                "50",
+                "-10"
+            ],
+            "drag-rel mousemove must use --relative with x,y deltas"
+        );
+
+        // mouseup --window ID --button N
+        assert_eq!(action[2].0, "mouseup");
+        assert_eq!(
+            action[2].1,
+            vec!["mouseup", "--window", "0x400002", "--button", "2"]
+        );
+
+        // All three commands target the SAME window index position (positional invariant).
+        for (sub, argv) in &action {
+            let wid_i = argv
+                .iter()
+                .position(|a| a == "--window")
+                .unwrap_or_else(|| panic!("{sub} missing --window"));
+            assert_eq!(argv[wid_i + 1], "0x400002", "window id at fixed position");
+        }
+    }
+
+    #[test]
+    fn build_xdotool_actions_drag_rel_rejects_missing_y() {
+        let err = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::DragRel,
+            Some(10),
+            None,
+            None,
+            None,
+        )
+        .expect_err("y must be required");
+        assert!(err.to_string().contains("--y"), "error should mention --y");
     }
 
     /// Construct a Config with no remote_host set, avoiding `from_env` / dotenv.

@@ -30,6 +30,10 @@ ALLOWED_OPERATIONS = {op.value for op in Operation}
 
 # Required and optional argument keys for each operation.
 # The verifier and rollback use VERIFY and RECOVER respectively.
+# DRAG_REL: model tracks x1,y1,x2,y2 at scenario level. Rust cli accepts
+# x,y only — each drag-rel is translated into a mousedown → mousemove(x,y)
+# → mouseup sequence at execution time. The REL coordinates are relative to
+# the window origin, not screen-wide (that's why CLICK_REL/DRAG_REL naming).
 OP_ARG_SCHEMAS = {
     Operation.VCLI_LOAD: ({"command"}, set()),
     Operation.VCLI_CALL: ({"function", "args"}, {"kwargs"}),
@@ -37,8 +41,8 @@ OP_ARG_SCHEMAS = {
     Operation.WINDOW_ACTIVATE: ({"window_title"}, set()),
     Operation.KEY: ({"keys"}, set()),
     Operation.TYPE: ({"text"}, set()),
-    Operation.CLICK_REL: ({"x", "y", "button"}, set()),
-    Operation.DRAG_REL: ({"x1", "y1", "x2", "y2", "button"}, set()),
+    Operation.CLICK_REL: ({"x", "y"}, {"button"}),
+    Operation.DRAG_REL: ({"x", "y"}, {"button"}),
     Operation.SCREENSHOT: (set(), {"path"}),
     Operation.VERIFY: ({"predicate", "expected"}, set()),
     Operation.RECOVER: ({"action", "target"}, set()),
@@ -46,8 +50,15 @@ OP_ARG_SCHEMAS = {
 
 # Integer-typed argument keys (strict int, bool rejected, must be positive)
 INT_ARG_KEYS = {
-    Operation.CLICK_REL: {"x", "y", "button"},
-    Operation.DRAG_REL: {"x1", "y1", "x2", "y2", "button"},
+    Operation.CLICK_REL: {"x", "y"},
+    Operation.DRAG_REL: {"x", "y"},
+}
+
+# Button must be positive 1/2/3 — tracked separately so validation runs
+# before execution. Unlike coords, button is Optional (default 1 = left).
+BUTTON_ARG_KEYS = {
+    Operation.CLICK_REL: {"button"},
+    Operation.DRAG_REL: {"button"},
 }
 
 # WINDOW_WAIT state allowlist — only these explicit states are supported.
@@ -172,19 +183,23 @@ class Step:
                 path,
             )
 
-        # Validate integer types
+        # Validate integer types (strict int, bool rejected). x/y coords may
+        # be zero; only the button arg is further constrained to 1..3 below.
         for key in INT_ARG_KEYS.get(operation, set()):
             if key in args and not _is_strict_int(args[key]):
                 raise ScenarioValidationError(
                     f"{key} must be an integer (bool rejected)",
                     path,
                 )
+
+        # Validate button types: must be 1/2/3 (left/middle/right). Optional —
+        # when absent the xdotool default (1 = left) is used.
+        for key in BUTTON_ARG_KEYS.get(operation, set()):
             if key in args:
                 val = args[key]
-                # button must be positive integer; coordinates can be any int
-                if key == "button" and val <= 0:
+                if not _is_strict_int(val) or val not in (1, 2, 3):
                     raise ScenarioValidationError(
-                        f"{key} must be a positive integer",
+                        f"{key} must be 1 (left), 2 (middle), or 3 (right); got {val}",
                         path,
                     )
 

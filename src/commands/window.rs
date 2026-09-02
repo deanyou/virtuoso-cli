@@ -363,6 +363,7 @@ pub fn action_x11(
     x: Option<i32>,
     y: Option<i32>,
     text: Option<&str>,
+    button: Option<u8>,
     output_dir: Option<&str>,
     explicit_display: Option<&str>,
 ) -> Result<Value> {
@@ -370,8 +371,9 @@ pub fn action_x11(
     use crate::transport::x11;
 
     let op = x11::X11Operation::from_str(operation)?;
-    let _details =
-        x11::validate_action_params(window_id, pid, display, operation, x, y, text, output_dir)?;
+    let _details = x11::validate_action_params(
+        window_id, pid, display, operation, x, y, text, button, output_dir,
+    )?;
 
     let config = Config::from_env()?;
     let runner: Arc<dyn RemoteTransport> = x11::transport_for_config(&config)?;
@@ -386,6 +388,7 @@ pub fn action_x11(
         operation: op,
         x,
         y,
+        button,
         text,
         output_dir,
         timeout_secs: 30,

@@ -49,11 +49,20 @@ class LockHeldError(Exception):
 
 
 class _DisplayLock:
-    """Exclusive, non-blocking lock for a DISPLAY within the run directory."""
+    """Exclusive per-DISPLAY lock on the GUI host.
 
-    def __init__(self, lock_dir: Path, display: str, session_id: str):
+    Lock file lives under ``~/.cache/virtuoso_bridge/x11-locks/`` so that
+    *every* LiveExecutor targeting the same ``DISPLAY`` — regardless of its
+    ``output_dir`` (which is per-run) — shares one flock. Without this, a
+    stray background job could stimulate the same CIW concurrently and
+    corrupt its state."""
+
+    GUI_LOCK_ROOT = Path.home() / ".cache" / "virtuoso_bridge" / "x11-locks"
+
+    def __init__(self, display: str):
         safe = re.sub(r"[^A-Za-z0-9_.-]", "_", display.lstrip(":") or "0")
-        self.path = lock_dir / f"display_{safe}_{session_id}.lock"
+        # Per-display lock: one lock per DISPLAY across all runs.
+        self.path = self.GUI_LOCK_ROOT / f"display_{safe}.lock"
         self._fd: Optional[int] = None
 
     def acquire(self) -> None:
@@ -135,9 +144,6 @@ class LiveExecutor(Executor):
                     "(alphanumerics, dots, underscores, hyphens)"
                 )
         self._output_dir = Path(output_dir)
-        # NOTE: the output dir itself is created by Runner.run (exist_ok=False);
-        # only the lock subdir is created lazily at precheck time.
-        self._lock_dir = self._output_dir / "locks"
         # Run state — only set after precheck validates identity.
         self._lock: Optional[_DisplayLock] = None
         self.window_id: Optional[str] = None
@@ -272,7 +278,7 @@ class LiveExecutor(Executor):
             self._scenario_pid = int(effective_pid)
 
             # 3. exclusive DISPLAY lock
-            lock = _DisplayLock(self._lock_dir, scenario.display, self._session_id)
+            lock = _DisplayLock(scenario.display)
             try:
                 lock.acquire()
             except LockHeldError as exc:
@@ -417,6 +423,14 @@ class LiveExecutor(Executor):
             self._lock.release()
             self._lock = None
 
+    def __del__(self) -> None:
+        # Best-effort: release the flock so sequential tests in the same process
+        # don't inherit a leaked lock (e.g. when the test never calls close()).
+        try:
+            self.close()
+        except Exception:  # noqa: BLE001 — C-level destructor
+            pass
+
     # ------------------------------------------------------------------
     # action plumbing
     # ------------------------------------------------------------------
@@ -426,6 +440,7 @@ class LiveExecutor(Executor):
         operation: str,
         x=None,
         y=None,
+        button=None,
         text=None,
         output_dir=None,
         timeout_seconds=_TIMEOUT_ACTION,
@@ -446,6 +461,8 @@ class LiveExecutor(Executor):
             argv += ["--x", str(x)]
         if y is not None:
             argv += ["--y", str(y)]
+        if button is not None:
+            argv += ["--button", str(button)]
         if text is not None:
             argv += ["--text", text]
         if output_dir is not None:
@@ -455,20 +472,24 @@ class LiveExecutor(Executor):
     def _execute_action_step(self, step: Step) -> None:
         op = _ACTION_OPERATIONS[step.operation]
         args = step.arguments
-        x = y = text = output_dir = None
+        x = y = button = text = output_dir = None
         if step.operation == Operation.CLICK_REL:
             x, y = args.get("x"), args.get("y")
+            button = args.get("button")
         elif step.operation == Operation.DRAG_REL:
-            # vcli's drag-rel takes relative start coordinates; the delta is
-            # applied by xdotool server-side from (x1,y1) to (x2,y2).
-            x, y = args.get("x1"), args.get("y1")
+            # vcli's drag-rel takes one relative move vector (x, y). xdotool
+            # expands this to mousedown → mousemove --relative → mouseup.
+            x, y = args.get("x"), args.get("y")
+            button = args.get("button")
         elif step.operation == Operation.KEY:
             text = args.get("keys")
         elif step.operation == Operation.TYPE:
             text = args.get("text")
         elif step.operation == Operation.SCREENSHOT:
             output_dir = str(self._output_dir)
-        result = self._run_action(op, x=x, y=y, text=text, output_dir=output_dir)
+        result = self._run_action(
+            op, x=x, y=y, button=button, text=text, output_dir=output_dir
+        )
         if result.get("status") not in (None, "success"):
             raise RuntimeError(f"action {op} failed: {result.get('status')}")
 
