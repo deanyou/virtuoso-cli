@@ -4,8 +4,14 @@ name: Security audit
 # advisories on every dependency change and on a weekly schedule, so a
 # newly-disclosed vulnerability is caught without waiting for a release.
 #
-# On push/PR the check turns red if any (non-informational) advisory is found.
-# On the scheduled run it additionally opens an issue per new advisory.
+# The check turns red if any (non-informational) advisory is found that is
+# not explicitly ignored in `audit.toml`.
+#
+# NOTE: we no longer use `rustsec/audit-check@v2.0.0`. That wrapper compiles
+# cargo-audit from source at run time and, against current rustsec releases,
+# fails with "Couldn't load ./Cargo.lock" (it runs outside the checked-out
+# repo root). We instead install a pinned cargo-audit and invoke it directly
+# from the repo root, where `audit.toml` and `Cargo.lock` are both present.
 
 on:
   push:
@@ -21,7 +27,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
   checks: write
 
 jobs:
@@ -29,7 +34,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install cargo-audit (pinned)
+        # Pinned to avoid the moving-target breakage of `rustsec/audit-check`,
+        # which compiles cargo-audit from source and currently fails to find
+        # ./Cargo.lock. `--locked` keeps the build reproducible.
+        run: cargo install cargo-audit --version 0.22.2 --locked
       - name: Run cargo-audit
-        uses: rustsec/audit-check@v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo audit
