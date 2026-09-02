@@ -1080,6 +1080,23 @@ pub fn action_x11(
         let token = Uuid::new_v4();
         let safe_name = format!("vcli_shot_{token}.png");
         let remote_path = format!("/tmp/{safe_name}");
+        // If the window was resolved via the xdotool fallback (minimized or
+        // unmapped), ImageMagick `import -window` cannot capture it — restore
+        // it first with windowactivate, which maps and raises the window.
+        // This is best-effort: if activate fails, the import will report the
+        // original error rather than masking it.
+        if !resolved.visible {
+            let activate_cmd = format!(
+                "{}xdotool windowactivate {}",
+                display_prefix,
+                shell_escape(&resolved.window_id)
+            );
+            let _ = runner.run_command(&CommandRequest::with_exec_timeout(
+                &activate_cmd,
+                Duration::from_secs(5),
+            ));
+            std::thread::sleep(Duration::from_millis(150));
+        }
         let remote_cmd = format!(
             "{}import -window {} {}",
             display_prefix,
