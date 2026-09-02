@@ -1458,6 +1458,11 @@ enum WindowCmd {
         /// Override the detected DISPLAY (X11 bypass only).
         #[arg(long)]
         display: Option<String>,
+        /// Dismiss only the dialog belonging to this window id (frame/app/child
+        /// id from `list-windows-x11`). Without this, all detected dialogs are
+        /// dismissed. X11 bypass only.
+        #[arg(long)]
+        window_id: Option<String>,
     },
 
     /// List dialogs visible via X11 SSH bypass (no keypress sent)
@@ -2097,9 +2102,15 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             dry_run,
             x11,
             display,
+            window_id,
         } => {
             if x11 {
-                commands::window::dismiss_dialog_x11(&action, dry_run, display.as_deref())
+                commands::window::dismiss_dialog_x11(
+                    &action,
+                    dry_run,
+                    display.as_deref(),
+                    window_id.as_deref(),
+                )
             } else {
                 commands::window::dismiss_dialog(&action, dry_run)
             }

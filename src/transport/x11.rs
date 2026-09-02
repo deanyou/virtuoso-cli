@@ -409,7 +409,14 @@ pub fn list_dialogs(
     let mut dialogs = Vec::new();
     for env in &envs {
         let display = env.display.as_deref().unwrap_or("");
-        let cmd = build_helper_cmd(&helper, display, env.xauthority.as_deref(), false, "enter");
+        let cmd = build_helper_cmd(
+            &helper,
+            display,
+            env.xauthority.as_deref(),
+            false,
+            "enter",
+            None,
+        );
         let out = runner.run_command(&CommandRequest::with_exec_timeout(
             &cmd,
             Duration::from_secs(30),
@@ -453,6 +460,7 @@ pub fn dismiss(
     explicit_display: Option<&str>,
     action: &str,
     dry_run: bool,
+    window_id: Option<&str>,
 ) -> Result<DismissResult> {
     let helper = ensure_helper_uploaded(runner, user, client_id)?;
     let mut found = Vec::new();
@@ -468,6 +476,7 @@ pub fn dismiss(
             env.xauthority.as_deref(),
             !dry_run,
             action,
+            window_id,
         );
         let out = runner.run_command(&CommandRequest::with_exec_timeout(
             &cmd,
@@ -774,7 +783,17 @@ pub fn validate_action_params(
             }
         }
         X11Operation::Wait => {
-            // wait condition (in --text) is evaluated by the caller's polling loop
+            // wait condition (in --text) is evaluated by the caller's polling loop;
+            // an empty pattern matches every title (substring match) so reject it
+            // to avoid immediate false-positive matches.
+            let t = text.ok_or_else(|| {
+                VirtuosoError::Config("operation 'wait' requires --text parameter".into())
+            })?;
+            if t.is_empty() {
+                return Err(VirtuosoError::Config(
+                    "operation 'wait' requires non-empty --text (empty pattern matches every window)".into(),
+                ));
+            }
         }
     }
 
@@ -1659,12 +1678,20 @@ fn build_helper_cmd(
     xauthority: Option<&str>,
     do_dismiss: bool,
     action: &str,
+    window_id: Option<&str>,
 ) -> String {
     // Quote the remote path with single quotes; the helper is ASCII so this is safe.
     let mut s = format!("python3 '{}'", helper_remote_path);
     s.push(' ');
     s.push_str(&shell_escape(display));
-    if do_dismiss {
+    if let Some(wid) = window_id {
+        // Explicit target: bypass the dialog-size filter and dismiss this window
+        // directly (frame/app/child id all accepted by the helper).
+        s.push_str(" --dismiss-window ");
+        s.push_str(&shell_escape(wid));
+        s.push_str(" --action ");
+        s.push_str(action);
+    } else if do_dismiss {
         s.push_str(" --dismiss");
         s.push_str(" --action ");
         s.push_str(action);
@@ -2167,6 +2194,7 @@ mod tests {
             None,
             true,
             "alt-o",
+            None,
         );
         assert!(cmd.contains("'/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py'"));
         assert!(cmd.contains("--dismiss"));
@@ -2176,8 +2204,23 @@ mod tests {
 
     #[test]
     fn build_helper_cmd_propagates_xauthority_when_set() {
-        let cmd = build_helper_cmd("/h.py", ":0", Some("/tmp/.X11-unix/X0"), false, "enter");
+        let cmd = build_helper_cmd(
+            "/h.py",
+            ":0",
+            Some("/tmp/.X11-unix/X0"),
+            false,
+            "enter",
+            None,
+        );
         assert!(cmd.contains("XAUTHORITY=/tmp/.X11-unix/X0"));
+    }
+
+    #[test]
+    fn build_helper_cmd_explicit_window_id_uses_dismiss_window_flag() {
+        let cmd = build_helper_cmd("/h.py", ":0", None, true, "escape", Some("0x2603394"));
+        assert!(cmd.contains("--dismiss-window 0x2603394"));
+        assert!(cmd.contains("--action escape"));
+        assert!(!cmd.contains("--dismiss "));
     }
 
     #[test]

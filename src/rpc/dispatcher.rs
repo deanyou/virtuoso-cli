@@ -588,7 +588,8 @@ impl RpcDispatcher {
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
                 let display = params.get("display").and_then(|v| v.as_str());
-                crate::commands::window::dismiss_dialog_x11(&action, dry_run, display)
+                let window_id = params.get("window_id").and_then(|v| v.as_str());
+                crate::commands::window::dismiss_dialog_x11(&action, dry_run, display, window_id)
             }
             "list_windows_x11" => {
                 // Enumerate every Virtuoso-related X11 window (no keypress).
