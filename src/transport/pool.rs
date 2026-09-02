@@ -117,7 +117,7 @@ impl EndpointKey {
     pub fn digest(&self) -> String {
         let canonical = format!("{self:?}");
         let h = <sha2::Sha256 as sha2::Digest>::digest(canonical.as_bytes());
-        format!("{h:x}")[..12].to_string()
+        hex::encode(h)[..12].to_string()
     }
 
     /// Human-readable form that excludes identities and options.
