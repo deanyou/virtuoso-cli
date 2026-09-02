@@ -297,14 +297,24 @@ def _parse_window_line(line):
         return None
     win_id = id_match.group(1)
 
-    paren = _PAREN_RE.search(line)
+    # xwininfo lines may contain multiple parenthesized groups: the title
+    # placeholder "(has no name)" comes first, and the WM class group
+    # ("class" "instance") comes after the colon. Take the LAST group that
+    # contains quoted strings as the class, avoiding "(has no name)".
     classes = []
-    if paren:
-        for quoted in _QUOTED_RE.findall(paren.group(1)):
-            classes.extend(quoted.split(":"))
+    for paren_text in _PAREN_RE.findall(line):
+        quoted = _QUOTED_RE.findall(paren_text)
+        if quoted:
+            classes = []
+            for q in quoted:
+                classes.extend(q.split(":"))
 
     # The title is the first quoted string before the class group.
-    head = line[: paren.start()] if paren else line
+    last_paren = None
+    for m in _PAREN_RE.finditer(line):
+        if _QUOTED_RE.search(m.group(1)):
+            last_paren = m
+    head = line[: last_paren.start()] if last_paren else line
     head_quoted = _QUOTED_RE.findall(head)
     title = head_quoted[0] if head_quoted else ""
 
