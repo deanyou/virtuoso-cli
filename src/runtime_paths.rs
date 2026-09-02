@@ -646,6 +646,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     #[serial]
     fn tmp_root_falls_back_to_absolute_path() {
         with_env_many(

@@ -20,14 +20,14 @@
 use crate::error::{Result, VirtuosoError};
 use serde_json::Value;
 
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 use std::path::Path;
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 use std::sync::Arc;
 
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 use crate::transport::contract::RemoteTransport;
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 use crate::transport::contract::TransportError;
 
 /// The "this build has no daemon" answer.
@@ -54,16 +54,19 @@ pub fn run(_ipc_endpoint: &str, _token_path: &str, _daemon_nonce: &str) -> Resul
 /// Production body of the daemon. Only compiled when `native-ssh` is on, so
 /// the subcommand stays absent from feature-stripped builds (the design's
 /// hard requirement).
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Result<Value> {
     use crate::transport::backend::open_transport;
     use crate::transport::ipc::server;
+    use crate::transport::lifecycle::ShutdownCoordinator;
+
+    let config = crate::config::Config::from_env()?;
 
     // `open_transport` already hands back a shared, boxed transport; the
     // server takes that same `Arc` so every connection thread shares one
     // backend instead of opening its own.
     let transport: Arc<dyn RemoteTransport> =
-        open_transport(&crate::config::Config::from_env()?).map_err(transport_to_virtuoso)?;
+        open_transport(&config).map_err(transport_to_virtuoso)?;
 
     let token = std::fs::read_to_string(Path::new(token_path)).map_err(|e| {
         VirtuosoError::Io(std::io::Error::other(format!(
@@ -74,8 +77,11 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
     // add — the token file is single-line.
     let token = token.trim().to_string();
 
+    // Grace period for `Operation::Shutdown` (VB_TRANSPORT_SHUTDOWN_GRACE).
+    let shutdown = ShutdownCoordinator::from_config(&config);
+
     let socket = Path::new(ipc_endpoint);
-    server::run(socket, transport, &token, daemon_nonce).map_err(|e| {
+    server::run(socket, transport, &token, daemon_nonce, shutdown).map_err(|e| {
         VirtuosoError::Io(std::io::Error::other(format!(
             "transport daemon exited unexpectedly: {e}"
         )))
@@ -83,11 +89,27 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
     Ok(Value::Null)
 }
 
+/// Non-Unix counterpart of [`run_with`].
+///
+/// [`crate::transport::ipc::server`] is Unix-only — it binds a Unix domain
+/// socket — so a `native-ssh` build elsewhere has no daemon to run. `main.rs`
+/// still dispatches the subcommand whenever the feature is on, so this has to
+/// answer with a structured Config error rather than be absent: the same
+/// contract `run` upholds for feature-off builds.
+#[cfg(all(feature = "native-ssh", not(unix)))]
+pub fn run_with(_ipc_endpoint: &str, _token_path: &str, _daemon_nonce: &str) -> Result<Value> {
+    Err(VirtuosoError::Config(
+        "native transport daemon requires a Unix domain socket: no daemon is \
+         available on this platform"
+            .into(),
+    ))
+}
+
 /// Map a transport error onto the daemon's CLI error path. Config and
 /// unsupported-backend failures are usage errors (exit code per the design);
 /// every other failure stays a general error so the parent process learns
 /// the daemon failed to start without parsing message text.
-#[cfg(feature = "native-ssh")]
+#[cfg(all(unix, feature = "native-ssh"))]
 fn transport_to_virtuoso(e: TransportError) -> VirtuosoError {
     use crate::transport::contract::TransportError as T;
     match e {

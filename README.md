@@ -45,6 +45,7 @@ Control Cadence Virtuoso from anywhere — locally or remotely. Designed for AI 
 - **Maestro ADE management** — Open/close Explorer (`maestro`) view sessions, set variables, run simulations, export results (IC23.1+ unified ADE)
 - **Spectre simulation** — Sync/async simulation, job registry with status tracking and atomic file writes, PSF parser
 - **Multi-profile support** — `--profile` flag for concurrent connections to multiple Virtuoso instances
+- **Optional pure-Rust native SSH backend** (`native-ssh` Cargo feature) — a `russh`-based single-hop transport with in-tree host-key verification, public-key auth, SFTP streaming for single files, and a connection pool. OpenSSH stays the default; selecting `native` is explicit via `VB_SSH_BACKEND=native` and there is no automatic backend migration. See `### SSH Backend Selection` below for the capability matrix.
 - **Command logging** — All SKILL executions logged to `~/.cache/virtuoso_bridge/logs/commands.log`
 - **Interactive TUI** — `vtui` terminal dashboard showing sessions, jobs, tunnel status
 
@@ -349,6 +350,55 @@ ssh -o "ProxyCommand=none" my-server "echo ok"
 vcli tunnel start -v
 ```
 
+### SSH Backend Selection
+
+`vcli` ships two SSH transports behind the same `RemoteTransport` contract:
+
+| Backend | Selected via | What it actually runs |
+|---------|--------------|-----------------------|
+| `openssh` (default) | unset / `VB_SSH_BACKEND=openssh` | System `ssh` client — ControlMaster multiplexing, full `~/.ssh/config` (Host / ProxyJump / IdentityAgent / Match) |
+| `native` | `VB_SSH_BACKEND=native` | Pure-Rust `russh` client (gated behind the `native-ssh` Cargo feature) |
+
+**There is no automatic backend migration.** Switching backends requires an explicit `VB_SSH_BACKEND` change; existing tunnels keep using whatever backend created their `state.json` until `tunnel stop && tunnel start`.
+
+**Feature-gated builds.** Official `cargo install virtuoso-cli` binaries are built with `--features native-ssh`. Custom builders who strip the feature can still select `openssh`; selecting `native` on such a build returns a structured `UnsupportedBackend` error rather than silently falling back to OpenSSH.
+
+`vcli tunnel status` JSON reports the active selection — look for:
+
+```json
+{
+  "config": {
+    "backend": {
+      "selected": "openssh",
+      "supported_in_build": true
+    }
+  },
+  "tunnel": { "backend": "openssh" }
+}
+```
+
+If `config.backend.selected` and `tunnel.backend` disagree, the JSON also carries a `config.backend_warning` field describing the drift — your `state.json` was written by a different backend than the one you're running now.
+
+#### Capability matrix (current)
+
+| Capability | `openssh` | `native` |
+|------------|-----------|----------|
+| Host-key verification (`known_hosts`) | yes (delegated to `ssh`) | yes (in-tree, supports legacy + `|1|salt|hash` entries) |
+| Public-key auth | yes | yes |
+| SSH agent forwarding | yes | no (selecting this returns `UnsupportedOperation`) |
+| Password / keyboard-interactive | yes (via `ssh`) | no (requires `VB_SSH_KEY`) |
+| `ProxyJump` / chained hops | yes (delegated to `ssh`) | no (single-hop only; returns `UnsupportedOperation`) |
+| Custom `~/.ssh/config` (`-F`) | yes (`VB_SSH_CONFIG`) | no — the native backend does not read `VB_SSH_CONFIG`; setting it has no effect on the native path |
+| Single-file SFTP streaming | yes (delegated to `sftp`/`scp`) | yes (russh-sftp subsystem, 64 KiB chunk window) |
+| Directory transfer | tar-over-exec | tar-over-exec (matches `openssh`) |
+| Concurrent connection reuse | ControlMaster | in-tree endpoint pool + channel scheduler |
+| Auto-reconnect with backoff | handled by `ssh` | yes (`VB_SSH_RECONNECT_MAX_ATTEMPTS` / `_MAX_DELAY`) |
+| Keepalive probing | delegated to `ssh` (`ServerAliveInterval`) | yes (`VB_SSH_KEEPALIVE_INTERVAL` / `_FAILURES`) |
+| SOCKS5 forwarding | no (planned) | no (planned) |
+| RAMIC / X11 forwarding | yes (delegated to `ssh`) | no |
+
+If you depend on anything in the right column of the `no` rows above, stay on `openssh` for now. If your work is single-hop, you want a self-contained Rust binary (no `/usr/bin/ssh` on the host), or you need the in-tree connection pool's latency profile, opt into `native`.
+
 ### How It Works
 
 ```
@@ -412,6 +462,7 @@ vcli skill exec    # connects to port N
 - **Maestro ADE 管理** — 打开/关闭 Explorer（`maestro` view）session、设置变量、运行仿真、导出结果（IC23.1+ 统一 ADE）
 - **Spectre 仿真** — 同步/异步仿真、Job 注册与状态跟踪、PSF 结果解析
 - **多 Profile 支持** — `--profile` 参数支持同时连接多个 Virtuoso 实例
+- **可选的纯 Rust 原生 SSH 后端**（`native-ssh` Cargo feature）— 基于 `russh` 的单跳传输，自带主机密钥校验、公钥认证、单文件 SFTP streaming 与连接池。OpenSSH 仍是默认；选择 `native` 必须显式通过 `VB_SSH_BACKEND=native`，**没有自动迁移**。能力差异表见下文 `### SSH 后端选择`。
 - **命令日志** — 所有 SKILL 调用记录到 `~/.cache/virtuoso_bridge/logs/commands.log`
 - **交互式 TUI** — `vtui` 终端仪表盘，实时显示 session、仿真 job、隧道状态
 
@@ -682,6 +733,55 @@ ssh -o "ProxyCommand=none" my-server "echo ok"
 # 查看 vcli 详细日志
 vcli tunnel start -v
 ```
+
+### SSH 后端选择
+
+`vcli` 在同一个 `RemoteTransport` 契约下提供两个 SSH 传输：
+
+| 后端 | 选择方式 | 实际执行 |
+|------|----------|----------|
+| `openssh`（默认） | 不设置 / `VB_SSH_BACKEND=openssh` | 系统 `ssh` 客户端 — ControlMaster 多路复用，完整支持 `~/.ssh/config`（Host / ProxyJump / IdentityAgent / Match） |
+| `native` | `VB_SSH_BACKEND=native` | 纯 Rust `russh` 客户端（由 `native-ssh` Cargo feature 门控） |
+
+**没有自动迁移**。切换后端必须显式改 `VB_SSH_BACKEND`；已有 tunnel 会继续使用创建它们 `state.json` 时所用的后端，直到 `tunnel stop && tunnel start`。
+
+**feature 门控的 build**。官方 `cargo install virtuoso-cli` 的二进制带 `--features native-ssh`；自定义构建如果去掉了该 feature，仍可选择 `openssh`；在该 build 上选择 `native` 会返回结构化 `UnsupportedBackend` 错误，**不会**静默回退到 OpenSSH。
+
+`vcli tunnel status` JSON 会报告当前生效的选择：
+
+```json
+{
+  "config": {
+    "backend": {
+      "selected": "openssh",
+      "supported_in_build": true
+    }
+  },
+  "tunnel": { "backend": "openssh" }
+}
+```
+
+若 `config.backend.selected` 与 `tunnel.backend` 不一致，JSON 还会带一个 `config.backend_warning` 字段描述 drift —— 即 `state.json` 由另一个后端写入，而你当前运行的是另一个。
+
+#### 能力矩阵（当前）
+
+| 能力 | `openssh` | `native` |
+|------|-----------|----------|
+| 主机密钥校验（`known_hosts`） | 是（委托给 `ssh`） | 是（内置，支持传统 + `|1|salt|hash` 条目） |
+| 公钥认证 | 是 | 是 |
+| SSH agent forwarding | 是 | 否（选择此功能会返回 `UnsupportedOperation`） |
+| 密码 / keyboard-interactive | 是（经 `ssh`） | 否（必须设置 `VB_SSH_KEY`） |
+| `ProxyJump` / 多级跳板 | 是（委托给 `ssh`） | 否（仅单跳；返回 `UnsupportedOperation`） |
+| 自定义 `~/.ssh/config`（`-F`） | 是（`VB_SSH_CONFIG`） | 否 — native 后端不读取 `VB_SSH_CONFIG`；设了它对 native 路径无效 |
+| 单文件 SFTP streaming | 是（委托给 `sftp`/`scp`） | 是（russh-sftp 子系统，64 KiB chunk window） |
+| 目录传输 | tar-over-exec | tar-over-exec（与 `openssh` 对齐） |
+| 并发连接复用 | ControlMaster | 内置 endpoint pool + channel scheduler |
+| 指数退避自动重连 | 由 `ssh` 负责 | 是（`VB_SSH_RECONNECT_MAX_ATTEMPTS` / `_MAX_DELAY`） |
+| Keepalive 探测 | 委托给 `ssh`（`ServerAliveInterval`） | 是（`VB_SSH_KEEPALIVE_INTERVAL` / `_FAILURES`） |
+| SOCKS5 转发 | 否（计划中） | 否（计划中） |
+| RAMIC / X11 转发 | 是（委托给 `ssh`） | 否 |
+
+如果你依赖右栏标记为 `否` 的任何能力，请暂时留在 `openssh`。如果是单跳、想要自包含的 Rust 二进制（无需宿主机 `/usr/bin/ssh`）、或看重内置连接池的延迟表现，再选择 `native`。
 
 ### 工作原理
 

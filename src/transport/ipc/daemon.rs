@@ -103,6 +103,25 @@ impl NativeTransportClient {
         }
     }
 
+    /// Ask the daemon to shut down cooperatively.
+    ///
+    /// The daemon acks, fires its internal cancellation token, and closes this
+    /// connection; its accept loop stops admitting and the shutdown
+    /// coordinator runs the design's three phases (stop admission → grace for
+    /// in-flight work → exit). Returns once the ack is received — daemon exit
+    /// itself is asynchronous and bounded by `VB_TRANSPORT_SHUTDOWN_GRACE`.
+    pub fn request_shutdown(&self) -> Result<(), TransportError> {
+        let resp = self.exchange(
+            Operation::Shutdown,
+            Value::Null,
+            Deadline::from_now(Duration::from_secs(5)),
+        )?;
+        match resp.result {
+            ResponseResult::Ok(_) => Ok(()),
+            ResponseResult::Err(e) => Err(TransportError::from(e)),
+        }
+    }
+
     fn exchange(
         &self,
         operation: Operation,

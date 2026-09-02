@@ -2,6 +2,95 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-09-01
+
+First release where the native (`russh`-based) SSH backend is documented
+and exercised end-to-end. OpenSSH remains the runtime default; users opt
+into `native` explicitly via `VB_SSH_BACKEND=native`. The native backend
+is now considered **stable** for single-hop direct-connection workloads
+that fit the capability matrix in the README's
+`SSH Backend Selection` section. There is no automatic backend migration;
+existing tunnels keep using whatever backend wrote their `state.json`
+until `tunnel stop && tunnel start`.
+
+### Added (native backend, single-hop)
+
+- **Pure-Rust native SSH transport** (`src/transport/native.rs`,
+  `native-ssh` Cargo feature, gated). Single-hop direct connection with
+  in-tree `known_hosts` host-key verification (legacy + `|1|salt|hash`
+  entries), public-key authentication, exec channel, **single-file
+  SFTP streaming** through the russh-sftp subsystem (64 KiB chunk
+  window), and an exec `cat` fallback when the remote does not
+  advertise `sftp`. Directory transfer still uses `tar-over-exec` so
+  the two backends agree on the remote toolchain.
+- **Backend selection** (`src/transport/backend.rs`,
+  `src/config.rs:115-119`). `VB_SSH_BACKEND` (`openssh` default,
+  `native` opt-in). Selecting `native` on a build without the
+  `native-ssh` feature returns a structured `UnsupportedBackend` rather
+  than silently falling back — see design L559.
+- **Endpoint pool + channel scheduler** (`src/transport/pool.rs`,
+  `src/transport/scheduler.rs`). Connection reuse keyed by
+  `EndpointKey` (SHA-256 digest, profile-isolated), three-level
+  priority channel scheduling (urgent reserved / FIFO / bulk-with-starve
+  grace / `QueueTimeout`), and the `total >= workers+2` capacity
+  invariant enforced at `open_transport`.
+- **Lifecyle primitives** (`src/transport/lifecycle.rs`).
+  `ReconnectPolicy` with exponential backoff + jitter,
+  `CircuitBreaker`→`Degraded` (only `reset` clears), `CancellationToken`,
+  `ShutdownCoordinator` three-phase teardown, `KeepalivePolicy`.
+  Five new env vars wired into `Config`:
+  `VB_SSH_RECONNECT_MAX_ATTEMPTS` / `_MAX_DELAY`,
+  `VB_SSH_KEEPALIVE_INTERVAL` / `_FAILURES`,
+  `VB_TRANSPORT_SHUTDOWN_GRACE`.
+- **Native consumes lifecycle** (`src/transport/native.rs`,
+  `src/transport/daemon_lifecycle.rs`, `src/transport/tunnel.rs`):
+  russh keepalive wired through, established-period transient retry
+  with deadline-bounded retry budget, SKILL `RetryPolicy::Never` /
+  `OutcomeUnknown` (no replay of unknown-outcome operations), idempotent
+  health probes, `tunnel stop` prefers IPC `request_shutdown()` over
+  raw signals when Tier-1 proves the daemon is alive.
+
+### Added (diagnostics)
+
+- **`tunnel status` backend diagnostics**
+  (`src/commands/tunnel.rs:backend_diagnostics`):
+  `config.backend.{selected, supported_in_build}` + `tunnel.backend`
+  + `config.backend_warning` on drift. `supported_in_build` mirrors
+  `cfg!(feature = "native-ssh")` so an operator asking for `native`
+  on an OpenSSH-only binary sees the truth from a status command.
+
+### Added (CI)
+
+- **Cross-platform integration matrix**
+  (`.github/workflows/integration.yml`): `ubuntu-latest` ×
+  `macos-latest` × `windows-latest` × `{default, native-ssh}` with
+  `fail-fast: false`. First CI build that compiles `identity.rs`'s
+  Windows branch (P1 highest-risk item previously unverified outside a
+  real Windows machine).
+- **`ci.yml` check job** now runs `cargo clippy --features native-ssh
+  -- -D warnings` in addition to the default-feature clippy.
+- **In-process SFTP roundtrip test** (`src/transport/native.rs`):
+  `tokio::io::duplex` + a minimal in-memory `russh_sftp::server::Handler`
+  fixture drives a real protocol roundtrip with a 200 KiB payload
+  (forces multi-chunk read/write through the production
+  `sftp_write_all` / `sftp_read_all` paths).
+
+### Changed (README)
+
+- New bilingual section `### SSH Backend Selection` / `### SSH 后端选择`
+  between `### SSH Remote Connection Setup` / `### SSH 远程连接配置`
+  and `### How It Works` / `### 工作原理`. Documents the
+  default-vs-opt-in contract, the feature gate, the diagnostics pointer,
+  and a 13-row capability matrix tying every "no" cell back to a code
+  return value. `### Key Features` / `### 核心特性` each gain a
+  one-line summary of the optional backend.
+
+### Design
+
+Closes step 8 of the native-transport delivery sequence
+(`docs/superpowers/specs/2026-08-29-native-remote-transport-design.md`):
+"publish diagnostics, migration documentation, and stable status."
+
 ## [1.1.2] - 2026-09-01
 
 Closes the native-transport delivery sequence through step 3 (direct russh

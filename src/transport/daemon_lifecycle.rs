@@ -81,6 +81,60 @@ pub fn challenge_via_ipc(state: &TunnelState) -> bool {
     }
 }
 
+/// Ask the recorded daemon to shut down cooperatively over IPC.
+///
+/// Reached from `tunnel stop` only after Tier 1 proved the daemon is ours —
+/// and the proof is repeated on *this* connection: the nonce challenge runs
+/// first, and the shutdown request is sent on the same authenticated channel
+/// only when the echoed nonce matches. The stop decision may have been
+/// reached through an earlier connection, and a Unix socket path is
+/// re-bindable, so trusting that decision here would widen the proof gap.
+///
+/// Returns `true` when the daemon acked — and because the daemon fires its
+/// shutdown token *before* writing the ack (step 6c-3), observing the ack
+/// proves admission has already stopped. The daemon finishes in-flight work
+/// within `VB_TRANSPORT_SHUTDOWN_GRACE` and exits on its own; the caller
+/// bounds its wait and falls back to signalling otherwise.
+///
+/// Gated identically to [`challenge_via_ipc`].
+#[cfg(all(unix, feature = "native-ssh"))]
+pub fn shutdown_via_ipc(state: &TunnelState) -> bool {
+    use crate::transport::ipc::daemon::NativeTransportClient;
+
+    let endpoint = match state.ipc_endpoint.as_deref() {
+        Some(p) if !p.is_empty() => p,
+        _ => return false,
+    };
+    let token_path = match state.token_path.as_deref() {
+        Some(p) if !p.is_empty() => p,
+        _ => return false,
+    };
+    let expected_nonce = match state.daemon_nonce.as_deref() {
+        Some(n) if !n.is_empty() => n,
+        _ => return false,
+    };
+    // Read the auth token the daemon was given at startup. Trimming mirrors
+    // `commands::transport_daemon::run_with` on the daemon side.
+    let token = match std::fs::read_to_string(token_path) {
+        Ok(s) => s.trim().to_string(),
+        Err(_) => return false,
+    };
+    let profile = state.profile.as_deref().unwrap_or("");
+
+    let client =
+        match NativeTransportClient::connect(std::path::Path::new(endpoint), profile, &token) {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+
+    match client.challenge() {
+        Ok(ack) if ack.daemon_nonce == expected_nonce => {}
+        _ => return false,
+    }
+
+    client.request_shutdown().is_ok()
+}
+
 /// What the recorded state still describes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verdict {
@@ -517,6 +571,37 @@ mod challenge_tests {
             start.elapsed()
         );
 
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&token_path);
+    }
+
+    /// Cooperative shutdown acks when the daemon echoes the recorded nonce —
+    /// the same Tier-1 proof `challenge_via_ipc` requires, then the Shutdown
+    /// request on the same channel.
+    #[test]
+    fn shutdown_acks_when_daemon_matches_the_recorded_nonce() {
+        let (socket, token_path) = spawn_challenge_daemon("recorded-nonce", "secret-token");
+        let st = state_with(
+            "recorded-nonce",
+            Some(socket.to_str().unwrap()),
+            Some(&token_path.to_string_lossy()),
+        );
+        assert!(shutdown_via_ipc(&st));
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&token_path);
+    }
+
+    /// A nonce mismatch must never reach the shutdown request: the daemon is
+    /// not proven ours, so the call refuses before sending `Shutdown`.
+    #[test]
+    fn shutdown_refuses_a_nonce_mismatch() {
+        let (socket, token_path) = spawn_challenge_daemon("real-nonce", "secret-token");
+        let st = state_with(
+            "WRONG-nonce",
+            Some(socket.to_str().unwrap()),
+            Some(&token_path.to_string_lossy()),
+        );
+        assert!(!shutdown_via_ipc(&st));
         let _ = std::fs::remove_file(&socket);
         let _ = std::fs::remove_file(&token_path);
     }

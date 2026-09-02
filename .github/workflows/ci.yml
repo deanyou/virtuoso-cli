@@ -22,6 +22,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy -- -D warnings
       - run: cargo clippy --features daemon -- -D warnings
+      - run: cargo clippy --features native-ssh -- -D warnings
 
   test:
     name: Test

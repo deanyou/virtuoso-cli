@@ -957,11 +957,22 @@ mod tests {
         // Both non-reserved slots are held for the whole test, so the waiter
         // cannot be admitted either way — what is observed is the promotion
         // itself, not an admission.
+        //
+        // Both phases anchor on `enqueued_at`, the timestamp the spawned thread
+        // stamps when it acquires the mutex. The previous version used a fixed
+        // `thread::sleep(30ms)` which raced with the OS scheduler: on slow CI
+        // runners the test thread's lock acquisition could land >100ms past
+        // `enqueued_at`, making Phase 1 observe `Normal` instead of `Bulk` for
+        // a reason unrelated to the promotion logic. `enqueued_at` is captured
+        // in the same critical section as the observed `now`, which makes the
+        // elapsed-at-observation a *property of the data* and not of the
+        // *moment we happened to grab the lock*.
+        let grace = Duration::from_millis(100);
         let s = SessionScheduler::new(SchedulerLimits {
             total: 3,
             bulk: 1,
             urgent_reserve: 1,
-            bulk_starvation_grace: Duration::from_millis(100),
+            bulk_starvation_grace: grace,
         })
         .unwrap();
         let _n1 = s.try_acquire(Priority::Normal).unwrap();
@@ -972,13 +983,54 @@ mod tests {
             sc.acquire(Priority::Bulk, &RequestId::new(), secs(10))
                 .expect("admitted once a slot frees")
         });
-        thread::sleep(Duration::from_millis(30));
-        {
+
+        // Phase 1: wait for the bulk waiter to be enqueued, then verify it is
+        // still inside the grace window. If the wait's not in the queue within
+        // a generous deadline, panic with a clear message; if it is but the
+        // scheduling latency already exceeds the grace, panic with the
+        // *observable* cause instead of an opaque `left: Normal, right: Bulk`.
+        let observed_deadline = Instant::now() + Duration::from_secs(2);
+        let enqueued_at = loop {
             let state = s.state.lock().unwrap();
-            let w = state.waiters.first().expect("bulk request is waiting");
-            assert_eq!(state.effective_priority(w, Instant::now()), Priority::Bulk);
+            if let Some(w) = state.waiters.first() {
+                // Same critical section: read both timestamps while the state
+                // is held, so `effective_priority(now, enqueued_at)` uses a
+                // `now` that cannot race with the waiter's continued waiting.
+                let now = Instant::now();
+                let elapsed = now.saturating_duration_since(w.enqueued_at);
+                let effective = state.effective_priority(w, now);
+                assert!(
+                    effective == Priority::Bulk,
+                    "first observation of the bulk waiter must show priority \
+                     `Bulk` (inside grace); observed priority `{:?}` after \
+                     {elapsed:?} of waiting — grace is {grace:?}. Either the \
+                     OS scheduler delayed the test thread past the grace \
+                     window, or the promotion logic flipped earlier than \
+                     `enqueued_at + grace`. The latter is the real regression \
+                     we are guarding; the former is environmental and would \
+                     warrant bumping the grace for this test.",
+                    effective
+                );
+                break w.enqueued_at;
+            }
+            drop(state);
+            if Instant::now() >= observed_deadline {
+                panic!("bulk waiter never reached the queue within 2s");
+            }
+            thread::sleep(Duration::from_millis(1));
+        };
+
+        // Phase 2: sleep until we are *deterministically* past `enqueued_at +
+        // grace`, then verify the waiter is promoted to `Normal`. The `+ 50ms`
+        // margin absorbs the latency between waking from `sleep` and the test
+        // thread grabbing the mutex; the anchor makes the total wall-clock
+        // duration independent of how slow the scheduler is — only the
+        // arithmetic `target - now` matters.
+        let target = enqueued_at + grace + Duration::from_millis(50);
+        let now = Instant::now();
+        if now < target {
+            thread::sleep(target - now);
         }
-        thread::sleep(Duration::from_millis(150));
         {
             let state = s.state.lock().unwrap();
             let w = state.waiters.first().expect("still waiting");

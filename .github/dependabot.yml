@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # Rust crate dependencies (Cargo.toml). The repo gitignores Cargo.lock,
+  # so Dependabot reads the manifest directly and opens PRs that bump
+  # Cargo.toml to the latest semver-compatible versions (a Cargo.lock is
+  # generated inside the PR). Transitive pins therefore need manual review.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "rust"
+
+  # GitHub Actions workflow pins (actions/* and reusable workflows).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"

@@ -283,13 +283,18 @@ pub fn diagnose() -> Result<Value> {
             Ok(true) => {
                 let lat = start.elapsed().as_millis();
                 // Try to get Virtuoso version
-                let ver = vc.execute_skill("getVersion()", None).ok().and_then(|r| {
-                    if r.skill_ok() {
-                        Some(r.output.trim_matches('"').to_string())
-                    } else {
-                        None
-                    }
-                });
+                // getVersion() is a fixed read-only probe; idempotent, so it
+                // may drain a stale queued ticket.
+                let ver = vc
+                    .execute_skill_idempotent_probe("getVersion()", None)
+                    .ok()
+                    .and_then(|r| {
+                        if r.skill_ok() {
+                            Some(r.output.trim_matches('"').to_string())
+                        } else {
+                            None
+                        }
+                    });
                 (true, Some(lat as u64), ver)
             }
             _ => (false, None, None),
@@ -301,7 +306,8 @@ pub fn diagnose() -> Result<Value> {
     // SKILL eval test
     let skill_ok = if daemon_ok {
         let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
-        vc.execute_skill("1+1", None)
+        // Idempotent health probe — same expression test_connection uses.
+        vc.execute_skill_idempotent_probe("1+1", None)
             .map(|r| r.output.trim() == "2")
             .unwrap_or(false)
     } else {
@@ -385,6 +391,17 @@ pub fn status(format: OutputFormat) -> Result<Value> {
         let port_open = std::net::TcpStream::connect(format!("127.0.0.1:{}", state.port)).is_ok();
         let host_match = !cfg.is_remote() || Some(&state.remote_host) == cfg.remote_host.as_ref();
 
+        // Backend diagnostics: report both the config-selected backend and the
+        // backend recorded on disk, so an operator can spot a drift (e.g. they
+        // ran a native daemon last, then re-launched with `VB_SSH_BACKEND=
+        // openssh` and the legacy state file still says `native`).
+        let (config_backend_value, tunnel_backend_value, drift_warning) =
+            backend_diagnostics(&cfg, Some(state.backend_or_openssh()));
+        result["config"]["backend"] = config_backend_value;
+        if let Some(warning) = drift_warning {
+            result["config"]["backend_warning"] = json!(warning);
+        }
+
         json!({
             "running": true,
             "port": state.port,
@@ -392,8 +409,13 @@ pub fn status(format: OutputFormat) -> Result<Value> {
             "remote_host": state.remote_host,
             "port_reachable": port_open,
             "host_match": host_match,
+            "backend": tunnel_backend_value,
         })
     } else {
+        // No live tunnel — report the config-selected backend alone; the
+        // recorded backend is irrelevant until a tunnel is actually running.
+        let (config_backend_value, _, _) = backend_diagnostics(&cfg, None);
+        result["config"]["backend"] = config_backend_value;
         json!({ "running": false })
     };
     result["tunnel"] = tunnel_info;
@@ -509,6 +531,53 @@ pub fn status(format: OutputFormat) -> Result<Value> {
     Ok(result)
 }
 
+/// Build the backend diagnostics block for `tunnel status` JSON.
+///
+/// Returns `(config_backend_value, tunnel_backend_value, drift_warning)`:
+/// - `config_backend_value` reports what the running `Config` selected, plus
+///   whether the `native-ssh` Cargo feature is compiled into this build, so an
+///   operator asking for `native` on an OpenSSH-only binary gets an immediate,
+///   explicit error instead of an `UnsupportedBackend` only when they actually
+///   try to use the transport.
+/// - `tunnel_backend_value` is the backend recorded on the live `TunnelState`
+///   file (`openssh` for v1 / legacy, `native` for native daemons). `None` for
+///   the running-branch call means no state file is loaded — caller should
+///   pass `None` when there is no live tunnel.
+/// - `drift_warning` is `Some(_)` iff the two backends disagree; callers
+///   surface it as a `config.backend_warning` field so dashboards / scripts can
+///   detect a stale `state.json` without diffing files by hand.
+pub(crate) fn backend_diagnostics(
+    cfg: &Config,
+    state_backend: Option<&str>,
+) -> (Value, Value, Option<String>) {
+    let selected = cfg.ssh_backend.as_deref().unwrap_or("openssh");
+    let config_backend_value = json!({
+        "selected": selected,
+        "supported_in_build": match selected {
+            "native" => cfg!(feature = "native-ssh"),
+            "openssh" => true,
+            // Unknown values surface honestly rather than being silently
+            // treated as openssh — the design forbids silent fallback.
+            _ => false,
+        },
+    });
+
+    let tunnel_backend_value = match state_backend {
+        Some(b) => json!(b),
+        None => Value::Null,
+    };
+
+    let drift_warning = match state_backend {
+        Some(on_disk) if on_disk != selected => Some(format!(
+            "backend drift: config selects '{selected}' but tunnel state records '{on_disk}'; \
+             the live tunnel was started with a different backend"
+        )),
+        _ => None,
+    };
+
+    (config_backend_value, tunnel_backend_value, drift_warning)
+}
+
 /// Hostname verification result — compares the user-configured remote host
 /// (`VB_REMOTE_HOST`) to the actual hostname the Virtuoso daemon reports
 /// via `getHostName()`. A mismatch is the most common EDA misconfig:
@@ -543,10 +612,10 @@ impl HostnameCheck {
             _ => return Ok(None),
         };
 
-        // Use execute_skill_unchecked because tunnel status / diagnose are
-        // diagnostic commands — they must work without Admin capability.
-        // getHostName() is read-only; the worst it can leak is the host name.
-        let result = vc.execute_skill_unchecked("getHostName()", timeout)?;
+        // Use the idempotent probe path because tunnel status / diagnose are
+        // diagnostic commands — they must work without Admin capability, and
+        // getHostName() is read-only (the worst it can leak is the host name).
+        let result = vc.execute_skill_idempotent_probe("getHostName()", timeout)?;
         if !result.skill_ok() {
             return Err(VirtuosoError::Execution(format!(
                 "getHostName() failed: {}",
@@ -817,4 +886,110 @@ mod tests {
     // covered by parse_gethostname_output tests above. The
     // execute_skill_unchecked path is exercised by the bridge's own
     // tests in client/bridge.rs.
+}
+
+#[cfg(test)]
+mod backend_diagnostics_tests {
+    use super::*;
+    use crate::config::Config;
+
+    fn cfg_with(backend: Option<&str>) -> Config {
+        // Config has no Default impl; build a minimal fixture inline so the
+        // tests stay hermetic (no env, no filesystem). Only the fields the
+        // backend-diagnostics logic actually reads matter here.
+        Config {
+            profile: None,
+            remote_host: None,
+            remote_user: None,
+            port: 0,
+            jump_host: None,
+            jump_user: None,
+            ssh_port: None,
+            ssh_key: None,
+            ssh_config: None,
+            ssh_backend: backend.map(String::from),
+            disable_control_master: false,
+            timeout: 30,
+            read_timeout: 120,
+            keep_remote_files: false,
+            spectre_cmd: "spectre".into(),
+            spectre_args: vec![],
+            spectre_max_workers: 8,
+            ssh_max_sessions: 10,
+            ssh_max_bulk_sessions: 2,
+            ssh_reconnect_max_attempts: 8,
+            ssh_reconnect_max_delay: 30,
+            ssh_keepalive_interval: 30,
+            ssh_keepalive_failures: 3,
+            transport_shutdown_grace: 5,
+            cadence_cshrc: None,
+            spectre_bin: None,
+            roles: crate::config::RemoteRoles::default(),
+        }
+    }
+
+    #[test]
+    fn config_default_reports_openssh_supported() {
+        let (config_value, tunnel_value, warning) = backend_diagnostics(&cfg_with(None), None);
+        assert_eq!(config_value["selected"], "openssh");
+        assert_eq!(config_value["supported_in_build"], true);
+        assert_eq!(tunnel_value, Value::Null);
+        assert!(warning.is_none());
+    }
+
+    #[test]
+    fn config_native_reports_native_supported_when_feature_is_on() {
+        let (config_value, _, warning) = backend_diagnostics(&cfg_with(Some("native")), None);
+        assert_eq!(config_value["selected"], "native");
+        assert_eq!(
+            config_value["supported_in_build"],
+            cfg!(feature = "native-ssh"),
+            "supported_in_build must mirror the compile-time feature"
+        );
+        assert!(warning.is_none());
+    }
+
+    #[test]
+    fn config_unknown_backend_is_honest_not_silently_falls_back() {
+        // The design forbids silent fallback; an unrecognised value must
+        // surface as unsupported rather than being silently treated as
+        // openssh. Drift detection against the on-disk backend still runs.
+        let (config_value, _, warning) =
+            backend_diagnostics(&cfg_with(Some("banana")), Some("openssh"));
+        assert_eq!(config_value["selected"], "banana");
+        assert_eq!(config_value["supported_in_build"], false);
+        assert!(
+            warning.is_some(),
+            "drift warning must fire when on-disk backend disagrees with config"
+        );
+    }
+
+    #[test]
+    fn state_openssh_with_config_openssh_has_no_drift_warning() {
+        let (_, tunnel_value, warning) = backend_diagnostics(&cfg_with(None), Some("openssh"));
+        assert_eq!(tunnel_value, "openssh");
+        assert!(warning.is_none());
+    }
+
+    #[test]
+    fn state_native_with_config_openssh_fires_drift_warning() {
+        // Live tunnel was started by a native daemon, but the operator
+        // is now running a CLI build that defaults to openssh. The
+        // status JSON must surface the mismatch so they don't act on
+        // a stale backend assumption.
+        let (_, tunnel_value, warning) = backend_diagnostics(&cfg_with(None), Some("native"));
+        assert_eq!(tunnel_value, "native");
+        let msg = warning.expect("drift warning must fire on config/state mismatch");
+        assert!(msg.contains("backend drift"), "got: {msg}");
+        assert!(msg.contains("config selects 'openssh'"), "got: {msg}");
+        assert!(msg.contains("tunnel state records 'native'"), "got: {msg}");
+    }
+
+    #[test]
+    fn state_native_with_config_native_has_no_drift_warning() {
+        let (_, tunnel_value, warning) =
+            backend_diagnostics(&cfg_with(Some("native")), Some("native"));
+        assert_eq!(tunnel_value, "native");
+        assert!(warning.is_none());
+    }
 }

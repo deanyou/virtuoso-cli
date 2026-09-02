@@ -241,6 +241,11 @@ fn pid_exists(pid: u32) -> bool {
 enum StopDecision {
     /// The recorded process was verified (or proven alive) — signal it.
     Signal,
+    /// The daemon proved alive over the IPC nonce challenge (Tier 1) —
+    /// request a cooperative shutdown and fall back to [`StopDecision::Signal`]
+    /// only if the request fails or the daemon misses the grace. Produced
+    /// only on the Unix native path; elsewhere unreachable.
+    GracefulIpcShutdown,
     /// Do not signal; the reason is reported to the operator.
     ///
     /// `clear_state` distinguishes *proven* staleness from a mere failure to
@@ -311,6 +316,15 @@ fn decide_stop(state: &TunnelState, force: bool) -> StopDecision {
         };
         #[cfg(not(all(unix, feature = "native-ssh")))]
         let verdict = daemon_lifecycle::assess(state, |_nonce| false);
+        // `Verdict::Alive` can only come from Tier 1 here — the IPC nonce
+        // challenge — and that channel is exactly the cooperative-shutdown
+        // channel. Prefer asking the proven daemon to exit over signalling
+        // it; the signal remains the fallback (and is still what Tier 2's
+        // `UnresponsiveButIdentified` maps to).
+        #[cfg(all(unix, feature = "native-ssh"))]
+        if matches!(verdict, Verdict::Alive) {
+            return StopDecision::GracefulIpcShutdown;
+        }
         verdict_to_decision(verdict, state.pid)
     } else if force {
         StopDecision::Signal
@@ -371,6 +385,40 @@ pub(crate) fn stop_saved_tunnel(cfg: &Config, state: &TunnelState, force: bool) 
             }
             tracing::info!("signalled tunnel process {pid}");
         }
+        StopDecision::GracefulIpcShutdown => {
+            // Reached only on the Unix native path, where Tier 1 proved the
+            // daemon is ours. Elsewhere the variant is never produced and
+            // this degrades to the signal, so the match stays exhaustive
+            // without feature gates.
+            #[cfg(all(unix, feature = "native-ssh"))]
+            let mut stopped = false;
+            #[cfg(not(all(unix, feature = "native-ssh")))]
+            let stopped = false;
+            #[cfg(all(unix, feature = "native-ssh"))]
+            {
+                if daemon_lifecycle::shutdown_via_ipc(state) {
+                    let grace = std::time::Duration::from_secs(cfg.transport_shutdown_grace);
+                    stopped = wait_for_daemon_exit(pid, grace);
+                    if stopped {
+                        tracing::info!("daemon {pid} shut down cooperatively over IPC");
+                    } else {
+                        tracing::warn!(
+                            "daemon {pid} acked shutdown but missed the grace; signalling"
+                        );
+                    }
+                } else {
+                    tracing::warn!("cooperative shutdown over IPC failed; signalling");
+                }
+            }
+            if !stopped {
+                if let Err(e) = signal_tunnel_pid(pid) {
+                    return Err(VirtuosoError::Ssh(format!(
+                        "failed to signal tunnel pid {pid}: {e}"
+                    )));
+                }
+                tracing::info!("signalled tunnel process {pid}");
+            }
+        }
         StopDecision::Skip {
             reason,
             clear_state,
@@ -418,6 +466,28 @@ pub(crate) fn stop_saved_tunnel(cfg: &Config, state: &TunnelState, force: bool) 
 
     TunnelState::clear_with_profile(cfg.profile.as_deref()).ok();
     Ok(())
+}
+
+/// Poll until the given pid is gone, bounded by `grace`.
+///
+/// `kill(pid, 0)` performs a liveness check without signalling: `ESRCH`
+/// proves the process is gone, and that is the only outcome counted as an
+/// exit. Returns `false` on timeout or on any other error — an unpermitted
+/// probe is not proof of exit, so the caller falls back to the signal.
+#[cfg(all(unix, feature = "native-ssh"))]
+fn wait_for_daemon_exit(pid: u32, grace: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + grace;
+    loop {
+        let gone = unsafe { libc::kill(pid as i32, 0) } == -1
+            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
+        if gone {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
 }
 
 /// Signal the recorded tunnel process. Cross-platform; the result is
@@ -923,6 +993,85 @@ mod tests {
         assert_eq!(decide_stop(&state, true), StopDecision::Signal);
     }
 
+    /// Tier 1 (the IPC nonce challenge) proving the daemon is ours routes to
+    /// the cooperative-shutdown decision — not a raw signal. Only reachable on
+    /// the Unix native path, where the challenge runs against a real daemon.
+    #[cfg(all(unix, feature = "native-ssh"))]
+    #[test]
+    fn ipc_proven_daemon_yields_the_cooperative_shutdown_decision() {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::net::UnixListener;
+        use std::sync::Arc;
+
+        use crate::transport::contract::test_support::FakeTransport;
+        use crate::transport::ipc::server;
+
+        let tag = uuid::Uuid::new_v4().simple().to_string();
+        let socket = std::path::PathBuf::from(format!("/tmp/vcli-t-{tag}.sock"));
+        let token_path = std::path::PathBuf::from(format!("/tmp/vcli-t-{tag}.tok"));
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&token_path);
+        let listener = UnixListener::bind(&socket).expect("bind");
+        {
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&token_path)
+                .expect("create token");
+            f.write_all(b"secret-token").expect("write token");
+        }
+        let listener_for_thread = listener.try_clone().expect("clone listener");
+        let nonce = "recorded-nonce".to_string();
+        std::thread::spawn(move || {
+            if let Ok((stream, _)) = listener_for_thread.accept() {
+                let transport: Arc<dyn crate::transport::contract::RemoteTransport> =
+                    Arc::new(FakeTransport::ok());
+                server::serve_one(stream, transport, "secret-token", &nonce);
+            }
+        });
+
+        let mut state = openssh_like_state(999_999);
+        state.backend = Some("native".into());
+        state.daemon_nonce = Some("recorded-nonce".into());
+        state.executable_path = Some("/bin/true".into());
+        state.start_identity = Some(1_767_225_600);
+        state.ipc_endpoint = Some(socket.to_str().unwrap().to_string());
+        state.token_path = Some(token_path.to_string_lossy().into_owned());
+
+        // Tier 1 proves liveness → cooperative shutdown, never a raw Signal.
+        assert_eq!(
+            decide_stop(&state, false),
+            StopDecision::GracefulIpcShutdown
+        );
+
+        drop(listener);
+        let _ = std::fs::remove_file(&socket);
+        let _ = std::fs::remove_file(&token_path);
+    }
+
+    /// A pid that is provably gone (`ESRCH`) returns immediately rather than
+    /// waiting out the grace.
+    #[cfg(all(unix, feature = "native-ssh"))]
+    #[test]
+    fn wait_for_daemon_exit_returns_immediately_for_a_gone_pid() {
+        assert!(super::wait_for_daemon_exit(
+            9_999_999,
+            std::time::Duration::from_secs(2)
+        ));
+    }
+
+    /// A live pid (our own) must not be reported gone within the grace.
+    #[cfg(all(unix, feature = "native-ssh"))]
+    #[test]
+    fn wait_for_daemon_exit_times_out_for_a_live_pid() {
+        assert!(!super::wait_for_daemon_exit(
+            std::process::id(),
+            std::time::Duration::from_millis(200)
+        ));
+    }
+
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn recorded_identity_matching_a_live_process_authorizes_the_signal() {
@@ -1097,7 +1246,7 @@ mod tests {
     /// regression — the old code skipped the kill yet still cleared the state,
     /// leaking the tunnel. Here we spawn a real child that is alive but not an
     /// ssh process, so `classify_ssh_pid` cannot verify it as ssh.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(unix)]
     #[test]
     #[serial]
     fn stop_saved_tunnel_refuses_unverifiable_live_process() {
@@ -1165,7 +1314,7 @@ mod tests {
 
     /// `--force` signals the recorded pid without the ssh identity check;
     /// remote cleanup is skipped because `VB_KEEP_REMOTE_FILES=1`.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(unix)]
     #[test]
     #[serial]
     fn stop_saved_tunnel_force_signals_unverified_process() {
