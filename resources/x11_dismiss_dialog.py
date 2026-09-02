@@ -706,6 +706,18 @@ def main():
         if isinstance(xauth, str) and xauth:
             os.environ["XAUTHORITY"] = xauth
 
+    # Verify the X display is actually reachable before enumerating or acting.
+    # Without this, xwininfo failures inside discover_windows are swallowed and
+    # the caller sees an empty window list — indistinguishable from "no windows".
+    try:
+        subprocess.check_output(
+            ["xwininfo", "-root"],
+            stderr=subprocess.PIPE,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        print(json.dumps({"error": "cannot open display %s: %s" % (display, exc)}))
+        sys.exit(2)
+
     if dismiss_target:
         # Single explicit window dismiss. Does NOT require dialog-size filter.
         try:

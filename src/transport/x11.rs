@@ -951,7 +951,18 @@ pub fn action_x11(
 
     let windows = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
 
-    // Step 2: Resolve the target window. When an explicit window_id is given,
+    // Build DISPLAY/XAUTHORITY prefix early so both the resolution fallback and
+    // the action commands below can reuse it.
+    let display_prefix = match env.xauthority {
+        Some(ref xa) => format!(
+            "env DISPLAY={} XAUTHORITY={} ",
+            shell_escape(display),
+            shell_escape(xa)
+        ),
+        None => format!("env DISPLAY={} ", shell_escape(display)),
+    };
+
+    // Step 2: Resolve the target window.
     // match by id + PID + DISPLAY directly — this disambiguates multiple windows
     // sharing one PID (common in Virtuoso: CIW + tool windows same process).
     // Without window_id, fall back to resolve_unique_window which errors on
@@ -968,9 +979,39 @@ pub fn action_x11(
             .collect();
         match matched.len() {
             0 => {
-                return Err(VirtuosoError::NotFound(format!(
-                    "no window with id '{window_id}' matching PID={pid} DISPLAY={display}"
-                )))
+                // The window isn't in the visible list — it may be minimized,
+                // unmapped, or on a different virtual desktop. xdotool can still
+                // operate on minimized windows (e.g. `key`, `windowactivate`),
+                // so fall back to a direct xdotool existence check before
+                // giving up. This lets automation target windows that were
+                // minimized between the list-windows snapshot and the action.
+                let verify_cmd = format!(
+                    "{}xdotool getwindowname {}",
+                    display_prefix,
+                    shell_escape(window_id)
+                );
+                let verify = runner.run_command(&CommandRequest::with_exec_timeout(
+                    &verify_cmd,
+                    Duration::from_secs(5),
+                ))?;
+                if verify.success && !verify.stdout.trim().is_empty() {
+                    WindowInfo {
+                        frame_id: window_id.to_string(),
+                        window_id: window_id.to_string(),
+                        dismiss_id: window_id.to_string(),
+                        display: Some(display.to_string()),
+                        xauthority: env.xauthority.clone(),
+                        title: verify.stdout.trim().to_string(),
+                        class: Vec::new(),
+                        geometry: Geometry::default(),
+                        pid: Some(*pid),
+                        visible: false,
+                    }
+                } else {
+                    return Err(VirtuosoError::NotFound(format!(
+                        "no window with id '{window_id}' matching PID={pid} DISPLAY={display}"
+                    )));
+                }
             }
             1 => matched.into_iter().next().unwrap().clone(),
             _ => {
@@ -1019,18 +1060,6 @@ pub fn action_x11(
     }
 
     let operation = *operation;
-
-    // Step 5: Build DISPLAY/XAUTHORITY prefix for action commands.
-    // The xdotool / import commands themselves do NOT inherit the list-windows
-    // env, so the fix is to prefix each action with DISPLAY / XAUTHORITY.
-    let display_prefix = match env.xauthority {
-        Some(ref xa) => format!(
-            "env DISPLAY={} XAUTHORITY={} ",
-            shell_escape(display),
-            shell_escape(xa)
-        ),
-        None => format!("env DISPLAY={} ", shell_escape(display)),
-    };
 
     // Step 6: Build and execute the xdotool / import commands. Most
     // operations yield a single command; drag yields three (mousedown,
@@ -1739,8 +1768,18 @@ fn wait_for_window_pattern(
     let deadline = std::time::Instant::now() + timeout;
     let mut matched = initial.iter().any(|w| w.title.contains(pattern));
     let mut outs = Vec::new();
-    while !matched && std::time::Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(500));
+    let poll_interval = Duration::from_millis(500);
+    while !matched {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        // Sleep only up to the remaining deadline so we never overshoot timeout
+        // by a full poll interval + helper execution time.
+        std::thread::sleep(remaining.min(poll_interval));
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
         let cmd = build_helper_cmd_list_windows(helper, display, xauthority);
         let out = runner.run_command(&CommandRequest::with_exec_timeout(
             &cmd,
