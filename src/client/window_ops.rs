@@ -94,7 +94,7 @@ impl WindowOps {
     /// error`.
     fn skill_capture(path_escaped: &str) -> String {
         format!(
-            r#"let((cmd ok) cmd = strcat("import -window root -silent " "{path}") ok = fileexists("{path}") system(cmd) if(ok "{path}" nil)"#,
+            r#"let((cmd ok) cmd = strcat("import -window root -silent " "{path}") ok = isFile("{path}") system(cmd) if(ok "{path}" nil)"#,
             path = path_escaped
         )
     }
@@ -204,7 +204,7 @@ mod tests {
             skill.contains("import -window root -silent"),
             "should use import"
         );
-        assert!(skill.contains("fileexists"), "should verify file");
+        assert!(skill.contains("isFile"), "should verify file with isFile");
     }
 
     #[test]
@@ -218,7 +218,7 @@ mod tests {
         let ops = WindowOps;
         let skill = ops.screenshot("/tmp/screen.png");
         assert!(
-            skill.contains("fileexists(\"/tmp/screen.png\")"),
+            skill.contains("isFile(\"/tmp/screen.png\")"),
             "path must be quoted as a SKILL string literal, got: {skill}"
         );
         assert!(
