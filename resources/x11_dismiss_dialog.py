@@ -477,6 +477,27 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
 
     xlib = ctypes.cdll.LoadLibrary(xlib_path)
     xtst = ctypes.cdll.LoadLibrary(xtst_path)
+    # Explicit ctypes signatures are mandatory: without argtypes/restype,
+    # ctypes defaults every argument to a 32-bit C int, truncating the 64-bit
+    # Display* returned by XOpenDisplay. Every X call below then dereferences a
+    # corrupted pointer -> SIGSEGV (exit 139) on 64-bit hosts. See issue "fix:
+    # dismiss-window-x11 / dismiss-dialog segfault".
+    _XDisplay = ctypes.c_void_p
+    _XID = ctypes.c_ulong
+    xlib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    xlib.XOpenDisplay.restype = _XDisplay
+    xlib.XFlush.argtypes = [_XDisplay]
+    xlib.XFlush.restype = ctypes.c_int
+    xlib.XCloseDisplay.argtypes = [_XDisplay]
+    xlib.XCloseDisplay.restype = ctypes.c_int
+    xlib.XRaiseWindow.argtypes = [_XDisplay, _XID]
+    xlib.XRaiseWindow.restype = ctypes.c_int
+    xlib.XSetInputFocus.argtypes = [_XDisplay, _XID, ctypes.c_int, ctypes.c_ulong]
+    xlib.XSetInputFocus.restype = ctypes.c_int
+    xlib.XKeysymToKeycode.argtypes = [_XDisplay, ctypes.c_ulong]
+    xlib.XKeysymToKeycode.restype = ctypes.c_uint
+    xtst.XTestFakeKeyEvent.argtypes = [_XDisplay, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+    xtst.XTestFakeKeyEvent.restype = ctypes.c_int
     dpy = xlib.XOpenDisplay(None)
     if not dpy:
         raise RuntimeError("cannot open display %s" % display)
