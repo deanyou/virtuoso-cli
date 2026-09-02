@@ -1292,19 +1292,7 @@ pub fn resolve_client_id() -> String {
     let host = std::env::var("HOSTNAME")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| {
-            // Use libc gethostname when available without pulling a crate.
-            let mut buf = [0u8; 256];
-            #[cfg(unix)]
-            unsafe {
-                let ret = libc_gethostname(buf.as_mut_ptr() as *mut _, buf.len());
-                if ret == 0 {
-                    let nul = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-                    return std::str::from_utf8(&buf[..nul]).ok().map(String::from);
-                }
-            }
-            None
-        })
+        .or_else(gethostname_fallback)
         .unwrap_or_else(|| "default".to_string());
     sanitize_client_id(&host)
 }
@@ -1332,6 +1320,32 @@ extern "C" {
 #[cfg(unix)]
 unsafe fn libc_gethostname(buf: *mut std::ffi::c_char, len: usize) -> i32 {
     gethostname(buf, len)
+}
+
+/// Read the hostname via libc, without pulling in a crate for it.
+///
+/// Unix-only. Off Unix there is no `gethostname`, so the caller's fallback
+/// chain simply ends at the literal "default".
+#[cfg(unix)]
+fn gethostname_fallback() -> Option<String> {
+    let mut buf = [0u8; 256];
+    // SAFETY: `buf` is a 256-byte stack buffer and `gethostname` writes at
+    // most `buf.len()` bytes into it.
+    unsafe {
+        let ret = libc_gethostname(buf.as_mut_ptr() as *mut _, buf.len());
+        if ret == 0 {
+            let nul = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+            return std::str::from_utf8(&buf[..nul]).ok().map(String::from);
+        }
+    }
+    None
+}
+
+/// Non-Unix counterpart of [`gethostname_fallback`]: no `gethostname` to
+/// call, so always defer to the caller's "default" fallback.
+#[cfg(not(unix))]
+fn gethostname_fallback() -> Option<String> {
+    None
 }
 
 /// Return the canonical remote scratch root for this client.

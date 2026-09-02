@@ -1280,9 +1280,19 @@ pub(crate) fn validate_staging_recursive(root: &Path) -> Result<()> {
 ///
 /// ALL errors mention `remote_dir` so the operator can correlate a
 /// publication failure with the preserved remote artifacts.
-pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str) -> Result<()> {
+/// Build the `CString` path arguments for the exclusive-rename syscalls.
+///
+/// Unix-only, and only ever reached from the macOS/Linux branches of
+/// [`atomic_publish_no_replace`]: `OsStrExt::as_bytes` is the one way to
+/// hand a path to a C syscall without letting Rust perform a lossy UTF-8
+/// conversion or pass an interior NUL byte through.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn publish_path_cstrings(
+    src: &Path,
+    dst: &Path,
+    remote_dir: &str,
+) -> Result<(std::ffi::CString, std::ffi::CString)> {
     use std::ffi::CString;
-    use std::io::Error as IoError;
     use std::os::unix::ffi::OsStrExt;
 
     // CString from raw OsStrExt bytes. We never let Rust do a
@@ -1300,6 +1310,24 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
              netlist artifacts preserved at remote_dir={remote_dir}"
         ))
     })?;
+    Ok((src_c, dst_c))
+}
+
+// On platforms with no exclusive-rename syscall, `src`/`dst` are never read
+// — the function only reports "unsupported". Silence that one narrow case
+// instead of weakening the signature for platforms that do use them.
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "linux")),
+    allow(unused_variables)
+)]
+pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str) -> Result<()> {
+    // Only the platforms whose exclusive-rename syscall we call below need
+    // the C string arguments. Unsupported platforms take neither binding
+    // and fall through to the explicit Config error at the end.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    use std::io::Error as IoError;
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let (src_c, dst_c) = publish_path_cstrings(src, dst, remote_dir)?;
 
     #[cfg(target_os = "macos")]
     {

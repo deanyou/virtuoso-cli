@@ -28,6 +28,60 @@ pub struct Job {
     pub remote_dir: Option<String>,
 }
 
+/// Report whether a local process still exists, via signal 0.
+///
+/// Unix-only: signal 0 performs existence/permission checking without
+/// delivering anything, which is the only non-destructive liveness probe
+/// available. Off Unix this reports the process as alive so [`Job::refresh`]
+/// falls through to its log-based completion check — the very path that
+/// already reaps zombies, whose PIDs keep answering a liveness probe after
+/// the process has exited.
+#[cfg(unix)]
+fn local_process_alive(pid: u32) -> bool {
+    // SAFETY: signal 0 delivers nothing; it only probes for the process.
+    (unsafe { libc::kill(pid as i32, 0) }) == 0
+}
+
+/// Non-Unix counterpart of [`local_process_alive`]. There is no equivalent
+/// probe, so assume the process is alive and let the log decide.
+#[cfg(not(unix))]
+fn local_process_alive(_pid: u32) -> bool {
+    true
+}
+
+/// Terminate a whole process group: SIGTERM, then SIGKILL after a grace
+/// period.
+///
+/// Unix-only, and the negative PID is deliberate — `spectre` is spawned
+/// under a shell, so signalling the group is what actually reaps the tree.
+#[cfg(unix)]
+fn terminate_process_group(pid: u32) -> Result<()> {
+    // SAFETY: the PID came from a child we spawned; the negation targets
+    // the process group rather than a single process.
+    unsafe {
+        libc::kill(-(pid as i32), libc::SIGTERM);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    unsafe {
+        libc::kill(-(pid as i32), libc::SIGKILL);
+    }
+    Ok(())
+}
+
+/// Non-Unix counterpart of [`terminate_process_group`].
+///
+/// Refuses rather than approximates: there is no process-group signal, and
+/// killing only the group leader would orphan the `spectre` children that
+/// hold the simulation state. Failing loudly beats a job that reports
+/// "cancelled" while still burning CPU.
+#[cfg(not(unix))]
+fn terminate_process_group(pid: u32) -> Result<()> {
+    Err(VirtuosoError::Config(format!(
+        "cancelling a local spectre job is unsupported on this platform: \
+         no process-group signal is available; terminate pid {pid} yourself"
+    )))
+}
+
 impl Job {
     fn dir() -> PathBuf {
         let dir = crate::runtime_paths::cache_subdir(&["jobs"]);
@@ -95,7 +149,7 @@ impl Job {
                     .unwrap_or(false)
             } else {
                 // Local: direct signal check
-                (unsafe { libc::kill(pid as i32, 0) }) == 0
+                local_process_alive(pid)
             };
 
             if !alive {
@@ -171,13 +225,7 @@ impl Job {
         }
         if let Some(pid) = self.pid {
             // Kill process group
-            unsafe {
-                libc::kill(-(pid as i32), libc::SIGTERM);
-            }
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            unsafe {
-                libc::kill(-(pid as i32), libc::SIGKILL);
-            }
+            terminate_process_group(pid)?;
         }
         self.status = JobStatus::Cancelled;
         self.finished = Some(chrono::Local::now().to_rfc3339());
