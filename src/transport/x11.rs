@@ -1616,10 +1616,10 @@ fn dialog_info_from_dismiss_value(
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string(),
-        x: 0,
-        y: 0,
-        w: 0,
-        h: 0,
+        x: val.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+        y: val.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+        w: val.get("w").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+        h: val.get("h").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
         child: val
             .get("child")
             .and_then(|v| v.as_str())
