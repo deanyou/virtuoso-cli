@@ -550,6 +550,22 @@ pub struct X11ActionResult {
     /// Sanitized details (e.g. "text_length: 5" for type, "keycode: 65" for key).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
+    /// Artifact info for screenshot operations (None for other ops).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<ArtifactInfo>,
+}
+
+/// Metadata describing a fetched screenshot artifact (name, size, sha256).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactInfo {
+    /// Artifact name chosen by the caller (e.g. "baseline.png" or "0x1a2b.png").
+    pub name: String,
+    /// Local path where the artifact was written (evidence dir).
+    pub local_path: String,
+    /// Size in bytes.
+    pub size_bytes: u64,
+    /// SHA-256 hex digest of the file contents (for evidence integrity).
+    pub sha256: String,
 }
 
 /// Parameters for an X11 action operation, already validated.
@@ -923,33 +939,110 @@ pub fn action_x11(
     // Step 6: Build and execute the xdotool / import commands. Most
     // operations yield a single command; drag yields three (mousedown,
     // mousemove, mouseup).
-    let results = if operation == X11Operation::Screenshot {
+    //
+    // Drag uses a MouseButtonGuard so that if the intermediate mousemove
+    // fails (SSH disconnect, timeout, NAK), a best-effort mouseup is still
+    // issued to release the held button.
+    let (results, artifact) = if operation == X11Operation::Screenshot {
         let dir = output_dir
             .ok_or_else(|| VirtuosoError::Config("screenshot requires --output-dir".into()))?;
-        let safe_name = format!("window_{}.png", window_id.replace("0x", ""));
-        let safe_path = format!("{}/{}", shell_escape(dir), safe_name);
+        // Use a random temp name on the GUI host to avoid colliding with
+        // prior runs or concurrent agents targeting the same DISPLAY.
+        let token = std::process::id() ^ (start.elapsed().as_nanos() as u32);
+        let safe_name = format!("vcli_shot_{token}.png");
+        let remote_path = format!("/tmp/{safe_name}");
         let remote_cmd = format!(
             "{}import -window {} {}",
             display_prefix,
             shell_escape(&resolved.window_id),
-            safe_path
+            shell_escape(&remote_path),
         );
         let out = runner.run_command(&CommandRequest::with_exec_timeout(
             &remote_cmd,
             Duration::from_secs(*timeout_secs),
         ))?;
-        // On SSH, fetch the produced screenshot back to the local host.
-        match runner.fetch_file(&safe_path, dir, Duration::from_secs(*timeout_secs)) {
+        if !out.success {
+            return Err(VirtuosoError::Execution(format!(
+                "import -window failed: {} (stderr: {})",
+                out.exit_status,
+                out.stderr.trim()
+            )));
+        }
+        // Fetch the PNG back to the local evidence directory.
+        match runner.fetch_file(&remote_path, dir, Duration::from_secs(*timeout_secs)) {
             Ok(()) => {}
-            Err(_) => {
-                // Transports that don't support fetch_file (e.g. local-runner
-                // impls that overwrite in place) will surface an
-                // UnsupportedOperation; treat screenshot as remote-local OK.
+            Err(e) => {
+                // LocalTransport doesn't support fetch_file; the import wrote
+                // directly to the local /tmp which was then renamed by caller.
+                return Err(VirtuosoError::Execution(format!(
+                    "screenshot fetch failed: {e}"
+                )));
             }
         }
-        vec![out]
+        // Validate PNG magic bytes (89 50 4E 47 0D 0A 1A 0A).
+        let local_path_buf = std::path::PathBuf::from(dir).join(&safe_name);
+        match validate_png_artifact(&local_path_buf) {
+            Ok((size, hash)) => {
+                let _ = std::fs::remove_file(&remote_path); // best-effort remote cleanup
+                (
+                    vec![out],
+                    Some(ArtifactInfo {
+                        name: safe_name,
+                        local_path: local_path_buf.to_string_lossy().into(),
+                        size_bytes: size,
+                        sha256: hash,
+                    }),
+                )
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&local_path_buf); // cleanup invalid file
+                return Err(e);
+            }
+        }
     } else if operation == X11Operation::Wait {
-        vec![]
+        (vec![], None)
+    } else if operation == X11Operation::DragRel {
+        // Drag needs a MouseButtonGuard: mousedown -> mousemove -> mouseup.
+        // If mousemove fails mid-drag (SSH drop, timeout), the guard's Drop
+        // will still issue a best-effort mouseup so we don't leave the button
+        // held on the CIW.
+        let cmds = build_xdotool_actions(&resolved, operation, *x, *y, *button, *text)?;
+        let mut outs = Vec::with_capacity(cmds.len());
+        let mut guard = MouseButtonGuard::new(runner, &display_prefix, &resolved, *button);
+
+        for (i, (_sub, argv)) in cmds.into_iter().enumerate() {
+            let remote_cmd = format!(
+                "{}xdotool {}",
+                display_prefix,
+                argv.iter()
+                    .map(|a| shell_escape(a))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            match runner.run_command(&CommandRequest::with_exec_timeout(
+                &remote_cmd,
+                Duration::from_secs(*timeout_secs),
+            )) {
+                Ok(cmd_out) => {
+                    if i == 0 {
+                        guard.arm(); // mousedown succeeded: arm the release guard
+                    } else if i == 2 {
+                        guard.mark_released(); // explicit mouseup succeeded
+                    }
+                    outs.push(cmd_out);
+                }
+                Err(err) => {
+                    // mousedown succeeded but a later step failed: guard's Drop
+                    // will still run mouseup. mousedown failed (i==0): nothing
+                    // to release because the button was never pressed.
+                    return Err(VirtuosoError::Execution(format!(
+                        "xdotool {} failed: {}",
+                        _sub, err
+                    )));
+                }
+            }
+        }
+        (outs, None)
     } else {
         let cmds = build_xdotool_actions(&resolved, operation, *x, *y, *button, *text)?;
         let mut outs = Vec::with_capacity(cmds.len());
@@ -968,7 +1061,7 @@ pub fn action_x11(
             ))?;
             outs.push(out);
         }
-        outs
+        (outs, None)
     };
 
     let duration_ms = start.elapsed().as_millis() as u64;
@@ -999,6 +1092,7 @@ pub fn action_x11(
         display: display.to_string(),
         duration_ms,
         details,
+        artifact,
     })
 }
 
@@ -1072,18 +1166,42 @@ fn build_xdotool_actions(
             )])
         }
         X11Operation::ClickRel => {
-            // xdotool click --window <id> --button <b>
-            // (No x/y: a relative click to the current position.)
-            let mut argv = vec!["click".into(), "--window".into(), wid];
-            argv.push("--button".into());
-            argv.push(btn);
-            if let (Some(rx), Some(ry)) = (x, y) {
-                // --move-to-cursor then click at the window-relative point.
-                argv.push("--move-to-cursor".into());
-                argv.push(rx.to_string());
-                argv.push(ry.to_string());
-            }
-            Ok(vec![("click".into(), argv)])
+            // Two-step click: first move cursor to the window-relative point,
+            // then issue the click. `--` separator before coords protects
+            // negative-valued x/y from being parsed as xdotool flags.
+            let (rx, ry) = match (x, y) {
+                (Some(xx), Some(yy)) => (xx, yy),
+                _ => {
+                    return Err(VirtuosoError::Config(
+                        "click-rel requires --x and --y".into(),
+                    ));
+                }
+            };
+            Ok(vec![
+                // Step 1: xdotool mousemove --window <id> -- <x> <y>
+                (
+                    "mousemove".into(),
+                    vec![
+                        "mousemove".into(),
+                        "--window".into(),
+                        wid.clone(),
+                        "--".into(),
+                        rx.to_string(),
+                        ry.to_string(),
+                    ],
+                ),
+                // Step 2: xdotool click --window <id> --button <b>
+                (
+                    "click".into(),
+                    vec![
+                        "click".into(),
+                        "--window".into(),
+                        wid,
+                        "--button".into(),
+                        btn,
+                    ],
+                ),
+            ])
         }
         X11Operation::DragRel => {
             // True drag: mousedown -> mousemove --relative -> mouseup.
@@ -1138,6 +1256,141 @@ fn build_xdotool_actions(
             Ok(vec![])
         }
     }
+}
+
+/// RAII guard that guarantees a mouse-button release after a successful
+/// `mousedown`. Used by `action_x11` for drag sequences: if the intermediate
+/// `mousemove --relative` fails (SSH drop, X11 timeout) the drag function
+/// returns an error before reaching the explicit `mouseup`. Without this
+/// guard the button would remain logically held on the CIW.
+///
+/// Call `arm()` immediately after the mousedown command succeeds. Call
+/// `mark_released()` after the explicit mouseup succeeds. On Drop, if
+/// still armed (mousedown succeeded but mouseup never ran), a best-effort
+/// mouseup is issued. Failures in Drop are logged but never panic.
+struct MouseButtonGuard<'a> {
+    runner: &'a dyn RemoteTransport,
+    display_prefix: &'a str,
+    window_id: String,
+    button: u8,
+    armed: bool,
+}
+
+impl<'a> MouseButtonGuard<'a> {
+    fn new(
+        runner: &'a dyn RemoteTransport,
+        display_prefix: &'a str,
+        window: &WindowInfo,
+        button: Option<u8>,
+    ) -> Self {
+        Self {
+            runner,
+            display_prefix,
+            window_id: window.window_id.clone(),
+            button: button.unwrap_or(1),
+            armed: false,
+        }
+    }
+
+    /// Mark the guard as armed — call after a successful mousedown.
+    fn arm(&mut self) {
+        self.armed = true;
+    }
+
+    /// Mark the guard as released — call after the explicit mouseup succeeds.
+    fn mark_released(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for MouseButtonGuard<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let remote_cmd = format!(
+            "{}xdotool mouseup --window {} --button {}",
+            self.display_prefix, self.window_id, self.button,
+        );
+        let req = CommandRequest::with_exec_timeout(
+            &remote_cmd,
+            Duration::from_secs(5), // bounded best-effort
+        );
+        if let Err(e) = self.runner.run_command(&req) {
+            // Best-effort: report but do not override the primary error.
+            eprintln!(
+                "vcli::x11 MouseButtonGuard: best-effort mouseup failed for \
+                 window {}: {}",
+                self.window_id, e
+            );
+        }
+    }
+}
+
+/// PNG file signature: 89 50 4E 47 0D 0A 1A 0A.
+const PNG_MAGIC: &[u8; 8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+/// Validate that `path` is a real PNG, then return (size_bytes, sha256_hex).
+/// Rejects empty files, tiny files (< 64 bytes), wrong magic, and symlinks.
+fn validate_png_artifact(
+    path: &std::path::Path,
+) -> std::result::Result<(u64, String), VirtuosoError> {
+    use std::io::{Read, Seek};
+
+    let metadata = std::fs::metadata(path).map_err(|e| {
+        VirtuosoError::Execution(format!("cannot stat screenshot path {:?}: {e}", path))
+    })?;
+
+    // Reject symlinks — they could point outside the evidence directory.
+    if metadata.file_type().is_symlink() {
+        return Err(VirtuosoError::Execution(format!(
+            "screenshot path {:?} is a symlink — rejecting",
+            path
+        )));
+    }
+
+    let size = metadata.len();
+    if size < 64 {
+        return Err(VirtuosoError::Execution(format!(
+            "screenshot file is suspiciously small ({size} bytes) — rejecting"
+        )));
+    }
+
+    // Check magic bytes.
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        VirtuosoError::Execution(format!("cannot open screenshot path {:?}: {e}", path))
+    })?;
+    let mut header = [0u8; 8];
+    file.read_exact(&mut header).map_err(|e| {
+        VirtuosoError::Execution(format!(
+            "cannot read screenshot header from {:?}: {e}",
+            path
+        ))
+    })?;
+    if &header != PNG_MAGIC {
+        return Err(VirtuosoError::Execution(format!(
+            "screenshot file is not a valid PNG (header: {header:02X?})"
+        )));
+    }
+
+    // Compute SHA-256 of the full file.
+    file.rewind()
+        .map_err(|e| VirtuosoError::Execution(format!("cannot rewind screenshot file: {e}")))?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buf).map_err(|e| {
+            VirtuosoError::Execution(format!("cannot read screenshot for hashing: {e}"))
+        })?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let digest = hasher.finalize();
+    let hash = format!("{digest:x}");
+
+    Ok((size, hash))
 }
 
 fn dialog_info_from_dismiss_value(
@@ -2753,6 +3006,8 @@ mod tests {
 
     #[test]
     fn build_xdotool_actions_click_rel_argv_shape_with_button() {
+        // P2-1 fix: click-rel now expands to TWO commands — mousemove then click.
+        // Previously it used "--move-to-cursor" which is not a valid xdotool flag.
         let action = build_xdotool_actions(
             &mk_action_window("0x400002"),
             X11Operation::ClickRel,
@@ -2762,23 +3017,22 @@ mod tests {
             None,
         )
         .expect("click-rel ok");
-        assert_eq!(action.len(), 1);
-        let (sub, argv) = &action[0];
-        assert_eq!(sub, "click");
-        // Position-checked: click --window ID --button N --move-to-cursor 10 20
+        assert_eq!(action.len(), 2, "click-rel must produce 2 commands");
+
+        // Command 0: mousemove --window ID -- <x> <y>
+        assert_eq!(action[0].0, "mousemove");
         assert_eq!(
-            argv,
-            &[
-                "click",
-                "--window",
-                "0x400002",
-                "--button",
-                "1",
-                "--move-to-cursor",
-                "10",
-                "20"
-            ],
-            "click-rel argv must pin --window before --button"
+            action[0].1,
+            &["mousemove", "--window", "0x400002", "--", "10", "20"],
+            "click-rel step 1 must move cursor to window-relative point"
+        );
+
+        // Command 1: click --window ID --button N (at the now-current position)
+        assert_eq!(action[1].0, "click");
+        assert_eq!(
+            action[1].1,
+            &["click", "--window", "0x400002", "--button", "1"],
+            "click-rel step 2 must click at the current position"
         );
     }
 
@@ -2789,17 +3043,46 @@ mod tests {
             &mk_action_window("0x400002"),
             X11Operation::ClickRel,
             Some(5),
-            Some(5),
+            Some(-5),
             Some(3),
             None,
         )
         .expect("click-rel ok");
-        let (_, argv) = &action[0];
+        let (_, argv) = &action[1]; // second command (click)
         let btn_i = argv
             .iter()
             .position(|a| a == "--button")
             .expect("--button present");
         assert_eq!(argv[btn_i + 1], "3", "button=3 must be passed as-is");
+        // Negative y must reach the command unmodified (protected by `--` sep).
+        let dash_i = action[0]
+            .1
+            .iter()
+            .position(|a| a == "--")
+            .expect("-- separator present");
+        assert_eq!(
+            action[0].1[dash_i + 2],
+            "-5",
+            "negative y must pass through"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_click_rel_requires_x_y() {
+        // click-rel without --x or --y must be rejected (can't click "nowhere").
+        let err = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::ClickRel,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect_err("click-rel without x,y must be rejected");
+        assert!(
+            err.to_string().contains("--x") && err.to_string().contains("--y"),
+            "error should mention both --x and --y, got: {err}"
+        );
     }
 
     #[test]
