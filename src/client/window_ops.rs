@@ -91,10 +91,11 @@ impl WindowOps {
     /// (as `load("{path}")` does), otherwise `/path/x.png` parses as an
     /// invalid identifier. The success check uses the 3-arg `if(cond t e)`
     /// form — SKILL rejects `if(cond t else e)` with a `lineread/read: syntax
-    /// error`.
+    /// error` — and `isFile` must run AFTER `system` (it probes the file the
+    /// capture just created; checking first always returns nil).
     fn skill_capture(path_escaped: &str) -> String {
         format!(
-            r#"let((cmd ok) cmd = strcat("import -window root -silent " "{path}") ok = isFile("{path}") system(cmd) if(ok "{path}" nil)"#,
+            r#"let((cmd) cmd = strcat("import -window root -silent " "{path}") system(cmd) if(isFile("{path}") "{path}" nil))"#,
             path = path_escaped
         )
     }
@@ -210,11 +211,12 @@ mod tests {
     #[test]
     fn screenshot_skill_uses_three_arg_if_and_quoted_path() {
         // Regression: skill_capture previously emitted `if(ok {path} else nil)`
-        // (mixing the 3-arg if form with the `else` keyword) AND left {path}
-        // unquoted (`escape_skill_string` returns a bare escaped string).
-        // Both make Virtuoso fail with "lineread/read: syntax error" when the
-        // SKILL is evaluated. The correct form quotes the path and uses the
-        // 3-arg if without the `else` keyword.
+        // (mixing the 3-arg if form with the `else` keyword), left {path}
+        // unquoted (`escape_skill_string` returns a bare escaped string), and
+        // probed `isFile` BEFORE `system` (so the freshly-created file was
+        // never seen and the SKILL always returned nil). All three make
+        // Virtuoso fail. The correct form quotes the path, uses the 3-arg if,
+        // and checks `isFile` AFTER `system`.
         let ops = WindowOps;
         let skill = ops.screenshot("/tmp/screen.png");
         assert!(
@@ -222,12 +224,22 @@ mod tests {
             "path must be quoted as a SKILL string literal, got: {skill}"
         );
         assert!(
-            skill.contains("if(ok \"/tmp/screen.png\" nil)"),
+            skill.contains("if(isFile(\"/tmp/screen.png\") \"/tmp/screen.png\" nil)"),
             "must use 3-arg if form without else keyword, got: {skill}"
         );
         assert!(
             !skill.contains("else nil"),
             "must not emit `else` in 3-arg if, got: {skill}"
+        );
+        // isFile must come after system(cmd) so it probes the file the
+        // capture just created.
+        let sys_pos = skill.find("system(cmd)").expect("must call system(cmd)");
+        let isfile_pos = skill
+            .find("isFile(")
+            .expect("must check isFile after system");
+        assert!(
+            sys_pos < isfile_pos,
+            "isFile must run AFTER system(cmd), got: {skill}"
         );
     }
 
