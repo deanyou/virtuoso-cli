@@ -494,6 +494,28 @@ pub fn dismiss(
     })
 }
 
+/// Parse the helper's `--list-windows` stdout into `WindowInfo`s.
+///
+/// The helper emits only per-window properties (frame_id/window_id/title/
+/// class/pid/geometry). `display`/`xauthority` are properties of the DISPLAY
+/// that was *queried*, not of the window, so they are backfilled here.
+///
+/// Backfilling is mandatory, not cosmetic: `resolve_unique_window` requires an
+/// exact DISPLAY match and treats `None` as a mismatch, so a caller that skips
+/// this step fails every resolution with `not_found`. Both `list_windows` and
+/// `action_x11` go through this function so they cannot drift apart again.
+fn parse_window_list(stdout: &str, display: &str, xauthority: Option<&String>) -> Vec<WindowInfo> {
+    stdout
+        .lines()
+        .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
+        .map(|mut w| {
+            w.display = Some(display.to_string());
+            w.xauthority = xauthority.cloned();
+            w
+        })
+        .collect()
+}
+
 /// Enumerate Virtuoso-related X11 windows. No dismiss action.
 pub fn list_windows(
     runner: &dyn RemoteTransport,
@@ -513,15 +535,7 @@ pub fn list_windows(
             &cmd,
             Duration::from_secs(15),
         ))?;
-        let mut these: Vec<WindowInfo> = out
-            .stdout
-            .lines()
-            .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
-            .collect();
-        for w in &mut these {
-            w.display = Some(display.to_string());
-            w.xauthority = env.xauthority.clone();
-        }
+        let these = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
         if these.is_empty() {
             helper_errors.extend(extract_helper_errors(&out));
         }
@@ -892,11 +906,7 @@ pub fn action_x11(
         Duration::from_secs(*timeout_secs),
     ))?;
 
-    let windows: Vec<WindowInfo> = out
-        .stdout
-        .lines()
-        .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
-        .collect();
+    let windows = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
 
     // Step 2: Resolve unique window with strict PID + DISPLAY matching
     let resolved = resolve_unique_window(&windows, *pid, display, None)?;
@@ -1152,15 +1162,13 @@ fn build_xdotool_actions(
 
     match operation {
         X11Operation::Activate => {
-            // xdotool windowraise --sync --window <id>
+            // `xdotool windowraise [window_id]` — this command accepts NO
+            // options: neither `--sync` nor `--window` exist for it. Both are
+            // rejected by every xdotool release (3.20200624.1 through current
+            // upstream xdotool.pod), so the window id must be positional.
             Ok(vec![(
                 "windowraise".into(),
-                vec![
-                    "windowraise".into(),
-                    "--sync".into(),
-                    "--window".into(),
-                    wid,
-                ],
+                vec!["windowraise".into(), wid],
             )])
         }
         X11Operation::Key => {
@@ -1207,22 +1215,20 @@ fn build_xdotool_actions(
                         ry.to_string(),
                     ],
                 ),
-                // Step 2: xdotool click --window <id> --button <b>
+                // Step 2: xdotool click --window <id> <button>
+                // `click [options] button` — the button is a POSITIONAL
+                // argument; there is no `--button` option on click/mousedown/
+                // mouseup in any xdotool release.
                 (
                     "click".into(),
-                    vec![
-                        "click".into(),
-                        "--window".into(),
-                        wid,
-                        "--button".into(),
-                        btn,
-                    ],
+                    vec!["click".into(), "--window".into(), wid, btn],
                 ),
             ])
         }
         X11Operation::DragRel => {
-            // True drag: mousedown -> mousemove --relative -> mouseup.
-            // Each command targets the same window by clone()-ing wid.
+            // True drag: mousedown -> mousemove_relative -> mouseup.
+            // Only press/release target the window; the relative move in
+            // between is global pointer motion and carries no window id.
             let (rx, yv) = match (x, y) {
                 (Some(xx), Some(yy)) => (xx, yy),
                 _ => {
@@ -1232,25 +1238,27 @@ fn build_xdotool_actions(
                 }
             };
             Ok(vec![
-                // press
+                // press — button is positional, there is no `--button` option
                 (
                     "mousedown".into(),
                     vec![
                         "mousedown".into(),
                         "--window".into(),
                         wid.clone(),
-                        "--button".into(),
                         btn.clone(),
                     ],
                 ),
                 // move relatively
+                // Relative pointer motion is its OWN command: `--relative` is
+                // not a mousemove option (it belongs to the window command
+                // `windowmove`), and `mousemove_relative` takes no `--window`
+                // because a delta needs no window-relative origin. `--` keeps
+                // negative deltas from being parsed as flags.
                 (
-                    "mousemove".into(),
+                    "mousemove_relative".into(),
                     vec![
-                        "mousemove".into(),
-                        "--window".into(),
-                        wid.clone(),
-                        "--relative".into(),
+                        "mousemove_relative".into(),
+                        "--".into(),
                         rx.to_string(),
                         yv.to_string(),
                     ],
@@ -1258,13 +1266,7 @@ fn build_xdotool_actions(
                 // release
                 (
                     "mouseup".into(),
-                    vec![
-                        "mouseup".into(),
-                        "--window".into(),
-                        wid,
-                        "--button".into(),
-                        btn,
-                    ],
+                    vec!["mouseup".into(), "--window".into(), wid, btn],
                 ),
             ])
         }
@@ -1277,7 +1279,7 @@ fn build_xdotool_actions(
 
 /// RAII guard that guarantees a mouse-button release after a successful
 /// `mousedown`. Used by `action_x11` for drag sequences: if the intermediate
-/// `mousemove --relative` fails (SSH drop, X11 timeout) the drag function
+/// `mousemove_relative` fails (SSH drop, X11 timeout) the drag function
 /// returns an error before reaching the explicit `mouseup`. Without this
 /// guard the button would remain logically held on the CIW.
 ///
@@ -1326,7 +1328,7 @@ impl Drop for MouseButtonGuard<'_> {
             return;
         }
         let remote_cmd = format!(
-            "{}xdotool mouseup --window {} --button {}",
+            "{}xdotool mouseup --window {} {}",
             self.display_prefix, self.window_id, self.button,
         );
         let req = CommandRequest::with_exec_timeout(
@@ -2437,6 +2439,33 @@ mod tests {
         assert_eq!(win.window_id, "0x1");
     }
 
+    #[test]
+    fn parse_window_list_backfills_display_and_xauthority() {
+        // Regression: the helper emits NO display/xauthority fields (see
+        // resources/x11_dismiss_dialog.py::discover_windows). If a caller
+        // forgets to backfill them, resolve_unique_window's exact DISPLAY
+        // match compares against None and every action returns not_found.
+        let line = r#"{"frame_id":"0x1","window_id":"0x2","dismiss_id":"0x2","title":"ADE Explorer","class":["virtuoso"],"geometry":{"x":0,"y":0,"w":800,"h":600},"pid":12345,"visible":true}"#;
+        let windows = parse_window_list(line, ":99", Some(&"/tmp/.Xauthority".to_string()));
+
+        assert_eq!(windows.len(), 1, "helper line must parse");
+        assert_eq!(windows[0].display.as_deref(), Some(":99"));
+        assert_eq!(windows[0].xauthority.as_deref(), Some("/tmp/.Xauthority"));
+
+        // The backfilled window must survive the strict PID+DISPLAY check that
+        // `action_x11` performs before running any xdotool command.
+        let resolved = resolve_unique_window(&windows, 12345, ":99", None)
+            .expect("backfilled display must satisfy resolve_unique_window");
+        assert_eq!(resolved.window_id, "0x2");
+    }
+
+    #[test]
+    fn parse_window_list_skips_unparsable_lines() {
+        let stdout = "not json\n{}\n";
+        let windows = parse_window_list(stdout, ":99", None);
+        assert!(windows.is_empty(), "malformed lines must be dropped");
+    }
+
     // =============================================================================
     // Scratch path tests — user-isolated X11 helper directory (Task 1)
     // =============================================================================
@@ -3159,17 +3188,16 @@ mod tests {
         assert_eq!(action.len(), 1);
         let (sub, argv) = &action[0];
         assert_eq!(sub, "windowraise");
-        // Fixed positional shape: no `--window ID windowraise --sync` permutation bug.
+        // windowraise takes NO options — neither --sync nor --window exist for
+        // it in any xdotool release, so the window id is purely positional.
         assert_eq!(
             argv,
-            &["windowraise", "--sync", "--window", "0x400002"],
-            "activate argv must be `windowraise --sync --window <id>`"
+            &["windowraise", "0x400002"],
+            "activate argv must be `windowraise <id>`"
         );
         assert!(
-            !argv
-                .windows(2)
-                .any(|w| w[0] == "--window" && w[1] == "windowraise"),
-            "regression: --window comes before subcommand in buggy version"
+            !argv.iter().any(|a| a == "--sync" || a == "--window"),
+            "regression: windowraise accepts neither --sync nor --window"
         );
     }
 
@@ -3196,12 +3224,16 @@ mod tests {
             "click-rel step 1 must move cursor to window-relative point"
         );
 
-        // Command 1: click --window ID --button N (at the now-current position)
+        // Command 1: click --window ID N (button is positional)
         assert_eq!(action[1].0, "click");
         assert_eq!(
             action[1].1,
-            &["click", "--window", "0x400002", "--button", "1"],
+            &["click", "--window", "0x400002", "1"],
             "click-rel step 2 must click at the current position"
+        );
+        assert!(
+            !action[1].1.iter().any(|a| a == "--button"),
+            "regression: click has no --button option"
         );
     }
 
@@ -3218,11 +3250,15 @@ mod tests {
         )
         .expect("click-rel ok");
         let (_, argv) = &action[1]; // second command (click)
-        let btn_i = argv
-            .iter()
-            .position(|a| a == "--button")
-            .expect("--button present");
-        assert_eq!(argv[btn_i + 1], "3", "button=3 must be passed as-is");
+        assert!(
+            !argv.iter().any(|a| a == "--button"),
+            "regression: click has no --button option"
+        );
+        assert_eq!(
+            argv.last().expect("argv non-empty"),
+            "3",
+            "button=3 must be the trailing positional button"
+        );
         // Negative y must reach the command unmodified (protected by `--` sep).
         let dash_i = action[0]
             .1
@@ -3315,37 +3351,37 @@ mod tests {
         // drag-rel must expand to three commands, NOT one malformed string.
         assert_eq!(action.len(), 3, "drag-rel must produce 3 commands");
 
-        // mousedown --window ID --button N
+        // mousedown --window ID N   (button is positional)
         assert_eq!(action[0].0, "mousedown");
-        assert_eq!(
-            action[0].1,
-            vec!["mousedown", "--window", "0x400002", "--button", "2"]
-        );
+        assert_eq!(action[0].1, vec!["mousedown", "--window", "0x400002", "2"]);
 
-        // mousemove --window ID --relative dx dy
-        assert_eq!(action[1].0, "mousemove");
+        // Relative pointer motion is the separate `mousemove_relative` command:
+        // `--relative` is not a mousemove option (it belongs to the window
+        // command `windowmove`), and mousemove_relative takes no --window
+        // because a delta needs no window-relative origin. `--` protects the
+        // negative delta from being parsed as a flag.
+        assert_eq!(action[1].0, "mousemove_relative");
         assert_eq!(
             action[1].1,
-            vec![
-                "mousemove",
-                "--window",
-                "0x400002",
-                "--relative",
-                "50",
-                "-10"
-            ],
-            "drag-rel mousemove must use --relative with x,y deltas"
+            vec!["mousemove_relative", "--", "50", "-10"],
+            "drag-rel motion must use mousemove_relative with x,y deltas"
         );
 
-        // mouseup --window ID --button N
+        // mouseup --window ID N
         assert_eq!(action[2].0, "mouseup");
-        assert_eq!(
-            action[2].1,
-            vec!["mouseup", "--window", "0x400002", "--button", "2"]
-        );
+        assert_eq!(action[2].1, vec!["mouseup", "--window", "0x400002", "2"]);
 
-        // All three commands target the SAME window index position (positional invariant).
+        // No command may emit the nonexistent --button option...
         for (sub, argv) in &action {
+            assert!(
+                !argv.iter().any(|a| a == "--button"),
+                "{sub} must not use the nonexistent --button option"
+            );
+        }
+        // ...and the press/release pair must target the same window. The
+        // relative move in between is global pointer motion and by design
+        // carries no window id.
+        for (sub, argv) in action.iter().filter(|(s, _)| s != "mousemove_relative") {
             let wid_i = argv
                 .iter()
                 .position(|a| a == "--window")
