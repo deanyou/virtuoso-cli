@@ -641,6 +641,7 @@ pub enum X11Operation {
     DragRel,
     Screenshot,
     Wait,
+    Close,
 }
 
 impl X11Operation {
@@ -654,8 +655,9 @@ impl X11Operation {
             "drag-rel" => Ok(Self::DragRel),
             "screenshot" => Ok(Self::Screenshot),
             "wait" => Ok(Self::Wait),
+            "close" => Ok(Self::Close),
             _ => Err(VirtuosoError::Config(format!(
-                "unknown operation '{}': must be one of activate|key|type|click-rel|drag-rel|screenshot|wait",
+                "unknown operation '{}': must be one of activate|key|type|click-rel|drag-rel|screenshot|wait|close",
                 s
             ))),
         }
@@ -670,6 +672,7 @@ impl X11Operation {
             Self::DragRel => "drag-rel",
             Self::Screenshot => "screenshot",
             Self::Wait => "wait",
+            Self::Close => "close",
         }
     }
 }
@@ -715,7 +718,7 @@ pub fn validate_action_params(
 
     // Operation-specific validation
     match op {
-        X11Operation::Activate => {
+        X11Operation::Activate | X11Operation::Close => {
             // no extra params beyond the common ones
         }
         X11Operation::Screenshot => {
@@ -806,6 +809,7 @@ pub fn validate_action_params(
             // wait uses a condition expression in --text; validated by the caller
             None
         }
+        X11Operation::Close => None,
     };
 
     Ok(details.unwrap_or_default())
@@ -928,19 +932,48 @@ pub fn action_x11(
 
     let windows = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
 
-    // Step 2: Resolve unique window with strict PID + DISPLAY matching
-    let resolved = resolve_unique_window(&windows, *pid, display, None)?;
+    // Step 2: Resolve the target window. When an explicit window_id is given,
+    // match by id + PID + DISPLAY directly — this disambiguates multiple windows
+    // sharing one PID (common in Virtuoso: CIW + tool windows same process).
+    // Without window_id, fall back to resolve_unique_window which errors on
+    // multi-window ambiguity.
+    let resolved = if !window_id.is_empty() {
+        let wid = *window_id;
+        let matched: Vec<&WindowInfo> = windows
+            .iter()
+            .filter(|w| {
+                w.pid == Some(*pid)
+                    && w.display.as_deref() == Some(display)
+                    && (w.window_id == wid || w.dismiss_id == wid || w.frame_id == wid)
+            })
+            .collect();
+        match matched.len() {
+            0 => {
+                return Err(VirtuosoError::NotFound(format!(
+                    "no window with id '{window_id}' matching PID={pid} DISPLAY={display}"
+                )))
+            }
+            1 => matched.into_iter().next().unwrap().clone(),
+            _ => {
+                return Err(VirtuosoError::Conflict(format!(
+                    "multiple windows matching id '{window_id}' PID={pid} DISPLAY={display}",
+                )))
+            }
+        }
+    } else {
+        resolve_unique_window(&windows, *pid, display, None)?
+    };
 
-    // Step 3: Verify exact window_id match. A requested id that resolves to a
-    // different window means the caller referenced a window that does not exist
-    // (or no longer matches this pid) — NotFound, not a multi-window ambiguity.
-    if resolved.window_id != *window_id
+    // Step 3 (legacy): verify the resolved window matches the requested id.
+    // When window_id drove the match in Step 2 this is a no-op.
+    if !window_id.is_empty()
+        && resolved.window_id != *window_id
         && resolved.dismiss_id != *window_id
         && resolved.frame_id != *window_id
     {
         return Err(VirtuosoError::NotFound(format!(
-            "no window with id '{window_id}' matching PID={pid} DISPLAY={display} (resolved to '{}')",
-            resolved.window_id
+            "no window with id '{}' matching PID={pid} DISPLAY={display} (resolved to '{}')",
+            window_id, resolved.window_id
         )));
     }
 
@@ -1143,6 +1176,24 @@ pub fn action_x11(
     };
 
     let duration_ms = start.elapsed().as_millis() as u64;
+
+    // P2-1: xdotool key exits 0 even for invalid key names (it only prints
+    // "No such key name '...'. Ignoring it." to stderr). Detect that explicitly
+    // so the caller gets a real error instead of a false success.
+    if operation == X11Operation::Key {
+        for out in &results {
+            if out.stderr.contains("No such key name") {
+                let detail = out
+                    .stderr
+                    .lines()
+                    .find(|l| l.contains("No such key name"))
+                    .unwrap_or("")
+                    .trim();
+                return Err(VirtuosoError::Config(format!("invalid key name: {detail}")));
+            }
+        }
+    }
+
     // wait's success is the match outcome (matched within timeout), not the
     // exit status of the last polling helper run.
     let success = if operation == X11Operation::Wait {
@@ -1154,7 +1205,9 @@ pub fn action_x11(
     // Build sanitized details
     let details = match operation {
         X11Operation::Activate => None,
-        X11Operation::Key | X11Operation::Type => Some(format!(
+        X11Operation::Close => None,
+        X11Operation::Key => Some(format!("key: {}", text.unwrap_or(""))),
+        X11Operation::Type => Some(format!(
             "text_length: {}",
             text.map(|s| s.len()).unwrap_or(0)
         )),
@@ -1251,6 +1304,17 @@ fn build_xdotool_actions(
             // xdotool type --window <id> -- <text>
             let t =
                 text.ok_or_else(|| VirtuosoError::Config("type operation requires --text".into()))?;
+            // xdotool type drives XTestFakeKeyEvent and only supports ASCII
+            // keysyms. Non-ASCII text (CJK, emoji, full-width) is silently
+            // dropped by xdotool — detect it upfront and fail loudly instead
+            // of reporting a false success.
+            if !t.is_ascii() {
+                return Err(VirtuosoError::Config(format!(
+                    "type operation supports ASCII only; got non-ASCII text ({} bytes). \
+                     Use clipboard paste (xclip + ctrl+v) for non-ASCII input",
+                    t.len()
+                )));
+            }
             Ok(vec![(
                 "type".into(),
                 vec!["type".into(), "--window".into(), wid, "--".into(), t.into()],
@@ -1335,6 +1399,14 @@ fn build_xdotool_actions(
                     vec!["mouseup".into(), "--window".into(), wid, btn],
                 ),
             ])
+        }
+        X11Operation::Close => {
+            // Close the window via Alt+F4 (standard WM close shortcut). xdotool
+            // cannot send WM_DELETE directly, so Alt+F4 is the portable path.
+            Ok(vec![(
+                "key".into(),
+                vec!["key".into(), "--window".into(), wid, "alt+F4".into()],
+            )])
         }
         X11Operation::Screenshot | X11Operation::Wait => {
             // Handled specially in action_x11, not via xdotool
