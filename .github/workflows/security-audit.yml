@@ -33,7 +33,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install cargo-audit (pinned)
         # Pinned to avoid the moving-target breakage of `rustsec/audit-check`,
         # which compiles cargo-audit from source and currently fails to find
