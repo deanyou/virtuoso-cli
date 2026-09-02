@@ -1441,7 +1441,7 @@ fn validate_png_artifact(
         hasher.update(&buf[..n]);
     }
     let digest = hasher.finalize();
-    let hash = format!("{digest:x}");
+    let hash = hex::encode(digest);
 
     Ok((size, hash))
 }
