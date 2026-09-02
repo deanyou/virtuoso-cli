@@ -895,6 +895,14 @@ pub fn action_x11(
         .stdout
         .lines()
         .filter_map(|l| serde_json::from_str::<WindowInfo>(l.trim()).ok())
+        .map(|mut w| {
+            // The helper emits no `display` field; annotate it here exactly like
+            // `list_windows` does so `resolve_unique_window`'s strict DISPLAY
+            // matching can pass (fixes `action-x11` always returning not_found).
+            w.display = Some(display.to_string());
+            w.xauthority = env.xauthority.clone();
+            w
+        })
         .collect();
 
     // Step 2: Resolve unique window with strict PID + DISPLAY matching
