@@ -12,6 +12,8 @@ on:
     paths:
       - '**/Cargo.toml'
       - '**/Cargo.lock'
+      - 'audit.toml'
+      - '.github/workflows/security-audit.yml'
   schedule:
     # Weekly, off-peak (avoid the :00 UTC stampede). Monday ~03:37 UTC.
     - cron: '37 3 * * 1'

@@ -1,0 +1,29 @@
+# cargo-audit configuration (read by `rustsec/audit-check` in CI).
+#
+# This file intentionally documents the *one* advisory we accept, with the
+# full reasoning, so the decision is reviewable and not silent.
+#
+# Only RUSTSEC-2023-0071 is a hard error (vulnerability) in our tree; the
+# other findings (paste unmaintained, lru unsound) are warnings that cargo
+# audit allows by default and do NOT fail the job.
+
+[advisories]
+# RUSTSEC-2023-0071 — "Marvin Attack": potential RSA key recovery through a
+# timing side-channel, in `rsa 0.10.0-rc.18`.
+#
+# Why ignored (re-evaluate when any of these change):
+#   1. Transitive only: rsa enters the build via ssh-key -> russh, which is
+#      gated behind the `native-ssh` feature (Cargo.toml:34
+#      `native-ssh = ["russh", "russh-sftp"]`). The default `vcli`/`vtui`
+#      build does NOT link rsa at all.
+#   2. No upstream fix: cargo audit reports "No fixed upgrade is available!"
+#      for this crate version, so there is nothing to bump to.
+#   3. Low practical exposure: Marvin needs a decryption oracle (many
+#      chosen-ciphertext queries against an RSA *private* key). Here rsa is
+#      used for SSH host-key / session signing and verification (public-key
+#      operations), not as a decryption oracle, so exploitability is nil in
+#      our usage.
+#
+# Follow-up: drop this ignore once russh ships a `rsa` release that resolves
+# the advisory, or if native-ssh ever becomes the default backend.
+ignore = ["RUSTSEC-2023-0071"]
