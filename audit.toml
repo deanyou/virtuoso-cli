@@ -1,7 +1,11 @@
-# cargo-audit configuration (read by `rustsec/audit-check` in CI).
-#
-# This file intentionally documents the *one* advisory we accept, with the
+# cargo-audit configuration — documents the one advisory we accept, with the
 # full reasoning, so the decision is reviewable and not silent.
+#
+# IMPORTANT: cargo-audit 0.22.2 (the pinned version in security-audit.yml)
+# does NOT auto-read this file. The ignore is therefore enforced on the
+# command line via `cargo audit --ignore RUSTSEC-2023-0071`. This file is
+# kept as the human-readable rationale and as forward-compatible config for
+# when a future cargo-audit version re-enables audit.toml auto-discovery.
 #
 # Only RUSTSEC-2023-0071 is a hard error (vulnerability) in our tree; the
 # other findings (paste unmaintained, lru unsound) are warnings that cargo
@@ -27,3 +31,4 @@
 # Follow-up: drop this ignore once russh ships a `rsa` release that resolves
 # the advisory, or if native-ssh ever becomes the default backend.
 ignore = ["RUSTSEC-2023-0071"]
+
