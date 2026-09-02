@@ -142,6 +142,59 @@ class GeometryParsingTests(unittest.TestCase):
 class DialogSizeClassificationTests(unittest.TestCase):
     """The geometric modal test must classify the pinned dialog/frame sizes."""
 
+    def _patch_check_output(self, fake):
+        import subprocess as sp
+        original = sp.check_output
+        sp.check_output = fake
+        self.addCleanup(setattr, sp, "check_output", original)
+
+    def test_semantic_dialog_transient(self):
+        # WM_TRANSIENT_FOR present → modal dialog
+        def fake(cmd, **kwargs):
+            return b"WM_TRANSIENT_FOR(WINDOW): window id # 0x3000006\n_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL\n"
+
+        self._patch_check_output(fake)
+        self.assertEqual(x11d._semantic_dialog_classification("0x2e"), "dialog")
+
+    def test_semantic_dialog_window_type(self):
+        def fake(cmd, **kwargs):
+            return b"WM_TRANSIENT_FOR:  not found.\n_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_DIALOG\n"
+
+        self._patch_check_output(fake)
+        self.assertEqual(x11d._semantic_dialog_classification("0x2e"), "dialog")
+
+    def test_semantic_not_dialog_utility(self):
+        # Explicit utility window is never a modal dialog, even if dialog-sized
+        def fake(cmd, **kwargs):
+            return b"WM_TRANSIENT_FOR:  not found.\n_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_UTILITY\n"
+
+        self._patch_check_output(fake)
+        self.assertEqual(x11d._semantic_dialog_classification("0x2e"), "not_dialog")
+
+    def test_semantic_not_dialog_toolbar(self):
+        def fake(cmd, **kwargs):
+            return b"WM_TRANSIENT_FOR:  not found.\n_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_TOOLBAR\n"
+
+        self._patch_check_output(fake)
+        self.assertEqual(x11d._semantic_dialog_classification("0x2e"), "not_dialog")
+
+    def test_semantic_normal_falls_back_to_none(self):
+        # NORMAL type with no transient → no signal → geometry heuristic applies
+        def fake(cmd, **kwargs):
+            return b"WM_TRANSIENT_FOR:  not found.\n_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL\n"
+
+        self._patch_check_output(fake)
+        self.assertIsNone(x11d._semantic_dialog_classification("0x2e"))
+
+    def test_semantic_xprop_failure_returns_none(self):
+        import subprocess as sp
+
+        def fake(cmd, **kwargs):
+            raise sp.CalledProcessError(1, "xprop")
+
+        self._patch_check_output(fake)
+        self.assertIsNone(x11d._semantic_dialog_classification("0x2e"))
+
     def test_typical_dialog_is_dialog_sized(self):
         # ADE "Update and Run" style: 580x140
         self.assertTrue(x11d._is_dialog_sized({"w": 580, "h": 140}))

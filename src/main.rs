@@ -1516,11 +1516,14 @@ enum WindowCmd {
         /// Operation: activate | key | type | click-rel | drag-rel | screenshot | wait
         #[arg(long)]
         operation: String,
-        /// Relative X coordinate (for click-rel, drag-rel)
-        #[arg(long)]
+        /// Relative X coordinate (for click-rel, drag-rel). Negative values are
+        /// allowed — drag-rel treats x/y as a displacement, so up/left drags
+        /// need negative deltas. Click-rel coordinates are bounds-checked
+        /// against the window geometry at action time.
+        #[arg(long, allow_hyphen_values = true)]
         x: Option<i32>,
-        /// Relative Y coordinate (for click-rel, drag-rel)
-        #[arg(long)]
+        /// Relative Y coordinate (for click-rel, drag-rel). See --x.
+        #[arg(long, allow_hyphen_values = true)]
         y: Option<i32>,
         /// Mouse button (1=left, 2=middle, 3=right); click-rel, drag-rel only
         #[arg(long)]

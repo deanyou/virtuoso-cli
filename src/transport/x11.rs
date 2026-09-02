@@ -931,27 +931,38 @@ pub fn action_x11(
     // Step 2: Resolve unique window with strict PID + DISPLAY matching
     let resolved = resolve_unique_window(&windows, *pid, display, None)?;
 
-    // Step 3: Verify exact window_id match
+    // Step 3: Verify exact window_id match. A requested id that resolves to a
+    // different window means the caller referenced a window that does not exist
+    // (or no longer matches this pid) — NotFound, not a multi-window ambiguity.
     if resolved.window_id != *window_id
         && resolved.dismiss_id != *window_id
         && resolved.frame_id != *window_id
     {
-        return Err(VirtuosoError::Conflict(format!(
-            "window_id mismatch: requested '{window_id}' but resolved to '{}'",
+        return Err(VirtuosoError::NotFound(format!(
+            "no window with id '{window_id}' matching PID={pid} DISPLAY={display} (resolved to '{}')",
             resolved.window_id
         )));
     }
 
-    // Step 4: Check geometry bounds for click/drag operations.
-    // A zero-sized geometry means the window bounds are unknown (unparsed or
-    // abnormal); don't blanket-reject — trust the caller's coordinates instead.
-    if let (Some(op_x), Some(op_y)) = (*x, *y) {
-        let geom = &resolved.geometry;
-        if geom.w > 0 && geom.h > 0 && (op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h) {
-            return Err(VirtuosoError::Config(format!(
-                "coordinates ({op_x}, {op_y}) out of bounds for window size {}x{}",
-                geom.w, geom.h
-            )));
+    // Step 4: Check geometry bounds for absolute click coordinates. Only
+    // ClickRel passes window-relative absolute coordinates, so only it is
+    // bounds-checked. DragRel's x/y are a relative displacement (mousemove
+    // delta) and may legitimately be negative (drag up/left) or exceed the
+    // window size mid-drag. A zero-sized geometry means the window bounds are
+    // unknown (unparsed or abnormal); don't blanket-reject — trust the
+    // caller's coordinates instead.
+    if *operation == X11Operation::ClickRel {
+        if let (Some(op_x), Some(op_y)) = (*x, *y) {
+            let geom = &resolved.geometry;
+            if geom.w > 0
+                && geom.h > 0
+                && (op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h)
+            {
+                return Err(VirtuosoError::Config(format!(
+                    "coordinates ({op_x}, {op_y}) out of bounds for window size {}x{}",
+                    geom.w, geom.h
+                )));
+            }
         }
     }
 
