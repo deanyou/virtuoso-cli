@@ -202,6 +202,7 @@ pub fn dismiss_dialog_x11(
     action: &str,
     dry_run: bool,
     explicit_display: Option<&str>,
+    window_id: Option<&str>,
 ) -> Result<Value> {
     use crate::config::Config;
     use crate::transport::x11;
@@ -222,6 +223,7 @@ pub fn dismiss_dialog_x11(
         explicit_display,
         action,
         dry_run,
+        window_id,
     )?;
     let mut out = serde_json::to_value(&result)
         .map_err(|e| VirtuosoError::Execution(format!("failed to serialize X11 result: {e}")))?;

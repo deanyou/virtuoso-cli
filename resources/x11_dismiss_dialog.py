@@ -37,6 +37,10 @@ MAX_DIALOG_HEIGHT = 420
 MAX_DIALOG_WHEN_LARGE_WIDTH = 1000
 MAX_DIALOG_WHEN_LARGE_HEIGHT = 300
 MIN_DIALOG_DIM = 20
+# For NORMAL/unknown windows (no explicit DIALOG type or transient hint), the
+# geometric fallback must reject wide-and-shallow tool windows (e.g. "Bus Style
+# Tools" 720x275 = 2.62 aspect). Real dialogs are roughly square-ish.
+MAX_NORMAL_DIALOG_ASPECT = 2.2
 
 VALID_ACTIONS = ("enter", "escape", "alt-y", "alt-n", "alt-o")
 TITLE_ACTIONS = (
@@ -207,6 +211,13 @@ def find_dialogs(display):
                 mapped = True
         if not mapped:
             continue
+        # For NORMAL/unknown windows (semantic fallback), reject wide-and-shallow
+        # tool windows by aspect ratio. Explicit DIALOG/transient windows bypass
+        # this check — they are dialogs by definition regardless of shape.
+        if semantic is None:
+            aspect = w / float(h) if h > 0 else 0
+            if aspect > MAX_NORMAL_DIALOG_ASPECT:
+                continue
         dialogs.append({
             "window_id": win_id,
             "title": child_title,
@@ -712,6 +723,13 @@ def main():
                     )
                 except (RuntimeError, ValueError) as exc:
                     result = {"error": str(exc), "window_id": d["window_id"]}
+                # Backfill geometry from find_dialogs — dismiss_window's return
+                # value carries identity/action fields but not x/y/w/h, which
+                # callers need for audit logging and post-dismiss verification.
+                if "error" not in result:
+                    for geom_key in ("x", "y", "w", "h"):
+                        if geom_key in d and geom_key not in result:
+                            result[geom_key] = d[geom_key]
                 print(json.dumps(result))
     sys.exit(0)
 
