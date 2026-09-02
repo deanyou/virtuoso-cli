@@ -100,6 +100,7 @@ fn assert_success(out: &Output) {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn admin_exec_and_eval_send_load_to_bridge() {
     for op in ["exec", "eval"] {
@@ -139,6 +140,7 @@ fn load_checks_admin_before_accessing_the_file() {
     assert!(bridge.requests.try_recv().is_err());
 }
 
+#[cfg(unix)]
 #[test]
 fn local_load_uses_original_absolute_path_and_preserves_ils() {
     let bridge = Bridge::new(b"\x02t");
@@ -172,6 +174,7 @@ fn local_load_preserves_a_symlinks_language_suffix_and_escapes_path() {
     assert_eq!(value["loaded_path"], link.to_str().unwrap());
 }
 
+#[cfg(unix)]
 #[test]
 fn rpc_load_success_reports_the_execution_host_path() {
     let bridge = Bridge::new(b"\x02t");
@@ -186,6 +189,7 @@ fn rpc_load_success_reports_the_execution_host_path() {
     assert_eq!(value["loaded_path"], file.to_str().unwrap());
 }
 
+#[cfg(unix)]
 #[test]
 fn cli_and_rpc_load_propagate_nil_and_skill_errors() {
     for response in [b"\x02nil".as_slice(), b"\x15syntax error".as_slice()] {
@@ -214,6 +218,7 @@ fn cli_and_rpc_load_propagate_nil_and_skill_errors() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn raw_nil_remains_a_valid_expression_result() {
     let bridge = Bridge::new(b"\x02nil");
