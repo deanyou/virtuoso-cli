@@ -152,6 +152,14 @@ def find_dialogs(display):
     # Step 2: keep only frames whose subtree contains a virtuoso-class window.
     dialogs = []
     for win_id in candidates:
+        # Semantic check first: an explicit non-dialog window type (utility/
+        # toolbar/dock/…) is never a modal dialog, even if it is dialog-sized.
+        # A transient or _NET_WM_WINDOW_TYPE_DIALOG window is a strong positive
+        # signal. NORMAL / unknown windows fall through to the geometric +
+        # class heuristic below (kept for dialogs that don't set these hints).
+        semantic = _semantic_dialog_classification(win_id)
+        if semantic == "not_dialog":
+            continue
         try:
             subtree = subprocess.check_output(
                 ["xwininfo", "-id", win_id, "-tree"],
@@ -379,6 +387,42 @@ def _frame_children(frame_id):
         if child and child["id"] != frame_id:
             children.append(child)
     return children
+
+
+def _semantic_dialog_classification(win_id):
+    """Classify a window with X semantic hints (xprop), independent of size.
+
+    Returns:
+      'dialog'     — WM_TRANSIENT_FOR present (modal/popup) or
+                     _NET_WM_WINDOW_TYPE_DIALOG
+      'not_dialog' — an explicit non-dialog window type (UTILITY / TOOLBAR /
+                     DOCK / DESKTOP / SPLASH / MENU / NOTIFICATION)
+      None         — no signal (NORMAL / unknown type) → geometry heuristic
+                     still applies (see find_dialogs)
+    """
+    try:
+        out = subprocess.check_output(
+            ["xprop", "-id", win_id, "WM_TRANSIENT_FOR", "_NET_WM_WINDOW_TYPE"],
+            stderr=subprocess.PIPE,
+        ).decode("utf-8", "replace")
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    if "_NET_WM_WINDOW_TYPE_DIALOG" in out:
+        return "dialog"
+    if "WM_TRANSIENT_FOR" in out and "not found" not in out:
+        return "dialog"
+    for neg in (
+        "_NET_WM_WINDOW_TYPE_UTILITY",
+        "_NET_WM_WINDOW_TYPE_TOOLBAR",
+        "_NET_WM_WINDOW_TYPE_DOCK",
+        "_NET_WM_WINDOW_TYPE_DESKTOP",
+        "_NET_WM_WINDOW_TYPE_SPLASH",
+        "_NET_WM_WINDOW_TYPE_MENU",
+        "_NET_WM_WINDOW_TYPE_NOTIFICATION",
+    ):
+        if neg in out:
+            return "not_dialog"
+    return None
 
 
 def _is_dialog_sized(geometry):
