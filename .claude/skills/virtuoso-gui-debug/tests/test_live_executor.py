@@ -675,6 +675,34 @@ class TestNewOperationsLive(unittest.TestCase):
             self.assertIsNotNone(err)
             self.assertIn("no windows matched", err["error"])
 
+    def test_scroll_maps_to_vcli_scroll(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, runner = self._prechecked_executor(
+                tmp, [res(stdout='{"status":"success"}')])
+            step = make_step(operation="SCROLL",
+                             arguments={"direction": "down", "count": 3,
+                                        "x": 40, "y": 60})
+            self.assertIsNone(ex.execute(step, 0))
+            action_argv = runner.argvs[-1]
+            self.assertIn("scroll", action_argv)
+            # --text carries direction:count
+            self.assertIn("down:3", action_argv)
+            self.assertIn("--x", action_argv)
+            self.assertIn("40", action_argv)
+            self.assertIn("--y", action_argv)
+            self.assertIn("60", action_argv)
+
+    def test_scroll_defaults_to_down_1(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, runner = self._prechecked_executor(
+                tmp, [res(stdout='{"status":"success"}')])
+            step = make_step(operation="SCROLL", arguments={})
+            self.assertIsNone(ex.execute(step, 0))
+            action_argv = runner.argvs[-1]
+            self.assertIn("down:1", action_argv)
+
 
 class TestNewVerifierPredicatesLive(unittest.TestCase):
     """Tests for title_matches and geometry_matches in live executor."""

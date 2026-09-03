@@ -88,11 +88,11 @@ Perform a relative drag.
 - **Optional arguments:** `button` (integer, 1/2/3, default 1)
 
 ### SCROLL
-Scroll the mouse wheel at a window-relative position. **Local executor only.**
+Scroll the mouse wheel at a window-relative position. Supported by both live (vcli `scroll`) and local executors.
 - **Required arguments:** `direction` (string, must be `up`, `down`, `left`, or `right`)
-- **Optional arguments:** `count` (integer, default 3), `x` (integer, default 50), `y` (integer, default 50)
+- **Optional arguments:** `count` (integer, 1-100, live default 1 / local default 3), `x` (integer, window-relative), `y` (integer, window-relative)
 
-Maps to xdotool mouse buttons: up=4, down=5, left=6, right=7.
+Maps to xdotool mouse buttons: up=4, down=5, left=6, right=7. Live mode encodes `direction:count` into vcli's `--text`.
 
 ### SCREENSHOT
 Capture a screenshot.
@@ -210,6 +210,7 @@ Live-mode operation mapping:
 | `TYPE` | `vcli window action-x11 --operation type --text <text>` |
 | `CLICK_REL` | `vcli window action-x11 --operation click-rel --x --y` |
 | `DRAG_REL` | `vcli window action-x11 --operation drag-rel --x --y` (start coordinates) |
+| `SCROLL` | `vcli window action-x11 --operation scroll --text direction[:count] [--x --y]` |
 | `SCREENSHOT` | `vcli window action-x11 --operation screenshot --output-dir` |
 | `WINDOW_WAIT` | Condition polling via `vcli window list-windows-x11` |
 | `VERIFY` | Database-first predicates via vcli; visibility via X11 window list |

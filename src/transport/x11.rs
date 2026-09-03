@@ -648,6 +648,7 @@ pub enum X11Operation {
     Type,
     ClickRel,
     DragRel,
+    Scroll,
     Screenshot,
     Wait,
     Close,
@@ -662,11 +663,12 @@ impl X11Operation {
             "type" => Ok(Self::Type),
             "click-rel" => Ok(Self::ClickRel),
             "drag-rel" => Ok(Self::DragRel),
+            "scroll" => Ok(Self::Scroll),
             "screenshot" => Ok(Self::Screenshot),
             "wait" => Ok(Self::Wait),
             "close" => Ok(Self::Close),
             _ => Err(VirtuosoError::Config(format!(
-                "unknown operation '{}': must be one of activate|key|type|click-rel|drag-rel|screenshot|wait|close",
+                "unknown operation '{}': must be one of activate|key|type|click-rel|drag-rel|scroll|screenshot|wait|close",
                 s
             ))),
         }
@@ -679,11 +681,41 @@ impl X11Operation {
             Self::Type => "type",
             Self::ClickRel => "click-rel",
             Self::DragRel => "drag-rel",
+            Self::Scroll => "scroll",
             Self::Screenshot => "screenshot",
             Self::Wait => "wait",
             Self::Close => "close",
         }
     }
+}
+
+/// Parse a scroll spec `direction[:count]` into (direction, count).
+///
+/// direction ∈ {up, down, left, right}; count ∈ 1..=100 (default 1).
+/// Returns a normalized `direction:count` string suitable for --text round-trip.
+pub fn parse_scroll_spec(spec: &str) -> Result<(String, u32)> {
+    let spec = spec.trim();
+    let (direction, count) = match spec.split_once(':') {
+        Some((d, c)) => {
+            let count: u32 = c
+                .trim()
+                .parse()
+                .map_err(|_| VirtuosoError::Config(format!("invalid scroll count in '{spec}': must be an integer")))?;
+            (d, count)
+        }
+        None => (spec, 1),
+    };
+    if !["up", "down", "left", "right"].contains(&direction) {
+        return Err(VirtuosoError::Config(format!(
+            "invalid scroll direction '{direction}': must be one of up|down|left|right"
+        )));
+    }
+    if count == 0 || count > 100 {
+        return Err(VirtuosoError::Config(format!(
+            "scroll count must be 1..=100, got {count}"
+        )));
+    }
+    Ok((direction.to_string(), count))
 }
 
 /// Validate action parameters.
@@ -782,6 +814,22 @@ pub fn validate_action_params(
                 }
             }
         }
+        X11Operation::Scroll => {
+            // scroll requires a direction spec in --text: "up" | "down" |
+            // "left" | "right", optionally "direction:count" (count 1..=100).
+            let t = text.ok_or_else(|| {
+                VirtuosoError::Config("operation 'scroll' requires --text direction (up|down|left|right)".into())
+            })?;
+            parse_scroll_spec(t)?;
+            // optional button must be 1/2/3
+            if let Some(b) = button {
+                if !(1..=3).contains(&b) {
+                    return Err(VirtuosoError::Config(format!(
+                        "button must be 1 (left), 2 (middle), or 3 (right); got {b}"
+                    )));
+                }
+            }
+        }
         X11Operation::Wait => {
             // wait condition (in --text) is evaluated by the caller's polling loop;
             // an empty pattern matches every title (substring match) so reject it
@@ -820,6 +868,12 @@ pub fn validate_action_params(
             y.unwrap_or(0),
             button.unwrap_or(1)
         )),
+        X11Operation::Scroll => {
+            let (direction, count) = text
+                .map(|t| parse_scroll_spec(t).unwrap_or_else(|_| ("down".to_string(), 1)))
+                .unwrap_or_else(|| ("down".to_string(), 1));
+            Some(format!("direction: {direction}, count: {count}"))
+        }
         X11Operation::Screenshot => {
             let dir = output_dir.unwrap_or("");
             Some(format!("output_dir: {}", dir))
@@ -1282,6 +1336,12 @@ pub fn action_x11(
             y.unwrap_or(0),
             button.unwrap_or(1)
         )),
+        X11Operation::Scroll => {
+            let (direction, count) = text
+                .map(|t| parse_scroll_spec(t).unwrap_or_else(|_| ("down".to_string(), 1)))
+                .unwrap_or_else(|| ("down".to_string(), 1));
+            Some(format!("direction: {direction}, count: {count}"))
+        }
         X11Operation::Screenshot => Some(format!("output_dir: {}", output_dir.unwrap_or(""))),
         X11Operation::Wait => Some(format!(
             "pattern: {:?}, matched: {}",
@@ -1464,6 +1524,60 @@ fn build_xdotool_actions(
                     vec!["mouseup".into(), "--window".into(), wid, btn],
                 ),
             ])
+        }
+        X11Operation::Scroll => {
+            // xdotool mouse-button scroll: 4=up, 5=down, 6=left, 7=right.
+            // direction + optional count come from --text ("down" or "down:3").
+            // Optional x/y move the pointer to a window-relative point first
+            // (defaults to the window center when omitted).
+            let (direction, count) = text
+                .map(parse_scroll_spec)
+                .transpose()?
+                .unwrap_or(("down".to_string(), 1));
+            let button = match direction.as_str() {
+                "up" => "4",
+                "down" => "5",
+                "left" => "6",
+                "right" => "7",
+                _ => "5",
+            };
+            let (tx, ty) = match (x, y) {
+                (Some(xx), Some(yy)) => (xx, yy),
+                _ => (0, 0),
+            };
+            // xdotool click --repeat <count> --delay 60 <button>; count>1
+            // repeats the whole press/release cycle, which for scroll buttons
+            // produces a scroll tick per click.
+            let click_argv = if count > 1 {
+                vec![
+                    "click".into(),
+                    "--window".into(),
+                    wid.clone(),
+                    "--repeat".into(),
+                    count.to_string(),
+                    "--delay".into(),
+                    "60".into(),
+                    button.into(),
+                ]
+            } else {
+                vec!["click".into(), "--window".into(), wid.clone(), button.into()]
+            };
+            let mut cmds = Vec::with_capacity(2);
+            if x.is_some() || y.is_some() {
+                cmds.push((
+                    "mousemove".into(),
+                    vec![
+                        "mousemove".into(),
+                        "--window".into(),
+                        wid,
+                        "--".into(),
+                        tx.to_string(),
+                        ty.to_string(),
+                    ],
+                ));
+            }
+            cmds.push(("click".into(), click_argv));
+            Ok(cmds)
         }
         X11Operation::Close => {
             // Close the window via Alt+F4 (standard WM close shortcut). xdotool
@@ -2200,6 +2314,97 @@ impl RemoteTransport for LocalTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scroll_operation_roundtrips_str() {
+        assert_eq!(X11Operation::from_str("scroll").unwrap(), X11Operation::Scroll);
+        assert_eq!(X11Operation::Scroll.as_str(), "scroll");
+    }
+
+    #[test]
+    fn scroll_rejects_unknown_direction() {
+        let err = parse_scroll_spec("sideways").unwrap_err();
+        assert!(err.to_string().contains("invalid scroll direction"));
+    }
+
+    #[test]
+    fn scroll_parses_direction_only() {
+        assert_eq!(parse_scroll_spec("down").unwrap(), ("down".to_string(), 1));
+        assert_eq!(parse_scroll_spec("up").unwrap(), ("up".to_string(), 1));
+        assert_eq!(parse_scroll_spec("left").unwrap(), ("left".to_string(), 1));
+        assert_eq!(parse_scroll_spec("right").unwrap(), ("right".to_string(), 1));
+    }
+
+    #[test]
+    fn scroll_parses_direction_count() {
+        assert_eq!(parse_scroll_spec("down:3").unwrap(), ("down".to_string(), 3));
+        assert_eq!(parse_scroll_spec("up:100").unwrap(), ("up".to_string(), 100));
+    }
+
+    #[test]
+    fn scroll_rejects_zero_and_overflow_count() {
+        assert!(parse_scroll_spec("down:0").is_err());
+        assert!(parse_scroll_spec("down:101").is_err());
+        assert!(parse_scroll_spec("down:abc").is_err());
+    }
+
+    #[test]
+    fn scroll_builds_click_button_mapping() {
+        let w = WindowInfo {
+            frame_id: "0x1".into(),
+            window_id: "0x1".into(),
+            dismiss_id: "0x1".into(),
+            display: Some(":0".into()),
+            xauthority: None,
+            title: "t".into(),
+            class: vec![],
+            geometry: Geometry::default(),
+            pid: Some(42),
+            visible: true,
+        };
+        // down:3 -> click --repeat 3 button 5
+        let cmds = build_xdotool_actions(
+            &w, X11Operation::Scroll, None, None, None, Some("down:3"),
+        )
+        .unwrap();
+        assert_eq!(cmds.len(), 1);
+        let (_, argv) = &cmds[0];
+        assert_eq!(argv[0], "click");
+        assert!(argv.contains(&"--repeat".to_string()));
+        assert!(argv.contains(&"5".to_string()));
+        // up -> single click button 4
+        let cmds = build_xdotool_actions(
+            &w, X11Operation::Scroll, None, None, None, Some("up"),
+        )
+        .unwrap();
+        let (_, argv) = &cmds[0];
+        assert_eq!(argv[0], "click");
+        assert!(!argv.contains(&"--repeat".to_string()));
+        assert!(argv.contains(&"4".to_string()));
+    }
+
+    #[test]
+    fn scroll_with_coords_moves_first() {
+        let w = WindowInfo {
+            frame_id: "0x1".into(),
+            window_id: "0x1".into(),
+            dismiss_id: "0x1".into(),
+            display: Some(":0".into()),
+            xauthority: None,
+            title: "t".into(),
+            class: vec![],
+            geometry: Geometry::default(),
+            pid: Some(42),
+            visible: true,
+        };
+        let cmds = build_xdotool_actions(
+            &w, X11Operation::Scroll, Some(10), Some(20), None, Some("down"),
+        )
+        .unwrap();
+        assert_eq!(cmds.len(), 2);
+        assert_eq!(cmds[0].0, "mousemove");
+        assert_eq!(cmds[1].0, "click");
+    }
 
     #[test]
     fn hash_helper_is_stable_for_same_source() {

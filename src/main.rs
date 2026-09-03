@@ -1518,7 +1518,7 @@ enum WindowCmd {
         /// DISPLAY value (e.g. :0, :1)
         #[arg(long)]
         display: String,
-        /// Operation: activate | key | type | click-rel | drag-rel | screenshot | wait | close
+        /// Operation: activate | key | type | click-rel | drag-rel | scroll | screenshot | wait | close
         #[arg(long)]
         operation: String,
         /// Relative X coordinate (for click-rel, drag-rel). Negative values are
@@ -1533,7 +1533,8 @@ enum WindowCmd {
         /// Mouse button (1=left, 2=middle, 3=right); click-rel, drag-rel only
         #[arg(long)]
         button: Option<u8>,
-        /// Text or key chord (for key, type, wait)
+        /// Text or key chord (for key, type, wait); for scroll it is the
+        /// direction spec "up"|"down"|"left"|"right", optionally "direction:count"
         #[arg(long)]
         text: Option<String>,
         /// Output directory for screenshots

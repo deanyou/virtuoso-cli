@@ -36,6 +36,7 @@ _ACTION_OPERATIONS = {
     Operation.TYPE: "type",
     Operation.CLICK_REL: "click-rel",
     Operation.DRAG_REL: "drag-rel",
+    Operation.SCROLL: "scroll",
     Operation.SCREENSHOT: "screenshot",
     Operation.CLOSE: "close",
 }
@@ -592,6 +593,15 @@ class LiveExecutor(Executor):
             text = args.get("keys")
         elif step.operation == Operation.TYPE:
             text = args.get("text")
+        elif step.operation == Operation.SCROLL:
+            # vcli scroll takes direction[:count] via --text, optional x/y
+            # via --x/--y (window-relative pointer position).
+            direction = args.get("direction", "down")
+            count = args.get("count", 1)
+            text = f"{direction}:{count}"
+            if "x" in args or "y" in args:
+                x = args.get("x")
+                y = args.get("y")
         elif step.operation == Operation.SCREENSHOT:
             output_dir = str(self._output_dir)
         elif step.operation == Operation.CLOSE:

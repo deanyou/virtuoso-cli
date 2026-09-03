@@ -306,5 +306,77 @@ class TestLocalExecutorBaseline(unittest.TestCase):
         self.assertIn("requires a successful precheck", err["error"])
 
 
+class TestLocalExecutorGeometryGuard(unittest.TestCase):
+    """Pre-execute geometry validation for CLICK_REL/SCROLL."""
+
+    def setUp(self):
+        self.executor = LocalExecutor(display=DISPLAY, output_dir=OUTPUT_DIR)
+        self.executor.window_id = WINDOW_ID
+
+    @mock.patch("vgui_runner.local_executor._run")
+    def test_click_out_of_bounds_rejected(self, mock_run):
+        # 800x600 window; clicking at 999,999 must be rejected
+        mock_run.return_value = _completed(
+            stdout="X=100\nY=200\nWIDTH=800\nHEIGHT=600\n"
+        )
+        err = self.executor.execute(
+            _make_step(Operation.CLICK_REL, {"x": 999, "y": 999}), 0
+        )
+        self.assertIsNotNone(err)
+        self.assertIn("out of bounds", err["error"])
+
+    @mock.patch("vgui_runner.local_executor._run")
+    def test_click_negative_coords_rejected(self, mock_run):
+        mock_run.return_value = _completed(
+            stdout="X=100\nY=200\nWIDTH=800\nHEIGHT=600\n"
+        )
+        err = self.executor.execute(
+            _make_step(Operation.CLICK_REL, {"x": -5, "y": 10}), 0
+        )
+        self.assertIsNotNone(err)
+        self.assertIn("out of bounds", err["error"])
+
+    @mock.patch("vgui_runner.local_executor._run")
+    def test_click_zero_geometry_rejected(self, mock_run):
+        # Window minimized/unmapped -> zero-size geometry -> fail closed
+        mock_run.return_value = _completed(
+            stdout="X=0\nY=0\nWIDTH=0\nHEIGHT=0\n"
+        )
+        err = self.executor.execute(
+            _make_step(Operation.CLICK_REL, {"x": 10, "y": 10}), 0
+        )
+        self.assertIsNotNone(err)
+        self.assertIn("zero-sized", err["error"])
+
+    @mock.patch("vgui_runner.local_executor._run")
+    def test_click_in_bounds_succeeds(self, mock_run):
+        mock_run.return_value = _completed(
+            stdout="X=100\nY=200\nWIDTH=800\nHEIGHT=600\n"
+        )
+        err = self.executor.execute(
+            _make_step(Operation.CLICK_REL, {"x": 50, "y": 30}), 0
+        )
+        self.assertIsNone(err)
+
+    @mock.patch("vgui_runner.local_executor._run")
+    def test_scroll_out_of_bounds_rejected(self, mock_run):
+        mock_run.return_value = _completed(
+            stdout="X=0\nY=0\nWIDTH=100\nHEIGHT=100\n"
+        )
+        err = self.executor.execute(
+            _make_step(Operation.SCROLL, {"direction": "down", "x": 200, "y": 200}), 0
+        )
+        self.assertIsNotNone(err)
+        self.assertIn("out of bounds", err["error"])
+
+    @mock.patch("vgui_runner.local_executor._run")
+    def test_geometry_normalizes_width_height(self, mock_run):
+        mock_run.return_value = _completed(
+            stdout="X=10\nY=20\nWIDTH=640\nHEIGHT=480\n"
+        )
+        geo = self.executor._window_geometry()
+        self.assertEqual(geo, {"x": 10, "y": 20, "w": 640, "h": 480})
+
+
 if __name__ == "__main__":
     unittest.main()

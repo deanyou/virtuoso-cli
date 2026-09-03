@@ -81,14 +81,23 @@ class LocalExecutor(Executor):
         return result.stdout.strip()
 
     def _window_geometry(self) -> Dict[str, int]:
-        """Return {x, y, w, h} for the bound window."""
+        """Return {x, y, w, h} for the bound window.
+
+        Normalizes xdotool getwindowgeometry --shell keys: X/Y/WIDTH/HEIGHT
+        (and POSITION/GEOMETRY variants) all map to x/y/w/h.
+        """
         out = self._xdotool("getwindowgeometry", "--shell", self.window_id or "")
         geo: Dict[str, int] = {}
         for line in out.splitlines():
             if "=" in line:
                 k, v = line.strip().split("=", 1)
+                key = k.lower()
+                if key == "width":
+                    key = "w"
+                elif key == "height":
+                    key = "h"
                 try:
-                    geo[k.lower()] = int(v)
+                    geo[key] = int(v)
                 except ValueError:
                     pass
         return geo
@@ -303,14 +312,42 @@ class LocalExecutor(Executor):
             self._xdotool("windowactivate", self.window_id or "")
             time.sleep(0.2)
             self._xdotool("type", "--clearmodifiers", "--delay", "30", "--", text)
-        elif op == Operation.CLICK_REL:
-            rx, ry = int(args.get("x", 0)), int(args.get("y", 0))
-            button = str(args.get("button", 1))
-            ax, ay = self._absolute_coords(rx, ry)
-            self._xdotool("mousemove", str(ax), str(ay))
-            time.sleep(0.1)
-            self._xdotool("click", "--repeat", "1", "--delay", "100", button)
-            time.sleep(0.3)
+        elif op in (Operation.CLICK_REL, Operation.SCROLL):
+            rx = int(args.get("x", 50 if op == Operation.SCROLL else 0))
+            ry = int(args.get("y", 50 if op == Operation.SCROLL else 0))
+            # Geometry guard: re-fetch the window bounds right before acting so
+            # a window that moved/resized between steps can't silently send
+            # clicks to the wrong location. If the window vanished or was
+            # minimized (zero-size), fail closed instead of clicking the root.
+            geo = self._window_geometry()
+            if not geo.get("w") or not geo.get("h"):
+                raise RuntimeError(
+                    "window geometry is zero-sized (window minimized/unmapped); "
+                    "refusing to click at possibly-stale coordinates"
+                )
+            if rx < 0 or ry < 0 or rx >= geo["w"] or ry >= geo["h"]:
+                raise RuntimeError(
+                    "coordinates ({}, {}) out of bounds for window size {}x{}; "
+                    "window may have moved/resized since precheck".format(
+                        rx, ry, geo["w"], geo["h"]
+                    )
+                )
+            if op == Operation.CLICK_REL:
+                button = str(args.get("button", 1))
+                ax, ay = self._absolute_coords(rx, ry)
+                self._xdotool("mousemove", str(ax), str(ay))
+                time.sleep(0.1)
+                self._xdotool("click", "--repeat", "1", "--delay", "100", button)
+                time.sleep(0.3)
+            else:
+                direction = args.get("direction", "down")
+                count = int(args.get("count", 3))
+                button = str(_SCROLL_BUTTONS.get(direction, 5))
+                ax, ay = self._absolute_coords(rx, ry)
+                self._xdotool("mousemove", str(ax), str(ay))
+                time.sleep(0.1)
+                self._xdotool("click", "--repeat", str(count), "--delay", "60", button)
+                time.sleep(0.3)
         elif op == Operation.DRAG_REL:
             rx, ry = int(args.get("x", 0)), int(args.get("y", 0))
             button = str(args.get("button", 1))
@@ -327,17 +364,6 @@ class LocalExecutor(Executor):
                 time.sleep(0.02)
             time.sleep(0.1)
             self._xdotool("mouseup", button)
-            time.sleep(0.3)
-        elif op == Operation.SCROLL:
-            direction = args.get("direction", "down")
-            count = int(args.get("count", 3))
-            rx = int(args.get("x", 50))
-            ry = int(args.get("y", 50))
-            button = str(_SCROLL_BUTTONS.get(direction, 5))
-            ax, ay = self._absolute_coords(rx, ry)
-            self._xdotool("mousemove", str(ax), str(ay))
-            time.sleep(0.1)
-            self._xdotool("click", "--repeat", str(count), "--delay", "60", button)
             time.sleep(0.3)
         elif op == Operation.SCREENSHOT:
             path = str(self._output_dir / f"window_{self.window_id}.png")

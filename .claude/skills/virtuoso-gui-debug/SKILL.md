@@ -125,7 +125,7 @@ Only these operations are permitted:
 - `TYPE` — type text
 - `CLICK_REL` — relative click (window-relative coordinates)
 - `DRAG_REL` — relative drag (window-relative vector)
-- `SCROLL` — scroll wheel at window-relative position (local executor only; directions: up/down/left/right)
+- `SCROLL` — scroll wheel at window-relative position (directions: up/down/left/right, optional count 1-100; live mode via vcli scroll, local mode via xdotool buttons 4/5/6/7)
 - `SCREENSHOT` — capture screenshot
 - `VERIFY` — verify state (predicates: window_exists, state_matches, title_matches, geometry_matches)
 - `RECOVER` — recovery action (auto-dismiss for KEY/TYPE/CLICK_REL when no rollback)
