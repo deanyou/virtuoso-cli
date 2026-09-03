@@ -267,6 +267,96 @@ sleep 2
 12. Bug found → fix SKILL → repeat from 2
 ```
 
+## Performance Optimization (measured on Virtuoso IC25.1, DISPLAY=:5.0)
+
+### Latency baseline
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| `vcli window action-x11 click-rel` | **~1350 ms** | Per call — Rust binary startup + X11 reconnect + server-side window re-resolution |
+| `vcli window list-windows-x11` | **~940 ms** | Per call — full window tree scan |
+| `xdotool mousemove --window + click` | **~10 ms** | 135× faster than vcli |
+| `xwininfo -id <wid>` | **~3 ms** | 313× faster than vcli list-windows |
+| `xdotool type --delay 50` (20 chars) | ~530 ms | Default in earlier scripts |
+| `xdotool type --delay 10` (20 chars) | ~120 ms | 4.4× faster; verified no char loss |
+| `xdotool type --delay 5` (20 chars) | ~70 ms | Reliable for ASCII; use 10 for safety |
+| `import -window <wid>` (screenshot) | ~20 ms | Fast; occasional failure on unmapped windows |
+| CIW input + exec (click+ctrl+a+type+Return) | ~425 ms | With delay=10; ~800 ms with delay=50 |
+
+### P0 — Use xdotool by default, vcli only when server-side validation is required
+
+The `vcli window action-x11` path pays a **1.3 second per-call tax** because every invocation starts the Rust binary, reconnects to X11, and re-resolves the window. For rapid GUI interaction (clicks, typing, dragging), use direct `xdotool` with `--window <wid>`:
+
+```bash
+# Fast path (10 ms):
+xdotool mousemove --window 0x26037c7 300 167
+xdotool click 1
+
+# Slow path (1350 ms) — only when you need the Rust side to re-validate window identity:
+vcli window action-x11 --window-id 0x26037c7 --pid 114668 --display :5.0 \
+  --operation click-rel --x 300 --y 167
+```
+
+Use vcli when: (a) the window identity must be server-verified for safety, (b) you are in `--executor live` mode of the DSL runner, or (c) xdotool is unavailable.
+
+### P0 — Use xwininfo for geometry, not vcli list-windows
+
+```bash
+# Fast (3 ms):
+xwininfo -id 0x26037c7 | grep -E "Absolute|Width|Height"
+
+# Slow (940 ms) — only when you need to discover windows by title/pid:
+vcli window list-windows-x11 --display :5.0 --format json
+```
+
+Reserve `list-windows-x11` for **window discovery** (finding a window you don't have the id for). Once you have the id, all geometry checks use `xwininfo`.
+
+### P1 — Reduce type delay to 10–15 ms
+
+`--delay 50` was conservative. `--delay 10` is verified reliable for ASCII input into both form fields and the CIW (no dropped characters across 6 repeated rounds). Use `--delay 15` for non-ASCII or complex strings.
+
+```bash
+# Before (530 ms for 20 chars):
+xdotool type --clearmodifiers --delay 50 "METAL1"
+
+# After (120 ms for 20 chars):
+xdotool type --clearmodifiers --delay 10 "METAL1"
+```
+
+### P1 — Eliminate inter-operation sleep for consecutive xdotool calls
+
+Consecutive `xdotool mousemove` + `click` calls with **zero sleep** are reliable (verified: 6 rapid radio clicks all fired callbacks and changed form height correctly). Only sleep when waiting for Virtuoso to respond asynchronously:
+
+- **No sleep needed**: consecutive clicks, consecutive type, mousemove→click
+- **Sleep / poll needed**: after triggering a form redraw (radio callback changes layout), after opening a modal dialog, after CIW Return (wait for eval result)
+- **Prefer conditional polling** over fixed sleep: `xwininfo` loop waiting for height change, or `vcli list-windows` waiting for dialog appearance
+
+```bash
+# Bad: fixed 800ms sleep after every click
+xdotool click 1; sleep 0.8
+
+# Good: poll for the expected state change
+for i in $(seq 1 20); do
+  h=$(xwininfo -id $WID 2>/dev/null | grep Height | awk '{print $2}')
+  [ "$h" = "250" ] && break
+  sleep 0.05
+done
+```
+
+### P2 — vcli-side optimizations (require Rust changes)
+
+- **Batch mode**: a `vcli window action-x11 --batch` that accepts multiple operations in one process invocation, keeping the X11 connection alive across operations (eliminates the 1.3s per-call startup tax).
+- **Window list caching**: `list-windows-x11` could cache results for ~500ms since the window tree rarely changes that fast.
+- **Daemon mode**: a persistent `vcli gui-daemon` that holds the X11 connection and accepts operations over a local socket.
+
+### P2 — Coordinate caching
+
+`hiGetFieldInfo` reverse-engineering costs one CIW round-trip (~425ms). Cache the resulting `((x y) (w h))` per field for the lifetime of the form; only re-query if `xwininfo` detects the window was resized or a radio callback changed the layout.
+
+### P2 — Verification: prefer CIW state reads over screenshot+OCR
+
+Reading a field value via CIW (`form->field->value`) costs ~425ms and is deterministic. Screenshot+OCR costs ~20ms but is unreliable (±40px drift, garbled text). Use CIW reads for behavioral verification; use screenshots only for visual evidence in reports.
+
 ## Testing
 
 ```bash
