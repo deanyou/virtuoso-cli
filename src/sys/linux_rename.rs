@@ -52,7 +52,7 @@ pub unsafe fn rename_noreplace(
     newpath: *const c_char,
 ) -> c_int {
     // ---- Fast path: libc exports renameat2 ---
-    let sym = unsafe { libc::dlsym(libc::RTLD_DEFAULT, b"renameat2\0".as_ptr() as *const c_char) };
+    let sym = unsafe { libc::dlsym(libc::RTLD_DEFAULT, c"renameat2".as_ptr() as *const c_char) };
     if !sym.is_null() {
         let f: Renameat2Fn = unsafe { mem::transmute(sym) };
         let res = unsafe { f(olddirfd, oldpath, newdirfd, newpath, RENAME_NOREPLACE) };
