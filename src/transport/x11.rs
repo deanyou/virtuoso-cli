@@ -2138,15 +2138,14 @@ pub fn action_x11_batch(
                 failed += 1;
                 // Maximize needs xdotool >= 3.20210804.1 (windowstate). Give a
                 // specific hint instead of the generic non-zero-exit message.
-                let err_msg = if pa.operation == "maximize"
-                    && out.stderr.contains("Unknown command")
-                {
-                    "maximize requires xdotool >= 3.20210804.1 (windowstate subcommand); \
+                let err_msg =
+                    if pa.operation == "maximize" && out.stderr.contains("Unknown command") {
+                        "maximize requires xdotool >= 3.20210804.1 (windowstate subcommand); \
                      installed xdotool is too old. Use activate/minimize/close or upgrade xdotool."
-                        .to_string()
-                } else {
-                    "xdotool command returned non-zero exit code".to_string()
-                };
+                            .to_string()
+                    } else {
+                        "xdotool command returned non-zero exit code".to_string()
+                    };
                 results.push(BatchActionResult {
                     index: pa.index,
                     operation: pa.operation.clone(),
