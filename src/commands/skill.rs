@@ -115,12 +115,13 @@ pub fn load(file: &str, skillpp: bool) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
     let result = client.load_il(file, skillpp)?;
+    let skillpp_mode = result.metadata.get("skillpp_mode").is_some();
 
     Ok(json!({
         "status": "success",
         "file": file,
         "loaded_path": result.metadata.get("loaded_path"),
-        "skillpp_mode": result.metadata.get("skillpp_mode").unwrap_or(&Value::Bool(false)),
+        "skillpp_mode": skillpp_mode,
         "output": result.output,
         "errors": result.errors,
     }))
