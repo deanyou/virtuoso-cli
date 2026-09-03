@@ -14,7 +14,7 @@ Three execution engines:
 
 - `--executor fake` — offline-only, deterministic, for regression tests and automation logic verification. No subprocess side effects beyond `python3` itself.
 - `--executor live` — drives the real `vcli` CLI through a fixed-argv command runner (local or SSH). All GUI input goes through `vcli window action-x11`, which re-validates window identity server-side on every action.
-- `--executor local` — direct `xdotool` execution on a local X11 DISPLAY. Binds the target window by PID (or explicit `--window-id`). Supports `SCROLL` (xdotool buttons 4/5/6/7), which vcli does not yet expose. No vcli binary or session required.
+- `--executor local` — direct `xdotool` execution on a local X11 DISPLAY. Binds the target window by PID (or explicit `--window-id`). Supports `SCROLL` (xdotool buttons 4/5/6/7). No vcli binary or session required. Live mode also supports `SCROLL` via `vcli window action-x11 --operation scroll --text direction[:count]`.
 
 ## When to Use
 
@@ -389,7 +389,9 @@ done
 
 - **✅ `--direct` flag (implemented, commit 513f929)**: skips helper upload, env resolution, and list-windows scan. 4.7× faster (1213ms → 260ms). Use when vcli is required but window identity is already known.
 - **✅ `action-x11-batch` (implemented, commit bab1809 + 10c88dc)**: JSONL batch mode with merged shell execution. 6 actions in 260ms (28× vs normal mode). All xdotool commands merged into one SSH round-trip with per-command exit-code markers.
-- **Window list caching (deferred)**: `list-windows-x11` could cache results for ~500ms. Low value since `--direct` already skips list-windows for actions.
+- **✅ Geometry precheck in `--direct` mode (PR #68)**: before sending a `click-rel`/`drag-rel`/`scroll` with coordinates, runs `xwininfo` to verify the window is not zero-sized (minimized/unmapped) and the coordinates are within bounds. Out-of-bounds coordinates are rejected with exit code 2 and a clear error message (`"coordinates (x, y) out of bounds for window size WxH"`). Prevents sending clicks to stale coordinates after a window moves/resizes.
+- **✅ Batch non-direct shared list-windows (PR #68)**: in non-direct batch mode, the helper upload, env resolution, and list-windows scan are done **once per unique DISPLAY** and reused across all actions in the batch. 3 actions in 1527ms (per-action only 134–271ms vs ~940ms each without sharing).
+- **✅ Geometry file cache (PR #68)**: direct-mode writes a `/tmp/vcli_geom_<display>_<wid>.json` cache (cross-platform via `std::env::temp_dir()`) with 500ms TTL. Used for zero-size fast-reject (avoids xwininfo round-trip on repeated calls to a minimized window). Coordinate bounds checking always uses fresh xwininfo.
 - **Daemon mode (deferred)**: persistent `vcli gui-daemon` holding X11 connection over a local socket. Batch mode already covers the main use case (consecutive operations in one process); daemon's marginal gain is small.
 
 ### P2 — Coordinate caching
@@ -399,6 +401,53 @@ done
 ### P2 — Verification: prefer CIW state reads over screenshot+OCR
 
 Reading a field value via CIW (`form->field->value`) costs ~425ms and is deterministic. Screenshot+OCR costs ~20ms but is unreliable (±40px drift, garbled text). Use CIW reads for behavioral verification; use screenshots only for visual evidence in reports.
+
+## Virtuoso GUI API Semantics (verified on IC25.1)
+
+> Hard-won findings from testing 13 example GUI programs (ui_dynamic_form, ui_callback_patterns, ui_color_picker, ui_listbox_*, ui_multipage_form, ui_progress_*, ui_table_form, ui_toggle_combo_form, menu_demo/*). These are NOT in the Cadence docs — they were discovered by breaking things.
+
+### Form Field Access Paths
+
+| Field type | Access pattern | Gotcha |
+|---|---|---|
+| Top-level field | `form->fieldName->value` | Direct access works |
+| Field inside **tab field** | `form->tabField->pageName->fieldName->value` | **Direct `form->fieldName->value` returns nil** — must go through tab→page |
+| ListBox field | `form->listbox->value` is always a **list** | Read with `car()`, set with `(list val)` |
+| Cyclic field | `form->cyclic->value` is a **single string** | Not a list |
+| Toggle field | `form->toggle->value` is `t`/`nil` list | `?choices` each item must be `(symbol label)` list |
+
+### Widget Creation Dependencies
+
+| Widget | Requires | Gotcha |
+|---|---|---|
+| `hiCreateLayerCyclicField` | Open cellview (`geGetEditRep()` non-nil) | `techGetTechFile(nil)` crashes. Guard: `when(rep Tech=techGetTechFile(rep) ...)` |
+| `hiCreateReportField` | None | Data is static list of lists; no dynamic update API |
+| `hiCreateTabField` | None | Pages are symbols; fields inside need tab→page access path |
+| `hiCreateSpinBox` | None | Arrows are ~10px, hard to click via xdotool. Prefer CIW: `form->spinbox->value = n` |
+| `hiCreatePointField` / `hiCreatePointListField` | None | Values are `(x y)` lists; render as read-only text |
+
+### Modal Form Behavior
+
+- `hiDisplayForm` creates a **modal** form that **blocks `vcli skill exec`** (30s timeout). While the form is open, all `vcli skill exec` calls hang until the form is dismissed.
+- To read form state while a modal form is open: use **CIW input** (xdotool type into CIW), not `vcli skill exec`.
+- `Escape` does NOT always close a form — click Cancel/OK button, or use `hiFormCancel(form)` via CIW.
+- `alt+F4` and `xdotool windowclose` may not work on Virtuoso modal forms.
+
+### Menu System
+
+- `hiInsertBannerMenu((hiGetCIWindow) menu)` inserts a pulldown into the CIW menu bar.
+- `hiCreateSliderMenuItem` with `?subMenu` renders a right-arrow (▶) indicating a submenu.
+- `hiCreateSeparatorMenuItem` renders a horizontal divider.
+- Menu `?callback` is a **string** that gets `eval`'d on click. If the function is undefined, CIW shows `undefined variable - funcName` (callback DID fire).
+- Submenus open on hover in most cases; if not, click the parent item.
+
+### CIW Input Reliability
+
+- `ctrl+a` does NOT select-all in Virtuoso form fields. Use `Escape` to clear the CIW input line.
+- `vcli skill load` times out on large files (>~50 lines). Use CIW `load("/path/file.il")` instead.
+- Semicolon-separated multi-expression CIW input: the second assignment may not execute. Run expressions one at a time.
+- `lambda((x) body)` fails — must be `lambda( (x) body)` with a space after `lambda(`.
+- `return` only works inside `prog()` blocks, not `let()` blocks. In `let`, the last expression is the implicit return.
 
 ## Testing
 
