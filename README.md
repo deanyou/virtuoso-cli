@@ -72,6 +72,20 @@ All binaries (`vcli`, `vtui`) are installed to `~/.cargo/bin/`.
 
 > **Note**: Do not name the binary `virtuoso` — it conflicts with Cadence's `virtuoso` executable.
 
+### System Dependencies
+
+The X11 GUI automation features (`vcli window action-x11`, `action-x11-batch`, `list-windows-x11`) and the `virtuoso-gui-debug` skill's local executor require the following tools on the Virtuoso host (the machine running the X11 display):
+
+| Tool | Minimum version | Required for | Install |
+|------|----------------|--------------|---------|
+| **xdotool** | **3.20140419.1** | All GUI input: `--window` flag on `key`/`type`/`mousemove`/`click`/`mousedown`/`mouseup`, `--repeat`/`--delay` on `click`, `search --onlyvisible`, `mousemove_relative` | `apt install xdotool` / `yum install xdotool` |
+| **xwininfo** | any (x11-utils) | Geometry precheck (`--direct` mode), window bounds validation | `apt install x11-utils` / `yum install xorg-x11-utils` |
+| **ImageMagick** (`import`) | 6.x+ | Screenshots (`action-x11 --operation screenshot`, skill local executor) | `apt install imagemagick` / `yum install ImageMagick` |
+
+**xdotool version note**: The critical feature is the `--window` flag on input commands, introduced in **3.20140419.1** (2014). Versions older than this reject `--window` on `key`/`type`/`click` and GUI automation will fail. Recommended: **3.20160805.1** or later. Tested on **3.20200624.1** (Ubuntu 20.04+). Verify with `xdotool --version`.
+
+`xwininfo` and ImageMagick are optional — `vcli window action-x11 --direct` works with xdotool alone (geometry precheck falls back gracefully). Screenshots require ImageMagick `import`.
+
 ### Quick Start
 
 **1. Load RAMIC Bridge in Virtuoso CIW:**
@@ -549,6 +563,20 @@ cargo install --path .
 安装后 `vcli` 和 `virtuoso-daemon` 均位于 `~/.cargo/bin/`。
 
 > **注意**：不要将 CLI 命名为 `virtuoso`，与 Cadence Virtuoso 二进制名冲突。
+
+### 系统依赖
+
+X11 GUI 自动化功能（`vcli window action-x11`、`action-x11-batch`、`list-windows-x11`）以及 `virtuoso-gui-debug` 技能的 local 执行器，需要在 Virtuoso 所在主机（运行 X11 display 的机器）上安装以下工具：
+
+| 工具 | 最低版本 | 用途 | 安装命令 |
+|------|---------|------|---------|
+| **xdotool** | **3.20140419.1** | 所有 GUI 输入：`key`/`type`/`mousemove`/`click`/`mousedown`/`mouseup` 的 `--window` 标志、`click` 的 `--repeat`/`--delay`、`search --onlyvisible`、`mousemove_relative` | `apt install xdotool` / `yum install xdotool` |
+| **xwininfo** | 任意（x11-utils） | 几何预检（`--direct` 模式）、窗口边界校验 | `apt install x11-utils` / `yum install xorg-x11-utils` |
+| **ImageMagick**（`import`） | 6.x+ | 截图（`action-x11 --operation screenshot`、技能 local 执行器） | `apt install imagemagick` / `yum install ImageMagick` |
+
+**xdotool 版本说明**：关键特性是输入命令的 `--window` 标志，于 **3.20140419.1**（2014 年）引入。更早版本会拒绝 `key`/`type`/`click` 的 `--window` 参数，导致 GUI 自动化失败。推荐 **3.20160805.1** 或更高版本。已在 **3.20200624.1**（Ubuntu 20.04+）上验证。用 `xdotool --version` 检查。
+
+`xwininfo` 和 ImageMagick 为可选——`vcli window action-x11 --direct` 仅需 xdotool 即可工作（几何预检会优雅降级）。截图功能需要 ImageMagick `import`。
 
 ### 快速开始
 
