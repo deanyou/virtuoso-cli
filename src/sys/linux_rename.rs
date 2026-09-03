@@ -33,11 +33,11 @@ const RENAME_NOREPLACE: c_uint = 1;
 ///   2. `syscall(SYS_renameat2, ...)` — glibc lacks the wrapper but kernel
 ///      supports the syscall (production kernels we target ≥ 3.15; many
 ///      CentOS 7 kernels also satisfy this via backport).
-///   3. `stat64` existence check + `renameat` — last-resort fallback that
+///   3. `lstat64` existence check + `renameat` — last-resort fallback that
 ///      preserves the "must not overwrite an existing destination" contract
 ///      at the cost of a small non-atomic window.
 #[cfg(target_os = "linux")]
-pub(crate) fn rename_noreplace(
+pub(crate) unsafe fn rename_noreplace(
     olddirfd: c_int,
     oldpath: *const c_char,
     newdirfd: c_int,
@@ -88,9 +88,9 @@ pub(crate) fn rename_noreplace(
         // internal mechanism.
     }
 
-    // ---- Slow path: stat + renameat (present since glibc 2.0) ----
+    // ---- Slow path: lstat + renameat (present since glibc 2.0) ----
     let mut st: libc::stat64 = unsafe { mem::zeroed() };
-    let exists = unsafe { libc::stat64(newpath, &mut st) } == 0;
+    let exists = unsafe { libc::lstat64(newpath, &mut st) } == 0;
     if exists {
         unsafe { *errno_location() = libc::EEXIST };
         return -1;

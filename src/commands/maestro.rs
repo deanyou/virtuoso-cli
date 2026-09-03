@@ -1369,12 +1369,14 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
         // links fail because the symbol is absent. Delegate to
         // sys::linux_rename which resolves via dlsym / raw syscall /
         // stat+renameat fallback transparently.
-        let res = crate::sys::linux_rename::rename_noreplace(
-            libc::AT_FDCWD,
-            src_c.as_ptr(),
-            libc::AT_FDCWD,
-            dst_c.as_ptr(),
-        );
+        let res = unsafe {
+            crate::sys::linux_rename::rename_noreplace(
+                libc::AT_FDCWD,
+                src_c.as_ptr(),
+                libc::AT_FDCWD,
+                dst_c.as_ptr(),
+            )
+        };
         if res == 0 {
             return Ok(());
         }
