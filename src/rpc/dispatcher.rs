@@ -761,15 +761,16 @@ impl RpcDispatcher {
                 }))
             }
             "ping" => {
-                // Use execute_skill_unchecked to avoid auth check for internal
-                // operations. The probe is `plus(1 1)`: a no-op SKILL
-                // expression that returns a non-nil integer on any responsive
-                // daemon. `ipcIsProcessRunning()` (previously used here)
-                // requires a specific process-handle argument and returns nil
-                // when called without one, making the ping spuriously fail on
+                // Ping uses the idempotent probe, NOT
+                // `execute_skill_unchecked`: a ping must survive a stale
+                // queued ticket — that is exactly the stuck state it is
+                // meant to detect.
+                // The probe expression is `plus(1 1)`: a no-op SKILL form
+                // that returns a non-nil integer on any responsive daemon.
+                // `ipcIsProcessRunning()` (previously used here) requires a
+                // specific process-handle argument and returns nil when
+                // called without one, making the ping spuriously fail on
                 // live daemons.
-                // Idempotent probe (`plus(1 1)`): a ping must survive a stale
-                // queued ticket — that is exactly the stuck state it detects.
                 let r = client.execute_skill_idempotent_probe("plus(1 1)", Some(5000))?;
                 if r.skill_ok() {
                     Ok(serde_json::json!({ "status": "ok" }))
