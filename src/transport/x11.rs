@@ -1745,6 +1745,22 @@ fn action_x11_cached(
         results.last().map(|r| r.success).unwrap_or(true)
     };
 
+    // Maximize requires xdotool >= 3.20210804.1 (the `windowstate` subcommand).
+    // On older xdotool the command prints "Unknown command: windowstate" and
+    // exits non-zero. Surface a clear, actionable error instead of a bare
+    // `"status": "failure"` with no explanation.
+    if operation == X11Operation::Maximize && !success {
+        let stderr = results.last().map(|r| r.stderr.as_str()).unwrap_or("");
+        if stderr.contains("Unknown command") || stderr.contains("windowstate") {
+            return Err(VirtuosoError::Config(
+                "maximize requires xdotool >= 3.20210804.1 (windowstate subcommand); \
+                 the installed xdotool is too old. Alternatives: use `activate` to \
+                 raise the window, `minimize` to iconify it, or upgrade xdotool."
+                    .into(),
+            ));
+        }
+    }
+
     // Build sanitized details
     let details = match operation {
         X11Operation::Activate => None,
@@ -2104,12 +2120,23 @@ pub fn action_x11_batch(
                 });
             } else {
                 failed += 1;
+                // Maximize needs xdotool >= 3.20210804.1 (windowstate). Give a
+                // specific hint instead of the generic non-zero-exit message.
+                let err_msg = if pa.operation == "maximize"
+                    && out.stderr.contains("Unknown command")
+                {
+                    "maximize requires xdotool >= 3.20210804.1 (windowstate subcommand); \
+                     installed xdotool is too old. Use activate/minimize/close or upgrade xdotool."
+                        .to_string()
+                } else {
+                    "xdotool command returned non-zero exit code".to_string()
+                };
                 results.push(BatchActionResult {
                     index: pa.index,
                     operation: pa.operation.clone(),
                     status: "failure".into(),
                     duration_ms: per_action_ms,
-                    error: Some("xdotool command returned non-zero exit code".into()),
+                    error: Some(err_msg),
                 });
             }
         }
