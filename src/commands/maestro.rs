@@ -1365,18 +1365,16 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
 
     #[cfg(target_os = "linux")]
     {
-        // RENAME_NOREPLACE on Linux: 1. renameat2 is a per-syscall
-        // errno return; EEXIST means a non-directory file exists at
-        // dst, ENOTEMPTY means dst is a non-empty directory. Both
-        // mean "the operator already has something there" → Conflict.
-        const RENAME_NOREPLACE: libc::c_uint = 1;
+        // renameat2 is a glibc 2.28+ symbol; CentOS 7 (glibc 2.17)
+        // links fail because the symbol is absent. Delegate to
+        // sys::linux_rename which resolves via dlsym / raw syscall /
+        // stat+renameat fallback transparently.
         let res = unsafe {
-            libc::renameat2(
+            crate::sys::linux_rename::rename_noreplace(
                 libc::AT_FDCWD,
                 src_c.as_ptr(),
                 libc::AT_FDCWD,
                 dst_c.as_ptr(),
-                RENAME_NOREPLACE,
             )
         };
         if res == 0 {
