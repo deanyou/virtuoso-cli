@@ -10,7 +10,6 @@ Security contract (2026-09-01 live-executor design):
 - argv elements containing NUL or newline are rejected before execution;
 - timeouts produce a structured ``CommandResult(timed_out=True)``.
 """
-from __future__ import annotations
 
 import re
 import shlex
@@ -64,7 +63,11 @@ class CommandResult:
 
 
 def _clean_env() -> dict:
-    env = {k: os_value for k in _ENV_ALLOWLIST if (os_value := _getenv(k)) is not None}
+    env = {}
+    for k in _ENV_ALLOWLIST:
+        os_value = _getenv(k)
+        if os_value is not None:
+            env[k] = os_value
     env.update(_EXTRA_ENV)
     return env
 
@@ -115,8 +118,8 @@ class LocalRunner(CommandRunner):
                 argv,
                 shell=False,
                 timeout=timeout_seconds,
-                capture_output=True,
-                text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                universal_newlines=True,
                 env=_clean_env(),
             )
             duration_ms = int((time.monotonic() - start) * 1000)
@@ -182,8 +185,8 @@ class SshRunner(CommandRunner):
                 full_argv,
                 shell=False,
                 timeout=timeout_seconds,
-                capture_output=True,
-                text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                universal_newlines=True,
                 env=_clean_env(),
             )
             duration_ms = int((time.monotonic() - start) * 1000)

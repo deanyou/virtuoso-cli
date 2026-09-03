@@ -1,5 +1,4 @@
 """vgui_runner.engine - State machine, fake executor, and runner."""
-from __future__ import annotations
 
 import json
 import time

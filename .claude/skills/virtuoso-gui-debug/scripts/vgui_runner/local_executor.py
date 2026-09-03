@@ -10,7 +10,6 @@ Unlike LiveExecutor, this executor:
 - supports SCROLL (xdotool buttons 4/5/6/7), which vcli does not yet expose;
 - requires no session_id or vcli binary — only --display and the scenario PID.
 """
-from __future__ import annotations
 
 import os
 import shutil
@@ -31,7 +30,7 @@ _TIMEOUT_PRECHECK = 15
 _TIMEOUT_ACTION = 30
 
 
-def _run(cmd: List[str], timeout: int = _TIMEOUT_ACTION) -> subprocess.CompletedProcess:
+def _run(cmd: List[str], timeout: int = _TIMEOUT_ACTION, env: dict = None) -> subprocess.CompletedProcess:
     """Run a command with universal_newlines, raising on timeout."""
     return subprocess.run(
         cmd,
@@ -39,6 +38,7 @@ def _run(cmd: List[str], timeout: int = _TIMEOUT_ACTION) -> subprocess.Completed
         stderr=subprocess.PIPE,
         universal_newlines=True,
         timeout=timeout,
+        env=env,
     )
 
 
@@ -73,7 +73,7 @@ class LocalExecutor(Executor):
     def _xdotool(self, *args: str, timeout: int = _TIMEOUT_ACTION) -> str:
         """Run xdotool with the bound DISPLAY; return stdout."""
         cmd = ["xdotool", *args]
-        result = _run(cmd, timeout)
+        result = _run(cmd, timeout, env=self._env)
         if result.returncode != 0:
             raise RuntimeError(
                 f"xdotool {' '.join(args)} failed: {result.stderr.strip()}"
@@ -103,7 +103,7 @@ class LocalExecutor(Executor):
         if shutil.which("import") is None:
             raise RuntimeError("ImageMagick 'import' not found; cannot screenshot")
         cmd = ["import", "-window", self.window_id or "root", path]
-        result = _run(cmd, _TIMEOUT_ACTION)
+        result = _run(cmd, _TIMEOUT_ACTION, env=self._env)
         if result.returncode != 0:
             raise RuntimeError(f"screenshot failed: {result.stderr.strip()}")
 

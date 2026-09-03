@@ -9,7 +9,6 @@ Exit codes:
   1 - FAILED (scenario step failed after all retries)
   2 - validation/usage/runtime error
 """
-from __future__ import annotations
 
 import argparse
 import json
@@ -212,7 +211,7 @@ def main() -> int:
         prog="gui_runner.py",
         description="Virtuoso GUI Runner (offline-only foundation)",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
 
     val = sub.add_parser("validate", help="Validate a scenario JSON file")
     val.add_argument("scenario", type=Path, help="Path to scenario JSON file")
@@ -234,6 +233,12 @@ def main() -> int:
                      help="Path to JSON file with fake outcomes (only with --executor fake)")
 
     args = parser.parse_args()
+
+    # Python 3.6 compat: add_subparsers has no `required` param
+    if args.command is None:
+        parser.print_help()
+        emit_json({"status": "error", "error": "no command specified"})
+        return 2
 
     try:
         if args.command == "validate":

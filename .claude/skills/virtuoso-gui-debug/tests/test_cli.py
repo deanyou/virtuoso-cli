@@ -36,8 +36,9 @@ def run_cli(*args, env=None):
         env = clean_env()
     return subprocess.run(
         ["python3", str(SCRIPT_PATH)] + list(args),
-        capture_output=True,
-        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
         env=env,
     )
 

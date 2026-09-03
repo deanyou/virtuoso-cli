@@ -1,5 +1,4 @@
 """vgui_runner.trace - Append-only JSONL event logging with immediate flush."""
-from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass

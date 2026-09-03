@@ -1,5 +1,4 @@
 """vgui_runner.model - Strict scenario parsing with deeply immutable dataclasses."""
-from __future__ import annotations
 
 import re
 from dataclasses import dataclass
@@ -166,11 +165,11 @@ class CellView:
 class Step:
     id: str
     operation: Operation
-    arguments: MappingProxyType[str, Any]
-    verifier: MappingProxyType[str, Any]
+    arguments: MappingProxyType
+    verifier: MappingProxyType
     timeout_seconds: int
     max_retries: int
-    rollback: Optional[MappingProxyType[str, Any]]
+    rollback: Optional[MappingProxyType]
 
     @staticmethod
     def _check_arguments(args: Dict[str, Any], operation: Operation, step_id: str) -> None:
@@ -410,7 +409,7 @@ class Scenario:
             )
 
     @classmethod
-    def from_dict(cls, data: Any) -> Scenario:
+    def from_dict(cls, data: Any) -> "Scenario":
         """Parse and validate a scenario from a dict."""
         if not isinstance(data, dict):
             raise ScenarioValidationError("root must be an object")
@@ -562,7 +561,7 @@ class Scenario:
         )
 
     @classmethod
-    def load(cls, path: Path) -> Scenario:
+    def load(cls, path: Path) -> "Scenario":
         import json
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)

@@ -12,7 +12,6 @@ the real ``vcli`` CLI, restricted by the 2026-09-01 live-executor design:
   re-validates window identity server-side;
 - error dicts are sanitized: typed input text never appears in them.
 """
-from __future__ import annotations
 
 import errno
 import fcntl
