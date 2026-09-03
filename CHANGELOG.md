@@ -26,10 +26,19 @@ All notable changes to this project will be documented in this file.
   `pid` the same way.
 - **issue #50** (`src/client/window_ops.rs`): `WindowOps::list_windows` now
   surfaces the window `id` (`hiGetWindowId`) alongside `name`, so SKILL-side
-  window enumeration is targetable. Full kind/mode/geometry/pid reflection still
-  requires live-Virtuoso SKILL API verification (`hiGetWindowType`,
-  `hiGetWindowMode`, `hiGetWindowScreenBox`, `hiGetProcessId`) and remains open
-  in #50.
+  window enumeration is targetable. `hiGetWindowId` is unbound in some IC
+  releases (verified missing on live IC25.1), so the SKILL attempts to read it
+  inside `errset` and **omits** the `id` field on those versions instead of
+  erroring — `vcli window list` thus works cross-version (`id` present on
+  IC23.1, name-only on IC25.1). The JSON is assembled with `strcat` (never
+  `sprintf`) and the id fragment defaults to `""`, because this daemon's SKILL
+  evaluator mis-evaluates `sprintf` as an `if`/`when` branch or top-level
+  expression and its `if`/`when` only accept self-evaluating (constant)
+  branches — both verified empirically on live IC25.1. Full
+  kind/mode/geometry/pid reflection still requires live-Virtuoso SKILL API
+  verification (`hiGetWindowType`, `hiGetWindowMode`, `hiGetWindowScreenBox`,
+  `hiGetProcessId`); all are unbound on IC25.1, so #50 stays closed and the
+  name-based heuristic `annotate_modes` remains the cross-version-safe path.
 
 ## [1.3.0] - 2026-09-03
 
