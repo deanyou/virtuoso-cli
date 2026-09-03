@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>virtuoso-gui-debug × vcli — GUI 调试协同架构</title>
+<style>
+  :root {
+    --accent: #8BC8EA;
+    --accent-dark: #5BA3C9;
+    --accent-light: #E8F4FA;
+    --text: #1A1B1C;
+    --text2: #6B7280;
+    --bg: #F4F3EE;
+    --card: #FFFFFF;
+    --border: #E4E3DD;
+    --green: #52C41A;
+    --orange: #FAAD14;
+    --red: #EA6668;
+    --purple: #9EACEA;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'PingFang SC', 'Segoe UI', Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 0;
+  }
+  .hero {
+    background: linear-gradient(135deg, #8BC8EA 0%, #9EACEA 100%);
+    color: #fff;
+    padding: 48px 24px 40px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  .hero p { font-size: 15px; opacity: 0.9; max-width: 640px; margin: 0 auto; }
+  .hero .badges { margin-top: 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .badge {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 12px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  .section { margin-bottom: 40px; }
+  .section-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    padding-left: 12px;
+    border-left: 4px solid var(--accent);
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  /* Architecture SVG */
+  .arch-svg { width: 100%; height: auto; display: block; }
+  /* Mode cards */
+  .modes { display: flex; gap: 12px; flex-wrap: wrap; }
+  .mode-card {
+    flex: 1 1 260px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .mode-card:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(139,200,234,0.15); }
+  .mode-card.active { border-color: var(--accent-dark); background: var(--accent-light); }
+  .mode-card h4 { font-size: 15px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .mode-card .tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .tag-fake { background: #F0F0EB; color: #6B7280; }
+  .tag-live { background: #E8F4FA; color: var(--accent-dark); }
+  .tag-local { background: #E6F7E6; color: #389E0D; }
+  .mode-card p { font-size: 13px; color: var(--text2); }
+  .mode-detail {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 12px;
+    display: none;
+  }
+  .mode-detail.show { display: block; }
+  .mode-detail pre {
+    background: #1A1B1C;
+    color: #E8F4FA;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    overflow-x: auto;
+    margin-top: 8px;
+  }
+  /* Flow steps */
+  .flow { display: flex; gap: 0; align-items: stretch; flex-wrap: wrap; }
+  .flow-step {
+    flex: 1 1 140px;
+    text-align: center;
+    padding: 16px 8px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-radius: 8px;
+  }
+  .flow-step:hover { background: var(--accent-light); }
+  .flow-step .num {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px;
+    margin: 0 auto 8px;
+  }
+  .flow-step h5 { font-size: 13px; margin-bottom: 4px; }
+  .flow-step p { font-size: 11px; color: var(--text2); }
+  .flow-arrow { display: flex; align-items: center; color: var(--text2); font-size: 18px; padding: 0 2px; }
+  .flow-detail {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+    display: none;
+  }
+  .flow-detail.show { display: block; }
+  /* Performance */
+  .perf-chart { width: 100%; height: 320px; }
+  .perf-tiers { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .tier {
+    border-radius: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-left: 4px solid;
+  }
+  .tier:hover { transform: translateX(4px); }
+  .tier-p0 { background: #FFF1F0; border-color: var(--red); }
+  .tier-p1 { background: #FFF7E6; border-color: var(--orange); }
+  .tier-p2 { background: #E6F7FF; border-color: var(--accent); }
+  .tier h5 { font-size: 14px; margin-bottom: 4px; }
+  .tier p { font-size: 12px; color: var(--text2); }
+  .tier .speedup { font-weight: 700; font-size: 16px; }
+  .tier-detail {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 8px;
+    display: none;
+    font-size: 13px;
+  }
+  .tier-detail.show { display: block; }
+  /* Matrix */
+  .matrix-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; }
+  .matrix-tab {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    background: var(--card);
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+  }
+  .matrix-tab:hover { border-color: var(--accent); }
+  .matrix-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .matrix-content { display: none; }
+  .matrix-content.show { display: block; }
+  .method-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .method-row:last-child { border-bottom: none; }
+  .method-badge {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 12px;
+    color: #fff;
+  }
+  .mb-a { background: var(--green); }
+  .mb-b { background: var(--accent); }
+  .mb-c { background: var(--purple); }
+  .mb-x { background: var(--red); }
+  .method-info h6 { font-size: 13px; margin-bottom: 2px; }
+  .method-info p { font-size: 12px; color: var(--text2); }
+  .method-info code {
+    background: #F0F0EB;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  /* API cards */
+  .api-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .api-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .api-card h6 {
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: var(--accent-dark);
+  }
+  .api-card p { font-size: 12px; color: var(--text2); }
+  .api-card code {
+    background: #F0F0EB;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--text);
+  }
+  /* Stats */
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .stat {
+    flex: 1 1 140px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+  .stat .num { font-size: 28px; font-weight: 700; color: var(--accent-dark); }
+  .stat .label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+  .footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 12px;
+    color: var(--text2);
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+  @media (max-width: 600px) {
+    .hero h1 { font-size: 22px; }
+    .flow { flex-direction: column; }
+    .flow-arrow { transform: rotate(90deg); justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>virtuoso-gui-debug × vcli</h1>
+  <p>技能层（Python DSL）与 vcli（Rust 桥接）协同驱动 Cadence Virtuoso GUI 自动化调试的完整架构</p>
+  <div class="badges">
+    <span class="badge">IC25.1 真机验证</span>
+    <span class="badge">237 单元测试</span>
+    <span class="badge">13 个示例程序</span>
+    <span class="badge">70+ Bug 修复</span>
+    <span class="badge">PR #68 全绿</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="num">135×</div><div class="label">xdotool vs vcli 加速</div></div>
+    <div class="stat"><div class="num">28×</div><div class="label">batch 模式加速</div></div>
+    <div class="stat"><div class="num">3</div><div class="label">执行引擎</div></div>
+    <div class="stat"><div class="num">12</div><div class="label">GUI 操作类型</div></div>
+  </div>
+
+  <!-- Architecture -->
+  <div class="section">
+    <h2 class="section-title">一、三层协同架构</h2>
+    <div class="card">
+      <svg class="arch-svg" viewBox="0 0 900 340" xmlns="http://www.w3.org/2000/svg">
+        <!-- Layer 1: Skill -->
+        <rect x="40" y="20" width="820" height="80" rx="12" fill="#E8F4FA" stroke="#8BC8EA" stroke-width="2"/>
+        <text x="60" y="48" font-size="14" font-weight="700" fill="#5BA3C9">技能层 — virtuoso-gui-debug (Python)</text>
+        <rect x="60" y="58" width="180" height="32" rx="6" fill="#fff" stroke="#8BC8EA"/>
+        <text x="150" y="78" font-size="11" text-anchor="middle" fill="#1A1B1C">JSON DSL 场景定义</text>
+        <rect x="260" y="58" width="180" height="32" rx="6" fill="#fff" stroke="#8BC8EA"/>
+        <text x="350" y="78" font-size="11" text-anchor="middle" fill="#1A1B1C">gui_runner.py 验证+执行</text>
+        <rect x="460" y="58" width="180" height="32" rx="6" fill="#fff" stroke="#8BC8EA"/>
+        <text x="550" y="78" font-size="11" text-anchor="middle" fill="#1A1B1C">vgui_runner 状态机</text>
+        <rect x="660" y="58" width="180" height="32" rx="6" fill="#fff" stroke="#8BC8EA"/>
+        <text x="750" y="78" font-size="11" text-anchor="middle" fill="#1A1B1C">证据输出 (task.json/trace)</text>
+
+        <!-- Arrows down -->
+        <line x1="200" y1="100" x2="200" y2="130" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="450" y1="100" x2="450" y2="130" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="700" y1="100" x2="700" y2="130" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <!-- Layer 2: vcli -->
+        <rect x="40" y="130" width="820" height="90" rx="12" fill="#F0F0EB" stroke="#9EACEA" stroke-width="2"/>
+        <text x="60" y="158" font-size="14" font-weight="700" fill="#6B7280">桥接层 — vcli (Rust, release binary)</text>
+        <rect x="60" y="168" width="150" height="40" rx="6" fill="#fff" stroke="#9EACEA"/>
+        <text x="135" y="185" font-size="10" text-anchor="middle" fill="#1A1B1C">session 管理</text>
+        <text x="135" y="199" font-size="9" text-anchor="middle" fill="#6B7280">port/PID/DISPLAY</text>
+        <rect x="230" y="168" width="150" height="40" rx="6" fill="#fff" stroke="#9EACEA"/>
+        <text x="305" y="185" font-size="10" text-anchor="middle" fill="#1A1B1C">action-x11</text>
+        <text x="305" y="199" font-size="9" text-anchor="middle" fill="#6B7280">click/type/key/scroll</text>
+        <rect x="400" y="168" width="150" height="40" rx="6" fill="#fff" stroke="#9EACEA"/>
+        <text x="475" y="185" font-size="10" text-anchor="middle" fill="#1A1B1C">--direct 模式</text>
+        <text x="475" y="199" font-size="9" text-anchor="middle" fill="#6B7280">跳过 helper/list-windows</text>
+        <rect x="570" y="168" width="150" height="40" rx="6" fill="#fff" stroke="#9EACEA"/>
+        <text x="645" y="185" font-size="10" text-anchor="middle" fill="#1A1B1C">action-x11-batch</text>
+        <text x="645" y="199" font-size="9" text-anchor="middle" fill="#6B7280">合并 shell 一次往返</text>
+        <rect x="740" y="168" width="100" height="40" rx="6" fill="#fff" stroke="#9EACEA"/>
+        <text x="790" y="185" font-size="10" text-anchor="middle" fill="#1A1B1C">skill exec</text>
+        <text x="790" y="199" font-size="9" text-anchor="middle" fill="#6B7280">SKILL 代码执行</text>
+
+        <!-- Arrows down -->
+        <line x1="305" y1="220" x2="305" y2="250" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="645" y1="220" x2="645" y2="250" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <!-- Layer 3: Virtuoso -->
+        <rect x="40" y="250" width="820" height="75" rx="12" fill="#E6F7E6" stroke="#52C41A" stroke-width="2"/>
+        <text x="60" y="278" font-size="14" font-weight="700" fill="#389E0D">目标层 — Cadence Virtuoso IC25.1 (X11)</text>
+        <rect x="60" y="288" width="200" height="28" rx="6" fill="#fff" stroke="#52C41A"/>
+        <text x="160" y="306" font-size="10" text-anchor="middle" fill="#1A1B1C">CIW 窗口 (SKILL 输入)</text>
+        <rect x="290" y="288" width="200" height="28" rx="6" fill="#fff" stroke="#52C41A"/>
+        <text x="390" y="306" font-size="10" text-anchor="middle" fill="#1A1B1C">表单窗口 (hiCreateAppForm)</text>
+        <rect x="520" y="288" width="160" height="28" rx="6" fill="#fff" stroke="#52C41A"/>
+        <text x="600" y="306" font-size="10" text-anchor="middle" fill="#1A1B1C">菜单 (hiInsertBannerMenu)</text>
+        <rect x="710" y="288" width="130" height="28" rx="6" fill="#fff" stroke="#52C41A"/>
+        <text x="775" y="306" font-size="10" text-anchor="middle" fill="#1A1B1C">xdotool/X11 事件</text>
+
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L8,3 L0,6" fill="#6B7280"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Three execution modes -->
+  <div class="section">
+    <h2 class="section-title">二、三种执行引擎</h2>
+    <div class="modes">
+      <div class="mode-card active" onclick="showMode('fake', this)">
+        <h4>fake <span class="tag tag-fake">离线</span></h4>
+        <p>确定性回放，无子进程副作用，用于回归测试和逻辑验证</p>
+      </div>
+      <div class="mode-card" onclick="showMode('live', this)">
+        <h4>live <span class="tag tag-live">远程 vcli</span></h4>
+        <p>通过 vcli 驱动真实 Virtuoso 会话，服务端窗口身份校验</p>
+      </div>
+      <div class="mode-card" onclick="showMode('local', this)">
+        <h4>local <span class="tag tag-local">直连 X11</span></h4>
+        <p>直接 xdotool 操作本地 DISPLAY，无需 vcli，支持 SCROLL</p>
+      </div>
+    </div>
+    <div id="mode-fake" class="mode-detail show">
+      <p><strong>用途：</strong>离线验证场景 JSON 合法性、状态机逻辑、回滚机制。不启动任何子进程，不接触 X11。</p>
+      <p><strong>前置检查：</strong>仅验证 schema（字段、类型、超时范围 1-300s、重试 0-1）。</p>
+      <pre>python3 scripts/gui_runner.py run scenario.json --output ./out --executor fake
+# 输出: task.json / agent-actions.jsonl / summary.json
+# 所有步骤 outcome 由 --fake-outcomes 注入，确定性可复现</pre>
+    </div>
+    <div id="mode-live" class="mode-detail">
+      <p><strong>用途：</strong>在真实 Virtuoso 会话上执行已验证的场景。所有 GUI 输入通过 <code>vcli window action-x11</code>，Rust 端每次重新解析和校验窗口身份。</p>
+      <p><strong>前置检查（fail-closed，按序）：</strong>session 存在且端口匹配 → PID 正数 → DISPLAY 精确匹配 → PID 绑定唯一窗口 → 获取 DISPLAY 排他锁。</p>
+      <pre>python3 scripts/gui_runner.py run scenario.json --output ./out \
+  --executor live --session dean-user1-39471 \
+  --vcli ~/virtuoso-stress-fix/target/release/vcli --ssh-host ubuntu-docker
+# 支持 --direct (4.7x) 和 action-x11-batch (28x) 性能优化</pre>
+    </div>
+    <div id="mode-local" class="mode-detail">
+      <p><strong>用途：</strong>在有 X11 的机器上直接用 xdotool 操作，无需 vcli 二进制或 Virtuoso 会话。适合本地快速调试和 SCROLL 操作。</p>
+      <p><strong>前置检查：</strong>xdotool 在 PATH → DISPLAY 可达 → PID 绑定可见窗口（或 --window-id 覆盖）。</p>
+      <pre>python3 scripts/gui_runner.py run scenario.json --output ./out \
+  --executor local --window-id 0x2600013
+# SCROLL 映射 xdotool buttons 4(up)/5(down)/6(left)/7(right)
+# 几何守卫: 零尺寸窗口拒绝点击, 越界坐标拒绝</pre>
+    </div>
+  </div>
+
+  <!-- Operation flow -->
+  <div class="section">
+    <h2 class="section-title">三、操作生命周期（点击展开）</h2>
+    <div class="card">
+      <div class="flow">
+        <div class="flow-step" onclick="showFlow(0, this)">
+          <div class="num">1</div>
+          <h5>Validate</h5>
+          <p>JSON schema 严格校验</p>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" onclick="showFlow(1, this)">
+          <div class="num">2</div>
+          <h5>Precheck</h5>
+          <p>session/PID/DISPLAY/锁</p>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" onclick="showFlow(2, this)">
+          <div class="num">3</div>
+          <h5>Execute</h5>
+          <p>vcli/xdotool 发送输入</p>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" onclick="showFlow(3, this)">
+          <div class="num">4</div>
+          <h5>Verify</h5>
+          <p>CIW 读状态/窗口可见性</p>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" onclick="showFlow(4, this)">
+          <div class="num">5</div>
+          <h5>Evidence</h5>
+          <p>trace/summary/截图</p>
+        </div>
+      </div>
+      <div id="flow-0" class="flow-detail show">
+        <strong>Validate：</strong>严格 JSON schema 校验。未知字段直接拒绝；超时必须 1-300 秒；重试必须 0 或 1；每个操作必须有 verifier。<code>VCLI_LOAD</code>/<code>VCLI_CALL</code> 被 schema 接受但 live/local executor 拒绝执行（fail-closed）。
+      </div>
+      <div id="flow-1" class="flow-detail">
+        <strong>Precheck（live 模式，按序 fail-closed）：</strong>① session 在 <code>vcli session list</code> 中存在且端口匹配 ② PID 正数（旧桥接元数据零 PID 回退到窗口发现，无唯一绑定则拒绝）③ DISPLAY 与 X 服务器精确匹配 ④ PID 在该 DISPLAY 上绑定唯一窗口（0 或多个均中止）⑤ 获取 DISPLAY 排他锁并持有整个运行周期。
+      </div>
+      <div id="flow-2" class="flow-detail">
+        <strong>Execute：</strong>每个操作映射到固定 argv。live 模式走 <code>vcli window action-x11</code>（Rust 端重新解析窗口）；local 模式走 xdotool。<code>--direct</code> 跳过 helper 上传和 list-windows；batch 模式合并所有 xdotool 命令为一次 shell 调用。几何预检在 direct 模式下对 click-rel/drag-rel/scroll 做零尺寸和越界拒绝。
+      </div>
+      <div id="flow-3" class="flow-detail">
+        <strong>Verify：</strong>优先数据库优先谓词（通过 vcli 读 form 字段值），可见性谓词用 X11 窗口列表。验证失败且有 rollback 时执行恢复并重试；无 rollback 则标记步骤失败。CIW 读值（<code>form->field->value</code>）~425ms 确定性，截图+OCR ~20ms 但不可靠（±40px 漂移）。
+      </div>
+      <div id="flow-4" class="flow-detail">
+        <strong>Evidence：</strong>每次运行输出 <code>task.json</code>（验证后的场景快照）、<code>agent-actions.jsonl</code>（追加式事件日志，含每步 outcome 和耗时）、<code>summary.json</code>（最终 pass/fail + 错误详情）、<code>window_&lt;id&gt;.png</code>（截图）。typed 文本不出现在错误载荷中，替换为 <code>text_length</code> 标记。
+      </div>
+    </div>
+  </div>
+
+  <!-- Performance -->
+  <div class="section">
+    <h2 class="section-title">四、性能优化分层（实测数据）</h2>
+    <div class="card">
+      <div id="perfChart" class="perf-chart"></div>
+      <div class="perf-tiers">
+        <div class="tier tier-p0" onclick="toggleTier(this)">
+          <h5>P0 — 默认用 xdotool，vcli 仅在需要服务端校验时 <span class="speedup">135×</span></h5>
+          <p>vcli action-x11 每次 ~1350ms（Rust 启动 + X11 重连 + 窗口重解析）；xdotool ~10ms。几何用 xwininfo（3ms）替代 vcli list-windows（940ms）。</p>
+          <div class="tier-detail">
+            <code>xdotool mousemove --window 0x2600013 300 167 &amp;&amp; xdotool click 1</code> — 窗口相对坐标，无需 xwininfo/绝对坐标换算。vcli 仅用于：(a) 窗口身份需服务端验证 (b) live executor 模式 (c) xdotool 不可用。
+          </div>
+        </div>
+        <div class="tier tier-p0" onclick="toggleTier(this)">
+          <h5>P0 — vcli --direct 跳过 helper/list-windows <span class="speedup">4.7×</span></h5>
+          <p>必须用 vcli 时加 --direct：跳过 helper 上传、env 解析、list-windows 扫描。1213ms → 260ms。支持 activate/key/type/click-rel/drag-rel/scroll/close。</p>
+          <div class="tier-detail">
+            --direct 模式新增几何预检（PR #68）：click-rel/drag-rel/scroll 发送前用 xwininfo 验证窗口非零尺寸且坐标在范围内。越界坐标 exit=2 + 清晰错误信息。零尺寸窗口（最小化）用 geom cache（500ms TTL）快速拒绝。
+          </div>
+        </div>
+        <div class="tier tier-p0" onclick="toggleTier(this)">
+          <h5>P0 — action-x11-batch 合并 shell 一次往返 <span class="speedup">28×</span></h5>
+          <p>连续操作（click→type→click...）用 JSONL batch，所有 xdotool 命令合并为一次 shell 调用。6 操作 260ms（vs 单独 7300ms）。非 direct 模式按唯一 DISPLAY 共享一次 list-windows。</p>
+          <div class="tier-detail">
+            每行一个 JSON action，支持 per-action 覆盖 pid/display。单操作失败不中止 batch。结果含 per-action status/duration/error。direct batch 新增 xwininfo 内存去重（同窗口多 action 只查一次几何）。
+          </div>
+        </div>
+        <div class="tier tier-p1" onclick="toggleTier(this)">
+          <h5>P1 — type delay 50ms → 10ms <span class="speedup">4.4×</span></h5>
+          <p>--delay 10 在 CIW 和表单字段中验证 6 轮无丢字。非 ASCII 用 15ms。20 字符输入 530ms → 120ms。</p>
+          <div class="tier-detail">
+            vcli action-x11 type 不可靠（注入乱码/剪贴板内容），始终用 xdotool type。<code>xdotool type --clearmodifiers --delay 10 "METAL1"</code>
+          </div>
+        </div>
+        <div class="tier tier-p1" onclick="toggleTier(this)">
+          <h5>P1 — 连续 xdotool 操作零 sleep</h5>
+          <p>mousemove→click→mousemove→click 零 sleep 可靠（6 次快速 radio 点击全部触发回调）。仅在等待 Virtuoso 异步响应（表单重绘、对话框弹出）时用条件轮询。</p>
+          <div class="tier-detail">
+            用条件轮询替代固定 sleep：xwininfo 循环等待高度变化，或 vcli list-windows 等待对话框出现。避免"每次点击后 sleep 0.8"的保守做法。
+          </div>
+        </div>
+        <div class="tier tier-p2" onclick="toggleTier(this)">
+          <h5>P2 — 几何预检 + batch 共享 + geom 缓存 (PR #68)</h5>
+          <p>direct 模式 xwininfo 预检（零尺寸/越界拒绝）；非 direct batch 按 DISPLAY 共享 list-windows；geom 文件缓存（temp_dir 跨平台，500ms TTL）零尺寸快速拒绝。</p>
+          <div class="tier-detail">
+            实测：SCROLL down:3 成功 528ms；direct 有效坐标 411ms；direct 越界 (9999,9999) 正确拒绝 exit=2；batch 非 direct 3 操作 1527ms（单 action 134-271ms）；geom 缓存文件写入正确几何。Windows/macOS/Linux 三平台 CI 全绿。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multi-method matrix -->
+  <div class="section">
+    <h2 class="section-title">五、多方法操作矩阵（每个操作 ≥2 种稳定方法）</h2>
+    <div class="card">
+      <div class="matrix-tabs">
+        <div class="matrix-tab active" onclick="showMatrix('discover', this)">窗口发现</div>
+        <div class="matrix-tab" onclick="showMatrix('coords', this)">坐标获取</div>
+        <div class="matrix-tab" onclick="showMatrix('click', this)">点击</div>
+        <div class="matrix-tab" onclick="showMatrix('type', this)">文本输入</div>
+        <div class="matrix-tab" onclick="showMatrix('submit', this)">提交/确认</div>
+        <div class="matrix-tab" onclick="showMatrix('close', this)">关闭/取消</div>
+        <div class="matrix-tab" onclick="showMatrix('modal', this)">模态对话框</div>
+      </div>
+
+      <div id="matrix-discover" class="matrix-content show">
+        <div class="method-row">
+          <div class="method-badge mb-a">A</div>
+          <div class="method-info"><h6>vcli list-windows-x11（推荐）</h6><p>返回 window_id(hex)/pid/title/geometry，服务端校验。<code>vcli window list-windows-x11 --display :5.0 --format json</code></p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-b">B</div>
+          <div class="method-info"><h6>xdotool search</h6><p>按标题搜索，返回十进制 id。<code>xdotool search --name "My Form"</code> → 39861795 = 0x2603e23</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-c">C</div>
+          <div class="method-info"><h6>xwininfo -name</h6><p>返回几何信息，用于交叉验证绝对位置。</p></div>
+        </div>
+      </div>
+
+      <div id="matrix-coords" class="matrix-content">
+        <div class="method-row">
+          <div class="method-badge mb-a">A</div>
+          <div class="method-info"><h6>SKILL 反推（推荐，±0px）</h6><p>CIW 中 <code>hiGetFieldInfo(form (quote fieldName))</code> → <code>((x y) (w h))</code> 表单客户区相对坐标。中心 = (x+w/2, y+h/2)。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-b">B</div>
+          <div class="method-info"><h6>像素级 crop 定位</h6><p><code>import -window &lt;wid&gt; out.png</code> 然后 <code>convert out.png -crop WxH+X+Y -resize 200%</code> 视觉确认。2 轮交叉验证后精确。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-x">✗</div>
+          <div class="method-info"><h6>OCR 千分比坐标（不可靠）</h6><p>重复捕获同一窗口漂移 ±40px，禁止依赖。</p></div>
+        </div>
+      </div>
+
+      <div id="matrix-click" class="matrix-content">
+        <div class="method-row">
+          <div class="method-badge mb-a">A</div>
+          <div class="method-info"><h6>vcli --direct click-rel（需服务端校验时）</h6><p><code>vcli window action-x11 --direct --window-id &lt;hex&gt; --pid &lt;pid&gt; --display :5.0 --operation click-rel --x &lt;cx&gt; --y &lt;cy&gt;</code> 260ms，含几何预检。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-b">B</div>
+          <div class="method-info"><h6>xdotool --window（推荐，10ms）</h6><p><code>xdotool mousemove --window &lt;wid&gt; &lt;cx&gt; &lt;cy&gt; &amp;&amp; xdotool click 1</code> 窗口相对坐标，无需 xwininfo。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-c">C</div>
+          <div class="method-info"><h6>xdotool 绝对坐标</h6><p>已有 xwininfo 绝对坐标时用：<code>xdotool mousemove &lt;abs_x&gt; &lt;abs_y&gt; &amp;&amp; xdotool click 1</code></p></div>
+        </div>
+      </div>
+
+      <div id="matrix-type" class="matrix-content">
+        <div class="method-row">
+          <div class="method-badge mb-a">A</div>
+          <div class="method-info"><h6>xdotool type --delay 10（推荐）</h6><p>点击/导航到字段后 <code>xdotool type --clearmodifiers --delay 10 "text"</code>。6 轮验证无丢字。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-b">B</div>
+          <div class="method-info"><h6>Tab 导航 + type（无坐标）</h6><p><code>xdotool key Tab</code> 重复到达目标字段，然后 type。4 次 Tab 到达测试表单的 Target Layer。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-c">C</div>
+          <div class="method-info"><h6>CIW 直接赋值（最可靠，绕过 GUI）</h6><p><code>form-&gt;field-&gt;value = "text"</code> 直接对象赋值，无需焦点。Tab 内字段用 <code>form-&gt;tab-&gt;page-&gt;field-&gt;value</code>。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-x">✗</div>
+          <div class="method-info"><h6>vcli action-x11 type（不可靠）</h6><p>IC25.1 上注入乱码/剪贴板内容而非指定文本。禁止使用。</p></div>
+        </div>
+      </div>
+
+      <div id="matrix-submit" class="matrix-content">
+        <div class="method-row">
+          <div class="method-badge mb-a">A</div>
+          <div class="method-info"><h6>xdotool key Return（对话框推荐）</h6><p>对话框聚焦时 Return = Open/OK。比点击 Open 按钮更可靠（Open 按钮有坐标敏感性问题）。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-b">B</div>
+          <div class="method-info"><h6>点击按钮（方法 3A/3B）</h6><p>OK/Apply 按钮 callback 正确绑定时有效。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-c">C</div>
+          <div class="method-info"><h6>CIW 直接调 callback</h6><p><code>udfApplyCB()</code> 完全绕过 GUI，验证回调逻辑独立于按钮接线。</p></div>
+        </div>
+      </div>
+
+      <div id="matrix-close" class="matrix-content">
+        <div class="method-row">
+          <div class="method-badge mb-a">A</div>
+          <div class="method-info"><h6>xdotool key Escape（推荐）</h6><p>窗口聚焦时关闭大多数对话框。Virtuoso 模态表单可能不响应，回退到点击 Cancel。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-b">B</div>
+          <div class="method-info"><h6>CIW hiFormCancel(form)</h6><p>干净的表单关闭。注意：已 map 的表单无法 cancel（返回 nil + WARNING）。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-c">C</div>
+          <div class="method-info"><h6>点击 Cancel 按钮</h6><p>坐标依赖。模态表单 alt+F4 / windowclose 可能无效。</p></div>
+        </div>
+      </div>
+
+      <div id="matrix-modal" class="matrix-content">
+        <div class="method-row">
+          <div class="method-badge mb-a">A</div>
+          <div class="method-info"><h6>检测：vcli list-windows 查意外对话框</h6><p>Browse/Open 后检查标题含 "Choose"/"Confirm"/"Error" 的窗口。模态对话框拦截所有输入，父窗口操作静默失败。</p></div>
+        </div>
+        <div class="method-row">
+          <div class="method-badge mb-b">B</div>
+          <div class="method-info"><h6>处理顺序：先对话框后主表单</h6><p>① <code>xdotool windowactivate &lt;dialog_wid&gt;</code> → Return(提交) 或 Escape(取消) ② 不行则用对话框自己的 window_id 和几何点击按钮 ③ 对话框消失后才操作父表单</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- API Semantics -->
+  <div class="section">
+    <h2 class="section-title">六、Virtuoso GUI API 语义沉淀（IC25.1 真机发现）</h2>
+    <div class="api-grid">
+      <div class="api-card">
+        <h6>Tab 字段访问路径</h6>
+        <p>Tab 内字段必须用 <code>form-&gt;tabField-&gt;pageName-&gt;fieldName-&gt;value</code>。直接 <code>form-&gt;fieldName-&gt;value</code> 返回 nil。</p>
+      </div>
+      <div class="api-card">
+        <h6>LayerCyclic 依赖 cellview</h6>
+        <p><code>techGetTechFile(geGetEditRep())</code> 在无打开 cellview 时崩溃。必须 <code>when(rep Tech=techGetTechFile(rep) ...)</code> 守卫。</p>
+      </div>
+      <div class="api-card">
+        <h6>模态表单阻塞 vcli exec</h6>
+        <p><code>hiDisplayForm</code> 创建模态表单，阻塞 <code>vcli skill exec</code>（30s 超时）。读表单状态用 CIW 输入，不用 vcli exec。</p>
+      </div>
+      <div class="api-card">
+        <h6>菜单回调是字符串</h6>
+        <p><code>hiCreateMenuItem ?callback "funcName"</code> 点击后直接 eval 字符串。函数未定义时 CIW 报 <code>undefined variable</code>（回调确实触发了）。</p>
+      </div>
+      <div class="api-card">
+        <h6>ListBox value 永远是列表</h6>
+        <p>即使单选，<code>form-&gt;listbox-&gt;value</code> 也是 list。读取用 <code>car()</code>，设置用 <code>(list val)</code>。Cyclic value 是单个字符串。</p>
+      </div>
+      <div class="api-card">
+        <h6>SpinBox 箭头 ~10px</h6>
+        <p>xdotool 难以精确点击。优先 CIW 直接设值 <code>form-&gt;spinbox-&gt;value = n</code>。</p>
+      </div>
+      <div class="api-card">
+        <h6>lambda 语法需空格</h6>
+        <p><code>lambda((x) body)</code> 报错，必须 <code>lambda( (x) body)</code>。<code>lambda()</code> 空参不被接受。</p>
+      </div>
+      <div class="api-card">
+        <h6>return 仅在 prog 中</h6>
+        <p><code>let</code> 块中用 return 导致后续函数未定义。let 中最后一个表达式是隐式返回。嵌套 <code>let((r ""))</code> 报 illegal binding form，改用 <code>prog((r)(setq r "")...(return r))</code>。</p>
+      </div>
+      <div class="api-card">
+        <h6>CIW 输入可靠性</h6>
+        <p><code>ctrl+a</code> 在 Virtuoso 表单字段中不全选；用 <code>Escape</code> 清空 CIW 输入行。分号分隔多表达式时第二个赋值可能不生效，分步执行。大文件用 CIW <code>load()</code>，不用 vcli skill load（超时）。</p>
+      </div>
+      <div class="api-card">
+        <h6>vcli skill exec 无 UI 库</h6>
+        <p><code>hiCreateAppForm</code>/<code>hiDisplayForm</code>/<code>hiGetFieldInfo</code> 在 daemon exec 上下文中均为 nil。GUI 创建必须走 CIW 输入；交互走 xdotool/vcli action-x11；读状态走 CIW。</p>
+      </div>
+      <div class="api-card">
+        <h6>Toggle ?choices 格式</h6>
+        <p><code>hiCreateToggleField ?value</code> 必须是 t/nil 列表；<code>?choices</code> 每项必须是 <code>(symbol label)</code> 列表，用 <code>stringToSymbol</code> 转换字符串。</p>
+      </div>
+      <div class="api-card">
+        <h6>动态更新列表选项</h6>
+        <p><code>form-&gt;field-&gt;choices = newList</code> 动态更新 listbox/cyclic 选项，UI 立即刷新。设置对象属性用 <code>=</code> 操作符，不是 setq。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Testing & CI -->
+  <div class="section">
+    <h2 class="section-title">七、测试与 CI 覆盖</h2>
+    <div class="card">
+      <div class="stats" style="margin-bottom:16px;">
+        <div class="stat"><div class="num">237</div><div class="label">Python 单元测试</div></div>
+        <div class="stat"><div class="num">857</div><div class="label">Rust lib 测试</div></div>
+        <div class="stat"><div class="num">111</div><div class="label">Rust x11 测试</div></div>
+        <div class="stat"><div class="num">10/10</div><div class="label">PR #68 CI 全绿</div></div>
+      </div>
+      <p style="font-size:13px;color:var(--text2);">
+        <strong>Python 测试：</strong>test_cli / test_command_runner / test_live_executor / test_local_executor / test_engine / test_model，覆盖 schema 校验、状态机、fake/live/local 三 executor、命令运行器。<br>
+        <strong>Rust 测试：</strong>x11 模块 111 个测试，含 parse_xwininfo_geometry、check_coords_in_bounds、geom_cache 读写、scroll spec 解析、batch action 解析等。<br>
+        <strong>CI 矩阵：</strong>Build / Check &amp; Lint / Test / Security Audit + macOS/Ubuntu/Windows × default/native-ssh，PR #68 全部通过。<br>
+        <strong>真机验证：</strong>13 个示例 GUI 程序（ui_dynamic_form / ui_callback_patterns / ui_color_picker / ui_listbox_* / ui_multipage_form / ui_progress_* / ui_table_form / ui_toggle_combo_form / menu_demo/*）在 IC25.1 云电脑上逐个加载、交互、修复、验证。
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  virtuoso-gui-debug × vcli GUI 调试协同架构 · 基于 IC25.1 真机实测 · 2026-09-03
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script>
+(function(){
+  // Mode tabs
+  window.showMode = function(id, el) {
+    document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.mode-detail').forEach(d => d.classList.remove('show'));
+    el.classList.add('active');
+    document.getElementById('mode-' + id).classList.add('show');
+  };
+  // Flow steps
+  window.showFlow = function(idx, el) {
+    document.querySelectorAll('.flow-step').forEach(s => s.style.background = '');
+    document.querySelectorAll('.flow-detail').forEach(d => d.classList.remove('show'));
+    el.style.background = 'var(--accent-light)';
+    document.getElementById('flow-' + idx).classList.add('show');
+  };
+  // Tier expand
+  window.toggleTier = function(el) {
+    const d = el.querySelector('.tier-detail');
+    d.classList.toggle('show');
+  };
+  // Matrix tabs
+  window.showMatrix = function(id, el) {
+    document.querySelectorAll('.matrix-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.matrix-content').forEach(c => c.classList.remove('show'));
+    el.classList.add('active');
+    document.getElementById('matrix-' + id).classList.add('show');
+  };
+  // Perf chart
+  try {
+    var chart = echarts.init(document.getElementById('perfChart'));
+    chart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { data: ['单次操作耗时 (ms)'], top: 0, textStyle: { fontSize: 11 } },
+      grid: { left: 60, right: 20, top: 36, bottom: 60 },
+      xAxis: {
+        type: 'category',
+        data: ['vcli\nnormal', 'vcli\n--direct', 'xdotool\n(推荐)', 'batch --direct\n(6操作均摊)', 'xwininfo\n几何'],
+        axisLabel: { fontSize: 10, interval: 0, color: '#6B7280' }
+      },
+      yAxis: {
+        type: 'log',
+        name: 'ms (log scale)',
+        nameTextStyle: { fontSize: 10, color: '#6B7280' },
+        axisLabel: { fontSize: 10, color: '#6B7280' }
+      },
+      series: [{
+        name: '单次操作耗时 (ms)',
+        type: 'bar',
+        data: [
+          { value: 1350, itemStyle: { color: '#EA6668' } },
+          { value: 260, itemStyle: { color: '#FAAD14' } },
+          { value: 10, itemStyle: { color: '#52C41A' } },
+          { value: 43, itemStyle: { color: '#8BC8EA' } },
+          { value: 3, itemStyle: { color: '#9EACEA' } }
+        ],
+        barWidth: '45%',
+        label: { show: true, position: 'top', fontSize: 11, fontWeight: 600, formatter: '{c}ms' }
+      }]
+    });
+    window.addEventListener('resize', function(){ chart.resize(); });
+  } catch(e) {
+    document.getElementById('perfChart').innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:13px;">图表库加载失败，数据见上方各层级说明。</div>';
+  }
+})();
+</script>
+</body>
+</html>
