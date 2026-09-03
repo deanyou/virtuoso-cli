@@ -48,7 +48,7 @@ Control Cadence Virtuoso from anywhere — locally or remotely. Designed for AI 
 - **Optional pure-Rust native SSH backend** (`native-ssh` Cargo feature) — a `russh`-based single-hop transport with in-tree host-key verification, public-key auth, SFTP streaming for single files, and a connection pool. OpenSSH stays the default; selecting `native` is explicit via `VB_SSH_BACKEND=native` and there is no automatic backend migration. See `### SSH Backend Selection` below for the capability matrix.
 - **Command logging** — All SKILL executions logged to `~/.cache/virtuoso_bridge/logs/commands.log`
 - **Interactive TUI** — `vtui` terminal dashboard showing sessions, jobs, tunnel status
-- **X11 GUI automation** — `vcli window action-x11` drives Virtuoso forms (click, type, key, drag, screenshot, scroll) with server-side window identity re-validation; `vcli window list-windows-x11` discovers windows by PID/display. Paired with the `virtuoso-gui-debug` skill (`.claude/skills/virtuoso-gui-debug/`) providing a strict JSON DSL, fake/live/local executors, and a multi-method operation playbook (SKILL coordinate reverse-engineering via `hiGetFieldInfo`, xdotool `--window` relative clicks, Tab navigation, CIW direct field assignment). Validated on real Virtuoso IC25.1 dynamic forms with radio field callbacks, file dialogs, and modal-dialog interception handling. [📊 Interactive architecture guide](https://htmlpreview.github.io/?https://github.com/deanyou/virtuoso-cli/blob/main/docs/virtuoso-gui-debug-architecture.html)
+- **X11 GUI automation** — `vcli window action-x11` drives Virtuoso forms (click, type, key, drag, screenshot, scroll) with server-side window identity re-validation; `vcli window list-windows-x11` discovers windows by PID/display. Paired with the `virtuoso-gui-debug` skill (`.claude/skills/virtuoso-gui-debug/`) providing a strict JSON DSL, fake/live/local executors, and a multi-method operation playbook (SKILL coordinate reverse-engineering via `hiGetFieldInfo`, xdotool `--window` relative clicks, Tab navigation, CIW direct field assignment). Validated on real Virtuoso IC25.1 dynamic forms with radio field callbacks, file dialogs, and modal-dialog interception handling. [📊 Interactive architecture guide](https://htmlpreview.github.io/?https://github.com/deanyou/virtuoso-cli/blob/main/docs/virtuoso-gui-debug-architecture.html) · [📈 Capability retrospective](https://htmlpreview.github.io/?https://github.com/deanyou/virtuoso-cli/blob/main/docs/vcli-gui-debug-retrospective.html)
 
 ### Installation
 
@@ -849,7 +849,7 @@ vcli tunnel start -v
 
 `vcli` 可以直接驱动 Virtuoso 的 X11 GUI 表单——无需屏幕抓取或 OCR。这使 AI Agent 能够在真实 Virtuoso session 上端到端测试 SKILL GUI 代码（表单、对话框、回调）。
 
-[📊 交互式架构图：virtuoso-gui-debug × vcli 协同调试](https://htmlpreview.github.io/?https://github.com/deanyou/virtuoso-cli/blob/main/docs/virtuoso-gui-debug-architecture.html)
+[📊 交互式架构图：virtuoso-gui-debug × vcli 协同调试](https://htmlpreview.github.io/?https://github.com/deanyou/virtuoso-cli/blob/main/docs/virtuoso-gui-debug-architecture.html) · [📈 能力建设复盘](https://htmlpreview.github.io/?https://github.com/deanyou/virtuoso-cli/blob/main/docs/vcli-gui-debug-retrospective.html)
 
 #### 窗口命令
 
