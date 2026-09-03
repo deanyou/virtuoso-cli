@@ -21,6 +21,7 @@ class Operation(str, Enum):
     TYPE = "TYPE"
     CLICK_REL = "CLICK_REL"
     DRAG_REL = "DRAG_REL"
+    SCROLL = "SCROLL"
     SCREENSHOT = "SCREENSHOT"
     VERIFY = "VERIFY"
     RECOVER = "RECOVER"
@@ -43,6 +44,7 @@ OP_ARG_SCHEMAS = {
     Operation.TYPE: ({"text"}, set()),
     Operation.CLICK_REL: ({"x", "y"}, {"button"}),
     Operation.DRAG_REL: ({"x", "y"}, {"button"}),
+    Operation.SCROLL: ({"direction"}, {"count", "x", "y"}),
     Operation.SCREENSHOT: (set(), {"path"}),
     Operation.VERIFY: ({"predicate", "expected"}, set()),
     Operation.RECOVER: ({"action", "target"}, set()),
@@ -52,6 +54,7 @@ OP_ARG_SCHEMAS = {
 INT_ARG_KEYS = {
     Operation.CLICK_REL: {"x", "y"},
     Operation.DRAG_REL: {"x", "y"},
+    Operation.SCROLL: {"count", "x", "y"},
 }
 
 # Button must be positive 1/2/3 — tracked separately so validation runs
@@ -65,6 +68,9 @@ BUTTON_ARG_KEYS = {
 # Any other value (including typos like "visibile") is rejected at parse time.
 WINDOW_WAIT_ALLOWED_STATES = {"visible", "hidden"}
 
+# SCROLL direction allowlist — maps to xdotool mouse buttons 4/5/6/7.
+SCROLL_ALLOWED_DIRECTIONS = {"up", "down", "left", "right"}
+
 # Supported verifier predicates. Each maps to a concrete vcli query in the
 # LiveExecutor verify phase. Unknown predicates fail closed at parse time.
 SUPPORTED_PREDICATES = {"window_exists", "state_matches"}
@@ -77,6 +83,7 @@ STR_ARG_KEYS = {
     Operation.WINDOW_ACTIVATE: {"window_title"},
     Operation.KEY: {"keys"},
     Operation.TYPE: {"text"},
+    Operation.SCROLL: {"direction"},
     Operation.SCREENSHOT: {"path"},
     Operation.VERIFY: {"predicate"},
     Operation.RECOVER: {"action", "target"},
@@ -254,6 +261,16 @@ class Step:
                 raise ScenarioValidationError(
                     f"WINDOW_WAIT state must be one of "
                     f"{sorted(WINDOW_WAIT_ALLOWED_STATES)}; got '{state_val}'",
+                    path,
+                )
+
+        # SCROLL direction allowlist — maps to xdotool buttons 4/5/6/7
+        if operation == Operation.SCROLL and "direction" in args:
+            dir_val = args["direction"]
+            if dir_val not in SCROLL_ALLOWED_DIRECTIONS:
+                raise ScenarioValidationError(
+                    f"SCROLL direction must be one of "
+                    f"{sorted(SCROLL_ALLOWED_DIRECTIONS)}; got '{dir_val}'",
                     path,
                 )
 

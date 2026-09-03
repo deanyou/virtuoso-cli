@@ -67,11 +67,20 @@ Type text.
 
 ### CLICK_REL
 Perform a relative click.
-- **Required arguments:** `x` (integer), `y` (integer), `button` (positive integer, bool rejected)
+- **Required arguments:** `x` (integer), `y` (integer) — window-relative coordinates
+- **Optional arguments:** `button` (integer, 1/2/3, default 1)
 
 ### DRAG_REL
 Perform a relative drag.
-- **Required arguments:** `x1`, `y1`, `x2`, `y2` (integers), `button` (positive integer, bool rejected)
+- **Required arguments:** `x` (integer), `y` (integer) — relative move vector from window origin
+- **Optional arguments:** `button` (integer, 1/2/3, default 1)
+
+### SCROLL
+Scroll the mouse wheel at a window-relative position. **Local executor only.**
+- **Required arguments:** `direction` (string, must be `up`, `down`, `left`, or `right`)
+- **Optional arguments:** `count` (integer, default 3), `x` (integer, default 50), `y` (integer, default 50)
+
+Maps to xdotool mouse buttons: up=4, down=5, left=6, right=7.
 
 ### SCREENSHOT
 Capture a screenshot.
@@ -170,12 +179,15 @@ The schema is executor-agnostic; executor selection happens on the CLI:
 python3 scripts/gui_runner.py run SCENARIO --output DIR --executor fake
 python3 scripts/gui_runner.py run SCENARIO --output DIR \
     --executor live --session SESSION_ID --vcli VCLI_PATH [--ssh-host HOST]
+python3 scripts/gui_runner.py run SCENARIO --output DIR \
+    --executor local [--window-id WID]
 ```
 
 | Executor | Behavior |
 |----------|----------|
 | `fake` | Deterministic offline replay via injected outcomes (`--fake-outcomes`). No subprocess side effects. |
 | `live` | Real `vcli` execution. Requires `--session` (must equal the scenario `session_id`), `--vcli`, and `--output`. Optional `--ssh-host` runs vcli over SSH with a safely-quoted fixed argv. |
+| `local` | Direct `xdotool` execution on a local DISPLAY. Binds window by PID or `--window-id`. Supports `SCROLL`. Requires `xdotool` and a reachable `DISPLAY`. |
 
 Live-mode operation mapping:
 
@@ -193,3 +205,21 @@ Live-mode operation mapping:
 | `VCLI_LOAD` / `VCLI_CALL` | Accepted by the schema; rejected by the live executor (fail-closed) |
 
 Live precheck enforces (in order): session exists and port matches, positive PID (with window-discovery fallback), DISPLAY equality, unique PID-bound window, and an exclusive DISPLAY lock. Any violation aborts the run before GUI input is sent.
+
+Local-mode operation mapping:
+
+| DSL operation | Local behavior |
+|---------------|----------------|
+| `WINDOW_ACTIVATE` | `xdotool windowactivate <id>` |
+| `KEY` | `xdotool key <keys>` (window activated first) |
+| `TYPE` | `xdotool type --clearmodifiers --delay 30 -- <text>` |
+| `CLICK_REL` | resolve window geometry → absolute coords → `xdotool mousemove` + `click` |
+| `DRAG_REL` | resolve window geometry → `mousedown` → interpolated `mousemove` → `mouseup` |
+| `SCROLL` | `xdotool click --repeat N --delay 60 <button>` (buttons: up=4, down=5, left=6, right=7) |
+| `SCREENSHOT` | `import -window <id> <path>` (ImageMagick) |
+| `WINDOW_WAIT` | Poll `xdotool search --onlyvisible` until state matches or timeout |
+| `VERIFY` | `xdotool search --onlyvisible` for window_exists / state_matches |
+| `RECOVER` | Executes only the step's validated `rollback` |
+| `VCLI_LOAD` / `VCLI_CALL` | Accepted by the schema; rejected by the local executor (fail-closed) |
+
+Local precheck enforces: `xdotool` on PATH, DISPLAY reachable, and a visible window bound to the PID (or explicit `--window-id`).
