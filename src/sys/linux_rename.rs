@@ -36,6 +36,14 @@ const RENAME_NOREPLACE: c_uint = 1;
 ///   3. `lstat64` existence check + `renameat` — last-resort fallback that
 ///      preserves the "must not overwrite an existing destination" contract
 ///      at the cost of a small non-atomic window.
+///
+/// # Safety
+///
+/// `oldpath` and `newpath` must each be a valid, NUL-terminated C string
+/// for the duration of the call. Passing dangling, unterminated, or
+/// misaligned pointers is undefined behavior. On the fast path the bytes are
+/// handed to `renameat2`/`renameat`; on the syscall path they are passed
+/// directly to the kernel.
 #[cfg(target_os = "linux")]
 pub unsafe fn rename_noreplace(
     olddirfd: c_int,
