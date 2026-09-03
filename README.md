@@ -48,6 +48,7 @@ Control Cadence Virtuoso from anywhere — locally or remotely. Designed for AI 
 - **Optional pure-Rust native SSH backend** (`native-ssh` Cargo feature) — a `russh`-based single-hop transport with in-tree host-key verification, public-key auth, SFTP streaming for single files, and a connection pool. OpenSSH stays the default; selecting `native` is explicit via `VB_SSH_BACKEND=native` and there is no automatic backend migration. See `### SSH Backend Selection` below for the capability matrix.
 - **Command logging** — All SKILL executions logged to `~/.cache/virtuoso_bridge/logs/commands.log`
 - **Interactive TUI** — `vtui` terminal dashboard showing sessions, jobs, tunnel status
+- **X11 GUI automation** — `vcli window action-x11` drives Virtuoso forms (click, type, key, drag, screenshot, scroll) with server-side window identity re-validation; `vcli window list-windows-x11` discovers windows by PID/display. Paired with the `virtuoso-gui-debug` skill (`.claude/skills/virtuoso-gui-debug/`) providing a strict JSON DSL, fake/live/local executors, and a multi-method operation playbook (SKILL coordinate reverse-engineering via `hiGetFieldInfo`, xdotool `--window` relative clicks, Tab navigation, CIW direct field assignment). Validated on real Virtuoso IC25.1 dynamic forms with radio field callbacks, file dialogs, and modal-dialog interception handling.
 
 ### Installation
 
@@ -399,6 +400,66 @@ If `config.backend.selected` and `tunnel.backend` disagree, the JSON also carrie
 
 If you depend on anything in the right column of the `no` rows above, stay on `openssh` for now. If your work is single-hop, you want a self-contained Rust binary (no `/usr/bin/ssh` on the host), or you need the in-tree connection pool's latency profile, opt into `native`.
 
+### GUI Debugging
+
+`vcli` can drive Virtuoso's X11 GUI forms directly — no screen-scraping or OCR required. This enables AI agents to test SKILL GUI code (forms, dialogs, callbacks) end-to-end on a real Virtuoso session.
+
+#### Window commands
+
+```bash
+# Discover windows on a display (JSON: window_id, pid, title, geometry)
+vcli window list-windows-x11 --display :5.0 --format json
+
+# Interact with a specific window (server-side re-validates window identity on every call)
+vcli window action-x11 \
+  --window-id 0x26037c7 --pid 114668 --display :5.0 \
+  --operation click-rel --x 300 --y 167
+
+# Supported operations: click-rel, type, key, drag-rel, activate, screenshot, scroll
+vcli window action-x11 --window-id 0x26037c7 --pid 114668 --display :5.0 \
+  --operation type --text "METAL1"
+```
+
+> **Important**: `vcli skill exec` runs in a daemon context that has **no UI library loaded** (`hiCreateAppForm`, `hiDisplayForm`, etc. are nil). Therefore GUI forms must be created/shown via the **CIW** (type SKILL into the CIW input line with xdotool), and GUI interaction goes through `vcli window action-x11` or xdotool. Reading/setting form field values works via the CIW (`form->field->value = "..."`).
+
+#### virtuoso-gui-debug skill
+
+The repo ships `.claude/skills/virtuoso-gui-debug/` — a deterministic GUI debugging skill with:
+
+- **Strict JSON DSL** for replayable scenarios (validate before run)
+- **Three executors**: `fake` (offline regression), `live` (real vcli), `local` (direct xdotool)
+- **Fail-closed prechecks**: session/port match, PID positivity, DISPLAY equality, unique window binding, exclusive X11 lock
+- **Multi-method operation playbook** — every operation has ≥2 independently verified stable methods
+
+#### Multi-method operation matrix (validated on IC25.1)
+
+| Operation | Method 1 (recommended) | Method 2 | Avoid |
+|-----------|----------------------|----------|-------|
+| Window discovery | `vcli window list-windows-x11 --format json` | `xdotool search --name "title"` | — |
+| Coordinate acquisition | SKILL reverse-engineering: `hiGetFieldInfo(form (quote field))` → `((x y) (w h))`, center = `(x+w/2, y+h/2)` | ImageMagick `import -window` + `convert -crop -resize` pixel-level | OCR percent boxes (±40px drift) |
+| Click | `xdotool mousemove --window <wid> <cx> <cy>; xdotool click 1` (window-relative, no xwininfo needed) | `vcli window action-x11 --operation click-rel` | — |
+| Text input | `xdotool type --clearmodifiers --delay 50 "text"` (after focusing field) | Tab-key navigation to field + xdotool type; or CIW direct `form->field->value = "text"` | `vcli window action-x11 --operation type` (injects garbled content on IC25.1) |
+| Submit / confirm | `xdotool key Return` (dialogs: equivalent to Open/OK) | Click button (click-rel or xdotool) | — |
+| Close / cancel | `xdotool key Escape` | CIW `hiFormCancel(form)` | — |
+
+#### Modal dialog handling
+
+Modal dialogs (e.g. "Choose a File" from `hiDisplayFileDialog`) **intercept all input** — clicks on the parent form silently fail. After any Browse/Open action, run `vcli window list-windows-x11` to detect unexpected dialogs, then dismiss with `Return` (submit) or `Escape` (cancel) **before** resuming parent-form operations.
+
+#### Quick GUI debug loop
+
+```
+1. validate SKILL → 2. scp to remote → 3. CIW: load("file.il")
+4. CIW: showForm()  → 5. vcli list-windows-x11 (get wid)
+6. CIW: hiGetFieldInfo(form (quote field))  → exact coords
+7. xdotool mousemove --window + click       → interact
+8. xdotool type / CIW assign                → input
+9. ImageMagick crop screenshot              → visual verify
+10. CIW screenshot → read callback output   → behavioral verify
+11. Modal dialog? → handle first
+12. Bug found → fix SKILL → repeat from 2
+```
+
 ### How It Works
 
 ```
@@ -465,6 +526,7 @@ vcli skill exec    # connects to port N
 - **可选的纯 Rust 原生 SSH 后端**（`native-ssh` Cargo feature）— 基于 `russh` 的单跳传输，自带主机密钥校验、公钥认证、单文件 SFTP streaming 与连接池。OpenSSH 仍是默认；选择 `native` 必须显式通过 `VB_SSH_BACKEND=native`，**没有自动迁移**。能力差异表见下文 `### SSH 后端选择`。
 - **命令日志** — 所有 SKILL 调用记录到 `~/.cache/virtuoso_bridge/logs/commands.log`
 - **交互式 TUI** — `vtui` 终端仪表盘，实时显示 session、仿真 job、隧道状态
+- **X11 GUI 自动化** — `vcli window action-x11` 驱动 Virtuoso 表单（点击、输入、按键、拖拽、截图、滚轮），服务端每次操作重新校验窗口身份；`vcli window list-windows-x11` 按 PID/display 发现窗口。配套 `virtuoso-gui-debug` 技能（`.claude/skills/virtuoso-gui-debug/`）提供严格 JSON DSL、fake/live/local 三种执行器，以及多方法操作手册（通过 `hiGetFieldInfo` 反推字段坐标、xdotool `--window` 相对点击、Tab 键导航、CIW 直接赋值字段）。已在真实 Virtuoso IC25.1 动态表单上验证，覆盖 radio 回调、文件对话框、模态对话框拦截处理等场景。
 
 ### 安装
 
@@ -782,6 +844,66 @@ vcli tunnel start -v
 | RAMIC / X11 转发 | 是（委托给 `ssh`） | 否 |
 
 如果你依赖右栏标记为 `否` 的任何能力，请暂时留在 `openssh`。如果是单跳、想要自包含的 Rust 二进制（无需宿主机 `/usr/bin/ssh`）、或看重内置连接池的延迟表现，再选择 `native`。
+
+### GUI 调试
+
+`vcli` 可以直接驱动 Virtuoso 的 X11 GUI 表单——无需屏幕抓取或 OCR。这使 AI Agent 能够在真实 Virtuoso session 上端到端测试 SKILL GUI 代码（表单、对话框、回调）。
+
+#### 窗口命令
+
+```bash
+# 发现指定 display 上的窗口（JSON：window_id、pid、title、几何信息）
+vcli window list-windows-x11 --display :5.0 --format json
+
+# 与指定窗口交互（服务端每次操作重新校验窗口身份）
+vcli window action-x11 \
+  --window-id 0x26037c7 --pid 114668 --display :5.0 \
+  --operation click-rel --x 300 --y 167
+
+# 支持的操作：click-rel、type、key、drag-rel、activate、screenshot、scroll
+vcli window action-x11 --window-id 0x26037c7 --pid 114668 --display :5.0 \
+  --operation type --text "METAL1"
+```
+
+> **重要**：`vcli skill exec` 运行在 daemon 上下文中，**未加载 UI 库**（`hiCreateAppForm`、`hiDisplayForm` 等均为 nil）。因此 GUI 表单必须通过 **CIW** 创建/显示（用 xdotool 将 SKILL 代码输入 CIW 输入行），GUI 交互通过 `vcli window action-x11` 或 xdotool 完成。读取/设置表单字段值可通过 CIW（`form->field->value = "..."`）。
+
+#### virtuoso-gui-debug 技能
+
+仓库自带 `.claude/skills/virtuoso-gui-debug/`——一个确定性 GUI 调试技能，包含：
+
+- **严格 JSON DSL** 用于可复现的测试场景（运行前先 validate）
+- **三种执行器**：`fake`（离线回归）、`live`（真实 vcli）、`local`（直接 xdotool）
+- **fail-closed 前置检查**：session/端口匹配、PID 正数、DISPLAY 一致、唯一窗口绑定、独占 X11 锁
+- **多方法操作手册**——每个操作至少有 2 种独立验证的稳定方法
+
+#### 多方法操作矩阵（IC25.1 真机验证）
+
+| 操作 | 方法 1（推荐） | 方法 2 | 避免 |
+|------|--------------|--------|------|
+| 窗口发现 | `vcli window list-windows-x11 --format json` | `xdotool search --name "标题"` | — |
+| 坐标获取 | SKILL 反推：`hiGetFieldInfo(form (quote field))` → `((x y) (w h))`，中心 = `(x+w/2, y+h/2)` | ImageMagick `import -window` + `convert -crop -resize` 像素级定位 | OCR 千分比框（漂移 ±40px） |
+| 点击 | `xdotool mousemove --window <wid> <cx> <cy>; xdotool click 1`（窗口相对，无需 xwininfo） | `vcli window action-x11 --operation click-rel` | — |
+| 文本输入 | `xdotool type --clearmodifiers --delay 50 "文本"`（聚焦字段后） | Tab 键导航到字段 + xdotool type；或 CIW 直接 `form->field->value = "文本"` | `vcli window action-x11 --operation type`（IC25.1 上注入乱码） |
+| 提交/确认 | `xdotool key Return`（对话框中等效 Open/OK） | 点击按钮（click-rel 或 xdotool） | — |
+| 关闭/取消 | `xdotool key Escape` | CIW `hiFormCancel(form)` | — |
+
+#### 模态对话框处理
+
+模态对话框（如 `hiDisplayFileDialog` 弹出的 "Choose a File"）**会拦截所有输入**——对父表单的点击会静默失败。任何 Browse/Open 操作后，先运行 `vcli window list-windows-x11` 检测是否有意外对话框，用 `Return`（提交）或 `Escape`（取消）关闭后**再**恢复父表单操作。
+
+#### GUI 调试快速循环
+
+```
+1. validate SKILL → 2. scp 到远端 → 3. CIW: load("file.il")
+4. CIW: showForm()  → 5. vcli list-windows-x11（获取 wid）
+6. CIW: hiGetFieldInfo(form (quote field))  → 精确坐标
+7. xdotool mousemove --window + click       → 交互
+8. xdotool type / CIW 赋值                  → 输入
+9. ImageMagick crop 截图                    → 视觉验证
+10. CIW 截图 → 读取回调输出                 → 行为验证
+11. 模态对话框？→ 优先处理
+12. 发现 bug → 修 SKILL → 从第 2 步重复
+```
 
 ### 工作原理
 

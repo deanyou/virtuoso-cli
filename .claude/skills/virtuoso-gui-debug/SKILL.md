@@ -141,6 +141,132 @@ Only these operations are permitted:
 - Local executor calls xdotool directly but only after precheck binds a specific window
 - Live runs require an explicit fresh `--output` directory; nothing is written outside it
 
+## GUI Operation Playbook (Multi-Method Matrix)
+
+> Every GUI operation has **at least two stable, independently-verified methods**. If one fails or is unreliable, fall through to the next. All methods below were validated on a real Virtuoso IC25.1 session (DISPLAY=:5.0) with the `ui_dynamic_form.il` dynamic form.
+
+### Critical Environment Constraint
+
+**`vcli skill exec` has NO UI library** — `hiCreateAppForm`, `hiDisplayForm`, `hiGetFieldInfo`, `hiCreateRadioField` are all nil in the daemon exec context. Therefore:
+
+- GUI form creation/display MUST go through the **CIW** (xdotool type into the CIW input line).
+- GUI interaction (clicks, typing) MUST go through **xdotool** or **`vcli window action-x11`**.
+- Reading form state / setting field values can go through the **CIW** (form object access works there).
+
+### 1. Window Discovery (2+ methods)
+
+| Method | Command | Notes |
+|--------|---------|-------|
+| **A (recommended)** | `vcli window list-windows-x11 --display :5.0 --format json` | Returns window_id (hex), pid, title, geometry. Server-side validated. |
+| **B** | `xdotool search --name "Layer Replace"` | Returns decimal window id (e.g. `39860167` = `0x26037c7`). Usable directly with xdotool. |
+| C | `xwininfo -name "title"` | Returns geometry; useful for cross-checking absolute position. |
+
+### 2. Coordinate Acquisition (2+ methods)
+
+| Method | How | Precision |
+|--------|-----|-----------|
+| **A (recommended): SKILL reverse-engineering** | In CIW: `hiGetFieldInfo(form (quote fieldName))` → returns `((x y) (w h))` in **form-client-relative coordinates**. Field center = `(x + w/2, y + h/2)`. | Exact (±0px) |
+| **B: pixel-level crop** | `import -window <wid> out.png` then `convert out.png -crop WxH+X+Y -resize 200%` to visually confirm element position. | Exact after 2 rounds of cross-checking |
+| ❌ OCR percentage boxes | Do NOT rely on OCR's relative-percent bounding boxes — drift of ±40px observed across repeated captures of the same window. | Unreliable |
+
+**Coordinate reverse-engineering example** (validated on `udfLayerReplaceForm`):
+```skill
+hiGetFieldInfo(udfLayerReplaceForm (quote oldLayer))   ; → ((5 150) (590 35))
+hiGetFieldInfo(udfLayerReplaceForm (quote newLayer))   ; → ((5 187) (590 35))
+hiGetFieldInfo(udfLayerReplaceForm (quote layerOp))    ; → ((5 41) (590 33))
+hiGetFieldInfo(udfLayerReplaceForm (quote filePath))   ; → ((5 76) (590 35))
+```
+Field centers (form-relative): oldLayer=(300,167), newLayer=(300,204), layerOp=(300,57), filePath=(300,93).
+Use these directly with `xdotool mousemove --window <wid>` (method 3B) — no xwininfo needed.
+
+### 3. Click Operation (3 methods)
+
+| Method | Command | When to use |
+|--------|---------|-------------|
+| **A** | `vcli window action-x11 --window-id <hex> --pid <pid> --display :5.0 --operation click-rel --x <cx> --y <cy>` | Need server-side window re-validation; session-bound. |
+| **B (recommended, lightweight)** | `xdotool mousemove --window <wid> <cx> <cy>; sleep 0.3; xdotool click 1` | Window-relative coords; no xwininfo/absolute math; works with decimal or hex wid. |
+| C | `xdotool mousemove <abs_x> <abs_y>; xdotool click 1` | Only when you already have absolute coords from xwininfo. |
+
+> `cx, cy` are **form-client-relative** coordinates (from method 2A or 2B). For radio buttons inside a field, distribute evenly across the field width.
+
+### 4. Text Input (3 stable methods, 1 unreliable)
+
+| Method | How | Reliability |
+|--------|-----|-------------|
+| **A (recommended)** | Click/navigate to field, then `xdotool type --clearmodifiers --delay 50 "text"` | ✅ High — validated with "TABTEST", "METAL1" |
+| **B (coordinate-free)** | `xdotool key Tab` (repeat to reach target field), then `xdotool type` | ✅ High — 4 Tabs reached Target Layer in the test form |
+| **C (most reliable, bypasses GUI)** | In CIW: `form->field->value = "text"` | ✅ Highest — direct object assignment; no focus needed |
+| ❌ `vcli window action-x11 --operation type --text` | — | ❌ **Unreliable** — injected garbled/clipboard content instead of specified text on IC25.1. Do not use. |
+
+### 5. Button Submit / Confirm (3 methods)
+
+| Method | How | Notes |
+|--------|-----|-------|
+| **A** | Click the button (method 3A or 3B) | Works for OK/Apply when `?buttonLayout` callback is correctly bound. |
+| **B (recommended for dialogs)** | `xdotool key Return` (with dialog focused) | Equivalent to Open/OK in file dialogs; more reliable than clicking the Open button (which had coordinate-sensitivity issues). |
+| C | In CIW: call the callback directly, e.g. `udfApplyCB()` | Bypasses GUI entirely; useful for verifying callback logic independent of button wiring. |
+
+### 6. Close / Cancel (3 methods)
+
+| Method | How | Notes |
+|--------|-----|-------|
+| **A (recommended)** | `xdotool key Escape` (with window focused) | Dismisses most dialogs; falls back to windowclose if no response. |
+| **B** | In CIW: `hiFormCancel(form)` | Clean form dismissal; note: cannot cancel a form that is mapped (returns nil with WARNING). |
+| C | Click Cancel button (method 3) | Coordinate-dependent. |
+
+### 7. Modal Dialog Handling (CRITICAL)
+
+Modal dialogs (e.g. "Choose a File" from `hiDisplayFileDialog`) **intercept ALL input** — clicks and typing on the parent form will silently fail or go to the dialog.
+
+**Detection**: After any Browse/Open action, run `vcli window list-windows-x11` and check for unexpected dialog windows (title contains "Choose", "Confirm", "Error", etc.).
+
+**Resolution order**:
+1. `xdotool windowactivate <dialog_wid>; sleep 0.5; xdotool key Return` (submit) — or `Escape` (cancel)
+2. If Return doesn't close it, click the dialog's Open/Cancel button using method 3 with the **dialog's** window id and geometry
+3. Only after the dialog is gone should you resume operating the parent form
+
+### 8. CIW Input (the bootstrap channel)
+
+Since `vcli skill exec` cannot drive GUI, the CIW is the bootstrap for form creation and state inspection.
+
+**CIW input line coordinates** (must be re-verified if the CIW window moves):
+- Click the input line, then `ctrl+a` (clear), then type the SKILL expression, then `Return`.
+- Always `xwininfo -id <ciw_wid>` before typing — the CIW can be moved/resized by the user.
+- The input line is at the **bottom** of the CIW window; compute `y = abs_y + height - 30` (approximate), then verify with a screenshot crop.
+
+**CIW input pattern**:
+```bash
+xdotool windowactivate <ciw_wid>
+sleep 0.8
+xdotool mousemove <input_x> <input_y>
+sleep 0.4
+xdotool click 1
+sleep 0.6
+xdotool key --clearmodifiers ctrl+a
+sleep 0.2
+xdotool type --clearmodifiers --delay 50 'load("/path/to/file.il")'
+sleep 0.4
+xdotool key Return
+sleep 2
+```
+
+### Recommended Debug Loop
+
+```
+1. debug_wrapper.py validate file.il              # syntax layer
+2. scp file.il ubuntu-docker:/home/user1/
+3. CIW input: load(".../file.il")                 # deploy
+4. CIW input: udfShowForm()                       # display
+5. vcli list-windows-x11 → get form wid           # locate
+6. CIW: hiGetFieldInfo(form (quote field))        # reverse-engineer coords
+7. xdotool mousemove --window + click             # interact (method 3B)
+8. xdotool type / Tab+type / CIW assign           # input (method 4A/B/C)
+9. ImageMagick crop screenshot                    # visual verify
+10. CIW screenshot → read callback output         # behavioral verify
+11. Modal dialog? → handle first (section 7)
+12. Bug found → fix SKILL → repeat from 2
+```
+
 ## Testing
 
 ```bash
