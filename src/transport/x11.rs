@@ -95,6 +95,61 @@ where
     Ok(opt.filter(|&p| p != 0))
 }
 
+/// Parse `xwininfo -id <wid>` stdout into a Geometry.
+///
+/// Extracts `Absolute upper-left X/Y` and `Width/Height`. Returns Err if
+/// the window doesn't exist (xwininfo prints "No such window" to stderr and
+/// exits non-zero, which the caller detects via CommandResult.success) or
+/// the output is unparseable. On parse failure, callers should fall back to
+/// "no geometry check" rather than aborting — xwininfo output format varies
+/// slightly across X11 releases.
+pub fn parse_xwininfo_geometry(stdout: &str) -> Result<Geometry> {
+    let mut x = 0i32;
+    let mut y = 0i32;
+    let mut w = 0i32;
+    let mut h = 0i32;
+    let mut found = 0u8;
+    for line in stdout.lines() {
+        let line = line.trim();
+        if let Some(val) = line.strip_prefix("Absolute upper-left X:") {
+            x = val.trim().parse().unwrap_or(0);
+            found |= 1;
+        } else if let Some(val) = line.strip_prefix("Absolute upper-left Y:") {
+            y = val.trim().parse().unwrap_or(0);
+            found |= 2;
+        } else if let Some(val) = line.strip_prefix("Width:") {
+            w = val.trim().parse().unwrap_or(0);
+            found |= 4;
+        } else if let Some(val) = line.strip_prefix("Height:") {
+            h = val.trim().parse().unwrap_or(0);
+            found |= 8;
+        }
+    }
+    if found != 0b1111 {
+        return Err(VirtuosoError::Execution(format!(
+            "xwininfo output missing geometry fields (found={found}); output: {}",
+            stdout.lines().take(5).collect::<Vec<_>>().join(" | ")
+        )));
+    }
+    Ok(Geometry { x, y, w, h })
+}
+
+/// Validate that coordinates are within a window's geometry.
+///
+/// Returns Ok(()) if the geometry is zero-sized (unknown — trust caller) or
+/// coords are in bounds. Returns Err with a descriptive message if coords
+/// are out of bounds. Zero-sized geometry is NOT an error here — callers
+/// that want to reject minimized windows should check `geom.w == 0` first.
+fn check_coords_in_bounds(geom: &Geometry, op_x: i32, op_y: i32, op_name: &str) -> Result<()> {
+    if geom.w > 0 && geom.h > 0 && (op_x < 0 || op_y < 0 || op_x >= geom.w || op_y >= geom.h) {
+        return Err(VirtuosoError::Config(format!(
+            "{op_name}: coordinates ({op_x}, {op_y}) out of bounds for window size {}x{}",
+            geom.w, geom.h
+        )));
+    }
+    Ok(())
+}
+
 /// Window geometry (x, y, width, height in pixels).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Geometry {
@@ -102,6 +157,82 @@ pub struct Geometry {
     pub y: i32,
     pub w: i32,
     pub h: i32,
+}
+
+/// Pre-fetched X11 context shared across batch actions (P2-3A).
+///
+/// Built once per unique DISPLAY in a non-direct batch: helper path, resolved
+/// env (with xauthority), the full window list, and the DISPLAY/XAUTHORITY
+/// shell prefix. Each action then resolves its target window from `windows`
+/// without re-running the ~500–900 ms helper list-windows command.
+#[derive(Debug, Clone)]
+struct CachedX11Context {
+    helper: String,
+    env: X11Env,
+    windows: Vec<WindowInfo>,
+    display_prefix: String,
+}
+
+/// Geometry file-cache entry (P2-3B). Written after every successful xwininfo
+/// in direct mode; read before xwininfo for zero-size fast-reject only.
+/// Coordinate bounds always use fresh xwininfo — the cache only answers
+/// "is this window currently zero-sized (minimized/unmapped)?".
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GeomCacheEntry {
+    geom: Geometry,
+    /// Unix millis when the entry was written.
+    ts_ms: u128,
+}
+
+const GEOM_CACHE_TTL_MS: u128 = 500;
+
+/// Build the filesystem cache path for a (display, window_id) pair.
+fn geom_cache_path(display: &str, window_id: &str) -> std::path::PathBuf {
+    let safe_display: String = display
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    let safe_wid: String = window_id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    std::env::temp_dir().join(format!("vcli_geom_{safe_display}_{safe_wid}.json"))
+}
+
+/// Try to read a geometry cache entry younger than GEOM_CACHE_TTL_MS.
+///
+/// Returns None on any failure (missing file, stale, parse error, IO error).
+/// Callers must never treat a cache miss as "window is fine" — they still
+/// run xwininfo for the authoritative check.
+fn geom_cache_read(display: &str, window_id: &str) -> Option<Geometry> {
+    let path = geom_cache_path(display, window_id);
+    let data = std::fs::read_to_string(&path).ok()?;
+    let entry: GeomCacheEntry = serde_json::from_str(&data).ok()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_millis();
+    if now.saturating_sub(entry.ts_ms) > GEOM_CACHE_TTL_MS {
+        return None;
+    }
+    Some(entry.geom)
+}
+
+/// Write a geometry cache entry. Best-effort: failures are silently ignored
+/// because the cache is purely an optimization.
+fn geom_cache_write(display: &str, window_id: &str, geom: &Geometry) {
+    let path = geom_cache_path(display, window_id);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let entry = GeomCacheEntry {
+        geom: geom.clone(),
+        ts_ms: now,
+    };
+    if let Ok(json) = serde_json::to_string(&entry) {
+        let _ = std::fs::write(&path, json);
+    }
 }
 
 /// Final result of a dismiss operation.
@@ -964,6 +1095,19 @@ pub fn dismiss_window(
 
 /// Execute a fixed-semantics X11 action on a specific window.
 ///
+/// Thin wrapper around `action_x11_cached` with no cached context. Preserves
+/// the public signature used by `commands::window::action_x11`.
+pub fn action_x11(
+    runner: &dyn RemoteTransport,
+    client_id: &str,
+    user: Option<&str>,
+    inputs: &ActionX11Inputs<'_>,
+) -> Result<X11ActionResult> {
+    action_x11_cached(runner, client_id, user, inputs, None)
+}
+
+/// Core X11 action executor.
+///
 /// Bundles identity + action inputs into `ActionX11Inputs` to keep the
 /// signature under the clippy argument ceiling. Internally it:
 /// 1. uploads the remote helper, lists windows, and resolves the unique
@@ -971,11 +1115,17 @@ pub fn dismiss_window(
 /// 2. re-validated the resolved window matches the requested window_id;
 /// 3. enforces geometry bounds for click/drag;
 /// 4. builds and runs the fixed xdotool/import argv via the command runner.
-pub fn action_x11(
+///
+/// When `cached` is Some (P2-3A batch mode), skips helper upload, env
+/// resolution, and the list-windows scan — the caller already fetched them
+/// once per unique DISPLAY. This eliminates N-1 redundant ~500-900 ms
+/// helper runs in a batch.
+fn action_x11_cached(
     runner: &dyn RemoteTransport,
     client_id: &str,
     user: Option<&str>,
     inputs: &ActionX11Inputs<'_>,
+    cached: Option<&CachedX11Context>,
 ) -> Result<X11ActionResult> {
     let ActionX11Inputs {
         window_id,
@@ -1009,7 +1159,7 @@ pub fn action_x11(
             ));
         }
         let display_prefix = format!("env DISPLAY={} ", shell_escape(display));
-        let resolved = WindowInfo {
+        let mut resolved = WindowInfo {
             frame_id: window_id.to_string(),
             window_id: window_id.to_string(),
             dismiss_id: window_id.to_string(),
@@ -1021,6 +1171,58 @@ pub fn action_x11(
             pid: Some(*pid),
             visible: true,
         };
+
+        // P2-2: direct-mode geometry precheck for coordinate-bearing ops.
+        // xwininfo (~3ms) catches minimized windows (zero-sized) and stale
+        // coordinates before xdotool fires at the wrong location. On xwininfo
+        // failure or unparseable output, fall through with default geometry
+        // (no bounds check) — backward-compatible behavior.
+        //
+        // P2-3B: filesystem geometry cache for zero-size fast-reject. Before
+        // xwininfo, check /tmp/vcli_geom_*.json (TTL 500ms). If the cached
+        // geometry is zero-sized, reject immediately without an SSH round-trip.
+        // Coordinate bounds always use fresh xwininfo — the cache only answers
+        // "is this window minimized?".
+        if *operation == X11Operation::ClickRel
+            || (*operation == X11Operation::Scroll && (x.is_some() || y.is_some()))
+        {
+            // P2-3B: zero-size fast-reject from cache (no SSH round-trip).
+            if let Some(cached_geom) = geom_cache_read(display, window_id) {
+                if cached_geom.w == 0 || cached_geom.h == 0 {
+                    return Err(VirtuosoError::Config(
+                        "direct: window geometry is zero-sized \
+                         (minimized/unmapped, cached); refusing coordinate operation"
+                            .into(),
+                    ));
+                }
+            }
+
+            let xwininfo_cmd =
+                format!("{}xwininfo -id {}", display_prefix, shell_escape(window_id));
+            if let Ok(out) = runner.run_command(&CommandRequest::with_exec_timeout(
+                &xwininfo_cmd,
+                Duration::from_secs(3),
+            )) {
+                if out.success {
+                    if let Ok(geom) = parse_xwininfo_geometry(&out.stdout) {
+                        // P2-3B: cache the fresh geometry for future fast-reject.
+                        geom_cache_write(display, window_id, &geom);
+                        if geom.w == 0 || geom.h == 0 {
+                            return Err(VirtuosoError::Config(
+                                "direct: window geometry is zero-sized \
+                                 (minimized/unmapped); refusing coordinate operation"
+                                    .into(),
+                            ));
+                        }
+                        if let (Some(ox), Some(oy)) = (*x, *y) {
+                            check_coords_in_bounds(&geom, ox, oy, "direct")?;
+                        }
+                        resolved.geometry = geom;
+                    }
+                }
+            }
+        }
+
         let operation = *operation;
         let cmds = build_xdotool_actions(&resolved, operation, *x, *y, *button, *text)?;
         let mut results = Vec::with_capacity(cmds.len());
@@ -1086,32 +1288,46 @@ pub fn action_x11(
         });
     }
 
-    // Step 1: List windows and resolve unique window
-    let helper = ensure_helper_uploaded(runner, user, client_id)?;
-    let envs = resolve_envs(runner, user, Some(display))?;
+    // Step 1: List windows and resolve unique window (or reuse cached context).
+    // P2-3A: when `cached` is Some (batch mode), skip helper upload + env
+    // resolution + list-windows — the caller already fetched them once per
+    // unique DISPLAY. This eliminates N-1 redundant ~500-900 ms helper runs.
+    let (helper, env, windows, display_prefix) = if let Some(ctx) = cached {
+        (
+            ctx.helper.clone(),
+            ctx.env.clone(),
+            ctx.windows.clone(),
+            ctx.display_prefix.clone(),
+        )
+    } else {
+        let helper = ensure_helper_uploaded(runner, user, client_id)?;
+        let envs = resolve_envs(runner, user, Some(display))?;
 
-    let env = envs
-        .iter()
-        .find(|e| e.display.as_deref() == Some(display))
-        .ok_or_else(|| VirtuosoError::Config(format!("DISPLAY '{display}' not found")))?;
+        let env = envs
+            .iter()
+            .find(|e| e.display.as_deref() == Some(display))
+            .ok_or_else(|| VirtuosoError::Config(format!("DISPLAY '{display}' not found")))?
+            .clone();
 
-    let cmd = build_helper_cmd_list_windows(&helper, display, env.xauthority.as_deref());
-    let out = runner.run_command(&CommandRequest::with_exec_timeout(
-        &cmd,
-        Duration::from_secs(*timeout_secs),
-    ))?;
+        let cmd = build_helper_cmd_list_windows(&helper, display, env.xauthority.as_deref());
+        let out = runner.run_command(&CommandRequest::with_exec_timeout(
+            &cmd,
+            Duration::from_secs(*timeout_secs),
+        ))?;
 
-    let windows = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
+        let windows = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
 
-    // Build DISPLAY/XAUTHORITY prefix early so both the resolution fallback and
-    // the action commands below can reuse it.
-    let display_prefix = match env.xauthority {
-        Some(ref xa) => format!(
-            "env DISPLAY={} XAUTHORITY={} ",
-            shell_escape(display),
-            shell_escape(xa)
-        ),
-        None => format!("env DISPLAY={} ", shell_escape(display)),
+        // Build DISPLAY/XAUTHORITY prefix early so both the resolution fallback and
+        // the action commands below can reuse it.
+        let display_prefix = match env.xauthority {
+            Some(ref xa) => format!(
+                "env DISPLAY={} XAUTHORITY={} ",
+                shell_escape(display),
+                shell_escape(xa)
+            ),
+            None => format!("env DISPLAY={} ", shell_escape(display)),
+        };
+        (helper, env, windows, display_prefix)
     };
 
     // Step 2: Resolve the target window.
@@ -1541,6 +1757,12 @@ pub fn action_x11_batch(
             commands: Vec<Vec<String>>,
         }
         let mut prepared: Vec<PreparedAction> = Vec::with_capacity(actions.len());
+        // P2-3B: in-memory xwininfo dedupe per window_id within this batch.
+        // All prechecks run before any xdotool command executes, so a snapshot
+        // at batch start is safe for bounds checking. Saves N-1 SSH round-trips
+        // when multiple actions target the same window.
+        let mut xwininfo_cache: std::collections::HashMap<String, Geometry> =
+            std::collections::HashMap::new();
 
         for (i, action) in actions.iter().enumerate() {
             let pid = action.pid.or(default_pid).unwrap_or(0);
@@ -1578,7 +1800,7 @@ pub fn action_x11_batch(
                 continue;
             }
             let display_prefix = format!("env DISPLAY={} ", shell_escape(display));
-            let resolved = WindowInfo {
+            let mut resolved = WindowInfo {
                 frame_id: action.window_id.clone(),
                 window_id: action.window_id.clone(),
                 dismiss_id: action.window_id.clone(),
@@ -1590,6 +1812,86 @@ pub fn action_x11_batch(
                 pid: Some(pid),
                 visible: true,
             };
+
+            // P2-2: direct batch geometry precheck (same logic as action_x11).
+            // P2-3B: in-memory dedupe per window_id + filesystem cache for
+            // zero-size fast-reject. All prechecks run before any xdotool
+            // command executes, so a snapshot at batch start is safe.
+            if op == X11Operation::ClickRel
+                || (op == X11Operation::Scroll && (action.x.is_some() || action.y.is_some()))
+            {
+                // In-memory cache: same window_id checked earlier in this batch.
+                let cached_geom = xwininfo_cache.get(&action.window_id).cloned();
+                let geom = if let Some(g) = cached_geom {
+                    Some(g)
+                } else {
+                    // Filesystem cache: zero-size fast-reject (no SSH round-trip).
+                    if let Some(fg) = geom_cache_read(display, &action.window_id) {
+                        if fg.w == 0 || fg.h == 0 {
+                            failed += 1;
+                            results.push(BatchActionResult {
+                                index: i,
+                                operation: action.operation.clone(),
+                                status: "failure".into(),
+                                duration_ms: 0,
+                                error: Some(
+                                    "direct: window zero-sized (minimized/unmapped, cached)".into(),
+                                ),
+                            });
+                            continue;
+                        }
+                    }
+                    let xwininfo_cmd = format!(
+                        "{}xwininfo -id {}",
+                        display_prefix,
+                        shell_escape(&action.window_id)
+                    );
+                    match runner.run_command(&CommandRequest::with_exec_timeout(
+                        &xwininfo_cmd,
+                        Duration::from_secs(3),
+                    )) {
+                        Ok(out) if out.success => {
+                            if let Ok(g) = parse_xwininfo_geometry(&out.stdout) {
+                                geom_cache_write(display, &action.window_id, &g);
+                                xwininfo_cache.insert(action.window_id.clone(), g.clone());
+                                Some(g)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    }
+                };
+
+                if let Some(geom) = geom {
+                    if geom.w == 0 || geom.h == 0 {
+                        failed += 1;
+                        results.push(BatchActionResult {
+                            index: i,
+                            operation: action.operation.clone(),
+                            status: "failure".into(),
+                            duration_ms: 0,
+                            error: Some("direct: window zero-sized (minimized/unmapped)".into()),
+                        });
+                        continue;
+                    }
+                    if let (Some(ox), Some(oy)) = (action.x, action.y) {
+                        if let Err(e) = check_coords_in_bounds(&geom, ox, oy, "direct-batch") {
+                            failed += 1;
+                            results.push(BatchActionResult {
+                                index: i,
+                                operation: action.operation.clone(),
+                                status: "failure".into(),
+                                duration_ms: 0,
+                                error: Some(e.to_string()),
+                            });
+                            continue;
+                        }
+                    }
+                    resolved.geometry = geom;
+                }
+            }
+
             let cmds = match build_xdotool_actions(
                 &resolved,
                 op,
@@ -1690,7 +1992,55 @@ pub fn action_x11_batch(
         }
         results.sort_by_key(|r| r.index);
     } else {
-        // ---- Non-direct: full action_x11 per action (shares process startup) ----
+        // ---- Non-direct: shared list-windows per unique DISPLAY (P2-3A) ----
+        // Build one CachedX11Context per unique display (helper upload + env
+        // + list-windows + display_prefix), then each action resolves its
+        // window from the cached list without re-running the ~500-900 ms
+        // helper list-windows command. For a 6-action batch on one DISPLAY
+        // this cuts 5 redundant helper runs (~3-4 s total).
+        use std::collections::HashMap;
+        let mut contexts: HashMap<String, CachedX11Context> = HashMap::new();
+        for action in actions.iter() {
+            let display = action
+                .display
+                .as_deref()
+                .or(default_display)
+                .unwrap_or(":0");
+            if contexts.contains_key(display) {
+                continue;
+            }
+            let helper = ensure_helper_uploaded(runner, user, client_id)?;
+            let envs = resolve_envs(runner, user, Some(display))?;
+            let env = envs
+                .iter()
+                .find(|e| e.display.as_deref() == Some(display))
+                .ok_or_else(|| VirtuosoError::Config(format!("DISPLAY '{display}' not found")))?
+                .clone();
+            let cmd = build_helper_cmd_list_windows(&helper, display, env.xauthority.as_deref());
+            let out = runner.run_command(&CommandRequest::with_exec_timeout(
+                &cmd,
+                Duration::from_secs(timeout_secs),
+            ))?;
+            let windows = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
+            let display_prefix = match env.xauthority {
+                Some(ref xa) => format!(
+                    "env DISPLAY={} XAUTHORITY={} ",
+                    shell_escape(display),
+                    shell_escape(xa)
+                ),
+                None => format!("env DISPLAY={} ", shell_escape(display)),
+            };
+            contexts.insert(
+                display.to_string(),
+                CachedX11Context {
+                    helper,
+                    env,
+                    windows,
+                    display_prefix,
+                },
+            );
+        }
+
         for (i, action) in actions.iter().enumerate() {
             let op_start = std::time::Instant::now();
             let pid = action.pid.or(default_pid).unwrap_or(0);
@@ -1726,7 +2076,10 @@ pub fn action_x11_batch(
                 timeout_secs,
                 direct: false,
             };
-            match action_x11(runner, client_id, user, &inputs) {
+            let ctx = contexts
+                .get(display)
+                .expect("context built for all unique displays");
+            match action_x11_cached(runner, client_id, user, &inputs, Some(ctx)) {
                 Ok(_) => {
                     succeeded += 1;
                     results.push(BatchActionResult {
@@ -4539,5 +4892,99 @@ mod tests {
                 scratch_root: None,
             },
         }
+    }
+
+    // ---- P2-2 / P2-3B: geometry parsing, bounds, and cache tests ----
+
+    #[test]
+    fn parse_xwininfo_geometry_extracts_all_fields() {
+        let stdout = "xwininfo: Window id: 0x2600013\n\
+                      \n\
+                      Absolute upper-left X: 1117\n\
+                      Absolute upper-left Y: 860\n\
+                      Width: 800\n\
+                      Height: 600\n";
+        let g = parse_xwininfo_geometry(stdout).unwrap();
+        assert_eq!(g.x, 1117);
+        assert_eq!(g.y, 860);
+        assert_eq!(g.w, 800);
+        assert_eq!(g.h, 600);
+    }
+
+    #[test]
+    fn parse_xwininfo_geometry_rejects_missing_fields() {
+        let stdout = "Absolute upper-left X: 10\nWidth: 100\n";
+        assert!(parse_xwininfo_geometry(stdout).is_err());
+    }
+
+    #[test]
+    fn check_coords_in_bounds_accepts_in_bounds() {
+        let g = Geometry {
+            x: 0,
+            y: 0,
+            w: 100,
+            h: 80,
+        };
+        assert!(check_coords_in_bounds(&g, 50, 40, "test").is_ok());
+        assert!(check_coords_in_bounds(&g, 0, 0, "test").is_ok());
+        assert!(check_coords_in_bounds(&g, 99, 79, "test").is_ok());
+    }
+
+    #[test]
+    fn check_coords_in_bounds_rejects_out_of_bounds() {
+        let g = Geometry {
+            x: 0,
+            y: 0,
+            w: 100,
+            h: 80,
+        };
+        assert!(check_coords_in_bounds(&g, 100, 40, "test").is_err());
+        assert!(check_coords_in_bounds(&g, 50, 80, "test").is_err());
+        assert!(check_coords_in_bounds(&g, -1, 40, "test").is_err());
+    }
+
+    #[test]
+    fn check_coords_in_bounds_trusts_caller_on_zero_size() {
+        let g = Geometry {
+            x: 0,
+            y: 0,
+            w: 0,
+            h: 0,
+        };
+        // Zero-sized geometry means "unknown" — trust caller, don't reject.
+        assert!(check_coords_in_bounds(&g, 999, 999, "test").is_ok());
+    }
+
+    #[test]
+    fn geom_cache_path_sanitizes_display_and_wid() {
+        let p = geom_cache_path(":5.0", "0x2600013");
+        let fname = p.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(fname.starts_with("vcli_geom_"));
+        assert!(fname.contains("_5_0")); // ':' and '.' replaced with '_'
+        assert!(fname.ends_with(".json"));
+        assert!(p.starts_with(std::env::temp_dir()));
+    }
+
+    #[test]
+    fn geom_cache_roundtrip_reads_what_was_written() {
+        let display = ":test_cache";
+        let wid = "0xdeadbeef";
+        let geom = Geometry {
+            x: 10,
+            y: 20,
+            w: 300,
+            h: 200,
+        };
+        geom_cache_write(display, wid, &geom);
+        let read = geom_cache_read(display, wid).expect("cache read should succeed");
+        assert_eq!(read.w, 300);
+        assert_eq!(read.h, 200);
+        // Cleanup
+        let _ = std::fs::remove_file(geom_cache_path(display, wid));
+    }
+
+    #[test]
+    fn geom_cache_read_returns_none_for_missing_file() {
+        assert!(geom_cache_read(":nonexistent", "0x0").is_none());
     }
 }

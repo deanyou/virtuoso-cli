@@ -385,7 +385,7 @@ for i in $(seq 1 20); do
 done
 ```
 
-### P2 — vcli-side optimizations (require Rust changes)
+### P2 — vcli-side optimizations (Rust changes, all implemented)
 
 - **✅ `--direct` flag (implemented, commit 513f929)**: skips helper upload, env resolution, and list-windows scan. 4.7× faster (1213ms → 260ms). Use when vcli is required but window identity is already known.
 - **✅ `action-x11-batch` (implemented, commit bab1809 + 10c88dc)**: JSONL batch mode with merged shell execution. 6 actions in 260ms (28× vs normal mode). All xdotool commands merged into one SSH round-trip with per-command exit-code markers.
