@@ -282,7 +282,8 @@ pub fn list_windows_x11(explicit_display: Option<&str>) -> Result<Value> {
 /// (typically an X resource id like `0x2e01f16`). Works locally when VB_REMOTE_HOST
 /// is absent.
 pub fn dismiss_window_x11(
-    window_id: &str,
+    window_id: Option<&str>,
+    pid: Option<u32>,
     action: &str,
     explicit_display: Option<&str>,
 ) -> Result<Value> {
@@ -292,12 +293,51 @@ pub fn dismiss_window_x11(
     let config = Config::from_env()?;
     let runner = x11::transport_for_config(&config)?;
     let user = config.remote_user.as_deref();
+
+    // Resolve the target window id. Precedence: explicit --window-id (or the
+    // positional id) > --pid (resolve via list-windows-x11) > error.
+    let id = match (window_id.filter(|s| !s.is_empty()), pid) {
+        (Some(id), _) => id.to_string(),
+        (None, Some(p)) => {
+            // A supplied PID is only a verification elsewhere; here it is the
+            // identity because no window id was given. Resolve it from the
+            // live window list — the same list-windows scan the caller uses
+            // to discover dismiss_ids.
+            let (_env, windows) = x11::list_windows(
+                runner.as_ref(),
+                &x11::client_id_for(&config),
+                user,
+                explicit_display,
+            )?;
+            let matches: Vec<&x11::WindowInfo> =
+                windows.iter().filter(|w| w.pid == Some(p)).collect();
+            match matches.len() {
+                0 => {
+                    return Err(VirtuosoError::NotFound(format!(
+                        "no window with PID={p} (it may not expose _NET_WM_PID, or may not be a Virtuoso window)"
+                    )))
+                }
+                1 => matches[0].dismiss_id.clone(),
+                _ => {
+                    return Err(VirtuosoError::Conflict(format!(
+                        "multiple windows with PID={p}; pass --window-id to disambiguate"
+                    )))
+                }
+            }
+        }
+        (None, None) => {
+            return Err(VirtuosoError::Config(
+                "window id required: pass it positionally, via --window-id, or via --pid".into(),
+            ))
+        }
+    };
+
     let result = x11::dismiss_window(
         runner.as_ref(),
         &x11::client_id_for(&config),
         user,
         explicit_display,
-        window_id,
+        &id,
         action,
     )?;
     let mut out = serde_json::to_value(&result)
@@ -315,7 +355,11 @@ pub fn dismiss_window_x11(
         }),
     );
     obj.insert("action".into(), json!(action));
-    obj.insert("window_id".into(), json!(window_id));
+    obj.insert("window_id".into(), json!(id));
+    // Report which identity was used when resolution came from a PID.
+    if pid.is_some() && window_id.filter(|s| !s.is_empty()).is_none() {
+        obj.insert("resolved_by_pid".into(), json!(pid));
+    }
     Ok(out)
 }
 

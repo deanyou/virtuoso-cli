@@ -603,10 +603,12 @@ impl RpcDispatcher {
                 // returned by list_windows_x11). Unlike dismiss_dialog_x11
                 // this does NOT apply the dialog-size filter — the caller is
                 // expected to have already identified the target window.
-                let window_id = json_str(params.get("window_id"), "window_id")?;
+                // Accepts window_id, or --pid to resolve the window by PID.
+                let window_id = params.get("window_id").and_then(|v| v.as_str());
+                let pid = params.get("pid").and_then(|v| v.as_u64()).map(|n| n as u32);
                 let action = json_str_or(params.get("action"), "enter")?;
                 let display = params.get("display").and_then(|v| v.as_str());
-                crate::commands::window::dismiss_window_x11(&window_id, &action, display)
+                crate::commands::window::dismiss_window_x11(window_id, pid, &action, display)
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown window method '{}'",
