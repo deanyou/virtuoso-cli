@@ -1197,17 +1197,12 @@ fn action_x11_cached(
                 }
             }
 
-            let xwininfo_cmd = format!(
-                "{}xwininfo -id {}",
-                display_prefix,
-                shell_escape(window_id)
-            );
-            if let Ok(out) =
-                runner.run_command(&CommandRequest::with_exec_timeout(
-                    &xwininfo_cmd,
-                    Duration::from_secs(3),
-                ))
-            {
+            let xwininfo_cmd =
+                format!("{}xwininfo -id {}", display_prefix, shell_escape(window_id));
+            if let Ok(out) = runner.run_command(&CommandRequest::with_exec_timeout(
+                &xwininfo_cmd,
+                Duration::from_secs(3),
+            )) {
                 if out.success {
                     if let Ok(geom) = parse_xwininfo_geometry(&out.stdout) {
                         // P2-3B: cache the fresh geometry for future fast-reject.
@@ -1840,8 +1835,7 @@ pub fn action_x11_batch(
                                 status: "failure".into(),
                                 duration_ms: 0,
                                 error: Some(
-                                    "direct: window zero-sized (minimized/unmapped, cached)"
-                                        .into(),
+                                    "direct: window zero-sized (minimized/unmapped, cached)".into(),
                                 ),
                             });
                             continue;
@@ -2007,7 +2001,11 @@ pub fn action_x11_batch(
         use std::collections::HashMap;
         let mut contexts: HashMap<String, CachedX11Context> = HashMap::new();
         for action in actions.iter() {
-            let display = action.display.as_deref().or(default_display).unwrap_or(":0");
+            let display = action
+                .display
+                .as_deref()
+                .or(default_display)
+                .unwrap_or(":0");
             if contexts.contains_key(display) {
                 continue;
             }
@@ -4921,7 +4919,12 @@ mod tests {
 
     #[test]
     fn check_coords_in_bounds_accepts_in_bounds() {
-        let g = Geometry { x: 0, y: 0, w: 100, h: 80 };
+        let g = Geometry {
+            x: 0,
+            y: 0,
+            w: 100,
+            h: 80,
+        };
         assert!(check_coords_in_bounds(&g, 50, 40, "test").is_ok());
         assert!(check_coords_in_bounds(&g, 0, 0, "test").is_ok());
         assert!(check_coords_in_bounds(&g, 99, 79, "test").is_ok());
@@ -4929,7 +4932,12 @@ mod tests {
 
     #[test]
     fn check_coords_in_bounds_rejects_out_of_bounds() {
-        let g = Geometry { x: 0, y: 0, w: 100, h: 80 };
+        let g = Geometry {
+            x: 0,
+            y: 0,
+            w: 100,
+            h: 80,
+        };
         assert!(check_coords_in_bounds(&g, 100, 40, "test").is_err());
         assert!(check_coords_in_bounds(&g, 50, 80, "test").is_err());
         assert!(check_coords_in_bounds(&g, -1, 40, "test").is_err());
@@ -4937,7 +4945,12 @@ mod tests {
 
     #[test]
     fn check_coords_in_bounds_trusts_caller_on_zero_size() {
-        let g = Geometry { x: 0, y: 0, w: 0, h: 0 };
+        let g = Geometry {
+            x: 0,
+            y: 0,
+            w: 0,
+            h: 0,
+        };
         // Zero-sized geometry means "unknown" — trust caller, don't reject.
         assert!(check_coords_in_bounds(&g, 999, 999, "test").is_ok());
     }
@@ -4954,7 +4967,12 @@ mod tests {
     fn geom_cache_roundtrip_reads_what_was_written() {
         let display = ":test_cache";
         let wid = "0xdeadbeef";
-        let geom = Geometry { x: 10, y: 20, w: 300, h: 200 };
+        let geom = Geometry {
+            x: 10,
+            y: 20,
+            w: 300,
+            h: 200,
+        };
         geom_cache_write(display, wid, &geom);
         let read = geom_cache_read(display, wid).expect("cache read should succeed");
         assert_eq!(read.w, 300);
