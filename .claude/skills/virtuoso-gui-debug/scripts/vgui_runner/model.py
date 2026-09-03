@@ -16,6 +16,9 @@ class Operation(str, Enum):
     VCLI_CALL = "VCLI_CALL"
     WINDOW_WAIT = "WINDOW_WAIT"
     WINDOW_ACTIVATE = "WINDOW_ACTIVATE"
+    WINDOW_DISCOVER = "WINDOW_DISCOVER"
+    DISMISS_DIALOG = "DISMISS_DIALOG"
+    CLOSE = "CLOSE"
     KEY = "KEY"
     TYPE = "TYPE"
     CLICK_REL = "CLICK_REL"
@@ -39,6 +42,9 @@ OP_ARG_SCHEMAS = {
     Operation.VCLI_CALL: ({"function", "args"}, {"kwargs"}),
     Operation.WINDOW_WAIT: ({"window_title", "state"}, set()),
     Operation.WINDOW_ACTIVATE: ({"window_title"}, set()),
+    Operation.WINDOW_DISCOVER: (set(), {"title", "class", "pid"}),
+    Operation.DISMISS_DIALOG: (set(), {"window_title", "window_id"}),
+    Operation.CLOSE: (set(), {"window_id"}),
     Operation.KEY: ({"keys"}, set()),
     Operation.TYPE: ({"text"}, set()),
     Operation.CLICK_REL: ({"x", "y"}, {"button"}),
@@ -54,6 +60,7 @@ INT_ARG_KEYS = {
     Operation.CLICK_REL: {"x", "y"},
     Operation.DRAG_REL: {"x", "y"},
     Operation.SCROLL: {"count", "x", "y"},
+    Operation.WINDOW_DISCOVER: {"pid"},
 }
 
 # Button must be positive 1/2/3 — tracked separately so validation runs
@@ -72,7 +79,7 @@ SCROLL_ALLOWED_DIRECTIONS = {"up", "down", "left", "right"}
 
 # Supported verifier predicates. Each maps to a concrete vcli query in the
 # LiveExecutor verify phase. Unknown predicates fail closed at parse time.
-SUPPORTED_PREDICATES = {"window_exists", "state_matches"}
+SUPPORTED_PREDICATES = {"window_exists", "state_matches", "title_matches", "geometry_matches"}
 
 # String-typed argument keys
 STR_ARG_KEYS = {
@@ -80,6 +87,9 @@ STR_ARG_KEYS = {
     Operation.VCLI_CALL: {"function"},
     Operation.WINDOW_WAIT: {"window_title", "state"},
     Operation.WINDOW_ACTIVATE: {"window_title"},
+    Operation.WINDOW_DISCOVER: {"title", "class"},
+    Operation.DISMISS_DIALOG: {"window_title", "window_id"},
+    Operation.CLOSE: {"window_id"},
     Operation.KEY: {"keys"},
     Operation.TYPE: {"text"},
     Operation.SCROLL: {"direction"},

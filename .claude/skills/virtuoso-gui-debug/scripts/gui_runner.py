@@ -124,6 +124,7 @@ def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, f
                 ssh_host=ssh_host,
                 session_id=session_id,
                 output_dir=output_dir,
+                window_id=window_id,
             )
             return executor, None
         except (CommandError, ValueError) as e:
@@ -227,7 +228,7 @@ def main() -> int:
     run.add_argument("--ssh-host", default=None, dest="ssh_host",
                      help="SSH host running vcli (optional with --executor live)")
     run.add_argument("--window-id", default=None, dest="window_id",
-                     help="X11 window id (optional with --executor local; overrides PID discovery)")
+                     help="X11 window id (overrides PID discovery; use with live or local executor)")
     run.add_argument("--fake-outcomes", type=Path, default=None,
                      dest="fake_outcomes",
                      help="Path to JSON file with fake outcomes (only with --executor fake)")

@@ -118,14 +118,17 @@ Only these operations are permitted:
 - `VCLI_LOAD` / `VCLI_CALL` — accepted by the schema; **not executable** by live or local executors (fail-closed)
 - `WINDOW_WAIT` — poll window state until the requested condition or timeout
 - `WINDOW_ACTIVATE` — activate window
+- `WINDOW_DISCOVER` — discover/filter windows (title/class/pid filters)
+- `DISMISS_DIALOG` — dismiss a dialog (vcli dismiss-dialog / xdotool Escape)
+- `CLOSE` — close a window
 - `KEY` — send key event
 - `TYPE` — type text
 - `CLICK_REL` — relative click (window-relative coordinates)
 - `DRAG_REL` — relative drag (window-relative vector)
 - `SCROLL` — scroll wheel at window-relative position (local executor only; directions: up/down/left/right)
 - `SCREENSHOT` — capture screenshot
-- `VERIFY` — verify state
-- `RECOVER` — recovery action
+- `VERIFY` — verify state (predicates: window_exists, state_matches, title_matches, geometry_matches)
+- `RECOVER` — recovery action (auto-dismiss for KEY/TYPE/CLICK_REL when no rollback)
 
 ## Constraints
 

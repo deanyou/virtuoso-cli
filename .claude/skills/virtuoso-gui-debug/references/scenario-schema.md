@@ -57,6 +57,18 @@ Wait for a window to reach a state.
 Activate a window by title.
 - **Required arguments:** `window_title` (string)
 
+### WINDOW_DISCOVER
+Discover and filter windows.
+- **Optional arguments:** `title` (string, substring match), `class` (string, WM_CLASS), `pid` (integer)
+
+### DISMISS_DIALOG
+Dismiss a dialog window.
+- **Optional arguments:** `window_title` (string), `window_id` (string, explicit target)
+
+### CLOSE
+Close a window.
+- **Optional arguments:** `window_id` (string, explicit target; defaults to bound window)
+
 ### KEY
 Send a key event.
 - **Required arguments:** `keys` (string)
@@ -98,10 +110,10 @@ Perform a recovery action.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `predicate` | string | Yes | Supported predicates: `window_exists` (window is in the X11 window list), `state_matches` (window visible flag equals expected) |
-| `expected` | any JSON | Yes | Expected value (boolean for `window_exists`, boolean for `state_matches`) |
+| `predicate` | string | Yes | Supported predicates: `window_exists` (window is in the X11 window list), `state_matches` (window visible flag equals expected), `title_matches` (window title contains expected substring), `geometry_matches` (window geometry x/y/w/h matches expected dict) |
+| `expected` | any JSON | Yes | Expected value (boolean for `window_exists`/`state_matches`, string for `title_matches`, dict for `geometry_matches`) |
 
-Verifier must be a non-empty object. Unknown keys are rejected. Any predicate other than `window_exists` or `state_matches` is rejected at parse time.
+Verifier must be a non-empty object. Unknown keys are rejected. Any predicate other than `window_exists`, `state_matches`, `title_matches`, or `geometry_matches` is rejected at parse time.
 
 ## Rollback Object
 

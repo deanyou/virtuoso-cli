@@ -783,5 +783,93 @@ class TestNonJsonValues(unittest.TestCase):
             Scenario.from_dict(data)
 
 
+class TestNewOperations(unittest.TestCase):
+    """Tests for DISMISS_DIALOG, CLOSE, WINDOW_DISCOVER operations."""
+
+    def _scenario_with_step(self, operation, arguments, verifier=None):
+        data = dict(VALID_SCENARIO)
+        data["steps"] = [{
+            "id": "s1",
+            "operation": operation,
+            "arguments": arguments,
+            "verifier": verifier or {"predicate": "window_exists", "expected": True},
+            "timeout_seconds": 10,
+            "max_retries": 0,
+        }]
+        return data
+
+    def test_dismiss_dialog_no_args_valid(self):
+        s = Scenario.from_dict(self._scenario_with_step("DISMISS_DIALOG", {}))
+        self.assertEqual(s.steps[0].operation, Operation.DISMISS_DIALOG)
+
+    def test_dismiss_dialog_with_window_title_valid(self):
+        s = Scenario.from_dict(self._scenario_with_step(
+            "DISMISS_DIALOG", {"window_title": "Confirm"}))
+        self.assertEqual(s.steps[0].arguments["window_title"], "Confirm")
+
+    def test_dismiss_dialog_with_window_id_valid(self):
+        s = Scenario.from_dict(self._scenario_with_step(
+            "DISMISS_DIALOG", {"window_id": "0x1234"}))
+        self.assertEqual(s.steps[0].arguments["window_id"], "0x1234")
+
+    def test_close_no_args_valid(self):
+        s = Scenario.from_dict(self._scenario_with_step("CLOSE", {}))
+        self.assertEqual(s.steps[0].operation, Operation.CLOSE)
+
+    def test_close_with_window_id_valid(self):
+        s = Scenario.from_dict(self._scenario_with_step("CLOSE", {"window_id": "0x1234"}))
+        self.assertEqual(s.steps[0].arguments["window_id"], "0x1234")
+
+    def test_window_discover_no_args_valid(self):
+        s = Scenario.from_dict(self._scenario_with_step("WINDOW_DISCOVER", {}))
+        self.assertEqual(s.steps[0].operation, Operation.WINDOW_DISCOVER)
+
+    def test_window_discover_with_filters_valid(self):
+        s = Scenario.from_dict(self._scenario_with_step(
+            "WINDOW_DISCOVER", {"title": "Virtuoso", "class": "virtuoso", "pid": 12345}))
+        self.assertEqual(s.steps[0].arguments["title"], "Virtuoso")
+        self.assertEqual(s.steps[0].arguments["pid"], 12345)
+
+    def test_window_discover_unknown_arg_rejected(self):
+        data = self._scenario_with_step("WINDOW_DISCOVER", {"unknown": "x"})
+        with self.assertRaises(ScenarioValidationError):
+            Scenario.from_dict(data)
+
+
+class TestNewVerifierPredicates(unittest.TestCase):
+    """Tests for title_matches and geometry_matches predicates."""
+
+    def _scenario_with_verifier(self, predicate, expected):
+        data = dict(VALID_SCENARIO)
+        data["steps"] = [{
+            "id": "s1",
+            "operation": "WINDOW_ACTIVATE",
+            "arguments": {"window_title": "x"},
+            "verifier": {"predicate": predicate, "expected": expected},
+            "timeout_seconds": 10,
+            "max_retries": 0,
+        }]
+        return data
+
+    def test_title_matches_valid(self):
+        s = Scenario.from_dict(self._scenario_with_verifier("title_matches", "Library"))
+        self.assertEqual(s.steps[0].verifier["predicate"], "title_matches")
+
+    def test_geometry_matches_dict_valid(self):
+        s = Scenario.from_dict(self._scenario_with_verifier(
+            "geometry_matches", {"w": 800, "h": 600}))
+        self.assertEqual(s.steps[0].verifier["expected"]["w"], 800)
+
+    def test_geometry_matches_partial_valid(self):
+        s = Scenario.from_dict(self._scenario_with_verifier(
+            "geometry_matches", {"x": 100}))
+        self.assertEqual(s.steps[0].verifier["expected"]["x"], 100)
+
+    def test_unknown_predicate_rejected(self):
+        data = self._scenario_with_verifier("pixel_color", "#ff0000")
+        with self.assertRaises(ScenarioValidationError):
+            Scenario.from_dict(data)
+
+
 if __name__ == "__main__":
     unittest.main()

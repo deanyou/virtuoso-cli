@@ -541,9 +541,26 @@ class TestRecover(unittest.TestCase):
             runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=WINDOWS_ONE)])
             ex = make_executor(runner, tmp)
             self.assertIsNone(ex.precheck(make_scenario()))
-            step = make_step(operation="KEY", arguments={"keys": "ctrl+z"})
+            # Non-dialog operation requires explicit rollback
+            step = make_step(operation="WINDOW_ACTIVATE", arguments={"window_title": "x"})
             err = ex.recover(step, 0, None)
             self.assertIsNotNone(err)
+            self.assertIn("no rollback", err["error"])
+
+    def test_recover_auto_dismiss_on_key(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([
+                res(stdout=SESSIONS_OK),
+                res(stdout=WINDOWS_ONE),
+                res(stdout='{"status":"success"}'),  # dismiss-dialog action
+            ])
+            ex = make_executor(runner, tmp)
+            self.assertIsNone(ex.precheck(make_scenario()))
+            step = make_step(operation="KEY", arguments={"keys": "ctrl+z"})
+            err = ex.recover(step, 0, None)
+            self.assertIsNone(err)  # auto dismiss-dialog succeeded
 
 
 class TestSanitization(unittest.TestCase):
@@ -591,6 +608,188 @@ class TestLockLifecycle(unittest.TestCase):
             ex2 = make_executor(runner2, tmp)
             self.assertIsNone(ex2.precheck(make_scenario()))
             ex2.close()
+
+
+class TestNewOperationsLive(unittest.TestCase):
+    """Tests for DISMISS_DIALOG, CLOSE, WINDOW_DISCOVER in live executor."""
+
+    def _prechecked_executor(self, tmp, extra_responses=None):
+        script = [res(stdout=SESSIONS_OK), res(stdout=WINDOWS_ONE)]
+        if extra_responses:
+            script.extend(extra_responses)
+        runner = FakeRunner(script)
+        ex = make_executor(runner, tmp)
+        self.assertIsNone(ex.precheck(make_scenario()))
+        return ex, runner
+
+    def test_dismiss_dialog_maps_to_vcli(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, runner = self._prechecked_executor(
+                tmp, [res(stdout='{"status":"success"}')])
+            step = make_step(operation="DISMISS_DIALOG", arguments={})
+            self.assertIsNone(ex.execute(step, 0))
+            # Verify the argv contains dismiss-dialog (dedicated subcommand)
+            action_argv = runner.argvs[-1]
+            self.assertIn("dismiss-dialog", action_argv)
+
+    def test_dismiss_dialog_with_window_id(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, runner = self._prechecked_executor(
+                tmp, [res(stdout='{"status":"success"}')])
+            step = make_step(operation="DISMISS_DIALOG",
+                             arguments={"window_id": "0xdeadbeef"})
+            self.assertIsNone(ex.execute(step, 0))
+            action_argv = runner.argvs[-1]
+            self.assertIn("0xdeadbeef", action_argv)
+
+    def test_close_maps_to_vcli(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, runner = self._prechecked_executor(
+                tmp, [res(stdout='{"status":"success"}')])
+            step = make_step(operation="CLOSE", arguments={})
+            self.assertIsNone(ex.execute(step, 0))
+            action_argv = runner.argvs[-1]
+            self.assertIn("close", action_argv)
+
+    def test_window_discover_calls_discover_windows(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, runner = self._prechecked_executor(
+                tmp, [res(stdout='{"windows":[{"window_id":"0x1","title":"Virtuoso Editor"}]}')])
+            step = make_step(operation="WINDOW_DISCOVER",
+                             arguments={"title": "Virtuoso"})
+            self.assertIsNone(ex.execute(step, 0))
+            discover_argv = runner.argvs[-1]
+            self.assertIn("list-windows-x11", discover_argv)
+
+    def test_window_discover_no_match_returns_error(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, runner = self._prechecked_executor(
+                tmp, [res(stdout='{"windows":[]}')])
+            step = make_step(operation="WINDOW_DISCOVER", arguments={})
+            err = ex.execute(step, 0)
+            self.assertIsNotNone(err)
+            self.assertIn("no windows matched", err["error"])
+
+
+class TestNewVerifierPredicatesLive(unittest.TestCase):
+    """Tests for title_matches and geometry_matches in live executor."""
+
+    def _prechecked_executor(self, tmp, verify_response):
+        runner = FakeRunner([
+            res(stdout=SESSIONS_OK),
+            res(stdout=WINDOWS_ONE),
+            res(stdout=verify_response),
+        ])
+        ex = make_executor(runner, tmp)
+        self.assertIsNone(ex.precheck(make_scenario()))
+        return ex
+
+    def test_title_matches_success(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex = self._prechecked_executor(tmp, WINDOWS_ONE)
+            step = make_step(verifier={"predicate": "title_matches",
+                                       "expected": "Virtuoso"})
+            self.assertIsNone(ex.verify(step, 0))
+
+    def test_title_matches_failure(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex = self._prechecked_executor(tmp, WINDOWS_ONE)
+            step = make_step(verifier={"predicate": "title_matches",
+                                       "expected": "Nonexistent"})
+            err = ex.verify(step, 0)
+            self.assertIsNotNone(err)
+            self.assertIn("title_matches", err["error"])
+
+    def test_geometry_matches_success(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex = self._prechecked_executor(tmp, WINDOWS_ONE)
+            step = make_step(verifier={"predicate": "geometry_matches",
+                                       "expected": {"w": 1200, "h": 800}})
+            self.assertIsNone(ex.verify(step, 0))
+
+    def test_geometry_matches_failure(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex = self._prechecked_executor(tmp, WINDOWS_ONE)
+            step = make_step(verifier={"predicate": "geometry_matches",
+                                       "expected": {"w": 9999}})
+            err = ex.verify(step, 0)
+            self.assertIsNotNone(err)
+            self.assertIn("geometry_matches", err["error"])
+
+
+class TestWindowIdDisambiguation(unittest.TestCase):
+    """Tests for --window-id override in multi-window PID scenarios."""
+
+    def test_multi_window_without_window_id_rejected(self):
+        import tempfile
+        windows_two = json.dumps({
+            "display": DISPLAY,
+            "count": 2,
+            "windows": [
+                {"window_id": "0x1", "dismiss_id": "0x1", "display": DISPLAY,
+                 "title": "Window A", "pid": PID, "visible": True,
+                 "geometry": {"x": 0, "y": 0, "w": 100, "h": 100}},
+                {"window_id": "0x2", "dismiss_id": "0x2", "display": DISPLAY,
+                 "title": "Window B", "pid": PID, "visible": True,
+                 "geometry": {"x": 0, "y": 0, "w": 200, "h": 200}},
+            ],
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=windows_two)])
+            ex = make_executor(runner, tmp)
+            err = ex.precheck(make_scenario())
+            self.assertIsNotNone(err)
+            self.assertIn("--window-id", err["error"])
+
+    def test_multi_window_with_window_id_succeeds(self):
+        import tempfile
+        windows_two = json.dumps({
+            "display": DISPLAY,
+            "count": 2,
+            "windows": [
+                {"window_id": "0x1", "dismiss_id": "0x1", "display": DISPLAY,
+                 "title": "Window A", "pid": PID, "visible": True,
+                 "geometry": {"x": 0, "y": 0, "w": 100, "h": 100}},
+                {"window_id": "0x2", "dismiss_id": "0x2", "display": DISPLAY,
+                 "title": "Window B", "pid": PID, "visible": True,
+                 "geometry": {"x": 0, "y": 0, "w": 200, "h": 200}},
+            ],
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=windows_two)])
+            ex = make_executor(runner, tmp, window_id="0x2")
+            self.assertIsNone(ex.precheck(make_scenario()))
+            self.assertEqual(ex.window_id, "0x2")
+
+    def test_multi_window_with_bad_window_id_rejected(self):
+        import tempfile
+        windows_two = json.dumps({
+            "display": DISPLAY,
+            "count": 2,
+            "windows": [
+                {"window_id": "0x1", "dismiss_id": "0x1", "display": DISPLAY,
+                 "title": "Window A", "pid": PID, "visible": True,
+                 "geometry": {"x": 0, "y": 0, "w": 100, "h": 100}},
+                {"window_id": "0x2", "dismiss_id": "0x2", "display": DISPLAY,
+                 "title": "Window B", "pid": PID, "visible": True,
+                 "geometry": {"x": 0, "y": 0, "w": 200, "h": 200}},
+            ],
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=windows_two)])
+            ex = make_executor(runner, tmp, window_id="0xdead")
+            err = ex.precheck(make_scenario())
+            self.assertIsNotNone(err)
+            self.assertIn("not found", err["error"])
 
 
 if __name__ == "__main__":

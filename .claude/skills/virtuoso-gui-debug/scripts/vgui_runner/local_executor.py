@@ -198,6 +198,42 @@ class LocalExecutor(Executor):
                         )
                     }
                 return None
+            if predicate == "title_matches":
+                # xdotool getwindowname may return empty; try xprop fallback
+                try:
+                    title = self._xdotool("getwindowname", self.window_id or "",
+                                          timeout=_TIMEOUT_PRECHECK)
+                except RuntimeError:
+                    title = ""
+                if not title:
+                    # xprop fallback for windows with empty xdotool name
+                    try:
+                        out = _run(["xprop", "-id", self.window_id or "", "_NET_WM_NAME"],
+                                   _TIMEOUT_PRECHECK, env=self._env)
+                        if out.returncode == 0 and "=" in out.stdout:
+                            title = out.stdout.split("=", 1)[1].strip().strip('"')
+                    except Exception:  # noqa: BLE001
+                        title = ""
+                if str(expected) not in title:
+                    return {
+                        "error": (
+                            f"predicate title_matches: expected '{expected}' in "
+                            f"title, got '{title[:80]}'"
+                        )
+                    }
+                return None
+            if predicate == "geometry_matches":
+                geo = self._window_geometry()
+                if isinstance(expected, dict):
+                    for key in ("x", "y", "w", "h"):
+                        if key in expected and geo.get(key) != expected[key]:
+                            return {
+                                "error": (
+                                    f"predicate geometry_matches: {key} expected "
+                                    f"{expected[key]}, got {geo.get(key)}"
+                                )
+                            }
+                return None
             return {"error": f"unsupported verifier predicate: {predicate}"}
         except Exception as exc:  # noqa: BLE001
             return {"error": str(exc)}
@@ -207,7 +243,18 @@ class LocalExecutor(Executor):
     ) -> Optional[Dict[str, Any]]:
         if self.window_id is None:
             return {"error": "recover requires a successful precheck"}
+        # Auto-recovery: if no explicit rollback but the step may have triggered
+        # a dialog (KEY/TYPE/CLICK_REL), send Escape as a safety net.
         if not rollback:
+            if step.operation in (Operation.KEY, Operation.TYPE, Operation.CLICK_REL):
+                try:
+                    self._xdotool("windowactivate", self.window_id or "")
+                    time.sleep(0.1)
+                    self._xdotool("key", "Escape")
+                    time.sleep(0.3)
+                    return None
+                except Exception as exc:  # noqa: BLE001
+                    return {"error": f"auto dismiss failed: {exc}"}
             return {"error": "no rollback defined for step; cannot recover"}
         op_str = rollback.get("operation")
         try:
@@ -295,6 +342,31 @@ class LocalExecutor(Executor):
         elif op == Operation.SCREENSHOT:
             path = str(self._output_dir / f"window_{self.window_id}.png")
             self._screenshot(path)
+        elif op == Operation.DISMISS_DIALOG:
+            # Try Escape first (most dialogs), fall back to windowclose
+            target = args.get("window_id") or self.window_id
+            self._xdotool("windowactivate", target or "")
+            time.sleep(0.1)
+            self._xdotool("key", "Escape")
+            time.sleep(0.3)
+        elif op == Operation.CLOSE:
+            target = args.get("window_id") or self.window_id
+            self._xdotool("windowclose", target or "")
+            time.sleep(0.3)
+        elif op == Operation.WINDOW_DISCOVER:
+            # xdotool search with optional title/class/pid filter
+            search_args = ["search", "--onlyvisible"]
+            if args.get("title"):
+                search_args += ["--name", args["title"]]
+            if args.get("class"):
+                search_args += ["--class", args["class"]]
+            if args.get("pid") is not None:
+                search_args += ["--pid", str(args["pid"])]
+            if not (args.get("title") or args.get("class") or args.get("pid")):
+                search_args += ["--name", ".*"]
+            out = self._xdotool(*search_args, timeout=_TIMEOUT_PRECHECK)
+            if not out.strip():
+                return {"error": "no windows matched discover criteria"}
         elif op == Operation.WINDOW_WAIT:
             self._wait_for_window(step)
         elif op == Operation.VERIFY:

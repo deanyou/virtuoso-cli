@@ -37,7 +37,11 @@ _ACTION_OPERATIONS = {
     Operation.CLICK_REL: "click-rel",
     Operation.DRAG_REL: "drag-rel",
     Operation.SCREENSHOT: "screenshot",
+    Operation.CLOSE: "close",
 }
+# DISMISS_DIALOG uses the dedicated vcli window dismiss-dialog subcommand,
+# not action-x11 (which doesn't support it).
+_DISMISS_DIALOG_OP = Operation.DISMISS_DIALOG
 
 _TIMEOUT_PRECHECK = 30
 _TIMEOUT_ACTION = 60
@@ -118,6 +122,7 @@ class LiveExecutor(Executor):
         ssh_host: Optional[str],
         session_id: str,
         output_dir: Path,
+        window_id: Optional[str] = None,
     ):
         if not session_id:
             raise ValueError("live executor requires an explicit --session")
@@ -143,6 +148,8 @@ class LiveExecutor(Executor):
                     "(alphanumerics, dots, underscores, hyphens)"
                 )
         self._output_dir = Path(output_dir)
+        # Explicit window id overrides PID-based discovery (for multi-window PIDs).
+        self._explicit_window_id = window_id
         # Run state — only set after precheck validates identity.
         self._lock: Optional[_DisplayLock] = None
         self.window_id: Optional[str] = None
@@ -164,10 +171,26 @@ class LiveExecutor(Executor):
         if result.exit_code != 0:
             reason = result.stderr.strip() or f"exit code {result.exit_code}"
             raise RuntimeError(reason)
+        stdout = result.stdout.strip()
         try:
-            data = json.loads(result.stdout)
-        except (json.JSONDecodeError, ValueError) as exc:
-            raise RuntimeError(f"unparseable JSON output: {exc}") from exc
+            data = json.loads(stdout)
+        except (json.JSONDecodeError, ValueError):
+            # Some vcli subcommands emit INFO log lines (with ANSI escapes)
+            # before the JSON payload. Find the first line that starts a
+            # JSON object/array and parse from there.
+            data = None
+            lines = stdout.splitlines()
+            for idx, line in enumerate(lines):
+                stripped = line.lstrip()
+                if stripped.startswith("{") or stripped.startswith("["):
+                    candidate = "\n".join(lines[idx:])
+                    try:
+                        data = json.loads(candidate)
+                        break
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+            if data is None:
+                raise RuntimeError(f"unparseable output: {stdout[:200]}")
         if not isinstance(data, dict):
             raise RuntimeError("command output is not a JSON object")
         return data
@@ -264,13 +287,30 @@ class LiveExecutor(Executor):
                         f"{scenario.display}"
                     )
                 }
+            # Multi-window disambiguation: explicit --window-id wins, then
+            # window_title filter from the first step's arguments.
             if len(candidates) > 1:
-                return {
-                    "error": (
-                        f"{len(candidates)} windows bound to PID {effective_pid} "
-                        f"on DISPLAY {scenario.display}; refusing ambiguous input"
-                    )
-                }
+                if self._explicit_window_id:
+                    matched = [
+                        w for w in candidates
+                        if (w.get("dismiss_id") or w.get("window_id")) == self._explicit_window_id
+                    ]
+                    if not matched:
+                        return {
+                            "error": (
+                                f"--window-id {self._explicit_window_id} not found "
+                                f"among {len(candidates)} windows for PID {effective_pid}"
+                            )
+                        }
+                    candidates = matched
+                else:
+                    return {
+                        "error": (
+                            f"{len(candidates)} windows bound to PID {effective_pid} "
+                            f"on DISPLAY {scenario.display}; use --window-id to "
+                            f"disambiguate"
+                        )
+                    }
             window = candidates[0]
             self.window_id = window.get("dismiss_id") or window.get("window_id")
             self._scenario_display = scenario.display
@@ -307,11 +347,15 @@ class LiveExecutor(Executor):
         if self.window_id is None or self._lock is None:
             return {"error": "execute requires a successful precheck"}
         try:
+            if step.operation == Operation.DISMISS_DIALOG:
+                return self._dismiss_dialog(step)
             if step.operation in _ACTION_OPERATIONS:
                 self._execute_action_step(step)
                 return None
             if step.operation == Operation.WINDOW_WAIT:
                 return self._wait_for_window(step)
+            if step.operation == Operation.WINDOW_DISCOVER:
+                return self._discover_windows(step)
             if step.operation == Operation.VERIFY:
                 return None  # verification happens in the verify phase
             if step.operation in (Operation.VCLI_LOAD, Operation.VCLI_CALL):
@@ -383,6 +427,64 @@ class LiveExecutor(Executor):
                         )
                     }
                 return None
+            if predicate == "title_matches":
+                # expected is a substring to match in the window title
+                windows_data = self._run_json(
+                    self._vcli_argv(
+                        "window",
+                        "list-windows-x11",
+                        "--display",
+                        self._scenario_display or ":0",
+                    ),
+                    _TIMEOUT_PRECHECK,
+                )
+                windows = windows_data.get("windows", [])
+                win = next(
+                    (w for w in windows
+                     if (w.get("dismiss_id") or w.get("window_id")) == self.window_id),
+                    None,
+                )
+                if win is None:
+                    return {"error": "predicate title_matches: window not found"}
+                title = win.get("title", "")
+                if str(expected) not in title:
+                    return {
+                        "error": (
+                            f"predicate title_matches: expected '{expected}' in "
+                            f"title, got '{title[:80]}'"
+                        )
+                    }
+                return None
+            if predicate == "geometry_matches":
+                # expected is a dict with optional x/y/w/h keys
+                windows_data = self._run_json(
+                    self._vcli_argv(
+                        "window",
+                        "list-windows-x11",
+                        "--display",
+                        self._scenario_display or ":0",
+                    ),
+                    _TIMEOUT_PRECHECK,
+                )
+                windows = windows_data.get("windows", [])
+                win = next(
+                    (w for w in windows
+                     if (w.get("dismiss_id") or w.get("window_id")) == self.window_id),
+                    None,
+                )
+                if win is None:
+                    return {"error": "predicate geometry_matches: window not found"}
+                geo = win.get("geometry", {})
+                if isinstance(expected, dict):
+                    for key in ("x", "y", "w", "h"):
+                        if key in expected and geo.get(key) != expected[key]:
+                            return {
+                                "error": (
+                                    f"predicate geometry_matches: {key} expected "
+                                    f"{expected[key]}, got {geo.get(key)}"
+                                )
+                            }
+                return None
             return {"error": f"unsupported verifier predicate: {predicate}"}
         except Exception as exc:  # noqa: BLE001
             return _sanitize_error({"error": str(exc)}, step)
@@ -392,7 +494,11 @@ class LiveExecutor(Executor):
     ) -> Optional[Dict[str, Any]]:
         if self.window_id is None or self._lock is None:
             return {"error": "recover requires a successful precheck"}
+        # Auto-recovery: if no explicit rollback but the step may have triggered
+        # a dialog (KEY/TYPE/CLICK_REL), try dismiss-dialog as a safety net.
         if not rollback:
+            if step.operation in (Operation.KEY, Operation.TYPE, Operation.CLICK_REL):
+                return self._dismiss_dialog(step)
             return {"error": "no rollback defined for step; cannot recover"}
         op_str = rollback.get("operation")
         try:
@@ -442,13 +548,14 @@ class LiveExecutor(Executor):
         button=None,
         text=None,
         output_dir=None,
+        window_id=None,
         timeout_seconds=_TIMEOUT_ACTION,
     ) -> Dict[str, Any]:
         argv = self._vcli_argv(
             "window",
             "action-x11",
             "--window-id",
-            self.window_id or "",
+            window_id or self.window_id or "",
             "--pid",
             str(self._scenario_pid),
             "--display",
@@ -472,6 +579,7 @@ class LiveExecutor(Executor):
         op = _ACTION_OPERATIONS[step.operation]
         args = step.arguments
         x = y = button = text = output_dir = None
+        action_window_id = self.window_id
         if step.operation == Operation.CLICK_REL:
             x, y = args.get("x"), args.get("y")
             button = args.get("button")
@@ -486,8 +594,12 @@ class LiveExecutor(Executor):
             text = args.get("text")
         elif step.operation == Operation.SCREENSHOT:
             output_dir = str(self._output_dir)
+        elif step.operation == Operation.CLOSE:
+            if args.get("window_id"):
+                action_window_id = args.get("window_id")
         result = self._run_action(
-            op, x=x, y=y, button=button, text=text, output_dir=output_dir
+            op, x=x, y=y, button=button, text=text, output_dir=output_dir,
+            window_id=action_window_id,
         )
         if result.get("status") not in (None, "success"):
             raise RuntimeError(f"action {op} failed: {result.get('status')}")
@@ -521,3 +633,48 @@ class LiveExecutor(Executor):
                 return None
             time.sleep(0.5)
         return {"error": f"window did not become {state} within {step.timeout_seconds}s"}
+
+    def _dismiss_dialog(self, step: Step) -> Optional[Dict[str, Any]]:
+        """Dismiss a dialog via vcli window dismiss-dialog.
+
+        Default path uses the Virtuoso session (SKILL-based). When an explicit
+        window_id is given, switches to --x11 bypass with --display.
+        """
+        target = step.arguments.get("window_id")
+        argv = self._vcli_argv("window", "dismiss-dialog")
+        if target:
+            argv += ["--x11", "--display", self._scenario_display or ":0",
+                     "--window-id", target]
+        try:
+            data = self._run_json(argv, _TIMEOUT_ACTION)
+            # "no-dialog" is a normal outcome — nothing to dismiss.
+            if data.get("status") not in (None, "success", "no-dialog"):
+                return {"error": f"dismiss-dialog failed: {data.get('status')}"}
+            return None
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"dismiss-dialog failed: {exc}"}
+
+    def _discover_windows(self, step: Step) -> Optional[Dict[str, Any]]:
+        """Discover windows via vcli list-windows-x11 with optional filters."""
+        argv = self._vcli_argv(
+            "window", "list-windows-x11",
+            "--display", self._scenario_display or ":0",
+        )
+        try:
+            data = self._run_json(argv, _TIMEOUT_PRECHECK)
+            windows = data.get("windows", [])
+            title = step.arguments.get("title")
+            wclass = step.arguments.get("class")
+            pid = step.arguments.get("pid")
+            if title:
+                windows = [w for w in windows if title in (w.get("title") or "")]
+            if wclass:
+                windows = [w for w in windows
+                           if wclass in (w.get("class") or [])]
+            if pid is not None:
+                windows = [w for w in windows if w.get("pid") == pid]
+            if not windows:
+                return {"error": "no windows matched discover criteria"}
+            return None
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"discover-windows failed: {exc}"}

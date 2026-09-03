@@ -261,11 +261,20 @@ class TestLocalExecutorRecover(unittest.TestCase):
         err = self.executor.recover(step, 0, rollback)
         self.assertIsNone(err)
 
-    def test_recover_without_rollback(self):
-        step = _make_step(Operation.KEY, {"keys": "a"})
+    def test_recover_without_rollback_non_dialog_op(self):
+        # Non-dialog operations (WINDOW_ACTIVATE) still require explicit rollback
+        step = _make_step(Operation.WINDOW_ACTIVATE, {"window_title": "x"})
         err = self.executor.recover(step, 0, None)
         self.assertIsNotNone(err)
         self.assertIn("no rollback", err["error"])
+
+    @mock.patch("vgui_runner.local_executor._run")
+    def test_recover_auto_dismiss_on_key(self, mock_run):
+        # Dialog-triggering ops (KEY/TYPE/CLICK_REL) auto-dismiss on no rollback
+        mock_run.return_value = _completed()
+        step = _make_step(Operation.KEY, {"keys": "a"})
+        err = self.executor.recover(step, 0, None)
+        self.assertIsNone(err)  # auto Escape succeeded
 
     @mock.patch("vgui_runner.local_executor._run")
     def test_recover_unknown_operation(self, mock_run):
