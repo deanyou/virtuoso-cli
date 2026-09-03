@@ -1507,15 +1507,19 @@ enum WindowCmd {
 
     /// Execute a fixed-semantics X11 action on a specific window.
     ///
-    /// Requires exact window-id, positive PID, and exact DISPLAY.
-    /// Re-validates the window via resolve_unique_window before each action.
+    /// Requires an exact window-id and exact DISPLAY. The PID is optional:
+    /// when supplied it must match the window exactly; when omitted the
+    /// window id alone identifies the target — the only way to drive windows
+    /// that expose no `_NET_WM_PID` (listed as `pid: null`).
+    /// Re-validates the window before each action.
     ActionX11 {
         /// Window id (dismiss_id from list-windows-x11, e.g. 0x2e01f16)
         #[arg(long)]
         window_id: String,
-        /// Process ID of the window (must be positive)
+        /// Process ID of the window. Optional; when supplied it must be
+        /// positive and must match the window exactly.
         #[arg(long)]
-        pid: u32,
+        pid: Option<u32>,
         /// DISPLAY value (e.g. :0, :1)
         #[arg(long)]
         display: String,
