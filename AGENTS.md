@@ -146,3 +146,15 @@ Key vars: `VB_HOST`, `VB_PORT`, `VB_SESSION`, `VB_TIMEOUT` (default 30 s; set to
 `VB_REMOTE_HOST`, `VB_JUMP_HOST`, `VB_CLIENT_ID`/`VB_PROFILE` (per-client scratch isolation),
 `VB_CACHE_DIR` / `VB_HOME` / `VB_LOG_DIR` / `VB_OUTPUT_DIR` / `VB_TMP_DIR` / `VB_STATE_DIR` / `VB_CONFIG_DIR`
 (overrides for `runtime_paths::cache_root` etc. — see `src/runtime_paths.rs`).
+
+## GUI Debugging
+
+涉及 Virtuoso 窗口操作、X11 自动化、GUI 回归测试时，使用 `.claude/skills/virtuoso-gui-debug/` 技能：
+
+- **`--executor fake`** — 离线确定性回放，用于回归测试和逻辑验证
+- **`--executor live`** — 通过 vcli CLI（本地或 SSH）驱动远程 Virtuoso 会话，服务端重新校验窗口身份
+- **`--executor local`** — 直接调用 xdotool 操作本地 X11 DISPLAY，支持 `SCROLL`（vcli 暂不支持滚轮）
+
+快速检查用 `scripts/xdotool_cli.py`（env/state/find/shot/click/type/key/drag/scroll/wait/smoke）。
+场景 DSL 规范见 `references/scenario-schema.md`，xdotool 命令参考见 `references/xdotool-cheatsheet.md`。
+测试：`cd .claude/skills/virtuoso-gui-debug && python3 -m unittest discover tests`。
