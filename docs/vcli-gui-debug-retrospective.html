@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>vcli GUI 调试能力建设复盘</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #0f1117; color: #e4e6eb; line-height: 1.7; }
@@ -80,7 +79,39 @@
   <!-- 性能优化 -->
   <div class="section">
     <h2>性能优化效果</h2>
-    <div id="perfChart" class="chart"></div>
+    <div class="chart">
+      <svg viewBox="0 0 680 300" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">
+        <!-- Legend -->
+        <rect x="240" y="8" width="12" height="12" rx="2" fill="#f87171"/><text x="258" y="18" font-size="11" fill="#8b949e">优化前</text>
+        <rect x="320" y="8" width="12" height="12" rx="2" fill="#4ade80"/><text x="338" y="18" font-size="11" fill="#8b949e">优化后</text>
+        <!-- Grid lines (log: 1,10,100,1000) -->
+        <line x1="70" y1="44" x2="660" y2="44" stroke="#30363d" stroke-width="0.5" stroke-dasharray="3,3"/><text x="65" y="48" font-size="9" fill="#8b949e" text-anchor="end">1000</text>
+        <line x1="70" y1="113" x2="660" y2="113" stroke="#30363d" stroke-width="0.5" stroke-dasharray="3,3"/><text x="65" y="117" font-size="9" fill="#8b949e" text-anchor="end">100</text>
+        <line x1="70" y1="181" x2="660" y2="181" stroke="#30363d" stroke-width="0.5" stroke-dasharray="3,3"/><text x="65" y="185" font-size="9" fill="#8b949e" text-anchor="end">10</text>
+        <line x1="70" y1="250" x2="660" y2="250" stroke="#8b949e" stroke-width="1"/><text x="65" y="254" font-size="9" fill="#8b949e" text-anchor="end">1</text>
+        <text x="14" y="150" font-size="10" fill="#8b949e" transform="rotate(-90,14,150)" text-anchor="middle">ms（对数轴）</text>
+        <!-- 单次点击: before 1350, after 10 -->
+        <rect x="93" y="35" width="35" height="215" rx="2" fill="#f87171"/><text x="110" y="30" font-size="10" fill="#f87171" text-anchor="middle">1350</text>
+        <rect x="132" y="181" width="35" height="69" rx="2" fill="#4ade80"/><text x="149" y="176" font-size="10" fill="#4ade80" text-anchor="middle">10</text>
+        <text x="130" y="268" font-size="11" fill="#c9d1d9" text-anchor="middle">单次点击</text>
+        <!-- 几何查询: before 940, after 3 -->
+        <rect x="213" y="46" width="35" height="204" rx="2" fill="#f87171"/><text x="230" y="41" font-size="10" fill="#f87171" text-anchor="middle">940</text>
+        <rect x="252" y="217" width="35" height="33" rx="2" fill="#4ade80"/><text x="269" y="212" font-size="10" fill="#4ade80" text-anchor="middle">3</text>
+        <text x="250" y="268" font-size="11" fill="#c9d1d9" text-anchor="middle">几何查询</text>
+        <!-- 20字输入: before 530, after 120 -->
+        <rect x="333" y="63" width="35" height="187" rx="2" fill="#f87171"/><text x="350" y="58" font-size="10" fill="#f87171" text-anchor="middle">530</text>
+        <rect x="372" y="107" width="35" height="143" rx="2" fill="#4ade80"/><text x="389" y="102" font-size="10" fill="#4ade80" text-anchor="middle">120</text>
+        <text x="370" y="268" font-size="11" fill="#c9d1d9" text-anchor="middle">20字输入</text>
+        <!-- 6操作批量: before 1603, after 260 -->
+        <rect x="453" y="30" width="35" height="220" rx="2" fill="#f87171"/><text x="470" y="25" font-size="10" fill="#f87171" text-anchor="middle">1603</text>
+        <rect x="492" y="84" width="35" height="166" rx="2" fill="#4ade80"/><text x="509" y="79" font-size="10" fill="#4ade80" text-anchor="middle">260</text>
+        <text x="490" y="268" font-size="11" fill="#c9d1d9" text-anchor="middle">6操作批量</text>
+        <!-- CIW执行: before 800, after 425 -->
+        <rect x="573" y="51" width="35" height="199" rx="2" fill="#f87171"/><text x="590" y="46" font-size="10" fill="#f87171" text-anchor="middle">800</text>
+        <rect x="612" y="70" width="35" height="180" rx="2" fill="#4ade80"/><text x="629" y="65" font-size="10" fill="#4ade80" text-anchor="middle">425</text>
+        <text x="610" y="268" font-size="11" fill="#c9d1d9" text-anchor="middle">CIW执行</text>
+      </svg>
+    </div>
     <div class="two-col">
       <div>
         <h3>P0 — 操作层切换</h3>
@@ -110,7 +141,50 @@ xdotool click 1
   <!-- Bug 修复统计 -->
   <div class="section">
     <h2>13 个文件 Bug 修复统计</h2>
-    <div id="bugChart" class="chart"></div>
+    <div class="chart">
+      <svg viewBox="0 0 680 380" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">
+        <!-- 13 rows, y starts at 18, spacing 27 -->
+        <!-- form_widgets: 1 -->
+        <text x="148" y="30" font-size="11" fill="#c9d1d9" text-anchor="end">form_widgets</text>
+        <rect x="155" y="19" width="42" height="16" rx="0" fill="#6ea8fe"/><text x="203" y="31" font-size="10" fill="#c9d1d9">1</text>
+        <!-- form_layout: 0 -->
+        <text x="148" y="57" font-size="11" fill="#c9d1d9" text-anchor="end">form_layout</text>
+        <text x="158" y="58" font-size="10" fill="#8b949e">0</text>
+        <!-- menu: 0 -->
+        <text x="148" y="84" font-size="11" fill="#c9d1d9" text-anchor="end">menu</text>
+        <text x="158" y="85" font-size="10" fill="#8b949e">0</text>
+        <!-- ui_toggle_combo: 6 -->
+        <text x="148" y="111" font-size="11" fill="#c9d1d9" text-anchor="end">ui_toggle_combo</text>
+        <rect x="155" y="100" width="252" height="16" rx="0" fill="#faad14"/><text x="413" y="112" font-size="10" fill="#c9d1d9">6</text>
+        <!-- ui_table_form: 9 -->
+        <text x="148" y="138" font-size="11" fill="#c9d1d9" text-anchor="end">ui_table_form</text>
+        <rect x="155" y="127" width="378" height="16" rx="0" fill="#f87171"/><text x="539" y="139" font-size="10" fill="#c9d1d9">9</text>
+        <!-- ui_progress_form: 7 -->
+        <text x="148" y="165" font-size="11" fill="#c9d1d9" text-anchor="end">ui_progress_form</text>
+        <rect x="155" y="154" width="294" height="16" rx="0" fill="#a78bfa"/><text x="455" y="166" font-size="10" fill="#c9d1d9">7</text>
+        <!-- ui_progress_bar: 5 -->
+        <text x="148" y="192" font-size="11" fill="#c9d1d9" text-anchor="end">ui_progress_bar</text>
+        <rect x="155" y="181" width="210" height="16" rx="0" fill="#f472b6"/><text x="371" y="193" font-size="10" fill="#c9d1d9">5</text>
+        <!-- ui_multipage_form: 4 -->
+        <text x="148" y="219" font-size="11" fill="#c9d1d9" text-anchor="end">ui_multipage_form</text>
+        <rect x="155" y="208" width="168" height="16" rx="0" fill="#2dd4bf"/><text x="329" y="220" font-size="10" fill="#c9d1d9">4</text>
+        <!-- ui_listbox_form: 8 -->
+        <text x="148" y="246" font-size="11" fill="#c9d1d9" text-anchor="end">ui_listbox_form</text>
+        <rect x="155" y="235" width="336" height="16" rx="0" fill="#fb923c"/><text x="497" y="247" font-size="10" fill="#c9d1d9">8</text>
+        <!-- ui_listbox_browser: 10 -->
+        <text x="148" y="273" font-size="11" fill="#c9d1d9" text-anchor="end">ui_listbox_browser</text>
+        <rect x="155" y="262" width="420" height="16" rx="0" fill="#60a5fa"/><text x="581" y="274" font-size="10" fill="#c9d1d9">10</text>
+        <!-- ui_color_picker: 5 -->
+        <text x="148" y="300" font-size="11" fill="#c9d1d9" text-anchor="end">ui_color_picker</text>
+        <rect x="155" y="289" width="210" height="16" rx="0" fill="#f472b6"/><text x="371" y="301" font-size="10" fill="#c9d1d9">5</text>
+        <!-- ui_callback_patterns: 12 -->
+        <text x="148" y="327" font-size="11" fill="#c9d1d9" text-anchor="end">ui_callback_patterns</text>
+        <rect x="155" y="316" width="504" height="16" rx="0" fill="#2dd4bf"/><text x="665" y="328" font-size="10" fill="#c9d1d9">12</text>
+        <!-- ui_dynamic_form: 8 -->
+        <text x="148" y="354" font-size="11" fill="#c9d1d9" text-anchor="end">ui_dynamic_form</text>
+        <rect x="155" y="343" width="336" height="16" rx="0" fill="#fb923c"/><text x="497" y="355" font-size="10" fill="#c9d1d9">8</text>
+      </svg>
+    </div>
     <table>
       <thead><tr><th>文件</th><th>Bug 数</th><th>关键发现</th><th>Commit</th></tr></thead>
       <tbody>
@@ -190,7 +264,42 @@ xdotool click 1
   <!-- GUI 调试方法论 -->
   <div class="section">
     <h2>GUI 调试方法论（每操作 ≥2 种稳定方法）</h2>
-    <div id="methodChart" class="chart-sm"></div>
+    <div class="chart-sm">
+      <svg viewBox="0 0 600 310" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">
+        <!-- Legend -->
+        <rect x="180" y="6" width="10" height="10" rx="2" fill="#6ea8fe" opacity="0.5"/><text x="195" y="15" font-size="10" fill="#8b949e">速度</text>
+        <rect x="240" y="6" width="10" height="10" rx="2" fill="#52c41a" opacity="0.5"/><text x="255" y="15" font-size="10" fill="#8b949e">可靠性</text>
+        <rect x="300" y="6" width="10" height="10" rx="2" fill="#faad14" opacity="0.5"/><text x="315" y="15" font-size="10" fill="#8b949e">确定性</text>
+        <rect x="360" y="6" width="10" height="10" rx="2" fill="#a78bfa" opacity="0.5"/><text x="375" y="15" font-size="10" fill="#8b949e">通用性</text>
+        <!-- Grid circles (center 300,155, r=25/50/75/100) -->
+        <circle cx="300" cy="155" r="25" fill="none" stroke="#30363d" stroke-width="0.5"/>
+        <circle cx="300" cy="155" r="50" fill="none" stroke="#30363d" stroke-width="0.5"/>
+        <circle cx="300" cy="155" r="75" fill="none" stroke="#30363d" stroke-width="0.5"/>
+        <circle cx="300" cy="155" r="100" fill="none" stroke="#30363d" stroke-width="0.5"/>
+        <!-- Axes (6 directions from top, 60° apart) -->
+        <line x1="300" y1="155" x2="300" y2="55" stroke="#30363d" stroke-width="0.5"/>
+        <line x1="300" y1="155" x2="387" y2="105" stroke="#30363d" stroke-width="0.5"/>
+        <line x1="300" y1="155" x2="387" y2="205" stroke="#30363d" stroke-width="0.5"/>
+        <line x1="300" y1="155" x2="300" y2="255" stroke="#30363d" stroke-width="0.5"/>
+        <line x1="300" y1="155" x2="213" y2="205" stroke="#30363d" stroke-width="0.5"/>
+        <line x1="300" y1="155" x2="213" y2="105" stroke="#30363d" stroke-width="0.5"/>
+        <!-- Axis labels -->
+        <text x="300" y="48" font-size="11" fill="#8b949e" text-anchor="middle">点击操作</text>
+        <text x="400" y="100" font-size="11" fill="#8b949e" text-anchor="start">文本输入</text>
+        <text x="400" y="215" font-size="11" fill="#8b949e" text-anchor="start">几何查询</text>
+        <text x="300" y="272" font-size="11" fill="#8b949e" text-anchor="middle">状态验证</text>
+        <text x="200" y="215" font-size="11" fill="#8b949e" text-anchor="end">坐标定位</text>
+        <text x="200" y="100" font-size="11" fill="#8b949e" text-anchor="end">模态处理</text>
+        <!-- 速度 [95,90,98,85,75,70] -->
+        <polygon points="300,60 378,110 385,204 300,240 235,193 239,105" fill="#6ea8fe" fill-opacity="0.15" stroke="#6ea8fe" stroke-width="1.5"/>
+        <!-- 可靠性 [90,85,95,95,80,85] -->
+        <polygon points="300,65 374,113 382,203 300,250 231,195 227,113" fill="#52c41a" fill-opacity="0.12" stroke="#52c41a" stroke-width="1.5"/>
+        <!-- 确定性 [70,75,90,98,85,60] -->
+        <polygon points="300,85 365,118 378,200 300,253 227,198 248,125" fill="#faad14" fill-opacity="0.12" stroke="#faad14" stroke-width="1.5"/>
+        <!-- 通用性 [85,80,70,65,90,95] -->
+        <polygon points="300,70 369,115 361,190 300,220 222,200 218,108" fill="#a78bfa" fill-opacity="0.12" stroke="#a78bfa" stroke-width="1.5"/>
+      </svg>
+    </div>
     <table>
       <thead><tr><th>操作</th><th>方法一（推荐）</th><th>方法二（备选）</th><th>不推荐</th></tr></thead>
       <tbody>
@@ -250,69 +359,5 @@ xdotool click 1
 
   <div class="footer">vcli GUI Debug Capability Retrospective · 2026-09-03 · 13 files · 75+ bugs · PR #68 CI 10/10 green · 237 skill tests</div>
 </div>
-
-<script>
-// 性能优化图表
-var perfChart = echarts.init(document.getElementById('perfChart'));
-perfChart.setOption({
-  backgroundColor: 'transparent',
-  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-  legend: { data: ['优化前(ms)', '优化后(ms)'], textStyle: { color: '#8b949e' }, top: 0 },
-  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-  xAxis: { type: 'category', data: ['单次点击', '几何查询', '20字输入', '6操作批量', 'CIW执行'], axisLabel: { color: '#8b949e' } },
-  yAxis: { type: 'log', name: '耗时(ms, 对数轴)', nameTextStyle: { color: '#8b949e' }, axisLabel: { color: '#8b949e' } },
-  series: [
-    { name: '优化前(ms)', type: 'bar', data: [1350, 940, 530, 1603, 800], itemStyle: { color: '#f87171' } },
-    { name: '优化后(ms)', type: 'bar', data: [10, 3, 120, 260, 425], itemStyle: { color: '#4ade80' } }
-  ]
-});
-
-// Bug 修复统计图表
-var bugChart = echarts.init(document.getElementById('bugChart'));
-bugChart.setOption({
-  backgroundColor: 'transparent',
-  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-  xAxis: { type: 'value', axisLabel: { color: '#8b949e' } },
-  yAxis: { type: 'category', data: ['form_widgets', 'form_layout', 'menu', 'ui_toggle_combo', 'ui_table_form', 'ui_progress_form', 'ui_progress_bar', 'ui_multipage_form', 'ui_listbox_form', 'ui_listbox_browser', 'ui_color_picker', 'ui_callback_patterns', 'ui_dynamic_form'], axisLabel: { color: '#8b949e', fontSize: 11 } },
-  series: [{
-    type: 'bar',
-    data: [1, 0, 0, 6, 9, 7, 5, 4, 8, 10, 5, 12, 8],
-    itemStyle: { color: function(p) { var colors = ['#6ea8fe','#8bc8ea','#52c41a','#faad14','#f87171','#a78bfa','#f472b6','#2dd4bf','#fb923c','#60a5fa','#f472b6','#2dd4bf','#fb923c']; return colors[p.dataIndex]; }, borderRadius: [0,4,4,0] },
-    label: { show: true, position: 'right', color: '#c9d1d9', fontSize: 12 }
-  }]
-});
-
-// 方法论雷达图
-var methodChart = echarts.init(document.getElementById('methodChart'));
-methodChart.setOption({
-  backgroundColor: 'transparent',
-  tooltip: {},
-  legend: { data: ['速度', '可靠性', '确定性', '通用性'], textStyle: { color: '#8b949e' }, top: 0 },
-  radar: {
-    indicator: [
-      { name: '点击操作', max: 100 },
-      { name: '文本输入', max: 100 },
-      { name: '几何查询', max: 100 },
-      { name: '状态验证', max: 100 },
-      { name: '坐标定位', max: 100 },
-      { name: '模态处理', max: 100 }
-    ],
-    axisName: { color: '#8b949e' },
-    splitArea: { areaStyle: { color: ['rgba(110,168,254,0.05)', 'rgba(110,168,254,0.1)'] } }
-  },
-  series: [{
-    type: 'radar',
-    data: [
-      { value: [95, 90, 98, 85, 75, 70], name: '速度', areaStyle: { color: 'rgba(110,168,254,0.2)' }, lineStyle: { color: '#6ea8fe' } },
-      { value: [90, 85, 95, 95, 80, 85], name: '可靠性', areaStyle: { color: 'rgba(82,196,26,0.2)' }, lineStyle: { color: '#52c41a' } },
-      { value: [70, 75, 90, 98, 85, 60], name: '确定性', areaStyle: { color: 'rgba(250,173,20,0.2)' }, lineStyle: { color: '#faad14' } },
-      { value: [85, 80, 70, 65, 90, 95], name: '通用性', areaStyle: { color: 'rgba(167,139,250,0.2)' }, lineStyle: { color: '#a78bfa' } }
-    ]
-  }]
-});
-
-window.addEventListener('resize', function() { perfChart.resize(); bugChart.resize(); methodChart.resize(); });
-</script>
 </body>
 </html>

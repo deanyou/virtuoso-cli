@@ -438,7 +438,44 @@
   <div class="section">
     <h2 class="section-title">四、性能优化分层（实测数据）</h2>
     <div class="card">
-      <div id="perfChart" class="perf-chart"></div>
+      <svg viewBox="0 0 680 320" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg">
+        <!-- Y axis label -->
+        <text x="14" y="150" font-size="10" fill="#6B7280" transform="rotate(-90,14,150)" text-anchor="middle">耗时 ms（对数轴）</text>
+        <!-- Grid lines (log scale: 1, 10, 100, 1000 ms) -->
+        <line x1="60" y1="40" x2="660" y2="40" stroke="#E4E3DD" stroke-width="0.5" stroke-dasharray="3,3"/>
+        <text x="55" y="44" font-size="9" fill="#6B7280" text-anchor="end">1000</text>
+        <line x1="60" y1="113" x2="660" y2="113" stroke="#E4E3DD" stroke-width="0.5" stroke-dasharray="3,3"/>
+        <text x="55" y="117" font-size="9" fill="#6B7280" text-anchor="end">100</text>
+        <line x1="60" y1="186" x2="660" y2="186" stroke="#E4E3DD" stroke-width="0.5" stroke-dasharray="3,3"/>
+        <text x="55" y="190" font-size="9" fill="#6B7280" text-anchor="end">10</text>
+        <line x1="60" y1="260" x2="660" y2="260" stroke="#6B7280" stroke-width="1"/>
+        <text x="55" y="264" font-size="9" fill="#6B7280" text-anchor="end">1</text>
+        <!-- Bars: vcli normal 1350ms -->
+        <rect x="80" y="30" width="60" height="230" rx="3" fill="#EA6668"/>
+        <text x="110" y="24" font-size="11" font-weight="700" fill="#EA6668" text-anchor="middle">1350ms</text>
+        <text x="110" y="278" font-size="10" fill="#1A1B1C" text-anchor="middle">vcli</text>
+        <text x="110" y="292" font-size="9" fill="#6B7280" text-anchor="middle">normal</text>
+        <!-- vcli --direct 260ms -->
+        <rect x="200" y="82" width="60" height="178" rx="3" fill="#FAAD14"/>
+        <text x="230" y="76" font-size="11" font-weight="700" fill="#FAAD14" text-anchor="middle">260ms</text>
+        <text x="230" y="278" font-size="10" fill="#1A1B1C" text-anchor="middle">vcli</text>
+        <text x="230" y="292" font-size="9" fill="#6B7280" text-anchor="middle">--direct</text>
+        <!-- xdotool 10ms -->
+        <rect x="320" y="186" width="60" height="74" rx="3" fill="#52C41A"/>
+        <text x="350" y="180" font-size="11" font-weight="700" fill="#52C41A" text-anchor="middle">10ms</text>
+        <text x="350" y="278" font-size="10" fill="#1A1B1C" text-anchor="middle">xdotool</text>
+        <text x="350" y="292" font-size="9" fill="#52C41A" text-anchor="middle">推荐 135×</text>
+        <!-- batch --direct 43ms -->
+        <rect x="440" y="140" width="60" height="120" rx="3" fill="#8BC8EA"/>
+        <text x="470" y="134" font-size="11" font-weight="700" fill="#5BA3C9" text-anchor="middle">43ms</text>
+        <text x="470" y="278" font-size="10" fill="#1A1B1C" text-anchor="middle">batch</text>
+        <text x="470" y="292" font-size="9" fill="#6B7280" text-anchor="middle">6操作均摊</text>
+        <!-- xwininfo 3ms -->
+        <rect x="560" y="225" width="60" height="35" rx="3" fill="#9EACEA"/>
+        <text x="590" y="219" font-size="11" font-weight="700" fill="#6B7280" text-anchor="middle">3ms</text>
+        <text x="590" y="278" font-size="10" fill="#1A1B1C" text-anchor="middle">xwininfo</text>
+        <text x="590" y="292" font-size="9" fill="#6B7280" text-anchor="middle">几何查询</text>
+      </svg>
       <div class="perf-tiers">
         <div class="tier tier-p0" onclick="toggleTier(this)">
           <h5>P0 — 默认用 xdotool，vcli 仅在需要服务端校验时 <span class="speedup">135×</span></h5>
@@ -687,7 +724,6 @@
   virtuoso-gui-debug × vcli GUI 调试协同架构 · 基于 IC25.1 真机实测 · 2026-09-03
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 <script>
 (function(){
   // Mode tabs
@@ -716,43 +752,6 @@
     el.classList.add('active');
     document.getElementById('matrix-' + id).classList.add('show');
   };
-  // Perf chart
-  try {
-    var chart = echarts.init(document.getElementById('perfChart'));
-    chart.setOption({
-      backgroundColor: 'transparent',
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      legend: { data: ['单次操作耗时 (ms)'], top: 0, textStyle: { fontSize: 11 } },
-      grid: { left: 60, right: 20, top: 36, bottom: 60 },
-      xAxis: {
-        type: 'category',
-        data: ['vcli\nnormal', 'vcli\n--direct', 'xdotool\n(推荐)', 'batch --direct\n(6操作均摊)', 'xwininfo\n几何'],
-        axisLabel: { fontSize: 10, interval: 0, color: '#6B7280' }
-      },
-      yAxis: {
-        type: 'log',
-        name: 'ms (log scale)',
-        nameTextStyle: { fontSize: 10, color: '#6B7280' },
-        axisLabel: { fontSize: 10, color: '#6B7280' }
-      },
-      series: [{
-        name: '单次操作耗时 (ms)',
-        type: 'bar',
-        data: [
-          { value: 1350, itemStyle: { color: '#EA6668' } },
-          { value: 260, itemStyle: { color: '#FAAD14' } },
-          { value: 10, itemStyle: { color: '#52C41A' } },
-          { value: 43, itemStyle: { color: '#8BC8EA' } },
-          { value: 3, itemStyle: { color: '#9EACEA' } }
-        ],
-        barWidth: '45%',
-        label: { show: true, position: 'top', fontSize: 11, fontWeight: 600, formatter: '{c}ms' }
-      }]
-    });
-    window.addEventListener('resize', function(){ chart.resize(); });
-  } catch(e) {
-    document.getElementById('perfChart').innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:13px;">图表库加载失败，数据见上方各层级说明。</div>';
-  }
 })();
 </script>
 </body>
