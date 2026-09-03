@@ -40,20 +40,35 @@ pub enum BootstrapAction {
 impl WindowOps {
     /// List all open Virtuoso windows.
     ///
-    /// Returns a JSON array string: `[{"id":<fixnum>,"name":"..."}]`.
+    /// Returns a JSON array string: `[{"id":<fixnum>,"name":"..."}]` when the
+    /// Virtuoso version exposes `hiGetWindowId`, or `[{"name":"..."}]` when it
+    /// does not (e.g. IC25.1, where `hiGetWindowId` is unbound).
     ///
     /// `id` is the Virtuoso-internal window id from `hiGetWindowId` — a stable
-    /// handle callers can use to target a window (e.g. for hi-level follow-up
-    /// SKILL) rather than re-deriving it from the name. `name` is the window
-    /// title; `kind`/`mode` are NOT emitted here because there is no single
-    /// cross-version SKILL call that returns them reliably — `window::list`
-    /// derives `kind`/`mode` heuristically from `name` instead (see
-    /// `annotate_modes` in commands/window.rs). Geometry and PID likewise
+    /// handle callers can use to target a window. Because `hiGetWindowId` is
+    /// NOT available in every IC release (it is unbound on IC25.1), the SKILL
+    /// attempts to read it inside `errset` and **omits** the `id` field (rather
+    /// than erroring) on versions where it is absent. This keeps
+    /// `vcli window list` functional across versions instead of returning
+    /// `skill_ok()==false` on the unbound ones.
+    ///
+    /// NOTE on the implementation shape: this daemon's SKILL evaluator only
+    /// accepts `if`/`when` with self-evaluating (constant) branches — compound
+    /// branches silently mis-evaluate. So we do NOT use `if(fboundp ...)`
+    /// around a `sprintf`/`strcat` branch; instead we default `idstr` to `""`
+    /// and let `errset` overwrite it only when `hiGetWindowId` is callable.
+    /// `strcat` is used (never `sprintf`) so the integer id is coerced to a
+    /// string inline and the JSON is assembled from literals.
+    ///
+    /// `name` is the window title; `kind`/`mode` are NOT emitted here because
+    /// there is no single cross-version SKILL call that returns them reliably —
+    /// `window::list` derives `kind`/`mode` heuristically from `name` instead
+    /// (see `annotate_modes` in commands/window.rs). Geometry and PID likewise
     /// require per-version SKILL introspection (`hiGetWindowScreenBox`,
     /// `hiGetProcessId`) that must be verified against a live Virtuoso before
     /// being added here.
     pub fn list_windows(&self) -> String {
-        r#"let((out sep) out = "[" sep = "" foreach(w hiGetWindowList() out = strcat(out sep sprintf(nil "{\"id\":%d,\"name\":\"%s\"}" hiGetWindowId(w) hiGetWindowName(w))) sep = ",") strcat(out "]"))"#
+        r#"let((out sep name idstr) out = "[" sep = "" foreach(w hiGetWindowList() name = hiGetWindowName(w) idstr = "" errset(idstr = strcat("\"id\":" hiGetWindowId(w) ",")) out = strcat(out sep "{" idstr "\"name\":\"" name "\"}") sep = ",") strcat(out "]"))"#
             .into()
     }
 
@@ -188,8 +203,32 @@ mod tests {
             "should surface the window id so callers can target it"
         );
         assert!(
-            skill.contains("%d"),
-            "id must be formatted as an integer (fixnum) field"
+            skill.contains("errset"),
+            "must guard hiGetWindowId with errset so list_windows works on \
+             versions where hiGetWindowId is unbound (e.g. IC25.1) instead of erroring"
+        );
+        assert!(
+            skill.contains("idstr = \"\""),
+            "idstr must default to empty string so the JSON is always well-formed"
+        );
+        // The object is assembled as `{` + idstr + `"name":"` + name + `}`, so
+        // the name key never appears as a contiguous `{"name":"` literal — the
+        // needle below is the escaped `"name":"` SKILL string literal.
+        assert!(
+            skill.contains(r#"name\":"#),
+            "must still emit the name key so the fallback object is \
+             {{\"name\":\"<title>\"}} when hiGetWindowId is unavailable"
+        );
+        assert!(
+            !skill.contains("fboundp"),
+            "do not use if(fboundp ...) compound branches — this daemon's \
+             evaluator mis-evaluates them; errset + default-idstr is the safe shape"
+        );
+        assert!(
+            !skill.contains("sprintf"),
+            "do not build the JSON with sprintf — this daemon's evaluator \
+             mis-evaluates sprintf as an if/when branch or top-level expr; \
+             strcat (which coerces the fixnum id inline) is the safe shape"
         );
     }
 
