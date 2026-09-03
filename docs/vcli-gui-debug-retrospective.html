@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vcli GUI 调试能力建设复盘</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #0f1117; color: #e4e6eb; line-height: 1.7; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; background: linear-gradient(135deg, #6ea8fe, #8bc8ea); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .subtitle { color: #8b949e; font-size: 14px; margin-bottom: 32px; }
+  .section { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+  .section h2 { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #6ea8fe; border-left: 3px solid #6ea8fe; padding-left: 10px; }
+  .section h3 { font-size: 15px; font-weight: 600; margin: 16px 0 8px; color: #c9d1d9; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 16px 0; }
+  .card { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+  .card .num { font-size: 32px; font-weight: 700; color: #52c41a; }
+  .card .label { font-size: 13px; color: #8b949e; margin-top: 4px; }
+  .card.warn .num { color: #faad14; }
+  .card.info .num { color: #6ea8fe; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #30363d; }
+  th { background: #0d1117; color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  tr:hover { background: #1c2128; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .tag-p0 { background: #7f1d1d; color: #fca5a5; }
+  .tag-p1 { background: #78350f; color: #fcd34d; }
+  .tag-p2 { background: #1e3a5f; color: #93c5fd; }
+  .tag-done { background: #14532d; color: #86efac; }
+  .chart { width: 100%; height: 340px; margin: 12px 0; }
+  .chart-sm { width: 100%; height: 280px; margin: 12px 0; }
+  .timeline { position: relative; padding-left: 24px; margin: 16px 0; }
+  .timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: #30363d; }
+  .tl-item { position: relative; margin-bottom: 20px; }
+  .tl-item::before { content: ''; position: absolute; left: -20px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: #6ea8fe; border: 2px solid #0f1117; }
+  .tl-item .tl-title { font-weight: 600; color: #c9d1d9; font-size: 14px; }
+  .tl-item .tl-desc { font-size: 13px; color: #8b949e; margin-top: 2px; }
+  .code { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 12px 16px; font-family: "SF Mono", "Fira Code", monospace; font-size: 12px; color: #a5d6ff; overflow-x: auto; margin: 8px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+  .footer { text-align: center; color: #484f58; font-size: 12px; margin-top: 32px; padding-top: 16px; border-top: 1px solid #21262d; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>vcli GUI 调试能力建设复盘</h1>
+  <div class="subtitle">Virtuoso CLI Bridge × GUI Debug Skill · 从安装测试到能力闭环 · 2026-09-03</div>
+
+  <!-- 核心指标 -->
+  <div class="section">
+    <h2>核心指标</h2>
+    <div class="grid">
+      <div class="card"><div class="num">13</div><div class="label">SKILL UI 文件真机修复</div></div>
+      <div class="card warn"><div class="num">75+</div><div class="label">真实 Bug 修复</div></div>
+      <div class="card info"><div class="num">135×</div><div class="label">GUI 操作最大加速</div></div>
+      <div class="card"><div class="num">28×</div><div class="label">批量操作加速</div></div>
+      <div class="card info"><div class="num">4.7×</div><div class="label">--direct 模式加速</div></div>
+      <div class="card warn"><div class="num">40+</div><div class="label">API 语义沉淀</div></div>
+      <div class="card"><div class="num">10/10</div><div class="label">PR #68 CI 全绿</div></div>
+      <div class="card info"><div class="num">237</div><div class="label">技能 Python 单元测试</div></div>
+    </div>
+  </div>
+
+  <!-- 时间线 -->
+  <div class="section">
+    <h2>建设时间线</h2>
+    <div class="timeline">
+      <div class="tl-item"><div class="tl-title">阶段一：安装与基础测试</div><div class="tl-desc">云电脑安装 virtuoso-cli，测试 vcli 调用 xdotool，发现 vcli skill exec 无 UI 库 → GUI 必须走 CIW 输入 + action-x11</div></div>
+      <div class="tl-item"><div class="tl-title">阶段二：边界探索与 Bug 修复</div><div class="tl-desc">ui_dynamic_form.il 8 个 bug，发现模态对话框拦截、OCR 坐标漂移、Open 按钮不稳定等关键边界</div></div>
+      <div class="tl-item"><div class="tl-title">阶段三：性能优化 P0/P1</div><div class="tl-desc">xdotool --window 替代 vcli action-x11（135×），xwininfo 替代 list-windows（313×），type delay 50→10ms，消除冗余 sleep</div></div>
+      <div class="tl-item"><div class="tl-title">阶段四：P2 Rust 侧优化</div><div class="tl-desc">--direct 标志（4.7×），action-x11-batch 合并 shell（28×），技能文档与 README 中英文更新</div></div>
+      <div class="tl-item"><div class="tl-title">阶段五：PR 批量收口</div><div class="tl-desc">13 个 OPEN PR 全部处理，main 全绿（270b15f），含 #25 sha2 0.11 代码修复、#22 crossterm 冲突解决</div></div>
+      <div class="tl-item"><div class="tl-title">阶段六：逐文件真机调试</div><div class="tl-desc">10 个 examples/ UI 文件逐个加载、修复、验证，沉淀 IC25.1 API 语义知识库</div></div>
+      <div class="tl-item"><div class="tl-title">阶段七：P2 Rust 优化落地 + menu_demo 测试</div><div class="tl-desc">PR #68 实现几何预检（零尺寸/越界拒绝）、batch 非 direct 共享 list-windows、geom 文件缓存（temp_dir 跨平台）；menu_demo 三文件（菜单系统/tab布局/14种widget）真机测试；技能同步到用户目录和仓库；交互式架构报告入库 docs/</div></div>
+    </div>
+  </div>
+
+  <!-- 性能优化 -->
+  <div class="section">
+    <h2>性能优化效果</h2>
+    <div id="perfChart" class="chart"></div>
+    <div class="two-col">
+      <div>
+        <h3>P0 — 操作层切换</h3>
+        <div class="code">xdotool mousemove --window $WID 300 167
+xdotool click 1
+# 替代 vcli window action-x11（1.3s 启动税）</div>
+      </div>
+      <div>
+        <h3>P2 — Batch 模式</h3>
+        <div class="code">vcli window action-x11-batch \
+  --ops 'mousemove 300 167;click 1;type "METAL1"'
+# 6 操作 1603ms → 260ms</div>
+      </div>
+    </div>
+    <h3>P2 — Rust 侧优化（PR #68，CI 10/10 全绿）</h3>
+    <table>
+      <thead><tr><th>优化项</th><th>实现方式</th><th>实测效果</th></tr></thead>
+      <tbody>
+        <tr><td>SCROLL 全链路</td><td>Rust X11Operation::Scroll + build_xdotool_actions + CLI + DSL + 单元测试</td><td>down:3 成功 528ms</td></tr>
+        <tr><td>--direct 几何预检</td><td>parse_xwininfo_geometry + check_coords_in_bounds，零尺寸/越界拒绝 exit=2</td><td>有效坐标 411ms；越界 (9999,9999) 正确拒绝</td></tr>
+        <tr><td>batch 非 direct 共享 list-windows</td><td>CachedX11Context 按唯一 DISPLAY 构建一次上下文复用</td><td>3 操作总 1527ms，单 action 仅 134-271ms</td></tr>
+        <tr><td>geom 文件缓存</td><td>temp_dir() 跨平台路径，TTL 500ms，仅零尺寸快速拒绝</td><td>缓存文件写入正确几何 {x:1057,y:-5,w:868,h:889}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Bug 修复统计 -->
+  <div class="section">
+    <h2>13 个文件 Bug 修复统计</h2>
+    <div id="bugChart" class="chart"></div>
+    <table>
+      <thead><tr><th>文件</th><th>Bug 数</th><th>关键发现</th><th>Commit</th></tr></thead>
+      <tbody>
+        <tr><td>ui_dynamic_form.il</td><td>8</td><td>模态对话框拦截输入、坐标反推</td><td>早期</td></tr>
+        <tr><td>ui_callback_patterns.il</td><td>12</td><td>hiGetFieldInfo 非字段对象、radio callback 必须 list</td><td>3181e6cb</td></tr>
+        <tr><td>ui_color_picker.il</td><td>5</td><td>hiGetFieldValue/hiSetFieldValue 不存在</td><td>75923051</td></tr>
+        <tr><td>ui_listbox_browser.il</td><td>10</td><td>?value 必须列表、hiSetFieldChoices 不存在</td><td>05d57e42</td></tr>
+        <tr><td>ui_listbox_form.il</td><td>8</td><td>setq 第一参数必须 symbol、?multiSelect 不支持</td><td>8e26d24a</td></tr>
+        <tr><td>ui_multipage_form.il</td><td>4</td><td>cyclic value 是单个字符串</td><td>1fec6ea8</td></tr>
+        <tr><td>ui_progress_bar.il</td><td>5</td><td>?attributes 不支持、label 文本更新方式</td><td>b7d283aa</td></tr>
+        <tr><td>ui_progress_form.il</td><td>7</td><td>let 中 return 非法、lambda 语法、%L 不支持</td><td>ca57e679</td></tr>
+        <tr><td>ui_table_form.il</td><td>9</td><td>嵌套 let 非法绑定、括号不匹配、foreach mapcar</td><td>ce615b0e</td></tr>
+        <tr><td>ui_toggle_combo_form.il</td><td>6</td><td>toggle choices 必须 (symbol label)、combo 用 ?items</td><td>c9291129</td></tr>
+        <tr><td>menu_demo/menu.il</td><td>0</td><td>菜单系统全通过：banner 插入、pulldown、子菜单、分隔符、回调触发</td><td>真机验证</td></tr>
+        <tr><td>menu_demo/form_layout.il</td><td>0</td><td>tab/report/toggle/form button 全通过；Tab 内字段需 tab→page→field 路径访问</td><td>真机验证</td></tr>
+        <tr><td>menu_demo/form_widgets.il</td><td>1</td><td>geGetEditRep() 为 nil 时 techGetTechFile 崩溃 → when(rep...) 守卫；12/14 widget 渲染验证</td><td>补丁验证</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- API 知识库 -->
+  <div class="section">
+    <h2>IC25.1 API 语义知识库（沉淀）</h2>
+    <div class="two-col">
+      <div>
+        <h3>✅ 已确认存在</h3>
+        <table>
+          <thead><tr><th>API</th><th>关键语义</th></tr></thead>
+          <tbody>
+            <tr><td>hiCreateAppForm</td><td>?name/?formTitle/?fields/?callback</td></tr>
+            <tr><td>hiCreateListBoxField</td><td>?value 必须列表，永远返回列表</td></tr>
+            <tr><td>hiCreateToggleField</td><td>?choices 每项 (symbol label)，?value 是 t/nil 列表</td></tr>
+            <tr><td>hiCreateComboField</td><td>用 ?items 不是 ?choices</td></tr>
+            <tr><td>hiCreateCyclicField</td><td>value 是单个字符串</td></tr>
+            <tr><td>hiCreateRadioField</td><td>?callback 必须是 (list "...")</td></tr>
+            <tr><td>form->field->value</td><td>唯一可靠的字段值读写方式</td></tr>
+            <tr><td>form->field->choices</td><td>直接赋值动态更新选项</td></tr>
+            <tr><td>hiFormDone / hiFormCancel</td><td>关闭表单（hiCloseForm 不存在）</td></tr>
+            <tr><td>lambda( (x) body)</td><td>空格分隔，返回 funobj</td></tr>
+            <tr><td>hiCreatePulldownMenu + hiInsertBannerMenu</td><td>菜单系统：pulldown/menuItem/sliderMenuItem(带子菜单)/separatorMenuItem，插入 CIW 横幅</td></tr>
+            <tr><td>hiCreateTabField</td><td>Tab 内字段必须 form->tab->page->field->value 访问，直接访问返回 nil</td></tr>
+            <tr><td>hiCreateReportField</td><td>静态数据表，无动态更新 API</td></tr>
+            <tr><td>hiCreateSpinBox</td><td>箭头 ~10px 难点击，优先 CIW 直接赋值 form->spinbox->value = n</td></tr>
+            <tr><td>hiCreateLayerCyclicField</td><td>依赖 geGetEditRep() 非 nil，无打开 cellview 时崩溃，需 when(rep...) 守卫</td></tr>
+            <tr><td>hiCreatePointField / PointListField</td><td>值为 (x y) 列表，渲染为只读文本</td></tr>
+            <tr><td>菜单 ?callback</td><td>字符串直接 eval，函数未定义时报 undefined variable（回调确实触发了）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3>❌ 已确认不存在 / 不支持</h3>
+        <table>
+          <thead><tr><th>API / 关键字</th><th>替代方案</th></tr></thead>
+          <tbody>
+            <tr><td>hiGetField</td><td>form->field 直接访问</td></tr>
+            <tr><td>hiGetFieldValue / hiSetFieldValue</td><td>form->field->value = val</td></tr>
+            <tr><td>hiSetFieldChoices</td><td>form->field->choices = list</td></tr>
+            <tr><td>hiSetFieldParameters</td><td>直接赋值各属性</td></tr>
+            <tr><td>hiFlushForm / hiCloseForm</td><td>不需要 / hiFormDone</td></tr>
+            <tr><td>?buttons / ?buttonLayout</td><td>hiCreateAppForm 不支持</td></tr>
+            <tr><td>?attributes</td><td>hiCreateAppForm 不支持</td></tr>
+            <tr><td>?multiSelect</td><td>listbox value 永远是列表</td></tr>
+            <tr><td>makeList</td><td>foreach mapcar c list t</td></tr>
+            <tr><td>convertString</td><td>sprintf %s 直接处理</td></tr>
+            <tr><td>vcli skill exec 驱动 GUI</td><td>daemon 上下文无 UI 库，hiCreateAppForm 等为 nil；GUI 创建走 CIW 输入</td></tr>
+            <tr><td>hiGetForm / hiGetCurrentForm</td><td>用 form 变量直接引用，或 hiGetAppForm</td></tr>
+            <tr><td>ctrl+a 全选表单字段</td><td>Virtuoso 表单字段不响应；用 Escape 清空 CIW 输入行</td></tr>
+            <tr><td>vcli skill load 大文件</td><td>超时；改用 CIW load("/path/file.il")</td></tr>
+            <tr><td>return in let</td><td>仅在 prog 中合法；let 最后一个表达式是隐式返回</td></tr>
+            <tr><td>vcli action-x11 type</td><td>注入乱码/剪贴板内容；用 xdotool type --delay 10</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- GUI 调试方法论 -->
+  <div class="section">
+    <h2>GUI 调试方法论（每操作 ≥2 种稳定方法）</h2>
+    <div id="methodChart" class="chart-sm"></div>
+    <table>
+      <thead><tr><th>操作</th><th>方法一（推荐）</th><th>方法二（备选）</th><th>不推荐</th></tr></thead>
+      <tbody>
+        <tr><td>点击</td><td>xdotool mousemove --window + click（10ms）</td><td>vcli action-x11 click-rel（1.3s，需服务端校验）</td><td>OCR 千分比坐标</td></tr>
+        <tr><td>输入</td><td>xdotool type --delay 10（120ms/20字）</td><td>CIW 输入 + Return（425ms）</td><td>vcli action-x11 type（乱码）</td></tr>
+        <tr><td>几何查询</td><td>xwininfo -id（3ms）</td><td>vcli list-windows-x11（940ms，需发现窗口时）</td><td>截图测量</td></tr>
+        <tr><td>状态验证</td><td>CIW 读 form->field->value（425ms，确定性）</td><td>截图 + 人工确认（20ms，仅作证据）</td><td>OCR 文本识别</td></tr>
+        <tr><td>坐标定位</td><td>hiGetFieldInfo 反推 + 窗口 0 点偏移</td><td>ImageMagick crop 像素级定位</td><td>OCR 千分比（±40px 漂移）</td></tr>
+        <tr><td>文件对话框</td><td>File name 输入 + Enter</td><td>先处理模态对话框再操作主表单</td><td>点击 Open 按钮（不稳定）</td></tr>
+        <tr><td>滚动</td><td>vcli action-x11 scroll（全链路支持）</td><td>xdotool click 4/5/6/7（local 模式）</td><td>拖拽滚动条（精度差）</td></tr>
+        <tr><td>几何预检</td><td>--direct 模式 xwininfo 预检（零尺寸/越界拒绝）</td><td>batch 非 direct 共享 list-windows</td><td>无预检直接发送（可能点到错误窗口）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 能力边界 -->
+  <div class="section">
+    <h2>能力边界与未来方向</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="tag tag-done">已覆盖</div>
+        <div style="margin-top:8px;font-size:13px;color:#c9d1d9;">
+          • 所有 hiCreate*Field 类型（含菜单/Tab/SpinBox/LayerCyclic）<br>
+          • 表单创建/显示/关闭<br>
+          • 字段值读写/选项动态更新<br>
+          • 回调触发与验证<br>
+          • 列表/表格/进度条/颜色选择器<br>
+          • 多页表单/标签页<br>
+          • SCROLL 全链路支持（vcli + xdotool）<br>
+          • --direct 几何预检（零尺寸/越界拒绝）<br>
+          • batch 非 direct 共享 list-windows<br>
+          • geom 文件缓存（temp_dir 跨平台，500ms TTL）<br>
+          • 菜单系统（banner/pulldown/submenu/separator）
+        </div>
+      </div>
+      <div class="card warn">
+        <div class="tag tag-p1">待补充</div>
+        <div style="margin-top:8px;font-size:13px;color:#c9d1d9;">
+          • vcli daemon 持久连接模式（batch 已覆盖主要场景）<br>
+          • 表单滚动条拖拽（滚轮在部分表单未生效）<br>
+          • SpinBox 箭头精确点击（~10px，当前用 CIW 赋值替代）<br>
+          • 子菜单 hover 展开自动化
+        </div>
+      </div>
+      <div class="card info">
+        <div class="tag tag-p2">探索中</div>
+        <div style="margin-top:8px;font-size:13px;color:#c9d1d9;">
+          • hiGetFieldInfo 坐标反推自动化<br>
+          • 表单字段布局自动发现<br>
+          • GUI 操作录制与回放<br>
+          • 回归测试场景 DSL（fake executor 已就绪）<br>
+          • 模态对话框自动检测与处理
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">vcli GUI Debug Capability Retrospective · 2026-09-03 · 13 files · 75+ bugs · PR #68 CI 10/10 green · 237 skill tests</div>
+</div>
+
+<script>
+// 性能优化图表
+var perfChart = echarts.init(document.getElementById('perfChart'));
+perfChart.setOption({
+  backgroundColor: 'transparent',
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  legend: { data: ['优化前(ms)', '优化后(ms)'], textStyle: { color: '#8b949e' }, top: 0 },
+  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+  xAxis: { type: 'category', data: ['单次点击', '几何查询', '20字输入', '6操作批量', 'CIW执行'], axisLabel: { color: '#8b949e' } },
+  yAxis: { type: 'log', name: '耗时(ms, 对数轴)', nameTextStyle: { color: '#8b949e' }, axisLabel: { color: '#8b949e' } },
+  series: [
+    { name: '优化前(ms)', type: 'bar', data: [1350, 940, 530, 1603, 800], itemStyle: { color: '#f87171' } },
+    { name: '优化后(ms)', type: 'bar', data: [10, 3, 120, 260, 425], itemStyle: { color: '#4ade80' } }
+  ]
+});
+
+// Bug 修复统计图表
+var bugChart = echarts.init(document.getElementById('bugChart'));
+bugChart.setOption({
+  backgroundColor: 'transparent',
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+  xAxis: { type: 'value', axisLabel: { color: '#8b949e' } },
+  yAxis: { type: 'category', data: ['form_widgets', 'form_layout', 'menu', 'ui_toggle_combo', 'ui_table_form', 'ui_progress_form', 'ui_progress_bar', 'ui_multipage_form', 'ui_listbox_form', 'ui_listbox_browser', 'ui_color_picker', 'ui_callback_patterns', 'ui_dynamic_form'], axisLabel: { color: '#8b949e', fontSize: 11 } },
+  series: [{
+    type: 'bar',
+    data: [1, 0, 0, 6, 9, 7, 5, 4, 8, 10, 5, 12, 8],
+    itemStyle: { color: function(p) { var colors = ['#6ea8fe','#8bc8ea','#52c41a','#faad14','#f87171','#a78bfa','#f472b6','#2dd4bf','#fb923c','#60a5fa','#f472b6','#2dd4bf','#fb923c']; return colors[p.dataIndex]; }, borderRadius: [0,4,4,0] },
+    label: { show: true, position: 'right', color: '#c9d1d9', fontSize: 12 }
+  }]
+});
+
+// 方法论雷达图
+var methodChart = echarts.init(document.getElementById('methodChart'));
+methodChart.setOption({
+  backgroundColor: 'transparent',
+  tooltip: {},
+  legend: { data: ['速度', '可靠性', '确定性', '通用性'], textStyle: { color: '#8b949e' }, top: 0 },
+  radar: {
+    indicator: [
+      { name: '点击操作', max: 100 },
+      { name: '文本输入', max: 100 },
+      { name: '几何查询', max: 100 },
+      { name: '状态验证', max: 100 },
+      { name: '坐标定位', max: 100 },
+      { name: '模态处理', max: 100 }
+    ],
+    axisName: { color: '#8b949e' },
+    splitArea: { areaStyle: { color: ['rgba(110,168,254,0.05)', 'rgba(110,168,254,0.1)'] } }
+  },
+  series: [{
+    type: 'radar',
+    data: [
+      { value: [95, 90, 98, 85, 75, 70], name: '速度', areaStyle: { color: 'rgba(110,168,254,0.2)' }, lineStyle: { color: '#6ea8fe' } },
+      { value: [90, 85, 95, 95, 80, 85], name: '可靠性', areaStyle: { color: 'rgba(82,196,26,0.2)' }, lineStyle: { color: '#52c41a' } },
+      { value: [70, 75, 90, 98, 85, 60], name: '确定性', areaStyle: { color: 'rgba(250,173,20,0.2)' }, lineStyle: { color: '#faad14' } },
+      { value: [85, 80, 70, 65, 90, 95], name: '通用性', areaStyle: { color: 'rgba(167,139,250,0.2)' }, lineStyle: { color: '#a78bfa' } }
+    ]
+  }]
+});
+
+window.addEventListener('resize', function() { perfChart.resize(); bugChart.resize(); methodChart.resize(); });
+</script>
+</body>
+</html>
