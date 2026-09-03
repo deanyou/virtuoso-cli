@@ -5,4 +5,4 @@
 //! via a fallback path.
 
 #[cfg(target_os = "linux")]
-pub(crate) mod linux_rename;
+pub mod linux_rename;

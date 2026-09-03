@@ -37,7 +37,7 @@ const RENAME_NOREPLACE: c_uint = 1;
 ///      preserves the "must not overwrite an existing destination" contract
 ///      at the cost of a small non-atomic window.
 #[cfg(target_os = "linux")]
-pub(crate) unsafe fn rename_noreplace(
+pub unsafe fn rename_noreplace(
     olddirfd: c_int,
     oldpath: *const c_char,
     newdirfd: c_int,
