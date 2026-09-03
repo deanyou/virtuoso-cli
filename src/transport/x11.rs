@@ -1352,6 +1352,22 @@ fn action_x11_cached(
             }
         }
         let success = results.last().map(|r| r.success).unwrap_or(true);
+
+        // Maximize requires xdotool >= 3.20210804.1 (windowstate subcommand).
+        // On older xdotool the command fails with "Unknown command: windowstate".
+        // Surface a clear error instead of a bare status:failure.
+        if operation == X11Operation::Maximize && !success {
+            let stderr = results.last().map(|r| r.stderr.as_str()).unwrap_or("");
+            if stderr.contains("Unknown command") || stderr.contains("windowstate") {
+                return Err(VirtuosoError::Config(
+                    "maximize requires xdotool >= 3.20210804.1 (windowstate subcommand); \
+                     the installed xdotool is too old. Alternatives: use `activate` to \
+                     raise the window, `minimize` to iconify it, or upgrade xdotool."
+                        .into(),
+                ));
+            }
+        }
+
         let details = match operation {
             X11Operation::Key => Some(format!("key: {}", text.unwrap_or(""))),
             X11Operation::Type => Some(format!(
