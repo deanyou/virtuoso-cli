@@ -39,9 +39,21 @@ pub enum BootstrapAction {
 
 impl WindowOps {
     /// List all open Virtuoso windows.
-    /// Returns a JSON array string: [{"name":"..."}]
+    ///
+    /// Returns a JSON array string: `[{"id":<fixnum>,"name":"..."}]`.
+    ///
+    /// `id` is the Virtuoso-internal window id from `hiGetWindowId` — a stable
+    /// handle callers can use to target a window (e.g. for hi-level follow-up
+    /// SKILL) rather than re-deriving it from the name. `name` is the window
+    /// title; `kind`/`mode` are NOT emitted here because there is no single
+    /// cross-version SKILL call that returns them reliably — `window::list`
+    /// derives `kind`/`mode` heuristically from `name` instead (see
+    /// `annotate_modes` in commands/window.rs). Geometry and PID likewise
+    /// require per-version SKILL introspection (`hiGetWindowScreenBox`,
+    /// `hiGetProcessId`) that must be verified against a live Virtuoso before
+    /// being added here.
     pub fn list_windows(&self) -> String {
-        r#"let((out sep) out = "[" sep = "" foreach(w hiGetWindowList() out = strcat(out sep sprintf(nil "{\"name\":\"%s\"}" hiGetWindowName(w))) sep = ",") strcat(out "]"))"#
+        r#"let((out sep) out = "[" sep = "" foreach(w hiGetWindowList() out = strcat(out sep sprintf(nil "{\"id\":%d,\"name\":\"%s\"}" hiGetWindowId(w) hiGetWindowName(w))) sep = ",") strcat(out "]"))"#
             .into()
     }
 
@@ -170,6 +182,14 @@ mod tests {
         assert!(
             skill.contains("hiGetWindowName"),
             "should use hiGetWindowName"
+        );
+        assert!(
+            skill.contains("hiGetWindowId"),
+            "should surface the window id so callers can target it"
+        );
+        assert!(
+            skill.contains("%d"),
+            "id must be formatted as an integer (fixnum) field"
         );
     }
 

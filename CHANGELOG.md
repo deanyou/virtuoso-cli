@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **issue #55** (`src/transport/x11.rs`, `src/commands/window.rs`, `src/main.rs`):
+  `--pid` is now optional on `vcli window action-x11`. Windows that expose no
+  `_NET_WM_PID` (listed as `pid: null`) were previously unreachable because the
+  action path required a positive numeric PID. Supplying a PID still matches the
+  window exactly; omitting it resolves by window id alone. `X11ActionResult.pid`
+  now reports the window actually acted on.
+- **issue #54** (`src/transport/x11.rs`, `src/main.rs`, `README.md`): four missing
+  `action-x11` operations added — `click-abs` (absolute screen coordinates),
+  `minimize` (`windowminimize`), `double-click` (`click --repeat 2`), and
+  `maximize` (`windowstate --add MAXIMIZED_HORZ/VERT`). `maximize` needs
+  xdotool ≥ 3.20210804.1; the global minimum stays 3.20140419.1 (documented in
+  README) so the other operations keep working on older xdotool.
+- **issue #49** (`src/commands/window.rs`, `src/main.rs`, `src/rpc/dispatcher.rs`):
+  `vcli window dismiss-window-x11` now accepts `--window-id` (alongside the
+  positional id, backward compatible) and `--pid`. When no window id is given,
+  `--pid` resolves the target window from `list-windows-x11` (errors on
+  zero/multiple matches). The JSON-RPC `window.dismiss_window_x11` method accepts
+  `pid` the same way.
+- **issue #50** (`src/client/window_ops.rs`): `WindowOps::list_windows` now
+  surfaces the window `id` (`hiGetWindowId`) alongside `name`, so SKILL-side
+  window enumeration is targetable. Full kind/mode/geometry/pid reflection still
+  requires live-Virtuoso SKILL API verification (`hiGetWindowType`,
+  `hiGetWindowMode`, `hiGetWindowScreenBox`, `hiGetProcessId`) and remains open
+  in #50.
+
 ## [1.3.0] - 2026-09-03
 
 X11 GUI automation comes of age. This release is dominated by a major
