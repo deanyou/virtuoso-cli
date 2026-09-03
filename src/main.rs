@@ -1485,8 +1485,19 @@ enum WindowCmd {
     /// from `list-windows-x11` (e.g. 0x2e01f16). Use this when you have
     /// multiple Virtuoso-related windows and don't want to dismiss them all.
     DismissWindowX11 {
-        /// X11 window id (dismiss_id from list-windows-x11)
-        window_id: String,
+        /// X11 window id (dismiss_id from list-windows-x11). Positional for
+        /// backward compatibility; prefer `--window-id`.
+        #[arg(index = 1, value_name = "WINDOW_ID")]
+        window_id_pos: Option<String>,
+        /// X11 window id (dismiss_id from list-windows-x11). Equivalent to the
+        /// positional id; use this when scripting.
+        #[arg(long, value_name = "WINDOW_ID")]
+        window_id: Option<String>,
+        /// Process ID of the target window. Optional. When no window id is
+        /// given, the window id is resolved from list-windows-x11 by this PID
+        /// (errors if zero or multiple windows share it).
+        #[arg(long)]
+        pid: Option<u32>,
         /// enter (default) | escape | alt-y | alt-n | alt-o
         #[arg(long, default_value = "enter")]
         action: String,
@@ -1523,7 +1534,7 @@ enum WindowCmd {
         /// DISPLAY value (e.g. :0, :1)
         #[arg(long)]
         display: String,
-        /// Operation: activate | key | type | click-rel | drag-rel | scroll | screenshot | wait | close
+        /// Operation: activate | key | type | click-rel | click-abs | drag-rel | scroll | screenshot | wait | minimize | maximize | double-click | close
         #[arg(long)]
         operation: String,
         /// Relative X coordinate (for click-rel, drag-rel). Negative values are
@@ -2162,9 +2173,16 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
         }
         WindowCmd::DismissWindowX11 {
             window_id,
+            window_id_pos,
+            pid,
             action,
             display,
-        } => commands::window::dismiss_window_x11(&window_id, &action, display.as_deref()),
+        } => commands::window::dismiss_window_x11(
+            window_id.as_deref().or(window_id_pos.as_deref()),
+            pid,
+            &action,
+            display.as_deref(),
+        ),
         WindowCmd::Screenshot { path, window } => {
             commands::window::screenshot(&path, window.as_deref())
         }
