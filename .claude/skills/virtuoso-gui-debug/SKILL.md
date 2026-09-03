@@ -315,6 +315,32 @@ vcli window action-x11 --direct --window-id 0x2603839 --pid 114668 --display :5.
 
 `--direct` supports: `activate`, `key`, `type`, `click-rel`, `drag-rel`, `scroll`, `close`. It **rejects** `wait` (needs window-list polling) and `screenshot` (needs artifact fetch) with a clear config error. Verified on IC25.1: click/type/key all succeed with correct field values and callback firing.
 
+### P0 — Use `action-x11-batch` for consecutive operations (6.3× faster)
+
+When you have a sequence of GUI operations (click → type → click → type...), use `action-x11-batch` with `--direct` to execute them all in **one process invocation and one SSH round-trip**. All xdotool commands are merged into a single shell script with per-command exit-code markers.
+
+```bash
+# batch.jsonl — one JSON action per line:
+{"window_id": "0x2603839", "operation": "click-rel", "x": 116, "y": 59}
+{"window_id": "0x2603839", "operation": "click-rel", "x": 300, "y": 167}
+{"window_id": "0x2603839", "operation": "type", "text": "METAL1"}
+{"window_id": "0x2603839", "operation": "click-rel", "x": 300, "y": 204}
+{"window_id": "0x2603839", "operation": "type", "text": "METAL2"}
+
+# Execute all 5 in one call (260ms total vs 1300ms for 5 separate --direct calls):
+vcli window action-x11-batch --file batch.jsonl --direct --pid 114668 --display :5.0
+```
+
+Result includes per-action status, duration, and error. A single action failure does not abort the batch. Each action may override `pid` and `display`; CLI flags are defaults.
+
+**Performance comparison (6 actions, IC25.1 remote):**
+
+| Mode | Total | Per-action | Speedup |
+|------|-------|-----------|---------|
+| 6× separate `action-x11` (normal) | ~7300 ms | ~1213 ms | 1× |
+| 6× separate `action-x11 --direct` | ~1650 ms | ~275 ms | 4.4× |
+| `action-x11-batch --direct` (merged shell) | **260 ms** | ~43 ms | **28×** |
+
 ### P0 — Use xwininfo for geometry, not vcli list-windows
 
 ```bash
@@ -362,9 +388,9 @@ done
 ### P2 — vcli-side optimizations (require Rust changes)
 
 - **✅ `--direct` flag (implemented, commit 513f929)**: skips helper upload, env resolution, and list-windows scan. 4.7× faster (1213ms → 260ms). Use when vcli is required but window identity is already known.
-- **Batch mode (pending)**: a `vcli window action-x11 --batch` that accepts multiple operations in one process invocation, keeping the X11 connection alive across operations (eliminates the 260ms per-call startup tax even in direct mode).
-- **Window list caching (pending)**: `list-windows-x11` could cache results for ~500ms since the window tree rarely changes that fast.
-- **Daemon mode (pending)**: a persistent `vcli gui-daemon` that holds the X11 connection and accepts operations over a local socket.
+- **✅ `action-x11-batch` (implemented, commit bab1809 + 10c88dc)**: JSONL batch mode with merged shell execution. 6 actions in 260ms (28× vs normal mode). All xdotool commands merged into one SSH round-trip with per-command exit-code markers.
+- **Window list caching (deferred)**: `list-windows-x11` could cache results for ~500ms. Low value since `--direct` already skips list-windows for actions.
+- **Daemon mode (deferred)**: persistent `vcli gui-daemon` holding X11 connection over a local socket. Batch mode already covers the main use case (consecutive operations in one process); daemon's marginal gain is small.
 
 ### P2 — Coordinate caching
 
