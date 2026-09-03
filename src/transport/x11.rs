@@ -1526,39 +1526,44 @@ pub fn action_x11_batch(
     let mut succeeded = 0usize;
     let mut failed = 0usize;
 
-    for (i, action) in actions.iter().enumerate() {
-        let op_start = std::time::Instant::now();
-        let pid = action.pid.or(default_pid).unwrap_or(0);
-        let display = action
-            .display
-            .as_deref()
-            .or(default_display)
-            .unwrap_or(":0");
+    if direct {
+        // ---- Direct batch: build all commands, execute in ONE shell call ----
+        struct PreparedAction {
+            index: usize,
+            operation: String,
+            display_prefix: String,
+            commands: Vec<Vec<String>>,
+        }
+        let mut prepared: Vec<PreparedAction> = Vec::with_capacity(actions.len());
 
-        let op = match X11Operation::from_str(&action.operation) {
-            Ok(op) => op,
-            Err(e) => {
-                failed += 1;
-                results.push(BatchActionResult {
-                    index: i,
-                    operation: action.operation.clone(),
-                    status: "failure".into(),
-                    duration_ms: 0,
-                    error: Some(e.to_string()),
-                });
-                continue;
-            }
-        };
-
-        if direct {
-            // Direct fast path: skip list-windows, trust window_id.
+        for (i, action) in actions.iter().enumerate() {
+            let pid = action.pid.or(default_pid).unwrap_or(0);
+            let display = action
+                .display
+                .as_deref()
+                .or(default_display)
+                .unwrap_or(":0");
+            let op = match X11Operation::from_str(&action.operation) {
+                Ok(op) => op,
+                Err(e) => {
+                    failed += 1;
+                    results.push(BatchActionResult {
+                        index: i,
+                        operation: action.operation.clone(),
+                        status: "failure".into(),
+                        duration_ms: 0,
+                        error: Some(e.to_string()),
+                    });
+                    continue;
+                }
+            };
             if op == X11Operation::Wait || op == X11Operation::Screenshot {
                 failed += 1;
                 results.push(BatchActionResult {
                     index: i,
                     operation: action.operation.clone(),
                     status: "failure".into(),
-                    duration_ms: op_start.elapsed().as_millis() as u64,
+                    duration_ms: 0,
                     error: Some(format!(
                         "direct mode does not support '{}'",
                         action.operation
@@ -1587,74 +1592,123 @@ pub fn action_x11_batch(
                 action.button,
                 action.text.as_deref(),
             ) {
-                Ok(cmds) => cmds,
+                Ok(cmds) => cmds.into_iter().map(|(_s, argv)| argv).collect(),
                 Err(e) => {
                     failed += 1;
                     results.push(BatchActionResult {
                         index: i,
                         operation: action.operation.clone(),
                         status: "failure".into(),
-                        duration_ms: op_start.elapsed().as_millis() as u64,
+                        duration_ms: 0,
                         error: Some(e.to_string()),
                     });
                     continue;
                 }
             };
-            let mut op_success = true;
-            let mut op_error: Option<String> = None;
-            for (_sub, argv) in cmds {
-                let remote_cmd = format!(
+            prepared.push(PreparedAction {
+                index: i,
+                operation: action.operation.clone(),
+                display_prefix,
+                commands: cmds,
+            });
+        }
+
+        // Merge all xdotool commands into a single shell invocation. Each
+        // command echoes its exit code as __RC_<pa_idx>_<cmd_idx>:$? so we
+        // can attribute success/failure per action after one SSH round-trip.
+        let exec_start = std::time::Instant::now();
+        let mut script_parts: Vec<String> = Vec::new();
+        for (pa_idx, pa) in prepared.iter().enumerate() {
+            for (cmd_idx, argv) in pa.commands.iter().enumerate() {
+                let cmd_str = format!(
                     "{}xdotool {}",
-                    display_prefix,
+                    pa.display_prefix,
                     argv.iter()
                         .map(|a| shell_escape(a))
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
-                match runner.run_command(&CommandRequest::with_exec_timeout(
-                    &remote_cmd,
-                    Duration::from_secs(timeout_secs),
-                )) {
-                    Ok(out) => {
-                        if !out.success {
-                            op_success = false;
-                            op_error = Some(format!(
-                                "xdotool exit {}: {}",
-                                out.exit_status,
-                                out.stderr.trim()
-                            ));
-                            break;
+                script_parts.push(format!("{}; echo __RC_{}_{}:$?", cmd_str, pa_idx, cmd_idx));
+            }
+        }
+        let script = script_parts.join("; ");
+        let total_timeout =
+            Duration::from_secs(timeout_secs * prepared.len().max(1) as u64);
+        let out =
+            runner.run_command(&CommandRequest::with_exec_timeout(&script, total_timeout))?;
+        let exec_duration_ms = exec_start.elapsed().as_millis() as u64;
+
+        let mut cmd_exit_codes: std::collections::HashMap<(usize, usize), i32> =
+            std::collections::HashMap::new();
+        for line in out.stdout.lines() {
+            if let Some(rest) = line.strip_prefix("__RC_") {
+                if let Some((key, code_str)) = rest.split_once(':') {
+                    if let Some((a_str, c_str)) = key.split_once('_') {
+                        if let (Ok(a), Ok(c), Ok(code)) = (
+                            a_str.parse::<usize>(),
+                            c_str.parse::<usize>(),
+                            code_str.parse::<i32>(),
+                        ) {
+                            cmd_exit_codes.insert((a, c), code);
                         }
-                    }
-                    Err(e) => {
-                        op_success = false;
-                        op_error = Some(e.to_string());
-                        break;
                     }
                 }
             }
-            let duration_ms = op_start.elapsed().as_millis() as u64;
-            if op_success {
+        }
+
+        let per_action_ms = if !prepared.is_empty() {
+            exec_duration_ms / prepared.len() as u64
+        } else {
+            0
+        };
+        for (pa_idx, pa) in prepared.iter().enumerate() {
+            let all_ok = (0..pa.commands.len())
+                .all(|c| cmd_exit_codes.get(&(pa_idx, c)).copied().unwrap_or(-1) == 0);
+            if all_ok {
                 succeeded += 1;
                 results.push(BatchActionResult {
-                    index: i,
-                    operation: action.operation.clone(),
+                    index: pa.index,
+                    operation: pa.operation.clone(),
                     status: "success".into(),
-                    duration_ms,
+                    duration_ms: per_action_ms,
                     error: None,
                 });
             } else {
                 failed += 1;
                 results.push(BatchActionResult {
-                    index: i,
-                    operation: action.operation.clone(),
+                    index: pa.index,
+                    operation: pa.operation.clone(),
                     status: "failure".into(),
-                    duration_ms,
-                    error: op_error,
+                    duration_ms: per_action_ms,
+                    error: Some("xdotool command returned non-zero exit code".into()),
                 });
             }
-        } else {
-            // Full validation path per action (shares one process startup).
+        }
+        results.sort_by_key(|r| r.index);
+    } else {
+        // ---- Non-direct: full action_x11 per action (shares process startup) ----
+        for (i, action) in actions.iter().enumerate() {
+            let op_start = std::time::Instant::now();
+            let pid = action.pid.or(default_pid).unwrap_or(0);
+            let display = action
+                .display
+                .as_deref()
+                .or(default_display)
+                .unwrap_or(":0");
+            let op = match X11Operation::from_str(&action.operation) {
+                Ok(op) => op,
+                Err(e) => {
+                    failed += 1;
+                    results.push(BatchActionResult {
+                        index: i,
+                        operation: action.operation.clone(),
+                        status: "failure".into(),
+                        duration_ms: 0,
+                        error: Some(e.to_string()),
+                    });
+                    continue;
+                }
+            };
             let inputs = ActionX11Inputs {
                 window_id: &action.window_id,
                 pid,
