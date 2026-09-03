@@ -1226,20 +1226,60 @@ fn action_x11_cached(
         let operation = *operation;
         let cmds = build_xdotool_actions(&resolved, operation, *x, *y, *button, *text)?;
         let mut results = Vec::with_capacity(cmds.len());
-        for (_sub, argv) in cmds {
-            let remote_cmd = format!(
-                "{}xdotool {}",
-                display_prefix,
-                argv.iter()
-                    .map(|a| shell_escape(a))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-            let out = runner.run_command(&CommandRequest::with_exec_timeout(
-                &remote_cmd,
-                Duration::from_secs(*timeout_secs),
-            ))?;
-            results.push(out);
+        if operation == X11Operation::DragRel {
+            // Drag needs a MouseButtonGuard: mousedown -> mousemove -> mouseup.
+            // If mousemove fails mid-drag (SSH drop, timeout, NAK), the guard's
+            // Drop still issues a best-effort mouseup so we don't leave the
+            // button held on the CIW. Mirrors the non-direct DragRel path below.
+            let mut guard = MouseButtonGuard::new(runner, &display_prefix, &resolved, *button);
+            for (i, (_sub, argv)) in cmds.into_iter().enumerate() {
+                let remote_cmd = format!(
+                    "{}xdotool {}",
+                    display_prefix,
+                    argv.iter()
+                        .map(|a| shell_escape(a))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+                match runner.run_command(&CommandRequest::with_exec_timeout(
+                    &remote_cmd,
+                    Duration::from_secs(*timeout_secs),
+                )) {
+                    Ok(out) => {
+                        if i == 0 {
+                            guard.arm(); // mousedown succeeded: arm the release guard
+                        } else if i == 2 {
+                            guard.mark_released(); // explicit mouseup succeeded
+                        }
+                        results.push(out);
+                    }
+                    Err(err) => {
+                        // mousedown succeeded but a later step failed: guard's
+                        // Drop will still run mouseup. If mousedown failed (i==0),
+                        // nothing to release — the button was never pressed.
+                        return Err(VirtuosoError::Execution(format!(
+                            "xdotool {} failed: {}",
+                            _sub, err
+                        )));
+                    }
+                }
+            }
+        } else {
+            for (_sub, argv) in cmds {
+                let remote_cmd = format!(
+                    "{}xdotool {}",
+                    display_prefix,
+                    argv.iter()
+                        .map(|a| shell_escape(a))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+                let out = runner.run_command(&CommandRequest::with_exec_timeout(
+                    &remote_cmd,
+                    Duration::from_secs(*timeout_secs),
+                ))?;
+                results.push(out);
+            }
         }
         let duration_ms = start.elapsed().as_millis() as u64;
         if operation == X11Operation::Key {
@@ -3965,6 +4005,87 @@ mod tests {
         }
     }
 
+    /// A transport that succeeds on the first command (mousedown) but fails on
+    /// the second (mousemove), then succeeds again — so the guard's best-effort
+    /// mouseup Drop does not itself error. Records every command it receives.
+    /// Used to assert a mid-drag failure still triggers a mouseup release.
+    struct MidDragFailingTransport {
+        commands: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl MidDragFailingTransport {
+        fn new() -> Self {
+            Self {
+                commands: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl RemoteTransport for MidDragFailingTransport {
+        fn test_connection(
+            &self,
+            _deadline: crate::transport::contract::Deadline,
+        ) -> std::result::Result<bool, crate::transport::contract::TransportError> {
+            Ok(true)
+        }
+
+        fn run_command(
+            &self,
+            req: &CommandRequest,
+        ) -> std::result::Result<CommandResult, crate::transport::contract::TransportError>
+        {
+            let mut cmds = self.commands.lock().unwrap();
+            cmds.push(req.command.clone());
+            let n = cmds.len();
+            drop(cmds);
+            if n == 1 {
+                // mousedown succeeded — arm the guard
+                Ok(mk_result("", "", 0))
+            } else if n == 2 {
+                // mousemove fails mid-drag → action_x11 returns early
+                Err(crate::transport::contract::TransportError::LocalIo(
+                    "simulated mid-drag failure".into(),
+                ))
+            } else {
+                // guard's best-effort mouseup (and any later call) succeeds
+                Ok(mk_result("", "", 0))
+            }
+        }
+
+        fn upload_text(
+            &self,
+            _req: &UploadTextRequest,
+        ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+            Ok(())
+        }
+        fn upload_file(
+            &self,
+            _req: &crate::transport::contract::UploadFileRequest,
+        ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+            Ok(())
+        }
+        fn download_file(
+            &self,
+            _req: &crate::transport::contract::DownloadFileRequest,
+        ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+            Err(
+                crate::transport::contract::TransportError::UnsupportedOperation(
+                    "download_file not supported".into(),
+                ),
+            )
+        }
+        fn download_dir(
+            &self,
+            _req: &crate::transport::contract::DownloadDirRequest,
+        ) -> std::result::Result<(), crate::transport::contract::TransportError> {
+            Err(
+                crate::transport::contract::TransportError::UnsupportedOperation(
+                    "download_dir not supported".into(),
+                ),
+            )
+        }
+    }
+
     #[test]
     fn list_dialogs_exit1_empty_means_no_dialogs_not_error() {
         // The helper exits 1 with no output to signal "no dialogs". This is the
@@ -4284,6 +4405,43 @@ mod tests {
             None,
         );
         assert!(result.is_ok(), "drag-rel with x,y should be ok");
+    }
+
+    #[test]
+    fn action_x11_direct_drag_issues_mouseup_on_failure() {
+        // Regression for the --direct drag MouseButtonGuard fix: a drag-rel whose
+        // mousemove fails mid-drag must still issue a best-effort mouseup so the
+        // pointer button is not left stuck on the target window. Without the
+        // guard, the `?` early-return skips the explicit mouseup entirely.
+        let transport = MidDragFailingTransport::new();
+        let inputs = ActionX11Inputs {
+            window_id: "0x123",
+            pid: 12345,
+            display: ":0",
+            operation: X11Operation::DragRel,
+            x: Some(10),
+            y: Some(20),
+            button: Some(1),
+            text: None,
+            output_dir: None,
+            timeout_secs: 5,
+            direct: true,
+        };
+        let result = action_x11(&transport, "client1", Some("user1"), &inputs);
+        assert!(
+            result.is_err(),
+            "mid-drag failure should propagate an error"
+        );
+        let cmds = transport.commands.lock().unwrap();
+        let joined = cmds.join("\n");
+        assert!(
+            joined.contains("mouseup"),
+            "expected a best-effort mouseup on mid-drag failure; commands were:\n{joined}"
+        );
+        assert!(
+            joined.contains("--window 0x123 1"),
+            "mouseup must target the window id and button; commands were:\n{joined}"
+        );
     }
 
     #[test]
