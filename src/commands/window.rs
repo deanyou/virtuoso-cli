@@ -406,6 +406,75 @@ pub fn action_x11(
     Ok(out)
 }
 
+/// Execute multiple X11 actions from a JSONL file in one process invocation.
+///
+/// Each line of the file is a JSON object with fields: window_id, pid (optional),
+/// display (optional), operation, x, y, button, text. pid/display fall back to
+/// the CLI defaults. When `direct` is true, every action skips the list-windows
+/// scan for maximum throughput.
+#[allow(clippy::too_many_arguments)]
+pub fn action_x11_batch(
+    file_path: &str,
+    direct: bool,
+    default_pid: Option<u32>,
+    default_display: Option<&str>,
+    explicit_display: Option<&str>,
+    timeout_secs: u64,
+) -> Result<Value> {
+    use crate::config::Config;
+    use crate::transport::x11;
+    use std::io::{BufRead, BufReader};
+
+    let file = std::fs::File::open(file_path).map_err(|e| {
+        VirtuosoError::Config(format!("cannot open batch file '{file_path}': {e}"))
+    })?;
+    let reader = BufReader::new(file);
+    let mut actions = Vec::new();
+    for (line_no, line) in reader.lines().enumerate() {
+        let line = line.map_err(|e| {
+            VirtuosoError::Config(format!("failed to read line {}: {e}", line_no + 1))
+        })?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let action: x11::BatchAction = serde_json::from_str(trimmed).map_err(|e| {
+            VirtuosoError::Config(format!(
+                "invalid JSON on line {}: {e}",
+                line_no + 1
+            ))
+        })?;
+        actions.push(action);
+    }
+    if actions.is_empty() {
+        return Err(VirtuosoError::Config(
+            "batch file contains no actions".into(),
+        ));
+    }
+
+    let config = Config::from_env()?;
+    let runner: Arc<dyn RemoteTransport> = x11::transport_for_config(&config)?;
+    let user = config.remote_user.as_deref();
+    let client_id = x11::client_id_for(&config);
+    let effective_default_display = explicit_display.or(default_display);
+
+    let result = x11::action_x11_batch(
+        runner.as_ref(),
+        &client_id,
+        user,
+        &actions,
+        default_pid,
+        effective_default_display,
+        direct,
+        timeout_secs,
+    )?;
+
+    let out = serde_json::to_value(&result).map_err(|e| {
+        VirtuosoError::Execution(format!("failed to serialize batch result: {e}"))
+    })?;
+    Ok(out)
+}
+
 /// Derive a mode string from a Virtuoso window name.
 fn window_mode(name: &str) -> &'static str {
     if name.contains("ADE Explorer Editing") || name.contains("ADE Assembler Editing") {

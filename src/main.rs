@@ -1553,6 +1553,34 @@ enum WindowCmd {
         #[arg(long, default_value = "false")]
         direct: bool,
     },
+
+    /// Execute multiple X11 actions in one process invocation (JSONL batch).
+    ///
+    /// Reads a JSONL file (one action per line) and executes them sequentially,
+    /// sharing a single list-windows scan and process startup. N actions cost
+    /// ~1 startup + N×xdotool instead of N×(startup + list-windows + xdotool).
+    /// Each line is a JSON object with fields: window_id, pid, display,
+    /// operation, x, y, button, text. pid/display default to the CLI flags.
+    ActionX11Batch {
+        /// Path to JSONL file with one action per line
+        #[arg(long)]
+        file: String,
+        /// Skip list-windows scan for all actions (trust window-id in each line)
+        #[arg(long, default_value = "false")]
+        direct: bool,
+        /// Default PID for actions that don't specify one
+        #[arg(long)]
+        pid: Option<u32>,
+        /// Default DISPLAY for actions that don't specify one
+        #[arg(long)]
+        display: Option<String>,
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display_override: Option<String>,
+        /// Timeout in seconds per operation (default: 30)
+        #[arg(long, default_value = "30")]
+        timeout: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2161,6 +2189,21 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             timeout,
             display_override.as_deref(),
             direct,
+        ),
+        WindowCmd::ActionX11Batch {
+            file,
+            direct,
+            pid,
+            display,
+            display_override,
+            timeout,
+        } => commands::window::action_x11_batch(
+            &file,
+            direct,
+            pid,
+            display.as_deref(),
+            display_override.as_deref(),
+            timeout,
         ),
     }
 }

@@ -1457,6 +1457,259 @@ pub fn action_x11(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Batch mode: execute multiple X11 actions in one process invocation.
+// ---------------------------------------------------------------------------
+
+/// One action in a JSONL batch file. Fields mirror `action-x11` CLI flags.
+/// `pid` and `display` are optional; they fall back to the CLI defaults.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchAction {
+    pub window_id: String,
+    #[serde(default)]
+    pub pid: Option<u32>,
+    #[serde(default)]
+    pub display: Option<String>,
+    pub operation: String,
+    #[serde(default)]
+    pub x: Option<i32>,
+    #[serde(default)]
+    pub y: Option<i32>,
+    #[serde(default)]
+    pub button: Option<u8>,
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+/// Per-action result in a batch run.
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchActionResult {
+    pub index: usize,
+    pub operation: String,
+    pub status: String,
+    pub duration_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Aggregated result of a batch run.
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchResult {
+    pub status: String,
+    pub total: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    pub total_duration_ms: u64,
+    pub results: Vec<BatchActionResult>,
+}
+
+/// Execute multiple X11 actions in one process invocation.
+///
+/// When `direct` is true, every action skips the list-windows scan and runs
+/// xdotool directly — the fastest path. When false, each action goes through
+/// the full `action_x11` validation path (still shares one process startup).
+///
+/// Returns per-action timing and an aggregated status. A single action failure
+/// does not abort the batch; subsequent actions continue executing.
+pub fn action_x11_batch(
+    runner: &dyn RemoteTransport,
+    client_id: &str,
+    user: Option<&str>,
+    actions: &[BatchAction],
+    default_pid: Option<u32>,
+    default_display: Option<&str>,
+    direct: bool,
+    timeout_secs: u64,
+) -> Result<BatchResult> {
+    let start = std::time::Instant::now();
+    let mut results = Vec::with_capacity(actions.len());
+    let mut succeeded = 0usize;
+    let mut failed = 0usize;
+
+    for (i, action) in actions.iter().enumerate() {
+        let op_start = std::time::Instant::now();
+        let pid = action.pid.or(default_pid).unwrap_or(0);
+        let display = action
+            .display
+            .as_deref()
+            .or(default_display)
+            .unwrap_or(":0");
+
+        let op = match X11Operation::from_str(&action.operation) {
+            Ok(op) => op,
+            Err(e) => {
+                failed += 1;
+                results.push(BatchActionResult {
+                    index: i,
+                    operation: action.operation.clone(),
+                    status: "failure".into(),
+                    duration_ms: 0,
+                    error: Some(e.to_string()),
+                });
+                continue;
+            }
+        };
+
+        if direct {
+            // Direct fast path: skip list-windows, trust window_id.
+            if op == X11Operation::Wait || op == X11Operation::Screenshot {
+                failed += 1;
+                results.push(BatchActionResult {
+                    index: i,
+                    operation: action.operation.clone(),
+                    status: "failure".into(),
+                    duration_ms: op_start.elapsed().as_millis() as u64,
+                    error: Some(format!(
+                        "direct mode does not support '{}'",
+                        action.operation
+                    )),
+                });
+                continue;
+            }
+            let display_prefix = format!("env DISPLAY={} ", shell_escape(display));
+            let resolved = WindowInfo {
+                frame_id: action.window_id.clone(),
+                window_id: action.window_id.clone(),
+                dismiss_id: action.window_id.clone(),
+                display: Some(display.to_string()),
+                xauthority: None,
+                title: String::new(),
+                class: Vec::new(),
+                geometry: Geometry::default(),
+                pid: Some(pid),
+                visible: true,
+            };
+            let cmds = match build_xdotool_actions(
+                &resolved,
+                op,
+                action.x,
+                action.y,
+                action.button,
+                action.text.as_deref(),
+            ) {
+                Ok(cmds) => cmds,
+                Err(e) => {
+                    failed += 1;
+                    results.push(BatchActionResult {
+                        index: i,
+                        operation: action.operation.clone(),
+                        status: "failure".into(),
+                        duration_ms: op_start.elapsed().as_millis() as u64,
+                        error: Some(e.to_string()),
+                    });
+                    continue;
+                }
+            };
+            let mut op_success = true;
+            let mut op_error: Option<String> = None;
+            for (_sub, argv) in cmds {
+                let remote_cmd = format!(
+                    "{}xdotool {}",
+                    display_prefix,
+                    argv.iter()
+                        .map(|a| shell_escape(a))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+                match runner.run_command(&CommandRequest::with_exec_timeout(
+                    &remote_cmd,
+                    Duration::from_secs(timeout_secs),
+                )) {
+                    Ok(out) => {
+                        if !out.success {
+                            op_success = false;
+                            op_error = Some(format!(
+                                "xdotool exit {}: {}",
+                                out.exit_status,
+                                out.stderr.trim()
+                            ));
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        op_success = false;
+                        op_error = Some(e.to_string());
+                        break;
+                    }
+                }
+            }
+            let duration_ms = op_start.elapsed().as_millis() as u64;
+            if op_success {
+                succeeded += 1;
+                results.push(BatchActionResult {
+                    index: i,
+                    operation: action.operation.clone(),
+                    status: "success".into(),
+                    duration_ms,
+                    error: None,
+                });
+            } else {
+                failed += 1;
+                results.push(BatchActionResult {
+                    index: i,
+                    operation: action.operation.clone(),
+                    status: "failure".into(),
+                    duration_ms,
+                    error: op_error,
+                });
+            }
+        } else {
+            // Full validation path per action (shares one process startup).
+            let inputs = ActionX11Inputs {
+                window_id: &action.window_id,
+                pid,
+                display,
+                operation: op,
+                x: action.x,
+                y: action.y,
+                button: action.button,
+                text: action.text.as_deref(),
+                output_dir: None,
+                timeout_secs,
+                direct: false,
+            };
+            match action_x11(runner, client_id, user, &inputs) {
+                Ok(_) => {
+                    succeeded += 1;
+                    results.push(BatchActionResult {
+                        index: i,
+                        operation: action.operation.clone(),
+                        status: "success".into(),
+                        duration_ms: op_start.elapsed().as_millis() as u64,
+                        error: None,
+                    });
+                }
+                Err(e) => {
+                    failed += 1;
+                    results.push(BatchActionResult {
+                        index: i,
+                        operation: action.operation.clone(),
+                        status: "failure".into(),
+                        duration_ms: op_start.elapsed().as_millis() as u64,
+                        error: Some(e.to_string()),
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(BatchResult {
+        status: if failed == 0 {
+            "success"
+        } else if succeeded > 0 {
+            "partial"
+        } else {
+            "failure"
+        }
+        .into(),
+        total: actions.len(),
+        succeeded,
+        failed,
+        total_duration_ms: start.elapsed().as_millis() as u64,
+        results,
+    })
+}
+
 /// Bundles identity + action inputs for `action_x11`; mirrors the CLI flags.
 #[derive(Debug, Clone)]
 pub struct ActionX11Inputs<'a> {
