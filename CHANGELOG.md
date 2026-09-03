@@ -2,6 +2,127 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-09-03
+
+X11 GUI automation comes of age. This release is dominated by a major
+expansion of `vcli window action-x11` — three performance features
+(`--direct`, `action-x11-batch`, P2 geometry precheck + geom cache), a
+new `SCROLL` operation, a `wait` operation, and two dozen boundary and
+correctness fixes validated on real Virtuoso IC25.1 sessions. The
+`virtuoso-gui-debug` skill is unified with a local xdotool executor and
+ships a multi-method operation playbook. 75 commits since 1.2.0.
+
+### Added (X11 GUI automation)
+
+- **`--direct` flag** (`src/transport/x11.rs`, `src/commands/window.rs`):
+  skips helper upload, env resolution, and list-windows scan. Trusts the
+  caller-provided `--window-id` and runs xdotool directly. ~4.7× faster
+  (1213ms → 260ms per action). Supports `activate`, `key`, `type`,
+  `click-rel`, `drag-rel`, `scroll`, `close`. Rejects `wait` and
+  `screenshot` with a clear config error.
+- **`action-x11-batch`** (`src/commands/window.rs`): JSONL batch mode
+  that merges all xdotool commands into one shell invocation with
+  per-command exit-code markers. 6 actions in 260ms (28× vs separate
+  calls). Each action may override `pid`/`display`; CLI flags are
+  defaults. Single-action failure does not abort the batch.
+- **`SCROLL` operation**: direction (`up`/`down`/`left`/`right`) with
+  optional count (1–100) and window-relative x/y. Maps to xdotool mouse
+  buttons 4/5/6/7. Full chain: Rust `X11Operation::Scroll` →
+  `build_xdotool_actions` → CLI → DSL → unit tests.
+- **`action-x11 wait`**: polls `list-windows-x11` for a title match,
+  with configurable timeout. Useful for waiting on dialog appearance
+  after a Browse/Open action.
+- **P2 geometry precheck** (`--direct` mode): `parse_xwininfo_geometry`
+  + `check_coords_in_bounds` validates the target window is non-zero-size
+  and coordinates are in-bounds before sending input. Zero-size or
+  out-of-bounds requests exit with code 2 and a clear message
+  (`coordinates (x, y) out of bounds for window size WxH`). Applies to
+  `click-rel`, `drag-rel`, and coordinate-bearing `scroll`.
+- **Batch shared list-windows** (non-direct mode): `CachedX11Context`
+  builds one window-list context per unique DISPLAY and reuses it across
+  all actions in the batch. 3 actions in 505ms (168ms/action) vs 940ms
+  per action previously.
+- **geom file cache** (`GeomCacheEntry`, `geom_cache_read/write`):
+  cross-platform `temp_dir()` path, 500ms TTL. Enables fast zero-size
+  rejection on repeated `--direct` calls to the same window (13ms cache
+  hit vs 30ms full check).
+- **MouseButtonGuard** (`--direct` drag path): ensures `mouseup` is
+  always sent even if the drag's `mousemove` fails, preventing stuck
+  mouse buttons.
+
+### Added (virtuoso-gui-debug skill)
+
+- **Unified skill** (`.claude/skills/virtuoso-gui-debug/`): merged the
+  old `gui-debugger` into `virtuoso-gui-debug` with three executors —
+  `fake` (deterministic offline), `live` (real vcli, session/PID/DISPLAY
+  bound), and `local` (direct xdotool, no vcli required).
+- **Local executor**: direct xdotool on a local DISPLAY, binds window by
+  PID or `--window-id`, supports SCROLL (buttons 4–7), uses ImageMagick
+  `import` for screenshots.
+- **Multi-method operation playbook**: every GUI operation has ≥2
+  independently-verified methods (click, type, coordinate acquisition,
+  window discovery, modal dialog handling, close/cancel).
+- **Performance optimization guide**: P0 (xdotool default 135×, xwininfo
+  313×), P1 (type delay 10ms, zero inter-op sleep), P2 (--direct, batch,
+  geom cache) with measured IC25.1 latencies.
+- **Python 3.6 compatibility**: the skill runs on the cloud machine's
+  Python 3.6 (no f-strings, no walrus).
+
+### Added (CI / build / release)
+
+- **Dependabot** for Cargo dependencies and GitHub Actions.
+- **cargo-audit** security vulnerability scan in CI (with
+  `RUSTSEC-2023-0071` rsa ignore).
+- **macOS + Windows binaries** in the release workflow.
+- **Cross-platform integration matrix**: ubuntu × macos × windows ×
+  {default, native-ssh}.
+
+### Fixed
+
+- **CentOS 7 glibc 2.17 link failure**: `renameat2` is not available on
+  glibc 2.17; resolved with a runtime fallback.
+- **list_dialogs exit code 1**: helper exit code 1 (healthy "no
+  dialogs") was incorrectly treated as a helper error. Now skipped.
+- **action-x11 window resolution + xdotool argv syntax**: repaired
+  window re-resolution and corrected xdotool argument construction.
+- **dismiss-dialog segfault**: ctypes `argtypes` now set so 64-bit
+  `Display*` isn't truncated to 32 bits.
+- **Minimized window handling**: screenshot and dismiss-dialog now
+  restore minimized windows before operating; `XSetInputFocus` guarded.
+- **WM class parsing**: reads from the last parenthesized group in
+  xwininfo output (handles windows with multiple class hints).
+- **xdotool `getwindowname` fallback**: used when xwininfo title is
+  empty.
+- **Key chord normalization**: hyphenated chords (`ctrl-a`) normalized
+  to xdotool `+` form (`ctrl+a`).
+- **list-windows-x11 "no Virtuoso windows"**: now treated as healthy
+  empty result, not an error.
+- **Multiple boundary fixes** (#52, #56, #57, #58, #59, #60, #61, #62,
+  #63, #64): multi-window disambiguation, dismiss default, type ASCII
+  restriction, key validation, timeout precision, dialog geometry
+  backfill, display env ordering.
+
+### Changed (dependencies)
+
+- `crossterm` 0.28 → 0.29
+- `sha2` 0.10 → 0.11 (with `LowerHex` → `hex::encode` code fix)
+- `ratatui` 0.29 → 0.30
+- `base64` 0.22 → 0.23
+- `dirs` 5 → 6
+- `toml` 0.8 → 1.1
+- `shlex` 1 → 2
+- `serial_test` 3 → 4
+- `actions/checkout` 4 → 7
+- `softprops/action-gh-release` 2 → 3
+
+### Changed (docs)
+
+- Interactive HTML architecture guide (`docs/virtuoso-gui-debug-architecture.html`)
+  and capability retrospective (`docs/vcli-gui-debug-retrospective.html`),
+  both pure-SVG (zero external CDN) and linked from README (EN + ZH).
+- Bilingual X11 GUI debugging section with multi-method playbook.
+- `AGENTS.md` / `CLAUDE.md` skill guidance for virtuoso-gui-debug.
+
 ## [1.2.0] - 2026-09-01
 
 First release where the native (`russh`-based) SSH backend is documented
