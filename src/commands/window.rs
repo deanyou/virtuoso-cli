@@ -359,7 +359,7 @@ pub fn screenshot(path: &str, window_pattern: Option<&str>) -> Result<Value> {
 #[allow(clippy::too_many_arguments)]
 pub fn action_x11(
     window_id: &str,
-    pid: u32,
+    pid: Option<u32>,
     display: &str,
     operation: &str,
     x: Option<i32>,

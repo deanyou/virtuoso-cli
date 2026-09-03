@@ -718,6 +718,8 @@ pub struct X11ActionResult {
     pub status: String,
     pub operation: String,
     pub window_id: String,
+    /// PID of the window that was acted on; `0` when the window exposes no
+    /// `_NET_WM_PID`.
     pub pid: u32,
     pub display: String,
     /// Duration in milliseconds.
@@ -850,6 +852,30 @@ pub fn parse_scroll_spec(spec: &str) -> Result<(String, u32)> {
     Ok((direction.to_string(), count))
 }
 
+/// PID predicate for window resolution.
+///
+/// A caller-supplied PID must match the window's PID exactly. When the caller
+/// supplies no PID (`None`), every window passes — identity then rests on the
+/// window id alone.
+///
+/// The `None` arm is what makes windows without `_NET_WM_PID` operable: the
+/// X11 helper reports `pid: null` for them, so requiring a numeric PID made
+/// those windows permanently unreachable.
+fn pid_matches(expected: Option<u32>, actual: Option<u32>) -> bool {
+    match expected {
+        Some(p) => actual == Some(p),
+        None => true,
+    }
+}
+
+/// Render an optional PID for error messages (`1234`, or `any` when unset).
+fn pid_label(pid: Option<u32>) -> String {
+    match pid {
+        Some(p) => p.to_string(),
+        None => "any".to_string(),
+    }
+}
+
 /// Validate action parameters.
 ///
 /// Mirrors the positional flags of `vcli window action-x11`, hence the
@@ -857,7 +883,7 @@ pub fn parse_scroll_spec(spec: &str) -> Result<(String, u32)> {
 #[allow(clippy::too_many_arguments)]
 pub fn validate_action_params(
     window_id: &str,
-    pid: u32,
+    pid: Option<u32>,
     display: &str,
     operation: &str,
     x: Option<i32>,
@@ -873,10 +899,12 @@ pub fn validate_action_params(
         ));
     }
 
-    // Reject non-positive PID
-    if pid == 0 {
+    // Reject a supplied-but-non-positive PID. Omitting the PID entirely is
+    // legal: the window id alone then identifies the target, which is the only
+    // way to operate on windows that expose no `_NET_WM_PID`.
+    if pid == Some(0) {
         return Err(VirtuosoError::Config(
-            "positive PID required (session PID must be resolved before any GUI action)".into(),
+            "PID must be positive when supplied; omit it to resolve by window id alone".into(),
         ));
     }
 
@@ -1168,7 +1196,7 @@ fn action_x11_cached(
             title: String::new(),
             class: Vec::new(),
             geometry: Geometry::default(),
-            pid: Some(*pid),
+            pid: *pid,
             visible: true,
         };
 
@@ -1320,7 +1348,7 @@ fn action_x11_cached(
             status: if success { "success" } else { "failure" }.to_string(),
             operation: operation.as_str().to_string(),
             window_id: window_id.to_string(),
-            pid: *pid,
+            pid: resolved.pid.unwrap_or(0),
             display: display.to_string(),
             duration_ms,
             details,
@@ -1370,17 +1398,22 @@ fn action_x11_cached(
         (helper, env, windows, display_prefix)
     };
 
+    // Render the PID once for every message below.
+    let pid_desc = pid_label(*pid);
+
     // Step 2: Resolve the target window.
-    // match by id + PID + DISPLAY directly — this disambiguates multiple windows
-    // sharing one PID (common in Virtuoso: CIW + tool windows same process).
-    // Without window_id, fall back to resolve_unique_window which errors on
-    // multi-window ambiguity.
+    // match by id + DISPLAY (+ PID when supplied) directly — this disambiguates
+    // multiple windows sharing one PID (common in Virtuoso: CIW + tool windows
+    // same process). The PID is a verification, not the identity: when the
+    // caller omits it, `pid_matches` accepts any window and the window id
+    // alone decides. Without window_id, fall back to resolve_unique_window
+    // which errors on multi-window ambiguity.
     let resolved = if !window_id.is_empty() {
         let wid = *window_id;
         let matched: Vec<&WindowInfo> = windows
             .iter()
             .filter(|w| {
-                w.pid == Some(*pid)
+                pid_matches(*pid, w.pid)
                     && w.display.as_deref() == Some(display)
                     && (w.window_id == wid || w.dismiss_id == wid || w.frame_id == wid)
             })
@@ -1412,24 +1445,33 @@ fn action_x11_cached(
                         title: verify.stdout.trim().to_string(),
                         class: Vec::new(),
                         geometry: Geometry::default(),
-                        pid: Some(*pid),
+                        pid: *pid,
                         visible: false,
                     }
                 } else {
                     return Err(VirtuosoError::NotFound(format!(
-                        "no window with id '{window_id}' matching PID={pid} DISPLAY={display}"
+                        "no window with id '{window_id}' matching PID={pid_desc} DISPLAY={display}"
                     )));
                 }
             }
             1 => matched.into_iter().next().unwrap().clone(),
             _ => {
                 return Err(VirtuosoError::Conflict(format!(
-                    "multiple windows matching id '{window_id}' PID={pid} DISPLAY={display}",
+                    "multiple windows matching id '{window_id}' PID={pid_desc} DISPLAY={display}",
                 )))
             }
         }
     } else {
-        resolve_unique_window(&windows, *pid, display, None)?
+        // No window id: identity can only come from the PID, so it is
+        // mandatory on this path. `resolve_unique_window` rejects 0 anyway.
+        let p = pid.ok_or_else(|| {
+            VirtuosoError::Config(
+                "positive PID required when no window id is given \
+                 (nothing else could identify the target window)"
+                    .into(),
+            )
+        })?;
+        resolve_unique_window(&windows, p, display, None)?
     };
 
     // Step 3 (legacy): verify the resolved window matches the requested id.
@@ -1440,7 +1482,7 @@ fn action_x11_cached(
         && resolved.frame_id != *window_id
     {
         return Err(VirtuosoError::NotFound(format!(
-            "no window with id '{}' matching PID={pid} DISPLAY={display} (resolved to '{}')",
+            "no window with id '{}' matching PID={pid_desc} DISPLAY={display} (resolved to '{}')",
             window_id, resolved.window_id
         )));
     }
@@ -1708,7 +1750,11 @@ fn action_x11_cached(
         status: if success { "success" } else { "failure" }.to_string(),
         operation: operation.as_str().to_string(),
         window_id: window_id.to_string(),
-        pid: *pid,
+        // Report the PID of the window we actually acted on, not the one the
+        // caller guessed. They are identical whenever a PID was supplied
+        // (resolution matched on it), so this stays backward compatible while
+        // still reporting a useful value for PID-less windows.
+        pid: resolved.pid.unwrap_or(0),
         display: display.to_string(),
         duration_ms,
         details,
@@ -1805,7 +1851,7 @@ pub fn action_x11_batch(
             std::collections::HashMap::new();
 
         for (i, action) in actions.iter().enumerate() {
-            let pid = action.pid.or(default_pid).unwrap_or(0);
+            let pid = action.pid.or(default_pid);
             let display = action
                 .display
                 .as_deref()
@@ -1849,7 +1895,7 @@ pub fn action_x11_batch(
                 title: String::new(),
                 class: Vec::new(),
                 geometry: Geometry::default(),
-                pid: Some(pid),
+                pid,
                 visible: true,
             };
 
@@ -2083,7 +2129,7 @@ pub fn action_x11_batch(
 
         for (i, action) in actions.iter().enumerate() {
             let op_start = std::time::Instant::now();
-            let pid = action.pid.or(default_pid).unwrap_or(0);
+            let pid = action.pid.or(default_pid);
             let display = action
                 .display
                 .as_deref()
@@ -2165,7 +2211,14 @@ pub fn action_x11_batch(
 #[derive(Debug, Clone)]
 pub struct ActionX11Inputs<'a> {
     pub window_id: &'a str,
-    pub pid: u32,
+    /// Process ID of the target window, when known.
+    ///
+    /// Optional on purpose: windows that do not set `_NET_WM_PID` are listed
+    /// with `pid: null` and can never match a numeric PID. When this is
+    /// `None`, identity comes from `window_id` alone. When `Some(p)`, the
+    /// resolved window must match `p` exactly — the PID is a verification,
+    /// never a substitute for the window id.
+    pub pid: Option<u32>,
     pub display: &'a str,
     pub operation: X11Operation,
     pub x: Option<i32>,
@@ -4302,7 +4355,7 @@ mod tests {
     fn action_x11_requires_window_id_not_empty() {
         // Empty window_id should be rejected by validate_action_params
         let result =
-            validate_action_params("", 12345, ":0", "activate", None, None, None, None, None);
+            validate_action_params("", Some(12345), ":0", "activate", None, None, None, None, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("window_id"));
@@ -4312,17 +4365,17 @@ mod tests {
     fn action_x11_rejects_zero_pid() {
         // Zero PID should be rejected
         let result =
-            validate_action_params("0x123", 0, ":0", "activate", None, None, None, None, None);
+            validate_action_params("0x123", Some(0), ":0", "activate", None, None, None, None, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("positive PID"));
+        assert!(err.to_string().contains("PID must be positive"));
     }
 
     #[test]
     fn action_x11_rejects_empty_display() {
         // Empty display should be rejected
         let result =
-            validate_action_params("0x123", 12345, "", "activate", None, None, None, None, None);
+            validate_action_params("0x123", Some(12345), "", "activate", None, None, None, None, None);
         assert!(result.is_err());
     }
 
@@ -4330,11 +4383,11 @@ mod tests {
     fn action_x11_key_requires_text_parameter() {
         // key operation requires non-empty text — passing None must be rejected
         let result =
-            validate_action_params("0x123", 12345, ":0", "key", None, None, None, None, None);
+            validate_action_params("0x123", Some(12345), ":0", "key", None, None, None, None, None);
         assert!(result.is_err(), "key requires --text");
         let result = validate_action_params(
             "0x123",
-            12345,
+            Some(12345),
             ":0",
             "key",
             None,
@@ -4351,7 +4404,7 @@ mod tests {
         // type operation sanitizes output to length only
         let result = validate_action_params(
             "0x123",
-            12345,
+            Some(12345),
             ":0",
             "type",
             None,
@@ -4378,7 +4431,7 @@ mod tests {
         // click-rel requires x and y
         let result = validate_action_params(
             "0x123",
-            12345,
+            Some(12345),
             ":0",
             "click-rel",
             Some(10),
@@ -4395,7 +4448,7 @@ mod tests {
         // drag-rel requires x and y
         let result = validate_action_params(
             "0x123",
-            12345,
+            Some(12345),
             ":0",
             "drag-rel",
             Some(10),
@@ -4416,7 +4469,7 @@ mod tests {
         let transport = MidDragFailingTransport::new();
         let inputs = ActionX11Inputs {
             window_id: "0x123",
-            pid: 12345,
+            pid: Some(12345),
             display: ":0",
             operation: X11Operation::DragRel,
             x: Some(10),
@@ -4449,7 +4502,7 @@ mod tests {
         // screenshot requires output_dir — missing must be rejected
         let result = validate_action_params(
             "0x123",
-            12345,
+            Some(12345),
             ":0",
             "screenshot",
             None,
@@ -4465,7 +4518,7 @@ mod tests {
         // provided output_dir is accepted
         let result = validate_action_params(
             "0x123",
-            12345,
+            Some(12345),
             ":0",
             "screenshot",
             None,
@@ -4482,7 +4535,7 @@ mod tests {
         // screenshot path must be within output_dir (no ..)
         let result = validate_action_params(
             "0x123",
-            12345,
+            Some(12345),
             ":0",
             "screenshot",
             None,
@@ -4624,7 +4677,7 @@ mod tests {
         // wait requires a condition expression
         let result = validate_action_params(
             "0x123",
-            12345,
+            Some(12345),
             ":0",
             "wait",
             None,
@@ -4719,7 +4772,7 @@ mod tests {
         // Unknown operation should be rejected
         let result = validate_action_params(
             "0x123",
-            12345,
+            Some(12345),
             ":0",
             "delete everything",
             None,
