@@ -780,10 +780,14 @@ pub enum X11Operation {
     Key,
     Type,
     ClickRel,
+    ClickAbs,
     DragRel,
     Scroll,
     Screenshot,
     Wait,
+    Minimize,
+    Maximize,
+    DoubleClick,
     Close,
 }
 
@@ -795,13 +799,17 @@ impl X11Operation {
             "key" => Ok(Self::Key),
             "type" => Ok(Self::Type),
             "click-rel" => Ok(Self::ClickRel),
+            "click-abs" => Ok(Self::ClickAbs),
             "drag-rel" => Ok(Self::DragRel),
             "scroll" => Ok(Self::Scroll),
             "screenshot" => Ok(Self::Screenshot),
             "wait" => Ok(Self::Wait),
+            "minimize" => Ok(Self::Minimize),
+            "maximize" => Ok(Self::Maximize),
+            "double-click" => Ok(Self::DoubleClick),
             "close" => Ok(Self::Close),
             _ => Err(VirtuosoError::Config(format!(
-                "unknown operation '{}': must be one of activate|key|type|click-rel|drag-rel|scroll|screenshot|wait|close",
+                "unknown operation '{}': must be one of activate|key|type|click-rel|click-abs|drag-rel|scroll|screenshot|wait|minimize|maximize|double-click|close",
                 s
             ))),
         }
@@ -813,10 +821,14 @@ impl X11Operation {
             Self::Key => "key",
             Self::Type => "type",
             Self::ClickRel => "click-rel",
+            Self::ClickAbs => "click-abs",
             Self::DragRel => "drag-rel",
             Self::Scroll => "scroll",
             Self::Screenshot => "screenshot",
             Self::Wait => "wait",
+            Self::Minimize => "minimize",
+            Self::Maximize => "maximize",
+            Self::DoubleClick => "double-click",
             Self::Close => "close",
         }
     }
@@ -919,7 +931,11 @@ pub fn validate_action_params(
 
     // Operation-specific validation
     match op {
-        X11Operation::Activate | X11Operation::Close => {
+        X11Operation::Activate
+        | X11Operation::Close
+        | X11Operation::Minimize
+        | X11Operation::Maximize
+        | X11Operation::DoubleClick => {
             // no extra params beyond the common ones
         }
         X11Operation::Screenshot => {
@@ -951,8 +967,9 @@ pub fn validate_action_params(
                 )));
             }
         }
-        X11Operation::ClickRel | X11Operation::DragRel => {
-            // click-rel and drag-rel require x and y
+        X11Operation::ClickRel | X11Operation::DragRel | X11Operation::ClickAbs => {
+            // click-rel and drag-rel require window-relative x and y;
+            // click-abs requires absolute screen x and y.
             let _ = x.ok_or_else(|| {
                 VirtuosoError::Config(format!(
                     "operation '{}' requires --x parameter",
@@ -1024,6 +1041,12 @@ pub fn validate_action_params(
             y.unwrap_or(0),
             button.unwrap_or(1)
         )),
+        X11Operation::ClickAbs => Some(format!(
+            "screen_x: {}, screen_y: {}, button: {}",
+            x.unwrap_or(0),
+            y.unwrap_or(0),
+            button.unwrap_or(1)
+        )),
         X11Operation::DragRel => Some(format!(
             "x: {}, y: {}, button: {}",
             x.unwrap_or(0),
@@ -1044,6 +1067,11 @@ pub fn validate_action_params(
             // wait uses a condition expression in --text; validated by the caller
             None
         }
+        X11Operation::Minimize => Some("minimize window".to_string()),
+        X11Operation::Maximize => {
+            Some("maximize window (requires xdotool >= 3.20210804.1)".to_string())
+        }
+        X11Operation::DoubleClick => Some(format!("button: {}", button.unwrap_or(1))),
         X11Operation::Close => None,
     };
 
@@ -1732,6 +1760,15 @@ fn action_x11_cached(
             y.unwrap_or(0),
             button.unwrap_or(1)
         )),
+        X11Operation::ClickAbs => Some(format!(
+            "screen_x: {}, screen_y: {}, button: {}",
+            x.unwrap_or(0),
+            y.unwrap_or(0),
+            button.unwrap_or(1)
+        )),
+        X11Operation::Minimize => Some("minimize window".to_string()),
+        X11Operation::Maximize => Some("maximize window".to_string()),
+        X11Operation::DoubleClick => Some(format!("button: {}", button.unwrap_or(1))),
         X11Operation::Scroll => {
             let (direction, count) = text
                 .map(|t| parse_scroll_spec(t).unwrap_or_else(|_| ("down".to_string(), 1)))
@@ -2348,6 +2385,37 @@ fn build_xdotool_actions(
                 ),
             ])
         }
+        X11Operation::ClickAbs => {
+            // Absolute screen click: move the pointer to (x, y) in root-window
+            // coordinates, then click on the window. Unlike click-rel, x/y are
+            // absolute (not window-relative) screen pixels. `--` protects
+            // negative coordinates from being parsed as xdotool flags.
+            let (ax, ay) = match (x, y) {
+                (Some(xx), Some(yy)) => (xx, yy),
+                _ => {
+                    return Err(VirtuosoError::Config(
+                        "click-abs requires --x and --y (absolute screen coords)".into(),
+                    ));
+                }
+            };
+            Ok(vec![
+                // Step 1: xdotool mousemove -- <x> <y>  (absolute root coords)
+                (
+                    "mousemove".into(),
+                    vec![
+                        "mousemove".into(),
+                        "--".into(),
+                        ax.to_string(),
+                        ay.to_string(),
+                    ],
+                ),
+                // Step 2: click the button on the window at the new pointer pos.
+                (
+                    "click".into(),
+                    vec!["click".into(), "--window".into(), wid, btn],
+                ),
+            ])
+        }
         X11Operation::DragRel => {
             // True drag: mousedown -> mousemove_relative -> mouseup.
             // Only press/release target the window; the relative move in
@@ -2458,6 +2526,55 @@ fn build_xdotool_actions(
             Ok(vec![(
                 "key".into(),
                 vec!["key".into(), "--window".into(), wid, "alt+F4".into()],
+            )])
+        }
+        X11Operation::Minimize => {
+            // xdotool windowminimize <id> — the window id is positional; this
+            // subcommand accepts no options in any xdotool release. Supported
+            // since 2009, so it is safe on the declared minimum xdotool.
+            Ok(vec![(
+                "windowminimize".into(),
+                vec!["windowminimize".into(), wid],
+            )])
+        }
+        X11Operation::Maximize => {
+            // True maximization: set the WM _NET_WM_STATE MAXIMIZED_* atoms via
+            // `xdotool windowstate --add`. This is the only X11-maximize API
+            // xdotool exposes — `windowmaximize` is NOT a real xdotool command.
+            // `windowstate` itself was added in xdotool 3.20210804.1, so this
+            // operation requires a newer xdotool than the rest of the tool.
+            // We deliberately do NOT raise the global minimum version (declared
+            // 3.20140419.1) for the whole CLI just to cover this one operation;
+            // on older xdotool the runner returns xdotool's own error, which is
+            // clearer than silently failing to maximize. Documented in README.
+            Ok(vec![(
+                "windowstate".into(),
+                vec![
+                    "windowstate".into(),
+                    "--add".into(),
+                    "MAXIMIZED_HORZ".into(),
+                    "--add".into(),
+                    "MAXIMIZED_VERT".into(),
+                    wid,
+                ],
+            )])
+        }
+        X11Operation::DoubleClick => {
+            // A double click is two full press/release cycles on the same
+            // button: `xdotool click --repeat 2 --delay 60 <button>`. `--repeat`
+            // is supported by every modern xdotool (since ~2010).
+            Ok(vec![(
+                "click".into(),
+                vec![
+                    "click".into(),
+                    "--window".into(),
+                    wid,
+                    "--repeat".into(),
+                    "2".into(),
+                    "--delay".into(),
+                    "60".into(),
+                    btn,
+                ],
             )])
         }
         X11Operation::Screenshot | X11Operation::Wait => {
@@ -4354,8 +4471,17 @@ mod tests {
     #[test]
     fn action_x11_requires_window_id_not_empty() {
         // Empty window_id should be rejected by validate_action_params
-        let result =
-            validate_action_params("", Some(12345), ":0", "activate", None, None, None, None, None);
+        let result = validate_action_params(
+            "",
+            Some(12345),
+            ":0",
+            "activate",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("window_id"));
@@ -4364,8 +4490,17 @@ mod tests {
     #[test]
     fn action_x11_rejects_zero_pid() {
         // Zero PID should be rejected
-        let result =
-            validate_action_params("0x123", Some(0), ":0", "activate", None, None, None, None, None);
+        let result = validate_action_params(
+            "0x123",
+            Some(0),
+            ":0",
+            "activate",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("PID must be positive"));
@@ -4374,16 +4509,94 @@ mod tests {
     #[test]
     fn action_x11_rejects_empty_display() {
         // Empty display should be rejected
-        let result =
-            validate_action_params("0x123", Some(12345), "", "activate", None, None, None, None, None);
+        let result = validate_action_params(
+            "0x123",
+            Some(12345),
+            "",
+            "activate",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn action_x11_validate_click_abs_requires_x_y() {
+        // click-abs needs absolute coordinates (validate-level reports --x first).
+        let err = validate_action_params(
+            "0x123",
+            Some(12345),
+            ":0",
+            "click-abs",
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect_err("click-abs without x,y must be rejected");
+        assert!(
+            err.to_string().contains("--x"),
+            "error should mention --x, got: {err}"
+        );
+    }
+
+    #[test]
+    fn action_x11_validate_minimize_maximize_double_click_need_no_coords() {
+        // These single-shot operations require no x/y/text.
+        for op in ["minimize", "maximize", "double-click"] {
+            let r = validate_action_params(
+                "0x123",
+                Some(12345),
+                ":0",
+                op,
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+            assert!(r.is_ok(), "{op} should validate without coords, got: {r:?}");
+        }
+    }
+
+    #[test]
+    fn action_x11_validate_unknown_operation_rejected() {
+        let r = validate_action_params(
+            "0x123",
+            Some(12345),
+            ":0",
+            "frobnicate",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(r.is_err(), "unknown operation must be rejected");
+        assert!(
+            r.unwrap_err().to_string().contains("unknown operation"),
+            "error should name the operation"
+        );
     }
 
     #[test]
     fn action_x11_key_requires_text_parameter() {
         // key operation requires non-empty text — passing None must be rejected
-        let result =
-            validate_action_params("0x123", Some(12345), ":0", "key", None, None, None, None, None);
+        let result = validate_action_params(
+            "0x123",
+            Some(12345),
+            ":0",
+            "key",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(result.is_err(), "key requires --text");
         let result = validate_action_params(
             "0x123",
@@ -4927,6 +5140,131 @@ mod tests {
         assert!(
             err.to_string().contains("--x") && err.to_string().contains("--y"),
             "error should mention both --x and --y, got: {err}"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_click_abs_argv_shape() {
+        // click-abs: move cursor to absolute screen coords, then click on the
+        // window. Unlike click-rel, x/y are root-window absolute pixels.
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::ClickAbs,
+            Some(800),
+            Some(420),
+            Some(1),
+            None,
+        )
+        .expect("click-abs ok");
+        assert_eq!(action.len(), 2, "click-abs must produce 2 commands");
+
+        // Step 1: mousemove -- <x> <y> (absolute root coords, no --window)
+        assert_eq!(action[0].0, "mousemove");
+        assert_eq!(
+            action[0].1,
+            &["mousemove", "--", "800", "420"],
+            "click-abs step 1 must move to absolute screen coordinates"
+        );
+
+        // Step 2: click --window ID N
+        assert_eq!(action[1].0, "click");
+        assert_eq!(
+            action[1].1,
+            &["click", "--window", "0x400002", "1"],
+            "click-abs step 2 must click on the window at the cursor"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_click_abs_requires_x_y() {
+        let err = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::ClickAbs,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect_err("click-abs without x,y must be rejected");
+        assert!(
+            err.to_string().contains("--x") && err.to_string().contains("--y"),
+            "error should mention both --x and --y, got: {err}"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_minimize_argv_shape() {
+        // windowminimize <id> — positional id, no --window, supported by every
+        // xdotool release (since 2009).
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::Minimize,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("minimize ok");
+        assert_eq!(action.len(), 1);
+        assert_eq!(action[0].0, "windowminimize");
+        assert_eq!(
+            action[0].1,
+            &["windowminimize", "0x400002"],
+            "minimize argv must be `windowminimize <id>`"
+        );
+        assert!(
+            !action[0].1.iter().any(|a| a == "--window"),
+            "regression: windowminimize takes a positional id"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_maximize_argv_shape() {
+        // maximize uses `windowstate --add MAXIMIZED_HORZ --add MAXIMIZED_VERT`,
+        // the only true X11-maximize API xdotool exposes (no `windowmaximize`).
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::Maximize,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("maximize ok");
+        assert_eq!(action.len(), 1);
+        assert_eq!(action[0].0, "windowstate");
+        assert_eq!(
+            action[0].1,
+            &[
+                "windowstate",
+                "--add",
+                "MAXIMIZED_HORZ",
+                "--add",
+                "MAXIMIZED_VERT",
+                "0x400002"
+            ],
+            "maximize argv must set both MAXIMIZED_* WM state atoms"
+        );
+    }
+
+    #[test]
+    fn build_xdotool_actions_double_click_argv_shape() {
+        // double-click = `click --repeat 2 --delay 60 <button>` on the window.
+        let action = build_xdotool_actions(
+            &mk_action_window("0x400002"),
+            X11Operation::DoubleClick,
+            None,
+            None,
+            Some(1),
+            None,
+        )
+        .expect("double-click ok");
+        assert_eq!(action.len(), 1);
+        assert_eq!(action[0].0, "click");
+        assert_eq!(
+            action[0].1,
+            &["click", "--window", "0x400002", "--repeat", "2", "--delay", "60", "1"],
+            "double-click must repeat the press/release cycle twice"
         );
     }
 
