@@ -25,6 +25,7 @@ from vgui_runner.model import Scenario, ScenarioValidationError  # noqa: E402
 from vgui_runner.engine import FakeExecutor, Runner, StepOutcome  # noqa: E402
 from vgui_runner.command_runner import CommandError, LocalRunner, SshRunner  # noqa: E402
 from vgui_runner.live_executor import LiveExecutor  # noqa: E402
+from vgui_runner.local_executor import LocalExecutor  # noqa: E402
 
 
 def emit_json(payload: dict) -> None:
@@ -87,7 +88,7 @@ def cmd_validate(scenario_path: Path) -> int:
         return 2
 
 
-def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, fake_outcomes_path):
+def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, fake_outcomes_path, window_id=None):
     """Construct the executor named by --executor. Returns (executor, error)."""
     if executor_name == "fake":
         if fake_outcomes_path is not None:
@@ -128,18 +129,34 @@ def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, f
             return executor, None
         except (CommandError, ValueError) as e:
             return None, {"status": "error", "error": str(e)}
+    if executor_name == "local":
+        if not output_dir:
+            return None, {
+                "status": "error",
+                "error": "--executor local requires --output DIR",
+            }
+        try:
+            executor = LocalExecutor(
+                display=":0",  # overridden by scenario.display at precheck
+                output_dir=output_dir,
+                window_id=window_id,
+            )
+            return executor, None
+        except ValueError as e:
+            return None, {"status": "error", "error": str(e)}
     return None, {
         "status": "error",
-        "error": f"executor '{executor_name}' not supported; use 'fake' or 'live'",
+        "error": f"executor '{executor_name}' not supported; use 'fake', 'live', or 'local'",
     }
 
 
 def cmd_run(scenario_path: Path, output_dir: Path, executor_name: str,
             session_id=None, vcli_path=None, ssh_host=None,
-            fake_outcomes_path: Path = None) -> int:
+            fake_outcomes_path: Path = None, window_id: str = None) -> int:
     """Run a scenario. Returns 0 on pass, 1 on fail, 2 on error."""
     executor, err = build_executor(
-        executor_name, session_id, vcli_path, ssh_host, output_dir, fake_outcomes_path
+        executor_name, session_id, vcli_path, ssh_host, output_dir, fake_outcomes_path,
+        window_id=window_id,
     )
     if executor is None:
         emit_json(err)
@@ -163,6 +180,11 @@ def cmd_run(scenario_path: Path, output_dir: Path, executor_name: str,
             ),
         })
         return 2
+
+    # LocalExecutor binds DISPLAY from the scenario at precheck time.
+    if isinstance(executor, LocalExecutor):
+        executor._display = scenario.display
+        executor._env["DISPLAY"] = scenario.display
 
     runner = Runner(executor)
 
@@ -195,16 +217,18 @@ def main() -> int:
     val = sub.add_parser("validate", help="Validate a scenario JSON file")
     val.add_argument("scenario", type=Path, help="Path to scenario JSON file")
 
-    run = sub.add_parser("run", help="Run a scenario with fake or live executor")
+    run = sub.add_parser("run", help="Run a scenario with fake, live, or local executor")
     run.add_argument("scenario", type=Path, help="Path to scenario JSON file")
     run.add_argument("--output", "-o", type=Path, required=True, help="Output directory")
-    run.add_argument("--executor", default="fake", help="Executor name ('fake' or 'live')")
+    run.add_argument("--executor", default="fake", help="Executor name ('fake', 'live', or 'local')")
     run.add_argument("--session", default=None, dest="session_id",
                      help="Virtuoso session id (required with --executor live)")
     run.add_argument("--vcli", default=None, dest="vcli_path",
                      help="Path to the vcli binary (required with --executor live)")
     run.add_argument("--ssh-host", default=None, dest="ssh_host",
                      help="SSH host running vcli (optional with --executor live)")
+    run.add_argument("--window-id", default=None, dest="window_id",
+                     help="X11 window id (optional with --executor local; overrides PID discovery)")
     run.add_argument("--fake-outcomes", type=Path, default=None,
                      dest="fake_outcomes",
                      help="Path to JSON file with fake outcomes (only with --executor fake)")
@@ -227,6 +251,7 @@ def main() -> int:
                 vcli_path=args.vcli_path,
                 ssh_host=args.ssh_host,
                 fake_outcomes_path=args.fake_outcomes,
+                window_id=args.window_id,
             )
         else:
             parser.print_help()
