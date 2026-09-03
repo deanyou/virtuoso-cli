@@ -84,6 +84,8 @@ The X11 GUI automation features (`vcli window action-x11`, `action-x11-batch`, `
 
 **xdotool version note**: The critical feature is the `--window` flag on input commands, introduced in **3.20140419.1** (2014). Versions older than this reject `--window` on `key`/`type`/`click` and GUI automation will fail. Recommended: **3.20160805.1** or later. Tested on **3.20200624.1** (Ubuntu 20.04+). Verify with `xdotool --version`.
 
+> **`maximize` operation version requirement**: True window maximization uses `xdotool windowstate --add MAXIMIZED_HORZ --add MAXIMIZED_VERT`. The `windowstate` subcommand was added in **xdotool 3.20210804.1** (2021), which is newer than the global minimum above. We deliberately do **not** raise the global minimum for the whole CLI to cover this single operation — `minimize`, `click-abs`, `double-click`, and every other operation still work on 3.20140419.1+. On xdotool older than 3.20210804.1, `maximize` returns xdotool's own "unknown command" error. There is no `windowmaximize` xdotool command; `windowmove`/`windowsize` do not set the maximized WM state.
+
 `xwininfo` and ImageMagick are optional — `vcli window action-x11 --direct` works with xdotool alone (geometry precheck falls back gracefully). Screenshots require ImageMagick `import`.
 
 ### Quick Start
@@ -429,7 +431,7 @@ vcli window action-x11 \
   --window-id 0x26037c7 --pid 114668 --display :5.0 \
   --operation click-rel --x 300 --y 167
 
-# Supported operations: click-rel, type, key, drag-rel, activate, screenshot, scroll
+# Supported operations: click-rel, click-abs, type, key, drag-rel, activate, screenshot, scroll, minimize, maximize, double-click, close
 vcli window action-x11 --window-id 0x26037c7 --pid 114668 --display :5.0 \
   --operation type --text "METAL1"
 ```
@@ -575,6 +577,8 @@ X11 GUI 自动化功能（`vcli window action-x11`、`action-x11-batch`、`list-
 | **ImageMagick**（`import`） | 6.x+ | 截图（`action-x11 --operation screenshot`、技能 local 执行器） | `apt install imagemagick` / `yum install ImageMagick` |
 
 **xdotool 版本说明**：关键特性是输入命令的 `--window` 标志，于 **3.20140419.1**（2014 年）引入。更早版本会拒绝 `key`/`type`/`click` 的 `--window` 参数，导致 GUI 自动化失败。推荐 **3.20160805.1** 或更高版本。已在 **3.20200624.1**（Ubuntu 20.04+）上验证。用 `xdotool --version` 检查。
+
+> **`maximize` 操作的版本要求**：真正的窗口最大化使用 `xdotool windowstate --add MAXIMIZED_HORZ --add MAXIMIZED_VERT`。`windowstate` 子命令于 **xdotool 3.20210804.1**（2021 年）新增，比上面的全局最低版本更新。我们**刻意不**为了这一个操作抬高整个 CLI 的全局最低版本——`minimize`、`click-abs`、`double-click` 以及其它所有操作在 3.20140419.1+ 上仍然可用。xdotool 低于 3.20210804.1 时，`maximize` 会返回 xdotool 自身的「unknown command」错误。xdotool 没有 `windowmaximize` 命令；`windowmove`/`windowsize` 也不会设置最大化 WM 状态。
 
 `xwininfo` 和 ImageMagick 为可选——`vcli window action-x11 --direct` 仅需 xdotool 即可工作（几何预检会优雅降级）。截图功能需要 ImageMagick `import`。
 
@@ -890,7 +894,7 @@ vcli window action-x11 \
   --window-id 0x26037c7 --pid 114668 --display :5.0 \
   --operation click-rel --x 300 --y 167
 
-# 支持的操作：click-rel、type、key、drag-rel、activate、screenshot、scroll
+# 支持的操作：click-rel、click-abs、type、key、drag-rel、activate、screenshot、scroll、minimize、maximize、double-click、close
 vcli window action-x11 --window-id 0x26037c7 --pid 114668 --display :5.0 \
   --operation type --text "METAL1"
 ```
