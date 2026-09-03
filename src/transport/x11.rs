@@ -187,7 +187,7 @@ struct GeomCacheEntry {
 const GEOM_CACHE_TTL_MS: u128 = 500;
 
 /// Build the filesystem cache path for a (display, window_id) pair.
-fn geom_cache_path(display: &str, window_id: &str) -> String {
+fn geom_cache_path(display: &str, window_id: &str) -> std::path::PathBuf {
     let safe_display: String = display
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
@@ -196,7 +196,7 @@ fn geom_cache_path(display: &str, window_id: &str) -> String {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect();
-    format!("/tmp/vcli_geom_{safe_display}_{safe_wid}.json")
+    std::env::temp_dir().join(format!("vcli_geom_{safe_display}_{safe_wid}.json"))
 }
 
 /// Try to read a geometry cache entry younger than GEOM_CACHE_TTL_MS.
@@ -4958,9 +4958,11 @@ mod tests {
     #[test]
     fn geom_cache_path_sanitizes_display_and_wid() {
         let p = geom_cache_path(":5.0", "0x2600013");
-        assert!(p.starts_with("/tmp/vcli_geom_"));
-        assert!(p.contains("_5_0")); // ':' and '.' replaced with '_'
-        assert!(p.ends_with(".json"));
+        let fname = p.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(fname.starts_with("vcli_geom_"));
+        assert!(fname.contains("_5_0")); // ':' and '.' replaced with '_'
+        assert!(fname.ends_with(".json"));
+        assert!(p.starts_with(std::env::temp_dir()));
     }
 
     #[test]
