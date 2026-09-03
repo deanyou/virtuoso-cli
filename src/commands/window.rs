@@ -425,9 +425,8 @@ pub fn action_x11_batch(
     use crate::transport::x11;
     use std::io::{BufRead, BufReader};
 
-    let file = std::fs::File::open(file_path).map_err(|e| {
-        VirtuosoError::Config(format!("cannot open batch file '{file_path}': {e}"))
-    })?;
+    let file = std::fs::File::open(file_path)
+        .map_err(|e| VirtuosoError::Config(format!("cannot open batch file '{file_path}': {e}")))?;
     let reader = BufReader::new(file);
     let mut actions = Vec::new();
     for (line_no, line) in reader.lines().enumerate() {
@@ -439,10 +438,7 @@ pub fn action_x11_batch(
             continue;
         }
         let action: x11::BatchAction = serde_json::from_str(trimmed).map_err(|e| {
-            VirtuosoError::Config(format!(
-                "invalid JSON on line {}: {e}",
-                line_no + 1
-            ))
+            VirtuosoError::Config(format!("invalid JSON on line {}: {e}", line_no + 1))
         })?;
         actions.push(action);
     }
@@ -458,20 +454,17 @@ pub fn action_x11_batch(
     let client_id = x11::client_id_for(&config);
     let effective_default_display = explicit_display.or(default_display);
 
-    let result = x11::action_x11_batch(
-        runner.as_ref(),
-        &client_id,
-        user,
-        &actions,
+    let batch_inputs = x11::BatchX11Inputs {
+        actions: &actions,
         default_pid,
-        effective_default_display,
+        default_display: effective_default_display,
         direct,
         timeout_secs,
-    )?;
+    };
+    let result = x11::action_x11_batch(runner.as_ref(), &client_id, user, &batch_inputs)?;
 
-    let out = serde_json::to_value(&result).map_err(|e| {
-        VirtuosoError::Execution(format!("failed to serialize batch result: {e}"))
-    })?;
+    let out = serde_json::to_value(&result)
+        .map_err(|e| VirtuosoError::Execution(format!("failed to serialize batch result: {e}")))?;
     Ok(out)
 }
 

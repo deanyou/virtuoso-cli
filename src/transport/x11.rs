@@ -697,10 +697,11 @@ pub fn parse_scroll_spec(spec: &str) -> Result<(String, u32)> {
     let spec = spec.trim();
     let (direction, count) = match spec.split_once(':') {
         Some((d, c)) => {
-            let count: u32 = c
-                .trim()
-                .parse()
-                .map_err(|_| VirtuosoError::Config(format!("invalid scroll count in '{spec}': must be an integer")))?;
+            let count: u32 = c.trim().parse().map_err(|_| {
+                VirtuosoError::Config(format!(
+                    "invalid scroll count in '{spec}': must be an integer"
+                ))
+            })?;
             (d, count)
         }
         None => (spec, 1),
@@ -818,7 +819,9 @@ pub fn validate_action_params(
             // scroll requires a direction spec in --text: "up" | "down" |
             // "left" | "right", optionally "direction:count" (count 1..=100).
             let t = text.ok_or_else(|| {
-                VirtuosoError::Config("operation 'scroll' requires --text direction (up|down|left|right)".into())
+                VirtuosoError::Config(
+                    "operation 'scroll' requires --text direction (up|down|left|right)".into(),
+                )
             })?;
             parse_scroll_spec(t)?;
             // optional button must be 1/2/3
@@ -1515,12 +1518,15 @@ pub fn action_x11_batch(
     runner: &dyn RemoteTransport,
     client_id: &str,
     user: Option<&str>,
-    actions: &[BatchAction],
-    default_pid: Option<u32>,
-    default_display: Option<&str>,
-    direct: bool,
-    timeout_secs: u64,
+    inputs: &BatchX11Inputs<'_>,
 ) -> Result<BatchResult> {
+    let BatchX11Inputs {
+        actions,
+        default_pid,
+        default_display,
+        direct,
+        timeout_secs,
+    } = *inputs;
     let start = std::time::Instant::now();
     let mut results = Vec::with_capacity(actions.len());
     let mut succeeded = 0usize;
@@ -1632,10 +1638,8 @@ pub fn action_x11_batch(
             }
         }
         let script = script_parts.join("; ");
-        let total_timeout =
-            Duration::from_secs(timeout_secs * prepared.len().max(1) as u64);
-        let out =
-            runner.run_command(&CommandRequest::with_exec_timeout(&script, total_timeout))?;
+        let total_timeout = Duration::from_secs(timeout_secs * prepared.len().max(1) as u64);
+        let out = runner.run_command(&CommandRequest::with_exec_timeout(&script, total_timeout))?;
         let exec_duration_ms = exec_start.elapsed().as_millis() as u64;
 
         let mut cmd_exit_codes: std::collections::HashMap<(usize, usize), i32> =
@@ -1782,6 +1786,18 @@ pub struct ActionX11Inputs<'a> {
     /// scan. Trusts the caller-provided window_id and runs xdotool directly.
     /// ~25x faster for click/key/type. Not compatible with `wait` or `screenshot`.
     pub direct: bool,
+}
+
+/// Bundles batch-level inputs for `action_x11_batch`; mirrors the CLI flags.
+///
+/// Packed into a single struct so the function signature stays under the
+/// clippy `too_many_arguments` ceiling while remaining self-documenting.
+pub struct BatchX11Inputs<'a> {
+    pub actions: &'a [BatchAction],
+    pub default_pid: Option<u32>,
+    pub default_display: Option<&'a str>,
+    pub direct: bool,
+    pub timeout_secs: u64,
 }
 
 /// Build xdotool commands for an action operation.
@@ -1966,7 +1982,12 @@ fn build_xdotool_actions(
                     button.into(),
                 ]
             } else {
-                vec!["click".into(), "--window".into(), wid.clone(), button.into()]
+                vec![
+                    "click".into(),
+                    "--window".into(),
+                    wid.clone(),
+                    button.into(),
+                ]
             };
             let mut cmds = Vec::with_capacity(2);
             if x.is_some() || y.is_some() {
@@ -2723,7 +2744,10 @@ mod tests {
 
     #[test]
     fn scroll_operation_roundtrips_str() {
-        assert_eq!(X11Operation::from_str("scroll").unwrap(), X11Operation::Scroll);
+        assert_eq!(
+            X11Operation::from_str("scroll").unwrap(),
+            X11Operation::Scroll
+        );
         assert_eq!(X11Operation::Scroll.as_str(), "scroll");
     }
 
@@ -2738,13 +2762,22 @@ mod tests {
         assert_eq!(parse_scroll_spec("down").unwrap(), ("down".to_string(), 1));
         assert_eq!(parse_scroll_spec("up").unwrap(), ("up".to_string(), 1));
         assert_eq!(parse_scroll_spec("left").unwrap(), ("left".to_string(), 1));
-        assert_eq!(parse_scroll_spec("right").unwrap(), ("right".to_string(), 1));
+        assert_eq!(
+            parse_scroll_spec("right").unwrap(),
+            ("right".to_string(), 1)
+        );
     }
 
     #[test]
     fn scroll_parses_direction_count() {
-        assert_eq!(parse_scroll_spec("down:3").unwrap(), ("down".to_string(), 3));
-        assert_eq!(parse_scroll_spec("up:100").unwrap(), ("up".to_string(), 100));
+        assert_eq!(
+            parse_scroll_spec("down:3").unwrap(),
+            ("down".to_string(), 3)
+        );
+        assert_eq!(
+            parse_scroll_spec("up:100").unwrap(),
+            ("up".to_string(), 100)
+        );
     }
 
     #[test]
@@ -2769,20 +2802,17 @@ mod tests {
             visible: true,
         };
         // down:3 -> click --repeat 3 button 5
-        let cmds = build_xdotool_actions(
-            &w, X11Operation::Scroll, None, None, None, Some("down:3"),
-        )
-        .unwrap();
+        let cmds =
+            build_xdotool_actions(&w, X11Operation::Scroll, None, None, None, Some("down:3"))
+                .unwrap();
         assert_eq!(cmds.len(), 1);
         let (_, argv) = &cmds[0];
         assert_eq!(argv[0], "click");
         assert!(argv.contains(&"--repeat".to_string()));
         assert!(argv.contains(&"5".to_string()));
         // up -> single click button 4
-        let cmds = build_xdotool_actions(
-            &w, X11Operation::Scroll, None, None, None, Some("up"),
-        )
-        .unwrap();
+        let cmds =
+            build_xdotool_actions(&w, X11Operation::Scroll, None, None, None, Some("up")).unwrap();
         let (_, argv) = &cmds[0];
         assert_eq!(argv[0], "click");
         assert!(!argv.contains(&"--repeat".to_string()));
@@ -2804,7 +2834,12 @@ mod tests {
             visible: true,
         };
         let cmds = build_xdotool_actions(
-            &w, X11Operation::Scroll, Some(10), Some(20), None, Some("down"),
+            &w,
+            X11Operation::Scroll,
+            Some(10),
+            Some(20),
+            None,
+            Some("down"),
         )
         .unwrap();
         assert_eq!(cmds.len(), 2);
