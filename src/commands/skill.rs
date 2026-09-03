@@ -120,6 +120,7 @@ pub fn load(file: &str, skillpp: bool) -> Result<Value> {
         "status": "success",
         "file": file,
         "loaded_path": result.metadata.get("loaded_path"),
+        "skillpp_mode": result.metadata.get("skillpp_mode").unwrap_or(&Value::Bool(false)),
         "output": result.output,
         "errors": result.errors,
     }))

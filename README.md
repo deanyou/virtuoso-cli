@@ -172,6 +172,21 @@ the filename and `.ils` language suffix; dependencies must also be accessible on
 that host. The JSON `loaded_path` identifies the source retained for debugging;
 uploaded sources are not removed by `tunnel detach`.
 
+**SKILL++ mode (`--skillpp`):**
+Virtuoso's `load()` selects the language mode by file extension: `.il` = standard
+SKILL, `.ils` = SKILL++. A `.il` file containing SKILL++ constructs (`defclass`,
+`defmethod`, `globalProc`, lexical closures) will fail to load because those forms
+are undefined in standard SKILL mode. Use `--skillpp` to force SKILL++ mode without
+renaming the file:
+```bash
+vcli skill load ./my_skillpp_code.il --skillpp
+# → copies to /tmp/vcli_skillpp_<name>.ils and loads in SKILL++ mode
+# → JSON output includes "skillpp_mode": true and the .ils loaded_path
+```
+`.ils` files are already SKILL++ and are unaffected by the flag. On IC25.1, some
+legacy SKILL++ patterns (e.g. `globalProc` inside `let(())`) may fail regardless of
+mode — use `defun`/`defclass` at top level for portability.
+
 Raw `skill exec`, `skill eval`, and `skill load` require Admin. Explicit
 `skill exec --readonly` retains the existing pattern restrictions even for Admin;
 it is not a complete SKILL interpreter sandbox. A failed file load returns a
@@ -239,7 +254,7 @@ vcli [--profile P] [--session S] [--format json|table]
 │   └── diagnose                          Full connection diagnostics
 ├── skill                             Execute SKILL code
 │   ├── exec <code> [--timeout N]
-│   ├── load <file>
+│   ├── load <file> [--skillpp]      加载 .il/.ils；--skillpp 强制 SKILL++ 模式
 │   ├── broadcast <code>              Fan out to all live sessions in parallel (requires VCLI_CAPABILITY=admin)
 │   ├── find <query> [--mode M] [--include-desc]   Search Cadence .fnd (fuzzy/prefix/suffix/exact/regex)
 │   └── info <name>                     Detailed info for one SKILL function
@@ -707,7 +722,7 @@ vcli [--profile P] [--session S] [--format json|table]
 │   └── diagnose                          完整连接诊断
 ├── skill                             执行 SKILL 代码
 │   ├── exec <code> [--timeout N]
-│   ├── load <file>
+│   ├── load <file> [--skillpp]      加载 .il/.ils；--skillpp 强制 SKILL++ 模式
 │   ├── broadcast <code>              并发广播到所有活跃 session（需 VCLI_CAPABILITY=admin）
 │   ├── find <query> [--mode M] [--include-desc]   搜索 Cadence .fnd（fuzzy/prefix/suffix/exact/regex）
 │   └── info <name>                     查看单个 SKILL 函数详情
