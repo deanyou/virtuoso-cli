@@ -369,6 +369,7 @@ pub fn action_x11(
     output_dir: Option<&str>,
     timeout_secs: u64,
     explicit_display: Option<&str>,
+    direct: bool,
 ) -> Result<Value> {
     use crate::config::Config;
     use crate::transport::x11;
@@ -395,6 +396,7 @@ pub fn action_x11(
         text,
         output_dir,
         timeout_secs,
+        direct,
     };
     let result = x11::action_x11(runner.as_ref(), &client_id, user, &inputs)?;
 

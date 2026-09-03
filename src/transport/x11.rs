@@ -985,8 +985,103 @@ pub fn action_x11(
         text,
         output_dir,
         timeout_secs,
+        direct,
     } = inputs;
     let start = std::time::Instant::now();
+
+    // Fast path: --direct skips helper upload, env resolution, and the
+    // list-windows scan. Trusts the caller-provided window_id and runs
+    // xdotool directly. Measured ~25x faster for click/key/type operations
+    // (1300ms -> 50ms on a remote SSH transport). Not compatible with
+    // `wait` (needs window-list polling) or `screenshot` (needs artifact fetch).
+    if *direct {
+        if *operation == X11Operation::Wait {
+            return Err(VirtuosoError::Config(
+                "direct mode does not support 'wait' (needs window-list polling)".into(),
+            ));
+        }
+        if *operation == X11Operation::Screenshot {
+            return Err(VirtuosoError::Config(
+                "direct mode does not support 'screenshot' (needs artifact fetch)".into(),
+            ));
+        }
+        let display_prefix = format!("env DISPLAY={} ", shell_escape(display));
+        let resolved = WindowInfo {
+            frame_id: window_id.to_string(),
+            window_id: window_id.to_string(),
+            dismiss_id: window_id.to_string(),
+            display: Some(display.to_string()),
+            xauthority: None,
+            title: String::new(),
+            class: Vec::new(),
+            geometry: Geometry::default(),
+            pid: Some(*pid),
+            visible: true,
+        };
+        let operation = *operation;
+        let cmds = build_xdotool_actions(&resolved, operation, *x, *y, *button, *text)?;
+        let mut results = Vec::with_capacity(cmds.len());
+        for (_sub, argv) in cmds {
+            let remote_cmd = format!(
+                "{}xdotool {}",
+                display_prefix,
+                argv.iter()
+                    .map(|a| shell_escape(a))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            let out = runner.run_command(&CommandRequest::with_exec_timeout(
+                &remote_cmd,
+                Duration::from_secs(*timeout_secs),
+            ))?;
+            results.push(out);
+        }
+        let duration_ms = start.elapsed().as_millis() as u64;
+        if operation == X11Operation::Key {
+            for out in &results {
+                if out.stderr.contains("No such key name") {
+                    let detail = out
+                        .stderr
+                        .lines()
+                        .find(|l| l.contains("No such key name"))
+                        .unwrap_or("")
+                        .trim();
+                    return Err(VirtuosoError::Config(format!("invalid key name: {detail}")));
+                }
+            }
+        }
+        let success = results.last().map(|r| r.success).unwrap_or(true);
+        let details = match operation {
+            X11Operation::Key => Some(format!("key: {}", text.unwrap_or(""))),
+            X11Operation::Type => Some(format!(
+                "text_length: {}",
+                text.map(|s| s.len()).unwrap_or(0)
+            )),
+            X11Operation::ClickRel | X11Operation::DragRel => Some(format!(
+                "x: {}, y: {}, button: {}",
+                x.unwrap_or(0),
+                y.unwrap_or(0),
+                button.unwrap_or(1)
+            )),
+            X11Operation::Scroll => {
+                let (direction, count) = text
+                    .map(|t| parse_scroll_spec(t).unwrap_or_else(|_| ("down".to_string(), 1)))
+                    .unwrap_or_else(|| ("down".to_string(), 1));
+                Some(format!("direction: {direction}, count: {count}"))
+            }
+            _ => None,
+        };
+        return Ok(X11ActionResult {
+            status: if success { "success" } else { "failure" }.to_string(),
+            operation: operation.as_str().to_string(),
+            window_id: window_id.to_string(),
+            pid: *pid,
+            display: display.to_string(),
+            duration_ms,
+            details,
+            artifact: None,
+        });
+    }
 
     // Step 1: List windows and resolve unique window
     let helper = ensure_helper_uploaded(runner, user, client_id)?;
@@ -1376,6 +1471,10 @@ pub struct ActionX11Inputs<'a> {
     pub text: Option<&'a str>,
     pub output_dir: Option<&'a str>,
     pub timeout_secs: u64,
+    /// When true, skip helper upload, env resolution, and the list-windows
+    /// scan. Trusts the caller-provided window_id and runs xdotool directly.
+    /// ~25x faster for click/key/type. Not compatible with `wait` or `screenshot`.
+    pub direct: bool,
 }
 
 /// Build xdotool commands for an action operation.

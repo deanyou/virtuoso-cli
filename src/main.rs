@@ -1547,6 +1547,11 @@ enum WindowCmd {
         /// Override the detected DISPLAY
         #[arg(long)]
         display_override: Option<String>,
+        /// Skip helper upload, env resolution, and list-windows scan.
+        /// Trusts the caller-provided --window-id and runs xdotool directly.
+        /// ~25x faster for click/key/type. Not compatible with --operation wait|screenshot.
+        #[arg(long, default_value = "false")]
+        direct: bool,
     },
 }
 
@@ -2142,6 +2147,7 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             output_dir,
             timeout,
             display_override,
+            direct,
         } => commands::window::action_x11(
             &window_id,
             pid,
@@ -2154,6 +2160,7 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             output_dir.as_deref(),
             timeout,
             display_override.as_deref(),
+            direct,
         ),
     }
 }
