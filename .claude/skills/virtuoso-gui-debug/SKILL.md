@@ -299,6 +299,22 @@ vcli window action-x11 --window-id 0x26037c7 --pid 114668 --display :5.0 \
 
 Use vcli when: (a) the window identity must be server-verified for safety, (b) you are in `--executor live` mode of the DSL runner, or (c) xdotool is unavailable.
 
+### P0 — Use `vcli --direct` when vcli is required (4.7× faster)
+
+When you **must** use vcli (e.g., `--executor live` mode, or server-side window identity verification), add `--direct` to skip the helper upload, env resolution, and list-windows scan. Trusts the caller-provided `--window-id` and runs xdotool directly.
+
+```bash
+# Before (1213 ms average):
+vcli window action-x11 --window-id 0x2603839 --pid 114668 --display :5.0 \
+  --operation click-rel --x 300 --y 167
+
+# After (260 ms average — 4.7× faster):
+vcli window action-x11 --direct --window-id 0x2603839 --pid 114668 --display :5.0 \
+  --operation click-rel --x 300 --y 167
+```
+
+`--direct` supports: `activate`, `key`, `type`, `click-rel`, `drag-rel`, `scroll`, `close`. It **rejects** `wait` (needs window-list polling) and `screenshot` (needs artifact fetch) with a clear config error. Verified on IC25.1: click/type/key all succeed with correct field values and callback firing.
+
 ### P0 — Use xwininfo for geometry, not vcli list-windows
 
 ```bash
@@ -345,9 +361,10 @@ done
 
 ### P2 — vcli-side optimizations (require Rust changes)
 
-- **Batch mode**: a `vcli window action-x11 --batch` that accepts multiple operations in one process invocation, keeping the X11 connection alive across operations (eliminates the 1.3s per-call startup tax).
-- **Window list caching**: `list-windows-x11` could cache results for ~500ms since the window tree rarely changes that fast.
-- **Daemon mode**: a persistent `vcli gui-daemon` that holds the X11 connection and accepts operations over a local socket.
+- **✅ `--direct` flag (implemented, commit 513f929)**: skips helper upload, env resolution, and list-windows scan. 4.7× faster (1213ms → 260ms). Use when vcli is required but window identity is already known.
+- **Batch mode (pending)**: a `vcli window action-x11 --batch` that accepts multiple operations in one process invocation, keeping the X11 connection alive across operations (eliminates the 260ms per-call startup tax even in direct mode).
+- **Window list caching (pending)**: `list-windows-x11` could cache results for ~500ms since the window tree rarely changes that fast.
+- **Daemon mode (pending)**: a persistent `vcli gui-daemon` that holds the X11 connection and accepts operations over a local socket.
 
 ### P2 — Coordinate caching
 
