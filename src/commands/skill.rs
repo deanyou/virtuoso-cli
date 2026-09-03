@@ -111,10 +111,10 @@ pub fn broadcast(code: &str, timeout: u64) -> Result<Value> {
     }))
 }
 
-pub fn load(file: &str) -> Result<Value> {
+pub fn load(file: &str, skillpp: bool) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
-    let result = client.load_il(file)?;
+    let result = client.load_il(file, skillpp)?;
 
     Ok(json!({
         "status": "success",

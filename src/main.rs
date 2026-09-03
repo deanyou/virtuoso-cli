@@ -443,6 +443,13 @@ enum SkillCmd {
     Load {
         /// Local path to a .il or .ils file
         file: String,
+
+        /// Force SKILL++ mode: copies a .il file to a temp .ils before loading.
+        /// Use when a .il file contains SKILL++ code (defclass, defmethod, globalProc)
+        /// that would otherwise fail because load() uses the .il extension to select
+        /// standard SKILL mode. No effect on .ils files (already SKILL++).
+        #[arg(long, default_value = "false")]
+        skillpp: bool,
     },
 
     /// Execute a SKILL expression across all live sessions concurrently
@@ -1781,7 +1788,7 @@ fn dispatch_skill(cmd: SkillCmd) -> error::Result<serde_json::Value> {
             timeout,
             readonly,
         } => commands::skill::exec(&code, timeout, readonly),
-        SkillCmd::Load { file } => commands::skill::load(&file),
+        SkillCmd::Load { file, skillpp } => commands::skill::load(&file, skillpp),
         SkillCmd::Broadcast { code, timeout } => commands::skill::broadcast(&code, timeout),
         SkillCmd::Eval { code, stdin } => commands::skill::eval(code, stdin),
         SkillCmd::Find {

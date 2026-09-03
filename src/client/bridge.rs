@@ -597,7 +597,7 @@ impl VirtuosoClient {
         }
     }
 
-    pub fn load_il(&self, local_path: &str) -> Result<VirtuosoResult> {
+    pub fn load_il(&self, local_path: &str, skillpp: bool) -> Result<VirtuosoResult> {
         // Loading executes arbitrary code: authorize before filesystem/SSH side effects.
         self.require_raw_skill_access()?;
         if self.whitelist.is_sandbox() {
@@ -621,11 +621,27 @@ impl VirtuosoClient {
             )));
         }
 
+        // --skillpp: if the file is .il but contains SKILL++ code, copy to a
+        // temp .ils file so Virtuoso's load() selects SKILL++ mode. The .il
+        // extension forces standard SKILL mode, where globalProc/defclass/
+        // defmethod are undefined. .ils files are already SKILL++ — no copy needed.
+        let effective_path = if skillpp && path.extension().and_then(|e| e.to_str()) == Some("il") {
+            let tmp = std::env::temp_dir().join(format!(
+                "vcli_skillpp_{}.ils",
+                path.file_stem().and_then(|s| s.to_str()).unwrap_or("skill")
+            ));
+            std::fs::copy(&path, &tmp).map_err(VirtuosoError::Io)?;
+            tmp
+        } else {
+            path.clone()
+        };
+
         let loaded_path = if let Some(tunnel) = &self.tunnel {
             let transport = tunnel.transport();
-            super::skill_loading::stage_remote_file(transport.as_ref(), &path)?
+            super::skill_loading::stage_remote_file(transport.as_ref(), &effective_path)?
         } else {
-            path.to_str()
+            effective_path
+                .to_str()
                 .ok_or_else(|| VirtuosoError::Config("SKILL path must be UTF-8".into()))?
                 .to_owned()
         };
@@ -634,6 +650,9 @@ impl VirtuosoClient {
             .execute_skill(&skill, None)?
             .ok_or_exec(&format!("load SKILL file {loaded_path}"))?;
         result.metadata.insert("loaded_path".into(), loaded_path);
+        if skillpp {
+            result.metadata.insert("skillpp_mode".into(), "true".into());
+        }
         Ok(result)
     }
 
