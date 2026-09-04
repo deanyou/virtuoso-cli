@@ -185,6 +185,9 @@ fn do_handshake(
         .map_err(|e| TransportError::LocalIo(format!("ipc encode: {e}")))?;
 
     let mut guard = conn.lock().unwrap();
+    // Handshake has a 10-second deadline; tighten the socket timeout so a
+    // stuck peer doesn't block connect() for the full 5-minute default.
+    apply_socket_timeouts(&*guard, Duration::from_secs(10));
     FrameWriter::new(&mut *guard)
         .write_frame(&bytes)
         .map_err(frame_err_to_transport)?;
