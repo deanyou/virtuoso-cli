@@ -467,9 +467,8 @@ mod tests {
             };
             let _ = hello;
             let ack = serde_json::json!({
-                "protocol_major": PROTOCOL_MAJOR,
-                "protocol_minor": PROTOCOL_MINOR,
-                "result": {"Ok": {"daemon_nonce": "n"}},
+                "request_id": "handshake",
+                "result": {"ok": {"daemon_nonce": "n"}},
             });
             FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
             // Every request: sleep 2s, then respond Ok.
@@ -482,9 +481,8 @@ mod tests {
                     Ok(Some(_)) => {
                         std::thread::sleep(Duration::from_secs(2));
                         let resp = serde_json::json!({
-                            "protocol_major": PROTOCOL_MAJOR,
-                            "protocol_minor": PROTOCOL_MINOR,
-                            "result": {"Ok": null},
+                            "request_id": "resp",
+                            "result": {"ok": null},
                         });
                         if FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&resp).unwrap()).is_err() {
                             break;
@@ -541,9 +539,8 @@ mod tests {
                 reader.read_frame().unwrap().unwrap()
             };
             let ack = serde_json::json!({
-                "protocol_major": PROTOCOL_MAJOR,
-                "protocol_minor": PROTOCOL_MINOR,
-                "result": {"Ok": {"daemon_nonce": "n"}},
+                "request_id": "handshake",
+                "result": {"ok": {"daemon_nonce": "n"}},
             });
             FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
             loop {
