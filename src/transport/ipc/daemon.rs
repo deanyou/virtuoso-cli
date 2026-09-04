@@ -703,8 +703,9 @@ mod tests {
                             break;
                         }
                         stream.flush().unwrap();
-                        // Stop — never send the 100 bytes.
-                        std::thread::sleep(Duration::from_secs(10));
+                        // Stop sending payload. Loop back to read — when the
+                        // client times out and drops the connection, read_frame
+                        // returns EOF and we exit.
                     }
                     _ => break,
                 }
