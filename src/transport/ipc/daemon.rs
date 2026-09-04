@@ -458,11 +458,14 @@ mod tests {
         // before responding to every request — holds the connection (and thus
         // the client's mutex) for the duration.
         let server_handle = thread::spawn(move || {
-            use std::io::{Read, Write};
+            use std::io::Write;
             let (mut stream, _) = listener.accept().unwrap();
             // Handshake: read Hello, write HelloAck.
-            let mut reader = FrameReader::new(&mut stream);
-            let _hello = reader.read_frame().unwrap().unwrap();
+            let hello = {
+                let mut reader = FrameReader::new(&mut stream);
+                reader.read_frame().unwrap().unwrap()
+            };
+            let _ = hello;
             let ack = serde_json::json!({
                 "protocol_major": PROTOCOL_MAJOR,
                 "protocol_minor": PROTOCOL_MINOR,
@@ -471,7 +474,11 @@ mod tests {
             FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
             // Every request: sleep 2s, then respond Ok.
             loop {
-                match reader.read_frame() {
+                let req = {
+                    let mut reader = FrameReader::new(&mut stream);
+                    reader.read_frame()
+                };
+                match req {
                     Ok(Some(_)) => {
                         std::thread::sleep(Duration::from_secs(2));
                         let resp = serde_json::json!({
@@ -529,8 +536,10 @@ mod tests {
         let server_handle = thread::spawn(move || {
             use std::io::Write;
             let (mut stream, _) = listener.accept().unwrap();
-            let mut reader = FrameReader::new(&mut stream);
-            let _hello = reader.read_frame().unwrap().unwrap();
+            let _hello = {
+                let mut reader = FrameReader::new(&mut stream);
+                reader.read_frame().unwrap().unwrap()
+            };
             let ack = serde_json::json!({
                 "protocol_major": PROTOCOL_MAJOR,
                 "protocol_minor": PROTOCOL_MINOR,
@@ -538,7 +547,11 @@ mod tests {
             });
             FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
             loop {
-                match reader.read_frame() {
+                let req = {
+                    let mut reader = FrameReader::new(&mut stream);
+                    reader.read_frame()
+                };
+                match req {
                     Ok(Some(_)) => {
                         // Write 4-byte length prefix (payload = 4 bytes).
                         stream.write_all(&4u32.to_be_bytes()).unwrap();
