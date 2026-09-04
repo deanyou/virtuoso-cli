@@ -140,7 +140,6 @@ class LiveExecutor(Executor):
         output_dir: Path,
         window_id: Optional[str] = None,
         use_direct: bool = True,
-        auto_dismiss_dialogs: bool = True,
     ):
         if not session_id:
             raise ValueError("live executor requires an explicit --session")
@@ -171,10 +170,6 @@ class LiveExecutor(Executor):
         # --direct skips helper upload, env resolution, and list-windows scan.
         # ~5x faster (260ms vs 1350ms per action). Default True for performance.
         self._use_direct = use_direct
-        # Auto-dismiss modal dialogs that appear after GUI actions. Prevents
-        # silent failures when a Browse/Open action spawns a file chooser that
-        # intercepts all subsequent input. Default True.
-        self._auto_dismiss_dialogs = auto_dismiss_dialogs
         # Coordinate cache: hiGetFieldInfo results keyed by "form:field".
         self._coord_cache: Dict[str, Dict[str, Any]] = {}
         # Run state — only set after precheck validates identity.
@@ -378,11 +373,9 @@ class LiveExecutor(Executor):
                 return self._dismiss_dialog(step)
             if step.operation == Operation.CIW_INPUT:
                 self._execute_action_step(step)
-                self._maybe_dismiss_dialogs(step)
                 return None
             if step.operation in _ACTION_OPERATIONS:
                 self._execute_action_step(step)
-                self._maybe_dismiss_dialogs(step)
                 return None
             if step.operation == Operation.WINDOW_WAIT:
                 return self._wait_for_window(step)
@@ -404,51 +397,6 @@ class LiveExecutor(Executor):
             return {"error": f"unsupported operation: {step.operation.value}"}
         except Exception as exc:  # noqa: BLE001
             return _sanitize_error({"error": str(exc)}, step)
-
-    def _maybe_dismiss_dialogs(self, step: Step) -> None:
-        """After GUI actions that may spawn dialogs, detect and auto-dismiss.
-
-        Only checks after operations that commonly trigger dialogs (CLICK_REL,
-        CLICK_ABS, DOUBLE_CLICK, KEY, TYPE, CIW_INPUT). Scans window list for
-        dialog-like titles and dismisses them via vcli dismiss-dialog.
-        """
-        if not self._auto_dismiss_dialogs:
-            return
-        dialog_triggers = {
-            Operation.CLICK_REL, Operation.CLICK_ABS, Operation.DOUBLE_CLICK,
-            Operation.KEY, Operation.TYPE, Operation.CIW_INPUT,
-        }
-        if step.operation not in dialog_triggers:
-            return
-        try:
-            windows_data = self._run_json(
-                self._vcli_argv(
-                    "window", "list-windows-x11",
-                    "--display", self._scenario_display or ":0",
-                ),
-                _TIMEOUT_PRECHECK,
-            )
-            windows = windows_data.get("windows", [])
-            dialog_keywords = ("Choose", "Confirm", "Error", "Warning",
-                               "Dialog", "Message", "Alert", "Question")
-            for w in windows:
-                wid = w.get("dismiss_id") or w.get("window_id")
-                title = w.get("title", "")
-                if wid == self.window_id:
-                    continue
-                if not w.get("visible", False):
-                    continue
-                if any(kw.lower() in title.lower() for kw in dialog_keywords):
-                    self._run_json(
-                        self._vcli_argv(
-                            "window", "dismiss-window-x11",
-                            "--window-id", wid,
-                            "--display", self._scenario_display or ":0",
-                        ),
-                        _TIMEOUT_ACTION,
-                    )
-        except Exception:  # noqa: BLE001 — dialog detection is best-effort
-            pass
 
     def verify(self, step: Step, attempt: int) -> Optional[Dict[str, Any]]:
         if self.window_id is None or self._lock is None:

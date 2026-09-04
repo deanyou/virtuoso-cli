@@ -87,7 +87,7 @@ def cmd_validate(scenario_path: Path) -> int:
         return 2
 
 
-def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, fake_outcomes_path, window_id=None, use_direct=True, auto_dismiss_dialogs=True):
+def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, fake_outcomes_path, window_id=None, use_direct=True):
     """Construct the executor named by --executor. Returns (executor, error)."""
     if executor_name == "fake":
         if fake_outcomes_path is not None:
@@ -126,7 +126,6 @@ def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, f
                 output_dir=output_dir,
                 window_id=window_id,
                 use_direct=use_direct,
-                auto_dismiss_dialogs=auto_dismiss_dialogs,
             )
             return executor, None
         except (CommandError, ValueError) as e:
@@ -155,12 +154,11 @@ def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, f
 def cmd_run(scenario_path: Path, output_dir: Path, executor_name: str,
             session_id=None, vcli_path=None, ssh_host=None,
             fake_outcomes_path: Path = None, window_id: str = None,
-            use_direct: bool = True, auto_dismiss_dialogs: bool = True) -> int:
+            use_direct: bool = True) -> int:
     """Run a scenario. Returns 0 on pass, 1 on fail, 2 on error."""
     executor, err = build_executor(
         executor_name, session_id, vcli_path, ssh_host, output_dir, fake_outcomes_path,
         window_id=window_id, use_direct=use_direct,
-        auto_dismiss_dialogs=auto_dismiss_dialogs,
     )
     if executor is None:
         emit_json(err)
@@ -238,8 +236,6 @@ def main() -> int:
                      help="Path to JSON file with fake outcomes (only with --executor fake)")
     run.add_argument("--no-direct", action="store_false", dest="use_direct",
                      help="Disable --direct fast path in live executor (use full server validation)")
-    run.add_argument("--no-auto-dismiss", action="store_false", dest="auto_dismiss_dialogs",
-                     help="Disable automatic modal dialog detection and dismissal")
 
     args = parser.parse_args()
 
@@ -267,7 +263,6 @@ def main() -> int:
                 fake_outcomes_path=args.fake_outcomes,
                 window_id=args.window_id,
                 use_direct=args.use_direct,
-                auto_dismiss_dialogs=args.auto_dismiss_dialogs,
             )
         else:
             parser.print_help()

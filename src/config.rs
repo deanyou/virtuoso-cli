@@ -161,6 +161,13 @@ pub struct Config {
     /// Multi-host role split. When empty (the common case), all roles
     /// resolve to `remote_host`. See [`RemoteRoles`].
     pub roles: RemoteRoles,
+    /// Path to a running transport daemon's IPC socket (VB_TRANSPORT_DAEMON_SOCKET).
+    /// When set, the native backend connects to the daemon via IPC instead of
+    /// opening a fresh SSH connection per operation. Unix-only.
+    pub transport_daemon_socket: Option<String>,
+    /// Auth token for the transport daemon IPC connection (VB_TRANSPORT_DAEMON_TOKEN).
+    /// Must match the token the daemon was started with. Unix-only.
+    pub transport_daemon_token: Option<String>,
 }
 
 impl Config {
@@ -333,6 +340,14 @@ impl Config {
                 spectre_host: Self::env_with_profile("VB_SPECTRE_HOST", profile),
                 scratch_root: Self::env_with_profile("VB_REMOTE_SCRATCH_ROOT", profile),
             },
+            transport_daemon_socket: Self::env_with_profile(
+                "VB_TRANSPORT_DAEMON_SOCKET",
+                profile,
+            ),
+            transport_daemon_token: Self::env_with_profile(
+                "VB_TRANSPORT_DAEMON_TOKEN",
+                profile,
+            ),
         })
     }
 

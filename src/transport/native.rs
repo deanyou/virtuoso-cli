@@ -477,7 +477,10 @@ async fn upload_via_sftp(
     let remote_str = remote.to_string_lossy().into_owned();
     // Atomic upload: write to a staging file first, then rename into place.
     // A failed upload leaves only the staging file (never a half-written target).
-    let staging = format!("{remote_str}.tmp.{pid}", pid = std::process::id());
+    // Use a per-request UUID so concurrent uploads to the same target never
+    // share a staging file (PID alone is insufficient — same process can issue
+    // multiple concurrent transfers).
+    let staging = format!("{remote_str}.tmp.{}", uuid::Uuid::new_v4());
     let mut file =
         sftp.create(&staging)
             .await
@@ -753,7 +756,7 @@ impl RemoteTransport for NativeTransport {
                 Ok(()) => Ok(()),
                 Err(e) if sftp_unavailable(&e) => {
                     // Atomic upload via exec: write to staging file, then mv.
-                    let staging = format!("{remote}.tmp.{pid}", pid = std::process::id());
+                    let staging = format!("{remote}.tmp.{}", uuid::Uuid::new_v4());
                     let cmd = format!("cat > {}", shell_quote(&staging));
                     let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
                     if raw.exit_status != 0 {
@@ -812,7 +815,7 @@ impl RemoteTransport for NativeTransport {
         let req_id = req.id.clone();
         block_with_deadline(req.deadline, req_id, move || async move {
             // Atomic upload: write to staging, then mv into place.
-            let staging = format!("{remote}.tmp.{pid}", pid = std::process::id());
+            let staging = format!("{remote}.tmp.{}", uuid::Uuid::new_v4());
             let cmd = format!("cat > {}", shell_quote(&staging));
             let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
             if raw.exit_status != 0 {
@@ -868,7 +871,9 @@ impl RemoteTransport for NativeTransport {
         block_with_deadline(req.deadline, req_id, move || async move {
             // Atomic download: write to a local staging file, then rename.
             // A failed download never leaves a half-written target file.
-            let local_staging = format!("{}.tmp.{}", local.display(), std::process::id());
+            // Use a per-request UUID so concurrent downloads to the same target
+            // never share a staging file.
+            let local_staging = format!("{}.tmp.{}", local.display(), uuid::Uuid::new_v4());
             let local_staging_path = std::path::PathBuf::from(&local_staging);
 
             let write_result = match download_via_sftp(&cfg, Path::new(&remote), req.deadline).await

@@ -548,20 +548,21 @@ class TestRecover(unittest.TestCase):
             self.assertIsNotNone(err)
             self.assertIn("no rollback", err["error"])
 
-    def test_recover_auto_dismiss_on_key(self):
+    def test_recover_without_rollback_returns_error(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             runner = FakeRunner([
                 res(stdout=SESSIONS_OK),
                 res(stdout=WINDOWS_ONE),
-                res(stdout='{"status":"success"}'),  # dismiss-dialog action
             ])
             ex = make_executor(runner, tmp)
             self.assertIsNone(ex.precheck(make_scenario()))
             step = make_step(operation="KEY", arguments={"keys": "ctrl+z"})
             err = ex.recover(step, 0, None)
-            self.assertIsNone(err)  # auto dismiss-dialog succeeded
+            # Strict recovery: no rollback means no action, never auto-dismiss.
+            self.assertIsNotNone(err)
+            self.assertIn("no rollback", err["error"])
 
 
 class TestSanitization(unittest.TestCase):

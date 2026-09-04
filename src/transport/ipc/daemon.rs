@@ -60,13 +60,11 @@ impl NativeTransportClient {
     ) -> Result<Self, TransportError> {
         let stream =
             UnixStream::connect(socket_path).map_err(|_| TransportError::DaemonUnavailable)?;
-        // Bound every socket operation by a short timeout so a hung peer
-        // cannot block the caller indefinitely. The Tier-1 challenge is the
-        // tightest case — `challenge()` wraps the read with a 2-second
-        // deadline — but applying the timeout at the socket level means the
-        // shared `exchange()` path also respects it without each call site
-        // having to remember.
-        apply_socket_timeouts(&stream, Duration::from_secs(5));
+        // Set a generous default socket timeout (5 minutes). Individual
+        // `exchange()` calls tighten this to the request's remaining deadline
+        // before reading the response, so long-running commands (large file
+        // transfers, slow SKILL evals) are not cut off at 5 seconds.
+        apply_socket_timeouts(&stream, Duration::from_secs(300));
         let conn = Mutex::new(stream);
         let nonce = do_handshake(&conn, profile, auth_token)?;
         Ok(Self {
@@ -143,6 +141,12 @@ impl NativeTransportClient {
             .map_err(|e| TransportError::LocalIo(format!("ipc encode: {e}")))?;
 
         let mut guard = self.conn.lock().unwrap();
+        // Tighten the socket read timeout to the request's remaining deadline
+        // before reading the response. This ensures long-running operations
+        // (large transfers, slow evals) are not cut off by the 5-minute
+        // default, while genuinely hung daemons still time out predictably.
+        let remaining = deadline.remaining();
+        apply_socket_timeouts(&guard, remaining.max(Duration::from_secs(1)));
         FrameWriter::new(&mut *guard)
             .write_frame(&bytes)
             .map_err(frame_err_to_transport)?;
