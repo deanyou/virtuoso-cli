@@ -436,6 +436,24 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
+    /// Build a Unix-socket path short enough to bind on every platform.
+    ///
+    /// macOS `$TMPDIR` is a long `/var/folders/.../T/` path that, combined with
+    /// a descriptive filename (`vcli-ipc-lock-<uuid>.sock`), can exceed
+    /// `SUN_LEN` (104 bytes on macOS) and make `UnixListener::bind` fail with
+    /// "path must be shorter than SUN_LEN". Use `/tmp` on macOS; other
+    /// platforms keep the OS temp dir.
+    fn short_socket_path(name: &str) -> std::path::PathBuf {
+        #[cfg(target_os = "macos")]
+        {
+            std::path::PathBuf::from("/tmp").join(format!("{name}-{}.sock", uuid::Uuid::new_v4()))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            std::env::temp_dir().join(format!("{name}-{}.sock", uuid::Uuid::new_v4()))
+        }
+    }
+
     /// Serve one connection: Hello handshake, then dispatch every request onto
     /// `transport` until the client closes.
     fn serve_one_via_real_server(
@@ -455,7 +473,7 @@ mod tests {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<NativeTransportClient>();
 
-        let socket = std::env::temp_dir().join(format!("vcli-ipc-{}.sock", uuid::Uuid::new_v4()));
+        let socket = short_socket_path("vcli-ipc");
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
@@ -551,8 +569,7 @@ mod tests {
             }
         }
 
-        let socket =
-            std::env::temp_dir().join(format!("vcli-ipc-lock-{}.sock", uuid::Uuid::new_v4()));
+        let socket = short_socket_path("vcli-ipc-lock");
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
@@ -598,8 +615,7 @@ mod tests {
     /// the absolute deadline, not reset on every underlying read().
     #[test]
     fn slow_chunked_response_hits_deadline() {
-        let socket =
-            std::env::temp_dir().join(format!("vcli-ipc-chunk-{}.sock", uuid::Uuid::new_v4()));
+        let socket = short_socket_path("vcli-ipc-chunk");
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
@@ -677,8 +693,7 @@ mod tests {
     /// (total ~1.9s). After the fix, the second read gets ~0.1s timeout.
     #[test]
     fn frame_header_near_deadline_then_stop() {
-        let socket =
-            std::env::temp_dir().join(format!("vcli-ipc-hdr-{}.sock", uuid::Uuid::new_v4()));
+        let socket = short_socket_path("vcli-ipc-hdr");
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
@@ -753,8 +768,7 @@ mod tests {
         use crate::transport::contract::RequestId;
         use std::sync::mpsc;
 
-        let socket =
-            std::env::temp_dir().join(format!("vcli-ipc-wr-{}.sock", uuid::Uuid::new_v4()));
+        let socket = short_socket_path("vcli-ipc-wr");
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 

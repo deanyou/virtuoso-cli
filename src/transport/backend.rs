@@ -314,11 +314,21 @@ mod tests {
             Ok(_) => panic!("32 workers need 34 sessions; the invariant must be enforced"),
             Err(e) => e,
         };
-        #[cfg(feature = "native-ssh")]
+        #[cfg(all(unix, feature = "native-ssh"))]
         assert!(
             matches!(err, TransportError::Configuration(_)),
             "the invariant must be reported as a configuration error, got {err:?}"
         );
+        #[cfg(all(not(unix), feature = "native-ssh"))]
+        {
+            // The native backend is not yet supported on non-Unix (IPC is a
+            // Unix-domain-socket transport), so it fails with UnsupportedBackend
+            // before any capacity validation can run.
+            assert!(
+                matches!(err, TransportError::UnsupportedBackend),
+                "native must be unsupported on non-Unix, got {err:?}"
+            );
+        }
         #[cfg(not(feature = "native-ssh"))]
         {
             // Without the feature the backend error comes first, which is the
