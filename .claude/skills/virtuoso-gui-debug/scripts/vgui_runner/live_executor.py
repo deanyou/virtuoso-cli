@@ -19,6 +19,7 @@ import json
 import os
 import re
 import time
+import uuid
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Dict, List, Optional
@@ -595,6 +596,53 @@ class LiveExecutor(Executor):
             pass
 
     # ------------------------------------------------------------------
+    # SSH screenshot helpers
+    # ------------------------------------------------------------------
+
+    def _is_ssh(self) -> bool:
+        """True when vcli runs on a remote host (--ssh-host was given)."""
+        return self._ssh_host is not None
+
+    def _remote_screenshot_dir(self) -> str:
+        """A per-run remote temp directory for screenshots.
+
+        vcli creates the directory on demand; we only need a unique path so
+        concurrent runs do not collide on the remote host.
+        """
+        return f"/tmp/vcli_gui_shots_{uuid.uuid4().hex[:8]}"
+
+    def _download_screenshot(self, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """In SSH mode, fetch the remote screenshot into the local output dir.
+
+        vcli writes the PNG to ``artifact.local_path`` on the remote host.  We
+        scp it to ``self._output_dir`` and rewrite ``local_path`` to the local
+        path so downstream consumers (reporting, verification) see a file that
+        actually exists.
+
+        Returns None on success, or an error dict.
+        """
+        if not self._is_ssh():
+            return None
+        artifact = result.get("artifact") or {}
+        remote_path = artifact.get("local_path")
+        if not remote_path:
+            return None
+        fname = Path(remote_path).name
+        local_path = self._output_dir / fname
+        try:
+            from .command_runner import SshRunner
+            if isinstance(self._runner, SshRunner):
+                scp_result = self._runner.scp_download(remote_path, str(local_path))
+                if scp_result.exit_code != 0:
+                    return {"error": f"scp download failed: {scp_result.stderr.strip()}"}
+            else:
+                return {"error": "SSH mode but runner is not SshRunner"}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"screenshot download failed: {exc}"}
+        result["artifact"]["local_path"] = str(local_path)
+        return None
+
+    # ------------------------------------------------------------------
     # action plumbing
     # ------------------------------------------------------------------
 
@@ -636,8 +684,28 @@ class LiveExecutor(Executor):
         if text is not None:
             argv += ["--text", text]
         if output_dir is not None:
-            argv += ["--output-dir", output_dir]
-        return self._run_json(argv, timeout_seconds)
+            # In SSH mode the local output_dir does not exist on the remote
+            # host.  Write screenshots to a remote temp dir (created first),
+            # then scp them down after the call (see _download_screenshot).
+            if operation == "screenshot" and self._is_ssh():
+                remote_dir = self._remote_screenshot_dir()
+                from .command_runner import SshRunner
+                if isinstance(self._runner, SshRunner):
+                    mk = self._runner.ensure_remote_dir(remote_dir)
+                    if mk.exit_code != 0:
+                        raise RuntimeError(
+                            f"failed to create remote screenshot dir: {mk.stderr.strip()}"
+                        )
+                argv += ["--output-dir", remote_dir]
+            else:
+                argv += ["--output-dir", output_dir]
+        result = self._run_json(argv, timeout_seconds)
+        # Fetch remote screenshots into the local output directory.
+        if operation == "screenshot":
+            dl_err = self._download_screenshot(result)
+            if dl_err:
+                raise RuntimeError(dl_err["error"])
+        return result
 
     def _execute_action_step(self, step: Step) -> None:
         # CIW_INPUT is handled specially — it's a composite of multiple

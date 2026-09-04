@@ -40,6 +40,113 @@ Live mode additionally requires: `--session` (must equal the scenario's `session
 
 Local mode requires: `xdotool` on PATH, `DISPLAY` reachable, and `--output DIR`. `--window-id WID` optionally overrides PID-based window discovery. ImageMagick `import` is required for screenshots.
 
+## Auto-Discovery (SSH Remote)
+
+自动发现 Virtuoso 的 DISPLAY 和 PID：
+
+```bash
+# 方法1: 从 daemon log 直接获取
+ssh ubuntu-docker "tail /tmp/virtuoso-daemon.log"
+
+# 方法2: 查找 virtuoso 进程并获取 DISPLAY
+ssh ubuntu-docker "ps aux | grep virtuoso | grep -v grep | awk '{print \$2}' | head -1"
+ssh ubuntu-docker "strings /proc/<PID>/environ | grep DISPLAY"
+
+# 方法3: 从 daemon 获取当前会话端口
+ssh ubuntu-docker "cat /tmp/virtuoso-daemon.log | grep PORT"
+```
+
+**快速发现脚本** (在 skill-dev 目录执行):
+```bash
+./scripts/vssh.sh --discover
+```
+
+**典型结果**:
+- PID: `12784`
+- DISPLAY: `:5.0`
+- Session ID: `dean-user1-<PORT>`
+
+## vcli GUI Debug 快速指南
+
+### 一、连接 Session
+```bash
+# 列出所有 session
+VCLI_CAPABILITY=admin VB_PORT=33817 VB_REMOTE_HOST=localhost vcli session list
+
+# 查看 session 详情
+VCLI_CAPABILITY=admin VB_PORT=33817 VB_REMOTE_HOST=localhost vcli session show dean-user1-33817
+```
+
+关键字段：
+- `alive: true` — session 存活
+- `pid: 0` — 旧 bridge 元数据，需通过窗口发现回退
+
+### 二、发现 DISPLAY（云电脑关键！）
+
+⚠️ vcli 的 `--display :0` 经常不对！云电脑上 Virtuoso 可能运行在其他 DISPLAY：
+
+```bash
+# 方法1：查看 X11 socket 文件
+ssh ubuntu-docker "ls /tmp/.X11-unix/"
+# 输出 X99 → DISPLAY=:99
+
+# 方法2：查看 Virtuoso 进程
+ssh ubuntu-docker "ps aux | grep virtuoso | grep -v grep"
+
+# 方法3：逐个尝试（常见 :0, :1, :99）
+vcli window list-windows-x11 --display :99 --session dean-user1-33817
+```
+
+### 三、发现窗口
+```bash
+# 列出指定 DISPLAY 上的所有窗口
+vcli window list-windows-x11 --display :99 --session dean-user1-33817
+```
+
+输出字段说明：
+```
+{
+  "window_id": "0x3000000",  // ← 操作时用这个字段（不是 id）
+  "pid": 393027,              // 进程 ID
+  "title": "VCLI_XDOTOOL_TEST",
+  "geometry": {"x":960,"y":446,"w":810,"h":634},
+  "visible": true
+}
+```
+
+快速筛选：
+```bash
+vcli window list-windows-x11 --display :99 --session dean-user1-33817 | python3 -c "
+import json,sys
+for w in json.load(sys.stdin)['windows']:
+    print(w['window_id'], w['pid'], w['title'][:40])
+"
+```
+
+### 四、执行 GUI 操作
+
+```bash
+# 通用格式（--direct 跳过 helper 上传，快 5 倍）
+vcli window action-x11 \
+  --window-id 0x3000000 \
+  --display :99 \
+  --session dean-user1-33817 \
+  --pid 393027 \
+  --operation <OP> \
+  --direct
+```
+
+常用操作：
+
+| 操作 | 额外参数 | 示例 |
+|------|---------|------|
+| activate | 无 | 激活窗口 |
+| click-rel | --x --y | 相对坐标点击 |
+| click-abs | --x --y | 绝对坐标点击 |
+| double-click | --x --y | 双击 |
+| key | --text Escape | 发送按键 |
+| type | --text "hello" | 输入文本 |
+
 ## Usage
 
 **IMPORTANT:** Always validate before running:

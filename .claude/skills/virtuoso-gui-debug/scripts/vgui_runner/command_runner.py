@@ -206,3 +206,93 @@ class SshRunner(CommandRunner):
                 duration_ms=duration_ms,
                 timed_out=True,
             )
+
+    def scp_download(self, remote_path: str, local_path: str,
+                     timeout_seconds: int = 60) -> CommandResult:
+        """Download a single file from the remote host via ``scp``.
+
+        Used by the live executor to fetch screenshots produced by a remote
+        vcli invocation.  ``remote_path`` and ``local_path`` are validated
+        against NUL/newline injection before use.
+        """
+        if not isinstance(remote_path, str) or not remote_path:
+            raise CommandError("scp_download requires a non-empty remote_path")
+        if not isinstance(local_path, str) or not local_path:
+            raise CommandError("scp_download requires a non-empty local_path")
+        if "\x00" in remote_path or "\n" in remote_path or "\r" in remote_path:
+            raise CommandError("remote_path contains forbidden characters")
+        if "\x00" in local_path or "\n" in local_path or "\r" in local_path:
+            raise CommandError("local_path contains forbidden characters")
+        argv = ["scp", "--", f"{self.ssh_host}:{remote_path}", local_path]
+        start = time.monotonic()
+        try:
+            proc = subprocess.run(
+                argv,
+                shell=False,
+                timeout=timeout_seconds,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                universal_newlines=True,
+                env=_clean_env(),
+            )
+            duration_ms = int((time.monotonic() - start) * 1000)
+            return CommandResult(
+                exit_code=proc.returncode,
+                stdout=proc.stdout,
+                stderr=proc.stderr,
+                duration_ms=duration_ms,
+                timed_out=False,
+            )
+        except subprocess.TimeoutExpired:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            return CommandResult(
+                exit_code=None,
+                stdout="",
+                stderr=f"scp timed out after {timeout_seconds}s",
+                duration_ms=duration_ms,
+                timed_out=True,
+            )
+
+    def ensure_remote_dir(self, remote_path: str,
+                          timeout_seconds: int = 15) -> CommandResult:
+        """Create a directory on the remote host (``mkdir -p``).
+
+        vcli's screenshot operation requires the output directory to already
+        exist — it does not create it.  The live executor calls this before
+        every screenshot in SSH mode.
+        """
+        if not isinstance(remote_path, str) or not remote_path:
+            raise CommandError("ensure_remote_dir requires a non-empty path")
+        if "\x00" in remote_path or "\n" in remote_path or "\r" in remote_path:
+            raise CommandError("remote_path contains forbidden characters")
+        # mkdir -p is idempotent and safe; we quote the path to prevent
+        # shell injection even though ssh passes it as a single argument.
+        import shlex
+        remote_cmd = f"mkdir -p {shlex.quote(remote_path)}"
+        argv = ["ssh", "--", self.ssh_host, remote_cmd]
+        start = time.monotonic()
+        try:
+            proc = subprocess.run(
+                argv,
+                shell=False,
+                timeout=timeout_seconds,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                universal_newlines=True,
+                env=_clean_env(),
+            )
+            duration_ms = int((time.monotonic() - start) * 1000)
+            return CommandResult(
+                exit_code=proc.returncode,
+                stdout=proc.stdout,
+                stderr=proc.stderr,
+                duration_ms=duration_ms,
+                timed_out=False,
+            )
+        except subprocess.TimeoutExpired:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            return CommandResult(
+                exit_code=None,
+                stdout="",
+                stderr=f"mkdir timed out after {timeout_seconds}s",
+                duration_ms=duration_ms,
+                timed_out=True,
+            )
