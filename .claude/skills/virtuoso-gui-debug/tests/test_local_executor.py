@@ -269,12 +269,13 @@ class TestLocalExecutorRecover(unittest.TestCase):
         self.assertIn("no rollback", err["error"])
 
     @mock.patch("vgui_runner.local_executor._run")
-    def test_recover_auto_dismiss_on_key(self, mock_run):
-        # Dialog-triggering ops (KEY/TYPE/CLICK_REL) auto-dismiss on no rollback
+    def test_recover_without_rollback_returns_error(self, mock_run):
+        # Strict recovery: no rollback means no action, never auto-dismiss
         mock_run.return_value = _completed()
         step = _make_step(Operation.KEY, {"keys": "a"})
         err = self.executor.recover(step, 0, None)
-        self.assertIsNone(err)  # auto Escape succeeded
+        self.assertIsNotNone(err)
+        self.assertIn("no rollback", err["error"])
 
     @mock.patch("vgui_runner.local_executor._run")
     def test_recover_unknown_operation(self, mock_run):

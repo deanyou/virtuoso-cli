@@ -252,18 +252,9 @@ class LocalExecutor(Executor):
     ) -> Optional[Dict[str, Any]]:
         if self.window_id is None:
             return {"error": "recover requires a successful precheck"}
-        # Auto-recovery: if no explicit rollback but the step may have triggered
-        # a dialog (KEY/TYPE/CLICK_REL), send Escape as a safety net.
+        # Strict recovery: no rollback means no action. Never auto-dismiss
+        # dialogs — could close a non-target dialog and lose user state.
         if not rollback:
-            if step.operation in (Operation.KEY, Operation.TYPE, Operation.CLICK_REL):
-                try:
-                    self._xdotool("windowactivate", self.window_id or "")
-                    time.sleep(0.1)
-                    self._xdotool("key", "Escape")
-                    time.sleep(0.3)
-                    return None
-                except Exception as exc:  # noqa: BLE001
-                    return {"error": f"auto dismiss failed: {exc}"}
             return {"error": "no rollback defined for step; cannot recover"}
         op_str = rollback.get("operation")
         try:
