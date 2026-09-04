@@ -458,7 +458,6 @@ mod tests {
         // before responding to every request — holds the connection (and thus
         // the client's mutex) for the duration.
         let server_handle = thread::spawn(move || {
-            use std::io::Write;
             let (mut stream, _) = listener.accept().unwrap();
             // Handshake: read Hello, write HelloAck.
             let hello = {
@@ -487,7 +486,7 @@ mod tests {
                         std::thread::sleep(Duration::from_secs(2));
                         let resp = serde_json::json!({
                             "request_id": "resp",
-                            "result": {"ok": null},
+                            "result": {"ok": true},
                         });
                         if FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&resp).unwrap()).is_err() {
                             break;
