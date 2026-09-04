@@ -495,7 +495,7 @@ mod tests {
             }
         });
 
-        let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
+        let client = Arc::new(NativeTransportClient::connect(&socket, "test-profile", "").unwrap());
 
         // Thread A: long request (will hold the mutex for ~2s).
         let client_a = client.clone();
