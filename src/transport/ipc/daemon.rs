@@ -476,65 +476,53 @@ mod tests {
 
     /// Regression: a short-deadline request must not wait indefinitely for a
     /// long request holding the shared connection mutex. End-to-end test over
-    /// a real IPC connection.
+    /// a real IPC connection with a slow server-side transport.
     #[test]
     fn short_deadline_request_times_out_while_lock_held() {
+        use crate::transport::contract::{CommandRequest, CommandResult, DownloadDirRequest, DownloadFileRequest, FakeTransport, RemoteTransport, UploadFileRequest, UploadTextRequest};
+
+        /// Wraps FakeTransport but sleeps 2s on test_connection to hold the lock.
+        struct SlowTransport(FakeTransport);
+        impl RemoteTransport for SlowTransport {
+            fn test_connection(&self, deadline: Deadline) -> Result<bool, TransportError> {
+                std::thread::sleep(Duration::from_secs(2));
+                self.0.test_connection(deadline)
+            }
+            fn run_command(&self, req: &CommandRequest) -> Result<CommandResult, TransportError> {
+                self.0.run_command(req)
+            }
+            fn upload_file(&self, req: &UploadFileRequest) -> Result<(), TransportError> {
+                self.0.upload_file(req)
+            }
+            fn upload_text(&self, req: &UploadTextRequest) -> Result<(), TransportError> {
+                self.0.upload_text(req)
+            }
+            fn download_file(&self, req: &DownloadFileRequest) -> Result<(), TransportError> {
+                self.0.download_file(req)
+            }
+            fn download_dir(&self, req: &DownloadDirRequest) -> Result<(), TransportError> {
+                self.0.download_dir(req)
+            }
+        }
+
         let socket = std::env::temp_dir().join(format!("vcli-ipc-lock-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
-        // Server: accept one connection, complete handshake, then sleep 2s
-        // before responding to every request — holds the connection (and thus
-        // the client's mutex) for the duration.
         let server_handle = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            // Handshake: read Hello, write HelloAck.
-            let hello = {
-                let mut reader = FrameReader::new(&mut stream);
-                reader.read_frame().unwrap().unwrap()
-            };
-            let _ = hello;
-            let ack = serde_json::json!({
-                "request_id": "handshake",
-                "result": {"ok": {
-                    "server_major": PROTOCOL_MAJOR,
-                    "server_minor": PROTOCOL_MINOR,
-                    "daemon_nonce": "n",
-                    "capabilities": []
-                }},
-            });
-            FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
-            // Every request: sleep 2s, then respond Ok.
-            loop {
-                let req = {
-                    let mut reader = FrameReader::new(&mut stream);
-                    reader.read_frame()
-                };
-                match req {
-                    Ok(Some(_)) => {
-                        std::thread::sleep(Duration::from_secs(2));
-                        let resp = serde_json::json!({
-                            "request_id": "resp",
-                            "result": {"ok": true},
-                        });
-                        if FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&resp).unwrap()).is_err() {
-                            break;
-                        }
-                    }
-                    _ => break,
-                }
-            }
+            let (stream, _) = listener.accept().unwrap();
+            real_server::serve_one(stream, Arc::new(SlowTransport(FakeTransport::ok())), "", "n");
         });
 
         let client = Arc::new(NativeTransportClient::connect(&socket, "test-profile", "").unwrap());
 
-        // Thread A: long request (will hold the mutex for ~2s).
+        // Thread A: long request (will hold the mutex for ~2s on server side).
         let client_a = client.clone();
         let handle_a = thread::spawn(move || {
             let _ = client_a.test_connection(Deadline::from_now(Duration::from_secs(10)));
         });
         // Give thread A time to acquire the mutex and send its request.
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(200));
 
         // Thread B: short deadline — must time out in ~1s, not wait for A's 2s.
         let start = std::time::Instant::now();
@@ -549,6 +537,7 @@ mod tests {
         );
 
         handle_a.join().unwrap();
+        drop(client);
         server_handle.join().unwrap();
         let _ = std::fs::remove_file(&socket);
     }
