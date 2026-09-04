@@ -468,7 +468,12 @@ mod tests {
             let _ = hello;
             let ack = serde_json::json!({
                 "request_id": "handshake",
-                "result": {"ok": {"daemon_nonce": "n"}},
+                "result": {"ok": {
+                    "server_major": PROTOCOL_MAJOR,
+                    "server_minor": PROTOCOL_MINOR,
+                    "daemon_nonce": "n",
+                    "capabilities": []
+                }},
             });
             FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
             // Every request: sleep 2s, then respond Ok.
@@ -540,7 +545,12 @@ mod tests {
             };
             let ack = serde_json::json!({
                 "request_id": "handshake",
-                "result": {"ok": {"daemon_nonce": "n"}},
+                "result": {"ok": {
+                    "server_major": PROTOCOL_MAJOR,
+                    "server_minor": PROTOCOL_MINOR,
+                    "daemon_nonce": "n",
+                    "capabilities": []
+                }},
             });
             FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
             loop {
