@@ -737,15 +737,20 @@ mod tests {
     #[test]
     fn large_request_to_nonreading_peer_hits_deadline() {
         use crate::transport::contract::RequestId;
+        use std::sync::mpsc;
 
         let socket = std::env::temp_dir().join(format!("vcli-ipc-wr-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
+        // Channel keeps the server alive without reading the socket. The server
+        // blocks on recv() until the test tells it to exit — it never drains the
+        // receive buffer, so the client's send buffer fills and write() blocks.
+        let (tx, rx) = mpsc::channel::<()>();
+
         let server_handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            // Handshake only — never read any request frames, so the client's
-            // send buffer fills and write() blocks.
+            // Handshake only.
             let mut reader = FrameReader::new(&stream);
             let _hello = reader.read_frame().unwrap().unwrap();
             let mut writer = FrameWriter::new(&stream);
@@ -759,9 +764,9 @@ mod tests {
                 }},
             });
             writer.write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
-            // Hold the connection open but never read — fills the send buffer.
-            // When the client times out and drops, read_frame returns EOF.
-            let _ = reader.read_frame();
+            // Block here — do NOT read any request frames. The client's send
+            // buffer fills and write() blocks on back-pressure.
+            let _ = rx.recv();
         });
 
         let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
@@ -781,6 +786,13 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(result.is_err(), "large write to non-reading peer should fail");
+        // Must be close to the 1s budget — not instant (which would mean no
+        // back-pressure and a fake pass) and not far over it.
+        assert!(
+            elapsed >= Duration::from_millis(500),
+            "write returned too fast ({:?}) — no back-pressure, test is fake",
+            elapsed
+        );
         assert!(
             elapsed < Duration::from_secs(3),
             "write deadline not enforced: waited {:?}",
@@ -788,6 +800,7 @@ mod tests {
         );
 
         drop(client);
+        let _ = tx.send(());
         server_handle.join().unwrap();
         let _ = std::fs::remove_file(&socket);
     }

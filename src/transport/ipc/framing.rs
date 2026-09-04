@@ -100,9 +100,9 @@ impl<R: Read> FrameReader<R> {
     /// Like [`read_frame`], but aborts with `FrameError::Io("deadline exceeded")`
     /// if the absolute `deadline` passes before the frame is complete.
     ///
-    /// The socket-level read timeout is re-applied on every loop iteration using
-    /// the **remaining** budget, so a multi-segment response cannot accumulate
-    /// more than the total deadline across partial reads.
+    /// This variant only checks the clock at loop boundaries — it does **not**
+    /// re-apply the socket timeout per read. For dynamic socket timeouts that
+    /// shrink with the remaining budget, use [`read_frame_until_with`].
     pub fn read_frame_until(
         &mut self,
         deadline: Option<std::time::Instant>,
