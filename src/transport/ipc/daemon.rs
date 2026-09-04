@@ -736,6 +736,8 @@ mod tests {
     /// write deadline, not block forever once the socket send buffer fills.
     #[test]
     fn large_request_to_nonreading_peer_hits_deadline() {
+        use crate::transport::contract::RequestId;
+
         let socket = std::env::temp_dir().join(format!("vcli-ipc-wr-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
@@ -758,15 +760,21 @@ mod tests {
             });
             writer.write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
             // Hold the connection open but never read — fills the send buffer.
-            std::thread::sleep(Duration::from_secs(30));
+            // When the client times out and drops, read_frame returns EOF.
+            let _ = reader.read_frame();
         });
 
         let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
 
         // 1 MiB text upload — far larger than the socket send buffer, so the
-        // write will block once the buffer fills.
+        // write will block once the buffer fills. Use an explicit 1s deadline.
         let big_text = "x".repeat(1024 * 1024);
-        let req = crate::transport::contract::UploadTextRequest::untimed(big_text, "/tmp/big");
+        let req = crate::transport::contract::UploadTextRequest {
+            id: RequestId::new(),
+            deadline: Deadline::from_now(Duration::from_secs(1)),
+            text: big_text,
+            remote: "/tmp/big".into(),
+        };
 
         let start = std::time::Instant::now();
         let result = client.upload_text(&req);
