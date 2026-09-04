@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2026-09-04
+
+Second-round code audit fixes. The 1.3.1 release introduced native-ssh IPC
+daemon wiring and atomic file transfers; a follow-up audit found that the
+implementation had Windows build breaks, config bypasses, and a too-short
+IPC timeout. This release addresses all of them, plus tightens the GUI
+debug skill's recovery contract.
+
+### Fixed
+
+- **Windows native build** (`src/transport/backend.rs`): the IPC daemon
+  client is now `#[cfg(unix)]`-gated. On Windows the native backend returns
+  `UnsupportedBackend` instead of failing to compile (the IPC transport is
+  Unix-domain-socket only).
+- **Config bypass** (`src/config.rs`, `src/transport/backend.rs`):
+  `VB_TRANSPORT_DAEMON_SOCKET` and `VB_TRANSPORT_DAEMON_TOKEN` are now read
+  through `Config::from_env()` (with profile suffix support) instead of
+  direct `std::env::var` calls in the backend.
+- **Staging file concurrency** (`src/transport/native.rs`): upload and
+  download staging files now use a per-request `uuid::Uuid::new_v4()` suffix
+  instead of PID-only. Concurrent transfers to the same target can no longer
+  share, truncate, or prematurely publish each other's staging files.
+- **IPC socket timeout** (`src/transport/ipc/daemon.rs`): the fixed 5-second
+  socket timeout is gone. The default is now 300s; `exchange()` dynamically
+  tightens the read timeout to the request's remaining deadline before
+  reading the response, and the handshake uses a 5s timeout. Long-running
+  commands (large transfers, slow SKILL evals) are no longer cut off at 5s.
+- **Native backend fallback** (`src/transport/backend.rs`): removed the
+  silent direct-`NativeTransport` fallback when the daemon is unreachable.
+  The native backend now returns `DaemonUnavailable` per the design
+  specification — connecting directly would bypass the connection pool.
+- **GUI auto-dismiss** (`.claude/skills/virtuoso-gui-debug/`): removed the
+  automatic modal-dialog dismissal from both live and local executors'
+  normal action paths and `recover()`. Recovery now requires an explicit
+  validated rollback; auto-dismiss could close a non-target dialog and lose
+  user state. The `--no-auto-dismiss` CLI flag and plumbing are removed.
+- **GUI test contradiction** (`.claude/skills/virtuoso-gui-debug/tests/`):
+  updated recover tests to expect an error when no rollback is defined,
+  matching the strict recovery contract.
+
+### Internal
+
+- 8 test fixture `Config` constructors updated for the new
+  `transport_daemon_socket` / `transport_daemon_token` fields.
+
 ## [1.3.1] - 2026-09-04
 
 ### Fixed
