@@ -479,7 +479,8 @@ mod tests {
     /// a real IPC connection with a slow server-side transport.
     #[test]
     fn short_deadline_request_times_out_while_lock_held() {
-        use crate::transport::contract::{CommandRequest, CommandResult, DownloadDirRequest, DownloadFileRequest, FakeTransport, RemoteTransport, UploadFileRequest, UploadTextRequest};
+        use crate::transport::contract::test_support::FakeTransport;
+        use crate::transport::contract::{CommandRequest, CommandResult, DownloadDirRequest, DownloadFileRequest, RemoteTransport, UploadFileRequest, UploadTextRequest};
 
         /// Wraps FakeTransport but sleeps 2s on test_connection to hold the lock.
         struct SlowTransport(FakeTransport);
