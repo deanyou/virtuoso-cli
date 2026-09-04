@@ -779,15 +779,16 @@ mod tests {
             let guard = client.conn.lock().unwrap();
             let fd = guard.as_raw_fd();
             let bufsize = 8192i32;
-            unsafe {
+            let rc = unsafe {
                 libc::setsockopt(
                     fd,
                     libc::SOL_SOCKET,
                     libc::SO_SNDBUF,
                     &bufsize as *const _ as *const libc::c_void,
                     std::mem::size_of::<i32>() as libc::socklen_t,
-                );
-            }
+                )
+            };
+            assert_eq!(rc, 0, "setsockopt(SO_SNDBUF) failed — test cannot guarantee back-pressure");
         }
 
         // 1 MiB text upload — far larger than the 8 KiB send buffer, so the
