@@ -140,13 +140,23 @@ impl NativeTransportClient {
         let bytes = serde_json::to_vec(&env)
             .map_err(|e| TransportError::LocalIo(format!("ipc encode: {e}")))?;
 
+        // Fail fast if the deadline has already passed before contending for
+        // the shared connection mutex — a queued request should not wait
+        // indefinitely on a lock held by a hung peer.
+        if deadline.is_expired() {
+            return Err(TransportError::QueueTimeout {
+                request: RequestId::new(),
+                after_secs: 0,
+            });
+        }
         let mut guard = self.conn.lock().unwrap();
-        // Tighten the socket read timeout to the request's remaining deadline
-        // before reading the response. This ensures long-running operations
-        // (large transfers, slow evals) are not cut off by the 5-minute
-        // default, while genuinely hung daemons still time out predictably.
+        // Tighten the socket read timeout to the request's remaining deadline.
+        // Use a 1ms floor: a zero SO_RCVTIMEO means "no timeout" on Linux,
+        // which would defeat the purpose. This is a per-read timeout, so a
+        // multi-segment response may exceed it in total — but each individual
+        // read is bounded, which prevents indefinite hangs.
         let remaining = deadline.remaining();
-        apply_socket_timeouts(&*guard, remaining.max(Duration::from_secs(1)));
+        apply_socket_timeouts(&*guard, remaining.max(Duration::from_millis(1)));
         FrameWriter::new(&mut *guard)
             .write_frame(&bytes)
             .map_err(frame_err_to_transport)?;

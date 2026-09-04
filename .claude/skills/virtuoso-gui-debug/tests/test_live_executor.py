@@ -547,7 +547,7 @@ class TestRecover(unittest.TestCase):
             self.assertIsNotNone(err)
             self.assertIn("no rollback", err["error"])
 
-    def test_recover_without_rollback_returns_error(self):
+    def test_recover_without_rollback_returns_error_for_key_op(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:

@@ -56,17 +56,18 @@ pub fn run(_ipc_endpoint: &str, _token_path: &str, _daemon_nonce: &str) -> Resul
 /// hard requirement).
 #[cfg(all(unix, feature = "native-ssh"))]
 pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Result<Value> {
-    use crate::transport::backend::open_transport;
+    use crate::transport::backend::open_transport_for_daemon;
     use crate::transport::ipc::server;
     use crate::transport::lifecycle::ShutdownCoordinator;
 
     let config = crate::config::Config::from_env()?;
 
-    // `open_transport` already hands back a shared, boxed transport; the
-    // server takes that same `Arc` so every connection thread shares one
-    // backend instead of opening its own.
+    // The daemon constructs its SSH backend directly via `open_transport_for_daemon`,
+    // NOT `open_transport`. The latter routes native traffic over IPC to a
+    // running daemon — using it here would deadlock on first startup (the
+    // daemon can't connect to itself before it starts listening).
     let transport: Arc<dyn RemoteTransport> =
-        open_transport(&config).map_err(transport_to_virtuoso)?;
+        open_transport_for_daemon(&config).map_err(transport_to_virtuoso)?;
 
     let token = std::fs::read_to_string(Path::new(token_path)).map_err(|e| {
         VirtuosoError::Io(std::io::Error::other(format!(

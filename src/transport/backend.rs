@@ -133,6 +133,36 @@ pub fn open_transport(config: &Config) -> Result<Arc<dyn RemoteTransport>, Trans
     }
 }
 
+/// Open the configured backend as a `Arc<dyn RemoteTransport>` for use
+/// **inside the transport daemon itself**.
+///
+/// This is distinct from [`open_transport`]: the daemon must construct its
+/// SSH backend directly (it *is* the daemon, so connecting to itself over IPC
+/// would be a startup deadlock). Business-side callers go through
+/// [`open_transport`], which routes native traffic over IPC to a running
+/// daemon. Never call this from a non-daemon code path.
+#[cfg(all(unix, feature = "native-ssh"))]
+pub fn open_transport_for_daemon(
+    config: &Config,
+) -> Result<Arc<dyn RemoteTransport>, TransportError> {
+    match SshBackend::from_config(config)? {
+        SshBackend::OpenSsh => {
+            let transport = OpenSshTransport::from_config(config);
+            let transport = if config.disable_control_master {
+                transport.with_control_master_disabled()
+            } else {
+                transport
+            };
+            Ok(Arc::new(transport))
+        }
+        SshBackend::Native => {
+            crate::transport::scheduler::validate_capacity(config)?;
+            let transport = crate::transport::native::NativeTransport::from_config(config)?;
+            Ok(Arc::new(transport))
+        }
+    }
+}
+
 /// Gate an OpenSSH-only code path on the selected backend.
 ///
 /// Some call sites build a concrete `SSHRunner` directly (the dedicated tunnel

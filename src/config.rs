@@ -99,7 +99,7 @@ impl RemoteRoles {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Config {
     #[allow(dead_code)]
     pub profile: Option<String>,
@@ -168,6 +168,45 @@ pub struct Config {
     /// Auth token for the transport daemon IPC connection (VB_TRANSPORT_DAEMON_TOKEN).
     /// Must match the token the daemon was started with. Unix-only.
     pub transport_daemon_token: Option<String>,
+}
+
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("profile", &self.profile)
+            .field("remote_host", &self.remote_host)
+            .field("remote_user", &self.remote_user)
+            .field("port", &self.port)
+            .field("jump_host", &self.jump_host)
+            .field("jump_user", &self.jump_user)
+            .field("ssh_port", &self.ssh_port)
+            .field("ssh_key", &self.ssh_key)
+            .field("ssh_config", &self.ssh_config)
+            .field("ssh_backend", &self.ssh_backend)
+            .field("disable_control_master", &self.disable_control_master)
+            .field("timeout", &self.timeout)
+            .field("read_timeout", &self.read_timeout)
+            .field("keep_remote_files", &self.keep_remote_files)
+            .field("spectre_cmd", &self.spectre_cmd)
+            .field("spectre_args", &self.spectre_args)
+            .field("spectre_max_workers", &self.spectre_max_workers)
+            .field("ssh_max_sessions", &self.ssh_max_sessions)
+            .field("ssh_max_bulk_sessions", &self.ssh_max_bulk_sessions)
+            .field("ssh_reconnect_max_attempts", &self.ssh_reconnect_max_attempts)
+            .field("ssh_reconnect_max_delay", &self.ssh_reconnect_max_delay)
+            .field("ssh_keepalive_interval", &self.ssh_keepalive_interval)
+            .field("ssh_keepalive_failures", &self.ssh_keepalive_failures)
+            .field("transport_shutdown_grace", &self.transport_shutdown_grace)
+            .field("cadence_cshrc", &self.cadence_cshrc)
+            .field("spectre_bin", &self.spectre_bin)
+            .field("roles", &self.roles)
+            .field("transport_daemon_socket", &self.transport_daemon_socket)
+            .field(
+                "transport_daemon_token",
+                &self.transport_daemon_token.as_ref().map(|_| "***redacted***"),
+            )
+            .finish()
+    }
 }
 
 impl Config {
