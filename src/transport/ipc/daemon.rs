@@ -146,7 +146,7 @@ impl NativeTransportClient {
         // (large transfers, slow evals) are not cut off by the 5-minute
         // default, while genuinely hung daemons still time out predictably.
         let remaining = deadline.remaining();
-        apply_socket_timeouts(&guard, remaining.max(Duration::from_secs(1)));
+        apply_socket_timeouts(&*guard, remaining.max(Duration::from_secs(1)));
         FrameWriter::new(&mut *guard)
             .write_frame(&bytes)
             .map_err(frame_err_to_transport)?;
