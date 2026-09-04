@@ -152,16 +152,23 @@ impl NativeTransportClient {
                 after_secs: 0,
             });
         }
-        // Tighten the socket read timeout to the request's remaining deadline.
-        // Use a 1ms floor: a zero SO_RCVTIMEO means "no timeout" on Linux.
-        let remaining = deadline.remaining();
-        apply_socket_timeouts(&*guard, remaining.max(Duration::from_millis(1)));
-        FrameWriter::new(&mut *guard)
-            .write_frame(&bytes)
+        let stream = &mut *guard;
+        let fd = std::os::unix::io::AsRawFd::as_raw_fd(&*stream);
+        // Write under the absolute deadline: every partial write re-applies
+        // the remaining budget as the socket send timeout, so back-pressure
+        // cannot accumulate beyond the total deadline.
+        FrameWriter::new(&mut *stream)
+            .write_frame_with_deadline(&bytes, Some(deadline.0), move |d| {
+                apply_socket_timeouts_fd(fd, d)
+            })
             .map_err(frame_err_to_transport)?;
-        // Read the full frame under the same absolute deadline — multi-segment
-        // responses must not reset the budget on every underlying read().
-        let resp_bytes = match FrameReader::new(&mut *guard).read_frame_until(Some(deadline.0)) {
+        // Read the full frame under the same absolute deadline — every
+        // partial read re-applies the remaining budget, so a multi-segment
+        // response cannot reset the timer on every underlying read().
+        let resp_bytes = match FrameReader::new(&mut *stream)
+            .read_frame_until_with(Some(deadline.0), move |d| {
+                apply_socket_timeouts_fd(fd, d)
+            }) {
             Ok(Some(b)) => b,
             Ok(None) => return Err(TransportError::DaemonUnavailable),
             Err(e) => return Err(frame_err_to_transport(e)),
@@ -227,13 +234,19 @@ fn do_handshake(
 
     let mut guard = conn.lock().unwrap();
     // Handshake should complete in well under a second on a healthy daemon.
-    // Use a 5s socket timeout and matching absolute read deadline.
+    // Use a 5s absolute deadline with dynamic socket timeouts.
     let handshake_deadline = std::time::Instant::now() + Duration::from_secs(5);
-    apply_socket_timeouts(&*guard, Duration::from_secs(5));
-    FrameWriter::new(&mut *guard)
-        .write_frame(&bytes)
+    let stream = &mut *guard;
+    let fd = std::os::unix::io::AsRawFd::as_raw_fd(&*stream);
+    FrameWriter::new(&mut *stream)
+        .write_frame_with_deadline(&bytes, Some(handshake_deadline), move |d| {
+            apply_socket_timeouts_fd(fd, d)
+        })
         .map_err(frame_err_to_transport)?;
-    let resp_bytes = match FrameReader::new(&mut *guard).read_frame_until(Some(handshake_deadline)) {
+    let resp_bytes = match FrameReader::new(&mut *stream)
+        .read_frame_until_with(Some(handshake_deadline), move |d| {
+            apply_socket_timeouts_fd(fd, d)
+        }) {
         Ok(Some(b)) => b,
         Ok(None) => return Err(TransportError::DaemonUnavailable),
         Err(e) => return Err(frame_err_to_transport(e)),
@@ -283,6 +296,36 @@ fn apply_socket_timeouts(stream: &UnixStream, timeout: Duration) {
     // the socket's receive/send side; failures are logged but ignored —
     // a missing timeout just leaves the prior (blocking) behaviour, which
     // is what the caller would have seen before this code existed.
+    unsafe {
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_RCVTIMEO,
+            &tv as *const _ as *const libc::c_void,
+            std::mem::size_of::<libc::timeval>() as libc::socklen_t,
+        );
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_SNDTIMEO,
+            &tv as *const _ as *const libc::c_void,
+            std::mem::size_of::<libc::timeval>() as libc::socklen_t,
+        );
+    }
+}
+
+/// Set both SO_RCVTIMEO and SO_SNDTIMEO on a raw socket fd. Used inside
+/// read/write loops where the `&UnixStream` is already mutably borrowed by
+/// the frame reader/writer — capturing just the `RawFd` (Copy) avoids a
+/// double-borrow.
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
+fn apply_socket_timeouts_fd(fd: std::os::unix::io::RawFd, timeout: Duration) {
+    let secs = timeout.as_secs() as libc::time_t;
+    let extra_nanos = timeout.subsec_nanos() as libc::c_long;
+    let tv = libc::timeval {
+        tv_sec: secs,
+        tv_usec: (extra_nanos / 1000) as libc::suseconds_t,
+    };
     unsafe {
         libc::setsockopt(
             fd,
@@ -606,6 +649,132 @@ mod tests {
         assert!(
             elapsed < Duration::from_secs(2),
             "deadline not enforced: waited {:?}",
+            elapsed
+        );
+
+        drop(client);
+        server_handle.join().unwrap();
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    /// Regression: a frame header that arrives just before the deadline must
+    /// not cause the next read to block for a full fresh socket timeout.
+    /// The read timeout must be re-applied using the *remaining* budget.
+    ///
+    /// Scenario: 1s deadline, server sends a 4-byte frame header at 0.9s
+    /// then stops. Before the fix, the second read could block ~1s more
+    /// (total ~1.9s). After the fix, the second read gets ~0.1s timeout.
+    #[test]
+    fn frame_header_near_deadline_then_stop() {
+        let socket = std::env::temp_dir().join(format!("vcli-ipc-hdr-{}.sock", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).unwrap();
+
+        let server_handle = thread::spawn(move || {
+            use std::io::Write;
+            let (mut stream, _) = listener.accept().unwrap();
+            // Handshake.
+            let _hello = {
+                let mut reader = FrameReader::new(&mut stream);
+                reader.read_frame().unwrap().unwrap()
+            };
+            let ack = serde_json::json!({
+                "request_id": "h",
+                "result": {"ok": {
+                    "server_major": PROTOCOL_MAJOR,
+                    "server_minor": PROTOCOL_MINOR,
+                    "daemon_nonce": "n",
+                    "capabilities": []
+                }},
+            });
+            FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
+            // For each request: wait 0.9s, send frame header (100-byte payload),
+            // then stop sending — the client must time out on the second read.
+            loop {
+                let req = {
+                    let mut reader = FrameReader::new(&mut stream);
+                    reader.read_frame()
+                };
+                match req {
+                    Ok(Some(_)) => {
+                        std::thread::sleep(Duration::from_millis(900));
+                        // 4-byte big-endian length = 100, then no payload.
+                        if stream.write_all(&100u32.to_be_bytes()).is_err() {
+                            break;
+                        }
+                        stream.flush().unwrap();
+                        // Stop — never send the 100 bytes.
+                        std::thread::sleep(Duration::from_secs(10));
+                    }
+                    _ => break,
+                }
+            }
+        });
+
+        let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
+
+        let start = std::time::Instant::now();
+        let result = client.test_connection(Deadline::from_now(Duration::from_secs(1)));
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "should time out waiting for payload");
+        // With dynamic timeouts: 0.9s (header) + ~0.1s (second read) = ~1.0s.
+        // Without it: 0.9s + 1.0s = ~1.9s. Allow 1.3s for scheduling jitter.
+        assert!(
+            elapsed < Duration::from_millis(1300),
+            "deadline not enforced on second read: waited {:?}",
+            elapsed
+        );
+
+        drop(client);
+        server_handle.join().unwrap();
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    /// Regression: a large request to a peer that never reads must hit the
+    /// write deadline, not block forever once the socket send buffer fills.
+    #[test]
+    fn large_request_to_nonreading_peer_hits_deadline() {
+        let socket = std::env::temp_dir().join(format!("vcli-ipc-wr-{}.sock", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).unwrap();
+
+        let server_handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            // Handshake only — never read any request frames, so the client's
+            // send buffer fills and write() blocks.
+            let mut reader = FrameReader::new(&stream);
+            let _hello = reader.read_frame().unwrap().unwrap();
+            let mut writer = FrameWriter::new(&stream);
+            let ack = serde_json::json!({
+                "request_id": "h",
+                "result": {"ok": {
+                    "server_major": PROTOCOL_MAJOR,
+                    "server_minor": PROTOCOL_MINOR,
+                    "daemon_nonce": "n",
+                    "capabilities": []
+                }},
+            });
+            writer.write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
+            // Hold the connection open but never read — fills the send buffer.
+            std::thread::sleep(Duration::from_secs(30));
+        });
+
+        let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
+
+        // 1 MiB text upload — far larger than the socket send buffer, so the
+        // write will block once the buffer fills.
+        let big_text = "x".repeat(1024 * 1024);
+        let req = crate::transport::contract::UploadTextRequest::untimed(big_text, "/tmp/big");
+
+        let start = std::time::Instant::now();
+        let result = client.upload_text(&req);
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "large write to non-reading peer should fail");
+        assert!(
+            elapsed < Duration::from_secs(3),
+            "write deadline not enforced: waited {:?}",
             elapsed
         );
 

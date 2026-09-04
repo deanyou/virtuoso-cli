@@ -98,19 +98,36 @@ impl<R: Read> FrameReader<R> {
     }
 
     /// Like [`read_frame`], but aborts with `FrameError::Io("deadline exceeded")`
-    /// if the absolute `deadline` passes before the frame is complete. Each
-    /// underlying `read` is bounded by the socket timeout, but a multi-segment
-    /// response can reset that timer on every read — this method enforces a
-    /// single absolute deadline across the whole frame.
+    /// if the absolute `deadline` passes before the frame is complete.
+    ///
+    /// The socket-level read timeout is re-applied on every loop iteration using
+    /// the **remaining** budget, so a multi-segment response cannot accumulate
+    /// more than the total deadline across partial reads.
     pub fn read_frame_until(
         &mut self,
         deadline: Option<std::time::Instant>,
     ) -> Result<Option<Vec<u8>>, FrameError> {
+        self.read_frame_until_with(deadline, |_| {})
+    }
+
+    /// Core read loop: checks the absolute deadline and re-applies the socket
+    /// timeout via `set_timeout` before every underlying `read()`.
+    pub fn read_frame_until_with<F>(
+        &mut self,
+        deadline: Option<std::time::Instant>,
+        mut set_timeout: F,
+    ) -> Result<Option<Vec<u8>>, FrameError>
+    where
+        F: FnMut(std::time::Duration),
+    {
         loop {
             if let Some(d) = deadline {
-                if std::time::Instant::now() >= d {
+                let remaining = d.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
                     return Err(FrameError::Io("ipc read deadline exceeded".into()));
                 }
+                // 1ms floor: a zero SO_RCVTIMEO means "no timeout" on Linux.
+                set_timeout(remaining.max(std::time::Duration::from_millis(1)));
             }
             if self.buf.len() >= FRAME_PREFIX_LEN {
                 let len = u32::from_be_bytes([self.buf[0], self.buf[1], self.buf[2], self.buf[3]])
@@ -155,6 +172,40 @@ impl<W: Write> FrameWriter<W> {
     pub fn write_frame(&mut self, payload: &[u8]) -> Result<(), FrameError> {
         let framed = encode_frame(payload)?;
         self.inner.write_all(&framed)?;
+        self.inner.flush()?;
+        Ok(())
+    }
+
+    /// Like [`write_frame`], but enforces an absolute deadline across partial
+    /// writes. The socket write timeout is re-applied before every underlying
+    /// `write()` using the remaining budget, so back-pressure cannot accumulate
+    /// more than the total deadline.
+    pub fn write_frame_with_deadline<F>(
+        &mut self,
+        payload: &[u8],
+        deadline: Option<std::time::Instant>,
+        mut set_timeout: F,
+    ) -> Result<(), FrameError>
+    where
+        F: FnMut(std::time::Duration),
+    {
+        let framed = encode_frame(payload)?;
+        let mut offset = 0;
+        while offset < framed.len() {
+            if let Some(d) = deadline {
+                let remaining = d.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    return Err(FrameError::Io("ipc write deadline exceeded".into()));
+                }
+                set_timeout(remaining.max(std::time::Duration::from_millis(1)));
+            }
+            match self.inner.write(&framed[offset..]) {
+                Ok(0) => return Err(FrameError::Io("ipc write returned 0 bytes".into())),
+                Ok(n) => offset += n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(FrameError::from(e)),
+            }
+        }
         self.inner.flush()?;
         Ok(())
     }
