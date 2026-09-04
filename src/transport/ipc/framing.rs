@@ -94,7 +94,24 @@ impl<R: Read> FrameReader<R> {
 
     /// Read the next complete frame payload, or `None` at a clean EOF.
     pub fn read_frame(&mut self) -> Result<Option<Vec<u8>>, FrameError> {
+        self.read_frame_until(None)
+    }
+
+    /// Like [`read_frame`], but aborts with `FrameError::Io("deadline exceeded")`
+    /// if the absolute `deadline` passes before the frame is complete. Each
+    /// underlying `read` is bounded by the socket timeout, but a multi-segment
+    /// response can reset that timer on every read — this method enforces a
+    /// single absolute deadline across the whole frame.
+    pub fn read_frame_until(
+        &mut self,
+        deadline: Option<std::time::Instant>,
+    ) -> Result<Option<Vec<u8>>, FrameError> {
         loop {
+            if let Some(d) = deadline {
+                if std::time::Instant::now() >= d {
+                    return Err(FrameError::Io("ipc read deadline exceeded".into()));
+                }
+            }
             if self.buf.len() >= FRAME_PREFIX_LEN {
                 let len = u32::from_be_bytes([self.buf[0], self.buf[1], self.buf[2], self.buf[3]])
                     as usize;

@@ -140,27 +140,28 @@ impl NativeTransportClient {
         let bytes = serde_json::to_vec(&env)
             .map_err(|e| TransportError::LocalIo(format!("ipc encode: {e}")))?;
 
-        // Fail fast if the deadline has already passed before contending for
-        // the shared connection mutex — a queued request should not wait
-        // indefinitely on a lock held by a hung peer.
+        // Acquire the shared connection mutex with a deadline. A long-running
+        // request holding the lock must not cause a short-deadline request to
+        // wait indefinitely — try_lock polls and bails when the deadline passes.
+        let mut guard = lock_with_deadline(&self.conn, &deadline)?;
+        // Re-check after acquiring the lock: the deadline may have passed
+        // while we were waiting. Don't send a request whose budget is gone.
         if deadline.is_expired() {
             return Err(TransportError::QueueTimeout {
                 request: RequestId::new(),
                 after_secs: 0,
             });
         }
-        let mut guard = self.conn.lock().unwrap();
         // Tighten the socket read timeout to the request's remaining deadline.
-        // Use a 1ms floor: a zero SO_RCVTIMEO means "no timeout" on Linux,
-        // which would defeat the purpose. This is a per-read timeout, so a
-        // multi-segment response may exceed it in total — but each individual
-        // read is bounded, which prevents indefinite hangs.
+        // Use a 1ms floor: a zero SO_RCVTIMEO means "no timeout" on Linux.
         let remaining = deadline.remaining();
         apply_socket_timeouts(&*guard, remaining.max(Duration::from_millis(1)));
         FrameWriter::new(&mut *guard)
             .write_frame(&bytes)
             .map_err(frame_err_to_transport)?;
-        let resp_bytes = match FrameReader::new(&mut *guard).read_frame() {
+        // Read the full frame under the same absolute deadline — multi-segment
+        // responses must not reset the budget on every underlying read().
+        let resp_bytes = match FrameReader::new(&mut *guard).read_frame_until(Some(deadline.0)) {
             Ok(Some(b)) => b,
             Ok(None) => return Err(TransportError::DaemonUnavailable),
             Err(e) => return Err(frame_err_to_transport(e)),
@@ -169,6 +170,36 @@ impl NativeTransportClient {
 
         serde_json::from_slice(&resp_bytes)
             .map_err(|e| TransportError::LocalIo(format!("ipc decode: {e}")))
+    }
+}
+
+/// Acquire a mutex, polling with `try_lock` so the wait is bounded by `deadline`.
+///
+/// `std::sync::Mutex::lock()` blocks indefinitely; a request whose deadline
+/// passes while another request holds the lock must fail with `QueueTimeout`
+/// rather than wait forever. Polls every 1ms — cheap enough for IPC latency,
+/// responsive enough for short deadlines.
+#[cfg(all(unix, any(test, feature = "native-ssh")))]
+fn lock_with_deadline<'a, T>(
+    mutex: &'a Mutex<T>,
+    deadline: &Deadline,
+) -> Result<std::sync::MutexGuard<'a, T>, TransportError> {
+    loop {
+        match mutex.try_lock() {
+            Ok(guard) => return Ok(guard),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                if deadline.is_expired() {
+                    return Err(TransportError::QueueTimeout {
+                        request: RequestId::new(),
+                        after_secs: 0,
+                    });
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err(TransportError::DaemonUnavailable);
+            }
+        }
     }
 }
 
@@ -196,13 +227,13 @@ fn do_handshake(
 
     let mut guard = conn.lock().unwrap();
     // Handshake should complete in well under a second on a healthy daemon.
-    // Use a 5s socket timeout (matching the pre-refresh behaviour) so a
-    // stuck peer fails connect() fast enough for `tunnel stop` responsiveness.
+    // Use a 5s socket timeout and matching absolute read deadline.
+    let handshake_deadline = std::time::Instant::now() + Duration::from_secs(5);
     apply_socket_timeouts(&*guard, Duration::from_secs(5));
     FrameWriter::new(&mut *guard)
         .write_frame(&bytes)
         .map_err(frame_err_to_transport)?;
-    let resp_bytes = match FrameReader::new(&mut *guard).read_frame() {
+    let resp_bytes = match FrameReader::new(&mut *guard).read_frame_until(Some(handshake_deadline)) {
         Ok(Some(b)) => b,
         Ok(None) => return Err(TransportError::DaemonUnavailable),
         Err(e) => return Err(frame_err_to_transport(e)),
@@ -411,6 +442,137 @@ mod tests {
 
         drop(client);
         handle.join().unwrap();
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    /// Regression: a short-deadline request must not wait indefinitely for a
+    /// long request holding the shared connection mutex. The lock acquisition
+    /// itself is bounded by the deadline.
+    #[test]
+    fn short_deadline_request_times_out_while_lock_held() {
+        let socket = std::env::temp_dir().join(format!("vcli-ipc-lock-{}.sock", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).unwrap();
+
+        // Server: accept one connection, complete handshake, then sleep 2s
+        // before responding to every request — holds the connection (and thus
+        // the client's mutex) for the duration.
+        let server_handle = thread::spawn(move || {
+            use std::io::{Read, Write};
+            let (mut stream, _) = listener.accept().unwrap();
+            // Handshake: read Hello, write HelloAck.
+            let mut reader = FrameReader::new(&mut stream);
+            let _hello = reader.read_frame().unwrap().unwrap();
+            let ack = serde_json::json!({
+                "protocol_major": PROTOCOL_MAJOR,
+                "protocol_minor": PROTOCOL_MINOR,
+                "result": {"Ok": {"daemon_nonce": "n"}},
+            });
+            FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
+            // Every request: sleep 2s, then respond Ok.
+            loop {
+                match reader.read_frame() {
+                    Ok(Some(_)) => {
+                        std::thread::sleep(Duration::from_secs(2));
+                        let resp = serde_json::json!({
+                            "protocol_major": PROTOCOL_MAJOR,
+                            "protocol_minor": PROTOCOL_MINOR,
+                            "result": {"Ok": null},
+                        });
+                        if FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&resp).unwrap()).is_err() {
+                            break;
+                        }
+                    }
+                    _ => break,
+                }
+            }
+        });
+
+        let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
+
+        // Thread A: long request (will hold the mutex for ~2s).
+        let client_a = client.clone();
+        let handle_a = thread::spawn(move || {
+            let _ = client_a.test_connection(Deadline::from_now(Duration::from_secs(10)));
+        });
+        // Give thread A time to acquire the mutex and send its request.
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Thread B: short deadline — must time out in ~1s, not wait for A's 2s.
+        let start = std::time::Instant::now();
+        let result = client.test_connection(Deadline::from_now(Duration::from_secs(1)));
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "short-deadline request should fail");
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "short-deadline request waited too long: {:?}",
+            elapsed
+        );
+
+        handle_a.join().unwrap();
+        server_handle.join().unwrap();
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    /// Regression: a response that arrives in slow chunks must be bounded by
+    /// the absolute deadline, not reset on every underlying read().
+    #[test]
+    fn slow_chunked_response_hits_deadline() {
+        let socket = std::env::temp_dir().join(format!("vcli-ipc-chunk-{}.sock", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).unwrap();
+
+        // Server: handshake, then for every request write the frame prefix and
+        // 1 byte of payload every 500ms — a 4-byte response takes ~2s, which
+        // exceeds the 1s deadline.
+        let server_handle = thread::spawn(move || {
+            use std::io::Write;
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = FrameReader::new(&mut stream);
+            let _hello = reader.read_frame().unwrap().unwrap();
+            let ack = serde_json::json!({
+                "protocol_major": PROTOCOL_MAJOR,
+                "protocol_minor": PROTOCOL_MINOR,
+                "result": {"Ok": {"daemon_nonce": "n"}},
+            });
+            FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
+            loop {
+                match reader.read_frame() {
+                    Ok(Some(_)) => {
+                        // Write 4-byte length prefix (payload = 4 bytes).
+                        stream.write_all(&4u32.to_be_bytes()).unwrap();
+                        stream.flush().unwrap();
+                        // Write 1 byte every 500ms — 4 bytes = 2s total.
+                        for _ in 0..4 {
+                            std::thread::sleep(Duration::from_millis(500));
+                            if stream.write_all(&[b'x']).is_err() {
+                                return;
+                            }
+                            stream.flush().unwrap();
+                        }
+                    }
+                    _ => break,
+                }
+            }
+        });
+
+        let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
+
+        // 1s deadline — the slow 2s response must be cut off at ~1s.
+        let start = std::time::Instant::now();
+        let result = client.test_connection(Deadline::from_now(Duration::from_secs(1)));
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "slow response should hit deadline");
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "deadline not enforced: waited {:?}",
+            elapsed
+        );
+
+        drop(client);
+        server_handle.join().unwrap();
         let _ = std::fs::remove_file(&socket);
     }
 }
