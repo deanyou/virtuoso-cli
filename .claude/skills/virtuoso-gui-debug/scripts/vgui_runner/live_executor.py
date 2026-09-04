@@ -140,6 +140,7 @@ class LiveExecutor(Executor):
         output_dir: Path,
         window_id: Optional[str] = None,
         use_direct: bool = True,
+        auto_dismiss_dialogs: bool = True,
     ):
         if not session_id:
             raise ValueError("live executor requires an explicit --session")
@@ -170,7 +171,11 @@ class LiveExecutor(Executor):
         # --direct skips helper upload, env resolution, and list-windows scan.
         # ~5x faster (260ms vs 1350ms per action). Default True for performance.
         self._use_direct = use_direct
-        # Coordinate cache: hiGetFieldInfo results keyed by (form, field).
+        # Auto-dismiss modal dialogs that appear after GUI actions. Prevents
+        # silent failures when a Browse/Open action spawns a file chooser that
+        # intercepts all subsequent input. Default True.
+        self._auto_dismiss_dialogs = auto_dismiss_dialogs
+        # Coordinate cache: hiGetFieldInfo results keyed by "form:field".
         self._coord_cache: Dict[str, Dict[str, Any]] = {}
         # Run state — only set after precheck validates identity.
         self._lock: Optional[_DisplayLock] = None
@@ -373,9 +378,11 @@ class LiveExecutor(Executor):
                 return self._dismiss_dialog(step)
             if step.operation == Operation.CIW_INPUT:
                 self._execute_action_step(step)
+                self._maybe_dismiss_dialogs(step)
                 return None
             if step.operation in _ACTION_OPERATIONS:
                 self._execute_action_step(step)
+                self._maybe_dismiss_dialogs(step)
                 return None
             if step.operation == Operation.WINDOW_WAIT:
                 return self._wait_for_window(step)
@@ -383,11 +390,13 @@ class LiveExecutor(Executor):
                 return self._discover_windows(step)
             if step.operation == Operation.VERIFY:
                 return None  # verification happens in the verify phase
-            if step.operation in (Operation.VCLI_LOAD, Operation.VCLI_CALL):
+            if step.operation == Operation.VCLI_LOAD:
+                return self._vcli_load(step)
+            if step.operation == Operation.VCLI_CALL:
                 return {
                     "error": (
-                        f"operation {step.operation.value} is not supported "
-                        "by the live executor"
+                        "operation VCLI_CALL is not supported by the live "
+                        "executor (use CIW_INPUT for ad-hoc SKILL evaluation)"
                     )
                 }
             if step.operation == Operation.RECOVER:
@@ -395,6 +404,51 @@ class LiveExecutor(Executor):
             return {"error": f"unsupported operation: {step.operation.value}"}
         except Exception as exc:  # noqa: BLE001
             return _sanitize_error({"error": str(exc)}, step)
+
+    def _maybe_dismiss_dialogs(self, step: Step) -> None:
+        """After GUI actions that may spawn dialogs, detect and auto-dismiss.
+
+        Only checks after operations that commonly trigger dialogs (CLICK_REL,
+        CLICK_ABS, DOUBLE_CLICK, KEY, TYPE, CIW_INPUT). Scans window list for
+        dialog-like titles and dismisses them via vcli dismiss-dialog.
+        """
+        if not self._auto_dismiss_dialogs:
+            return
+        dialog_triggers = {
+            Operation.CLICK_REL, Operation.CLICK_ABS, Operation.DOUBLE_CLICK,
+            Operation.KEY, Operation.TYPE, Operation.CIW_INPUT,
+        }
+        if step.operation not in dialog_triggers:
+            return
+        try:
+            windows_data = self._run_json(
+                self._vcli_argv(
+                    "window", "list-windows-x11",
+                    "--display", self._scenario_display or ":0",
+                ),
+                _TIMEOUT_PRECHECK,
+            )
+            windows = windows_data.get("windows", [])
+            dialog_keywords = ("Choose", "Confirm", "Error", "Warning",
+                               "Dialog", "Message", "Alert", "Question")
+            for w in windows:
+                wid = w.get("dismiss_id") or w.get("window_id")
+                title = w.get("title", "")
+                if wid == self.window_id:
+                    continue
+                if not w.get("visible", False):
+                    continue
+                if any(kw.lower() in title.lower() for kw in dialog_keywords):
+                    self._run_json(
+                        self._vcli_argv(
+                            "window", "dismiss-window-x11",
+                            "--window-id", wid,
+                            "--display", self._scenario_display or ":0",
+                        ),
+                        _TIMEOUT_ACTION,
+                    )
+        except Exception:  # noqa: BLE001 — dialog detection is best-effort
+            pass
 
     def verify(self, step: Step, attempt: int) -> Optional[Dict[str, Any]]:
         if self.window_id is None or self._lock is None:
@@ -760,6 +814,28 @@ class LiveExecutor(Executor):
         except Exception as exc:  # noqa: BLE001
             return {"error": f"dismiss-dialog failed: {exc}"}
 
+    def _vcli_load(self, step: Step) -> Optional[Dict[str, Any]]:
+        """Load a SKILL file via vcli skill load, with optional --skillpp.
+
+        VCLI_LOAD is the only non-GUI operation allowed in live mode — it
+        deploys SKILL code (form definitions, callbacks) before GUI interaction.
+        Supports `skillpp: true` to force SKILL++ mode for .il files.
+        """
+        command = step.arguments.get("command", "")
+        skillpp = step.arguments.get("skillpp", False)
+        if not command:
+            return {"error": "VCLI_LOAD requires 'command' (file path)"}
+        argv = self._vcli_argv("skill", "load", command)
+        if skillpp:
+            argv += ["--skillpp"]
+        try:
+            data = self._run_json(argv, _TIMEOUT_ACTION)
+            if data.get("status") not in (None, "success"):
+                return {"error": f"vcli skill load failed: {data.get('status')}"}
+            return None
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"vcli skill load failed: {exc}"}
+
     def _discover_windows(self, step: Step) -> Optional[Dict[str, Any]]:
         """Discover windows via vcli list-windows-x11 with optional filters."""
         argv = self._vcli_argv(
@@ -784,3 +860,35 @@ class LiveExecutor(Executor):
             return None
         except Exception as exc:  # noqa: BLE001
             return {"error": f"discover-windows failed: {exc}"}
+
+    # ------------------------------------------------------------------
+    # coordinate cache (P2 optimization)
+    # ------------------------------------------------------------------
+
+    def cache_coords(self, form: str, field: str, x: int, y: int,
+                     w: int, h: int) -> None:
+        """Cache hiGetFieldInfo result for a form field.
+
+        hiGetFieldInfo costs one CIW round-trip (~425ms). Cache the resulting
+        ((x y) (w h)) per field for the lifetime of the form; only re-query
+        if the window was resized (call invalidate_coords).
+        """
+        key = f"{form}:{field}"
+        self._coord_cache[key] = {"x": x, "y": y, "w": w, "h": h}
+
+    def get_cached_coords(self, form: str, field: str) -> Optional[Dict[str, int]]:
+        """Retrieve cached field coordinates. Returns None if not cached."""
+        return self._coord_cache.get(f"{form}:{field}")
+
+    def invalidate_coords(self, form: str = None) -> None:
+        """Clear cached coordinates. Call after window resize or layout change.
+
+        If form is None, clears all cached coordinates. Otherwise clears only
+        the specified form's fields.
+        """
+        if form is None:
+            self._coord_cache.clear()
+        else:
+            keys_to_remove = [k for k in self._coord_cache if k.startswith(f"{form}:")]
+            for k in keys_to_remove:
+                del self._coord_cache[k]

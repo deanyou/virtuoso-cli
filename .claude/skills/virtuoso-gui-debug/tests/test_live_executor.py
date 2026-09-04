@@ -145,6 +145,7 @@ def make_executor(runner, tmpdir, **kwargs):
         ssh_host=None,
         session_id=SESSION,
         output_dir=Path(tmpdir),
+        auto_dismiss_dialogs=False,
     )
     params.update(kwargs)
     return LiveExecutor(**params)

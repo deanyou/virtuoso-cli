@@ -115,7 +115,8 @@ Each run writes to the caller-specified output directory:
 
 Only these operations are permitted:
 
-- `VCLI_LOAD` / `VCLI_CALL` — accepted by the schema; **not executable** by live or local executors (fail-closed). `VCLI_LOAD` supports optional `skillpp: true` to force SKILL++ mode.
+- `VCLI_LOAD` — load a SKILL file via `vcli skill load` (supports `skillpp: true` for SKILL++ mode). **Executable** by live executor.
+- `VCLI_CALL` — accepted by the schema; **not executable** by live or local executors (use `CIW_INPUT` for ad-hoc SKILL evaluation).
 - `WINDOW_WAIT` — poll window state until the requested condition or timeout
 - `WINDOW_ACTIVATE` — activate window
 - `WINDOW_DISCOVER` — discover/filter windows (title/class/pid filters)
@@ -406,7 +407,21 @@ done
 
 ### P2 — Coordinate caching
 
-`hiGetFieldInfo` reverse-engineering costs one CIW round-trip (~425ms). Cache the resulting `((x y) (w h))` per field for the lifetime of the form; only re-query if `xwininfo` detects the window was resized or a radio callback changed the layout.
+`hiGetFieldInfo` reverse-engineering costs one CIW round-trip (~425ms). The live executor provides a coordinate cache API:
+
+```python
+executor.cache_coords("myForm", "oldLayer", x=5, y=150, w=590, h=35)
+coords = executor.get_cached_coords("myForm", "oldLayer")  # → {"x":5, "y":150, "w":590, "h":35}
+executor.invalidate_coords("myForm")  # call after window resize/layout change
+```
+
+Cache the resulting `((x y) (w h))` per field for the lifetime of the form; only re-query if `xwininfo` detects the window was resized or a radio callback changed the layout.
+
+### P2 — Modal dialog auto-detection (default ON)
+
+After any GUI action that may spawn a dialog (`CLICK_REL`, `CLICK_ABS`, `DOUBLE_CLICK`, `KEY`, `TYPE`, `CIW_INPUT`), the live executor automatically scans for new dialog windows (titles containing Choose/Confirm/Error/Warning/Dialog/Message/Alert/Question) and dismisses them via `vcli dismiss-window-x11`. This prevents silent failures when a Browse/Open action spawns a file chooser that intercepts all subsequent input.
+
+Disable with `--no-auto-dismiss` if you need to interact with dialogs explicitly.
 
 ### P2 — Verification: prefer CIW state reads over screenshot+OCR
 

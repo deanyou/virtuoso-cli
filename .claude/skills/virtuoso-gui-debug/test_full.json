@@ -1,0 +1,66 @@
+{
+  "version": "1.0",
+  "task_id": "gui-full-test",
+  "session_id": "dean-user1-37787",
+  "pid": 537774,
+  "display": ":5.0",
+  "cellview": {"lib": "test", "cell": "test", "view": "test"},
+  "steps": [
+    {
+      "id": "step1-vcli-load",
+      "operation": "VCLI_LOAD",
+      "arguments": {"command": "/tmp/test_load.il"},
+      "verifier": {"predicate": "ciw_eval", "expected": {"expression": "testLoadFunc()", "equals": "42"}},
+      "timeout_seconds": 15,
+      "max_retries": 0
+    },
+    {
+      "id": "step2-activate",
+      "operation": "WINDOW_ACTIVATE",
+      "arguments": {"window_title": "Virtuoso"},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 10,
+      "max_retries": 0
+    },
+    {
+      "id": "step3-click-abs",
+      "operation": "CLICK_ABS",
+      "arguments": {"x": 1488, "y": 482},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 10,
+      "max_retries": 0
+    },
+    {
+      "id": "step4-double-click",
+      "operation": "DOUBLE_CLICK",
+      "arguments": {"x": 200, "y": 200},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 10,
+      "max_retries": 0
+    },
+    {
+      "id": "step5-scroll",
+      "operation": "SCROLL",
+      "arguments": {"direction": "down", "count": 2, "x": 400, "y": 400},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 10,
+      "max_retries": 0
+    },
+    {
+      "id": "step6-ciw-input",
+      "operation": "CIW_INPUT",
+      "arguments": {"text": "2+2", "delay_ms": 10, "clear_first": true},
+      "verifier": {"predicate": "ciw_eval", "expected": {"expression": "2+2", "equals": "4"}},
+      "timeout_seconds": 15,
+      "max_retries": 0
+    },
+    {
+      "id": "step7-verify-ciw",
+      "operation": "VERIFY",
+      "arguments": {"predicate": "ciw_eval", "expected": {"expression": "3*3", "equals": "9"}},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 10,
+      "max_retries": 0
+    }
+  ]
+}
