@@ -311,43 +311,79 @@ class LocalExecutor(Executor):
             text = args.get("text", "")
             self._xdotool("windowactivate", self.window_id or "")
             time.sleep(0.2)
-            self._xdotool("type", "--clearmodifiers", "--delay", "30", "--", text)
-        elif op in (Operation.CLICK_REL, Operation.SCROLL):
-            rx = int(args.get("x", 50 if op == Operation.SCROLL else 0))
-            ry = int(args.get("y", 50 if op == Operation.SCROLL else 0))
-            # Geometry guard: re-fetch the window bounds right before acting so
-            # a window that moved/resized between steps can't silently send
-            # clicks to the wrong location. If the window vanished or was
-            # minimized (zero-size), fail closed instead of clicking the root.
+            self._xdotool("type", "--clearmodifiers", "--delay", "10", "--", text)
+        elif op == Operation.CIW_INPUT:
+            # CIW input: activate, click input line, clear, type, Return
+            text = args.get("text", "")
+            delay_ms = str(args.get("delay_ms", 10))
+            clear_first = args.get("clear_first", True)
+            self._xdotool("windowactivate", self.window_id or "")
+            time.sleep(0.2)
             geo = self._window_geometry()
-            if not geo.get("w") or not geo.get("h"):
-                raise RuntimeError(
-                    "window geometry is zero-sized (window minimized/unmapped); "
-                    "refusing to click at possibly-stale coordinates"
-                )
-            if rx < 0 or ry < 0 or rx >= geo["w"] or ry >= geo["h"]:
-                raise RuntimeError(
-                    "coordinates ({}, {}) out of bounds for window size {}x{}; "
-                    "window may have moved/resized since precheck".format(
-                        rx, ry, geo["w"], geo["h"]
-                    )
-                )
-            if op == Operation.CLICK_REL:
-                button = str(args.get("button", 1))
-                ax, ay = self._absolute_coords(rx, ry)
-                self._xdotool("mousemove", str(ax), str(ay))
-                time.sleep(0.1)
-                self._xdotool("click", "--repeat", "1", "--delay", "100", button)
-                time.sleep(0.3)
+            input_y = max(0, (geo.get("h") or 800) - 20)
+            input_x = (geo.get("w") or 800) // 2
+            ax, ay = self._absolute_coords(input_x, input_y)
+            self._xdotool("mousemove", str(ax), str(ay))
+            self._xdotool("click", "1")
+            time.sleep(0.1)
+            if clear_first:
+                self._xdotool("key", "ctrl+a")
+                self._xdotool("key", "Delete")
+            self._xdotool("type", "--clearmodifiers", "--delay", delay_ms, "--", text)
+            self._xdotool("key", "Return")
+            time.sleep(0.3)
+        elif op in (Operation.CLICK_REL, Operation.CLICK_ABS, Operation.DOUBLE_CLICK, Operation.SCROLL):
+            if op == Operation.CLICK_ABS:
+                ax, ay = int(args.get("x", 0)), int(args.get("y", 0))
             else:
+                rx = int(args.get("x", 50 if op == Operation.SCROLL else 0))
+                ry = int(args.get("y", 50 if op == Operation.SCROLL else 0))
+                # Geometry guard: re-fetch the window bounds right before acting so
+                # a window that moved/resized between steps can't silently send
+                # clicks to the wrong location.
+                geo = self._window_geometry()
+                if not geo.get("w") or not geo.get("h"):
+                    raise RuntimeError(
+                        "window geometry is zero-sized (window minimized/unmapped); "
+                        "refusing to click at possibly-stale coordinates"
+                    )
+                if rx < 0 or ry < 0 or rx >= geo["w"] or ry >= geo["h"]:
+                    raise RuntimeError(
+                        "coordinates ({}, {}) out of bounds for window size {}x{}; "
+                        "window may have moved/resized since precheck".format(
+                            rx, ry, geo["w"], geo["h"]
+                        )
+                    )
+                ax, ay = self._absolute_coords(rx, ry)
+            if op == Operation.SCROLL:
                 direction = args.get("direction", "down")
                 count = int(args.get("count", 3))
                 button = str(_SCROLL_BUTTONS.get(direction, 5))
-                ax, ay = self._absolute_coords(rx, ry)
                 self._xdotool("mousemove", str(ax), str(ay))
                 time.sleep(0.1)
                 self._xdotool("click", "--repeat", str(count), "--delay", "60", button)
                 time.sleep(0.3)
+            else:
+                button = str(args.get("button", 1))
+                repeat = "2" if op == Operation.DOUBLE_CLICK else "1"
+                self._xdotool("mousemove", str(ax), str(ay))
+                time.sleep(0.1)
+                self._xdotool("click", "--repeat", repeat, "--delay", "100", button)
+                time.sleep(0.3)
+        elif op == Operation.MINIMIZE:
+            self._xdotool("windowminimize", self.window_id or "")
+            time.sleep(0.3)
+        elif op == Operation.MAXIMIZE:
+            # xdotool windowstate requires >= 3.20210804.1; fall back gracefully
+            try:
+                self._xdotool("windowstate", "--add", "MAXIMIZED_HORZ,MAXIMIZED_VERT",
+                              self.window_id or "")
+            except RuntimeError:
+                raise RuntimeError(
+                    "maximize requires xdotool >= 3.20210804.1 (windowstate subcommand); "
+                    "the installed xdotool is too old"
+                )
+            time.sleep(0.3)
         elif op == Operation.DRAG_REL:
             rx, ry = int(args.get("x", 0)), int(args.get("y", 0))
             button = str(args.get("button", 1))

@@ -83,7 +83,7 @@ Before any GUI input is sent, precheck verifies in order:
 4. exactly one window is bound to the PID on that DISPLAY — zero or multiple matches abort;
 5. an exclusive lock on the DISPLAY (lock file under `~/.cache/virtuoso_bridge/x11-locks/`) is acquired and held for the whole run.
 
-Every GUI action (`KEY`, `TYPE`, `CLICK_REL`, `DRAG_REL`, `WINDOW_ACTIVATE`, `SCREENSHOT`) maps to a fixed `vcli window action-x11` argv carrying the resolved window id, PID, and DISPLAY — the Rust side re-resolves and re-validates the window before sending input. `verify` prefers database-first predicates via vcli; only visibility predicates use the X11 window list. `recover` executes only rollback operations that pass scenario validation.
+Every GUI action (`KEY`, `TYPE`, `CLICK_REL`, `CLICK_ABS`, `DOUBLE_CLICK`, `DRAG_REL`, `WINDOW_ACTIVATE`, `MINIMIZE`, `MAXIMIZE`, `CLOSE`, `SCROLL`) maps to a fixed `vcli window action-x11` argv carrying the resolved window id, PID, and DISPLAY. **`--direct` is enabled by default** (~5x faster, skips helper upload/env resolution/list-windows); use `--no-direct` for full server-side re-validation. `--pid` is optional since v1.3.1 (windows without `_NET_WM_PID` are reachable). `verify` prefers database-first predicates via vcli; the `ciw_eval` predicate executes SKILL via `vcli skill exec` and compares output. `recover` executes only rollback operations that pass scenario validation.
 
 Typed input text never appears in error payloads or logs — it is replaced by `text_length` markers.
 
@@ -115,7 +115,7 @@ Each run writes to the caller-specified output directory:
 
 Only these operations are permitted:
 
-- `VCLI_LOAD` / `VCLI_CALL` — accepted by the schema; **not executable** by live or local executors (fail-closed)
+- `VCLI_LOAD` / `VCLI_CALL` — accepted by the schema; **not executable** by live or local executors (fail-closed). `VCLI_LOAD` supports optional `skillpp: true` to force SKILL++ mode.
 - `WINDOW_WAIT` — poll window state until the requested condition or timeout
 - `WINDOW_ACTIVATE` — activate window
 - `WINDOW_DISCOVER` — discover/filter windows (title/class/pid filters)
@@ -124,10 +124,15 @@ Only these operations are permitted:
 - `KEY` — send key event
 - `TYPE` — type text
 - `CLICK_REL` — relative click (window-relative coordinates)
+- `CLICK_ABS` — absolute click (screen coordinates)
+- `DOUBLE_CLICK` — double-click (window-relative coordinates)
 - `DRAG_REL` — relative drag (window-relative vector)
 - `SCROLL` — scroll wheel at window-relative position (directions: up/down/left/right, optional count 1-100; live mode via vcli scroll, local mode via xdotool buttons 4/5/6/7)
+- `MINIMIZE` — minimize/iconify the window
+- `MAXIMIZE` — maximize the window (requires xdotool ≥ 3.20210804.1; clear error on older versions)
+- `CIW_INPUT` — type a SKILL expression into the CIW input line and press Return (encapsulates activate→click input line→clear→type→Return)
 - `SCREENSHOT` — capture screenshot
-- `VERIFY` — verify state (predicates: window_exists, state_matches, title_matches, geometry_matches)
+- `VERIFY` — verify state (predicates: window_exists, state_matches, title_matches, geometry_matches, ciw_eval)
 - `RECOVER` — recovery action (auto-dismiss for KEY/TYPE/CLICK_REL when no rollback)
 
 ## Constraints
@@ -229,26 +234,30 @@ Modal dialogs (e.g. "Choose a File" from `hiDisplayFileDialog`) **intercept ALL 
 
 Since `vcli skill exec` cannot drive GUI, the CIW is the bootstrap for form creation and state inspection.
 
-**CIW input line coordinates** (must be re-verified if the CIW window moves):
-- Click the input line, then `ctrl+a` (clear), then type the SKILL expression, then `Return`.
-- Always `xwininfo -id <ciw_wid>` before typing — the CIW can be moved/resized by the user.
-- The input line is at the **bottom** of the CIW window; compute `y = abs_y + height - 30` (approximate), then verify with a screenshot crop.
+**DSL operation `CIW_INPUT`** encapsulates the full flow: activate → click input line → clear → type → Return. Use this in scenarios instead of manual xdotool sequences.
 
-**CIW input pattern**:
+```json
+{"operation": "CIW_INPUT", "arguments": {"text": "load(\"/tmp/form.il\")"}}
+{"operation": "CIW_INPUT", "arguments": {"text": "udfShowForm()", "delay_ms": 10, "clear_first": true}}
+```
+
+**Manual CIW input pattern** (when not using the DSL):
 ```bash
 xdotool windowactivate <ciw_wid>
-sleep 0.8
-xdotool mousemove <input_x> <input_y>
-sleep 0.4
+sleep 0.3
+xdotool mousemove --window <ciw_wid> 400 870
 xdotool click 1
-sleep 0.6
-xdotool key --clearmodifiers ctrl+a
-sleep 0.2
-xdotool type --clearmodifiers --delay 50 'load("/path/to/file.il")'
-sleep 0.4
+sleep 0.1
+xdotool key ctrl+a
+xdotool key Delete
+xdotool type --clearmodifiers --delay 10 'load("/path/to/file.il")'
 xdotool key Return
-sleep 2
+sleep 1
 ```
+
+**CIW input line coordinates** (must be re-verified if the CIW window moves):
+- The input line is at the **bottom** of the CIW window; compute `y = height - 20` (approximate), then verify with a screenshot crop.
+- Always `xwininfo -id <ciw_wid>` before typing — the CIW can be moved/resized by the user.
 
 ### Recommended Debug Loop
 
@@ -299,18 +308,19 @@ vcli window action-x11 --window-id 0x26037c7 --pid 114668 --display :5.0 \
 
 Use vcli when: (a) the window identity must be server-verified for safety, (b) you are in `--executor live` mode of the DSL runner, or (c) xdotool is unavailable.
 
-### P0 — Use `vcli --direct` when vcli is required (4.7× faster)
+### P0 — `--direct` is now the DEFAULT in live executor (5× faster)
 
-When you **must** use vcli (e.g., `--executor live` mode, or server-side window identity verification), add `--direct` to skip the helper upload, env resolution, and list-windows scan. Trusts the caller-provided `--window-id` and runs xdotool directly.
+The live executor uses `vcli window action-x11 --direct` by default, skipping helper upload, env resolution, and list-windows scan. This reduces per-action latency from ~1350ms to ~260ms. Use `--no-direct` CLI flag only when you need full server-side window re-validation (e.g., untrusted window ids).
 
 ```bash
-# Before (1213 ms average):
-vcli window action-x11 --window-id 0x2603839 --pid 114668 --display :5.0 \
-  --operation click-rel --x 300 --y 167
+# Default (fast, 260ms):
+python3 scripts/gui_runner.py run scenario.json --output out --executor live \
+    --session dean-user1-37787 --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker
 
-# After (260 ms average — 4.7× faster):
-vcli window action-x11 --direct --window-id 0x2603839 --pid 114668 --display :5.0 \
-  --operation click-rel --x 300 --y 167
+# Full validation (slow, 1350ms, use --no-direct):
+python3 scripts/gui_runner.py run scenario.json --output out --executor live \
+    --session dean-user1-37787 --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker \
+    --no-direct
 ```
 
 `--direct` supports: `activate`, `key`, `type`, `click-rel`, `drag-rel`, `scroll`, `close`. It **rejects** `wait` (needs window-list polling) and `screenshot` (needs artifact fetch) with a clear config error. Verified on IC25.1: click/type/key all succeed with correct field values and callback firing.

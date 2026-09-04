@@ -22,8 +22,13 @@ class Operation(str, Enum):
     KEY = "KEY"
     TYPE = "TYPE"
     CLICK_REL = "CLICK_REL"
+    CLICK_ABS = "CLICK_ABS"
+    DOUBLE_CLICK = "DOUBLE_CLICK"
     DRAG_REL = "DRAG_REL"
     SCROLL = "SCROLL"
+    MINIMIZE = "MINIMIZE"
+    MAXIMIZE = "MAXIMIZE"
+    CIW_INPUT = "CIW_INPUT"
     SCREENSHOT = "SCREENSHOT"
     VERIFY = "VERIFY"
     RECOVER = "RECOVER"
@@ -38,7 +43,7 @@ ALLOWED_OPERATIONS = {op.value for op in Operation}
 # → mouseup sequence at execution time. The REL coordinates are relative to
 # the window origin, not screen-wide (that's why CLICK_REL/DRAG_REL naming).
 OP_ARG_SCHEMAS = {
-    Operation.VCLI_LOAD: ({"command"}, set()),
+    Operation.VCLI_LOAD: ({"command"}, {"skillpp"}),
     Operation.VCLI_CALL: ({"function", "args"}, {"kwargs"}),
     Operation.WINDOW_WAIT: ({"window_title", "state"}, set()),
     Operation.WINDOW_ACTIVATE: ({"window_title"}, set()),
@@ -48,8 +53,13 @@ OP_ARG_SCHEMAS = {
     Operation.KEY: ({"keys"}, set()),
     Operation.TYPE: ({"text"}, set()),
     Operation.CLICK_REL: ({"x", "y"}, {"button"}),
+    Operation.CLICK_ABS: ({"x", "y"}, {"button"}),
+    Operation.DOUBLE_CLICK: ({"x", "y"}, {"button"}),
     Operation.DRAG_REL: ({"x", "y"}, {"button"}),
     Operation.SCROLL: ({"direction"}, {"count", "x", "y"}),
+    Operation.MINIMIZE: (set(), set()),
+    Operation.MAXIMIZE: (set(), set()),
+    Operation.CIW_INPUT: ({"text"}, {"delay_ms", "clear_first"}),
     Operation.SCREENSHOT: (set(), {"path"}),
     Operation.VERIFY: ({"predicate", "expected"}, set()),
     Operation.RECOVER: ({"action", "target"}, set()),
@@ -58,8 +68,11 @@ OP_ARG_SCHEMAS = {
 # Integer-typed argument keys (strict int, bool rejected, must be positive)
 INT_ARG_KEYS = {
     Operation.CLICK_REL: {"x", "y"},
+    Operation.CLICK_ABS: {"x", "y"},
+    Operation.DOUBLE_CLICK: {"x", "y"},
     Operation.DRAG_REL: {"x", "y"},
     Operation.SCROLL: {"count", "x", "y"},
+    Operation.CIW_INPUT: {"delay_ms"},
     Operation.WINDOW_DISCOVER: {"pid"},
 }
 
@@ -67,6 +80,8 @@ INT_ARG_KEYS = {
 # before execution. Unlike coords, button is Optional (default 1 = left).
 BUTTON_ARG_KEYS = {
     Operation.CLICK_REL: {"button"},
+    Operation.CLICK_ABS: {"button"},
+    Operation.DOUBLE_CLICK: {"button"},
     Operation.DRAG_REL: {"button"},
 }
 
@@ -79,7 +94,10 @@ SCROLL_ALLOWED_DIRECTIONS = {"up", "down", "left", "right"}
 
 # Supported verifier predicates. Each maps to a concrete vcli query in the
 # LiveExecutor verify phase. Unknown predicates fail closed at parse time.
-SUPPORTED_PREDICATES = {"window_exists", "state_matches", "title_matches", "geometry_matches"}
+SUPPORTED_PREDICATES = {
+    "window_exists", "state_matches", "title_matches", "geometry_matches",
+    "ciw_eval",
+}
 
 # String-typed argument keys
 STR_ARG_KEYS = {
@@ -92,6 +110,7 @@ STR_ARG_KEYS = {
     Operation.CLOSE: {"window_id"},
     Operation.KEY: {"keys"},
     Operation.TYPE: {"text"},
+    Operation.CIW_INPUT: {"text"},
     Operation.SCROLL: {"direction"},
     Operation.SCREENSHOT: {"path"},
     Operation.VERIFY: {"predicate"},
