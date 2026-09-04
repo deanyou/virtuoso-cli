@@ -771,7 +771,26 @@ mod tests {
 
         let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
 
-        // 1 MiB text upload — far larger than the socket send buffer, so the
+        // Explicitly cap the client's send buffer at 8 KiB so a 1 MiB upload is
+        // guaranteed to block in write() — no reliance on the system default.
+        // (Linux doubles the value for bookkeeping, so actual is ~16 KiB.)
+        {
+            use std::os::unix::io::AsRawFd;
+            let guard = client.conn.lock().unwrap();
+            let fd = guard.as_raw_fd();
+            let bufsize = 8192i32;
+            unsafe {
+                libc::setsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_SNDBUF,
+                    &bufsize as *const _ as *const libc::c_void,
+                    std::mem::size_of::<i32>() as libc::socklen_t,
+                );
+            }
+        }
+
+        // 1 MiB text upload — far larger than the 8 KiB send buffer, so the
         // write will block once the buffer fills. Use an explicit 1s deadline.
         let big_text = "x".repeat(1024 * 1024);
         let req = crate::transport::contract::UploadTextRequest {
