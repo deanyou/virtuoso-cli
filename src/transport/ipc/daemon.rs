@@ -449,6 +449,32 @@ mod tests {
     /// long request holding the shared connection mutex. The lock acquisition
     /// itself is bounded by the deadline.
     #[test]
+    fn lock_with_deadline_bails_when_deadline_passes() {
+        let mutex = Mutex::new(0i32);
+        // Hold the lock in another thread for 2 seconds.
+        let guard = mutex.lock().unwrap();
+        let handle = thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2));
+            drop(guard);
+        });
+        // Try to acquire with a 500ms deadline — must fail in <2s.
+        let deadline = Deadline::from_now(Duration::from_millis(500));
+        let start = std::time::Instant::now();
+        let result = lock_with_deadline(&mutex, &deadline);
+        let elapsed = start.elapsed();
+        assert!(result.is_err(), "lock should fail while held");
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "lock waited too long: {:?}",
+            elapsed
+        );
+        handle.join().unwrap();
+    }
+
+    /// Regression: a short-deadline request must not wait indefinitely for a
+    /// long request holding the shared connection mutex. End-to-end test over
+    /// a real IPC connection.
+    #[test]
     fn short_deadline_request_times_out_while_lock_held() {
         let socket = std::env::temp_dir().join(format!("vcli-ipc-lock-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
