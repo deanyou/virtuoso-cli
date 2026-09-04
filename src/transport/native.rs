@@ -475,15 +475,56 @@ async fn upload_via_sftp(
 ) -> Result<(), TransportError> {
     let (_session, sftp) = open_sftp(cfg, deadline).await?;
     let remote_str = remote.to_string_lossy().into_owned();
+    // Atomic upload: write to a staging file first, then rename into place.
+    // A failed upload leaves only the staging file (never a half-written target).
+    let staging = format!("{remote_str}.tmp.{pid}", pid = std::process::id());
     let mut file =
-        sftp.create(&remote_str)
+        sftp.create(&staging)
             .await
             .map_err(|e| TransportError::TransferInterrupted {
                 request: RequestId::new(),
-                reason: format!("sftp create {remote_str}: {e}"),
+                reason: format!("sftp create {staging}: {e}"),
             })?;
     sftp_write_all(&mut file, &data).await?;
-    Ok(())
+    drop(file);
+    // Atomic publish via exec `mv` — SFTP rename is not universally supported
+    // by all servers, and `mv` is atomic on the same filesystem.
+    let mv_cmd = format!(
+        "mv -f {src} {dst} && rm -f {src}",
+        src = shell_quote(&staging),
+        dst = shell_quote(&remote_str)
+    );
+    let mv_result = exec_command(cfg, &mv_cmd, None, deadline).await;
+    match mv_result {
+        Ok(r) if r.exit_status == 0 => Ok(()),
+        Ok(r) => {
+            // Best-effort cleanup of staging file on failure.
+            let _ = exec_command(
+                cfg,
+                &format!("rm -f {}", shell_quote(&staging)),
+                None,
+                deadline,
+            )
+            .await;
+            Err(TransportError::TransferInterrupted {
+                request: RequestId::new(),
+                reason: format!(
+                    "atomic rename failed: {}",
+                    String::from_utf8_lossy(&r.stderr)
+                ),
+            })
+        }
+        Err(e) => {
+            let _ = exec_command(
+                cfg,
+                &format!("rm -f {}", shell_quote(&staging)),
+                None,
+                deadline,
+            )
+            .await;
+            Err(e)
+        }
+    }
 }
 
 /// Download `remote` over the SFTP subsystem, streaming in 64 KiB windows into
@@ -711,12 +752,44 @@ impl RemoteTransport for NativeTransport {
             match upload_via_sftp(&cfg, Path::new(&remote), bytes.clone(), req.deadline).await {
                 Ok(()) => Ok(()),
                 Err(e) if sftp_unavailable(&e) => {
-                    let cmd = format!("cat > {}", shell_quote(&remote));
+                    // Atomic upload via exec: write to staging file, then mv.
+                    let staging = format!("{remote}.tmp.{pid}", pid = std::process::id());
+                    let cmd = format!("cat > {}", shell_quote(&staging));
                     let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
                     if raw.exit_status != 0 {
+                        let _ = exec_command(
+                            &cfg,
+                            &format!("rm -f {}", shell_quote(&staging)),
+                            None,
+                            req.deadline,
+                        )
+                        .await;
                         return Err(TransportError::TransferInterrupted {
                             request: req.id.clone(),
                             reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
+                        });
+                    }
+                    // Atomic publish.
+                    let mv_cmd = format!(
+                        "mv -f {src} {dst} && rm -f {src}",
+                        src = shell_quote(&staging),
+                        dst = shell_quote(&remote)
+                    );
+                    let mv_raw = exec_command(&cfg, &mv_cmd, None, req.deadline).await?;
+                    if mv_raw.exit_status != 0 {
+                        let _ = exec_command(
+                            &cfg,
+                            &format!("rm -f {}", shell_quote(&staging)),
+                            None,
+                            req.deadline,
+                        )
+                        .await;
+                        return Err(TransportError::TransferInterrupted {
+                            request: req.id.clone(),
+                            reason: format!(
+                                "atomic rename failed: {}",
+                                String::from_utf8_lossy(&mv_raw.stderr)
+                            ),
                         });
                     }
                     Ok(())
@@ -738,12 +811,43 @@ impl RemoteTransport for NativeTransport {
         let remote = req.remote.clone();
         let req_id = req.id.clone();
         block_with_deadline(req.deadline, req_id, move || async move {
-            let cmd = format!("cat > {}", shell_quote(&remote));
+            // Atomic upload: write to staging, then mv into place.
+            let staging = format!("{remote}.tmp.{pid}", pid = std::process::id());
+            let cmd = format!("cat > {}", shell_quote(&staging));
             let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
             if raw.exit_status != 0 {
+                let _ = exec_command(
+                    &cfg,
+                    &format!("rm -f {}", shell_quote(&staging)),
+                    None,
+                    req.deadline,
+                )
+                .await;
                 return Err(TransportError::TransferInterrupted {
                     request: req.id.clone(),
                     reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
+                });
+            }
+            let mv_cmd = format!(
+                "mv -f {src} {dst} && rm -f {src}",
+                src = shell_quote(&staging),
+                dst = shell_quote(&remote)
+            );
+            let mv_raw = exec_command(&cfg, &mv_cmd, None, req.deadline).await?;
+            if mv_raw.exit_status != 0 {
+                let _ = exec_command(
+                    &cfg,
+                    &format!("rm -f {}", shell_quote(&staging)),
+                    None,
+                    req.deadline,
+                )
+                .await;
+                return Err(TransportError::TransferInterrupted {
+                    request: req.id.clone(),
+                    reason: format!(
+                        "atomic rename failed: {}",
+                        String::from_utf8_lossy(&mv_raw.stderr)
+                    ),
                 });
             }
             Ok(())
@@ -762,12 +866,16 @@ impl RemoteTransport for NativeTransport {
         let local = req.local.clone();
         let req_id = req.id.clone();
         block_with_deadline(req.deadline, req_id, move || async move {
-            // Single files stream over the SFTP subsystem (design step 4); a
-            // remote without sftp falls back to the exec `cat` pipe.
-            match download_via_sftp(&cfg, Path::new(&remote), req.deadline).await {
+            // Atomic download: write to a local staging file, then rename.
+            // A failed download never leaves a half-written target file.
+            let local_staging = format!("{}.tmp.{}", local.display(), std::process::id());
+            let local_staging_path = std::path::PathBuf::from(&local_staging);
+
+            let write_result = match download_via_sftp(&cfg, Path::new(&remote), req.deadline).await
+            {
                 Ok(bytes) => {
-                    std::fs::write(&local, &bytes).map_err(|e| {
-                        TransportError::LocalIo(format!("write {}: {e}", local.display()))
+                    std::fs::write(&local_staging_path, &bytes).map_err(|e| {
+                        TransportError::LocalIo(format!("write {}: {e}", local_staging))
                     })?;
                     Ok(())
                 }
@@ -775,17 +883,37 @@ impl RemoteTransport for NativeTransport {
                     let cmd = format!("cat {}", shell_quote(&remote));
                     let raw = exec_command(&cfg, &cmd, None, req.deadline).await?;
                     if raw.exit_status != 0 {
+                        let _ = std::fs::remove_file(&local_staging_path);
                         return Err(TransportError::TransferInterrupted {
                             request: req.id.clone(),
                             reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
                         });
                     }
-                    std::fs::write(&local, &raw.stdout).map_err(|e| {
-                        TransportError::LocalIo(format!("write {}: {e}", local.display()))
+                    std::fs::write(&local_staging_path, &raw.stdout).map_err(|e| {
+                        TransportError::LocalIo(format!("write {}: {e}", local_staging))
                     })?;
                     Ok(())
                 }
                 Err(e) => Err(e),
+            };
+
+            match write_result {
+                Ok(()) => {
+                    // Atomic publish: rename staging to target.
+                    std::fs::rename(&local_staging_path, &local).map_err(|e| {
+                        let _ = std::fs::remove_file(&local_staging_path);
+                        TransportError::LocalIo(format!(
+                            "atomic rename {} -> {}: {e}",
+                            local_staging,
+                            local.display()
+                        ))
+                    })?;
+                    Ok(())
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&local_staging_path);
+                    Err(e)
+                }
             }
         })
     }

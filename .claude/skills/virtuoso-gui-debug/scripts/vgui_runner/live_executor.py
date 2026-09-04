@@ -604,11 +604,11 @@ class LiveExecutor(Executor):
     ) -> Optional[Dict[str, Any]]:
         if self.window_id is None or self._lock is None:
             return {"error": "recover requires a successful precheck"}
-        # Auto-recovery: if no explicit rollback but the step may have triggered
-        # a dialog (KEY/TYPE/CLICK_REL), try dismiss-dialog as a safety net.
+        # Strict recovery: only execute a rollback that was explicitly defined
+        # and validated in the scenario. Never auto-dismiss dialogs or take
+        # other unauthorised actions — a modal dialog may be legitimate UI
+        # (e.g. a file chooser the test intends to interact with next).
         if not rollback:
-            if step.operation in (Operation.KEY, Operation.TYPE, Operation.CLICK_REL):
-                return self._dismiss_dialog(step)
             return {"error": "no rollback defined for step; cannot recover"}
         op_str = rollback.get("operation")
         try:

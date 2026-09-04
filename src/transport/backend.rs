@@ -100,6 +100,40 @@ pub fn open_transport(config: &Config) -> Result<Arc<dyn RemoteTransport>, Trans
             // `Config::from_env` because only the native backend has a
             // per-endpoint session ceiling — see `scheduler::validate_capacity`.
             crate::transport::scheduler::validate_capacity(config)?;
+
+            // Preferred path: connect to an already-running transport daemon
+            // via IPC. The daemon holds a pooled NativeTransport and multiplexes
+            // requests over it, eliminating the per-operation SSH reconnect cost.
+            // Set VB_TRANSPORT_DAEMON_SOCKET and VB_TRANSPORT_DAEMON_TOKEN to use
+            // a daemon started by `vcli __transport-daemon`.
+            if let Some(socket) = std::env::var("VB_TRANSPORT_DAEMON_SOCKET").ok()
+                .filter(|s| !s.is_empty())
+            {
+                let token = std::env::var("VB_TRANSPORT_DAEMON_TOKEN")
+                    .unwrap_or_default();
+                let profile = config.profile.as_deref().unwrap_or("");
+                match crate::transport::ipc::daemon::NativeTransportClient::connect(
+                    std::path::Path::new(&socket),
+                    profile,
+                    &token,
+                ) {
+                    Ok(client) => return Ok(Arc::new(client)),
+                    Err(e) => {
+                        // Daemon unreachable — fall through to direct transport.
+                        // This is non-fatal: the daemon is an optimisation, not
+                        // a hard requirement. Log to stderr for observability.
+                        eprintln!(
+                            "[vcli] transport daemon at {socket} unreachable ({e}); \
+                             falling back to direct NativeTransport"
+                        );
+                    }
+                }
+            }
+
+            // Fallback: direct NativeTransport (fresh SSH connection per operation).
+            // This is the path used when no daemon is running. It is correct but
+            // slower — the connection pool and daemon lifecycle are a later
+            // increment (see docs/superpowers/specs/2026-08-29-native-remote-transport-design.md).
             Ok(Arc::new(
                 crate::transport::native::NativeTransport::from_config(config)?,
             ))

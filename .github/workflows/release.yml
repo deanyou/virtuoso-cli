@@ -22,7 +22,7 @@ jobs:
 
       - name: Build release binaries
         run: |
-          cargo build --release
+          cargo build --release --features native-ssh
           cargo build --release --features daemon --bin virtuoso-daemon
 
       - name: Package binaries
@@ -87,7 +87,7 @@ jobs:
 
       - name: Build release binaries
         run: |
-          cargo build --release
+          cargo build --release --features native-ssh
           cargo build --release --features daemon --bin virtuoso-daemon
 
       - name: Package binaries
@@ -115,7 +115,7 @@ jobs:
 
       - name: Build release binaries
         run: |
-          cargo build --release
+          cargo build --release --features native-ssh
           cargo build --release --features daemon --bin virtuoso-daemon
 
       - name: Package binaries

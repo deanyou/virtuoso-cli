@@ -3203,11 +3203,31 @@ impl RemoteTransport for LocalTransport {
             t.min(remaining)
         });
 
-        let mut cmd = std::process::Command::new("sh");
-        cmd.arg("-c")
-            .arg(&req.command)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        // Security: prefer program + independent argv over `sh -c` to eliminate
+        // the command-injection surface. Only fall back to `sh -c` when the
+        // command genuinely needs shell features (pipes, redirects, ;, &, etc.).
+        let shell_meta = ['|', '>', '<', ';', '&', '$', '`', '*', '?', '(', ')', '{', '}'];
+        let needs_shell = req.command.chars().any(|c| shell_meta.contains(&c));
+        let mut cmd = if needs_shell {
+            let mut c = std::process::Command::new("sh");
+            c.arg("-c").arg(&req.command);
+            c
+        } else {
+            match shlex::split(&req.command) {
+                Some(parts) if !parts.is_empty() => {
+                    let mut c = std::process::Command::new(&parts[0]);
+                    c.args(&parts[1..]);
+                    c
+                }
+                _ => {
+                    // Fallback for empty or unparseable commands.
+                    let mut c = std::process::Command::new("sh");
+                    c.arg("-c").arg(&req.command);
+                    c
+                }
+            }
+        };
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         let mut child = cmd.spawn().map_err(|e| {
             crate::transport::contract::TransportError::LocalIo(format!("local spawn failed: {e}"))

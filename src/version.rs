@@ -61,7 +61,7 @@ pub fn detect_version(client: &VirtuosoClient) -> Result<VirtuosoVersion> {
     // Idempotent probe: fixed read-only literals (internal operation, and
     // version detection must survive a stale queued ticket).
     let result = client.execute_skill_idempotent_probe("getVersion(t)", None)?;
-    if result.ok() {
+    if result.skill_ok() {
         let version_str = result.output.trim().trim_matches('"');
         if !version_str.is_empty() && version_str != "nil" {
             return Ok(parse_ic_version(version_str));
@@ -69,7 +69,7 @@ pub fn detect_version(client: &VirtuosoClient) -> Result<VirtuosoVersion> {
     }
     // Fallback: some builds may have getVersionString()
     let result2 = client.execute_skill_idempotent_probe("getVersionString()", None)?;
-    if result2.ok() {
+    if result2.skill_ok() {
         let version_str = result2.output.trim().trim_matches('"');
         if !version_str.is_empty() && version_str != "nil" {
             return Ok(parse_ic_version(version_str));
