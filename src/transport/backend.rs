@@ -111,13 +111,12 @@ pub fn open_transport(config: &Config) -> Result<Arc<dyn RemoteTransport>, Trans
                 .ok_or(TransportError::DaemonUnavailable)?;
             let token = config.transport_daemon_token.as_deref().unwrap_or("");
             let profile = config.profile.as_deref().unwrap_or("");
-            let client =
-                crate::transport::ipc::daemon::NativeTransportClient::connect(
-                    std::path::Path::new(socket),
-                    profile,
-                    token,
-                )
-                .map_err(|_| TransportError::DaemonUnavailable)?;
+            let client = crate::transport::ipc::daemon::NativeTransportClient::connect(
+                std::path::Path::new(socket),
+                profile,
+                token,
+            )
+            .map_err(|_| TransportError::DaemonUnavailable)?;
             Ok(Arc::new(client))
         }
         // Native on non-Unix (Windows) is not yet supported — the IPC transport

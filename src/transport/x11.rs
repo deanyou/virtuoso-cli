@@ -3206,7 +3206,9 @@ impl RemoteTransport for LocalTransport {
         // Security: prefer program + independent argv over `sh -c` to eliminate
         // the command-injection surface. Only fall back to `sh -c` when the
         // command genuinely needs shell features (pipes, redirects, ;, &, etc.).
-        let shell_meta = ['|', '>', '<', ';', '&', '$', '`', '*', '?', '(', ')', '{', '}'];
+        let shell_meta = [
+            '|', '>', '<', ';', '&', '$', '`', '*', '?', '(', ')', '{', '}',
+        ];
         let needs_shell = req.command.chars().any(|c| shell_meta.contains(&c));
         let mut cmd = if needs_shell {
             let mut c = std::process::Command::new("sh");

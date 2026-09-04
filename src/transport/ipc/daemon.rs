@@ -166,9 +166,8 @@ impl NativeTransportClient {
         // partial read re-applies the remaining budget, so a multi-segment
         // response cannot reset the timer on every underlying read().
         let resp_bytes = match FrameReader::new(&mut *stream)
-            .read_frame_until_with(Some(deadline.0), move |d| {
-                apply_socket_timeouts_fd(fd, d)
-            }) {
+            .read_frame_until_with(Some(deadline.0), move |d| apply_socket_timeouts_fd(fd, d))
+        {
             Ok(Some(b)) => b,
             Ok(None) => return Err(TransportError::DaemonUnavailable),
             Err(e) => return Err(frame_err_to_transport(e)),
@@ -523,7 +522,10 @@ mod tests {
     #[test]
     fn short_deadline_request_times_out_while_lock_held() {
         use crate::transport::contract::test_support::FakeTransport;
-        use crate::transport::contract::{CommandRequest, CommandResult, DownloadDirRequest, DownloadFileRequest, RemoteTransport, UploadFileRequest, UploadTextRequest};
+        use crate::transport::contract::{
+            CommandRequest, CommandResult, DownloadDirRequest, DownloadFileRequest,
+            RemoteTransport, UploadFileRequest, UploadTextRequest,
+        };
 
         /// Wraps FakeTransport but sleeps 2s on test_connection to hold the lock.
         struct SlowTransport(FakeTransport);
@@ -549,13 +551,19 @@ mod tests {
             }
         }
 
-        let socket = std::env::temp_dir().join(format!("vcli-ipc-lock-{}.sock", uuid::Uuid::new_v4()));
+        let socket =
+            std::env::temp_dir().join(format!("vcli-ipc-lock-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
         let server_handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            real_server::serve_one(stream, Arc::new(SlowTransport(FakeTransport::ok())), "", "n");
+            real_server::serve_one(
+                stream,
+                Arc::new(SlowTransport(FakeTransport::ok())),
+                "",
+                "n",
+            );
         });
 
         let client = Arc::new(NativeTransportClient::connect(&socket, "test-profile", "").unwrap());
@@ -590,7 +598,8 @@ mod tests {
     /// the absolute deadline, not reset on every underlying read().
     #[test]
     fn slow_chunked_response_hits_deadline() {
-        let socket = std::env::temp_dir().join(format!("vcli-ipc-chunk-{}.sock", uuid::Uuid::new_v4()));
+        let socket =
+            std::env::temp_dir().join(format!("vcli-ipc-chunk-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
@@ -613,7 +622,9 @@ mod tests {
                     "capabilities": []
                 }},
             });
-            FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
+            FrameWriter::new(&mut stream)
+                .write_frame(&serde_json::to_vec(&ack).unwrap())
+                .unwrap();
             loop {
                 let req = {
                     let mut reader = FrameReader::new(&mut stream);
@@ -627,7 +638,7 @@ mod tests {
                         // Write 1 byte every 500ms — 4 bytes = 2s total.
                         for _ in 0..4 {
                             std::thread::sleep(Duration::from_millis(500));
-                            if stream.write_all(&[b'x']).is_err() {
+                            if stream.write_all(b"x").is_err() {
                                 return;
                             }
                             stream.flush().unwrap();
@@ -666,7 +677,8 @@ mod tests {
     /// (total ~1.9s). After the fix, the second read gets ~0.1s timeout.
     #[test]
     fn frame_header_near_deadline_then_stop() {
-        let socket = std::env::temp_dir().join(format!("vcli-ipc-hdr-{}.sock", uuid::Uuid::new_v4()));
+        let socket =
+            std::env::temp_dir().join(format!("vcli-ipc-hdr-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
@@ -687,7 +699,9 @@ mod tests {
                     "capabilities": []
                 }},
             });
-            FrameWriter::new(&mut stream).write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
+            FrameWriter::new(&mut stream)
+                .write_frame(&serde_json::to_vec(&ack).unwrap())
+                .unwrap();
             // For each request: wait 0.9s, send frame header (100-byte payload),
             // then stop sending — the client must time out on the second read.
             loop {
@@ -739,7 +753,8 @@ mod tests {
         use crate::transport::contract::RequestId;
         use std::sync::mpsc;
 
-        let socket = std::env::temp_dir().join(format!("vcli-ipc-wr-{}.sock", uuid::Uuid::new_v4()));
+        let socket =
+            std::env::temp_dir().join(format!("vcli-ipc-wr-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
@@ -763,7 +778,9 @@ mod tests {
                     "capabilities": []
                 }},
             });
-            writer.write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap();
+            writer
+                .write_frame(&serde_json::to_vec(&ack).unwrap())
+                .unwrap();
             // Block here — do NOT read any request frames. The client's send
             // buffer fills and write() blocks on back-pressure.
             let _ = rx.recv();
@@ -788,7 +805,10 @@ mod tests {
                     std::mem::size_of::<i32>() as libc::socklen_t,
                 )
             };
-            assert_eq!(rc, 0, "setsockopt(SO_SNDBUF) failed — test cannot guarantee back-pressure");
+            assert_eq!(
+                rc, 0,
+                "setsockopt(SO_SNDBUF) failed — test cannot guarantee back-pressure"
+            );
         }
 
         // 1 MiB text upload — far larger than the 8 KiB send buffer, so the
@@ -805,7 +825,10 @@ mod tests {
         let result = client.upload_text(&req);
         let elapsed = start.elapsed();
 
-        assert!(result.is_err(), "large write to non-reading peer should fail");
+        assert!(
+            result.is_err(),
+            "large write to non-reading peer should fail"
+        );
         // Must be close to the 1s budget — not instant (which would mean no
         // back-pressure and a fake pass) and not far over it.
         assert!(

@@ -208,11 +208,16 @@ mod tests {
 
     #[test]
     fn parse_progress() {
-        let content =
-            "Simulation running\nTime: 1.234e-6 s\nIteration 500\nSome output\n";
+        let content = "Simulation running\nTime: 1.234e-6 s\nIteration 500\nSome output\n";
         let event = JobProgressTracker::parse_log_content("test", content, 100);
         match event {
-            JobEvent::Progress { job_id, percent, message, iteration, .. } => {
+            JobEvent::Progress {
+                job_id,
+                percent,
+                message,
+                iteration,
+                ..
+            } => {
                 assert_eq!(job_id, "test");
                 assert!(percent >= 0.0);
                 assert!(message.contains("1.234"));

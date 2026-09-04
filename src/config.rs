@@ -192,7 +192,10 @@ impl std::fmt::Debug for Config {
             .field("spectre_max_workers", &self.spectre_max_workers)
             .field("ssh_max_sessions", &self.ssh_max_sessions)
             .field("ssh_max_bulk_sessions", &self.ssh_max_bulk_sessions)
-            .field("ssh_reconnect_max_attempts", &self.ssh_reconnect_max_attempts)
+            .field(
+                "ssh_reconnect_max_attempts",
+                &self.ssh_reconnect_max_attempts,
+            )
             .field("ssh_reconnect_max_delay", &self.ssh_reconnect_max_delay)
             .field("ssh_keepalive_interval", &self.ssh_keepalive_interval)
             .field("ssh_keepalive_failures", &self.ssh_keepalive_failures)
@@ -203,7 +206,10 @@ impl std::fmt::Debug for Config {
             .field("transport_daemon_socket", &self.transport_daemon_socket)
             .field(
                 "transport_daemon_token",
-                &self.transport_daemon_token.as_ref().map(|_| "***redacted***"),
+                &self
+                    .transport_daemon_token
+                    .as_ref()
+                    .map(|_| "***redacted***"),
             )
             .finish()
     }
@@ -379,14 +385,8 @@ impl Config {
                 spectre_host: Self::env_with_profile("VB_SPECTRE_HOST", profile),
                 scratch_root: Self::env_with_profile("VB_REMOTE_SCRATCH_ROOT", profile),
             },
-            transport_daemon_socket: Self::env_with_profile(
-                "VB_TRANSPORT_DAEMON_SOCKET",
-                profile,
-            ),
-            transport_daemon_token: Self::env_with_profile(
-                "VB_TRANSPORT_DAEMON_TOKEN",
-                profile,
-            ),
+            transport_daemon_socket: Self::env_with_profile("VB_TRANSPORT_DAEMON_SOCKET", profile),
+            transport_daemon_token: Self::env_with_profile("VB_TRANSPORT_DAEMON_TOKEN", profile),
         })
     }
 
