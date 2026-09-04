@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3] - 2026-09-04
+
+IPC deadline hardening. The 1.3.2 release introduced dynamic socket timeouts,
+but a multi-round audit found that the deadline was not truly end-to-end: lock
+waiting was unbounded, partial reads reset the timeout each iteration, and the
+write path had no deadline at all. This release makes the deadline cover every
+stage — lock acquisition, write, and read — and adds five regression tests.
+
+### Fixed
+
+- **Daemon startup dependency cycle** (`src/transport/backend.rs`,
+  `src/commands/transport_daemon.rs`): split `open_transport()` (business
+  side, goes through IPC) from `open_transport_for_daemon()` (daemon-internal,
+  direct SSH). The daemon no longer requires a running daemon to start.
+- **Unbounded lock wait** (`src/transport/ipc/daemon.rs`): `exchange()` now
+  uses `lock_with_deadline()` — a `try_lock` polling loop bounded by the
+  request's absolute deadline. A request whose deadline passes while waiting
+  for the lock returns `QueueTimeout` instead of blocking indefinitely.
+- **Post-lock deadline recheck** (`src/transport/ipc/daemon.rs`): after
+  acquiring the lock, `exchange()` re-checks the deadline before sending. A
+  request that spent its whole budget waiting for the lock is not sent.
+- **Read deadline per partial read** (`src/transport/ipc/framing.rs`,
+  `daemon.rs`): `read_frame_until_with()` re-applies `SO_RCVTIMEO` with the
+  **remaining** budget before every partial read. A multi-segment response can
+  no longer accumulate more than the total deadline across reads.
+- **Write deadline** (`src/transport/ipc/framing.rs`, `daemon.rs`):
+  `write_frame_with_deadline()` replaces `write_all()` with a manual partial-
+  write loop that re-applies `SO_SNDTIMEO` with the remaining budget before
+  every write. Back-pressure from a slow receiver can no longer cause writes
+  to exceed the deadline.
+- **Config Debug token leak** (`src/config.rs`): `Config` now has a manual
+  `Debug` impl that redacts `transport_daemon_token`. The derived impl would
+  have printed the token in any debug output.
+- **GUI test name collision** (`.claude/skills/virtuoso-gui-debug/`): two
+  test methods shared the name `test_recover_without_rollback_returns_error`,
+  causing the second to shadow the first and a net loss of one test. Renamed
+  to unique names; test count restored to 237.
+
+### Tests
+
+- `lock_with_deadline_bails_when_deadline_passes` — unit test for bounded
+  lock waiting.
+- `short_deadline_request_times_out_while_lock_held` — end-to-end test with a
+  real server holding the lock; a short-deadline request must time out.
+- `slow_chunked_response_hits_deadline` — server sends the response in slow
+  chunks; the client must hit the deadline rather than accumulating timeouts.
+- `frame_header_near_deadline_then_stop` — server sends the frame header at
+  0.9s then stops; a 1s deadline must fail in <1.3s (previously ~1.9s).
+- `large_request_to_nonreading_peer_hits_deadline` — 1 MiB upload to a peer
+  that never reads, with `SO_SNDBUF` capped at 8 KiB to guarantee write
+  back-pressure. The write must hit the 1s deadline.
+
 ## [1.3.2] - 2026-09-04
 
 Second-round code audit fixes. The 1.3.1 release introduced native-ssh IPC
