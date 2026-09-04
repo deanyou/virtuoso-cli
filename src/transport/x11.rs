@@ -5502,6 +5502,8 @@ mod tests {
                 spectre_host: None,
                 scratch_root: None,
             },
+            transport_daemon_socket: None,
+            transport_daemon_token: None,
         }
     }
 

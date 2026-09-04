@@ -925,6 +925,8 @@ mod backend_diagnostics_tests {
             cadence_cshrc: None,
             spectre_bin: None,
             roles: crate::config::RemoteRoles::default(),
+            transport_daemon_socket: None,
+            transport_daemon_token: None,
         }
     }
 

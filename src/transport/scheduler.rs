@@ -686,6 +686,8 @@ mod tests {
             cadence_cshrc: None,
             spectre_bin: None,
             roles: Default::default(),
+            transport_daemon_socket: None,
+            transport_daemon_token: None,
         }
     }
 
