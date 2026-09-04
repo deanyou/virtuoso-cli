@@ -450,13 +450,16 @@ mod tests {
     /// itself is bounded by the deadline.
     #[test]
     fn lock_with_deadline_bails_when_deadline_passes() {
-        let mutex = Mutex::new(0i32);
+        let mutex = Arc::new(Mutex::new(0i32));
+        let mutex_clone = mutex.clone();
         // Hold the lock in another thread for 2 seconds.
-        let guard = mutex.lock().unwrap();
         let handle = thread::spawn(move || {
+            let guard = mutex_clone.lock().unwrap();
             std::thread::sleep(Duration::from_secs(2));
             drop(guard);
         });
+        // Give the thread time to acquire the lock.
+        std::thread::sleep(Duration::from_millis(100));
         // Try to acquire with a 500ms deadline — must fail in <2s.
         let deadline = Deadline::from_now(Duration::from_millis(500));
         let start = std::time::Instant::now();
