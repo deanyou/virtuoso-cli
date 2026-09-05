@@ -26,9 +26,13 @@ __all__ = [
     "SshRunner",
 ]
 
-# Keys kept from the parent environment. Everything else (credentials,
-# license paths, DISPLAY, VB_*) is dropped before spawning a child.
-_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL")
+# Keys kept from the parent environment. Most credentials, license paths,
+# DISPLAY, and VB_* are dropped before spawning a child.
+# Explicitly allowed:
+#   VB_PORT, VB_REMOTE_HOST — needed for vcli to connect to the daemon
+#   HOME — needed for vcli to resolve ~/.cache/virtuoso_bridge/sessions/
+#   XDG_CACHE_HOME — needed for vcli to find session files
+_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "HOME", "XDG_CACHE_HOME", "VB_PORT", "VB_REMOTE_HOST")
 _EXTRA_ENV = {"VCLI_CAPABILITY": "admin"}
 
 # A syntactically safe SSH hostname: no whitespace, shell metacharacters,

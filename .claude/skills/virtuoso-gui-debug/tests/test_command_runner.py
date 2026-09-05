@@ -73,7 +73,8 @@ class TestLocalRunner(unittest.TestCase):
         import json
 
         keys = set(json.loads(result.stdout))
-        allowed = {"PATH", "LANG", "LC_ALL", "VCLI_CAPABILITY"}
+        allowed = {"PATH", "LANG", "LC_ALL", "VCLI_CAPABILITY",
+                   "HOME", "XDG_CACHE_HOME", "VB_PORT", "VB_REMOTE_HOST"}
         # macOS injects system keys like __CF_USER_TEXT_ENCODING and LC_CTYPE
         # into every child; they carry no user data. Everything else — in
         # particular VB_*, DISPLAY, credentials — must be dropped.

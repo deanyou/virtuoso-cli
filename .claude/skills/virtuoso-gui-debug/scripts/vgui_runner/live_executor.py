@@ -179,13 +179,21 @@ class LiveExecutor(Executor):
         self._baseline_taken = False
         self._scenario_display: Optional[str] = None
         self._scenario_pid: int = 0
+        # Window geometry for CIW_INPUT click coordinates — set during precheck.
+        self._window_width: Optional[int] = None
+        self._window_height: Optional[int] = None
 
     # ------------------------------------------------------------------
     # helpers
     # ------------------------------------------------------------------
 
     def _vcli_argv(self, *args: str) -> List[str]:
+        """Build vcli argv without session (for session list, etc.)."""
         return [self._vcli, *args, "--format", "json"]
+
+    def _vcli_argv_with_session(self, *args: str) -> List[str]:
+        """Build vcli argv with --session flag for commands that need daemon access."""
+        return [self._vcli, "--session", self._session_id, *args, "--format", "json"]
 
     def _run_json(self, argv: List[str], timeout_seconds: int) -> Dict[str, Any]:
         result = self._runner.run(argv, timeout_seconds)
@@ -338,6 +346,12 @@ class LiveExecutor(Executor):
             self.window_id = window.get("dismiss_id") or window.get("window_id")
             self._scenario_display = scenario.display
             self._scenario_pid = int(effective_pid)
+            # Store window geometry for CIW_INPUT click coordinates.
+            # Use vcli-reported geometry directly — no artificial cap, since
+            # high-DPI CIW windows can be 1200+ pixels wide.
+            geom = window.get("geometry", {})
+            self._window_width = geom.get("w", 800)
+            self._window_height = geom.get("h", 600)
 
             # 3. exclusive DISPLAY lock
             lock = _DisplayLock(scenario.display)
@@ -523,7 +537,7 @@ class LiveExecutor(Executor):
                     }
                 expression = expected["expression"]
                 data = self._run_json(
-                    self._vcli_argv("skill", "exec", expression),
+                    self._vcli_argv_with_session("skill", "exec", expression),
                     _TIMEOUT_ACTION,
                 )
                 actual = data.get("output", "")
@@ -765,12 +779,25 @@ class LiveExecutor(Executor):
         wid = self.window_id
         if not wid:
             raise RuntimeError("CIW_INPUT requires a bound window")
+        # Calculate click position based on window geometry
+        # CIW input line is typically at bottom 10-20% of the window
+        if self._window_width is None or self._window_height is None:
+            raise RuntimeError(
+                "CIW_INPUT requires window geometry from precheck; "
+                "run precheck() before execute()"
+            )
+        w = self._window_width
+        h = self._window_height
+        click_x = w // 2  # Center X
+        # CIW input line is typically at the bottom ~10% of the window.
+        # Use 90% of height, but ensure we're at least 100px from the top
+        # and at most 5px from the bottom (stay inside the window).
+        click_y = max(int(h * 0.9), h - 100)
+        click_y = min(click_y, h - 5)
         # 1. Activate the CIW window
         self._run_action("activate")
         # 2. Click the input line (bottom center of window)
-        # Use click-rel with approximate bottom-center coordinates.
-        # The input line is ~20px from the bottom of the CIW window.
-        self._run_action("click-rel", x=400, y=870)
+        self._run_action("click-rel", x=click_x, y=click_y)
         # 3. Clear existing input if requested
         if clear_first:
             self._run_action("key", text="ctrl+a")
