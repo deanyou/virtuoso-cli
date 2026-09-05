@@ -80,7 +80,9 @@ const INTEGER_VARS: &[(&str, u64, u64)] = &[
 ];
 
 /// Variables whose value is a local filesystem path that should exist.
-const LOCAL_PATH_VARS: &[&str] = &["VB_SSH_KEY", "VB_SSH_CONFIG", "VB_CADENCE_CSHRC", "VB_SPECTRE_BIN"];
+/// Note: VB_CADENCE_CSHRC and VB_SPECTRE_BIN are remote paths (on the
+/// Virtuoso host) and are intentionally NOT checked here.
+const LOCAL_PATH_VARS: &[&str] = &["VB_SSH_KEY", "VB_SSH_CONFIG"];
 
 /// Run `vcli config check`.
 pub fn run() -> Result<Value> {
@@ -141,19 +143,29 @@ pub fn run() -> Result<Value> {
                 match raw.parse::<u64>() {
                     Ok(val) => {
                         if val < *min || val > *max {
+                            let note = if var == &"VB_PORT" {
+                                " — Config::from_env() will fall back to a username-derived default port (65000-65499)"
+                            } else {
+                                ""
+                            };
                             errors.push(json!({
                                 "var": v,
                                 "value": val,
-                                "message": format!("{v}={val} is out of range [{min}, {max}]"),
+                                "message": format!("{v}={val} is out of range [{min}, {max}]{note}"),
                                 "fix": format!("Set {v} to a value between {min} and {max}")
                             }));
                         }
                     }
                     Err(_) => {
+                        let note = if var == &"VB_PORT" {
+                            " — Config::from_env() will fall back to a username-derived default port (65000-65499)"
+                        } else {
+                            ""
+                        };
                         errors.push(json!({
                             "var": v,
                             "value": raw,
-                            "message": format!("{v}='{raw}' is not a valid integer"),
+                            "message": format!("{v}='{raw}' is not a valid integer{note}"),
                             "fix": format!("Set {v} to an integer (e.g. {v}=30)")
                         }));
                     }
@@ -331,10 +343,13 @@ fn strip_profile_suffix(var: &str) -> String {
 /// Find the closest recognized variable name for typo suggestions.
 fn suggest_closest(var: &str) -> String {
     let base = strip_profile_suffix(var);
+    // Shorter variable names need a tighter threshold to avoid false matches.
+    // e.g. VB_FOO (6 chars) at distance 3 could match unrelated names.
+    let max_dist = if base.len() < 8 { 2 } else { 3 };
     let mut best: Vec<(usize, &str)> = RECOGNIZED_VARS
         .iter()
         .map(|known| (levenshtein(&base, known), *known))
-        .filter(|(d, _)| *d <= 3)
+        .filter(|(d, _)| *d <= max_dist)
         .collect();
     best.sort_by_key(|(d, _)| *d);
     if best.is_empty() {
