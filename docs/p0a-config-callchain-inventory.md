@@ -77,6 +77,20 @@
   `--profile` 四种选择均正确解析；目标缺失 exit 3、失效 active_target exit 2；
   `tunnel status` 输出含 `target` 与 `config_digest`。
 
+### 5.1 tunnel 命令族二轮审阅修复（本地回退 / attach 归属 / profile 参数）
+
+针对 f68bf12 后审阅的 4 项问题（提交后）：
+
+| 问题 | 修复 |
+|---|---|
+| `ensure_tunnel` 本地端口递增会改写远端身份 | 拆分本地/远端：`SSHClient.remote_bridge_port = cfg.port` 固定，`try_ssh_tunnel(local, remote)` 各自独立；本地端口回退时 `TunnelState` 用 `remote_bridge_port` 单独记录远端端口；`validate_tunnel_ownership` 以远端端口为判别（`remote_bridge_port.or(attached_remote_port).unwrap_or(port)`）；建隧失败清理远端 setup 目录 |
+| attach 未按目标端口筛选会话 | `scoped_attach_sessions()` 先按 `cfg.port` 过滤，再做存活探测与 `validate_session_ownership`；同主机不同端口会话不再误入本目标命名空间（3 单测） |
+| `stop_saved_tunnel`/`SSHClient::stop` 远端清理重读 env | 改用传入 `cfg`（`SSHClient::from_config`）构造清理连接；`SSHClient` 持有 `config` 供 `stop()` 使用，杜绝"env 主机 + context 目录"组合 |
+| `profile show` 丢失显式 `--profile` | `dispatch_profile(cmd, cli_profile)` 直传 CLI profile；配置管理命令仍校验 `--target`/`--profile` 冲突（exit 2）；2 bin 单测 |
+
+`tunnel status` 输出新增 `remote_bridge_port`（归属判别端口），便于诊断本地回退。
+
+
 ## 6. 待办（下一步）
 
 - 迁移 session 命令族（list/show/current/cleanup/history）到 `&CommandContext`；

@@ -1744,11 +1744,18 @@ fn dispatch_tunnel(
     }
 }
 
-fn dispatch_profile(cmd: ProfileCmd) -> error::Result<serde_json::Value> {
+fn dispatch_profile(
+    cmd: ProfileCmd,
+    cli_profile: Option<String>,
+) -> error::Result<serde_json::Value> {
     use virtuoso_cli::profile::{BindScope, ProfileResolution};
     match cmd {
         ProfileCmd::Show => {
-            let info: ProfileResolution = virtuoso_cli::profile::resolve_profile_info(None);
+            // `--profile`/`-p` must win over the ambient VB_PROFILE. Config
+            // management skips full connection-target resolution, so the CLI
+            // profile is threaded here explicitly.
+            let info: ProfileResolution =
+                virtuoso_cli::profile::resolve_profile_info(cli_profile.as_deref());
             Ok(serde_json::json!({
                 "profile": info.profile,
                 "source": info.source,
@@ -2695,7 +2702,17 @@ fn main() {
             cmd,
             format,
         ),
-        Commands::Profile(cmd) => dispatch_profile(cmd),
+        Commands::Profile(cmd) => {
+            // Config management skips full target resolution, but the
+            // `--target`/`--profile` exclusivity contract still holds.
+            if cli.target.is_some() {
+                Err(error::VirtuosoError::Config(
+                    "--target and --profile are mutually exclusive".into(),
+                ))
+            } else {
+                dispatch_profile(cmd, cli.profile.clone())
+            }
+        }
         Commands::Skill(cmd) => dispatch_skill(cmd),
         Commands::Cell(cmd) => dispatch_cell(cmd),
         Commands::Sim(cmd) => dispatch_sim(cmd),

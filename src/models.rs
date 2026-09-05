@@ -417,6 +417,14 @@ pub struct TunnelState {
     /// the daemon's own listening port, identical to `port`).
     #[serde(default)]
     pub attached_remote_port: Option<u16>,
+    /// Remote bridge port this tunnel forwards to, recorded separately from
+    /// the *local* forward port (`port`) so a local port fallback never
+    /// changes the remote endpoint identity. For `deployed` tunnels this is
+    /// the target's fixed bridge port (`cfg.port`); for `attached` tunnels it
+    /// equals `attached_remote_port`. `None` on legacy files means the remote
+    /// port was identical to `port`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_bridge_port: Option<u16>,
     /// Bridge session id this attach resolved to. Mirrors
     /// `SessionInfo::id` for the daemon we discovered via
     /// `~/.cache/virtuoso_bridge/sessions/*.json`.
@@ -569,6 +577,7 @@ mod tests {
             config_digest: Some("deadbeef".into()),
             mode: None,
             attached_remote_port: None,
+            remote_bridge_port: None,
             attached_session_id: None,
         };
         let json = serde_json::to_string(&s).unwrap();
@@ -612,6 +621,7 @@ mod tests {
             config_digest: None,
             mode: None,
             attached_remote_port: None,
+            remote_bridge_port: None,
             attached_session_id: None,
         };
         let json = serde_json::to_string(&s).unwrap();

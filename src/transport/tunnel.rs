@@ -453,7 +453,10 @@ pub(crate) fn stop_saved_tunnel(cfg: &Config, state: &TunnelState, force: bool) 
              use `vcli tunnel detach` if you only want to disconnect)"
         );
     } else if !cfg.keep_remote_files {
-        match SSHClient::from_env(cfg.keep_remote_files) {
+        // Remote cleanup must run against the SAME config that describes the
+        // tunnel being stopped — never re-read the environment (that could
+        // combine an ambient host with this cfg's setup dir).
+        match SSHClient::from_config(cfg, cfg.keep_remote_files) {
             Ok(client) => {
                 let setup_dir = setup_dir_for_profile(cfg.profile.as_deref());
                 if let Err(e) = client.run_command(&format!("rm -rf {setup_dir}")) {
@@ -526,7 +529,18 @@ pub struct SSHClient {
     /// `SSHRunner::clone` snapshots its ControlMaster flag instead of sharing
     /// it, so handing out a second runner would silently break the fallback.
     transport: Arc<OpenSshTransport>,
+    /// The resolved config this client was built from. Held so lifecycle
+    /// operations (`stop`, remote cleanup) reuse the SAME identity instead of
+    /// re-reading the environment — combining env hosts with context dirs is
+    /// exactly the cross-identity bug target isolation must prevent.
+    config: Config,
+    /// Local forward port the client connects to. For `deployed` tunnels this
+    /// may fall back to a free port when `cfg.port` is taken locally; the
+    /// remote endpoint stays at [`Self::remote_bridge_port`].
     pub port: u16,
+    /// Fixed remote bridge port (= `cfg.port`) this tunnel forwards to.
+    /// Never incremented together with the local port.
+    pub remote_bridge_port: u16,
     pub keep_remote_files: bool,
     pub profile: Option<String>,
     /// Config identity digest (F05). Recorded into `TunnelState` so `status`
@@ -584,7 +598,9 @@ impl SSHClient {
 
         Ok(Self {
             transport: Arc::new(OpenSshTransport::new(runner)),
+            config: cfg.clone(),
             port: cfg.port,
+            remote_bridge_port: cfg.port,
             keep_remote_files,
             profile: cfg.profile.clone(),
             config_digest: Some(cfg.digest()),
@@ -603,13 +619,14 @@ impl SSHClient {
     pub fn stop(&self) -> Result<()> {
         // Delegate to the single stop path so the CLI and the programmatic API
         // never diverge. `force` is not exposed here: identity verification is
-        // mandatory for an in-process client.
-        let cfg = Config::from_env()?;
+        // mandatory for an in-process client. Uses the config this client was
+        // built from — never re-reads the environment, so cleanup cannot
+        // combine env hosts with the client's own profile.
         let state = TunnelState::load_with_profile(self.profile.as_deref())
             .ok()
             .flatten();
         match state {
-            Some(s) => stop_saved_tunnel(&cfg, &s, false),
+            Some(s) => stop_saved_tunnel(&self.config, &s, false),
             None => Err(VirtuosoError::NotFound("no running tunnel found".into())),
         }
     }
@@ -694,12 +711,20 @@ impl SSHClient {
     }
 
     fn ensure_tunnel(&mut self) -> Result<()> {
-        for port in self.port..(self.port + 10) {
-            if self.try_ssh_tunnel(port).is_ok() {
-                self.port = port;
+        // The REMOTE bridge port is fixed (= cfg.port); only the local forward
+        // port may fall back when `cfg.port` is already taken locally. The two
+        // are never incremented together, so a fallback can't change the
+        // tunnel's remote endpoint identity.
+        let remote = self.remote_bridge_port;
+        for local in self.port..(self.port + 10) {
+            if self.try_ssh_tunnel(local, remote).is_ok() {
+                self.port = local;
                 return Ok(());
             }
         }
+        // All candidate local ports failed — clean up the resources this
+        // creation deployed (the remote setup dir) rather than leaking them.
+        let _ = self.cleanup_remote();
         Err(VirtuosoError::Ssh(format!(
             "failed to establish tunnel on any port; verify SSH: `{}`",
             self.runner().verify_cmd_hint()
@@ -710,12 +735,13 @@ impl SSHClient {
     ///
     /// Used by `tunnel attach` to plug into a pre-existing daemon at a port
     /// discovered from session metadata — no port walk, since the OS-assigned
-    /// port we want to reach is known up front.
+    /// port we want to reach is known up front. Local and remote coincide here
+    /// (attach forwards to the discovered daemon port).
     pub fn open_tunnel(&mut self, port: u16) -> Result<()> {
-        self.try_ssh_tunnel(port)
+        self.try_ssh_tunnel(port, port)
     }
 
-    fn try_ssh_tunnel(&mut self, port: u16) -> Result<()> {
+    fn try_ssh_tunnel(&mut self, local_port: u16, remote_port: u16) -> Result<()> {
         let target = self.runner().remote_target();
         let mut cmd = Command::new("ssh");
         cmd.args([
@@ -730,7 +756,7 @@ impl SSHClient {
             "-f",
             "-N",
             "-L",
-            &format!("127.0.0.1:{port}:127.0.0.1:{port}"),
+            &format!("127.0.0.1:{local_port}:127.0.0.1:{remote_port}"),
         ]);
 
         // Conditionally add ControlMaster options — disabled when CM has been
@@ -775,7 +801,7 @@ impl SSHClient {
         use std::net::TcpStream;
         for _ in 0..10 {
             std::thread::sleep(std::time::Duration::from_millis(50));
-            if TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
+            if TcpStream::connect(format!("127.0.0.1:{local_port}")).is_ok() {
                 return Ok(());
             }
         }
@@ -805,6 +831,7 @@ impl SSHClient {
             config_digest: self.config_digest.clone(),
             mode: Some(crate::models::TUNNEL_MODE_DEPLOYED.into()),
             attached_remote_port: None,
+            remote_bridge_port: Some(self.remote_bridge_port),
             attached_session_id: None,
         };
         // Write under the *config's* profile namespace. Using `save()` (which
@@ -983,6 +1010,7 @@ mod tests {
             config_digest: None,
             mode: None,
             attached_remote_port: None,
+            remote_bridge_port: None,
             attached_session_id: None,
         }
     }

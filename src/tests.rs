@@ -2188,3 +2188,56 @@ END"#;
         assert!(sweep_data.contains_key(&1));
     }
 }
+
+#[cfg(test)]
+mod profile_dispatch_tests {
+    use serial_test::serial;
+    use std::env;
+
+    /// RAII guard restoring a set of env vars to their previous values.
+    struct EnvGuard(Vec<(String, Option<String>)>);
+    impl EnvGuard {
+        fn set(entries: &[(&str, &str)]) -> Self {
+            let mut prev = Vec::new();
+            for (k, v) in entries {
+                prev.push((k.to_string(), env::var(k).ok()));
+                env::set_var(k, v);
+            }
+            Self(prev)
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (k, v) in &self.0 {
+                match v {
+                    Some(prev) => env::set_var(k, prev),
+                    None => env::remove_var(k),
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn profile_show_explicit_wins_over_ambient_vb_profile() {
+        // Regression: `VB_PROFILE=review_ambient vcli --profile review_explicit
+        // profile show` returned the ambient profile because the config
+        // management branch skipped resolution and dispatch_profile did not
+        // receive the CLI --profile. The explicit arg must win.
+        let _g = EnvGuard::set(&[("VB_PROFILE", "review_ambient")]);
+        let out = crate::dispatch_profile(crate::ProfileCmd::Show, Some("review_explicit".into()))
+            .expect("dispatch should succeed");
+        assert_eq!(out["profile"], "review_explicit");
+        assert_eq!(out["source"], "explicit");
+    }
+
+    #[test]
+    #[serial]
+    fn profile_show_falls_back_to_ambient_without_explicit() {
+        let _g = EnvGuard::set(&[("VB_PROFILE", "review_ambient")]);
+        let out = crate::dispatch_profile(crate::ProfileCmd::Show, None)
+            .expect("dispatch should succeed");
+        assert_eq!(out["profile"], "review_ambient");
+        assert_eq!(out["source"], "environment");
+    }
+}
