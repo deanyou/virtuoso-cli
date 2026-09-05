@@ -102,6 +102,17 @@ enum Commands {
         if_not_exists: bool,
     },
 
+    /// Validate .env configuration and report errors/warnings for LLM-assisted repair
+    #[command(
+        long_about = "Check .env configuration for errors, deprecated variables, typos, and \
+            consistency issues. Outputs structured JSON with errors, warnings, and suggestions \
+            so an LLM agent can quickly fix misconfiguration.\n\n\
+            Examples:\n  \
+            vcli config check\n  \
+            vcli config check --format json"
+    )]
+    ConfigCheck,
+
     /// Manage SSH tunnel to remote Virtuoso host
     #[command(subcommand)]
     Tunnel(TunnelCmd),
@@ -2334,6 +2345,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
+        Commands::ConfigCheck => commands::config::run(),
         // Compiled only with `native-ssh`; other builds have no such subcommand
         // at all, so there is nothing to dispatch. `run_with` blocks forever
         // (it is the daemon process); returning here is fine because nothing
