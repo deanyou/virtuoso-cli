@@ -57,23 +57,56 @@ impl CommandContext {
 
     /// Validate that a session belongs to this context's target.
     ///
-    /// When a target is selected, a session recorded against a different host
-    /// is an ownership violation — switching targets must not silently reuse
-    /// the wrong session (report F05: "切换目标不复用错误 session").
-    /// Target-less (legacy env) selections skip the check.
+    /// Single source of truth for target-ownership validation (report F05).
+    /// Distinguishes both the host and the remote bridge port, so two targets
+    /// on the same compute node with different bridge ports are not conflated.
+    /// Target-less (legacy env) selections skip the check entirely.
     pub fn validate_session_ownership(&self, session: &crate::models::SessionInfo) -> Result<()> {
+        self.validate_endpoint_ownership("session", &session.id, &session.host, session.port)
+    }
+
+    /// Validate that a tunnel state belongs to this context's target.
+    /// `state.port` is the local forward port; the discriminator against the
+    /// target is the *remote* bridge port (`attached_remote_port` when set,
+    /// otherwise the deployed tunnel's `port`).
+    pub fn validate_tunnel_ownership(&self, state: &crate::models::TunnelState) -> Result<()> {
+        let remote_port = state.attached_remote_port.unwrap_or(state.port);
+        self.validate_endpoint_ownership(
+            "tunnel",
+            &state.port.to_string(),
+            &state.remote_host,
+            remote_port,
+        )
+    }
+
+    /// Shared host + bridge-port ownership rule.
+    fn validate_endpoint_ownership(
+        &self,
+        kind: &str,
+        id: &str,
+        host: &str,
+        port: u16,
+    ) -> Result<()> {
         if self.target_id.is_none() {
             return Ok(());
         }
         let target_host = self.config.remote_host.as_deref().unwrap_or("");
-        if !target_host.is_empty() && session.host != target_host {
+        if !target_host.is_empty() && host != target_host {
             return Err(VirtuosoError::Config(format!(
-                "session '{}' belongs to host '{}' but target '{}' resolves to '{}'; \
-                 refusing to reuse the wrong session (run `vcli session list`)",
-                session.id,
-                session.host,
+                "{kind} '{id}' belongs to host '{host}' but target '{}' resolves to '{target_host}'; \
+                 refusing to reuse the wrong {kind} (run `vcli session list`)",
+                self.target_id().unwrap_or("unknown")
+            )));
+        }
+        // Same-host discrimination: two targets on one compute node differ by
+        // their remote bridge port, so a port mismatch is an ownership
+        // violation even when the host matches.
+        if self.config.port != 0 && port != self.config.port {
+            return Err(VirtuosoError::Config(format!(
+                "{kind} '{id}' is on bridge port {port} but target '{}' uses port {}; \
+                 refusing to reuse the wrong {kind}",
                 self.target_id().unwrap_or("unknown"),
-                target_host
+                self.config.port
             )));
         }
         Ok(())
@@ -86,19 +119,21 @@ mod tests {
     use crate::models::SessionInfo;
     use serial_test::serial;
 
-    fn cfg_with_host(host: &str) -> Config {
-        // Build via env_with_profile with a scoped var, then strip profile.
+    fn cfg_with(host: &str, port: u16) -> Config {
+        // Build via env_with_profile with scoped vars, then strip profile.
         std::env::set_var("VB_REMOTE_HOST_targettest", host);
+        std::env::set_var("VB_PORT_targettest", port.to_string());
         let mut c = Config::from_env_with_profile(Some("targettest")).unwrap();
         std::env::remove_var("VB_REMOTE_HOST_targettest");
+        std::env::remove_var("VB_PORT_targettest");
         c.profile = None;
         c
     }
 
-    fn session(host: &str) -> SessionInfo {
+    fn session_with(host: &str, port: u16) -> SessionInfo {
         SessionInfo {
             id: "sess-test".into(),
-            port: 30001,
+            port,
             pid: 42,
             host: host.into(),
             user: "user1".into(),
@@ -111,20 +146,28 @@ mod tests {
     #[serial]
     #[test]
     fn digest_is_stable_and_identifies_host() {
-        let c1 = cfg_with_host("compute-a");
-        let c2 = cfg_with_host("compute-b");
-        let c1b = cfg_with_host("compute-a");
+        let c1 = cfg_with("compute-a", 30001);
+        let c2 = cfg_with("compute-b", 30001);
+        let c1b = cfg_with("compute-a", 30001);
         assert_eq!(c1.digest(), c1b.digest());
         assert_ne!(c1.digest(), c2.digest());
     }
 
     #[serial]
     #[test]
-    fn ownership_check_passes_on_matching_host() {
+    fn digest_changes_when_bridge_port_changes() {
+        let c1 = cfg_with("compute-eda-42", 30001);
+        let c2 = cfg_with("compute-eda-42", 30002);
+        assert_ne!(c1.digest(), c2.digest());
+    }
+
+    #[serial]
+    #[test]
+    fn ownership_check_passes_on_matching_host_and_port() {
         let ctx =
-            CommandContext::new(cfg_with_host("compute-eda-42"), Some("prod".into())).unwrap();
+            CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
         assert!(ctx
-            .validate_session_ownership(&session("compute-eda-42"))
+            .validate_session_ownership(&session_with("compute-eda-42", 30001))
             .is_ok());
     }
 
@@ -132,9 +175,9 @@ mod tests {
     #[test]
     fn ownership_check_rejects_wrong_host_session() {
         let ctx =
-            CommandContext::new(cfg_with_host("compute-eda-42"), Some("prod".into())).unwrap();
+            CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
         let err = ctx
-            .validate_session_ownership(&session("compute-eda-99"))
+            .validate_session_ownership(&session_with("compute-eda-99", 30001))
             .unwrap_err();
         assert!(err
             .to_string()
@@ -143,10 +186,52 @@ mod tests {
 
     #[serial]
     #[test]
+    fn ownership_check_rejects_same_host_different_bridge_port() {
+        // prod/test share a compute node; only the bridge port distinguishes them.
+        let ctx =
+            CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
+        let err = ctx
+            .validate_session_ownership(&session_with("compute-eda-42", 30002))
+            .unwrap_err();
+        assert!(err.to_string().contains("is on bridge port 30002"));
+    }
+
+    #[serial]
+    #[test]
+    fn tunnel_ownership_check_rejects_same_host_different_bridge_port() {
+        let ctx =
+            CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
+        let state = crate::models::TunnelState {
+            version: crate::models::CURRENT_STATE_VERSION,
+            port: 40001,
+            pid: 0,
+            remote_host: "compute-eda-42".into(),
+            setup_path: None,
+            profile: Some("prod".into()),
+            backend: Some("openssh".into()),
+            daemon_nonce: None,
+            executable_path: None,
+            start_identity: None,
+            ipc_endpoint: None,
+            token_path: None,
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
+            mode: Some(crate::models::TUNNEL_MODE_ATTACHED.into()),
+            attached_remote_port: Some(30002),
+            attached_session_id: None,
+        };
+        let err = ctx.validate_tunnel_ownership(&state).unwrap_err();
+        assert!(err.to_string().contains("is on bridge port 30002"));
+    }
+
+    #[serial]
+    #[test]
     fn ownership_check_skipped_without_target() {
-        let ctx = CommandContext::new(cfg_with_host("compute-eda-42"), None).unwrap();
+        let ctx = CommandContext::new(cfg_with("compute-eda-42", 30001), None).unwrap();
         assert!(ctx
-            .validate_session_ownership(&session("compute-eda-99"))
+            .validate_session_ownership(&session_with("compute-eda-99", 30001))
             .is_ok());
     }
 }

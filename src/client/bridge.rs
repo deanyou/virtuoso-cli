@@ -100,12 +100,27 @@ impl VirtuosoClient {
     }
 
     fn from_config(cfg: Config, target_id: Option<String>) -> Result<Self> {
+        // One shared ownership-validation context (F05). A `CommandContext` is
+        // cheap (digest computation only); building it here keeps every check
+        // below on the same identity rule implemented in `context.rs`.
+        let ctx = crate::context::CommandContext::new(cfg.clone(), target_id)?;
+
         let tunnel = if cfg.is_remote() {
-            let state = crate::models::TunnelState::load().ok().flatten();
+            // Load tunnel state under the *config's* profile namespace, never the
+            // ambient `VB_PROFILE` — otherwise `--target prod` could reuse a
+            // tunnel recorded for `test`.
+            let state = crate::models::TunnelState::load_with_profile(cfg.profile.as_deref())
+                .ok()
+                .flatten();
             if let Some(ref s) = state {
+                // Validate the tunnel belongs to this target *before* reusing it.
+                // This is a tunnel-ownership check, not a substitute for the
+                // session check below — an existing tunnel bypasses session
+                // selection entirely.
+                ctx.validate_tunnel_ownership(s)?;
                 if is_port_open(s.port) {
                     tracing::info!("reusing existing tunnel on port {}", s.port);
-                    let client = SSHClient::from_env(cfg.keep_remote_files)?;
+                    let client = SSHClient::from_config(&cfg, cfg.keep_remote_files)?;
                     Some(client)
                 } else {
                     None
@@ -175,17 +190,11 @@ impl VirtuosoClient {
         }
 
         // P0-A ownership (F05): when a target is selected, a session recorded
-        // against a different host is an ownership violation — switching targets
-        // must not silently reuse the wrong session.
-        if let (Some(tid), Some(session)) = (target_id.as_deref(), resolved_session.as_ref()) {
-            let target_host = cfg.remote_host.as_deref().unwrap_or("");
-            if !target_host.is_empty() && session.host != target_host {
-                return Err(crate::error::VirtuosoError::Config(format!(
-                    "session '{}' belongs to host '{}' but target '{tid}' resolves to '{}'; \
-                     refusing to reuse the wrong session (run `vcli session list`)",
-                    session.id, session.host, target_host
-                )));
-            }
+        // against a different host or a different bridge port (same host, other
+        // target) is an ownership violation. Single rule lives in
+        // `CommandContext::validate_session_ownership`.
+        if let Some(session) = resolved_session.as_ref() {
+            ctx.validate_session_ownership(session)?;
         }
 
         Ok(Self {
@@ -1487,6 +1496,105 @@ mod client_id_tests {
         );
 
         std::env::remove_var("VB_PORT");
+        clear_env();
+    }
+
+    /// Real construction path (F05 regression): a session recorded on the SAME
+    /// compute host but a different bridge port belongs to another target and
+    /// must be rejected by `VirtuosoClient::from_context` — the actual path the
+    /// CLI takes, not just the unit-level `validate_session_ownership` check.
+    #[test]
+    #[serial]
+    fn from_context_rejects_session_on_same_host_but_other_target_bridge_port() {
+        clear_env();
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("cache");
+        let state = dir.path().join("state");
+        std::fs::create_dir_all(cache.join("virtuoso_bridge/sessions")).unwrap();
+        // A session that belongs to `test` (bridge port 30002), sharing the
+        // same compute node as `prod` (bridge port 30001).
+        let sess = serde_json::json!({
+            "id": "sess-wrong-port",
+            "port": 30002,
+            "pid": 42,
+            "host": "compute-eda-42",
+            "user": "user1",
+            "created": "2026-01-01T00:00:00Z",
+        });
+        std::fs::write(
+            cache.join("virtuoso_bridge/sessions/sess-wrong-port.json"),
+            serde_json::to_string(&sess).unwrap(),
+        )
+        .unwrap();
+
+        std::env::set_var("VB_CACHE_DIR", &cache);
+        std::env::set_var("VB_STATE_DIR", &state);
+        std::env::set_var("VB_SESSION", "sess-wrong-port");
+        std::env::set_var("VB_REMOTE_HOST_prodfix", "compute-eda-42");
+        std::env::set_var("VB_PORT_prodfix", "30001");
+
+        let mut cfg = Config::from_env_with_profile(Some("prodfix")).unwrap();
+        cfg.profile = None; // state/tunnel reads key on the target namespace
+        let ctx = crate::context::CommandContext::new(cfg.clone(), Some("prod".into())).unwrap();
+
+        let error = match VirtuosoClient::from_context(&ctx) {
+            Ok(_) => panic!("session on another target's bridge port must be rejected"),
+            Err(e) => e,
+        };
+        assert!(
+            error.to_string().contains("is on bridge port 30002"),
+            "expected bridge-port ownership error, got: {error}"
+        );
+
+        std::env::remove_var("VB_REMOTE_HOST_prodfix");
+        std::env::remove_var("VB_PORT_prodfix");
+        std::env::remove_var("VB_CACHE_DIR");
+        std::env::remove_var("VB_STATE_DIR");
+        clear_env();
+    }
+
+    /// Positive control on the same construction path: a session matching the
+    /// target's host AND bridge port constructs a client successfully.
+    #[test]
+    #[serial]
+    fn from_context_accepts_session_matching_target_host_and_bridge_port() {
+        clear_env();
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("cache");
+        let state = dir.path().join("state");
+        std::fs::create_dir_all(cache.join("virtuoso_bridge/sessions")).unwrap();
+        let sess = serde_json::json!({
+            "id": "sess-right-port",
+            "port": 30001,
+            "pid": 42,
+            "host": "compute-eda-42",
+            "user": "user1",
+            "created": "2026-01-01T00:00:00Z",
+        });
+        std::fs::write(
+            cache.join("virtuoso_bridge/sessions/sess-right-port.json"),
+            serde_json::to_string(&sess).unwrap(),
+        )
+        .unwrap();
+
+        std::env::set_var("VB_CACHE_DIR", &cache);
+        std::env::set_var("VB_STATE_DIR", &state);
+        std::env::set_var("VB_SESSION", "sess-right-port");
+        std::env::set_var("VB_REMOTE_HOST_prodfix", "compute-eda-42");
+        std::env::set_var("VB_PORT_prodfix", "30001");
+
+        let mut cfg = Config::from_env_with_profile(Some("prodfix")).unwrap();
+        cfg.profile = None;
+        let ctx = crate::context::CommandContext::new(cfg.clone(), Some("prod".into())).unwrap();
+
+        let client = VirtuosoClient::from_context(&ctx)
+            .expect("session matching target host+port must construct");
+        assert_eq!(client.port, 30001);
+
+        std::env::remove_var("VB_REMOTE_HOST_prodfix");
+        std::env::remove_var("VB_PORT_prodfix");
+        std::env::remove_var("VB_CACHE_DIR");
+        std::env::remove_var("VB_STATE_DIR");
         clear_env();
     }
 }
