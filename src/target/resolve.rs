@@ -104,16 +104,15 @@ pub fn resolve_target(name: &str) -> Result<ResolvedTarget, VirtuosoError> {
     })
 }
 
-/// Resolve the effective configuration for an invocation from CLI flags and
-/// ambient configuration.
+/// Resolve a concrete [`Selection`] into the effective, immutable config for
+/// one invocation. This is the single resolution point: callers (main) build a
+/// [`crate::context::CommandContext`] from the result and pass it to migrated
+/// commands, which must not re-read env.
 // TODO(P0-A CommandContext): remove `allow(dead_code)` once commands receive
 // the resolved Config explicitly instead of re-reading env.
 #[allow(dead_code)]
-pub fn resolve(
-    cli_target: Option<&str>,
-    cli_profile: Option<&str>,
-) -> Result<ResolvedTarget, VirtuosoError> {
-    match resolve_selection(cli_target, cli_profile)? {
+pub fn resolve_from_selection(selection: Selection) -> Result<ResolvedTarget, VirtuosoError> {
+    match selection {
         Selection::CliTarget(name) | Selection::EnvTarget(name) | Selection::ActiveTarget(name) => {
             resolve_target(&name)
         }
@@ -126,6 +125,18 @@ pub fn resolve(
             config: Config::from_env()?,
         }),
     }
+}
+
+/// Resolve the effective configuration for an invocation from CLI flags and
+/// ambient configuration.
+// TODO(P0-A CommandContext): remove `allow(dead_code)` once commands receive
+// the resolved Config explicitly instead of re-reading env.
+#[allow(dead_code)]
+pub fn resolve(
+    cli_target: Option<&str>,
+    cli_profile: Option<&str>,
+) -> Result<ResolvedTarget, VirtuosoError> {
+    resolve_from_selection(resolve_selection(cli_target, cli_profile)?)
 }
 
 #[cfg(test)]

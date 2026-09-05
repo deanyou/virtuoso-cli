@@ -52,15 +52,35 @@
 
 ## 4. 已完成（本阶段）
 
-- `src/target/resolve.rs`（新）：`resolve_selection` / `resolve_target` / `resolve` +
-  10 个单测（优先级、冲突、VB_TARGET、active_target、损坏配置报错）。
-- `src/main.rs`：接入 `resolve_selection`；`--target`+`--profile` 冲突报错（exit 2）；
-  目标不存在 exit 3；按 resolver 决定同步 env（profile/legacy 时清 `VB_TARGET`）。
-- `config.rs::from_env_with_profile` 的 `VB_TARGET` 分支标注为 TEMPORARY 桥接。
+- `src/target/resolve.rs`（新）：`resolve_selection` / `resolve_target` / `resolve` /
+  `resolve_from_selection` + 17 个单测（优先级、冲突、VB_TARGET、active_target、
+  失效 active_target 报错、最终配置层回归）。
+- `src/main.rs`：接入 resolver；`--target`+`--profile` 冲突报错（exit 2）；
+  目标不存在 exit 3；失效 active_target 报错（exit 2）；按 resolver 决定同步 env。
+- `config.rs::from_env_with_profile` 的 `VB_TARGET` 分支标注为 TEMPORARY 桥接；
+  新增 `from_env_with_profile_no_target`（resolver 隔离 VB_TARGET 干扰）；
+  新增 `Config::digest()`（身份摘要，F05）。
+- `src/context.rs`（新）：`CommandContext { config, target_id, config_digest }` +
+  `validate_session_ownership`（4 单测：摘要稳定性、归属通过/拒绝/跳过）。
 
-## 5. 待办（下一步）
+## 5. CommandContext 迁移进度（P0-A 进行中）
 
-- `CommandContext` 结构 + `VirtuosoClient::from_context`；
-- 迁移 76 处 `from_env` 调用点；
-- 删除 env 桥接分支；
-- target_id / config_digest 摘要计算（供 F05 校验）。
+| 命令族 | 状态 |
+|---|---|
+| tunnel（start/stop/restart/status/diagnose/attach/detach） | ✅ 已迁移：接收 `&CommandContext`，经 `ctx.config()` / `SSHClient::from_config` / `VirtuosoClient::from_context` 使用单次解析配置 |
+| `VirtuosoClient` | ✅ `from_context(ctx)` 新入口；`from_config(cfg, target_id)` 拆出；构造时做会话目标归属校验 |
+| session 命令族 | ⏳ 未迁移（仍经 env 重读） |
+| spectre/runner、skill、maestro 等 | ⏳ 未迁移（仍经 env 重读） |
+| env 桥接（`VB_TARGET`） | ⚠️ 保留给未迁移命令族；与 CommandContext 共用同一 `resolve_selection`，保证一致性 |
+
+- 端到端验证：`tunnel start --dry-run` 对 `--target`/`VB_TARGET`/active_target/
+  `--profile` 四种选择均正确解析；目标缺失 exit 3、失效 active_target exit 2；
+  `tunnel status` 输出含 `target` 与 `config_digest`。
+
+## 6. 待办（下一步）
+
+- 迁移 session 命令族（list/show/current/cleanup/history）到 `&CommandContext`；
+- 迁移 spectre/runner 与其余 `VirtuosoClient::from_env()` 调用点（76 处总量）；
+- 删除 `main()` 的 `VB_TARGET` env 桥接 + `config.rs` 的 `VB_TARGET` 分支
+  （全部命令族迁移完成后）；
+- `config_digest` 接入 daemon Hello 校验（P0-B 前哨，F05）。

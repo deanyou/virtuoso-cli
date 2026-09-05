@@ -7,6 +7,7 @@ mod client;
 mod command_log;
 mod commands;
 mod config;
+mod context;
 mod error;
 mod exit_codes;
 mod history;
@@ -1725,15 +1726,21 @@ fn parse_key_val(s: &str) -> std::result::Result<(String, String), String> {
 
 // ── Per-group dispatch helpers ───────────────────────────────────────
 
-fn dispatch_tunnel(cmd: TunnelCmd, format: OutputFormat) -> error::Result<serde_json::Value> {
+fn dispatch_tunnel(
+    ctx: &crate::context::CommandContext,
+    cmd: TunnelCmd,
+    format: OutputFormat,
+) -> error::Result<serde_json::Value> {
     match cmd {
-        TunnelCmd::Start { timeout, dry_run } => commands::tunnel::start(Some(timeout), dry_run),
-        TunnelCmd::Stop { force, dry_run } => commands::tunnel::stop(force, dry_run),
-        TunnelCmd::Restart { timeout } => commands::tunnel::restart(Some(timeout)),
-        TunnelCmd::Status => commands::tunnel::status(format),
-        TunnelCmd::Diagnose => commands::tunnel::diagnose(),
-        TunnelCmd::Attach { dry_run } => commands::tunnel::attach(dry_run),
-        TunnelCmd::Detach => commands::tunnel::detach(),
+        TunnelCmd::Start { timeout, dry_run } => {
+            commands::tunnel::start(ctx, Some(timeout), dry_run)
+        }
+        TunnelCmd::Stop { force, dry_run } => commands::tunnel::stop(ctx, force, dry_run),
+        TunnelCmd::Restart { timeout } => commands::tunnel::restart(ctx, Some(timeout)),
+        TunnelCmd::Status => commands::tunnel::status(ctx, format),
+        TunnelCmd::Diagnose => commands::tunnel::diagnose(ctx),
+        TunnelCmd::Attach { dry_run } => commands::tunnel::attach(ctx, dry_run),
+        TunnelCmd::Detach => commands::tunnel::detach(ctx),
     }
 }
 
@@ -2556,63 +2563,62 @@ fn main() {
     // of the process sees a single, consistent selection. `--target` and
     // `--profile` are mutually exclusive (see target::resolve).
     //
-    // NOTE: the effective Config is still read back from env by the command
-    // layer (Config::from_env()/VirtuosoClient::from_env()). Until CommandContext
-    // propagation lands (P0-A next step), we bridge the resolved selection via
-    // VB_TARGET/VB_PROFILE so those paths observe the same choice.
-    use crate::target::resolve::{resolve_selection, Selection};
-    match resolve_selection(cli.target.as_deref(), cli.profile.as_deref()) {
-        Ok(selection) => match selection {
-            Selection::CliTarget(name) => {
-                let manager = match crate::target::TargetManager::load() {
-                    Ok(m) => m,
-                    Err(e) => {
-                        eprintln!("Error loading targets: {}", e);
-                        std::process::exit(exit_codes::USAGE_ERROR);
-                    }
-                };
-                if manager.get(&name).is_none() {
-                    eprintln!(
-                        "Error: target '{}' not found in {}",
-                        name,
-                        manager.config_path().display()
-                    );
-                    std::process::exit(exit_codes::NOT_FOUND);
-                }
-                tracing::info!(
-                    "Target '{}' selected from {}",
-                    name,
-                    manager.config_path().display()
-                );
-                std::env::set_var("VB_TARGET", &name);
-            }
-            Selection::ActiveTarget(name) => {
-                // Bridge the active target through the same env path so
-                // Config::from_env() resolves it. Resolve_selection already
-                // verified the target exists.
-                std::env::set_var("VB_TARGET", &name);
-            }
-            Selection::EnvTarget(_) => {
-                // Already in the environment; Config::from_env() picks it up.
-            }
-            Selection::CliProfile(profile) => {
-                // An explicit profile beats a stale ambient VB_TARGET: the
-                // resolver already decided this is a profile selection, so
-                // clear the bridge variable to keep Config::from_env() in sync.
-                std::env::remove_var("VB_TARGET");
-                std::env::set_var("VB_PROFILE", &profile);
-            }
-            Selection::LegacyEnv => {
-                // No target selected; clear any stale bridge variable so a
-                // leftover VB_TARGET cannot hijack legacy env resolution.
-                std::env::remove_var("VB_TARGET");
-            }
-        },
+    // P0-A: the effective Config is resolved exactly once and handed to
+    // migrated command families (tunnel) via CommandContext. Not-yet-migrated
+    // families still call Config::from_env(), so they are driven through the
+    // VB_TARGET/VB_PROFILE bridge — set from the SAME single selection to keep
+    // every path consistent until their migration lands.
+    use crate::target::resolve::{resolve_from_selection, resolve_selection, Selection};
+    let selection = match resolve_selection(cli.target.as_deref(), cli.profile.as_deref()) {
+        Ok(s) => s,
         Err(e) => {
             eprintln!("Error: {e}");
             std::process::exit(exit_codes::USAGE_ERROR);
         }
+    };
+    match &selection {
+        Selection::CliTarget(name) => {
+            // Existence is validated below by resolve_from_selection.
+            std::env::set_var("VB_TARGET", name);
+        }
+        Selection::ActiveTarget(name) => {
+            // resolve_selection already verified the target exists.
+            std::env::set_var("VB_TARGET", name);
+        }
+        Selection::EnvTarget(_) => {
+            // Already in the environment; Config::from_env() picks it up.
+        }
+        Selection::CliProfile(profile) => {
+            // An explicit profile beats a stale ambient VB_TARGET: clear the
+            // bridge variable so legacy Config::from_env() stays in sync.
+            std::env::remove_var("VB_TARGET");
+            std::env::set_var("VB_PROFILE", profile);
+        }
+        Selection::LegacyEnv => {
+            // No target selected; clear any stale bridge variable so a
+            // leftover VB_TARGET cannot hijack legacy env resolution.
+            std::env::remove_var("VB_TARGET");
+        }
     }
+    // P0-A: single immutable Config for this invocation. Migrated commands
+    // receive it through CommandContext and must not re-read env.
+    let resolved = match resolve_from_selection(selection) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(match e {
+                crate::error::VirtuosoError::NotFound(_) => exit_codes::NOT_FOUND,
+                _ => exit_codes::USAGE_ERROR,
+            });
+        }
+    };
+    let ctx = match crate::context::CommandContext::from_resolved(&resolved) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(exit_codes::USAGE_ERROR);
+        }
+    };
 
     let log_level = if cli.verbose {
         "debug"
@@ -2670,7 +2676,7 @@ fn main() {
             token_path,
             daemon_nonce,
         } => commands::transport_daemon::run_with(&ipc_endpoint, &token_path, &daemon_nonce),
-        Commands::Tunnel(cmd) => dispatch_tunnel(cmd, format),
+        Commands::Tunnel(cmd) => dispatch_tunnel(&ctx, cmd, format),
         Commands::Profile(cmd) => dispatch_profile(cmd),
         Commands::Skill(cmd) => dispatch_skill(cmd),
         Commands::Cell(cmd) => dispatch_cell(cmd),

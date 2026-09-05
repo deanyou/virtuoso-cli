@@ -4,6 +4,7 @@ use crate::client::maestro_ops::MaestroOps;
 use crate::client::schematic_ops::SchematicOps;
 use crate::client::whitelist::EvalstringWhitelist;
 use crate::client::window_ops::WindowOps;
+use crate::config::Config;
 use crate::error::{Result, VirtuosoError};
 use crate::models::{ExecutionStatus, SessionInfo, VirtuosoResult};
 use crate::transport::contract::CommandRequest;
@@ -87,7 +88,18 @@ impl VirtuosoClient {
 
     pub fn from_env() -> Result<Self> {
         let cfg = crate::config::Config::from_env()?;
+        Self::from_config(cfg, None)
+    }
 
+    /// Build a client from an already-resolved CommandContext (P0-A). The
+    /// config is parsed exactly once in `main()`; this path never re-reads the
+    /// environment for host/port/backend. Session selection still follows
+    /// `--session`/`VB_SESSION` and is validated against the context's target.
+    pub fn from_context(ctx: &crate::context::CommandContext) -> Result<Self> {
+        Self::from_config(ctx.config().clone(), ctx.target_id().map(str::to_string))
+    }
+
+    fn from_config(cfg: Config, target_id: Option<String>) -> Result<Self> {
         let tunnel = if cfg.is_remote() {
             let state = crate::models::TunnelState::load().ok().flatten();
             if let Some(ref s) = state {
@@ -160,6 +172,20 @@ impl VirtuosoClient {
         // Skipped if daemon_user is not yet known (populated lazily by `session show`).
         if let Some(ref session) = resolved_session {
             guard_cross_user(session)?;
+        }
+
+        // P0-A ownership (F05): when a target is selected, a session recorded
+        // against a different host is an ownership violation — switching targets
+        // must not silently reuse the wrong session.
+        if let (Some(tid), Some(session)) = (target_id.as_deref(), resolved_session.as_ref()) {
+            let target_host = cfg.remote_host.as_deref().unwrap_or("");
+            if !target_host.is_empty() && session.host != target_host {
+                return Err(crate::error::VirtuosoError::Config(format!(
+                    "session '{}' belongs to host '{}' but target '{tid}' resolves to '{}'; \
+                     refusing to reuse the wrong session (run `vcli session list`)",
+                    session.id, session.host, target_host
+                )));
+            }
         }
 
         Ok(Self {

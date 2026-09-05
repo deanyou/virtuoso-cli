@@ -553,9 +553,14 @@ impl SSHClient {
 
     pub fn from_env(keep_remote_files: bool) -> Result<Self> {
         let cfg = Config::from_env()?;
-        // The tunnel child is a dedicated OpenSSH-only lifecycle. An explicit
-        // `native` request must fail here rather than be silently ignored.
-        crate::transport::backend::require_openssh(&cfg)?;
+        Self::from_config(&cfg, keep_remote_files)
+    }
+
+    /// Build from an already-resolved config (P0-A). The tunnel child is a
+    /// dedicated OpenSSH-only lifecycle; an explicit `native` request must
+    /// fail here rather than be silently ignored.
+    pub fn from_config(cfg: &Config, keep_remote_files: bool) -> Result<Self> {
+        crate::transport::backend::require_openssh(cfg)?;
         let mut runner = SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
         if let Some(ref user) = cfg.remote_user {
             runner = runner.with_user(user);
@@ -578,7 +583,7 @@ impl SSHClient {
             transport: Arc::new(OpenSshTransport::new(runner)),
             port: cfg.port,
             keep_remote_files,
-            profile: cfg.profile,
+            profile: cfg.profile.clone(),
             tunnel_pid: None,
         })
     }
