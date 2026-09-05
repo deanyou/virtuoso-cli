@@ -21,6 +21,7 @@ mod skill_finder;
 mod spectre;
 mod streaming;
 mod sys;
+mod target;
 #[cfg(test)]
 mod test_env;
 mod transaction;

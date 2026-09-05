@@ -293,7 +293,37 @@ impl Config {
     }
 
     pub fn from_env_with_profile(profile: Option<&str>) -> Result<Self> {
+        Self::from_env_resolve(profile, true)
+    }
+
+    /// Like [`from_env_with_profile`] but never honors the ambient `VB_TARGET`
+    /// bridge. Used by `target::resolve` for profile/legacy selections so a
+    /// leftover `VB_TARGET` cannot hijack the resolved configuration.
+    pub(crate) fn from_env_with_profile_no_target(profile: Option<&str>) -> Result<Self> {
+        Self::from_env_resolve(profile, false)
+    }
+
+    fn from_env_resolve(profile: Option<&str>, honor_vb_target: bool) -> Result<Self> {
         load_dotenv_upward();
+
+        if honor_vb_target {
+            // TEMPORARY bridge (P0-A): main() resolves the target/profile
+            // selection via target::resolve and syncs VB_TARGET here. This
+            // branch must be removed together with the env-var bridge when
+            // commands receive the resolved Config explicitly (CommandContext
+            // propagation).
+            if let Ok(target_name) = std::env::var("VB_TARGET") {
+                if !target_name.is_empty() {
+                    let manager = crate::target::TargetManager::load().map_err(|e| {
+                        VirtuosoError::Config(format!("failed to load targets: {e}"))
+                    })?;
+                    let target = manager.get(&target_name).ok_or_else(|| {
+                        VirtuosoError::Config(format!("target '{}' not found", target_name))
+                    })?;
+                    return Self::from_target(target, &target_name);
+                }
+            }
+        }
 
         let remote_host = Self::env_with_profile("VB_REMOTE_HOST", profile);
 
@@ -398,6 +428,66 @@ impl Config {
             .unwrap_or_default();
         let hash: u16 = user.bytes().map(|b| b as u16).sum::<u16>() % 500;
         65000 + hash
+    }
+
+    /// Create a Config from a TargetConfig (multi-target mode).
+    ///
+    /// TargetConfig fields override defaults; None fields fall back to
+    /// the same defaults as from_env().
+    pub fn from_target(target: &crate::target::TargetConfig, target_name: &str) -> Result<Self> {
+        let port = target.port.unwrap_or_else(Self::default_port);
+        if port == 0 {
+            return Err(VirtuosoError::Config(
+                "target port must be between 1 and 65535".into(),
+            ));
+        }
+
+        Ok(Self {
+            profile: Some(target_name.to_string()),
+            remote_host: target.remote_host.clone(),
+            remote_user: target.remote_user.clone(),
+            port,
+            jump_host: target.jump_host.clone(),
+            jump_user: target.jump_user.clone(),
+            ssh_port: target.ssh_port,
+            ssh_key: target.ssh_key.clone(),
+            ssh_config: target.ssh_config.clone(),
+            ssh_backend: target.ssh_backend.clone(),
+            disable_control_master: target.disable_control_master.unwrap_or(false),
+            timeout: target.timeout.unwrap_or(30),
+            read_timeout: target.read_timeout.unwrap_or(120),
+            keep_remote_files: target.keep_remote_files.unwrap_or(false),
+            spectre_cmd: target
+                .spectre_cmd
+                .clone()
+                .unwrap_or_else(|| "spectre".into()),
+            spectre_args: target.spectre_args.clone().unwrap_or_default(),
+            spectre_max_workers: target.spectre_max_workers.unwrap_or(8),
+            ssh_max_sessions: target
+                .ssh_max_sessions
+                .unwrap_or(crate::transport::scheduler::SchedulerLimits::DEFAULT_TOTAL),
+            ssh_max_bulk_sessions: target
+                .ssh_max_bulk_sessions
+                .unwrap_or(crate::transport::scheduler::SchedulerLimits::DEFAULT_BULK),
+            ssh_reconnect_max_attempts: target
+                .ssh_reconnect_max_attempts
+                .unwrap_or(crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_ATTEMPTS),
+            ssh_reconnect_max_delay: target
+                .ssh_reconnect_max_delay
+                .unwrap_or(crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_DELAY),
+            ssh_keepalive_interval: target
+                .ssh_keepalive_interval
+                .unwrap_or(crate::transport::lifecycle::KeepalivePolicy::DEFAULT_INTERVAL),
+            ssh_keepalive_failures: target
+                .ssh_keepalive_failures
+                .unwrap_or(crate::transport::lifecycle::KeepalivePolicy::DEFAULT_FAILURES),
+            transport_shutdown_grace: 10,
+            cadence_cshrc: target.cadence_cshrc.clone(),
+            spectre_bin: target.spectre_bin.clone(),
+            roles: RemoteRoles::default(),
+            transport_daemon_socket: target.transport_daemon_socket.clone(),
+            transport_daemon_token: target.transport_daemon_token.clone(),
+        })
     }
 
     pub fn is_remote(&self) -> bool {

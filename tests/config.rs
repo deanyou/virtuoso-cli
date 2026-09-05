@@ -1,9 +1,10 @@
 //! Integration tests for Config parsing.
 //!
-//! Note: These tests are limited because Config::from_env_with_profile() loads
-//! .env files from the current directory upward, which can override test values.
-//! Only tests that don't depend on specific env values or are resilient to .env
-//! overrides are included here.
+//! `Config::from_env_with_profile()` loads `.env` files from the current
+//! directory upward (so `~/.env` can leak values here). dotenvy's `load()`
+//! never overrides an already-set env var, so tests that must see a specific
+//! value set that var explicitly in the process first — that shields them from
+//! `.env`. Env-mutating tests are marked `#[serial]`.
 
 /// Test that Config can be created without panicking.
 #[test]
@@ -24,10 +25,29 @@ fn test_config_spectre_max_workers_default() {
     assert_eq!(config.spectre_max_workers, 8);
 }
 
-/// Test that timeout has a reasonable default.
+/// The default timeout is 30, verified in isolation.
+///
+/// An empty `VB_TIMEOUT` is set first so the upward `.env` (which on this
+/// machine sets `VB_TIMEOUT=60`) cannot leak in: dotenvy skips already-set
+/// vars, and `Config` treats an empty value as absent, so the parser falls
+/// back to the built-in default.
+#[serial_test::serial]
 #[test]
-fn test_config_timeout_default() {
+fn test_config_timeout_default_isolated() {
+    std::env::set_var("VB_TIMEOUT", "");
     let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
-    // Should be 30 by default
+    std::env::remove_var("VB_TIMEOUT");
     assert_eq!(config.timeout, 30);
+}
+
+/// An explicit ambient `VB_TIMEOUT` overrides both the default and any `.env`
+/// value. `45` differs from the default (30) and from this machine's `~/.env`
+/// (60), so a pass proves the process env var wins.
+#[serial_test::serial]
+#[test]
+fn test_config_timeout_env_override_wins() {
+    std::env::set_var("VB_TIMEOUT", "45");
+    let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
+    std::env::remove_var("VB_TIMEOUT");
+    assert_eq!(config.timeout, 45);
 }

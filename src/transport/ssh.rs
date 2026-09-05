@@ -853,7 +853,10 @@ mod tests {
             .arg("-C")
             .arg(destination.path());
 
-        let output = run_streaming_pipeline(producer, consumer, Duration::from_secs(5)).unwrap();
+        // 20s is a deadlock-detection bound, not a performance bound: a real
+        // deadlock never completes regardless of the budget. 5s was too tight
+        // and flaky on loaded machines.
+        let output = run_streaming_pipeline(producer, consumer, Duration::from_secs(20)).unwrap();
         assert!(output.producer_status.success());
         assert!(output.consumer_status.success());
         assert!(output.producer_stderr.len() >= 262144);
