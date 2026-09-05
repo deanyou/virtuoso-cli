@@ -179,6 +179,9 @@ class LiveExecutor(Executor):
         self._baseline_taken = False
         self._scenario_display: Optional[str] = None
         self._scenario_pid: int = 0
+        # Window geometry for CIW_INPUT click coordinates — set during precheck.
+        self._window_width: Optional[int] = None
+        self._window_height: Optional[int] = None
 
     # ------------------------------------------------------------------
     # helpers
@@ -782,8 +785,13 @@ class LiveExecutor(Executor):
             raise RuntimeError("CIW_INPUT requires a bound window")
         # Calculate click position based on window geometry
         # CIW input line is typically at bottom 10-20% of the window
-        w = getattr(self, '_window_width', 800)
-        h = getattr(self, '_window_height', 600)
+        if self._window_width is None or self._window_height is None:
+            raise RuntimeError(
+                "CIW_INPUT requires window geometry from precheck; "
+                "run precheck() before execute()"
+            )
+        w = self._window_width
+        h = self._window_height
         click_x = w // 2  # Center X
         # Use 90% of height to ensure we're in the input area
         # CIW input is typically at the bottom of the window
