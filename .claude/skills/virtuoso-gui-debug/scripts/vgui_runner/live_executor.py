@@ -185,7 +185,12 @@ class LiveExecutor(Executor):
     # ------------------------------------------------------------------
 
     def _vcli_argv(self, *args: str) -> List[str]:
+        """Build vcli argv without session (for session list, etc.)."""
         return [self._vcli, *args, "--format", "json"]
+
+    def _vcli_argv_with_session(self, *args: str) -> List[str]:
+        """Build vcli argv with --session flag for commands that need daemon access."""
+        return [self._vcli, "--session", self._session_id, *args, "--format", "json"]
 
     def _run_json(self, argv: List[str], timeout_seconds: int) -> Dict[str, Any]:
         result = self._runner.run(argv, timeout_seconds)
@@ -338,6 +343,16 @@ class LiveExecutor(Executor):
             self.window_id = window.get("dismiss_id") or window.get("window_id")
             self._scenario_display = scenario.display
             self._scenario_pid = int(effective_pid)
+            # Store window geometry for CIW_INPUT click coordinates
+            # Use vcli reported geometry, but cap at reasonable values for CIW
+            geom = window.get("geometry", {})
+            # CIW windows are typically around 600-800 wide and 500-700 tall
+            # Use reported values but cap to reasonable bounds
+            reported_w = geom.get("w", 800)
+            reported_h = geom.get("h", 600)
+            # Cap at 800x700 max (typical CIW window size)
+            self._window_width = min(reported_w, 800)
+            self._window_height = min(reported_h, 700)
 
             # 3. exclusive DISPLAY lock
             lock = _DisplayLock(scenario.display)
@@ -523,7 +538,7 @@ class LiveExecutor(Executor):
                     }
                 expression = expected["expression"]
                 data = self._run_json(
-                    self._vcli_argv("skill", "exec", expression),
+                    self._vcli_argv_with_session("skill", "exec", expression),
                     _TIMEOUT_ACTION,
                 )
                 actual = data.get("output", "")
@@ -765,12 +780,18 @@ class LiveExecutor(Executor):
         wid = self.window_id
         if not wid:
             raise RuntimeError("CIW_INPUT requires a bound window")
+        # Calculate click position based on window geometry
+        # CIW input line is typically at bottom 10-20% of the window
+        w = getattr(self, '_window_width', 800)
+        h = getattr(self, '_window_height', 600)
+        click_x = w // 2  # Center X
+        # Use 90% of height to ensure we're in the input area
+        # CIW input is typically at the bottom of the window
+        click_y = max(int(h * 0.9), h - 100)  # At least 100px from top
         # 1. Activate the CIW window
         self._run_action("activate")
         # 2. Click the input line (bottom center of window)
-        # Use click-rel with approximate bottom-center coordinates.
-        # The input line is ~20px from the bottom of the CIW window.
-        self._run_action("click-rel", x=400, y=870)
+        self._run_action("click-rel", x=click_x, y=click_y)
         # 3. Clear existing input if requested
         if clear_first:
             self._run_action("key", text="ctrl+a")

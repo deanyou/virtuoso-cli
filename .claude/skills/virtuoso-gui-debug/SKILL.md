@@ -423,11 +423,11 @@ The live executor uses `vcli window action-x11 --direct` by default, skipping he
 ```bash
 # Default (fast, 260ms):
 python3 scripts/gui_runner.py run scenario.json --output out --executor live \
-    --session dean-user1-37787 --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker
+    --session dean-user1-33817 --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker
 
 # Full validation (slow, 1350ms, use --no-direct):
 python3 scripts/gui_runner.py run scenario.json --output out --executor live \
-    --session dean-user1-37787 --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker \
+    --session dean-user1-33817 --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker \
     --no-direct
 ```
 
