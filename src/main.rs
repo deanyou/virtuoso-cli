@@ -109,9 +109,14 @@ enum Commands {
             so an LLM agent can quickly fix misconfiguration.\n\n\
             Examples:\n  \
             vcli config check\n  \
+            vcli config check --connect\n  \
             vcli config check --format json"
     )]
-    ConfigCheck,
+    ConfigCheck {
+        /// Attempt actual SSH/daemon connectivity test (TCP + SSH auth + daemon ping)
+        #[arg(long, default_value_t = false)]
+        connect: bool,
+    },
 
     /// Manage SSH tunnel to remote Virtuoso host
     #[command(subcommand)]
@@ -2345,7 +2350,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
-        Commands::ConfigCheck => commands::config::run(),
+        Commands::ConfigCheck { connect } => commands::config::run(connect),
         // Compiled only with `native-ssh`; other builds have no such subcommand
         // at all, so there is nothing to dispatch. `run_with` blocks forever
         // (it is the daemon process); returning here is fine because nothing

@@ -85,7 +85,10 @@ const INTEGER_VARS: &[(&str, u64, u64)] = &[
 const LOCAL_PATH_VARS: &[&str] = &["VB_SSH_KEY", "VB_SSH_CONFIG"];
 
 /// Run `vcli config check`.
-pub fn run() -> Result<Value> {
+///
+/// If `connect` is true, also perform live connectivity checks:
+/// TCP port reachability, SSH authentication, and daemon response.
+pub fn run(connect: bool) -> Result<Value> {
     let mut errors: Vec<Value> = Vec::new();
     let mut warnings: Vec<Value> = Vec::new();
     let mut suggestions: Vec<String> = Vec::new();
@@ -362,6 +365,13 @@ pub fn run() -> Result<Value> {
         "fail"
     };
 
+    // 13. Optional live connectivity checks (--connect flag)
+    let connectivity = if connect {
+        Some(run_connectivity_checks(&config_status))
+    } else {
+        None
+    };
+
     Ok(json!({
         "status": status,
         "errors_count": errors.len(),
@@ -372,6 +382,7 @@ pub fn run() -> Result<Value> {
         "recognized_vars": recognized,
         "unrecognized_vars": unrecognized,
         "config": config_status,
+        "connectivity": connectivity,
     }))
 }
 
@@ -548,4 +559,91 @@ fn check_dotenv_file(
             }
         }
     }
+}
+
+/// Live connectivity checks: TCP reachability, SSH auth, daemon response.
+fn run_connectivity_checks(config: &Value) -> Value {
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    let is_remote = config.get("is_remote").and_then(|v| v.as_bool()).unwrap_or(false);
+    if !is_remote {
+        return json!({
+            "status": "skipped",
+            "reason": "not in remote mode (VB_REMOTE_HOST not set)"
+        });
+    }
+
+    let host = config.get("remote_host").and_then(|v| v.as_str()).unwrap_or("");
+    let port = config.get("port").and_then(|v| v.as_u64()).unwrap_or(0);
+    let ssh_port = config.get("ssh_port").and_then(|v| v.as_u64()).unwrap_or(22);
+
+    let mut checks = Vec::new();
+
+    // 1. TCP port reachability (SSH port)
+    let tcp_target = format!("{host}:{ssh_port}");
+    let tcp_ok = TcpStream::connect_timeout(
+        &tcp_target.parse().unwrap_or_else(|_| "0.0.0.0:0".parse().unwrap()),
+        Duration::from_secs(5),
+    ).is_ok();
+    checks.push(json!({
+        "check": "tcp_connect",
+        "target": tcp_target,
+        "ok": tcp_ok,
+        "duration_ms": 5000u64,
+    }));
+
+    // 2. SSH authentication test (if TCP succeeded)
+    let mut ssh_ok = false;
+    if tcp_ok {
+        let ssh_result = std::process::Command::new("ssh")
+            .args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=accept-new", "-p", &ssh_port.to_string(), host, "true"])
+            .output();
+        ssh_ok = ssh_result.map(|o| o.status.success()).unwrap_or(false);
+        checks.push(json!({
+            "check": "ssh_auth",
+            "target": host,
+            "ok": ssh_ok,
+        }));
+    } else {
+        checks.push(json!({
+            "check": "ssh_auth",
+            "target": host,
+            "ok": false,
+            "skipped": "tcp_connect failed",
+        }));
+    }
+
+    // 3. Daemon response test (if SSH succeeded)
+    let mut daemon_ok = false;
+    if ssh_ok {
+        let daemon_result = std::process::Command::new("ssh")
+            .args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-p", &ssh_port.to_string(), host, &format!("VB_PORT={port} vcli session list --format json")])
+            .output();
+        if let Ok(output) = daemon_result {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                daemon_ok = stdout.contains("\"status\"") || stdout.contains("sessions");
+            }
+        }
+        checks.push(json!({
+            "check": "daemon_response",
+            "port": port,
+            "ok": daemon_ok,
+        }));
+    } else {
+        checks.push(json!({
+            "check": "daemon_response",
+            "port": port,
+            "ok": false,
+            "skipped": "ssh_auth failed",
+        }));
+    }
+
+    let all_ok = checks.iter().all(|c| c.get("ok").and_then(|v| v.as_bool()).unwrap_or(false));
+    json!({
+        "status": if all_ok { "pass" } else { "fail" },
+        "host": host,
+        "checks": checks,
+    })
 }

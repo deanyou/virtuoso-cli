@@ -49,7 +49,7 @@ fn with_env_vars<F: FnOnce()>(vars: &[(&str, Option<&str>)], f: F) {
 }
 
 fn run_check() -> serde_json::Value {
-    virtuoso_cli::commands::config::run().unwrap()
+    virtuoso_cli::commands::config::run(false).unwrap()
 }
 
 fn status_of(result: &serde_json::Value) -> &str {
@@ -408,7 +408,7 @@ fn run_with_dotenv(env_content: &str) -> serde_json::Value {
     std::fs::write(&env_path, env_content).unwrap();
     let prev_dir = std::env::current_dir().unwrap();
     std::env::set_current_dir(&tmp).unwrap();
-    let result = virtuoso_cli::commands::config::run().unwrap();
+    let result = virtuoso_cli::commands::config::run(false).unwrap();
     std::env::set_current_dir(&prev_dir).unwrap();
     std::fs::remove_dir_all(&tmp).ok();
     result
@@ -442,7 +442,7 @@ fn test_dotenv_bom_is_warning() {
     std::fs::write(tmp.join(".env"), &content).unwrap();
     let prev_dir = std::env::current_dir().unwrap();
     std::env::set_current_dir(&tmp).unwrap();
-    let result = virtuoso_cli::commands::config::run().unwrap();
+    let result = virtuoso_cli::commands::config::run(false).unwrap();
     std::env::set_current_dir(&prev_dir).unwrap();
     std::fs::remove_dir_all(&tmp).ok();
     assert!(
