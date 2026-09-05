@@ -28,7 +28,10 @@ __all__ = [
 
 # Keys kept from the parent environment. Everything else (credentials,
 # license paths, DISPLAY, VB_*) is dropped before spawning a child.
-_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL")
+# Note: VB_PORT and VB_REMOTE_HOST are needed for vcli to connect to the daemon.
+# Note: HOME is needed for vcli to resolve paths like ~/.cache/virtuoso_bridge/sessions/.
+# Note: XDG_CACHE_HOME is needed for vcli to find session files.
+_ENV_ALLOWLIST = ("PATH", "LANG", "LC_ALL", "HOME", "XDG_CACHE_HOME", "VB_PORT", "VB_REMOTE_HOST")
 _EXTRA_ENV = {"VCLI_CAPABILITY": "admin"}
 
 # A syntactically safe SSH hostname: no whitespace, shell metacharacters,
