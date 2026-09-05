@@ -66,11 +66,16 @@ impl CommandContext {
     }
 
     /// Validate that a tunnel state belongs to this context's target.
-    /// `state.port` is the local forward port; the discriminator against the
-    /// target is the *remote* bridge port (`attached_remote_port` when set,
-    /// otherwise the deployed tunnel's `port`).
+    /// `state.port` is the local forward port and may legitimately fall back
+    /// from the target's bridge port, so the ownership discriminator is the
+    /// *remote* bridge port: `remote_bridge_port` (deployed, fixed at
+    /// `cfg.port`) or `attached_remote_port` (attached), falling back to
+    /// `port` only for legacy state files.
     pub fn validate_tunnel_ownership(&self, state: &crate::models::TunnelState) -> Result<()> {
-        let remote_port = state.attached_remote_port.unwrap_or(state.port);
+        let remote_port = state
+            .remote_bridge_port
+            .or(state.attached_remote_port)
+            .unwrap_or(state.port);
         self.validate_endpoint_ownership(
             "tunnel",
             &state.port.to_string(),
@@ -220,10 +225,111 @@ mod tests {
             config_digest: None,
             mode: Some(crate::models::TUNNEL_MODE_ATTACHED.into()),
             attached_remote_port: Some(30002),
+            remote_bridge_port: Some(30002),
             attached_session_id: None,
         };
         let err = ctx.validate_tunnel_ownership(&state).unwrap_err();
         assert!(err.to_string().contains("is on bridge port 30002"));
+    }
+
+    #[serial]
+    #[test]
+    fn tunnel_ownership_pass_with_local_port_fallback_remote_fixed() {
+        // `tunnel start` may fall back to a *local* forward port when the
+        // configured bridge port is taken locally, while the remote endpoint
+        // stays fixed at the target's bridge port. Ownership must be judged on
+        // the remote port, so this freshly-created state is NOT self-rejected.
+        let ctx =
+            CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
+        let state = crate::models::TunnelState {
+            version: crate::models::CURRENT_STATE_VERSION,
+            port: 40001, // local fallback — differs from the bridge port
+            pid: 0,
+            remote_host: "compute-eda-42".into(),
+            setup_path: None,
+            profile: Some("prod".into()),
+            backend: Some("openssh".into()),
+            daemon_nonce: None,
+            executable_path: None,
+            start_identity: None,
+            ipc_endpoint: None,
+            token_path: None,
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
+            mode: Some(crate::models::TUNNEL_MODE_DEPLOYED.into()),
+            attached_remote_port: None,
+            remote_bridge_port: Some(30001), // fixed remote bridge port
+            attached_session_id: None,
+        };
+        assert!(ctx.validate_tunnel_ownership(&state).is_ok());
+    }
+
+    #[serial]
+    #[test]
+    fn tunnel_ownership_rejects_local_fallback_on_wrong_remote_port() {
+        // Same as above but the recorded remote bridge port belongs to another
+        // target — must be rejected even though the local port matches nothing
+        // meaningful.
+        let ctx =
+            CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
+        let state = crate::models::TunnelState {
+            version: crate::models::CURRENT_STATE_VERSION,
+            port: 30001,
+            pid: 0,
+            remote_host: "compute-eda-42".into(),
+            setup_path: None,
+            profile: Some("prod".into()),
+            backend: Some("openssh".into()),
+            daemon_nonce: None,
+            executable_path: None,
+            start_identity: None,
+            ipc_endpoint: None,
+            token_path: None,
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
+            mode: Some(crate::models::TUNNEL_MODE_DEPLOYED.into()),
+            attached_remote_port: None,
+            remote_bridge_port: Some(30002),
+            attached_session_id: None,
+        };
+        let err = ctx.validate_tunnel_ownership(&state).unwrap_err();
+        assert!(err.to_string().contains("is on bridge port 30002"));
+    }
+
+    #[serial]
+    #[test]
+    fn tunnel_ownership_legacy_state_uses_port_when_no_remote_port() {
+        // v1/v2 legacy state files have neither remote_bridge_port nor
+        // attached_remote_port; the remote port is then identical to `port`.
+        let ctx =
+            CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
+        let state = crate::models::TunnelState {
+            version: crate::models::CURRENT_STATE_VERSION,
+            port: 30001,
+            pid: 0,
+            remote_host: "compute-eda-42".into(),
+            setup_path: None,
+            profile: Some("prod".into()),
+            backend: None,
+            daemon_nonce: None,
+            executable_path: None,
+            start_identity: None,
+            ipc_endpoint: None,
+            token_path: None,
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
+            mode: None,
+            attached_remote_port: None,
+            remote_bridge_port: None,
+            attached_session_id: None,
+        };
+        assert!(ctx.validate_tunnel_ownership(&state).is_ok());
     }
 
     #[serial]

@@ -45,6 +45,16 @@ pub fn start(ctx: &CommandContext, timeout: Option<u64>, dry_run: bool) -> Resul
     }))
 }
 
+/// Filter remote sessions down to those belonging to `target_port` (the
+/// target's configured bridge port). Same-host, same-user sessions from a
+/// *different* target must never be attachable into this target's namespace.
+fn scoped_attach_sessions(sessions: Vec<SessionInfo>, target_port: u16) -> Vec<SessionInfo> {
+    sessions
+        .into_iter()
+        .filter(|s| s.port == target_port)
+        .collect()
+}
+
 /// Connect to a Virtuoso daemon that already exists on the remote host.
 ///
 /// This is the non-destructive counterpart to [`start`]: instead of deploying
@@ -90,14 +100,34 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
         ));
     }
 
+    // Target-scoped selection (F05): only sessions whose bridge port matches
+    // this target's configured port may be attached. We must never fall back
+    // to a different-port daemon — that would record another target's tunnel
+    // into this target's namespace, which stop/detach would then reject (and
+    // which the ownership check below forbids anyway).
+    let target_port = cfg.port;
+    let scoped = scoped_attach_sessions(sessions, target_port);
+    if scoped.is_empty() {
+        return Err(VirtuosoError::NotFound(format!(
+            "no session found on bridge port {target_port} for target '{}'; \
+             run `vcli tunnel start` to deploy a fresh daemon on this target",
+            ctx.target_id().unwrap_or("(selected)")
+        )));
+    }
+
     let host_hint = cfg.remote_host.as_deref();
-    let live = pick_live_session(sessions, transport.as_ref(), host_hint)?.ok_or_else(|| {
+    let live = pick_live_session(scoped, transport.as_ref(), host_hint)?.ok_or_else(|| {
         VirtuosoError::NotFound(
             "found session(s) on remote but no live daemons (port not listening); \
                  check that Virtuoso is running and the daemon process is alive"
                 .into(),
         )
     })?;
+
+    // Final ownership guard (F05) before opening the tunnel / writing state.
+    // Single rule in CommandContext::validate_session_ownership. For target
+    // selections this is defense-in-depth on top of the port filter above.
+    ctx.validate_session_ownership(&live)?;
 
     if dry_run {
         return Ok(json!({
@@ -146,6 +176,7 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
         config_digest: Some(ctx.config_digest().to_string()),
         mode: Some(TUNNEL_MODE_ATTACHED.into()),
         attached_remote_port: Some(live.port),
+        remote_bridge_port: Some(live.port),
         attached_session_id: Some(live.id.clone()),
     };
     // Write under the config's profile namespace so later stop/detach/status
@@ -427,6 +458,10 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         json!({
             "running": true,
             "port": state.port,
+            "remote_bridge_port": state
+                .remote_bridge_port
+                .or(state.attached_remote_port)
+                .unwrap_or(state.port),
             "pid": state.pid,
             "remote_host": state.remote_host,
             "port_reachable": port_open,
@@ -756,6 +791,55 @@ mod tests {
             actual: actual.into(),
             mismatch: actual != configured,
         }
+    }
+
+    fn session(id: &str, port: u16, host: &str) -> SessionInfo {
+        SessionInfo {
+            id: id.into(),
+            host: host.into(),
+            user: "user1".into(),
+            port,
+            pid: 0,
+            created: String::new(),
+            daemon_user: None,
+            daemon_version: None,
+        }
+    }
+
+    // ─── scoped_attach_sessions (F05) ────────────────────────────────────
+
+    #[test]
+    fn attach_scope_keeps_only_target_bridge_port() {
+        // Same host, two targets: prod=30001, test=30002. Only the prod
+        // session may be attachable for a prod target.
+        let sessions = vec![
+            session("prod-30001", 30001, "compute-eda-42"),
+            session("test-30002", 30002, "compute-eda-42"),
+            session("prod-30001-2", 30001, "compute-eda-42"),
+        ];
+        let scoped = scoped_attach_sessions(sessions, 30001);
+        assert_eq!(scoped.len(), 2);
+        assert!(scoped.iter().all(|s| s.port == 30001));
+    }
+
+    #[test]
+    fn attach_scope_empty_when_target_port_absent() {
+        let sessions = vec![
+            session("test-30002", 30002, "compute-eda-42"),
+            session("dev-30003", 30003, "compute-eda-42"),
+        ];
+        assert!(scoped_attach_sessions(sessions, 30001).is_empty());
+    }
+
+    #[test]
+    fn attach_scope_is_port_specific_not_host_specific() {
+        // Different hosts with the same bridge port still belong to the same
+        // target port; the scope is by port, host matching happens later.
+        let sessions = vec![
+            session("a-30001", 30001, "compute-a"),
+            session("b-30001", 30001, "compute-b"),
+        ];
+        assert_eq!(scoped_attach_sessions(sessions, 30001).len(), 2);
     }
 
     // ─── Warning text + JSON shape (existing 4 tests) ────────────────────
