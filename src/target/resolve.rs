@@ -184,23 +184,30 @@ mod tests {
         assert_eq!(sel, Selection::CliProfile("analog".to_string()));
     }
 
-    /// Write a targets.yaml under the given (temp) home directory.
-    fn write_targets(home: &std::path::Path, yaml: &str) {
-        let vcli = home.join(".vcli");
-        std::fs::create_dir_all(&vcli).unwrap();
-        std::fs::write(vcli.join("targets.yaml"), yaml).unwrap();
+    /// Write a targets.yaml into the given (temp) config directory.
+    fn write_targets(dir: &std::path::Path, yaml: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join("targets.yaml"), yaml).unwrap();
     }
 
-    /// Run `body` with HOME pointed at a temp dir (used to isolate
-    /// `TargetManager::load()`), then restore the original HOME.
-    fn with_home<T>(body: impl FnOnce(&std::path::Path) -> T) -> T {
-        let original_home = std::env::var_os("HOME");
+    /// Run `body` with `VB_TARGETS_FILE` pointed at a temp targets.yaml, then
+    /// restore the previous value.
+    ///
+    /// Pointing `HOME` at a temp dir does **not** isolate
+    /// `TargetManager::load()`: on Windows `dirs::home_dir()` resolves to
+    /// `FOLDERID_Profile` and ignores `HOME` entirely, so a HOME-based helper
+    /// silently loads the real user profile there and every "config exists"
+    /// assertion degrades to the empty-config path. `VB_TARGETS_FILE` is
+    /// honoured identically on every platform, so these tests assert the same
+    /// behaviour everywhere.
+    fn with_targets_dir<T>(body: impl FnOnce(&std::path::Path) -> T) -> T {
+        let original = std::env::var_os("VB_TARGETS_FILE");
         let temp = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", temp.path());
+        std::env::set_var("VB_TARGETS_FILE", temp.path().join("targets.yaml"));
         let result = body(temp.path());
-        match original_home {
-            Some(h) => std::env::set_var("HOME", h),
-            None => std::env::remove_var("HOME"),
+        match original {
+            Some(v) => std::env::set_var("VB_TARGETS_FILE", v),
+            None => std::env::remove_var("VB_TARGETS_FILE"),
         }
         result
     }
@@ -209,7 +216,7 @@ mod tests {
     #[test]
     fn active_target_used_when_no_cli_or_env() {
         std::env::remove_var("VB_TARGET");
-        let sel = with_home(|home| {
+        let sel = with_targets_dir(|home| {
             write_targets(
                 home,
                 "active_target: prod\ntargets:\n  prod:\n    remote_host: compute-eda-42\n",
@@ -223,7 +230,7 @@ mod tests {
     #[test]
     fn legacy_env_when_nothing_selected() {
         std::env::remove_var("VB_TARGET");
-        let sel = with_home(|_home| resolve_selection(None, None).unwrap());
+        let sel = with_targets_dir(|_home| resolve_selection(None, None).unwrap());
         assert_eq!(sel, Selection::LegacyEnv);
     }
 
@@ -231,7 +238,7 @@ mod tests {
     #[test]
     fn corrupt_targets_errors_when_needed() {
         std::env::remove_var("VB_TARGET");
-        let err = with_home(|home| {
+        let err = with_targets_dir(|home| {
             write_targets(home, "active_target: prod\ntargets: [not valid");
             resolve_selection(None, None).unwrap_err()
         });
@@ -241,7 +248,7 @@ mod tests {
     #[serial]
     #[test]
     fn resolve_target_builds_config() {
-        let resolved = with_home(|home| {
+        let resolved = with_targets_dir(|home| {
             write_targets(
                 home,
                 "targets:\n  prod:\n    remote_host: compute-eda-42\n    port: 30001\n",
@@ -259,7 +266,7 @@ mod tests {
     #[serial]
     #[test]
     fn resolve_target_not_found_errors() {
-        let err = with_home(|_home| resolve_target("nope").unwrap_err());
+        let err = with_targets_dir(|_home| resolve_target("nope").unwrap_err());
         assert!(err.to_string().contains("not found"));
     }
 
@@ -269,7 +276,7 @@ mod tests {
         // active_target is set to a name whose definition was deleted: this is
         // an inconsistent config and must error, not silently fall back.
         std::env::remove_var("VB_TARGET");
-        let err = with_home(|home| {
+        let err = with_targets_dir(|home| {
             write_targets(
                 home,
                 "active_target: prod\ntargets:\n  test:\n    remote_host: compute-eda-99\n",
@@ -285,7 +292,7 @@ mod tests {
     #[test]
     fn resolve_invalid_active_target_errors() {
         std::env::remove_var("VB_TARGET");
-        let err = with_home(|home| {
+        let err = with_targets_dir(|home| {
             write_targets(
                 home,
                 "active_target: prod\ntargets:\n  test:\n    remote_host: compute-eda-99\n",
@@ -303,7 +310,7 @@ mod tests {
         // An unset active_target must fall back to legacy env even when a
         // target literally named "default" exists — no implicit default pick.
         std::env::remove_var("VB_TARGET");
-        let sel = with_home(|home| {
+        let sel = with_targets_dir(|home| {
             write_targets(
                 home,
                 "targets:\n  default:\n    remote_host: compute-eda-default\n",
@@ -316,7 +323,7 @@ mod tests {
     #[serial]
     #[test]
     fn resolve_target_flow_uses_target_config() {
-        let resolved = with_home(|home| {
+        let resolved = with_targets_dir(|home| {
             write_targets(
                 home,
                 "targets:\n  prod:\n    remote_host: compute-eda-42\n    port: 30001\n",
@@ -335,7 +342,7 @@ mod tests {
     #[test]
     fn resolve_env_target_flow_uses_target_config() {
         std::env::set_var("VB_TARGET", "test");
-        let resolved = with_home(|home| {
+        let resolved = with_targets_dir(|home| {
             write_targets(
                 home,
                 "targets:\n  test:\n    remote_host: compute-eda-99\n    port: 30002\n",
@@ -355,7 +362,7 @@ mod tests {
     #[test]
     fn resolve_active_target_flow_uses_target_config() {
         std::env::remove_var("VB_TARGET");
-        let resolved = with_home(|home| {
+        let resolved = with_targets_dir(|home| {
             write_targets(
                 home,
                 "active_target: prod\ntargets:\n  prod:\n    remote_host: compute-eda-42\n    port: 30001\n",
@@ -380,7 +387,7 @@ mod tests {
         std::env::set_var("VB_TARGET", "test");
         std::env::set_var("VB_REMOTE_HOST", "sentinel-host");
         std::env::set_var("VB_PORT", "65432");
-        let resolved = with_home(|home| {
+        let resolved = with_targets_dir(|home| {
             write_targets(
                 home,
                 "targets:\n  test:\n    remote_host: compute-eda-99\n    port: 30002\n",
