@@ -821,5 +821,90 @@ class TestWindowIdDisambiguation(unittest.TestCase):
             self.assertIn("not found", err["error"])
 
 
+class TestSessionAwareArgv(unittest.TestCase):
+    """Tests for _vcli_argv_with_session (PR #74)."""
+
+    def test_argv_without_session(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([])
+            ex = make_executor(runner, tmp)
+            argv = ex._vcli_argv("session", "list")
+            self.assertEqual(argv[0], VCLI)
+            self.assertNotIn("--session", argv)
+            self.assertIn("--format", argv)
+
+    def test_argv_with_session(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([])
+            ex = make_executor(runner, tmp)
+            argv = ex._vcli_argv_with_session("skill", "exec", "1+1")
+            self.assertEqual(argv[0], VCLI)
+            self.assertIn("--session", argv)
+            self.assertIn(SESSION, argv)
+            # --session comes before subcommand args
+            session_idx = argv.index("--session")
+            self.assertEqual(argv[session_idx + 1], SESSION)
+            self.assertIn("skill", argv)
+            self.assertIn("exec", argv)
+            self.assertIn("1+1", argv)
+
+
+class TestDynamicCiwCoordinates(unittest.TestCase):
+    """Tests for dynamic CIW click coordinate calculation (PR #74)."""
+
+    def _precheck_with_geometry(self, w, h):
+        """Run precheck with a window of given geometry, return executor."""
+        import tempfile
+        windows = json.dumps({
+            "display": DISPLAY,
+            "count": 1,
+            "windows": [{
+                "window_id": WINDOW_ID, "dismiss_id": WINDOW_ID,
+                "display": DISPLAY, "title": "CIW", "pid": PID,
+                "visible": True,
+                "geometry": {"x": 0, "y": 0, "w": w, "h": h},
+            }],
+        })
+        tmp = tempfile.TemporaryDirectory()
+        runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=windows)])
+        ex = make_executor(runner, tmp.name)
+        err = ex.precheck(make_scenario())
+        self.assertIsNone(err, f"precheck failed: {err}")
+        return ex, tmp
+
+    def test_precheck_sets_window_geometry(self):
+        ex, tmp = self._precheck_with_geometry(900, 700)
+        try:
+            self.assertEqual(ex._window_width, 900)
+            self.assertEqual(ex._window_height, 700)
+        finally:
+            tmp.cleanup()
+
+    def test_large_window_not_capped(self):
+        """High-DPI windows (1200+ wide) should not be artificially capped."""
+        ex, tmp = self._precheck_with_geometry(1400, 1000)
+        try:
+            self.assertEqual(ex._window_width, 1400)
+            self.assertEqual(ex._window_height, 1000)
+        finally:
+            tmp.cleanup()
+
+    def test_ciw_input_requires_geometry(self):
+        """_ciw_input should raise if precheck hasn't set geometry."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([])
+            ex = make_executor(runner, tmp)
+            # Simulate window bound but geometry missing (shouldn't happen
+            # in practice since precheck sets both, but test the guard)
+            ex.window_id = WINDOW_ID
+            self.assertIsNone(ex._window_width)
+            with self.assertRaises(RuntimeError) as ctx:
+                ex._ciw_input("1+1")
+            self.assertIn("geometry", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

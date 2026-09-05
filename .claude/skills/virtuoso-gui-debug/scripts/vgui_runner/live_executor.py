@@ -346,16 +346,12 @@ class LiveExecutor(Executor):
             self.window_id = window.get("dismiss_id") or window.get("window_id")
             self._scenario_display = scenario.display
             self._scenario_pid = int(effective_pid)
-            # Store window geometry for CIW_INPUT click coordinates
-            # Use vcli reported geometry, but cap at reasonable values for CIW
+            # Store window geometry for CIW_INPUT click coordinates.
+            # Use vcli-reported geometry directly — no artificial cap, since
+            # high-DPI CIW windows can be 1200+ pixels wide.
             geom = window.get("geometry", {})
-            # CIW windows are typically around 600-800 wide and 500-700 tall
-            # Use reported values but cap to reasonable bounds
-            reported_w = geom.get("w", 800)
-            reported_h = geom.get("h", 600)
-            # Cap at 800x700 max (typical CIW window size)
-            self._window_width = min(reported_w, 800)
-            self._window_height = min(reported_h, 700)
+            self._window_width = geom.get("w", 800)
+            self._window_height = geom.get("h", 600)
 
             # 3. exclusive DISPLAY lock
             lock = _DisplayLock(scenario.display)
@@ -793,9 +789,11 @@ class LiveExecutor(Executor):
         w = self._window_width
         h = self._window_height
         click_x = w // 2  # Center X
-        # Use 90% of height to ensure we're in the input area
-        # CIW input is typically at the bottom of the window
-        click_y = max(int(h * 0.9), h - 100)  # At least 100px from top
+        # CIW input line is typically at the bottom ~10% of the window.
+        # Use 90% of height, but ensure we're at least 100px from the top
+        # and at most 5px from the bottom (stay inside the window).
+        click_y = max(int(h * 0.9), h - 100)
+        click_y = min(click_y, h - 5)
         # 1. Activate the CIW window
         self._run_action("activate")
         # 2. Click the input line (bottom center of window)
