@@ -27,6 +27,7 @@ mod config_tests {
             remote_host: remote_host.map(String::from),
             remote_user: remote_user.map(String::from),
             port: 65432,
+            port_explicit: true,
             jump_host: jump_host.map(String::from),
             jump_user: jump_user.map(String::from),
             ssh_port: None,

@@ -391,6 +391,7 @@ mod tests {
             remote_host: None,
             remote_user: None,
             port: 22,
+            port_explicit: false,
             jump_host: None,
             jump_user: None,
             ssh_port: None,

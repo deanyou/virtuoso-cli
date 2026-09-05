@@ -106,6 +106,12 @@ pub struct Config {
     pub remote_host: Option<String>,
     pub remote_user: Option<String>,
     pub port: u16,
+    /// Whether `port` is an explicit user constraint (VB_PORT set / target's
+    /// `port:` field present) rather than the hash-of-USER default. A default
+    /// port is NOT a bridge-endpoint constraint: daemons bind OS-assigned
+    /// ports, so a default `port` must never be used to filter or reject
+    /// discovered sessions (only an explicit port can be).
+    pub port_explicit: bool,
     pub jump_host: Option<String>,
     pub jump_user: Option<String>,
     pub ssh_port: Option<u16>,
@@ -330,6 +336,7 @@ impl Config {
         let port: u16 = Self::env_with_profile("VB_PORT", profile)
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(Self::default_port);
+        let port_explicit = Self::env_with_profile("VB_PORT", profile).is_some();
 
         if port == 0 {
             return Err(VirtuosoError::Config(
@@ -347,6 +354,7 @@ impl Config {
             remote_host,
             remote_user: Self::env_with_profile("VB_REMOTE_USER", profile),
             port,
+            port_explicit,
             jump_host: Self::env_with_profile("VB_JUMP_HOST", profile),
             jump_user: Self::env_with_profile("VB_JUMP_USER", profile),
             ssh_port: Self::env_with_profile("VB_SSH_PORT", profile).and_then(|v| v.parse().ok()),
@@ -436,6 +444,7 @@ impl Config {
     /// the same defaults as from_env().
     pub fn from_target(target: &crate::target::TargetConfig, target_name: &str) -> Result<Self> {
         let port = target.port.unwrap_or_else(Self::default_port);
+        let port_explicit = target.port.is_some();
         if port == 0 {
             return Err(VirtuosoError::Config(
                 "target port must be between 1 and 65535".into(),
@@ -447,6 +456,7 @@ impl Config {
             remote_host: target.remote_host.clone(),
             remote_user: target.remote_user.clone(),
             port,
+            port_explicit,
             jump_host: target.jump_host.clone(),
             jump_user: target.jump_user.clone(),
             ssh_port: target.ssh_port,
@@ -495,15 +505,18 @@ impl Config {
     /// detection and daemon Hello validation compare this digest instead of
     /// trusting parsed values alone. Credentials are deliberately excluded,
     /// but all fields that shape the connection identity ARE included: host,
-    /// bridge port, SSH port, the *path* of the identity key / ssh_config
-    /// (paths, not key material), jump route, backend, timeouts and control
-    /// master behaviour.
+    /// bridge port AND whether that port is an explicit constraint
+    /// (`port_explicit` — the same port value with auto-discovery vs forced
+    /// port-matching must hash differently), SSH port, the *path* of the
+    /// identity key / ssh_config (paths, not key material), jump route,
+    /// backend, timeouts and control master behaviour.
     pub fn digest(&self) -> String {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         for part in [
             self.remote_host.as_deref().unwrap_or(""),
             &self.port.to_string(),
+            &self.port_explicit.to_string(),
             self.remote_user.as_deref().unwrap_or(""),
             &self
                 .ssh_port

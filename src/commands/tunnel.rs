@@ -9,7 +9,7 @@ use crate::transport::tunnel::SSHClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-pub fn start(ctx: &CommandContext, timeout: Option<u64>, dry_run: bool) -> Result<Value> {
+pub fn start(ctx: &CommandContext, _timeout: Option<u64>, dry_run: bool) -> Result<Value> {
     let cfg = ctx.config();
 
     if dry_run {
@@ -24,8 +24,13 @@ pub fn start(ctx: &CommandContext, timeout: Option<u64>, dry_run: bool) -> Resul
         }));
     }
 
-    let mut client = SSHClient::from_config(cfg, cfg.keep_remote_files)?;
-    client.warm(timeout)?;
+    // Deploy-only. The daemon is started by Virtuoso loading the deployed IL,
+    // at which point it binds an OS-assigned port — vcli does NOT start it and
+    // does NOT know the endpoint yet. Reporting "deployed, not ready" instead
+    // of a guessed port is what keeps the endpoint honest (the bridge's
+    // `RBStart` passes port=0; see resources/ramic_bridge.il).
+    let client = SSHClient::from_config(cfg, cfg.keep_remote_files)?;
+    let il_path = client.warm()?;
 
     // Auto-discover remote sessions and sync them to local cache.
     // This allows `vcli skill exec` to find the Virtuoso daemon port
@@ -33,15 +38,19 @@ pub fn start(ctx: &CommandContext, timeout: Option<u64>, dry_run: bool) -> Resul
     let transport = client.transport();
     let sessions_synced = SessionInfo::sync_from_remote(transport.as_ref()).unwrap_or(0);
 
-    let vc = VirtuosoClient::from_context(ctx)?;
-    let daemon_ok = matches!(vc.test_connection(Some(cfg.timeout)), Ok(true));
-
     Ok(json!({
-        "status": "started",
-        "port": client.port,
+        "status": "deployed",
+        "daemon_started": false,
+        "il_path": il_path,
         "remote_host": cfg.remote_host.as_deref().unwrap_or("local"),
-        "daemon_responsive": daemon_ok,
         "sessions_synced": sessions_synced,
+        "next": format!(
+            "load '{il_path}' in Virtuoso (or run RBStart() in CIW) to start the daemon, \
+             then `vcli tunnel attach{}` to open the tunnel to the daemon's port",
+            ctx.target_id()
+                .map(|t| format!(" --target {t}"))
+                .unwrap_or_default()
+        ),
     }))
 }
 
@@ -53,6 +62,75 @@ fn scoped_attach_sessions(sessions: Vec<SessionInfo>, target_port: u16) -> Vec<S
         .into_iter()
         .filter(|s| s.port == target_port)
         .collect()
+}
+
+/// Choose the candidate sessions for `tunnel attach`.
+///
+/// The bridge port is scoped ONLY when the target has an explicit port
+/// constraint (`port_explicit`). A default (hash-of-USER) port is not an
+/// endpoint constraint — the daemon binds an OS-assigned port — so it must
+/// never filter out discovered sessions. Target-less (legacy/profile) mode
+/// keeps full auto-discovery.
+fn attach_candidate_sessions(
+    sessions: Vec<SessionInfo>,
+    has_target: bool,
+    port: u16,
+    port_explicit: bool,
+) -> Vec<SessionInfo> {
+    if has_target && port_explicit {
+        scoped_attach_sessions(sessions, port)
+    } else {
+        sessions
+    }
+}
+
+/// Discover and validate a live daemon session for this target, without any
+/// side effects. Shared by [`attach`] and by `restart`'s pre-flight check, so
+/// restart refuses BEFORE disconnecting when there is nothing to re-attach to.
+///
+/// The bridge port is scoped only when the target's port is an explicit
+/// constraint (`port_explicit`); a default port never filters discoveries.
+/// Ownership is validated via [`CommandContext::validate_session_ownership`]
+/// (host always; bridge port only when explicit).
+fn discover_live_session(ctx: &CommandContext, client: &SSHClient) -> Result<SessionInfo> {
+    let cfg = ctx.config();
+    let transport = client.transport();
+
+    let sessions = SessionInfo::list_remote(transport.as_ref())?;
+    if sessions.is_empty() {
+        return Err(VirtuosoError::NotFound(
+            "no Virtuoso sessions found on remote; run `vcli tunnel start` to deploy a fresh daemon"
+                .into(),
+        ));
+    }
+
+    let scoped = attach_candidate_sessions(
+        sessions,
+        ctx.target_id().is_some(),
+        cfg.port,
+        cfg.port_explicit,
+    );
+    if scoped.is_empty() {
+        return Err(VirtuosoError::NotFound(format!(
+            "no session found on bridge port {} for target '{}'; \
+             run `vcli tunnel start` to deploy a fresh daemon on this target",
+            cfg.port,
+            ctx.target_id().unwrap_or("(selected)")
+        )));
+    }
+
+    let host_hint = cfg.remote_host.as_deref();
+    let live = pick_live_session(scoped, transport.as_ref(), host_hint)?.ok_or_else(|| {
+        VirtuosoError::NotFound(
+            "found session(s) on remote but no live daemons (port not listening); \
+                 check that Virtuoso is running and the daemon process is alive"
+                .into(),
+        )
+    })?;
+
+    // Final ownership guard (F05) before opening the tunnel / writing state.
+    ctx.validate_session_ownership(&live)?;
+    Ok(live)
 }
 
 /// Connect to a Virtuoso daemon that already exists on the remote host.
@@ -91,43 +169,7 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
     // warm() (which would deploy a fresh daemon). The runner is configured
     // by from_config() but no remote command runs until we explicitly call one.
     let mut client = SSHClient::from_config(cfg, cfg.keep_remote_files)?;
-    let transport = client.transport();
-
-    let sessions = SessionInfo::list_remote(transport.as_ref())?;
-    if sessions.is_empty() {
-        return Err(VirtuosoError::NotFound(
-            "no Virtuoso sessions found on remote; run `vcli tunnel start` to deploy a fresh daemon".into()
-        ));
-    }
-
-    // Target-scoped selection (F05): only sessions whose bridge port matches
-    // this target's configured port may be attached. We must never fall back
-    // to a different-port daemon — that would record another target's tunnel
-    // into this target's namespace, which stop/detach would then reject (and
-    // which the ownership check below forbids anyway).
-    let target_port = cfg.port;
-    let scoped = scoped_attach_sessions(sessions, target_port);
-    if scoped.is_empty() {
-        return Err(VirtuosoError::NotFound(format!(
-            "no session found on bridge port {target_port} for target '{}'; \
-             run `vcli tunnel start` to deploy a fresh daemon on this target",
-            ctx.target_id().unwrap_or("(selected)")
-        )));
-    }
-
-    let host_hint = cfg.remote_host.as_deref();
-    let live = pick_live_session(scoped, transport.as_ref(), host_hint)?.ok_or_else(|| {
-        VirtuosoError::NotFound(
-            "found session(s) on remote but no live daemons (port not listening); \
-                 check that Virtuoso is running and the daemon process is alive"
-                .into(),
-        )
-    })?;
-
-    // Final ownership guard (F05) before opening the tunnel / writing state.
-    // Single rule in CommandContext::validate_session_ownership. For target
-    // selections this is defense-in-depth on top of the port filter above.
-    ctx.validate_session_ownership(&live)?;
+    let live = discover_live_session(ctx, &client)?;
 
     if dry_run {
         return Ok(json!({
@@ -148,9 +190,10 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
     // forwarding keeps scripts that bind to the canonical daemon port
     // working without reconfiguration. `open_tunnel` runs `ssh -L
     // 127.0.0.1:<port>:127.0.0.1:<port>`, so this forwards to the
-    // discovered listener exactly.
+    // discovered listener exactly, and only reports success once the
+    // forward-holding ssh is verified alive.
     let local_port = live.port;
-    client.open_tunnel(local_port)?;
+    client.open_tunnel(local_port, live.port)?;
 
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -167,7 +210,7 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
         backend: Some("openssh".to_string()),
         daemon_nonce: None,
         executable_path: None,
-        start_identity: None,
+        start_identity: client.tunnel_identity(),
         ipc_endpoint: None,
         token_path: None,
         local_forward: Some(format!("L*:{local_port}")),
@@ -299,17 +342,23 @@ pub fn detach(ctx: &CommandContext) -> Result<Value> {
     }))
 }
 
-pub fn restart(ctx: &CommandContext, timeout: Option<u64>) -> Result<Value> {
+pub fn restart(ctx: &CommandContext, _timeout: Option<u64>) -> Result<Value> {
+    // Pre-flight BEFORE stopping: `start` is deploy-only and cannot restore a
+    // connection, so restart must refuse (without disconnecting the user) when
+    // there is no live daemon to re-attach to.
+    let client = SSHClient::from_config(ctx.config(), ctx.config().keep_remote_files)?;
+    discover_live_session(ctx, &client)?;
+
     let stop_result = match stop(ctx, false, false) {
         Ok(v) => Some(v),
         Err(VirtuosoError::NotFound(_)) => None,
         Err(e) => return Err(e),
     };
-    let start_result = start(ctx, timeout, false)?;
+    let attach_result = attach(ctx, false)?;
 
     Ok(json!({
         "stop": stop_result,
-        "start": start_result,
+        "attach": attach_result,
     }))
 }
 
@@ -842,6 +891,41 @@ mod tests {
         assert_eq!(scoped_attach_sessions(sessions, 30001).len(), 2);
     }
 
+    #[test]
+    fn attach_candidates_unfiltered_for_default_port() {
+        // A default (hash-of-USER) target port is NOT an endpoint constraint:
+        // the daemon binds an OS-assigned port, so sessions on other ports
+        // must stay discoverable.
+        let sessions = vec![
+            session("os-41234", 41234, "compute-eda-42"),
+            session("os-41235", 41235, "compute-eda-42"),
+        ];
+        let kept = attach_candidate_sessions(sessions, true, 65013, false);
+        assert_eq!(kept.len(), 2, "default port must not filter discoveries");
+    }
+
+    #[test]
+    fn attach_candidates_unfiltered_for_legacy_no_target() {
+        // Legacy/profile mode (no target) keeps full auto-discovery.
+        let sessions = vec![
+            session("os-41234", 41234, "compute-eda-42"),
+            session("os-41235", 41235, "compute-eda-42"),
+        ];
+        let kept = attach_candidate_sessions(sessions, false, 30001, true);
+        assert_eq!(kept.len(), 2, "target-less mode must not filter by port");
+    }
+
+    #[test]
+    fn attach_candidates_filtered_for_explicit_target_port() {
+        let sessions = vec![
+            session("prod-30001", 30001, "compute-eda-42"),
+            session("test-30002", 30002, "compute-eda-42"),
+        ];
+        let kept = attach_candidate_sessions(sessions, true, 30001, true);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].id, "prod-30001");
+    }
+
     // ─── Warning text + JSON shape (existing 4 tests) ────────────────────
 
     #[test]
@@ -1010,6 +1094,7 @@ mod backend_diagnostics_tests {
             remote_host: None,
             remote_user: None,
             port: 0,
+            port_explicit: false,
             jump_host: None,
             jump_user: None,
             ssh_port: None,
