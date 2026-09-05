@@ -71,10 +71,10 @@ ssh ubuntu-docker "cat /tmp/virtuoso-daemon.log | grep PORT"
 ### 一、连接 Session
 ```bash
 # 列出所有 session
-VCLI_CAPABILITY=admin VB_PORT=33817 VB_REMOTE_HOST=localhost vcli session list
+VCLI_CAPABILITY=admin VB_PORT=XXXXX VB_REMOTE_HOST=localhost vcli session list
 
 # 查看 session 详情
-VCLI_CAPABILITY=admin VB_PORT=33817 VB_REMOTE_HOST=localhost vcli session show dean-user1-33817
+VCLI_CAPABILITY=admin VB_PORT=XXXXX VB_REMOTE_HOST=localhost vcli session show dean-user1-XXXXX
 ```
 
 关键字段：
@@ -94,13 +94,13 @@ ssh ubuntu-docker "ls /tmp/.X11-unix/"
 ssh ubuntu-docker "ps aux | grep virtuoso | grep -v grep"
 
 # 方法3：逐个尝试（常见 :0, :1, :99）
-vcli window list-windows-x11 --display :99 --session dean-user1-33817
+vcli window list-windows-x11 --display :99 --session dean-user1-XXXXX
 ```
 
 ### 三、发现窗口
 ```bash
 # 列出指定 DISPLAY 上的所有窗口
-vcli window list-windows-x11 --display :99 --session dean-user1-33817
+vcli window list-windows-x11 --display :99 --session dean-user1-XXXXX
 ```
 
 输出字段说明：
@@ -116,7 +116,7 @@ vcli window list-windows-x11 --display :99 --session dean-user1-33817
 
 快速筛选：
 ```bash
-vcli window list-windows-x11 --display :99 --session dean-user1-33817 | python3 -c "
+vcli window list-windows-x11 --display :99 --session dean-user1-XXXXX | python3 -c "
 import json,sys
 for w in json.load(sys.stdin)['windows']:
     print(w['window_id'], w['pid'], w['title'][:40])
@@ -130,7 +130,7 @@ for w in json.load(sys.stdin)['windows']:
 vcli window action-x11 \
   --window-id 0x3000000 \
   --display :99 \
-  --session dean-user1-33817 \
+  --session dean-user1-XXXXX \
   --pid 393027 \
   --operation <OP> \
   --direct
@@ -423,11 +423,11 @@ The live executor uses `vcli window action-x11 --direct` by default, skipping he
 ```bash
 # Default (fast, 260ms):
 python3 scripts/gui_runner.py run scenario.json --output out --executor live \
-    --session dean-user1-33817 --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker
+    --session dean-user1-XXXXX --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker
 
 # Full validation (slow, 1350ms, use --no-direct):
 python3 scripts/gui_runner.py run scenario.json --output out --executor live \
-    --session dean-user1-33817 --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker \
+    --session dean-user1-XXXXX --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker \
     --no-direct
 ```
 
