@@ -1,4 +1,4 @@
-//! `vcli config check` — validate .env configuration and give actionable feedback.
+//! `vcli config-check` — validate .env configuration and give actionable feedback.
 //!
 //! Designed for LLM-assisted repair: the output is structured JSON with
 //! `errors`, `warnings`, and `suggestions` so an agent can quickly fix
@@ -125,49 +125,64 @@ pub fn run() -> Result<Value> {
         }
     }
 
-    // 4. Integer validation
+    // 4. Integer validation (covers both base var and profile-suffixed variants
+    //    e.g. VB_PORT and VB_PORT_prod)
     for (var, min, max) in INTEGER_VARS {
-        if let Ok(raw) = env::var(var) {
-            if raw.is_empty() {
-                continue;
-            }
-            match raw.parse::<u64>() {
-                Ok(v) => {
-                    if v < *min || v > *max {
+        let prefix = format!("{var}_");
+        let variants: Vec<String> = env::vars()
+            .map(|(k, _)| k)
+            .filter(|k| k == var || k.starts_with(&prefix))
+            .collect();
+        for v in variants {
+            if let Ok(raw) = env::var(&v) {
+                if raw.is_empty() {
+                    continue;
+                }
+                match raw.parse::<u64>() {
+                    Ok(val) => {
+                        if val < *min || val > *max {
+                            errors.push(json!({
+                                "var": v,
+                                "value": val,
+                                "message": format!("{v}={val} is out of range [{min}, {max}]"),
+                                "fix": format!("Set {v} to a value between {min} and {max}")
+                            }));
+                        }
+                    }
+                    Err(_) => {
                         errors.push(json!({
-                            "var": var,
-                            "value": v,
-                            "message": format!("{var}={v} is out of range [{min}, {max}]"),
-                            "fix": format!("Set {var} to a value between {min} and {max}")
+                            "var": v,
+                            "value": raw,
+                            "message": format!("{v}='{raw}' is not a valid integer"),
+                            "fix": format!("Set {v} to an integer (e.g. {v}=30)")
                         }));
                     }
-                }
-                Err(_) => {
-                    errors.push(json!({
-                        "var": var,
-                        "value": raw,
-                        "message": format!("{var}='{raw}' is not a valid integer"),
-                        "fix": format!("Set {var} to an integer (e.g. {var}=30)")
-                    }));
                 }
             }
         }
     }
 
-    // 5. Boolean validation
+    // 5. Boolean validation (covers base and profile-suffixed variants)
     for var in BOOLEAN_VARS {
-        if let Ok(raw) = env::var(var) {
-            if raw.is_empty() {
-                continue;
-            }
-            let lower = raw.to_lowercase();
-            if !matches!(lower.as_str(), "1" | "0" | "true" | "false" | "yes" | "no") {
-                warnings.push(json!({
-                    "var": var,
-                    "value": raw,
-                    "message": format!("{var}='{raw}' is not a recognized boolean (expected 1/0/true/false)"),
-                    "fix": format!("Set {var}=1 or {var}=0")
-                }));
+        let prefix = format!("{var}_");
+        let variants: Vec<String> = env::vars()
+            .map(|(k, _)| k)
+            .filter(|k| k == var || k.starts_with(&prefix))
+            .collect();
+        for v in variants {
+            if let Ok(raw) = env::var(&v) {
+                if raw.is_empty() {
+                    continue;
+                }
+                let lower = raw.to_lowercase();
+                if !matches!(lower.as_str(), "1" | "0" | "true" | "false" | "yes" | "no") {
+                    warnings.push(json!({
+                        "var": v,
+                        "value": raw,
+                        "message": format!("{v}='{raw}' is not a recognized boolean (expected 1/0/true/false)"),
+                        "fix": format!("Set {v}=1 or {v}=0")
+                    }));
+                }
             }
         }
     }
@@ -194,36 +209,42 @@ pub fn run() -> Result<Value> {
         }
     }
 
-    // 7. Local path existence (only check when set)
+    // 7. Local path existence (only check when set; covers base and profile variants)
     for var in LOCAL_PATH_VARS {
-        if let Ok(path) = env::var(var) {
-            if path.is_empty() {
-                continue;
-            }
-            if !std::path::Path::new(&path).exists() {
-                warnings.push(json!({
-                    "var": var,
-                    "value": path,
-                    "message": format!("{var} path '{path}' does not exist locally"),
-                    "fix": format!("Verify the path is correct and accessible, or unset {var}")
-                }));
+        let prefix = format!("{var}_");
+        let variants: Vec<String> = env::vars()
+            .map(|(k, _)| k)
+            .filter(|k| k == var || k.starts_with(&prefix))
+            .collect();
+        for v in variants {
+            if let Ok(path) = env::var(&v) {
+                if path.is_empty() {
+                    continue;
+                }
+                if !std::path::Path::new(&path).exists() {
+                    warnings.push(json!({
+                        "var": v,
+                        "value": path,
+                        "message": format!("{v} path '{path}' does not exist locally"),
+                        "fix": format!("Verify the path is correct and accessible, or unset {v}")
+                    }));
+                }
             }
         }
     }
 
     // 8. Remote mode consistency
     let has_remote_host = env::var("VB_REMOTE_HOST").map(|v| !v.is_empty()).unwrap_or(false);
-    if has_remote_host {
-        // If remote host is set but port is default-derived, that's fine — just info
-        let port = env::var("VB_PORT").unwrap_or_else(|_| "(default)".into());
-        recognized.insert("_effective_port".into(), json!(port));
+    let effective_port = if has_remote_host {
+        env::var("VB_PORT").ok().filter(|v| !v.is_empty())
     } else {
         warnings.push(json!({
             "var": "VB_REMOTE_HOST",
             "message": "VB_REMOTE_HOST is not set — running in local mode (no SSH tunnel)",
             "fix": "Set VB_REMOTE_HOST=<hostname> for remote Virtuoso access"
         }));
-    }
+        None
+    };
 
     // 9. VB_SPECTRE_ARGS shell syntax
     if let Ok(args) = env::var("VB_SPECTRE_ARGS") {
@@ -256,7 +277,8 @@ pub fn run() -> Result<Value> {
             "port": cfg.port,
             "ssh_backend": cfg.ssh_backend,
             "timeout": cfg.timeout,
-            "read_timeout": cfg.read_timeout
+            "read_timeout": cfg.read_timeout,
+            "effective_port": effective_port
         }),
         Err(e) => {
             errors.push(json!({

@@ -122,6 +122,21 @@ fn test_valid_port_passes() {
     });
 }
 
+#[test]
+fn test_profile_suffix_integer_is_validated() {
+    // VB_PORT_prod=abc should be caught as an error, not silently recognized
+    with_env_var("VB_PORT_prod", Some("not-a-number"), || {
+        let result = run_check();
+        assert!(has_error_var(&result, "VB_PORT_prod"));
+        // Should also be recognized (not flagged as unrecognized)
+        let unrecognized = result["unrecognized_vars"].as_array().unwrap();
+        assert!(
+            !unrecognized.iter().any(|v| v == "VB_PORT_prod"),
+            "profile-suffixed var should be recognized"
+        );
+    });
+}
+
 // ── Unrecognized variable (typo) ───────────────────────────────
 
 #[test]
