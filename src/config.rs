@@ -490,6 +490,29 @@ impl Config {
         })
     }
 
+    /// Deterministic SHA-256 over the non-secret identity fields of the
+    /// resolved config. Used for config identity (F05): `tunnel status` drift
+    /// detection and daemon Hello validation compare this digest instead of
+    /// trusting parsed values alone. Credentials (key paths, tokens) are
+    /// deliberately excluded.
+    pub fn digest(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        for part in [
+            self.remote_host.as_deref().unwrap_or(""),
+            &self.port.to_string(),
+            self.remote_user.as_deref().unwrap_or(""),
+            self.jump_host.as_deref().unwrap_or(""),
+            self.jump_user.as_deref().unwrap_or(""),
+            self.profile.as_deref().unwrap_or(""),
+            self.ssh_backend.as_deref().unwrap_or(""),
+        ] {
+            hasher.update(part.as_bytes());
+            hasher.update([0u8]);
+        }
+        hex::encode(hasher.finalize())
+    }
+
     pub fn is_remote(&self) -> bool {
         self.remote_host.is_some()
     }

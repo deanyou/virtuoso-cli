@@ -1,5 +1,6 @@
 use crate::client::bridge::VirtuosoClient;
 use crate::config::Config;
+use crate::context::CommandContext;
 use crate::error::{Result, VirtuosoError};
 use crate::models::{SessionInfo, TunnelState, TUNNEL_MODE_ATTACHED, TUNNEL_MODE_DEPLOYED};
 use crate::output::OutputFormat;
@@ -8,8 +9,8 @@ use crate::transport::tunnel::SSHClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
-    let cfg = Config::from_env()?;
+pub fn start(ctx: &CommandContext, timeout: Option<u64>, dry_run: bool) -> Result<Value> {
+    let cfg = ctx.config();
 
     if dry_run {
         return Ok(json!({
@@ -23,7 +24,7 @@ pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
         }));
     }
 
-    let mut client = SSHClient::from_env(cfg.keep_remote_files)?;
+    let mut client = SSHClient::from_config(cfg, cfg.keep_remote_files)?;
     client.warm(timeout)?;
 
     // Auto-discover remote sessions and sync them to local cache.
@@ -32,7 +33,7 @@ pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
     let transport = client.transport();
     let sessions_synced = SessionInfo::sync_from_remote(transport.as_ref()).unwrap_or(0);
 
-    let vc = crate::client::bridge::VirtuosoClient::from_env()?;
+    let vc = VirtuosoClient::from_context(ctx)?;
     let daemon_ok = matches!(vc.test_connection(Some(cfg.timeout)), Ok(true));
 
     Ok(json!({
@@ -57,8 +58,8 @@ pub fn start(timeout: Option<u64>, dry_run: bool) -> Result<Value> {
 /// `tunnel detach` (which kills the tunnel SSH process and clears state).
 ///
 /// Returns `Err(NotFound)` if no live daemon can be discovered.
-pub fn attach(dry_run: bool) -> Result<Value> {
-    let cfg = Config::from_env()?;
+pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
+    let cfg = ctx.config();
 
     // Refuse if a tunnel of any mode is already up. The user can pick the
     // matching verb to clean up (`detach` for attached, `stop` for deployed).
@@ -77,8 +78,8 @@ pub fn attach(dry_run: bool) -> Result<Value> {
 
     // SSHClient here is used purely as a transport wrapper — we don't call
     // warm() (which would deploy a fresh daemon). The runner is configured
-    // by from_env() but no remote command runs until we explicitly call one.
-    let mut client = SSHClient::from_env(cfg.keep_remote_files)?;
+    // by from_config() but no remote command runs until we explicitly call one.
+    let mut client = SSHClient::from_config(cfg, cfg.keep_remote_files)?;
     let transport = client.transport();
 
     let sessions = SessionInfo::list_remote(transport.as_ref())?;
@@ -167,8 +168,8 @@ pub fn attach(dry_run: bool) -> Result<Value> {
     }))
 }
 
-pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
-    let cfg = Config::from_env()?;
+pub fn stop(ctx: &CommandContext, force: bool, dry_run: bool) -> Result<Value> {
+    let cfg = ctx.config();
 
     let state = TunnelState::load()?;
     let state = match state {
@@ -203,7 +204,7 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
     //      tunnel is ours or proven gone (a live/unverifiable daemon is kept)
     //   2. ownership — only a `deployed` tunnel owns its remote setup dir; an
     //      `attached` daemon belongs to Virtuoso and is never rm -rf'd
-    crate::transport::tunnel::stop_saved_tunnel(&cfg, &state, force)?;
+    crate::transport::tunnel::stop_saved_tunnel(cfg, &state, force)?;
 
     Ok(json!({
         "status": "stopped",
@@ -224,9 +225,22 @@ pub fn stop(force: bool, dry_run: bool) -> Result<Value> {
 /// `Err(Execution)` when the recorded tunnel is in `deployed` mode (use
 /// `tunnel stop` instead, since deployed tunnels own a setup dir that
 /// needs cleanup).
-pub fn detach() -> Result<Value> {
+pub fn detach(ctx: &CommandContext) -> Result<Value> {
     let state = TunnelState::load()?
         .ok_or_else(|| VirtuosoError::NotFound("no attached tunnel found".into()))?;
+
+    // P0-A ownership (F05): never detach a tunnel that belongs to another
+    // target's host.
+    if let Some(tid) = ctx.target_id() {
+        let target_host = ctx.config().remote_host.as_deref().unwrap_or("");
+        if !target_host.is_empty() && state.remote_host != target_host {
+            return Err(VirtuosoError::Config(format!(
+                "tunnel belongs to host '{}' but target '{tid}' resolves to '{}'; \
+                 refusing to touch another target's tunnel",
+                state.remote_host, target_host
+            )));
+        }
+    }
 
     let mode = state.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
     if mode != TUNNEL_MODE_ATTACHED {
@@ -250,13 +264,13 @@ pub fn detach() -> Result<Value> {
     }))
 }
 
-pub fn restart(timeout: Option<u64>) -> Result<Value> {
-    let stop_result = match stop(false, false) {
+pub fn restart(ctx: &CommandContext, timeout: Option<u64>) -> Result<Value> {
+    let stop_result = match stop(ctx, false, false) {
         Ok(v) => Some(v),
         Err(VirtuosoError::NotFound(_)) => None,
         Err(e) => return Err(e),
     };
-    let start_result = start(timeout, false)?;
+    let start_result = start(ctx, timeout, false)?;
 
     Ok(json!({
         "stop": stop_result,
@@ -264,8 +278,8 @@ pub fn restart(timeout: Option<u64>) -> Result<Value> {
     }))
 }
 
-pub fn diagnose() -> Result<Value> {
-    let cfg = Config::from_env()?;
+pub fn diagnose(ctx: &CommandContext) -> Result<Value> {
+    let cfg = ctx.config();
     let port = TunnelState::load()?.map(|s| s.port).unwrap_or(cfg.port);
 
     // TCP reachability
@@ -364,14 +378,16 @@ pub fn diagnose() -> Result<Value> {
     Ok(result)
 }
 
-pub fn status(format: OutputFormat) -> Result<Value> {
-    let cfg = Config::from_env()?;
+pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
+    let cfg = ctx.config();
 
     let mut result = json!({
         "config": {
             "remote_host": cfg.remote_host.as_deref().unwrap_or("local"),
             "port": cfg.port,
             "timeout": cfg.timeout,
+            "target": ctx.target_id(),
+            "config_digest": ctx.config_digest(),
         }
     });
 
@@ -396,7 +412,7 @@ pub fn status(format: OutputFormat) -> Result<Value> {
         // ran a native daemon last, then re-launched with `VB_SSH_BACKEND=
         // openssh` and the legacy state file still says `native`).
         let (config_backend_value, tunnel_backend_value, drift_warning) =
-            backend_diagnostics(&cfg, Some(state.backend_or_openssh()));
+            backend_diagnostics(cfg, Some(state.backend_or_openssh()));
         result["config"]["backend"] = config_backend_value;
         if let Some(warning) = drift_warning {
             result["config"]["backend_warning"] = json!(warning);
@@ -414,7 +430,7 @@ pub fn status(format: OutputFormat) -> Result<Value> {
     } else {
         // No live tunnel — report the config-selected backend alone; the
         // recorded backend is irrelevant until a tunnel is actually running.
-        let (config_backend_value, _, _) = backend_diagnostics(&cfg, None);
+        let (config_backend_value, _, _) = backend_diagnostics(cfg, None);
         result["config"]["backend"] = config_backend_value;
         json!({ "running": false })
     };

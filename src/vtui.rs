@@ -7,6 +7,7 @@ mod client;
 mod command_log;
 mod commands;
 mod config;
+mod context;
 mod error;
 mod exit_codes;
 mod history;
