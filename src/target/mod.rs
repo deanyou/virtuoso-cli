@@ -87,8 +87,21 @@ pub struct TargetManager {
 }
 
 impl TargetManager {
-    /// Default config file path: ~/.vcli/targets.yaml
+    /// Default config file path: `$VB_TARGETS_FILE` when set, otherwise
+    /// `~/.vcli/targets.yaml`.
+    ///
+    /// The env override is not a convenience — it is the only way to relocate
+    /// this file on Windows. `dirs::home_dir()` there resolves to
+    /// `FOLDERID_Profile` (via `SHGetKnownFolderPath`) and ignores `HOME`
+    /// entirely, so anything that tried to redirect the lookup through `HOME`
+    /// silently read the real user profile instead. Non-Windows platforms
+    /// honour the same variable, so behaviour stays identical everywhere.
     pub fn default_config_path() -> PathBuf {
+        if let Some(raw) = std::env::var_os("VB_TARGETS_FILE") {
+            if !raw.is_empty() {
+                return PathBuf::from(raw);
+            }
+        }
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join(".vcli")
@@ -221,6 +234,48 @@ pub enum TargetError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+
+    /// `VB_TARGETS_FILE` must win over the home-dir default on every platform.
+    ///
+    /// Regression: the lookup used to be `dirs::home_dir()/.vcli/targets.yaml`
+    /// with no override. On Windows `dirs::home_dir()` resolves to
+    /// `FOLDERID_Profile` and ignores `HOME`, so nothing could redirect it —
+    /// the target tests silently exercised the real user profile there.
+    #[serial]
+    #[test]
+    fn default_config_path_honours_vb_targets_file() {
+        let original = std::env::var_os("VB_TARGETS_FILE");
+        let expected = if cfg!(windows) {
+            PathBuf::from(r"C:\tmp\targets.yaml")
+        } else {
+            PathBuf::from("/tmp/targets.yaml")
+        };
+        std::env::set_var("VB_TARGETS_FILE", &expected);
+        assert_eq!(TargetManager::default_config_path(), expected);
+        match original {
+            Some(v) => std::env::set_var("VB_TARGETS_FILE", v),
+            None => std::env::remove_var("VB_TARGETS_FILE"),
+        }
+    }
+
+    /// An empty `VB_TARGETS_FILE` must be treated as unset, not as `""`.
+    #[serial]
+    #[test]
+    fn default_config_path_ignores_empty_vb_targets_file() {
+        let original = std::env::var_os("VB_TARGETS_FILE");
+        std::env::set_var("VB_TARGETS_FILE", "");
+        let path = TargetManager::default_config_path();
+        assert!(
+            path.ends_with("targets.yaml"),
+            "must fall back to the home-dir default, got: {}",
+            path.display()
+        );
+        match original {
+            Some(v) => std::env::set_var("VB_TARGETS_FILE", v),
+            None => std::env::remove_var("VB_TARGETS_FILE"),
+        }
+    }
 
     #[test]
     fn test_target_config_serialization() {

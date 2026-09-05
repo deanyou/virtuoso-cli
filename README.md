@@ -300,6 +300,7 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_PROFILE` | — | Config profile (reads `VB_*_<profile>` vars) |
 | `VB_CLIENT_ID` | `$VB_PROFILE` or `gethostname()` | Per-client remote scratch scoping (e.g. `vcli-A`, `vcli-B`); isolates `/tmp/virtuoso_bridge/<client>/` paths between concurrent operators |
 | `VCLI_CAPABILITY` | `user` | Set to `admin` to unlock `vcli skill broadcast` and raw SKILL exec |
+| `VB_TARGETS_FILE` | `~/.vcli/targets.yaml` | Explicit path to the targets config file (needed on Windows, where `HOME` is ignored for home-dir lookup) |
 | `RB_DAEMON_PATH` | auto-detected | Override daemon binary path |
 
 ### SSH Remote Connection Setup
@@ -763,6 +764,7 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_PROFILE` | - | 配置 profile（读取 `VB_*_<profile>` 变量） |
 | `VB_CLIENT_ID` | `$VB_PROFILE` 或 `gethostname()` | 每客户端远端 scratch 隔离标识（如 `vcli-A`、`vcli-B`）；隔离 `/tmp/virtuoso_bridge/<client>/` 路径，避免多操作员并发冲突 |
 | `VCLI_CAPABILITY` | `user` | 设为 `admin` 解锁 `vcli skill broadcast` 与原始 SKILL 执行权限 |
+| `VB_TARGETS_FILE` | `~/.vcli/targets.yaml` | targets 配置文件的显式路径（Windows 上 `HOME` 对 home 目录查找无效，必须用此变量） |
 | `RB_DAEMON_PATH` | 自动检测 | 覆盖 daemon 二进制路径 |
 
 ### SSH 远程连接配置
