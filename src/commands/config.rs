@@ -281,6 +281,60 @@ pub fn run() -> Result<Value> {
         }));
     }
 
+    // 11. Cross-variable consistency checks
+    // 11a. Remote host set but port is default-derived (user may not realize)
+    if has_remote_host && effective_port.is_none() {
+        warnings.push(json!({
+            "var": "VB_PORT",
+            "message": "VB_REMOTE_HOST is set but VB_PORT is not explicitly configured — using username-derived default port. Verify this matches your daemon's port.",
+            "fix": "Set VB_PORT explicitly to match your Virtuoso bridge port"
+        }));
+    }
+
+    // 11b. Jump host set but jump user not set
+    let has_jump_host = env::var("VB_JUMP_HOST").map(|v| !v.is_empty()).unwrap_or(false);
+    let has_jump_user = env::var("VB_JUMP_USER").map(|v| !v.is_empty()).unwrap_or(false);
+    if has_jump_host && !has_jump_user {
+        warnings.push(json!({
+            "var": "VB_JUMP_USER",
+            "message": "VB_JUMP_HOST is set but VB_JUMP_USER is not — SSH will use the current local username, which may not match the jump host account",
+            "fix": "Set VB_JUMP_USER to the username for the jump host, or verify the local username is correct"
+        }));
+    }
+
+    // 11c. VB_TIMEOUT > VB_READ_TIMEOUT is logically inconsistent
+    let timeout_val = env::var("VB_TIMEOUT").ok().and_then(|v| v.parse::<u64>().ok());
+    let read_timeout_val = env::var("VB_READ_TIMEOUT").ok().and_then(|v| v.parse::<u64>().ok());
+    if let (Some(t), Some(rt)) = (timeout_val, read_timeout_val) {
+        if t > rt {
+            warnings.push(json!({
+                "var": "VB_TIMEOUT",
+                "message": format!("VB_TIMEOUT={t}s is greater than VB_READ_TIMEOUT={rt}s — write operations would have more time than read operations, which is unusual"),
+                "fix": "Typically VB_READ_TIMEOUT should be >= VB_TIMEOUT (reads like list_instances take longer)"
+            }));
+        }
+    }
+
+    // 11d. native backend but all native tuning params are defaults
+    let backend = env::var("VB_SSH_BACKEND").unwrap_or_default();
+    if backend.eq_ignore_ascii_case("native") {
+        let native_tuned = env::var("VB_SSH_MAX_SESSIONS").is_ok()
+            || env::var("VB_SSH_MAX_BULK_SESSIONS").is_ok()
+            || env::var("VB_SSH_RECONNECT_MAX_ATTEMPTS").is_ok()
+            || env::var("VB_SSH_KEEPALIVE_INTERVAL").is_ok();
+        if !native_tuned {
+            suggestions.push(
+                "VB_SSH_BACKEND=native: consider tuning VB_SSH_MAX_SESSIONS, VB_SSH_MAX_BULK_SESSIONS, VB_SSH_KEEPALIVE_INTERVAL for your workload"
+                    .into(),
+            );
+        }
+    }
+
+    // 12. .env file syntax and permission checks
+    if let Some(env_path) = find_dotenv() {
+        check_dotenv_file(&env_path, &mut warnings, &mut errors);
+    }
+
     // Build Config to confirm it parses (catches any remaining issues)
     let config_status = match Config::from_env() {
         Ok(cfg) => json!({
@@ -390,5 +444,108 @@ fn sanitize_value(var: &str, val: &str) -> Value {
         }
     } else {
         json!(val)
+    }
+}
+
+/// Find the .env file that Config::from_env() would load (cwd → parent → …).
+fn find_dotenv() -> Option<std::path::PathBuf> {
+    let start = std::env::current_dir().ok()?;
+    let mut dir = start.as_path();
+    loop {
+        let candidate = dir.join(".env");
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        dir = dir.parent()?;
+    }
+}
+
+/// Validate a .env file: duplicate keys, invalid lines, permissions, BOM.
+fn check_dotenv_file(
+    path: &std::path::Path,
+    warnings: &mut Vec<Value>,
+    _errors: &mut Vec<Value>,
+) {
+    let content = match std::fs::read(path) {
+        Ok(c) => c,
+        Err(e) => {
+            warnings.push(json!({
+                "var": ".env",
+                "message": format!("Cannot read .env file at {}: {e}", path.display()),
+                "fix": "Check file permissions"
+            }));
+            return;
+        }
+    };
+
+    // BOM check (UTF-8 BOM = EF BB BF)
+    if content.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        warnings.push(json!({
+            "var": ".env",
+            "message": ".env file has a UTF-8 BOM — this can cause the first variable name to be malformed (e.g. '\\u{feff}VB_PORT')",
+            "fix": "Save the file as UTF-8 without BOM"
+        }));
+    }
+
+    let text = String::from_utf8_lossy(&content);
+    let mut seen_keys: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+    for (line_num, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        // Skip empty lines and comments
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        // Skip export prefix (common in shell-style .env)
+        let line_for_parse = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+
+        // Valid line: KEY=VALUE or KEY="VALUE" or KEY='VALUE'
+        if !line_for_parse.contains('=') {
+            warnings.push(json!({
+                "var": ".env",
+                "message": format!(".env line {} is not in KEY=VALUE format: '{}'", line_num + 1, trimmed.chars().take(60).collect::<String>()),
+                "fix": "Use KEY=VALUE format, or prefix with # for comments"
+            }));
+            continue;
+        }
+
+        if let Some(eq_pos) = line_for_parse.find('=') {
+            let key = line_for_parse[..eq_pos].trim();
+            // Validate key format: uppercase letters, digits, underscores
+            if !key.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_') {
+                warnings.push(json!({
+                    "var": ".env",
+                    "message": format!(".env line {}: variable name '{}' contains unusual characters (expected UPPER_SNAKE_CASE)", line_num + 1, key),
+                    "fix": "Rename to UPPER_SNAKE_CASE format"
+                }));
+            }
+            // Duplicate key detection
+            if let Some(prev_line) = seen_keys.get(key) {
+                warnings.push(json!({
+                    "var": key,
+                    "message": format!("Duplicate key '{}' in .env (lines {} and {}) — the later value overrides the earlier one", key, prev_line, line_num + 1),
+                    "fix": "Remove the duplicate or combine into one line"
+                }));
+            } else {
+                seen_keys.insert(key.to_string(), line_num + 1);
+            }
+        }
+    }
+
+    // Permission check: if .env contains secrets, it should be 600 (not world-readable)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(path) {
+            let mode = meta.permissions().mode() & 0o777;
+            let has_secret = text.contains("TOKEN") || text.contains("KEY") || text.contains("SECRET");
+            if has_secret && mode & 0o004 != 0 {
+                warnings.push(json!({
+                    "var": ".env",
+                    "message": format!(".env file contains secrets but is world-readable (mode {:o}) — other users on this machine can read your tokens/keys", mode),
+                    "fix": "Run: chmod 600 .env"
+                }));
+            }
+        }
     }
 }

@@ -25,6 +25,29 @@ fn with_env_var<F: FnOnce()>(key: &str, val: Option<&str>, f: F) {
     }
 }
 
+/// Set multiple env vars for the duration of the closure, then restore.
+/// Avoids nested with_env_var calls which would deadlock on ENV_LOCK.
+fn with_env_vars<F: FnOnce()>(vars: &[(&str, Option<&str>)], f: F) {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let prevs: Vec<(&str, Option<String>)> = vars
+        .iter()
+        .map(|(k, _)| (*k, env::var(k).ok()))
+        .collect();
+    for (key, val) in vars {
+        match val {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+    f();
+    for (key, prev) in prevs {
+        match prev {
+            Some(v) => env::set_var(key, v),
+            None => env::remove_var(key),
+        }
+    }
+}
+
 fn run_check() -> serde_json::Value {
     virtuoso_cli::commands::config::run().unwrap()
 }
@@ -318,4 +341,129 @@ fn test_suggestions_present_for_deprecated() {
             "deprecated var should produce at least one suggestion"
         );
     });
+}
+
+// --- Cross-variable consistency checks (P0 enhancement) ---
+
+#[test]
+fn test_remote_host_without_explicit_port_is_warning() {
+    with_env_vars(&[("VB_REMOTE_HOST", Some("eda-server")), ("VB_PORT", None)], || {
+        let result = run_check();
+        assert!(
+            has_warning_var(&result, "VB_PORT"),
+            "remote host without explicit port should warn about default-derived port"
+        );
+    });
+}
+
+#[test]
+fn test_jump_host_without_jump_user_is_warning() {
+    with_env_vars(&[("VB_JUMP_HOST", Some("bastion.example.com")), ("VB_JUMP_USER", None)], || {
+        let result = run_check();
+        assert!(
+            has_warning_var(&result, "VB_JUMP_USER"),
+            "jump host without jump user should warn"
+        );
+    });
+}
+
+#[test]
+fn test_timeout_greater_than_read_timeout_is_warning() {
+    with_env_vars(&[("VB_TIMEOUT", Some("60")), ("VB_READ_TIMEOUT", Some("30"))], || {
+        let result = run_check();
+        assert!(
+            has_warning_var(&result, "VB_TIMEOUT"),
+            "VB_TIMEOUT > VB_READ_TIMEOUT should warn"
+        );
+    });
+}
+
+#[test]
+fn test_native_backend_without_tuning_produces_suggestion() {
+    with_env_vars(&[
+        ("VB_SSH_BACKEND", Some("native")),
+        ("VB_SSH_MAX_SESSIONS", None),
+        ("VB_SSH_KEEPALIVE_INTERVAL", None),
+    ], || {
+        let result = run_check();
+        let suggestions = result["suggestions"].as_array().unwrap();
+        let has_native_suggestion = suggestions.iter().any(|s| {
+            s.as_str().unwrap_or("").contains("native")
+        });
+        assert!(
+            has_native_suggestion,
+            "native backend without tuning should produce a suggestion"
+        );
+    });
+}
+
+// --- .env file checks (P0 enhancement) ---
+
+/// Run config-check in a temp directory containing a .env file.
+fn run_with_dotenv(env_content: &str) -> serde_json::Value {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let tmp = std::env::temp_dir().join(format!("vcli_cfg_test_{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let env_path = tmp.join(".env");
+    std::fs::write(&env_path, env_content).unwrap();
+    let prev_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&tmp).unwrap();
+    let result = virtuoso_cli::commands::config::run().unwrap();
+    std::env::set_current_dir(&prev_dir).unwrap();
+    std::fs::remove_dir_all(&tmp).ok();
+    result
+}
+
+#[test]
+fn test_dotenv_duplicate_key_is_warning() {
+    let result = run_with_dotenv("VB_PORT=3000\nVB_PORT=3001\n");
+    assert!(
+        has_warning_var(&result, "VB_PORT"),
+        "duplicate key in .env should warn"
+    );
+}
+
+#[test]
+fn test_dotenv_invalid_line_is_warning() {
+    let result = run_with_dotenv("VB_PORT=3000\nthis is not valid\n");
+    assert!(
+        has_warning_var(&result, ".env"),
+        "invalid line in .env should warn"
+    );
+}
+
+#[test]
+fn test_dotenv_bom_is_warning() {
+    // UTF-8 BOM + content
+    let content = [0xEF, 0xBB, 0xBF].iter().chain(b"VB_PORT=3000\n".iter()).copied().collect::<Vec<u8>>();
+    let _guard = ENV_LOCK.lock().unwrap();
+    let tmp = std::env::temp_dir().join(format!("vcli_cfg_bom_{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::write(tmp.join(".env"), &content).unwrap();
+    let prev_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&tmp).unwrap();
+    let result = virtuoso_cli::commands::config::run().unwrap();
+    std::env::set_current_dir(&prev_dir).unwrap();
+    std::fs::remove_dir_all(&tmp).ok();
+    assert!(
+        has_warning_var(&result, ".env"),
+        ".env with BOM should warn"
+    );
+}
+
+#[test]
+fn test_dotenv_clean_file_no_warning() {
+    let result = run_with_dotenv("VB_PORT=3000\nVB_REMOTE_HOST=eda\n# comment\n\n");
+    // A clean .env should not produce .env-specific warnings
+    let env_warnings: Vec<_> = result["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|w| w["var"].as_str() == Some(".env"))
+        .collect();
+    assert!(
+        env_warnings.is_empty(),
+        "clean .env should not produce .env warnings, got: {:?}",
+        env_warnings
+    );
 }
