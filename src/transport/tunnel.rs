@@ -529,6 +529,9 @@ pub struct SSHClient {
     pub port: u16,
     pub keep_remote_files: bool,
     pub profile: Option<String>,
+    /// Config identity digest (F05). Recorded into `TunnelState` so `status`
+    /// can detect drift between the resolved config and the running tunnel.
+    pub config_digest: Option<String>,
     /// Set by [`Self::warm`] once the tunnel child is spawned; carried so
     /// liveness probes and state saving agree on the target. `stop` prefers
     /// the recorded `TunnelState` pid as the sole target (see
@@ -584,6 +587,7 @@ impl SSHClient {
             port: cfg.port,
             keep_remote_files,
             profile: cfg.profile.clone(),
+            config_digest: Some(cfg.digest()),
             tunnel_pid: None,
         })
     }
@@ -611,7 +615,13 @@ impl SSHClient {
     }
 
     pub fn saved_port(&self) -> Option<u16> {
-        TunnelState::load().ok().flatten().map(|s| s.port)
+        // Read under the *config's* profile namespace, never the ambient
+        // `VB_PROFILE` — the caller (VirtuosoClient) resolves the tunnel for a
+        // specific target and must not pick up another target's state file.
+        TunnelState::load_with_profile(self.profile.as_deref())
+            .ok()
+            .flatten()
+            .map(|s| s.port)
     }
 
     /// OS PID of the SSH tunnel process spawned by [`Self::open_tunnel`]
@@ -792,12 +802,18 @@ impl SSHClient {
             local_forward: None,
             start_time_unix_ms: None,
             health: None,
-            config_digest: None,
+            config_digest: self.config_digest.clone(),
             mode: Some(crate::models::TUNNEL_MODE_DEPLOYED.into()),
             attached_remote_port: None,
             attached_session_id: None,
         };
-        state.save().map_err(|e| VirtuosoError::Ssh(e.to_string()))
+        // Write under the *config's* profile namespace. Using `save()` (which
+        // keys on ambient `VB_PROFILE`) here would record the tunnel under the
+        // wrong namespace whenever the process env profile differs from the
+        // resolved config (e.g. `--target prod` with `VB_PROFILE=test`).
+        state
+            .save_with_profile(self.profile.as_deref())
+            .map_err(|e| VirtuosoError::Ssh(e.to_string()))
     }
 
     fn deploy_daemon_3(&self, setup_dir: &str) -> Result<String> {

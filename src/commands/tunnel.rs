@@ -63,7 +63,8 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
 
     // Refuse if a tunnel of any mode is already up. The user can pick the
     // matching verb to clean up (`detach` for attached, `stop` for deployed).
-    if let Some(existing) = TunnelState::load()? {
+    // Read under the config's profile namespace (same identity as the write).
+    if let Some(existing) = TunnelState::load_with_profile(cfg.profile.as_deref())? {
         let mode = existing.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
         let verb = if mode == TUNNEL_MODE_ATTACHED {
             "detach"
@@ -142,13 +143,15 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
         local_forward: Some(format!("L*:{local_port}")),
         start_time_unix_ms: Some(now_ms),
         health: None,
-        config_digest: None,
+        config_digest: Some(ctx.config_digest().to_string()),
         mode: Some(TUNNEL_MODE_ATTACHED.into()),
         attached_remote_port: Some(live.port),
         attached_session_id: Some(live.id.clone()),
     };
+    // Write under the config's profile namespace so later stop/detach/status
+    // reads (also profile-keyed) see this tunnel — never the ambient VB_PROFILE.
     state
-        .save()
+        .save_with_profile(cfg.profile.as_deref())
         .map_err(|e| VirtuosoError::Ssh(format!("save tunnel state: {e}")))?;
 
     // Mirror the remote session metadata into the local cache so subsequent
@@ -171,11 +174,19 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
 pub fn stop(ctx: &CommandContext, force: bool, dry_run: bool) -> Result<Value> {
     let cfg = ctx.config();
 
-    let state = TunnelState::load()?;
+    // Read the tunnel state under the *config's* profile namespace, never the
+    // ambient `VB_PROFILE` — otherwise `--target prod` could stop a tunnel
+    // recorded for `test` and then clean up using prod's config (mixed
+    // identities). Read, write and cleanup all key on `cfg.profile`.
+    let state = TunnelState::load_with_profile(cfg.profile.as_deref())?;
     let state = match state {
         Some(s) => s,
         None => return Err(VirtuosoError::NotFound("no running tunnel found".into())),
     };
+
+    // Ownership (F05): never stop a tunnel that belongs to another target —
+    // including the same host with a different bridge port.
+    ctx.validate_tunnel_ownership(&state)?;
 
     let mode = state.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
 
@@ -226,21 +237,14 @@ pub fn stop(ctx: &CommandContext, force: bool, dry_run: bool) -> Result<Value> {
 /// `tunnel stop` instead, since deployed tunnels own a setup dir that
 /// needs cleanup).
 pub fn detach(ctx: &CommandContext) -> Result<Value> {
-    let state = TunnelState::load()?
+    let cfg = ctx.config();
+    let state = TunnelState::load_with_profile(cfg.profile.as_deref())?
         .ok_or_else(|| VirtuosoError::NotFound("no attached tunnel found".into()))?;
 
     // P0-A ownership (F05): never detach a tunnel that belongs to another
-    // target's host.
-    if let Some(tid) = ctx.target_id() {
-        let target_host = ctx.config().remote_host.as_deref().unwrap_or("");
-        if !target_host.is_empty() && state.remote_host != target_host {
-            return Err(VirtuosoError::Config(format!(
-                "tunnel belongs to host '{}' but target '{tid}' resolves to '{}'; \
-                 refusing to touch another target's tunnel",
-                state.remote_host, target_host
-            )));
-        }
-    }
+    // target — single rule in `CommandContext::validate_tunnel_ownership`
+    // (host + remote bridge port).
+    ctx.validate_tunnel_ownership(&state)?;
 
     let mode = state.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
     if mode != TUNNEL_MODE_ATTACHED {
@@ -251,7 +255,7 @@ pub fn detach(ctx: &CommandContext) -> Result<Value> {
 
     kill_tunnel_pid(state.pid, false);
 
-    TunnelState::clear()?;
+    TunnelState::clear_with_profile(cfg.profile.as_deref())?;
 
     Ok(json!({
         "status": "detached",
@@ -280,7 +284,9 @@ pub fn restart(ctx: &CommandContext, timeout: Option<u64>) -> Result<Value> {
 
 pub fn diagnose(ctx: &CommandContext) -> Result<Value> {
     let cfg = ctx.config();
-    let port = TunnelState::load()?.map(|s| s.port).unwrap_or(cfg.port);
+    let port = TunnelState::load_with_profile(cfg.profile.as_deref())?
+        .map(|s| s.port)
+        .unwrap_or(cfg.port);
 
     // TCP reachability
     let tcp_ok = std::net::TcpStream::connect_timeout(
@@ -403,7 +409,7 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         "scratch_root": cfg.roles.scratch_root(),
     });
 
-    let tunnel_info = if let Some(state) = TunnelState::load()? {
+    let tunnel_info = if let Some(state) = TunnelState::load_with_profile(cfg.profile.as_deref())? {
         let port_open = std::net::TcpStream::connect(format!("127.0.0.1:{}", state.port)).is_ok();
         let host_match = !cfg.is_remote() || Some(&state.remote_host) == cfg.remote_host.as_ref();
 
@@ -436,7 +442,9 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
     };
     result["tunnel"] = tunnel_info;
 
-    let port = TunnelState::load()?.map(|s| s.port).unwrap_or(cfg.port);
+    let port = TunnelState::load_with_profile(cfg.profile.as_deref())?
+        .map(|s| s.port)
+        .unwrap_or(cfg.port);
 
     let mut daemon_info = if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
         let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
