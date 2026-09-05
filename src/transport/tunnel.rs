@@ -534,23 +534,18 @@ pub struct SSHClient {
     /// re-reading the environment — combining env hosts with context dirs is
     /// exactly the cross-identity bug target isolation must prevent.
     config: Config,
-    /// Local forward port the client connects to. For `deployed` tunnels this
-    /// may fall back to a free port when `cfg.port` is taken locally; the
-    /// remote endpoint stays at [`Self::remote_bridge_port`].
+    /// Local forward port the client connects to.
     pub port: u16,
-    /// Fixed remote bridge port (= `cfg.port`) this tunnel forwards to.
-    /// Never incremented together with the local port.
-    pub remote_bridge_port: u16,
     pub keep_remote_files: bool,
     pub profile: Option<String>,
-    /// Config identity digest (F05). Recorded into `TunnelState` so `status`
-    /// can detect drift between the resolved config and the running tunnel.
-    pub config_digest: Option<String>,
-    /// Set by [`Self::warm`] once the tunnel child is spawned; carried so
-    /// liveness probes and state saving agree on the target. `stop` prefers
-    /// the recorded `TunnelState` pid as the sole target (see
-    /// [`stop_saved_tunnel`]).
+    /// PID of the SSH tunnel process spawned by [`Self::open_tunnel`]. The
+    /// process is spawned WITHOUT `-f`, so this is the real forward-holding
+    /// process (verifiable via [`Self::is_tunnel_alive`]).
     tunnel_pid: Option<u32>,
+    /// Start-identity of the tunnel process, captured at spawn (best-effort).
+    /// Recorded into `TunnelState::start_identity` so `stop` can distinguish
+    /// the process we spawned from an unrelated PID-reuse.
+    tunnel_identity: Option<u64>,
 }
 
 impl SSHClient {
@@ -600,20 +595,22 @@ impl SSHClient {
             transport: Arc::new(OpenSshTransport::new(runner)),
             config: cfg.clone(),
             port: cfg.port,
-            remote_bridge_port: cfg.port,
             keep_remote_files,
             profile: cfg.profile.clone(),
-            config_digest: Some(cfg.digest()),
             tunnel_pid: None,
+            tunnel_identity: None,
         })
     }
 
-    pub fn warm(&mut self, _timeout: Option<u64>) -> Result<()> {
-        self.ensure_remote_setup()?;
-        self.ensure_tunnel()?;
-        self.save_state()?;
-        tracing::info!("tunnel established on port {}", self.port);
-        Ok(())
+    /// Deploy the remote setup files (daemon binary + bridge IL) for this
+    /// profile. This does NOT open a tunnel and does NOT claim a daemon
+    /// endpoint: the daemon is started by Virtuoso loading the IL, at which
+    /// point it binds an OS-assigned port that is discovered and validated by
+    /// `vcli tunnel attach`. Returns the deployed IL path.
+    pub fn warm(&self) -> Result<String> {
+        let il_path = self.ensure_remote_setup()?;
+        tracing::info!("remote setup deployed: profile={:?}", self.profile);
+        Ok(il_path)
     }
 
     pub fn stop(&self) -> Result<()> {
@@ -641,11 +638,18 @@ impl SSHClient {
             .map(|s| s.port)
     }
 
-    /// OS PID of the SSH tunnel process spawned by [`Self::open_tunnel`]
-    /// (or by `warm()`), if any. Used by `tunnel attach` to record the
-    /// tunnel pid into `TunnelState` so `tunnel detach` / `stop` can signal it.
+    /// OS PID of the SSH tunnel process spawned by [`Self::open_tunnel`].
+    /// Used by `tunnel attach` to record the tunnel pid into `TunnelState` so
+    /// `tunnel detach` / `stop` can signal it.
     pub fn tunnel_pid(&self) -> Option<u32> {
         self.tunnel_pid
+    }
+
+    /// Start-identity of the tunnel process (best-effort), recorded into
+    /// `TunnelState::start_identity` so `stop` can tell the process we spawned
+    /// apart from an unrelated PID reuse.
+    pub fn tunnel_identity(&self) -> Option<u64> {
+        self.tunnel_identity
     }
 
     pub fn is_tunnel_alive(&self) -> bool {
@@ -710,35 +714,15 @@ impl SSHClient {
         Ok(il_path)
     }
 
-    fn ensure_tunnel(&mut self) -> Result<()> {
-        // The REMOTE bridge port is fixed (= cfg.port); only the local forward
-        // port may fall back when `cfg.port` is already taken locally. The two
-        // are never incremented together, so a fallback can't change the
-        // tunnel's remote endpoint identity.
-        let remote = self.remote_bridge_port;
-        for local in self.port..(self.port + 10) {
-            if self.try_ssh_tunnel(local, remote).is_ok() {
-                self.port = local;
-                return Ok(());
-            }
-        }
-        // All candidate local ports failed — clean up the resources this
-        // creation deployed (the remote setup dir) rather than leaking them.
-        let _ = self.cleanup_remote();
-        Err(VirtuosoError::Ssh(format!(
-            "failed to establish tunnel on any port; verify SSH: `{}`",
-            self.runner().verify_cmd_hint()
-        )))
-    }
-
-    /// Open an SSH tunnel forwarding the local port to the remote host.
+    /// Open an SSH tunnel forwarding `local_port` to `remote_port` on the
+    /// remote host.
     ///
-    /// Used by `tunnel attach` to plug into a pre-existing daemon at a port
-    /// discovered from session metadata — no port walk, since the OS-assigned
-    /// port we want to reach is known up front. Local and remote coincide here
-    /// (attach forwards to the discovered daemon port).
-    pub fn open_tunnel(&mut self, port: u16) -> Result<()> {
-        self.try_ssh_tunnel(port, port)
+    /// Used by `tunnel attach` to plug into a pre-existing daemon whose real
+    /// (OS-assigned) port was discovered and validated from session metadata.
+    /// No port walk: the endpoint is known up front, so a local-port conflict
+    /// is reported as a failure, not silently shifted.
+    pub fn open_tunnel(&mut self, local_port: u16, remote_port: u16) -> Result<()> {
+        self.try_ssh_tunnel(local_port, remote_port)
     }
 
     fn try_ssh_tunnel(&mut self, local_port: u16, remote_port: u16) -> Result<()> {
@@ -753,27 +737,30 @@ impl SSHClient {
             "ServerAliveInterval=30",
             "-o",
             "ServerAliveCountMax=3",
-            "-f",
+            // The spawned process MUST be the sole forward holder, so
+            // connection reuse is explicitly disabled here — even a user's
+            // `~/.ssh/config` cannot turn this tunnel into a ControlMaster
+            // slave whose recorded PID is not the process owning the forward.
+            "-o",
+            "ControlMaster=no",
+            // -v logs the `Local forwarding listening on …` line to stderr;
+            // `wait_for_forward` uses it to prove THIS ssh actually bound the
+            // port (a pre-existing service can never produce it). `LogLevel`
+            // is pinned explicitly because `-v` only raises the level when the
+            // user config left it unset: a `LogLevel QUIET` in ~/.ssh/config
+            // would otherwise silence the marker and make every attach time
+            // out. Command-line `-o` wins over the config file.
+            "-v",
+            "-o",
+            "LogLevel=DEBUG1",
             "-N",
             "-L",
             &format!("127.0.0.1:{local_port}:127.0.0.1:{remote_port}"),
         ]);
-
-        // Conditionally add ControlMaster options — disabled when CM has been
-        // found to fail at runtime (WSL2/Windows named pipe issues).
-        if *self.runner().use_control_master.lock().unwrap() {
-            let control_dir = crate::runtime_paths::cache_subdir(&["ssh"]);
-            let _ = std::fs::create_dir_all(&control_dir);
-            let control_path = control_dir.join("%h-%p-%r");
-            cmd.args([
-                "-o",
-                "ControlMaster=auto",
-                "-o",
-                &format!("ControlPath={}", control_path.display()),
-                "-o",
-                "ControlPersist=600",
-            ]);
-        }
+        // No `-f`: the spawned process IS the forward-holding ssh, so its pid
+        // and start identity are verifiable and `stop` can signal it directly.
+        // Without `-f`, ssh keeps forwarding after this CLI process exits, so
+        // the tunnel lifetime is unchanged from the old backgrounded form.
 
         if let Some(p) = self.runner().ssh_port {
             cmd.arg("-p").arg(p.to_string());
@@ -789,58 +776,31 @@ impl SSHClient {
         }
         cmd.arg(&target);
 
-        let output = cmd
+        let mut child = cmd
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| VirtuosoError::Ssh(format!("failed to start tunnel: {e}")))?;
 
-        let pid = output.id();
-        self.tunnel_pid = Some(pid);
+        // Only THIS ssh's forward counts as success. `wait_for_forward` needs
+        // the ssh child alive AND a reachable port AND its stderr showing it
+        // bound the local port — a pre-existing service can never satisfy the
+        // stderr marker, so it cannot masquerade as our tunnel. Any failure
+        // reaps the child so the caller can try another local port without
+        // leaking a process.
+        //
+        // The budget covers the full SSH handshake + auth, which can be slow
+        // through a jump host; failures (`ExitOnForwardFailure`) are detected
+        // immediately by the child exiting, not by the budget running out.
+        wait_for_forward(&mut child, local_port, TUNNEL_FORWARD_BUDGET)?;
 
-        use std::net::TcpStream;
-        for _ in 0..10 {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            if TcpStream::connect(format!("127.0.0.1:{local_port}")).is_ok() {
-                return Ok(());
-            }
-        }
-        Err(VirtuosoError::Ssh("tunnel port not reachable".into()))
-    }
-
-    fn save_state(&self) -> Result<()> {
-        let state = TunnelState {
-            version: crate::models::CURRENT_STATE_VERSION,
-            port: self.port,
-            pid: self.tunnel_pid.unwrap_or(0),
-            remote_host: self.runner().host.clone(),
-            setup_path: Some(setup_dir_for_profile(self.profile.as_deref())),
-            // v2 fields: the OpenSSH backend records its backend + profile; the
-            // remaining v2 fields (daemon nonce, IPC endpoint, executable path,
-            // start identity, …) are populated by the native daemon when it ships.
-            profile: self.profile.clone(),
-            backend: Some("openssh".to_string()),
-            daemon_nonce: None,
-            executable_path: None,
-            start_identity: None,
-            ipc_endpoint: None,
-            token_path: None,
-            local_forward: None,
-            start_time_unix_ms: None,
-            health: None,
-            config_digest: self.config_digest.clone(),
-            mode: Some(crate::models::TUNNEL_MODE_DEPLOYED.into()),
-            attached_remote_port: None,
-            remote_bridge_port: Some(self.remote_bridge_port),
-            attached_session_id: None,
-        };
-        // Write under the *config's* profile namespace. Using `save()` (which
-        // keys on ambient `VB_PROFILE`) here would record the tunnel under the
-        // wrong namespace whenever the process env profile differs from the
-        // resolved config (e.g. `--target prod` with `VB_PROFILE=test`).
-        state
-            .save_with_profile(self.profile.as_deref())
-            .map_err(|e| VirtuosoError::Ssh(e.to_string()))
+        self.tunnel_pid = Some(child.id());
+        self.tunnel_identity = crate::transport::identity::ProcessIdentity::of_pid(child.id())
+            .ok()
+            .map(|p| p.start_identity);
+        // The child is intentionally not waited on: it keeps forwarding after
+        // this process exits (same lifetime as the old `-f` behaviour).
+        Ok(())
     }
 
     fn deploy_daemon_3(&self, setup_dir: &str) -> Result<String> {
@@ -922,17 +882,143 @@ impl SSHClient {
         self.runner().upload_text(&il_content, &path)?;
         Ok(path)
     }
+}
 
-    fn cleanup_remote(&self) -> Result<()> {
-        // Cleanup is scoped to the active profile's setup dir so that
-        // stopping profile A does not wipe profile B's bridge files.
-        // This was the bug upstream PR #86 fixed in the Python bridge
-        // and that we mirror here.
-        let setup_dir = setup_dir_for_profile(self.profile.as_deref());
-        self.runner()
-            .run_command(&format!("rm -rf {setup_dir}"), None)?;
-        Ok(())
+/// How long `wait_for_forward` waits for the ssh child to report its bind.
+///
+/// This must cover a full SSH handshake + auth, which can take several seconds
+/// through a jump host or a loaded bastion. It is NOT the failure path: with
+/// `ExitOnForwardFailure=yes` a bind failure (or any connection error) makes
+/// ssh exit, and the child-exit branch returns immediately.
+const TUNNEL_FORWARD_BUDGET: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Wait until the spawned ssh process has established its local forward.
+///
+/// The ONLY proof that THIS ssh's forward is up is ssh's own stderr: with
+/// `-v` and `ExitOnForwardFailure=yes`, OpenSSH prints `Local forwarding
+/// listening on 127.0.0.1 port <n>` once it has bound the local port and set
+/// up the forwarding. A pre-existing service on the port can satisfy a bare
+/// TCP probe but can never produce that line — and during the ssh handshake
+/// (before it has tried to bind) a naive "child alive + port reachable" test
+/// would falsely report success. So we require the stderr bind marker AND a
+/// reachable port AND a live child. On any failure the child is killed and
+/// reaped so the caller can try another local port without leaking a process.
+fn wait_for_forward(
+    child: &mut std::process::Child,
+    local_port: u16,
+    budget: std::time::Duration,
+) -> Result<()> {
+    use std::io::Read;
+    use std::net::TcpStream;
+    use std::sync::{Arc, Mutex};
+
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| VirtuosoError::Ssh("tunnel stderr unavailable".into()))?;
+    // Drain stderr on a background thread so ssh's debug output can never fill
+    // the pipe and block the child while we poll liveness + the port below.
+    let log: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let log_reader = Arc::clone(&log);
+    let reader = std::thread::spawn(move || {
+        let mut buf = [0u8; 2048];
+        let mut s = stderr;
+        loop {
+            match s.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => log_reader.lock().unwrap().extend_from_slice(&buf[..n]),
+            }
+        }
+    });
+
+    // Snapshot the bytes captured so far. The mutex guard must be dropped
+    // before the value is used, so this returns an owned, lowercased String
+    // rather than a `Cow` borrowed from the guard.
+    fn snapshot(log: &std::sync::Arc<std::sync::Mutex<Vec<u8>>>) -> String {
+        let guard = match log.lock() {
+            Ok(g) => g,
+            // A poisoned mutex only means the reader thread panicked; the
+            // captured bytes are still safe to read for a diagnostic.
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        String::from_utf8_lossy(&guard).to_lowercase()
     }
+
+    // The marker must be followed by a NON-digit: with a plain substring
+    // match, ssh binding port 30001 would satisfy the marker for port 3000.
+    fn bind_marker_present(log: &str, local_port: u16) -> bool {
+        let marker = format!("local forwarding listening on 127.0.0.1 port {local_port}");
+        let mut rest = log;
+        while let Some(idx) = rest.find(&marker) {
+            let after = &rest[idx + marker.len()..];
+            if !after.starts_with(|c: char| c.is_ascii_digit()) {
+                return true;
+            }
+            rest = after;
+        }
+        false
+    }
+
+    let deadline = std::time::Instant::now() + budget;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let _ = child.wait();
+                let tail = snapshot(&log);
+                let _ = reader.join();
+                return Err(VirtuosoError::Ssh(format!(
+                    "ssh exited before forward was established ({status}); stderr tail: {}",
+                    tail.trim_end()
+                )));
+            }
+            Ok(None) => {}
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = reader.join();
+                return Err(VirtuosoError::Ssh(format!("tunnel wait failed: {e}")));
+            }
+        }
+
+        let log_snapshot = snapshot(&log);
+        if bind_marker_present(&log_snapshot, local_port)
+            && TcpStream::connect(("127.0.0.1", local_port)).is_ok()
+        {
+            // ssh logged that IT bound the port; confirm it did not die right
+            // after (e.g. the remote end tore the connection down).
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let _ = child.wait();
+                    let _ = reader.join();
+                    return Err(VirtuosoError::Ssh(format!(
+                        "ssh exited right after reporting the forward: {status}"
+                    )));
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = reader.join();
+                    return Err(VirtuosoError::Ssh(format!("tunnel wait failed: {e}")));
+                }
+            }
+            // Detach the reader: it blocks on the pipe until ssh exits (i.e.
+            // the tunnel is torn down), which is fine for a short-lived CLI.
+            return Ok(());
+        }
+
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = reader.join();
+    Err(VirtuosoError::Ssh(
+        "tunnel forward never established in time".into(),
+    ))
 }
 
 pub fn file_md5(path: &str) -> Result<String> {
@@ -955,8 +1041,8 @@ mod tests {
     use super::is_ssh_executable;
     use super::{
         classify_ssh_pid, daemon_lifecycle, decide_stop, profiled_bridge_leaf, profiled_env_key,
-        setup_dir_for_profile, stop_saved_tunnel, verdict_to_decision, verify_ssh_pid, PidVerdict,
-        StopDecision, TunnelState, Verdict,
+        setup_dir_for_profile, stop_saved_tunnel, verdict_to_decision, verify_ssh_pid,
+        wait_for_forward, PidVerdict, StopDecision, TunnelState, Verdict,
     };
     use crate::config::Config;
     use serial_test::serial;
@@ -1529,5 +1615,151 @@ mod tests {
         let k_a = profiled_env_key("VB_LOCAL_PORT", Some("analog"));
         let k_b = profiled_env_key("VB_LOCAL_PORT", Some("digital"));
         assert_ne!(k_a, k_b);
+    }
+
+    // ---- wait_for_forward -------------------------------------------------
+    //
+    // The regression these guard against: the old success check probed only
+    // the local TCP port, so when the port was already served by another
+    // process (and ssh exited on bind failure) the tunnel was reported as
+    // established. `wait_for_forward` now requires ssh's own stderr bind
+    // marker (`Local forwarding listening on 127.0.0.1 port <n>`) — only that
+    // proves THIS ssh bound the port; a foreign listener can never produce it.
+    //
+    // Budgets here are deliberately short: production uses
+    // `TUNNEL_FORWARD_BUDGET`, but every failure mode these tests exercise is
+    // detected without waiting it out, so the whole group runs in ~3 s.
+
+    fn free_port() -> u16 {
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
+    fn shell_child(script: &str) -> std::process::Child {
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg(script)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    }
+
+    const TEST_BUDGET: std::time::Duration = std::time::Duration::from_secs(5);
+
+    /// A port that has a listener but whose child exited immediately: must
+    /// fail, even though the port is reachable. The child never emitted a
+    /// bind marker, so the foreign listener cannot be mistaken for our tunnel.
+    #[test]
+    fn wait_for_forward_fails_when_child_dies_despite_port_open() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut child = shell_child("exit 7");
+        let err = wait_for_forward(&mut child, port, TEST_BUDGET).unwrap_err();
+        assert!(
+            err.to_string().contains("exited before forward"),
+            "must not claim success on a pre-existing service, got: {err}"
+        );
+        // child is reaped by wait_for_forward.
+    }
+
+    /// The false-success window: an unrelated service holds the port while
+    /// our "ssh" is still handshaking (alive) and then fails LATE. A naive
+    /// "child alive + port reachable" probe would return Ok during the alive
+    /// window; the bind-marker requirement means we never do — we wait out the
+    /// delay and reject on exit.
+    #[test]
+    fn wait_for_forward_rejects_unrelated_listener_when_ssh_fails_late() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut child = shell_child("sleep 2; exit 7");
+        let err = wait_for_forward(&mut child, port, TEST_BUDGET).unwrap_err();
+        assert!(
+            err.to_string().contains("exited before forward"),
+            "foreign listener must never be accepted as our forward, got: {err}"
+        );
+    }
+
+    /// A live child that reports the OpenSSH `-v` bind line on stderr (i.e.
+    /// THIS ssh bound the port) plus a reachable port → success. The marker is
+    /// matched case-insensitively and irrespective of the `debug1: ` prefix
+    /// OpenSSH adds, so the check survives cosmetic log-format changes.
+    #[test]
+    fn wait_for_forward_succeeds_when_ssh_reports_the_bind() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let script = format!(
+            "echo 'debug1: Local forwarding listening on 127.0.0.1 port {port}.' >&2; sleep 30"
+        );
+        let mut child = shell_child(&script);
+        assert!(
+            wait_for_forward(&mut child, port, TEST_BUDGET).is_ok(),
+            "the stderr bind marker must be accepted as proof of the forward"
+        );
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// The bind marker is port-scoped: ssh reporting a bind on a DIFFERENT
+    /// port must not be accepted as proof for the port we asked for.
+    #[test]
+    fn wait_for_forward_ignores_bind_marker_for_another_port() {
+        let port = free_port();
+        let other = port.wrapping_add(1);
+        let script = format!(
+            "echo 'debug1: Local forwarding listening on 127.0.0.1 port {other}.' >&2; sleep 30"
+        );
+        let mut child = shell_child(&script);
+        let err =
+            wait_for_forward(&mut child, port, std::time::Duration::from_millis(500)).unwrap_err();
+        assert!(
+            err.to_string().contains("never established"),
+            "a bind marker for another port must not satisfy the check, got: {err}"
+        );
+        assert!(
+            child.try_wait().unwrap().is_some(),
+            "child must be reclaimed after a timeout"
+        );
+    }
+
+    /// The marker must be digit-boundary-scoped: a bind on `30001` is not a
+    /// bind on `3000`. (The TCP probe is irrelevant here — no listener is
+    /// bound by the test — so the outcome must be a timeout either way.)
+    #[test]
+    fn wait_for_forward_ignores_bind_marker_that_extends_the_port() {
+        let child_port = 30_001;
+        let mut child = shell_child(&format!(
+            "echo 'debug1: Local forwarding listening on 127.0.0.1 port {child_port}.' >&2; sleep 30"
+        ));
+        let err =
+            wait_for_forward(&mut child, 3_000, std::time::Duration::from_millis(500)).unwrap_err();
+        assert!(
+            err.to_string().contains("never established"),
+            "'port 30001' must not satisfy the marker for port 3000, got: {err}"
+        );
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// Live child but NO listener on the port (and no bind marker) → times
+    /// out, and the child is reclaimed (killed + reaped) so the caller can try
+    /// the next port.
+    #[test]
+    fn wait_for_forward_times_out_and_reclaims_child() {
+        let mut child = shell_child("sleep 30");
+        let err = wait_for_forward(
+            &mut child,
+            free_port(),
+            std::time::Duration::from_millis(500),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("never established"), "err: {err}");
+        assert!(
+            child.try_wait().unwrap().is_some(),
+            "child must be killed + reaped after a timeout"
+        );
     }
 }

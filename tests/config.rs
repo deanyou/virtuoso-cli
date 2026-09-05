@@ -110,3 +110,56 @@ fn test_config_timeout_env_override_wins() {
     let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
     assert_eq!(config.timeout, 45);
 }
+
+/// `port_explicit` is part of the connection identity: the same numeric port
+/// with "allow auto-discovery" vs "force port matching" must produce
+/// different digests, otherwise `tunnel status` drift detection / daemon Hello
+/// cannot tell the two constraints apart. Pure struct literal — no env, no
+/// filesystem — so it needs no serialisation or guards.
+#[test]
+fn test_config_digest_distinguishes_port_explicit() {
+    let base = virtuoso_cli::config::Config {
+        profile: None,
+        remote_host: Some("compute-eda-42".into()),
+        remote_user: None,
+        port: 30001,
+        port_explicit: false,
+        jump_host: None,
+        jump_user: None,
+        ssh_port: None,
+        ssh_key: None,
+        ssh_config: None,
+        ssh_backend: None,
+        disable_control_master: false,
+        timeout: 30,
+        read_timeout: 120,
+        keep_remote_files: false,
+        spectre_cmd: "spectre".into(),
+        spectre_args: vec![],
+        spectre_max_workers: 8,
+        ssh_max_sessions: 10,
+        ssh_max_bulk_sessions: 2,
+        ssh_reconnect_max_attempts: 8,
+        ssh_reconnect_max_delay: 30,
+        ssh_keepalive_interval: 30,
+        ssh_keepalive_failures: 3,
+        transport_shutdown_grace: 5,
+        cadence_cshrc: None,
+        spectre_bin: None,
+        roles: Default::default(),
+        transport_daemon_socket: None,
+        transport_daemon_token: None,
+    };
+    let mut explicit = base.clone();
+    explicit.port_explicit = true;
+    assert_ne!(
+        base.digest(),
+        explicit.digest(),
+        "port constraint mode must change the config digest"
+    );
+    assert_eq!(
+        base.digest(),
+        base.clone().digest(),
+        "digest must be deterministic for identical configs"
+    );
+}

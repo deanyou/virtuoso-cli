@@ -66,11 +66,11 @@ impl CommandContext {
     }
 
     /// Validate that a tunnel state belongs to this context's target.
-    /// `state.port` is the local forward port and may legitimately fall back
-    /// from the target's bridge port, so the ownership discriminator is the
-    /// *remote* bridge port: `remote_bridge_port` (deployed, fixed at
-    /// `cfg.port`) or `attached_remote_port` (attached), falling back to
-    /// `port` only for legacy state files.
+    /// `state.port` is the local forward port; the ownership discriminator is
+    /// the *remote* bridge port actually used: `remote_bridge_port` (the
+    /// discovered daemon port, recorded by attach) or `attached_remote_port`,
+    /// falling back to `port` only for legacy state files. The bridge-port arm
+    /// only fires when the target's port is an explicit constraint.
     pub fn validate_tunnel_ownership(&self, state: &crate::models::TunnelState) -> Result<()> {
         let remote_port = state
             .remote_bridge_port
@@ -85,6 +85,13 @@ impl CommandContext {
     }
 
     /// Shared host + bridge-port ownership rule.
+    ///
+    /// The bridge-port arm applies ONLY when the target's port is an explicit
+    /// user constraint (`Config::port_explicit`). A default (hash-of-USER)
+    /// port is not an endpoint constraint — daemons bind OS-assigned ports —
+    /// so it must never reject a discovered session or tunnel. Host identity is
+    /// always enforced in target mode; target-less (legacy env) selections
+    /// skip the whole check.
     fn validate_endpoint_ownership(
         &self,
         kind: &str,
@@ -104,9 +111,10 @@ impl CommandContext {
             )));
         }
         // Same-host discrimination: two targets on one compute node differ by
-        // their remote bridge port, so a port mismatch is an ownership
-        // violation even when the host matches.
-        if self.config.port != 0 && port != self.config.port {
+        // their remote bridge port, so an explicitly configured port mismatch
+        // is an ownership violation even when the host matches. A non-explicit
+        // (default) port is not a constraint and is never checked here.
+        if self.config.port_explicit && self.config.port != 0 && port != self.config.port {
             return Err(VirtuosoError::Config(format!(
                 "{kind} '{id}' is on bridge port {port} but target '{}' uses port {}; \
                  refusing to reuse the wrong {kind}",
@@ -339,5 +347,67 @@ mod tests {
         assert!(ctx
             .validate_session_ownership(&session_with("compute-eda-99", 30001))
             .is_ok());
+    }
+
+    /// A target config whose port is NOT an explicit constraint (mirrors a
+    /// target whose `port:` field is absent → hash-of-USER default). Built as
+    /// a literal rather than via env so ambient `VB_PORT` cannot leak in.
+    fn cfg_with_default_port(host: &str) -> Config {
+        let mut c = cfg_with(host, 65013);
+        c.port_explicit = false;
+        c
+    }
+
+    #[serial]
+    #[test]
+    fn ownership_default_port_is_not_a_constraint_same_host() {
+        // The daemon binds an OS-assigned port; a default cfg.port must never
+        // reject a discovered session that happens to differ from it.
+        let ctx = CommandContext::new(cfg_with_default_port("compute-eda-42"), Some("prod".into()))
+            .unwrap();
+        assert!(ctx
+            .validate_session_ownership(&session_with("compute-eda-42", 41234))
+            .is_ok());
+    }
+
+    #[serial]
+    #[test]
+    fn ownership_default_port_still_enforces_host() {
+        let ctx = CommandContext::new(cfg_with_default_port("compute-eda-42"), Some("prod".into()))
+            .unwrap();
+        let err = ctx
+            .validate_session_ownership(&session_with("compute-eda-99", 41234))
+            .unwrap_err();
+        assert!(err.to_string().contains("belongs to host 'compute-eda-99'"));
+    }
+
+    #[serial]
+    #[test]
+    fn tunnel_ownership_default_port_is_not_a_constraint() {
+        let ctx = CommandContext::new(cfg_with_default_port("compute-eda-42"), Some("prod".into()))
+            .unwrap();
+        let state = crate::models::TunnelState {
+            version: crate::models::CURRENT_STATE_VERSION,
+            port: 41234,
+            pid: 0,
+            remote_host: "compute-eda-42".into(),
+            setup_path: None,
+            profile: Some("prod".into()),
+            backend: Some("openssh".into()),
+            daemon_nonce: None,
+            executable_path: None,
+            start_identity: None,
+            ipc_endpoint: None,
+            token_path: None,
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
+            mode: Some(crate::models::TUNNEL_MODE_ATTACHED.into()),
+            attached_remote_port: Some(41234),
+            remote_bridge_port: Some(41234),
+            attached_session_id: None,
+        };
+        assert!(ctx.validate_tunnel_ownership(&state).is_ok());
     }
 }
