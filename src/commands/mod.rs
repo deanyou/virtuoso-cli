@@ -1,4 +1,5 @@
 pub mod cell;
+pub mod config;
 pub mod design;
 pub mod diag;
 pub mod init;
