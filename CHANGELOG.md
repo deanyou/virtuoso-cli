@@ -2,14 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.4] - 2026-09-06
+## [Unreleased]
 
 Multi-user / shared deployment. Previously each user on a shared host had to
 place (or symlink) their own `virtuoso-daemon` under `~/.cargo/bin` because the
 SKILL bridge resolved the daemon path in two conflicting places — a top-level
 resolver that claimed to honor `RB_DAEMON_PATH`, and `_RBAutoStart()` which ran
 last and unconditionally hardcoded `$HOME/.cargo/bin/virtuoso-daemon`, silently
-overriding everything (including `RB_DAEMON_PATH`). This release unifies daemon
+overriding everything (including `RB_DAEMON_PATH`). This change unifies daemon
 resolution behind a single ordered search chain, lets one shared install serve
 every user with zero per-user setup, and revives the deploy-time `__DAEMON_PATH__`
 injection point so `vcli tunnel start` and the new `install.sh` bake in an exact
@@ -49,10 +49,35 @@ still work (lowest priority in the chain).
   (1) `__DAEMON_PATH__` deploy-time substitution, (2) `RB_DAEMON_PATH` env
   override, (3) shared installs `/opt/virtuoso-cli/bin`, `/usr/local/bin`,
   (4) per-user `~/.local/bin`, `~/.cargo/bin` (backward compatibility).
-- **`; RB_VERSION:`** in `resources/ramic_bridge.il` bumped to `1.3.4` to match
-  `Cargo.toml`; the daemon reports `1.3.4` after rebuild (version-skew triad).
 - **README** — documented multi-user / shared install, the search chain, and
   corrected the stale "resets path to ~/.cargo/bin" description of `_RBAutoStart`.
+
+## [1.3.4] - 2026-09-04
+
+CI green-up after the 1.3.3 IPC deadline work. The 1.3.3 release left the
+integration matrix red: `cargo fmt --check` and `cargo clippy -D warnings`
+failed on recent IPC deadline changes, and two platform-specific test failures
+surfaced on the matrix (macOS Unix-socket path length, Windows native-backend
+assertion). This release restores a fully green CI on all platforms.
+
+### Fixed
+
+- **rustfmt violations** (`src/transport/x11.rs`, `src/config.rs`,
+  `src/transport/backend.rs`, `src/transport/ipc/daemon.rs`,
+  `src/streaming/job_progress.rs`): reformatted long lines and chain calls so
+  `cargo fmt --check` passes again.
+- **clippy `byte_char_slices`** (`src/transport/ipc/daemon.rs`): replaced
+  `&[b'x']` with `b"x"` in the write back-pressure test so
+  `cargo clippy -- -D warnings` passes.
+- **macOS IPC test socket path** (`src/transport/ipc/daemon.rs`): added a
+  `short_socket_path` helper — macOS `$TMPDIR` (`/var/folders/.../T/`) plus the
+  descriptive socket filename exceeded `SUN_LEN` (104 bytes), making
+  `UnixListener::bind` fail with "path must be shorter than SUN_LEN". The five
+  IPC regression tests now use `/tmp` on macOS.
+- **Windows native-backend test assertion** (`src/transport/backend.rs`):
+  `native_path_enforces_the_capacity_invariant` now distinguishes unix (capacity
+  check reports `Configuration`) from non-unix (native backend is unsupported,
+  reports `UnsupportedBackend` before capacity validation).
 
 ## [1.3.3] - 2026-09-04
 

@@ -145,7 +145,9 @@ All configuration via env vars — see `src/config.rs` `Config::from_env()`.
 Key vars: `VB_HOST`, `VB_PORT`, `VB_SESSION`, `VB_TIMEOUT` (default 30 s; set to 120 for busy servers),
 `VB_REMOTE_HOST`, `VB_JUMP_HOST`, `VB_CLIENT_ID`/`VB_PROFILE` (per-client scratch isolation),
 `VB_CACHE_DIR` / `VB_HOME` / `VB_LOG_DIR` / `VB_OUTPUT_DIR` / `VB_TMP_DIR` / `VB_STATE_DIR` / `VB_CONFIG_DIR`
-(overrides for `runtime_paths::cache_root` etc. — see `src/runtime_paths.rs`).
+(overrides for `runtime_paths::cache_root` etc. — see `src/runtime_paths.rs`),
+`VB_TARGETS_FILE` (explicit path to `targets.yaml`; overrides `~/.vcli/targets.yaml` — required on Windows,
+where `dirs::home_dir()` reads `FOLDERID_Profile` and ignores `HOME`).
 
 ## GUI Debugging
 

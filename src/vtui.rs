@@ -7,6 +7,7 @@ mod client;
 mod command_log;
 mod commands;
 mod config;
+mod context;
 mod error;
 mod exit_codes;
 mod history;
@@ -21,6 +22,7 @@ mod skill_finder;
 mod spectre;
 mod streaming;
 mod sys;
+mod target;
 #[cfg(test)]
 mod test_env;
 mod transaction;

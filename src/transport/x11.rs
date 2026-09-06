@@ -5475,6 +5475,7 @@ mod tests {
             remote_host: None,
             remote_user: None,
             port: 5555,
+            port_explicit: false,
             jump_host: None,
             jump_user: None,
             ssh_port: None,

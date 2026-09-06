@@ -5,6 +5,7 @@ pub mod client;
 pub mod command_log;
 pub mod commands;
 pub mod config;
+pub mod context;
 pub mod error;
 pub mod exit_codes;
 pub mod history;
@@ -22,6 +23,7 @@ pub mod spectre;
 pub mod streaming;
 #[cfg(target_os = "linux")]
 pub mod sys;
+pub mod target;
 #[cfg(test)]
 pub mod test_env;
 pub mod transaction;

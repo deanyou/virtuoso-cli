@@ -7,6 +7,7 @@ mod client;
 mod command_log;
 mod commands;
 mod config;
+mod context;
 mod error;
 mod exit_codes;
 mod history;
@@ -21,6 +22,7 @@ mod skill_finder;
 mod spectre;
 mod streaming;
 mod sys;
+mod target;
 #[cfg(test)]
 mod test_env;
 #[cfg(test)]
@@ -79,6 +81,11 @@ struct Cli {
     /// Connection profile name (reads VB_REMOTE_HOST_<profile> etc.)
     #[arg(long, short, global = true)]
     profile: Option<String>,
+
+    /// Target name from ~/.vcli/targets.yaml (multi-target mode).
+    /// Overrides --profile and environment variables when specified.
+    #[arg(long, global = true)]
+    target: Option<String>,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -101,6 +108,10 @@ enum Commands {
         #[arg(long)]
         if_not_exists: bool,
     },
+
+    /// Manage multiple Virtuoso targets (multi-host connection pools)
+    #[command(subcommand)]
+    Target(TargetCmd),
 
     /// Manage SSH tunnel to remote Virtuoso host
     #[command(subcommand)]
@@ -325,6 +336,69 @@ impl McpCmd {
             McpCmd::Serve => crate::mcp::server::run().map(|_| serde_json::json!({})),
         }
     }
+}
+
+#[derive(Subcommand)]
+enum TargetCmd {
+    /// List all configured targets
+    #[command(long_about = "List all targets from ~/.vcli/targets.yaml.\n\n\
+            Examples:\n  \
+            vcli target list\n  \
+            vcli target list --format json")]
+    List,
+
+    /// Show configuration for a specific target
+    #[command(long_about = "Show detailed configuration for a target.\n\n\
+            Examples:\n  \
+            vcli target show prod\n  \
+            vcli target show")]
+    Show {
+        /// Target name (defaults to active target)
+        name: Option<String>,
+    },
+
+    /// Switch the active target
+    #[command(long_about = "Set the active target in ~/.vcli/targets.yaml.\n\n\
+            Examples:\n  \
+            vcli target switch prod")]
+    Switch {
+        /// Target name to activate
+        name: String,
+    },
+
+    /// Add a new target
+    #[command(long_about = "Add a new target to ~/.vcli/targets.yaml.\n\n\
+            Examples:\n  \
+            vcli target add prod --host compute-eda-42 --port 30001\n  \
+            vcli target add test --host compute-eda-99 --port 30002 --ssh-backend native")]
+    Add {
+        /// Target name
+        name: String,
+        /// Remote host running Virtuoso
+        #[arg(long)]
+        host: String,
+        /// Bridge port (default: username-derived)
+        #[arg(long)]
+        port: Option<u16>,
+        /// SSH backend (openssh or native)
+        #[arg(long)]
+        ssh_backend: Option<String>,
+        /// Jump host (bastion)
+        #[arg(long)]
+        jump_host: Option<String>,
+        /// Description
+        #[arg(long)]
+        description: Option<String>,
+    },
+
+    /// Remove a target
+    #[command(long_about = "Remove a target from ~/.vcli/targets.yaml.\n\n\
+            Examples:\n  \
+            vcli target remove old-prod")]
+    Remove {
+        /// Target name to remove
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1652,23 +1726,36 @@ fn parse_key_val(s: &str) -> std::result::Result<(String, String), String> {
 
 // ── Per-group dispatch helpers ───────────────────────────────────────
 
-fn dispatch_tunnel(cmd: TunnelCmd, format: OutputFormat) -> error::Result<serde_json::Value> {
+fn dispatch_tunnel(
+    ctx: &crate::context::CommandContext,
+    cmd: TunnelCmd,
+    format: OutputFormat,
+) -> error::Result<serde_json::Value> {
     match cmd {
-        TunnelCmd::Start { timeout, dry_run } => commands::tunnel::start(Some(timeout), dry_run),
-        TunnelCmd::Stop { force, dry_run } => commands::tunnel::stop(force, dry_run),
-        TunnelCmd::Restart { timeout } => commands::tunnel::restart(Some(timeout)),
-        TunnelCmd::Status => commands::tunnel::status(format),
-        TunnelCmd::Diagnose => commands::tunnel::diagnose(),
-        TunnelCmd::Attach { dry_run } => commands::tunnel::attach(dry_run),
-        TunnelCmd::Detach => commands::tunnel::detach(),
+        TunnelCmd::Start { timeout, dry_run } => {
+            commands::tunnel::start(ctx, Some(timeout), dry_run)
+        }
+        TunnelCmd::Stop { force, dry_run } => commands::tunnel::stop(ctx, force, dry_run),
+        TunnelCmd::Restart { timeout } => commands::tunnel::restart(ctx, Some(timeout)),
+        TunnelCmd::Status => commands::tunnel::status(ctx, format),
+        TunnelCmd::Diagnose => commands::tunnel::diagnose(ctx),
+        TunnelCmd::Attach { dry_run } => commands::tunnel::attach(ctx, dry_run),
+        TunnelCmd::Detach => commands::tunnel::detach(ctx),
     }
 }
 
-fn dispatch_profile(cmd: ProfileCmd) -> error::Result<serde_json::Value> {
+fn dispatch_profile(
+    cmd: ProfileCmd,
+    cli_profile: Option<String>,
+) -> error::Result<serde_json::Value> {
     use virtuoso_cli::profile::{BindScope, ProfileResolution};
     match cmd {
         ProfileCmd::Show => {
-            let info: ProfileResolution = virtuoso_cli::profile::resolve_profile_info(None);
+            // `--profile`/`-p` must win over the ambient VB_PROFILE. Config
+            // management skips full connection-target resolution, so the CLI
+            // profile is threaded here explicitly.
+            let info: ProfileResolution =
+                virtuoso_cli::profile::resolve_profile_info(cli_profile.as_deref());
             Ok(serde_json::json!({
                 "profile": info.profile,
                 "source": info.source,
@@ -1751,6 +1838,201 @@ fn dispatch_profile(cmd: ProfileCmd) -> error::Result<serde_json::Value> {
                     }))
                 }
             }
+        }
+    }
+}
+
+fn dispatch_target(cmd: TargetCmd, format: OutputFormat) -> error::Result<serde_json::Value> {
+    use crate::target::{TargetConfig, TargetManager};
+
+    match cmd {
+        TargetCmd::List => {
+            let manager =
+                TargetManager::load().map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+
+            if manager.is_empty() && matches!(format, OutputFormat::Table) {
+                println!(
+                    "No targets configured yet. Add one with: vcli target add <name> --host <host>"
+                );
+            }
+
+            let targets: Vec<serde_json::Value> = manager
+                .list_names()
+                .iter()
+                .map(|name| {
+                    let cfg = manager.get(name).unwrap();
+                    serde_json::json!({
+                        "name": name,
+                        "active": *name == manager.active_target_name(),
+                        "remote_host": cfg.remote_host,
+                        "port": cfg.port,
+                        "description": cfg.description,
+                    })
+                })
+                .collect();
+
+            if matches!(format, OutputFormat::Table) && !targets.is_empty() {
+                println!(
+                    "\n{:<15} {:<8} {:<25} {:<10}",
+                    "NAME", "ACTIVE", "REMOTE_HOST", "PORT"
+                );
+                println!("{:-<15} {:-<8} {:-<25} {:-<10}", "", "", "", "");
+                for t in &targets {
+                    println!(
+                        "{:<15} {:<8} {:<25} {:<10}",
+                        t["name"].as_str().unwrap_or(""),
+                        if t["active"].as_bool().unwrap_or(false) {
+                            "*"
+                        } else {
+                            ""
+                        },
+                        t["remote_host"].as_str().unwrap_or("-"),
+                        t["port"]
+                            .as_u64()
+                            .map(|p| p.to_string())
+                            .unwrap_or_else(|| "-".to_string()),
+                    );
+                }
+                println!();
+            }
+
+            Ok(serde_json::json!({
+                "targets": targets,
+                "count": targets.len(),
+                "active": manager.active_target_name(),
+                "config_path": manager.config_path().to_string_lossy().to_string(),
+            }))
+        }
+
+        TargetCmd::Show { name } => {
+            let manager =
+                TargetManager::load().map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+
+            let target_name = name
+                .as_deref()
+                .unwrap_or_else(|| manager.active_target_name());
+            let cfg = manager.get(target_name).ok_or_else(|| {
+                error::VirtuosoError::NotFound(format!("target '{}' not found", target_name))
+            })?;
+
+            if matches!(format, OutputFormat::Table) {
+                println!("\nTarget: {}", target_name);
+                println!(
+                    "  remote_host:    {}",
+                    cfg.remote_host.as_deref().unwrap_or("-")
+                );
+                println!(
+                    "  port:           {}",
+                    cfg.port
+                        .map(|p| p.to_string())
+                        .unwrap_or_else(|| "default".to_string())
+                );
+                println!(
+                    "  remote_user:    {}",
+                    cfg.remote_user.as_deref().unwrap_or("-")
+                );
+                println!(
+                    "  jump_host:      {}",
+                    cfg.jump_host.as_deref().unwrap_or("-")
+                );
+                println!(
+                    "  ssh_backend:    {}",
+                    cfg.ssh_backend.as_deref().unwrap_or("openssh")
+                );
+                println!("  timeout:        {}s", cfg.timeout.unwrap_or(30));
+                println!("  read_timeout:   {}s", cfg.read_timeout.unwrap_or(120));
+                if let Some(desc) = &cfg.description {
+                    println!("  description:    {}", desc);
+                }
+                println!();
+            }
+
+            Ok(serde_json::json!({
+                "name": target_name,
+                "config": cfg,
+            }))
+        }
+
+        TargetCmd::Switch { name } => {
+            let mut manager =
+                TargetManager::load().map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+
+            manager
+                .set_active(&name)
+                .map_err(|e| error::VirtuosoError::NotFound(e.to_string()))?;
+            manager
+                .save()
+                .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+
+            println!("Switched active target to: {}", name);
+            Ok(serde_json::json!({
+                "action": "switch",
+                "active_target": name,
+            }))
+        }
+
+        TargetCmd::Add {
+            name,
+            host,
+            port,
+            ssh_backend,
+            jump_host,
+            description,
+        } => {
+            let mut manager =
+                TargetManager::load().map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+
+            let cfg = TargetConfig {
+                remote_host: Some(host),
+                port,
+                ssh_backend,
+                jump_host,
+                description,
+                ..Default::default()
+            };
+
+            manager.set(&name, cfg);
+            if manager.active_target().is_none() {
+                manager
+                    .set_active(&name)
+                    .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+            }
+            manager
+                .save()
+                .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+
+            println!("Added target: {}", name);
+            Ok(serde_json::json!({
+                "action": "add",
+                "name": name,
+            }))
+        }
+
+        TargetCmd::Remove { name } => {
+            let mut manager =
+                TargetManager::load().map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+
+            if !manager.remove(&name) {
+                return Err(error::VirtuosoError::NotFound(format!(
+                    "target '{}' not found",
+                    name
+                )));
+            }
+
+            // If we removed the active target, clear active_target
+            if manager.active_target_name() == name {
+                manager.clear_active();
+            }
+
+            manager
+                .save()
+                .map_err(|e| error::VirtuosoError::Config(e.to_string()))?;
+
+            println!("Removed target: {}", name);
+            Ok(serde_json::json!({
+                "action": "remove",
+                "name": name,
+            }))
         }
     }
 }
@@ -2284,10 +2566,79 @@ fn dispatch_rpc(cmd: RpcCmd) -> error::Result<serde_json::Value> {
 fn main() {
     let cli = Cli::parse();
 
-    // Propagate profile to config layer via env var
-    if let Some(ref profile) = cli.profile {
-        std::env::set_var("VB_PROFILE", profile);
-    }
+    // Target/profile selection: resolve the precedence once here so the rest
+    // of the process sees a single, consistent selection. `--target` and
+    // `--profile` are mutually exclusive (see target::resolve).
+    //
+    // P0-A: the effective Config is resolved exactly once and handed to
+    // migrated command families (tunnel) via CommandContext. Not-yet-migrated
+    // families still call Config::from_env(), so they are driven through the
+    // VB_TARGET/VB_PROFILE bridge — set from the SAME single selection to keep
+    // every path consistent until their migration lands.
+    //
+    // Config-management commands (target/profile/init) must keep working even
+    // when the current active target is stale or missing — they do not need a
+    // connection target, so they skip the whole resolution entirely. Only
+    // connection commands perform full selection + resolve.
+    use crate::target::resolve::{resolve_from_selection, resolve_selection, Selection};
+    let needs_config = !matches!(
+        &cli.command,
+        Commands::Target(_) | Commands::Profile(_) | Commands::Init { .. }
+    );
+    let ctx: Option<crate::context::CommandContext> = if needs_config {
+        let selection = match resolve_selection(cli.target.as_deref(), cli.profile.as_deref()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Error: {e}");
+                std::process::exit(exit_codes::USAGE_ERROR);
+            }
+        };
+        match &selection {
+            Selection::CliTarget(name) => {
+                // Existence is validated below by resolve_from_selection.
+                std::env::set_var("VB_TARGET", name);
+            }
+            Selection::ActiveTarget(name) => {
+                // resolve_selection already verified the target exists.
+                std::env::set_var("VB_TARGET", name);
+            }
+            Selection::EnvTarget(_) => {
+                // Already in the environment; Config::from_env() picks it up.
+            }
+            Selection::CliProfile(profile) => {
+                // An explicit profile beats a stale ambient VB_TARGET: clear the
+                // bridge variable so legacy Config::from_env() stays in sync.
+                std::env::remove_var("VB_TARGET");
+                std::env::set_var("VB_PROFILE", profile);
+            }
+            Selection::LegacyEnv => {
+                // No target selected; clear any stale bridge variable so a
+                // leftover VB_TARGET cannot hijack legacy env resolution.
+                std::env::remove_var("VB_TARGET");
+            }
+        }
+        // P0-A: single immutable Config for this invocation. Migrated commands
+        // receive it through CommandContext and must not re-read env.
+        let resolved = match resolve_from_selection(selection) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Error: {e}");
+                std::process::exit(match e {
+                    crate::error::VirtuosoError::NotFound(_) => exit_codes::NOT_FOUND,
+                    _ => exit_codes::USAGE_ERROR,
+                });
+            }
+        };
+        match crate::context::CommandContext::from_resolved(&resolved) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                eprintln!("Error: {e}");
+                std::process::exit(exit_codes::USAGE_ERROR);
+            }
+        }
+    } else {
+        None
+    };
 
     let log_level = if cli.verbose {
         "debug"
@@ -2334,6 +2685,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
+        Commands::Target(cmd) => dispatch_target(cmd, format),
         // Compiled only with `native-ssh`; other builds have no such subcommand
         // at all, so there is nothing to dispatch. `run_with` blocks forever
         // (it is the daemon process); returning here is fine because nothing
@@ -2344,8 +2696,23 @@ fn main() {
             token_path,
             daemon_nonce,
         } => commands::transport_daemon::run_with(&ipc_endpoint, &token_path, &daemon_nonce),
-        Commands::Tunnel(cmd) => dispatch_tunnel(cmd, format),
-        Commands::Profile(cmd) => dispatch_profile(cmd),
+        Commands::Tunnel(cmd) => dispatch_tunnel(
+            ctx.as_ref()
+                .expect("tunnel commands always resolve a config"),
+            cmd,
+            format,
+        ),
+        Commands::Profile(cmd) => {
+            // Config management skips full target resolution, but the
+            // `--target`/`--profile` exclusivity contract still holds.
+            if cli.target.is_some() {
+                Err(error::VirtuosoError::Config(
+                    "--target and --profile are mutually exclusive".into(),
+                ))
+            } else {
+                dispatch_profile(cmd, cli.profile.clone())
+            }
+        }
         Commands::Skill(cmd) => dispatch_skill(cmd),
         Commands::Cell(cmd) => dispatch_cell(cmd),
         Commands::Sim(cmd) => dispatch_sim(cmd),

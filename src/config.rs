@@ -106,6 +106,12 @@ pub struct Config {
     pub remote_host: Option<String>,
     pub remote_user: Option<String>,
     pub port: u16,
+    /// Whether `port` is an explicit user constraint (VB_PORT set / target's
+    /// `port:` field present) rather than the hash-of-USER default. A default
+    /// port is NOT a bridge-endpoint constraint: daemons bind OS-assigned
+    /// ports, so a default `port` must never be used to filter or reject
+    /// discovered sessions (only an explicit port can be).
+    pub port_explicit: bool,
     pub jump_host: Option<String>,
     pub jump_user: Option<String>,
     pub ssh_port: Option<u16>,
@@ -293,13 +299,44 @@ impl Config {
     }
 
     pub fn from_env_with_profile(profile: Option<&str>) -> Result<Self> {
+        Self::from_env_resolve(profile, true)
+    }
+
+    /// Like [`from_env_with_profile`] but never honors the ambient `VB_TARGET`
+    /// bridge. Used by `target::resolve` for profile/legacy selections so a
+    /// leftover `VB_TARGET` cannot hijack the resolved configuration.
+    pub(crate) fn from_env_with_profile_no_target(profile: Option<&str>) -> Result<Self> {
+        Self::from_env_resolve(profile, false)
+    }
+
+    fn from_env_resolve(profile: Option<&str>, honor_vb_target: bool) -> Result<Self> {
         load_dotenv_upward();
+
+        if honor_vb_target {
+            // TEMPORARY bridge (P0-A): main() resolves the target/profile
+            // selection via target::resolve and syncs VB_TARGET here. This
+            // branch must be removed together with the env-var bridge when
+            // commands receive the resolved Config explicitly (CommandContext
+            // propagation).
+            if let Ok(target_name) = std::env::var("VB_TARGET") {
+                if !target_name.is_empty() {
+                    let manager = crate::target::TargetManager::load().map_err(|e| {
+                        VirtuosoError::Config(format!("failed to load targets: {e}"))
+                    })?;
+                    let target = manager.get(&target_name).ok_or_else(|| {
+                        VirtuosoError::Config(format!("target '{}' not found", target_name))
+                    })?;
+                    return Self::from_target(target, &target_name);
+                }
+            }
+        }
 
         let remote_host = Self::env_with_profile("VB_REMOTE_HOST", profile);
 
         let port: u16 = Self::env_with_profile("VB_PORT", profile)
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(Self::default_port);
+        let port_explicit = Self::env_with_profile("VB_PORT", profile).is_some();
 
         if port == 0 {
             return Err(VirtuosoError::Config(
@@ -317,6 +354,7 @@ impl Config {
             remote_host,
             remote_user: Self::env_with_profile("VB_REMOTE_USER", profile),
             port,
+            port_explicit,
             jump_host: Self::env_with_profile("VB_JUMP_HOST", profile),
             jump_user: Self::env_with_profile("VB_JUMP_USER", profile),
             ssh_port: Self::env_with_profile("VB_SSH_PORT", profile).and_then(|v| v.parse().ok()),
@@ -398,6 +436,106 @@ impl Config {
             .unwrap_or_default();
         let hash: u16 = user.bytes().map(|b| b as u16).sum::<u16>() % 500;
         65000 + hash
+    }
+
+    /// Create a Config from a TargetConfig (multi-target mode).
+    ///
+    /// TargetConfig fields override defaults; None fields fall back to
+    /// the same defaults as from_env().
+    pub fn from_target(target: &crate::target::TargetConfig, target_name: &str) -> Result<Self> {
+        let port = target.port.unwrap_or_else(Self::default_port);
+        let port_explicit = target.port.is_some();
+        if port == 0 {
+            return Err(VirtuosoError::Config(
+                "target port must be between 1 and 65535".into(),
+            ));
+        }
+
+        Ok(Self {
+            profile: Some(target_name.to_string()),
+            remote_host: target.remote_host.clone(),
+            remote_user: target.remote_user.clone(),
+            port,
+            port_explicit,
+            jump_host: target.jump_host.clone(),
+            jump_user: target.jump_user.clone(),
+            ssh_port: target.ssh_port,
+            ssh_key: target.ssh_key.clone(),
+            ssh_config: target.ssh_config.clone(),
+            ssh_backend: target.ssh_backend.clone(),
+            disable_control_master: target.disable_control_master.unwrap_or(false),
+            timeout: target.timeout.unwrap_or(30),
+            read_timeout: target.read_timeout.unwrap_or(120),
+            keep_remote_files: target.keep_remote_files.unwrap_or(false),
+            spectre_cmd: target
+                .spectre_cmd
+                .clone()
+                .unwrap_or_else(|| "spectre".into()),
+            spectre_args: target.spectre_args.clone().unwrap_or_default(),
+            spectre_max_workers: target.spectre_max_workers.unwrap_or(8),
+            ssh_max_sessions: target
+                .ssh_max_sessions
+                .unwrap_or(crate::transport::scheduler::SchedulerLimits::DEFAULT_TOTAL),
+            ssh_max_bulk_sessions: target
+                .ssh_max_bulk_sessions
+                .unwrap_or(crate::transport::scheduler::SchedulerLimits::DEFAULT_BULK),
+            ssh_reconnect_max_attempts: target
+                .ssh_reconnect_max_attempts
+                .unwrap_or(crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_ATTEMPTS),
+            ssh_reconnect_max_delay: target
+                .ssh_reconnect_max_delay
+                .unwrap_or(crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_DELAY),
+            ssh_keepalive_interval: target
+                .ssh_keepalive_interval
+                .unwrap_or(crate::transport::lifecycle::KeepalivePolicy::DEFAULT_INTERVAL),
+            ssh_keepalive_failures: target
+                .ssh_keepalive_failures
+                .unwrap_or(crate::transport::lifecycle::KeepalivePolicy::DEFAULT_FAILURES),
+            transport_shutdown_grace: 10,
+            cadence_cshrc: target.cadence_cshrc.clone(),
+            spectre_bin: target.spectre_bin.clone(),
+            roles: RemoteRoles::default(),
+            transport_daemon_socket: target.transport_daemon_socket.clone(),
+            transport_daemon_token: target.transport_daemon_token.clone(),
+        })
+    }
+
+    /// Deterministic SHA-256 over the non-secret identity fields of the
+    /// resolved config. Used for config identity (F05): `tunnel status` drift
+    /// detection and daemon Hello validation compare this digest instead of
+    /// trusting parsed values alone. Credentials are deliberately excluded,
+    /// but all fields that shape the connection identity ARE included: host,
+    /// bridge port AND whether that port is an explicit constraint
+    /// (`port_explicit` — the same port value with auto-discovery vs forced
+    /// port-matching must hash differently), SSH port, the *path* of the
+    /// identity key / ssh_config (paths, not key material), jump route,
+    /// backend, timeouts and control master behaviour.
+    pub fn digest(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        for part in [
+            self.remote_host.as_deref().unwrap_or(""),
+            &self.port.to_string(),
+            &self.port_explicit.to_string(),
+            self.remote_user.as_deref().unwrap_or(""),
+            &self
+                .ssh_port
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| "22".into()),
+            self.ssh_key.as_deref().unwrap_or(""),
+            self.ssh_config.as_deref().unwrap_or(""),
+            self.jump_host.as_deref().unwrap_or(""),
+            self.jump_user.as_deref().unwrap_or(""),
+            self.profile.as_deref().unwrap_or(""),
+            self.ssh_backend.as_deref().unwrap_or(""),
+            &self.disable_control_master.to_string(),
+            &self.timeout.to_string(),
+            &self.read_timeout.to_string(),
+        ] {
+            hasher.update(part.as_bytes());
+            hasher.update([0u8]);
+        }
+        hex::encode(hasher.finalize())
     }
 
     pub fn is_remote(&self) -> bool {

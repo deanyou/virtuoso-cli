@@ -983,6 +983,7 @@ mod tests {
             remote_host: Some(host.into()),
             remote_user: None,
             port: 65432,
+            port_explicit: true,
             jump_host: jump.map(String::from),
             jump_user: None,
             ssh_port: Some(22),

@@ -243,6 +243,7 @@ mod tests {
             config_digest: None,
             mode: None,
             attached_remote_port: None,
+            remote_bridge_port: None,
             attached_session_id: None,
         }
     }
@@ -456,6 +457,7 @@ mod challenge_tests {
             config_digest: None,
             mode: None,
             attached_remote_port: None,
+            remote_bridge_port: None,
             attached_session_id: None,
         }
     }
