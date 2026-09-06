@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.4] - 2026-09-06
+
+Multi-user / shared deployment. Previously each user on a shared host had to
+place (or symlink) their own `virtuoso-daemon` under `~/.cargo/bin` because the
+SKILL bridge resolved the daemon path in two conflicting places — a top-level
+resolver that claimed to honor `RB_DAEMON_PATH`, and `_RBAutoStart()` which ran
+last and unconditionally hardcoded `$HOME/.cargo/bin/virtuoso-daemon`, silently
+overriding everything (including `RB_DAEMON_PATH`). This release unifies daemon
+resolution behind a single ordered search chain, lets one shared install serve
+every user with zero per-user setup, and revives the deploy-time `__DAEMON_PATH__`
+injection point so `vcli tunnel start` and the new `install.sh` bake in an exact
+path for any prefix. 100% backward compatible: existing `~/.cargo/bin` installs
+still work (lowest priority in the chain).
+
+### Added
+
+- **`install.sh`** — one-shot shared/multi-user installer. Flags: `--prefix DIR`,
+  `--system` (default prefix `/opt/virtuoso-cli`), `--user` (default prefix
+  `~/.local`), `--no-build`. Builds `vcli`/`vtui`/`virtuoso-daemon` (unless
+  `--no-build`), installs binaries to `$PREFIX/bin`, installs `ramic_bridge.il`
+  to `$PREFIX/share/virtuoso-cli/` with `__DAEMON_PATH__` substituted to the
+  real daemon path, and prints the `.cdsinit` `load(...)` line to add.
+- **`RBResolveDaemonPath()`** (`resources/ramic_bridge.il`) — single ordered
+  daemon-path resolver used by both the top-level load-time resolution and
+  `_RBAutoStart()`.
+
+### Fixed
+
+- **Daemon path hardcode in `_RBAutoStart()`** (`resources/ramic_bridge.il`):
+  replaced `RBDPath = $HOME/.cargo/bin/virtuoso-daemon` with
+  `RBDPath = RBResolveDaemonPath()`. This is the change that makes
+  `RB_DAEMON_PATH` and shared installs actually take effect — the hardcode ran
+  last on every `load()` and clobbered them.
+- **Dead `__DAEMON_PATH__` injection point** (`resources/ramic_bridge.il`,
+  `src/transport/tunnel.rs`): `deploy_il_script()` has always done
+  `.replace("__DAEMON_PATH__", daemon_path)`, but the committed `.il` no longer
+  contained the token, so `vcli tunnel start` uploaded the daemon to its setup
+  dir yet the bridge still resolved `~/.cargo/bin`. The token is reintroduced in
+  the resolver's first (highest-priority) candidate; when the `.il` is loaded
+  directly the literal token is not a real file (`isFile()` nil) and is skipped.
+
+### Changed
+
+- **Daemon resolution is now an ordered search chain** (first existing wins):
+  (1) `__DAEMON_PATH__` deploy-time substitution, (2) `RB_DAEMON_PATH` env
+  override, (3) shared installs `/opt/virtuoso-cli/bin`, `/usr/local/bin`,
+  (4) per-user `~/.local/bin`, `~/.cargo/bin` (backward compatibility).
+- **`; RB_VERSION:`** in `resources/ramic_bridge.il` bumped to `1.3.4` to match
+  `Cargo.toml`; the daemon reports `1.3.4` after rebuild (version-skew triad).
+- **README** — documented multi-user / shared install, the search chain, and
+  corrected the stale "resets path to ~/.cargo/bin" description of `_RBAutoStart`.
+
 ## [1.3.3] - 2026-09-04
 
 IPC deadline hardening. The 1.3.2 release introduced dynamic socket timeouts,
