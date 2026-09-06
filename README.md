@@ -72,6 +72,41 @@ All binaries (`vcli`, `vtui`) are installed to `~/.cargo/bin/`.
 
 > **Note**: Do not name the binary `virtuoso` — it conflicts with Cadence's `virtuoso` executable.
 
+### Multi-user / shared install
+
+On a shared host you do **not** need to install the daemon under every user's
+`~/.cargo/bin`. Install once to a shared prefix and every user picks it up
+automatically:
+
+```bash
+# Build + install vcli/vtui/virtuoso-daemon + ramic_bridge.il to a shared prefix
+./install.sh --system                 # prefix /opt/virtuoso-cli (needs write perm)
+./install.sh --prefix /opt/eda/vcli   # or any prefix you choose
+./install.sh --user                   # per-user prefix ~/.local
+./install.sh --system --no-build      # skip cargo build, install existing target/release
+```
+
+`install.sh` installs the binaries to `$PREFIX/bin`, writes
+`ramic_bridge.il` to `$PREFIX/share/virtuoso-cli/` with the daemon path baked in,
+and prints the one line each user adds to their `~/.cdsinit` (or a site-wide
+`.cdsinit`):
+
+```skill
+load("$PREFIX/share/virtuoso-cli/ramic_bridge.il")
+```
+
+**How the daemon is resolved.** On `load`, the bridge finds `virtuoso-daemon`
+via an ordered search chain (first existing wins):
+
+1. `__DAEMON_PATH__` — a path baked in at deploy time by `install.sh` or
+   `vcli tunnel start` (arbitrary prefix, zero per-user config);
+2. `$RB_DAEMON_PATH` — explicit environment override;
+3. shared installs: `/opt/virtuoso-cli/bin`, `/usr/local/bin`;
+4. per-user installs: `~/.local/bin`, `~/.cargo/bin` (backward compatibility).
+
+A plain `cargo install` under `~/.cargo/bin` therefore keeps working with no
+changes; a shared `install.sh` deployment serves all users with none.
+
 ### System Dependencies
 
 The X11 GUI automation features (`vcli window action-x11`, `action-x11-batch`, `list-windows-x11`) and the `virtuoso-gui-debug` skill's local executor require the following tools on the Virtuoso host (the machine running the X11 display):
@@ -96,7 +131,7 @@ The X11 GUI automation features (`vcli window action-x11`, `action-x11-batch`, `
 load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
 ```
 
-`load` automatically stops any existing daemon, resets the path to `~/.cargo/bin/virtuoso-daemon`, starts fresh, and prints the Ready banner — works for first load and for reloading after updates.
+`load` automatically stops any existing daemon, re-resolves the daemon binary via an ordered search chain (see [Multi-user / shared install](#multi-user--shared-install)), starts fresh, and prints the Ready banner — works for first load and for reloading after updates.
 
 Output:
 ```
@@ -301,7 +336,7 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_CLIENT_ID` | `$VB_PROFILE` or `gethostname()` | Per-client remote scratch scoping (e.g. `vcli-A`, `vcli-B`); isolates `/tmp/virtuoso_bridge/<client>/` paths between concurrent operators |
 | `VCLI_CAPABILITY` | `user` | Set to `admin` to unlock `vcli skill broadcast` and raw SKILL exec |
 | `VB_TARGETS_FILE` | `~/.vcli/targets.yaml` | Explicit path to the targets config file (needed on Windows, where `HOME` is ignored for home-dir lookup) |
-| `RB_DAEMON_PATH` | auto-detected | Override daemon binary path |
+| `RB_DAEMON_PATH` | search chain | Override daemon binary path (checked before shared/per-user install locations; see [Multi-user / shared install](#multi-user--shared-install)) |
 
 ### SSH Remote Connection Setup
 
@@ -582,6 +617,39 @@ cargo install --path .
 
 > **注意**：不要将 CLI 命名为 `virtuoso`，与 Cadence Virtuoso 二进制名冲突。
 
+### 多用户 / 共享安装
+
+在共享主机上**无需**为每个用户都往其 `~/.cargo/bin` 装一份 daemon。装一次到共享
+前缀，所有用户即自动命中：
+
+```bash
+# 构建 + 安装 vcli/vtui/virtuoso-daemon + ramic_bridge.il 到共享前缀
+./install.sh --system                 # 前缀 /opt/virtuoso-cli（需写权限）
+./install.sh --prefix /opt/eda/vcli   # 或任意自选前缀
+./install.sh --user                   # 按用户前缀 ~/.local
+./install.sh --system --no-build      # 跳过 cargo build，装已有 target/release
+```
+
+`install.sh` 把二进制装到 `$PREFIX/bin`，把 `ramic_bridge.il` 写到
+`$PREFIX/share/virtuoso-cli/` 并将 daemon 路径烤入其中，最后打印每个用户加到
+`~/.cdsinit`（或站点级 `.cdsinit`）的一行：
+
+```skill
+load("$PREFIX/share/virtuoso-cli/ramic_bridge.il")
+```
+
+**daemon 如何解析**：`load` 时 bridge 通过有序搜索链找 `virtuoso-daemon`（第一个
+存在者胜出）：
+
+1. `__DAEMON_PATH__` —— `install.sh` 或 `vcli tunnel start` 在部署时烤入的路径
+   （任意前缀，零按用户配置）；
+2. `$RB_DAEMON_PATH` —— 显式环境变量覆盖；
+3. 共享安装：`/opt/virtuoso-cli/bin`、`/usr/local/bin`；
+4. 按用户安装：`~/.local/bin`、`~/.cargo/bin`（向后兼容）。
+
+因此普通 `cargo install` 装到 `~/.cargo/bin` 仍照旧可用；而共享 `install.sh`
+部署可零配置服务所有用户。
+
 ### 系统依赖
 
 X11 GUI 自动化功能（`vcli window action-x11`、`action-x11-batch`、`list-windows-x11`）以及 `virtuoso-gui-debug` 技能的 local 执行器，需要在 Virtuoso 所在主机（运行 X11 display 的机器）上安装以下工具：
@@ -606,7 +674,7 @@ X11 GUI 自动化功能（`vcli window action-x11`、`action-x11-batch`、`list-
 load("/path/to/virtuoso-cli/resources/ramic_bridge.il")
 ```
 
-`load` 会自动停止旧 daemon、将路径重置为 `~/.cargo/bin/virtuoso-daemon` 并重启，首次加载和更新后重载均适用。
+`load` 会自动停止旧 daemon、按有序搜索链重新解析 daemon 二进制（见[多用户 / 共享安装](#多用户--共享安装)）并重启，首次加载和更新后重载均适用。
 
 输出：
 ```
@@ -765,7 +833,7 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_CLIENT_ID` | `$VB_PROFILE` 或 `gethostname()` | 每客户端远端 scratch 隔离标识（如 `vcli-A`、`vcli-B`）；隔离 `/tmp/virtuoso_bridge/<client>/` 路径，避免多操作员并发冲突 |
 | `VCLI_CAPABILITY` | `user` | 设为 `admin` 解锁 `vcli skill broadcast` 与原始 SKILL 执行权限 |
 | `VB_TARGETS_FILE` | `~/.vcli/targets.yaml` | targets 配置文件的显式路径（Windows 上 `HOME` 对 home 目录查找无效，必须用此变量） |
-| `RB_DAEMON_PATH` | 自动检测 | 覆盖 daemon 二进制路径 |
+| `RB_DAEMON_PATH` | 搜索链 | 覆盖 daemon 二进制路径（优先于共享/按用户安装位置检查；见[多用户 / 共享安装](#多用户--共享安装)） |
 
 ### SSH 远程连接配置
 
