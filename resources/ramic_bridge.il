@@ -10,28 +10,51 @@
 ;RBD = RB Daemon
 ;RBM = RB Monitor
 
-; Daemon binary path: resolved at load-time, never hardcoded.
-; sh() returns t/nil (not stdout), so `which` cannot be used for path detection.
-; Priority: (1) RB_DAEMON_PATH env var, (2) ~/.cargo/bin/virtuoso-daemon.
-; Re-resolved on reload if previously empty or the file no longer exists.
-when(!boundp('RBDPath) || RBDPath == "" || RBDPath == nil || !isFile(RBDPath)
-    RBDPath = let((fromEnv cargoPath)
-        fromEnv = getShellEnvVar("RB_DAEMON_PATH")
-        if(fromEnv then
-            fromEnv
-        else
-            cargoPath = strcat(getShellEnvVar("HOME") "/.cargo/bin/virtuoso-daemon")
-            if(isFile(cargoPath) then
-                cargoPath
-            else
-                ""
-            )
+; Daemon binary path: resolved at load-time via an ordered search chain,
+; never hardcoded. sh() returns t/nil (not stdout), so `which` cannot be used
+; for path detection — candidates are probed with isFile() instead.
+; Search order (first existing wins):
+;   (1) __DAEMON_PATH__  deploy-time substitution (vcli tunnel start / install.sh)
+;   (2) RB_DAEMON_PATH   explicit env override
+;   (3) /opt/virtuoso-cli/bin, /usr/local/bin   shared multi-user installs
+;   (4) ~/.local/bin, ~/.cargo/bin              per-user installs (back-compat)
+; Multi-user friendly: one shared install (e.g. /opt/virtuoso-cli/bin) is found
+; by every user with zero per-user setup. Re-resolved on reload if previously
+; empty or the file no longer exists.
+procedure(RBResolveDaemonPath()
+    let((home deployPath envPath cand candidates result)
+        home = getShellEnvVar("HOME")
+        unless(home home = "")
+        result = ""
+        ; (1) Deploy-time substitution. `vcli tunnel start` and install.sh replace
+        ;     the __DAEMON_PATH__ token with an absolute path. When the .il is loaded
+        ;     directly the token stays literal, so isFile() is nil and it is skipped
+        ;     — no split-literal trick needed since it is never a real file.
+        deployPath = "__DAEMON_PATH__"
+        when(result == "" && isFile(deployPath) result = deployPath)
+        ; (2) Explicit env override (now actually honored — _RBAutoStart no longer
+        ;     clobbers it).
+        envPath = getShellEnvVar("RB_DAEMON_PATH")
+        when(result == "" && envPath && isFile(envPath) result = envPath)
+        ; (3)+(4) Shared installs first (multi-user), then per-user (compat).
+        candidates = list(
+            "/opt/virtuoso-cli/bin/virtuoso-daemon"
+            "/usr/local/bin/virtuoso-daemon"
+            strcat(home "/.local/bin/virtuoso-daemon")
+            strcat(home "/.cargo/bin/virtuoso-daemon")
         )
+        foreach(cand candidates
+            when(result == "" && isFile(cand) result = cand))
+        result
     )
 )
+when(!boundp('RBDPath) || RBDPath == "" || RBDPath == nil || !isFile(RBDPath)
+    RBDPath = RBResolveDaemonPath()
+)
 when(RBDPath == "" || RBDPath == nil
-    printf("[RAMIC Bridge] ERROR: virtuoso-daemon not found.\n")
-    printf("[RAMIC Bridge] Set RB_DAEMON_PATH or run: cargo install --path <repo> --bin virtuoso-daemon --features daemon\n")
+    printf("[RAMIC Bridge] ERROR: virtuoso-daemon not found in any known location.\n")
+    printf("[RAMIC Bridge] Searched (in order): deploy path, $RB_DAEMON_PATH, /opt/virtuoso-cli/bin, /usr/local/bin, ~/.local/bin, ~/.cargo/bin\n")
+    printf("[RAMIC Bridge] Fix: run install.sh (shared/multi-user), set RB_DAEMON_PATH, or cargo install --path <repo> --bin virtuoso-daemon --features daemon\n")
 )
 ; RBPython is no longer used (daemon is a standalone binary), kept for compatibility
 unless(boundp('RBPython) RBPython = "")
@@ -489,13 +512,14 @@ RBLoadedPackages = nil
 ; )
 
 ; ============================================================================
-; Auto-start on every load(): stop stale daemon, reset path, start fresh.
+; Auto-start on every load(): stop stale daemon, re-resolve daemon path via the
+; search chain (RBResolveDaemonPath), start fresh.
 ; Wrapped in a procedure so no intermediate return values echo in CIW.
 ; ============================================================================
 
 procedure(_RBAutoStart()
     RBPython = ""
-    RBDPath = strcat(getShellEnvVar("HOME") "/.cargo/bin/virtuoso-daemon")
+    RBDPath = RBResolveDaemonPath()
     ; No manual package loading needed — Virtuoso handles context loading internally.
     ; Manual loadi() calls caused "too many arguments" parser errors in IC25.
     when(boundp('RBIpc) && ipcIsAliveProcess(RBIpc) RBStop())
