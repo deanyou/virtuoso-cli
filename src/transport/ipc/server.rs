@@ -1323,8 +1323,17 @@ mod tests {
         use crate::transport::pool::{EndpointKey, EndpointPool};
         use crate::transport::scheduler::SchedulerLimits;
 
-        let socket =
-            std::env::temp_dir().join(format!("vcli-shut-pool-{}.sock", uuid::Uuid::new_v4()));
+        // Keep the suffix short: macOS runners resolve `temp_dir()` to a long
+        // `/var/folders/.../T` path and a Unix socket's `sun_path` holds at
+        // most 104 bytes. A longer name fails to bind and the daemon never
+        // comes up — on macOS only, which makes it easy to misread as a
+        // platform bug in the server.
+        let socket = std::env::temp_dir().join(format!("vcli-shp-{}.sock", uuid::Uuid::new_v4()));
+        assert!(
+            socket.to_string_lossy().len() <= 100,
+            "socket path too long for sun_path: {}",
+            socket.display()
+        );
         let _ = std::fs::remove_file(&socket);
         let coordinator =
             crate::transport::lifecycle::ShutdownCoordinator::new(Duration::from_millis(200));
