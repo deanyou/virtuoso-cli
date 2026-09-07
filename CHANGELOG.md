@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **`install.sh`** — shared/multi-user installer with `--system` (`/opt/virtuoso-cli`),
+  `--user` (`~/.local`), `--prefix DIR` and `--no-build`. Installs `vcli`/`vtui`/
+  `virtuoso-daemon` into `$PREFIX/bin` and `ramic_bridge.il` into
+  `$PREFIX/share/virtuoso-cli/` with `__DAEMON_PATH__` baked to the real daemon path,
+  so one shared install serves every user with zero per-user setup.
+
+### Fixed
+
+- **Daemon path resolution was split across two conflicting places.**
+  `_RBAutoStart()` unconditionally hardcoded `$HOME/.cargo/bin/virtuoso-daemon` and
+  silently overrode the top-level resolver — and therefore `RB_DAEMON_PATH`. Both now
+  call the new `RBResolveDaemonPath()`.
+- **`__DAEMON_PATH__` was a dead injection point.** `deploy_il_script()` substituted a
+  token that the shipped `ramic_bridge.il` no longer contained, so `vcli tunnel start`
+  uploaded the daemon while the bridge still looked under `~/.cargo/bin`. The token is
+  back in the bridge, so deploy-time path injection works again.
+
+### Changed
+
+- Daemon resolution is now an ordered search chain, first-existing-wins:
+  deploy-time `__DAEMON_PATH__` → `$RB_DAEMON_PATH` → `/opt/virtuoso-cli/bin`,
+  `/usr/local/bin` → `~/.local/bin`, `~/.cargo/bin`. Existing `cargo install` layouts
+  under `~/.cargo/bin` still work but are now the **lowest** priority: a shared install
+  wins over a per-user one. Set `RB_DAEMON_PATH` to force a specific binary.
+
 ## [1.3.4] - 2026-09-04
 
 CI green-up after the 1.3.3 IPC deadline work. The 1.3.3 release left the
