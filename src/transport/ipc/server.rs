@@ -684,6 +684,7 @@ pub fn dispatch(
 
 /// Bind a Unix domain socket at `socket_path`, set its mode to `0600`, and
 /// build the shared shutdown bookkeeping.
+#[cfg(feature = "native-ssh")]
 fn bind_listener(
     socket_path: &Path,
     shutdown: ShutdownCoordinator,
@@ -728,6 +729,7 @@ fn bind_listener(
 /// the auth token, the server nonce, and the shared shutdown state, and must
 /// return an error only when the worker thread cannot be created (which is
 /// fatal for the daemon, matching the pre-pool behaviour).
+#[cfg(feature = "native-ssh")]
 fn accept_loop<F>(
     listener: UnixListener,
     state: &Arc<ShutdownState>,
@@ -820,7 +822,8 @@ pub fn run(
             thread::Builder::new()
                 .name("vcli-ipc".to_string())
                 .spawn(move || serve_one_with_shutdown(s, transport, &token, &nonce, Some(&state)))
-                .map_err(|e| format!("failed to spawn ipc worker: {e}"))
+                .map_err(|e| format!("failed to spawn ipc worker: {e}"))?;
+            Ok(())
         },
     )
 }
@@ -851,6 +854,7 @@ pub fn run_with_pool(
             let token = t.to_string();
             let nonce = n.to_string();
             let state = Arc::clone(st);
+            let factory = Arc::clone(&factory);
             thread::Builder::new()
                 .name("vcli-ipc".to_string())
                 .spawn(move || {
@@ -859,13 +863,14 @@ pub fn run_with_pool(
                         pool,
                         key,
                         limits,
-                        Arc::clone(&factory),
+                        factory,
                         &token,
                         &nonce,
                         Some(&state),
                     )
                 })
-                .map_err(|e| format!("failed to spawn ipc worker: {e}"))
+                .map_err(|e| format!("failed to spawn ipc worker: {e}"))?;
+            Ok(())
         },
     )
 }
@@ -882,6 +887,9 @@ mod tests {
     use crate::transport::ipc::messages::IpcError;
     use std::os::unix::net::UnixListener;
     use std::time::Duration;
+
+    #[cfg(feature = "native-ssh")]
+    use crate::transport::contract::TransportError;
 
     /// Build a `NativeTransportClient` connected to `socket`. The matching
     /// daemon is launched in a background thread before this returns so the
@@ -1176,7 +1184,10 @@ mod tests {
         let err = client
             .run_command(&CommandRequest::untimed("echo hi"))
             .expect_err("connection-level failure");
-        assert!(matches!(err, IpcError::ConnectionFailed(_)), "got {err:?}");
+        assert!(
+            matches!(err, TransportError::ConnectionFailed(_)),
+            "got {err:?}"
+        );
         drop(client);
         let _ = std::fs::remove_file(&socket);
         let _ = listener;
