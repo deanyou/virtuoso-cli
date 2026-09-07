@@ -286,6 +286,7 @@ mod imp {
     /// `GetModuleFileNameExW` because it needs only
     /// `PROCESS_QUERY_LIMITED_INFORMATION` — no `psapi` link, and it succeeds
     /// on processes we do not own.
+    #[allow(clippy::upper_case_acronyms)]
     mod ffi {
         use std::os::raw::{c_int, c_void};
 
