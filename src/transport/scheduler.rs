@@ -36,7 +36,7 @@
 //! testable relaxation of strict priority, not a different policy: urgent work
 //! still wins immediately, and a healthy system never reaches the grace period.
 
-#![allow(dead_code)] // consumed by step 4b (config) and the daemon in step 6
+#![allow(dead_code)] // validate_capacity/from_config are consumed by the backend (step 4b); SessionScheduler itself by the pooled daemon (step 6) on Unix. Windows builds have no daemon yet.
 
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};

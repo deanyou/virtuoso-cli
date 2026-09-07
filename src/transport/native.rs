@@ -145,6 +145,7 @@ impl Handler for NativeClientHandler {
 /// Load a `known_hosts` store, falling back to an empty in-memory store on any
 /// read error. A missing file and a denied permission are both equivalent to
 /// "no prior trust" — the caller discovers an unknown host on first connection.
+#[allow(dead_code)] // wired on Unix by open_transport_for_daemon and the pooled daemon; non-Unix builds have neither
 fn load_known_hosts_or_empty(path: &Path) -> KnownHosts {
     match KnownHosts::load(path) {
         Ok(kh) => kh,
@@ -633,6 +634,7 @@ impl NativeTransport {
     /// Build from the shared `Config`. Fails loudly (never falls back) when the
     /// native backend cannot satisfy the request: missing `VB_REMOTE_HOST`, or
     /// no `VB_SSH_KEY` (step 3 is public-key only).
+    #[allow(dead_code)] // wired on Unix by open_transport_for_daemon and the pooled daemon; non-Unix builds have neither
     pub fn from_config(config: &Config) -> Result<Self, TransportError> {
         let host = config.remote_host.clone().ok_or_else(|| {
             TransportError::Configuration("native backend requires VB_REMOTE_HOST".into())
