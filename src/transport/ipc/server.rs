@@ -1381,6 +1381,13 @@ mod tests {
             thread::sleep(Duration::from_millis(20));
         }
         let client = client.expect("daemon did not come up");
+        // Serve one real command first. `Hello` is answered before the
+        // dispatch loop and `Shutdown` breaks out of it before the transport
+        // is resolved, so without this the factory would never run and the
+        // test would not exercise the pooled path at all.
+        client
+            .run_command(&CommandRequest::untimed("echo hi"))
+            .expect("command must succeed on a healthy pooled transport");
         client.request_shutdown().expect("shutdown ack");
 
         let started = std::time::Instant::now();
