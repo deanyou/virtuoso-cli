@@ -515,8 +515,7 @@ fn signal_tunnel_pid(pid: u32) -> std::io::Result<()> {
     if out.status.success() {
         Ok(())
     } else {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(std::io::Error::other(
             String::from_utf8_lossy(&out.stderr).trim().to_string(),
         ))
     }
