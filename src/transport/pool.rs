@@ -27,7 +27,7 @@
 //! how the key is *built*, not to the key's shape, and no pooled connection
 //! can outlive a change to its own identity.
 
-#![allow(dead_code)] // consumed by the daemon in step 6
+#![allow(dead_code)] // consumed on Unix by the pooled transport daemon (commands::transport_daemon → server::run_with_pool). Windows builds have no daemon yet, so the pool stays un-referenced there.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

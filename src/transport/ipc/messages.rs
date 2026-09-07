@@ -272,6 +272,26 @@ impl IpcError {
             IpcError::UnsupportedBackend => "unsupported_backend",
         }
     }
+
+    /// Whether the error means the connection itself is gone or unreachable —
+    /// as opposed to a command that ran and failed, a transfer that was
+    /// interrupted, or a timeout on healthy plumbing.
+    ///
+    /// The pooled daemon uses this to decide whether the pooled connection
+    /// may still serve the next request: a connection-level failure poisons
+    /// the pooled transport, so the pool drops it and the next request
+    /// reconnects. Everything else (remote exit codes, execution timeouts,
+    /// integrity mismatches, ...) is business state and must NOT evict a
+    /// healthy connection.
+    pub fn is_connection_level(&self) -> bool {
+        matches!(
+            self,
+            IpcError::ConnectionFailed(_)
+                | IpcError::JumpFailed(_)
+                | IpcError::ProxyFailed(_)
+                | IpcError::DaemonUnavailable
+        )
+    }
 }
 
 impl From<TransportError> for IpcError {
@@ -577,5 +597,56 @@ mod tests {
     fn deadline_ms_fits_u64() {
         let d = Deadline::from_now(Duration::from_secs(30));
         let _ms: u64 = (d.0.elapsed().as_millis() as u64) + 30_000;
+    }
+
+    // The pool drops a pooled connection exactly on connection-level errors,
+    // and keeps it for everything else. This classifies the full vocabulary.
+    #[test]
+    fn connection_level_classification() {
+        assert!(IpcError::ConnectionFailed("tcp reset".into()).is_connection_level());
+        assert!(IpcError::JumpFailed("bastion down".into()).is_connection_level());
+        assert!(IpcError::ProxyFailed("proxy refused".into()).is_connection_level());
+        assert!(IpcError::DaemonUnavailable.is_connection_level());
+
+        // Business failures must never evict a healthy pooled connection.
+        assert!(!IpcError::RemoteExit {
+            status: 2,
+            stderr: "ls: no such file".into()
+        }
+        .is_connection_level());
+        assert!(!IpcError::ExecutionTimeout {
+            request: "r".into(),
+            after_secs: 30,
+            remote_terminated: false
+        }
+        .is_connection_level());
+        assert!(!IpcError::QueueTimeout {
+            request: "r".into(),
+            after_secs: 30
+        }
+        .is_connection_level());
+        assert!(!IpcError::AuthenticationFailed("bad key".into()).is_connection_level());
+        assert!(!IpcError::HostKeyUnknown {
+            host: "h".into(),
+            fingerprint: "f".into()
+        }
+        .is_connection_level());
+        assert!(!IpcError::IntegrityMismatch {
+            expected: "a".into(),
+            actual: "b".into()
+        }
+        .is_connection_level());
+        assert!(!IpcError::TransferInterrupted {
+            request: "r".into(),
+            reason: "x".into()
+        }
+        .is_connection_level());
+        assert!(!IpcError::Cancelled {
+            request: "r".into()
+        }
+        .is_connection_level());
+        assert!(!IpcError::Configuration("bad env".into()).is_connection_level());
+        assert!(!IpcError::LocalIo("disk full".into()).is_connection_level());
+        assert!(!IpcError::RemoteIo("remote disk full".into()).is_connection_level());
     }
 }

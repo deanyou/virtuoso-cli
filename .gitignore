@@ -1,4 +1,5 @@
 /target/
+/target-lld2/
 Cargo.lock
 .env
 *.swp

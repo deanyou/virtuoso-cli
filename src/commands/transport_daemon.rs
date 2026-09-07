@@ -6,12 +6,12 @@
 //!
 //! It is spawned by `vcli` itself, never typed by a user. This module wires
 //! the `__transport-daemon` hidden subcommand to the production IPC server in
-//! [`crate::transport::ipc::server`], with a [`NativeTransport`] backend when
-//! the `native-ssh` feature is enabled. Step 6 of the design (channel pool,
-//! reconnect, lifecycle) is a later increment; this iteration dispatches each
-//! request onto a fresh transport. That is sufficient for the first stable
-//! cut because the contract is observable and the shared suite already
-//! exercises the IPC surface.
+//! [`crate::transport::ipc::server`]. Step 6 of the design (channel pool,
+//! reconnect, lifecycle) is consumed here: the daemon owns an
+//! [`EndpointPool`], resolves one [`EndpointKey`] from the shared config, and
+//! serves every request through [`server::run_with_pool`] — so all four roles
+//! that name the same host share one transport, and a connection-level
+//! failure evicts the pooled connection and reconnects on the next request.
 //!
 //! [Step 2]: docs/superpowers/specs/2026-08-29-native-remote-transport-design.md
 //!
@@ -29,6 +29,10 @@ use std::sync::Arc;
 use crate::transport::contract::RemoteTransport;
 #[cfg(all(unix, feature = "native-ssh"))]
 use crate::transport::contract::TransportError;
+#[cfg(all(unix, feature = "native-ssh"))]
+use crate::transport::pool::{EndpointKey, EndpointPool};
+#[cfg(all(unix, feature = "native-ssh"))]
+use crate::transport::scheduler::SchedulerLimits;
 
 /// The "this build has no daemon" answer.
 ///
@@ -66,8 +70,22 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
     // NOT `open_transport`. The latter routes native traffic over IPC to a
     // running daemon — using it here would deadlock on first startup (the
     // daemon can't connect to itself before it starts listening).
-    let transport: Arc<dyn RemoteTransport> =
-        open_transport_for_daemon(&config).map_err(transport_to_virtuoso)?;
+    //
+    // Configuration errors surface here, before the socket is bound, with the
+    // same fail-loudly semantics as the pre-pool daemon: a backend that cannot
+    // be constructed (missing `VB_REMOTE_HOST`, missing `VB_SSH_KEY`, invalid
+    // capacity) must fail startup, not the first request. The pooled daemon
+    // then re-runs this factory only when a connection needs (re)building.
+    open_transport_for_daemon(&config).map_err(transport_to_virtuoso)?;
+
+    // One endpoint key for the whole daemon: the daemon serves the config's
+    // single remote host, so all roles collapse onto one pooled connection.
+    let host = config.remote_host.as_deref().unwrap_or("");
+    let key = EndpointKey::from_config(&config, host);
+    let limits = SchedulerLimits::from_config(&config)?;
+    let pool = Arc::new(EndpointPool::new());
+    let factory: Arc<dyn Fn() -> Result<Arc<dyn RemoteTransport>, TransportError> + Send + Sync> =
+        Arc::new(move || open_transport_for_daemon(&config));
 
     let token = std::fs::read_to_string(Path::new(token_path)).map_err(|e| {
         VirtuosoError::Io(std::io::Error::other(format!(
@@ -82,7 +100,17 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
     let shutdown = ShutdownCoordinator::from_config(&config);
 
     let socket = Path::new(ipc_endpoint);
-    server::run(socket, transport, &token, daemon_nonce, shutdown).map_err(|e| {
+    server::run_with_pool(
+        socket,
+        pool,
+        key,
+        limits,
+        factory,
+        &token,
+        daemon_nonce,
+        shutdown,
+    )
+    .map_err(|e| {
         VirtuosoError::Io(std::io::Error::other(format!(
             "transport daemon exited unexpectedly: {e}"
         )))

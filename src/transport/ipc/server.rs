@@ -7,6 +7,13 @@
 //! forever (or until the listener is dropped by `SIGTERM`/`SIGINT` handling
 //! wired in the daemon subcommand).
 //!
+//! The pooled variant ([`serve_one_pooled`], [`run_with_pool`]) is what the
+//! daemon actually runs with. Instead of a fixed transport it holds an
+//! [`EndpointPool`]: each request resolves to an [`EndpointKey`], the pool
+//! returns the one pooled connection for that key (creating it at most once),
+//! and a connection-level failure evicts the pooled transport so the next
+//! request reconnects rather than serving from a poisoned connection.
+//!
 //! `Challenge` is the Tier-1 liveness probe described in the design's
 //! "Stop and crash recovery" section: the parent CLI connects over IPC, asks
 //! the daemon for its nonce, and compares the answer against the value it
@@ -26,12 +33,14 @@ use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
-// Used only by `run`, which is feature-gated; the test module imports its own.
+// Used only by `run`/`run_with_pool`, which are feature-gated; the test module
+// imports its own.
 #[cfg(feature = "native-ssh")]
 use std::time::Duration;
 
-// `run` is the only consumer of these, and it is feature-gated, so the imports
-// must carry the same gate — ungated, a feature-off build reports them unused.
+// `run`/`run_with_pool` are the only consumers of these, and they are
+// feature-gated, so the imports must carry the same gate — ungated, a
+// feature-off build reports them unused.
 #[cfg(feature = "native-ssh")]
 use std::os::unix::net::UnixListener;
 #[cfg(feature = "native-ssh")]
@@ -40,8 +49,8 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::transport::contract::{
-    CommandRequest, CommandResult, DownloadDirRequest, DownloadFileRequest, RemoteTransport,
-    RequestId, UploadFileRequest, UploadTextRequest,
+    CommandRequest, CommandResult, Deadline, DownloadDirRequest, DownloadFileRequest,
+    RemoteTransport, RequestId, TransportError, UploadFileRequest, UploadTextRequest,
 };
 use crate::transport::ipc::framing::{
     FrameError, FrameReader, FrameWriter, PROTOCOL_MAJOR, PROTOCOL_MINOR,
@@ -49,8 +58,17 @@ use crate::transport::ipc::framing::{
 use crate::transport::ipc::messages::{
     Hello, HelloAck, IpcError, Operation, RequestEnvelope, ResponseEnvelope, ResponseResult,
 };
-// `ShutdownCoordinator` is consumed only by the feature-gated `run` and
-// `ShutdownState::coordinator`; gate the import to match.
+// `EndpointKey`/`EndpointPool`/`Priority`/`SchedulerLimits` are consumed only
+// by the pooled entry points (`serve_one_pooled`/`run_with_pool`), which are
+// feature-gated — gate the imports to match so a feature-off build does not
+// report them unused. `Permit` is used by the ungated [`TransportAccess`].
+#[cfg(feature = "native-ssh")]
+use crate::transport::pool::{EndpointKey, EndpointPool};
+use crate::transport::scheduler::Permit;
+#[cfg(feature = "native-ssh")]
+use crate::transport::scheduler::{Priority, SchedulerLimits};
+// `ShutdownCoordinator` is consumed only by the feature-gated `run`/`run_with_pool`
+// and `ShutdownState::coordinator`; gate the import to match.
 use crate::transport::lifecycle::CancellationToken;
 #[cfg(feature = "native-ssh")]
 use crate::transport::lifecycle::ShutdownCoordinator;
@@ -302,6 +320,53 @@ pub fn serve_one_with_shutdown(
     server_nonce: &str,
     shutdown: Option<&Arc<ShutdownState>>,
 ) {
+    let mut transport_for = |_: &RequestEnvelope| {
+        Ok(TransportAccess {
+            transport: Arc::clone(&transport),
+            _permit: None,
+        })
+    };
+    let mut on_connection_error = |_: &ResponseResult| {};
+    serve_loop(
+        stream,
+        &mut transport_for,
+        &mut on_connection_error,
+        auth_token,
+        server_nonce,
+        shutdown,
+    )
+}
+
+/// The transport a single request dispatches on, plus the scheduler permit
+/// held for its duration.
+///
+/// The permit is what makes the endpoint scheduler count the request: it is
+/// acquired right before `dispatch` and dropped when the [`TransportAccess`]
+/// goes out of scope at the end of the loop iteration. The fixed-transport
+/// (non-pooled) path carries `None` because it has no endpoint scheduler.
+struct TransportAccess {
+    transport: Arc<dyn RemoteTransport>,
+    _permit: Option<Permit>,
+}
+
+/// The dispatch loop shared by every serve entry point.
+///
+/// `transport_for` resolves the current request to a transport (the pooled
+/// path re-resolves the endpoint key on every request; the fixed path returns
+/// the same transport). `on_connection_error` is invoked after a dispatch
+/// whose result is a connection-level failure, so a pooled daemon can evict
+/// the poisoned connection and reconnect on the next request.
+fn serve_loop<F, G>(
+    stream: UnixStream,
+    transport_for: &mut F,
+    on_connection_error: &mut G,
+    auth_token: &str,
+    server_nonce: &str,
+    shutdown: Option<&Arc<ShutdownState>>,
+) where
+    F: FnMut(&RequestEnvelope) -> Result<TransportAccess, TransportError>,
+    G: FnMut(&ResponseResult),
+{
     let read_stream = match stream.try_clone() {
         Ok(s) => s,
         Err(_) => return,
@@ -379,10 +444,31 @@ pub fn serve_one_with_shutdown(
             }
             break;
         }
+        // Resolve the transport for this request. A failure here is a daemon
+        // problem (no connection can be created), reported as an error frame
+        // — it does not tear down the accept loop.
+        let access = match transport_for(&env) {
+            Ok(access) => access,
+            Err(e) => {
+                let resp = ResponseEnvelope {
+                    request_id: env.request_id.clone(),
+                    result: ResponseResult::Err(IpcError::from(e)),
+                };
+                let body = serde_json::to_vec(&resp).unwrap_or_default();
+                let _ = writer.write_frame(&body);
+                continue;
+            }
+        };
         let resp = ResponseEnvelope {
             request_id: env.request_id.clone(),
-            result: dispatch(&*transport, &env, server_nonce),
+            result: dispatch(&*access.transport, &env, server_nonce),
         };
+        // A connection-level failure means the pooled transport is no longer
+        // trustworthy. Evict it so the next request reconnects instead of
+        // serving from a dead connection.
+        if matches!(&resp.result, ResponseResult::Err(e) if e.is_connection_level()) {
+            on_connection_error(&resp.result);
+        }
         let body = match serde_json::to_vec(&resp) {
             Ok(b) => b,
             Err(e) => {
@@ -402,6 +488,65 @@ pub fn serve_one_with_shutdown(
     }
 }
 
+/// [`serve_one_with_shutdown`] over an [`EndpointPool`]: every request
+/// resolves to the same [`EndpointKey`], the pool returns the one pooled
+/// connection for it (creating it at most once), the endpoint's scheduler
+/// meters the request, and a connection-level failure evicts the connection
+/// so the next request reconnects.
+#[cfg(feature = "native-ssh")]
+pub fn serve_one_pooled(
+    stream: UnixStream,
+    pool: Arc<EndpointPool>,
+    key: EndpointKey,
+    limits: SchedulerLimits,
+    factory: Arc<dyn Fn() -> Result<Arc<dyn RemoteTransport>, TransportError> + Send + Sync>,
+    auth_token: &str,
+    server_nonce: &str,
+    shutdown: Option<&Arc<ShutdownState>>,
+) {
+    let pool_for_errors = Arc::clone(&pool);
+    let key_for_errors = key.clone();
+    let mut transport_for = move |env: &RequestEnvelope| {
+        let endpoint = pool.get_or_create(key.clone(), limits, || factory())?;
+        // Meter every transport-touching operation on the endpoint scheduler.
+        // Challenge/Shutdown/Hello never touch the wire, so they must not
+        // consume a session.
+        let permit = if matches!(
+            &env.operation,
+            Operation::RunCommand
+                | Operation::TestConnection
+                | Operation::UploadFile
+                | Operation::UploadText
+                | Operation::DownloadFile
+                | Operation::DownloadDir
+        ) {
+            let deadline = Deadline::from_unix_ms(env.deadline_unix_ms);
+            Some(endpoint.acquire(
+                Priority::Normal,
+                &RequestId(env.request_id.clone()),
+                deadline,
+            )?)
+        } else {
+            None
+        };
+        Ok(TransportAccess {
+            transport: Arc::clone(&endpoint.transport),
+            _permit: permit,
+        })
+    };
+    let mut on_connection_error = move |_r: &ResponseResult| {
+        pool_for_errors.remove(&key_for_errors);
+    };
+    serve_loop(
+        stream,
+        &mut transport_for,
+        &mut on_connection_error,
+        auth_token,
+        server_nonce,
+        shutdown,
+    )
+}
+
 /// Dispatch a single request onto a transport. Pure function: no I/O,
 /// no thread safety, no daemon state beyond the nonce passed in for the
 /// Challenge answer.
@@ -410,7 +555,6 @@ pub fn dispatch(
     env: &RequestEnvelope,
     server_nonce: &str,
 ) -> ResponseResult {
-    use crate::transport::contract::Deadline;
     let deadline = Deadline::from_unix_ms(env.deadline_unix_ms);
     let request_id = env.request_id.clone();
     match &env.operation {
@@ -539,6 +683,101 @@ pub fn dispatch(
 }
 
 /// Bind a Unix domain socket at `socket_path`, set its mode to `0600`, and
+/// build the shared shutdown bookkeeping.
+fn bind_listener(
+    socket_path: &Path,
+    shutdown: ShutdownCoordinator,
+) -> Result<(UnixListener, Arc<ShutdownState>), String> {
+    if let Some(parent) = socket_path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            return Err(format!(
+                "ipc socket parent directory does not exist: {}",
+                parent.display()
+            ));
+        }
+    }
+    // Best-effort cleanup of any stale socket left by a crashed previous run.
+    let _ = std::fs::remove_file(socket_path);
+    let listener = UnixListener::bind(socket_path)
+        .map_err(|e| format!("failed to bind ipc socket {}: {e}", socket_path.display()))?;
+    // Mode 0600: only the current user can connect. The owner is set by the
+    // bind above; chmod enforces the bits regardless of umask.
+    use std::os::unix::fs::PermissionsExt;
+    let perms = std::fs::Permissions::from_mode(0o600);
+    if let Err(e) = std::fs::set_permissions(socket_path, perms) {
+        return Err(format!(
+            "failed to chmod 0600 ipc socket {}: {e}",
+            socket_path.display()
+        ));
+    }
+    let state = Arc::new(ShutdownState::new(shutdown));
+    // Non-blocking accept + poll: the token is fired from a worker thread (a
+    // connection that sent `Shutdown`), and a blocking accept would never see
+    // it until the next connection arrived.
+    listener
+        .set_nonblocking(true)
+        .map_err(|e| format!("failed to set non-blocking accept: {e}"))?;
+    Ok((listener, state))
+}
+
+/// Accept loop shared by [`run`] and [`run_with_pool`]: non-blocking accept,
+/// one OS thread per connection (named `vcli-ipc`), and the design's
+/// three-phase shutdown once the token fires.
+///
+/// `spawn` builds the per-connection worker; it receives the accepted stream,
+/// the auth token, the server nonce, and the shared shutdown state, and must
+/// return an error only when the worker thread cannot be created (which is
+/// fatal for the daemon, matching the pre-pool behaviour).
+fn accept_loop<F>(
+    listener: UnixListener,
+    state: &Arc<ShutdownState>,
+    auth_token: &str,
+    server_nonce: &str,
+    spawn: F,
+) -> Result<(), String>
+where
+    F: Fn(UnixStream, &str, &str, &Arc<ShutdownState>) -> Result<(), String>,
+{
+    let token = auth_token.to_string();
+    let nonce = server_nonce.to_string();
+    loop {
+        if state.token.is_cancelled() {
+            break;
+        }
+        match listener.accept() {
+            Ok((s, _)) => {
+                // Restore blocking mode on the accepted stream: on macOS an
+                // accepted socket inherits O_NONBLOCK from the listener, and
+                // a non-blocking stream would make every frame read return
+                // `WouldBlock` immediately.
+                let _ = s.set_nonblocking(false);
+                spawn(s, &token, &nonce, state)?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(25));
+            }
+            Err(e) => {
+                // A spurious accept error is not fatal: the listener is still
+                // alive and the next connection might succeed. We deliberately
+                // do not return here — a transient resource exhaustion should
+                // not tear down the daemon.
+                eprintln!("vcli __transport-daemon: accept failed: {e}");
+            }
+        }
+    }
+    // Three-phase shutdown: admission is already stopped (the loop broke);
+    // wait for in-flight connections within the grace, then return — the
+    // daemon process exits and reaps any straggler stuck in a transport call.
+    let phase2_state = Arc::clone(state);
+    state.coordinator.execute(
+        || drop(listener),
+        || phase2_state.active.load(Ordering::SeqCst) == 0,
+        || {},
+    );
+    Ok(())
+}
+
+/// Bind a Unix domain socket at `socket_path`, set its mode to `0600`, and
 /// spawn one OS thread per accepted connection. Each thread runs
 /// [`serve_one_with_shutdown`] until the peer closes.
 ///
@@ -567,83 +806,68 @@ pub fn run(
     server_nonce: &str,
     shutdown: ShutdownCoordinator,
 ) -> Result<(), String> {
-    if let Some(parent) = socket_path.parent() {
-        if !parent.as_os_str().is_empty() && !parent.exists() {
-            return Err(format!(
-                "ipc socket parent directory does not exist: {}",
-                parent.display()
-            ));
-        }
-    }
-    // Best-effort cleanup of any stale socket left by a crashed previous run.
-    let _ = std::fs::remove_file(socket_path);
-    let listener = UnixListener::bind(socket_path)
-        .map_err(|e| format!("failed to bind ipc socket {}: {e}", socket_path.display()))?;
-    // Mode 0600: only the current user can connect. The owner is set by the
-    // bind above; chmod enforces the bits regardless of umask.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let perms = std::fs::Permissions::from_mode(0o600);
-        if let Err(e) = std::fs::set_permissions(socket_path, perms) {
-            return Err(format!(
-                "failed to chmod 0600 ipc socket {}: {e}",
-                socket_path.display()
-            ));
-        }
-    }
-    let state = Arc::new(ShutdownState::new(shutdown));
-    // Non-blocking accept + poll: the token is fired from a worker thread (a
-    // connection that sent `Shutdown`), and a blocking accept would never see
-    // it until the next connection arrived.
-    listener
-        .set_nonblocking(true)
-        .map_err(|e| format!("failed to set non-blocking accept: {e}"))?;
-    loop {
-        if state.token.is_cancelled() {
-            break;
-        }
-        match listener.accept() {
-            Ok((s, _)) => {
-                // Restore blocking mode on the accepted stream: on macOS an
-                // accepted socket inherits O_NONBLOCK from the listener, and
-                // a non-blocking stream would make every frame read return
-                // `WouldBlock` immediately.
-                let _ = s.set_nonblocking(false);
-                let transport = transport.clone();
-                let token = auth_token.to_string();
-                let nonce = server_nonce.to_string();
-                let state = Arc::clone(&state);
-                thread::Builder::new()
-                    .name("vcli-ipc".to_string())
-                    .spawn(move || {
-                        serve_one_with_shutdown(s, transport, &token, &nonce, Some(&state))
-                    })
-                    .map_err(|e| format!("failed to spawn ipc worker: {e}"))?;
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(25));
-            }
-            Err(e) => {
-                // A spurious accept error is not fatal: the listener is still
-                // alive and the next connection might succeed. We deliberately
-                // do not return here — a transient resource exhaustion should
-                // not tear down the daemon.
-                eprintln!("vcli __transport-daemon: accept failed: {e}");
-            }
-        }
-    }
-    // Three-phase shutdown: admission is already stopped (the loop broke);
-    // wait for in-flight connections within the grace, then return — the
-    // daemon process exits and reaps any straggler stuck in a transport call.
-    let phase2_state = Arc::clone(&state);
-    state.coordinator.execute(
-        || drop(listener),
-        || phase2_state.active.load(Ordering::SeqCst) == 0,
-        || {},
-    );
-    let _ = std::fs::remove_file(socket_path);
-    Ok(())
+    let (listener, state) = bind_listener(socket_path, shutdown)?;
+    accept_loop(
+        listener,
+        &state,
+        auth_token,
+        server_nonce,
+        move |s, t, n, st| {
+            let transport = Arc::clone(&transport);
+            let token = t.to_string();
+            let nonce = n.to_string();
+            let state = Arc::clone(st);
+            thread::Builder::new()
+                .name("vcli-ipc".to_string())
+                .spawn(move || serve_one_with_shutdown(s, transport, &token, &nonce, Some(&state)))
+                .map_err(|e| format!("failed to spawn ipc worker: {e}"))
+        },
+    )
+}
+
+/// [`run`] over an [`EndpointPool`]: every connection is served by
+/// [`serve_one_pooled`], so requests to the same endpoint key share one
+/// transport and a connection-level failure reconnects on the next request.
+#[cfg(feature = "native-ssh")]
+pub fn run_with_pool(
+    socket_path: &Path,
+    pool: Arc<EndpointPool>,
+    key: EndpointKey,
+    limits: SchedulerLimits,
+    factory: Arc<dyn Fn() -> Result<Arc<dyn RemoteTransport>, TransportError> + Send + Sync>,
+    auth_token: &str,
+    server_nonce: &str,
+    shutdown: ShutdownCoordinator,
+) -> Result<(), String> {
+    let (listener, state) = bind_listener(socket_path, shutdown)?;
+    accept_loop(
+        listener,
+        &state,
+        auth_token,
+        server_nonce,
+        move |s, t, n, st| {
+            let pool = Arc::clone(&pool);
+            let key = key.clone();
+            let token = t.to_string();
+            let nonce = n.to_string();
+            let state = Arc::clone(st);
+            thread::Builder::new()
+                .name("vcli-ipc".to_string())
+                .spawn(move || {
+                    serve_one_pooled(
+                        s,
+                        pool,
+                        key,
+                        limits,
+                        Arc::clone(&factory),
+                        &token,
+                        &nonce,
+                        Some(&state),
+                    )
+                })
+                .map_err(|e| format!("failed to spawn ipc worker: {e}"))
+        },
+    )
 }
 
 // ────────────────────────────────── tests ──────────────────────────────────
@@ -808,6 +1032,194 @@ mod tests {
         assert_eq!(answer.daemon_nonce, "the-recorded-nonce");
 
         let _ = std::fs::remove_file(&socket);
+    }
+
+    /// The pooled serve path shares one connection across requests to the
+    /// same endpoint key: the factory runs once per key, and a second
+    /// connection (a fresh IPC session) reuses the pooled transport.
+    #[cfg(feature = "native-ssh")]
+    #[test]
+    fn pooled_serve_reuses_one_transport_across_requests() {
+        use crate::transport::pool::{EndpointKey, EndpointPool};
+        use crate::transport::scheduler::SchedulerLimits;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let pool = Arc::new(EndpointPool::new());
+        let factory_calls = Arc::clone(&calls);
+        let factory: Arc<
+            dyn Fn() -> Result<Arc<dyn RemoteTransport>, TransportError> + Send + Sync,
+        > = Arc::new(move || {
+            factory_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Arc::new(FakeTransport::ok()))
+        });
+        let key = EndpointKey {
+            profile: None,
+            host: "eda-1".into(),
+            port: 22,
+            user: None,
+            jump_route: Vec::new(),
+            socks_route: None,
+            identities: Vec::new(),
+            host_key_aliases: Vec::new(),
+            security_options: Vec::new(),
+        };
+
+        // Two independent IPC sessions, both resolving to the same key. The
+        // first creates the endpoint; the second must reuse it.
+        for _ in 0..2 {
+            let socket =
+                std::env::temp_dir().join(format!("vcli-pool-{}.sock", uuid::Uuid::new_v4()));
+            let _ = std::fs::remove_file(&socket);
+            let listener = UnixListener::bind(&socket).expect("bind");
+            let listener_for_thread = listener.try_clone().expect("clone listener");
+            let pool = Arc::clone(&pool);
+            let key = key.clone();
+            let factory = Arc::clone(&factory);
+            thread::spawn(move || {
+                if let Ok((stream, _)) = listener_for_thread.accept() {
+                    serve_one_pooled(
+                        stream,
+                        pool,
+                        key,
+                        SchedulerLimits::default_limits(),
+                        factory,
+                        "secret-token",
+                        "n",
+                        None,
+                    );
+                }
+            });
+
+            let client =
+                NativeTransportClient::connect(&socket, "p", "secret-token").expect("connect");
+            let ok = client
+                .run_command(&CommandRequest::untimed("echo hi"))
+                .expect("run command");
+            assert_eq!(ok.exit_status, 0);
+            drop(client);
+            let _ = std::fs::remove_file(&socket);
+            let _ = listener;
+        }
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "one transport per endpoint key, reused across requests"
+        );
+        assert_eq!(pool.len(), 1);
+    }
+
+    /// A connection-level failure evicts the pooled connection, so the next
+    /// request reconnects instead of serving from a dead transport. Business
+    /// failures (remote exit codes) must NOT evict.
+    #[cfg(feature = "native-ssh")]
+    #[test]
+    fn pooled_serve_evicts_on_connection_failure_but_not_on_business_failure() {
+        use crate::transport::pool::{EndpointKey, EndpointPool};
+        use crate::transport::scheduler::SchedulerLimits;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        // Factory hands out a transport that fails at the connection level the
+        // first time and works afterwards.
+        let calls = Arc::new(AtomicUsize::new(0));
+        let pool = Arc::new(EndpointPool::new());
+        let factory_calls = Arc::clone(&calls);
+        let factory: Arc<
+            dyn Fn() -> Result<Arc<dyn RemoteTransport>, TransportError> + Send + Sync,
+        > = Arc::new(move || {
+            let n = factory_calls.fetch_add(1, Ordering::SeqCst);
+            let mut t = FakeTransport::ok();
+            if n == 0 {
+                t.fail_with = Some(TransportError::ConnectionFailed("tcp reset".into()));
+            } else {
+                t.command_result.exit_status = 7; // a business failure, not a connection one
+            }
+            Ok(Arc::new(t))
+        });
+        let key = EndpointKey {
+            profile: None,
+            host: "eda-1".into(),
+            port: 22,
+            user: None,
+            jump_route: Vec::new(),
+            socks_route: None,
+            identities: Vec::new(),
+            host_key_aliases: Vec::new(),
+            security_options: Vec::new(),
+        };
+
+        // Session 1: the pooled transport fails at the connection level. The
+        // client sees the error and the pool must evict the connection.
+        let socket = std::env::temp_dir().join(format!("vcli-evict-{}.sock", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind");
+        let listener_for_thread = listener.try_clone().expect("clone listener");
+        let pool_1 = Arc::clone(&pool);
+        let key_1 = key.clone();
+        let factory_1 = Arc::clone(&factory);
+        thread::spawn(move || {
+            if let Ok((stream, _)) = listener_for_thread.accept() {
+                serve_one_pooled(
+                    stream,
+                    pool_1,
+                    key_1,
+                    SchedulerLimits::default_limits(),
+                    factory_1,
+                    "secret-token",
+                    "n",
+                    None,
+                );
+            }
+        });
+        let client = NativeTransportClient::connect(&socket, "p", "secret-token").expect("connect");
+        let err = client
+            .run_command(&CommandRequest::untimed("echo hi"))
+            .expect_err("connection-level failure");
+        assert!(matches!(err, IpcError::ConnectionFailed(_)), "got {err:?}");
+        drop(client);
+        let _ = std::fs::remove_file(&socket);
+        let _ = listener;
+        assert_eq!(pool.len(), 0, "poisoned connection must be evicted");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        // Session 2: a fresh connection is created and reports the business
+        // failure (exit 7) — which must NOT evict it.
+        let socket = std::env::temp_dir().join(format!("vcli-evict-{}.sock", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind");
+        let listener_for_thread = listener.try_clone().expect("clone listener");
+        let pool_2 = Arc::clone(&pool);
+        let key_2 = key.clone();
+        let factory_2 = Arc::clone(&factory);
+        thread::spawn(move || {
+            if let Ok((stream, _)) = listener_for_thread.accept() {
+                serve_one_pooled(
+                    stream,
+                    pool_2,
+                    key_2,
+                    SchedulerLimits::default_limits(),
+                    factory_2,
+                    "secret-token",
+                    "n",
+                    None,
+                );
+            }
+        });
+        let client = NativeTransportClient::connect(&socket, "p", "secret-token").expect("connect");
+        let result = client
+            .run_command(&CommandRequest::untimed("echo hi"))
+            .expect("reconnected");
+        assert_eq!(result.exit_status, 7);
+        drop(client);
+        let _ = std::fs::remove_file(&socket);
+        let _ = listener;
+        assert_eq!(
+            pool.len(),
+            1,
+            "a business failure must not evict the connection"
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 2, "reconnected exactly once");
     }
 
     /// Cooperative shutdown end-to-end: a client's `Shutdown` request is
