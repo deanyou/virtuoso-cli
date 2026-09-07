@@ -1,0 +1,39 @@
+name: Skill Tests
+
+# The Rust workflows (ci.yml / integration.yml) never invoke python, so changes
+# under .claude/skills used to land with zero automated verification. This
+# workflow covers them: byte-compile every skill script and run each skill's
+# unittest suite. Path-filtered so pure-Rust PRs are not slowed down.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".claude/skills/**"
+      - ".github/workflows/skill-tests.yml"
+      - ".github/scripts/run-skill-tests.sh"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".claude/skills/**"
+      - ".github/workflows/skill-tests.yml"
+      - ".github/scripts/run-skill-tests.sh"
+
+jobs:
+  python:
+    name: Skill tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 = oldest supported system python, 3.13 = current stable.
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run skill test suites
+        run: bash .github/scripts/run-skill-tests.sh
