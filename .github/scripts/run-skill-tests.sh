@@ -2,8 +2,8 @@
 # Syntax-check every skill script and run each skill's unittest suite.
 #
 # Used by .github/workflows/skill-tests.yml. Exits non-zero if any skill fails,
-# or if no skill suite was found at all (a renamed/removed tests/ directory must
-# not silently turn this job green).
+# if no skill suite was found at all (a renamed/removed tests/ directory must
+# not silently turn this job green), or if a discovered suite ran 0 tests.
 set -euo pipefail
 
 # Keep the working tree clean: importing skill modules must not litter
@@ -40,7 +40,21 @@ for tests_dir in .claude/skills/*/tests; do
     echo "== unittest discover: $skill_dir =="
     # Tests inject their own sys.path for the skill's scripts/ package, so run
     # from the skill directory rather than the repo root.
-    if (cd "$skill_dir" && python3 -m unittest discover tests); then
+    status=0
+    out="$(cd "$skill_dir" && python3 -m unittest discover tests 2>&1)" || status=$?
+    printf '%s\n' "$out"
+    # A tests/ directory that merely exists is not proof of anything: unittest
+    # exits 0 when it discovers no tests at all (e.g. every test file was
+    # renamed, or the directory was emptied), which would turn this job green
+    # while verifying nothing. Require a positive "Ran N tests" line.
+    # Note the optional plural: unittest prints "Ran 1 test" (singular) for a
+    # single test, so `tests?` is required — `tests` alone would reject a
+    # suite that legitimately ran exactly one test.
+    if [ "$status" -eq 0 ] && ! printf '%s\n' "$out" | grep -qE '^Ran [1-9][0-9]* tests?'; then
+        echo "   ERROR: discovered 0 tests in $skill_dir"
+        status=1
+    fi
+    if [ "$status" -eq 0 ]; then
         echo "   OK"
     else
         echo "   FAILED: $skill_dir"
