@@ -210,15 +210,22 @@ impl Endpoint {
 /// slots and therefore connect in parallel.
 struct EndpointSlot {
     endpoint: Mutex<Option<Arc<Endpoint>>>,
-    limits: SchedulerLimits,
+    /// The scheduler outlives the individual endpoint.
+    ///
+    /// It is created once, when the slot is, and every endpoint built for
+    /// this key shares that one instance. Reconnecting therefore keeps a
+    /// single set of channel limits: an in-flight request holding a permit
+    /// and a request served by the freshly-built replacement draw on the
+    /// same budget instead of two independent ones.
+    scheduler: Arc<SessionScheduler>,
 }
 
 impl EndpointSlot {
-    fn new(limits: SchedulerLimits) -> Self {
-        Self {
+    fn new(limits: SchedulerLimits) -> Result<Self, TransportError> {
+        Ok(Self {
             endpoint: Mutex::new(None),
-            limits,
-        }
+            scheduler: SessionScheduler::new(limits)?,
+        })
     }
 
     fn get_or_create<F>(
@@ -243,14 +250,29 @@ impl EndpointSlot {
         let endpoint = Arc::new(Endpoint {
             key,
             transport,
-            scheduler: SessionScheduler::new(self.limits)?,
+            scheduler: Arc::clone(&self.scheduler),
             generation,
         });
         *guard = Some(Arc::clone(&endpoint));
         Ok(endpoint)
     }
 
-    /// Whether the endpoint currently held in this slot carries `gen`.
+    /// Drop the connection but keep the slot — and therefore the scheduler.
+    ///
+    /// This is what conditional eviction does. Removing the whole slot would
+    /// take its scheduler with it, and the next `get_or_create` would build a
+    /// fresh one, splitting the key's channel budget across two schedulers.
+    fn clear(&self) {
+        *self.endpoint.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
+    fn has_endpoint(&self) -> bool {
+        self.endpoint
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    }
+
     ///
     /// Used by [`EndpointPool::remove_if_matches`] and by the regression
     /// test that proves a stale eviction callback does not drop a
@@ -295,10 +317,13 @@ impl EndpointPool {
     {
         let slot = {
             let mut slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
-            slots
-                .entry(key.clone())
-                .or_insert_with(|| Arc::new(EndpointSlot::new(limits)))
-                .clone()
+            if let Some(existing) = slots.get(&key) {
+                Arc::clone(existing)
+            } else {
+                let created = Arc::new(EndpointSlot::new(limits)?);
+                slots.insert(key.clone(), Arc::clone(&created));
+                created
+            }
         };
         match slot.get_or_create(key.clone(), factory) {
             Ok(endpoint) => Ok(endpoint),
@@ -344,48 +369,59 @@ impl EndpointPool {
     /// A request captured `expected_gen` when it began. If the connection
     /// failed and was already replaced by a fresh one before the eviction
     /// callback ran, the slot's current generation is newer and this call
-    /// is a no-op: returning `false` keeps the replacement alive for the
-    /// next request instead of evicting it on stale evidence.
+    /// eviction is a no-op: the slot keeps its scheduler, so the next
+    /// `get_or_create` reconnects onto the same channel budget instead of
+    /// a reset one.
     ///
     /// This is the contract the IPC server relies on. An unconditional
     /// [`remove`] is for `tunnel stop` only — it would otherwise race with
     /// reconnect in step 6.
     pub fn remove_if_matches(&self, key: &EndpointKey, expected_gen: u64) -> bool {
+        // One lock for the whole check-then-clear. `EndpointPool::slots` is a
+        // plain `Mutex`: a second `lock()` on this thread would deadlock
+        // because the first guard is still alive, so the comparison and the
+        // eviction must happen inside a single critical section.
         let slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
+        let matches = slots
+            .get(key)
+            .map(|slot| slot.current_generation() == Some(expected_gen))
+            .unwrap_or(false);
+        if !matches {
+            return false;
+        }
         let Some(slot) = slots.get(key) else {
             return false;
         };
-        if slot.current_generation() != Some(expected_gen) {
-            return false;
-        }
-        // Re-lock so the comparison and the removal happen on the same
-        // view of the map. Two consecutive locks are deliberate: the first
-        // short-circuits the common "no slot" case without taking the
-        // slot's mutex, and the second only fires when the generation
-        // already agreed.
-        let mut slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
-        match slots.get(key) {
-            Some(slot) if slot.current_generation() == Some(expected_gen) => {
-                slots.remove(key).is_some()
-            }
-            _ => false,
-        }
+        slot.clear();
+        true
     }
 
+    /// Number of keys with a live connection.
+    ///
+    /// An evicted key keeps its slot (and scheduler) so a reconnect reuses
+    /// the same budget, so this counts slots that currently hold an
+    /// endpoint rather than every slot in the map.
     pub fn len(&self) -> usize {
-        self.slots.lock().unwrap_or_else(|e| e.into_inner()).len()
+        self.slots
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .filter(|s| s.has_endpoint())
+            .count()
     }
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// Keys that currently hold a live connection.
     pub fn keys(&self) -> Vec<EndpointKey> {
         self.slots
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .keys()
-            .cloned()
+            .iter()
+            .filter(|(_, s)| s.has_endpoint())
+            .map(|(k, _)| k.clone())
             .collect()
     }
 
@@ -834,22 +870,18 @@ mod tests {
     }
 
     #[test]
-    fn removing_one_endpoint_does_not_reset_its_scheduler() {
-        // "Deleting an endpoint must not rebuild its scheduler" is part of
-        // the design intent: per-endpoint schedulers stay stable across
-        // reconnects so limits don't jitter. We check it by acquiring a
-        // permit, evicting the endpoint, observing the permit is still held
-        // (the Arc kept the scheduler alive), and confirming the pool's
-        // rebuilt endpoint gets a *new* scheduler — which is fine, because
-        // the old one is still around servicing outstanding permits.
+    fn evicting_an_endpoint_keeps_its_scheduler_and_budget() {
+        // #79 ③: cleaning up a failed instance must not rebuild the
+        // endpoint's scheduler. The scheduler lives on the slot, so the
+        // endpoint built after an eviction shares one channel budget with
+        // requests that are still in flight — never two independent ones.
         let pool = EndpointPool::new();
+        let limits = SchedulerLimits::default_limits();
         let first = pool
-            .get_or_create(
-                key("eda-1"),
-                SchedulerLimits::default_limits(),
-                ok_transport,
-            )
+            .get_or_create(key("eda-1"), limits, ok_transport)
             .unwrap();
+        // Stand in for an in-flight request: one permit is checked out and
+        // will only be returned after the eviction.
         let permit = first
             .acquire(
                 Priority::Normal,
@@ -858,29 +890,39 @@ mod tests {
             )
             .unwrap();
         let first_scheduler = Arc::clone(&first.scheduler);
+        let gen_a = first.generation();
+        assert_eq!(first_scheduler.stats().active, 1);
 
-        pool.remove(&key("eda-1"));
+        // Conditional eviction (the path the IPC server takes on a
+        // connection-level failure) drops the instance but keeps the slot.
+        assert!(
+            pool.remove_if_matches(&key("eda-1"), gen_a),
+            "the current generation must evict"
+        );
+        assert!(pool.is_empty(), "no live endpoint survives");
+
         let second = pool
-            .get_or_create(
-                key("eda-1"),
-                SchedulerLimits::default_limits(),
-                ok_transport,
-            )
+            .get_or_create(key("eda-1"), limits, ok_transport)
             .unwrap();
 
-        // The old scheduler kept its permit live: dropping the permit here
-        // returns capacity to it, not to the new endpoint's scheduler.
-        drop(permit);
-        assert_eq!(
-            first_scheduler.stats().active,
-            0,
-            "old scheduler got the release"
+        assert!(
+            Arc::ptr_eq(&first_scheduler, &second.scheduler),
+            "the reconnect must reuse the same scheduler, not build a new one"
+        );
+        assert!(
+            second.generation() > gen_a,
+            "the replacement is a new instance"
         );
         assert_eq!(
             second.scheduler.stats().active,
-            0,
-            "new scheduler is independent of the old one"
+            1,
+            "the in-flight permit is charged to the shared budget — it must not reset"
         );
-        assert!(!Arc::ptr_eq(&first_scheduler, &second.scheduler));
+
+        // Releasing the old permit returns capacity to the one scheduler
+        // both endpoints share.
+        drop(permit);
+        assert_eq!(first_scheduler.stats().active, 0);
+        assert_eq!(second.scheduler.stats().active, 0);
     }
 }
