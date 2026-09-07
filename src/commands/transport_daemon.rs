@@ -83,9 +83,13 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
     let host = config.remote_host.as_deref().unwrap_or("");
     let key = EndpointKey::from_config(&config, host);
     let limits = SchedulerLimits::from_config(&config)?;
+    // `shutdown` borrows `config` and must be computed before the `factory`
+    // closure below moves `config` into itself.
+    let shutdown = ShutdownCoordinator::from_config(&config);
     let pool = Arc::new(EndpointPool::new());
-    let factory: Arc<dyn Fn() -> Result<Arc<dyn RemoteTransport>, TransportError> + Send + Sync> =
-        Arc::new(move || open_transport_for_daemon(&config));
+    let factory: Arc<
+        dyn Fn() -> std::result::Result<Arc<dyn RemoteTransport>, TransportError> + Send + Sync,
+    > = Arc::new(move || open_transport_for_daemon(&config));
 
     let token = std::fs::read_to_string(Path::new(token_path)).map_err(|e| {
         VirtuosoError::Io(std::io::Error::other(format!(
@@ -97,8 +101,6 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
     let token = token.trim().to_string();
 
     // Grace period for `Operation::Shutdown` (VB_TRANSPORT_SHUTDOWN_GRACE).
-    let shutdown = ShutdownCoordinator::from_config(&config);
-
     let socket = Path::new(ipc_endpoint);
     server::run_with_pool(
         socket,
