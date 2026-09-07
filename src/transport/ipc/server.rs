@@ -825,7 +825,7 @@ pub fn run(
     shutdown: ShutdownCoordinator,
 ) -> Result<(), String> {
     let (listener, state) = bind_listener(socket_path, shutdown)?;
-    accept_loop(
+    let result = accept_loop(
         listener,
         &state,
         auth_token,
@@ -841,7 +841,12 @@ pub fn run(
                 .map_err(|e| format!("failed to spawn ipc worker: {e}"))?;
             Ok(())
         },
-    )
+    );
+    // Best-effort unlink on every exit path: a stale socket from a crashed
+    // previous run is cleaned up by `bind_listener`, but a clean exit must
+    // also leave no artefact behind so the next daemon can rebind.
+    let _ = std::fs::remove_file(socket_path);
+    result
 }
 
 /// [`run`] over an [`EndpointPool`]: every connection is served by
@@ -859,7 +864,7 @@ pub fn run_with_pool(
     shutdown: ShutdownCoordinator,
 ) -> Result<(), String> {
     let (listener, state) = bind_listener(socket_path, shutdown)?;
-    accept_loop(
+    let result = accept_loop(
         listener,
         &state,
         auth_token,
@@ -879,7 +884,10 @@ pub fn run_with_pool(
                 .map_err(|e| format!("failed to spawn ipc worker: {e}"))?;
             Ok(())
         },
-    )
+    );
+    // Best-effort unlink on every exit path — see `run` for the rationale.
+    let _ = std::fs::remove_file(socket_path);
+    result
 }
 
 // ────────────────────────────────── tests ──────────────────────────────────
@@ -1288,6 +1296,102 @@ mod tests {
 
         // Clean exit also unlinks the socket.
         assert!(!socket.exists(), "socket must be unlinked on clean exit");
+    }
+
+    /// The pooled daemon must unlink its socket on the same shutdown path
+    /// that `run` exercises. Without this, a clean daemon restart leaves a
+    /// stale socket behind and the next bind fails.
+    #[cfg(feature = "native-ssh")]
+    #[test]
+    fn run_with_pool_unlinks_its_socket_on_clean_shutdown() {
+        use crate::transport::pool::{EndpointKey, EndpointPool};
+        use crate::transport::scheduler::SchedulerLimits;
+
+        let socket =
+            std::env::temp_dir().join(format!("vcli-shut-pool-{}.sock", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&socket);
+        let coordinator =
+            crate::transport::lifecycle::ShutdownCoordinator::new(Duration::from_millis(200));
+
+        let pool = Arc::new(EndpointPool::new());
+        // The key here only has to be a stable identity for the duration of
+        // this test; no SSH is exercised. Construct it directly rather than
+        // through `from_config` so this test module does not depend on a
+        // full `Config`.
+        let key = EndpointKey {
+            profile: None,
+            host: "eda-1".to_string(),
+            port: 22,
+            user: None,
+            jump_route: Vec::new(),
+            socks_route: None,
+            identities: Vec::new(),
+            host_key_aliases: Vec::new(),
+            security_options: vec!["backend=openssh".to_string()],
+        };
+        let limits = SchedulerLimits::default_limits();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let factory: Arc<
+            dyn Fn() -> Result<Arc<dyn RemoteTransport>, TransportError> + Send + Sync,
+        > = {
+            let calls = Arc::clone(&calls);
+            Arc::new(move || {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(Arc::new(FakeTransport::ok()) as Arc<dyn RemoteTransport>)
+            })
+        };
+
+        let path = socket.clone();
+        let runner = thread::spawn(move || {
+            run_with_pool(
+                &path,
+                pool,
+                key,
+                limits,
+                factory,
+                "secret-token",
+                "n",
+                coordinator,
+            )
+        });
+
+        // Wait for the daemon to come up before issuing the shutdown.
+        let mut client = None;
+        for _ in 0..100 {
+            if let Ok(c) = NativeTransportClient::connect(&socket, "p", "secret-token") {
+                client = Some(c);
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        let client = client.expect("daemon did not come up");
+        client.request_shutdown().expect("shutdown ack");
+
+        let started = std::time::Instant::now();
+        loop {
+            if runner.is_finished() {
+                break;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "run_with_pool did not terminate after a shutdown ack"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        let result = runner.join().expect("run_with_pool thread panicked");
+        assert!(
+            result.is_ok(),
+            "run_with_pool returned an error: {result:?}"
+        );
+        assert!(
+            !socket.exists(),
+            "pooled daemon must unlink its socket on clean exit"
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "factory should run exactly once for this connection"
+        );
     }
 
     /// Before shutdown fires, the daemon keeps serving; after the ack, the
