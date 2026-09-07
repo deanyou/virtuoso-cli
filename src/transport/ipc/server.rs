@@ -323,10 +323,11 @@ pub fn serve_one_with_shutdown(
     let mut transport_for = |_: &RequestEnvelope| {
         Ok(TransportAccess {
             transport: Arc::clone(&transport),
+            captured_generation: 0,
             _permit: None,
         })
     };
-    let mut on_connection_error = |_: &ResponseResult| {};
+    let mut on_connection_error = |_: u64| {};
     serve_loop(
         stream,
         &mut transport_for,
@@ -346,6 +347,12 @@ pub fn serve_one_with_shutdown(
 /// (non-pooled) path carries `None` because it has no endpoint scheduler.
 struct TransportAccess {
     transport: Arc<dyn RemoteTransport>,
+    /// Generation of the [`crate::transport::pool::Endpoint`] this request
+    /// was served on. The connection-error callback hands it to
+    /// [`EndpointPool::remove_if_matches`] so a late eviction does not
+    /// drop a replacement built concurrently. `0` on the non-pooled path,
+    /// which never evicts.
+    captured_generation: u64,
     _permit: Option<Permit>,
 }
 
@@ -365,7 +372,7 @@ fn serve_loop<F, G>(
     shutdown: Option<&Arc<ShutdownState>>,
 ) where
     F: FnMut(&RequestEnvelope) -> Result<TransportAccess, TransportError>,
-    G: FnMut(&ResponseResult),
+    G: FnMut(u64),
 {
     let read_stream = match stream.try_clone() {
         Ok(s) => s,
@@ -465,9 +472,11 @@ fn serve_loop<F, G>(
         };
         // A connection-level failure means the pooled transport is no longer
         // trustworthy. Evict it so the next request reconnects instead of
-        // serving from a dead connection.
+        // serving from a dead connection. The generation captured before
+        // dispatch is the safety net: a fresh endpoint built by a concurrent
+        // request stays alive even when this callback is late.
         if matches!(&resp.result, ResponseResult::Err(e) if e.is_connection_level()) {
-            on_connection_error(&resp.result);
+            on_connection_error(access.captured_generation);
         }
         let body = match serde_json::to_vec(&resp) {
             Ok(b) => b,
@@ -529,13 +538,20 @@ pub fn serve_one_pooled(
         } else {
             None
         };
+        // Capture the generation of the endpoint we are about to serve on.
+        // The eviction callback uses it to drop the connection only when the
+        // slot still holds the same instance — a fresh replacement built
+        // concurrently must survive a late callback from a request that
+        // already failed.
+        let captured_generation = endpoint.generation();
         Ok(TransportAccess {
             transport: Arc::clone(&endpoint.transport),
+            captured_generation,
             _permit: permit,
         })
     };
-    let mut on_connection_error = move |_r: &ResponseResult| {
-        pool_for_errors.remove(&key_for_errors);
+    let mut on_connection_error = move |captured: u64| {
+        pool_for_errors.remove_if_matches(&key_for_errors, captured);
     };
     serve_loop(
         stream,
@@ -858,16 +874,7 @@ pub fn run_with_pool(
             thread::Builder::new()
                 .name("vcli-ipc".to_string())
                 .spawn(move || {
-                    serve_one_pooled(
-                        s,
-                        pool,
-                        key,
-                        limits,
-                        factory,
-                        &token,
-                        &nonce,
-                        Some(&state),
-                    )
+                    serve_one_pooled(s, pool, key, limits, factory, &token, &nonce, Some(&state))
                 })
                 .map_err(|e| format!("failed to spawn ipc worker: {e}"))?;
             Ok(())

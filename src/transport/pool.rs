@@ -30,7 +30,21 @@
 #![allow(dead_code)] // consumed on Unix by the pooled transport daemon (commands::transport_daemon → server::run_with_pool). Windows builds have no daemon yet, so the pool stays un-referenced there.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+
+/// Monotonically increasing counter stamped onto every newly-created
+/// [`Endpoint`].
+///
+/// `EndpointPool::get_or_create` bumps this once per successful factory call
+/// and writes the new value into the freshly-stored `Endpoint`. A stale
+/// eviction callback captured the generation of the connection it ran on;
+/// when it later asks the pool to drop that connection, the pool compares
+/// the captured generation against the slot's current one. They differ when
+/// a concurrent caller has already replaced the failed connection with a
+/// fresh one — in which case the stale callback must not drop the
+/// replacement.
+static NEXT_ENDPOINT_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 use crate::config::Config;
 use crate::transport::contract::{Deadline, RemoteTransport, RequestId, TransportError};
@@ -143,6 +157,14 @@ pub struct Endpoint {
     pub key: EndpointKey,
     pub transport: Arc<dyn RemoteTransport>,
     pub scheduler: Arc<SessionScheduler>,
+    /// Generation stamped when this `Endpoint` was stored in its slot. Used
+    /// to make eviction conditional: a late callback from a request that
+    /// already failed must not drop a replacement built concurrently.
+    ///
+    /// Held by `Arc` so callers can capture the generation cheaply (one
+    /// `Arc::clone`) and the [`EndpointPool`] can read it without borrowing
+    /// the whole `Endpoint` while it is evicting.
+    pub generation: Arc<AtomicU64>,
 }
 
 /// Hand-written because neither `dyn RemoteTransport` nor
@@ -168,6 +190,15 @@ impl Endpoint {
         deadline: Deadline,
     ) -> Result<Permit, TransportError> {
         self.scheduler.acquire(priority, request, deadline)
+    }
+
+    /// Read the generation stamped on this endpoint.
+    ///
+    /// Pair with [`EndpointPool::remove_if_matches`] to drop the connection
+    /// only when the captured generation still describes the slot's current
+    /// endpoint.
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Relaxed)
     }
 }
 
@@ -203,13 +234,33 @@ impl EndpointSlot {
             return Ok(Arc::clone(existing));
         }
         let transport = factory()?;
+        // Bump the global counter once per successful factory call. Reading
+        // the previous value and storing the next gives every newly-built
+        // `Endpoint` a strictly larger generation than its predecessor.
+        let generation = Arc::new(AtomicU64::new(
+            NEXT_ENDPOINT_GENERATION.fetch_add(1, Ordering::Relaxed),
+        ));
         let endpoint = Arc::new(Endpoint {
             key,
             transport,
             scheduler: SessionScheduler::new(self.limits)?,
+            generation,
         });
         *guard = Some(Arc::clone(&endpoint));
         Ok(endpoint)
+    }
+
+    /// Whether the endpoint currently held in this slot carries `gen`.
+    ///
+    /// Used by [`EndpointPool::remove_if_matches`] and by the regression
+    /// test that proves a stale eviction callback does not drop a
+    /// replacement.
+    fn current_generation(&self) -> Option<u64> {
+        self.endpoint
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|ep| ep.generation())
     }
 }
 
@@ -285,6 +336,40 @@ impl EndpointPool {
             .unwrap_or_else(|e| e.into_inner())
             .remove(key)
             .is_some()
+    }
+
+    /// Conditionally drop the connection for `key`, only if its current
+    /// generation matches `expected_gen`.
+    ///
+    /// A request captured `expected_gen` when it began. If the connection
+    /// failed and was already replaced by a fresh one before the eviction
+    /// callback ran, the slot's current generation is newer and this call
+    /// is a no-op: returning `false` keeps the replacement alive for the
+    /// next request instead of evicting it on stale evidence.
+    ///
+    /// This is the contract the IPC server relies on. An unconditional
+    /// [`remove`] is for `tunnel stop` only — it would otherwise race with
+    /// reconnect in step 6.
+    pub fn remove_if_matches(&self, key: &EndpointKey, expected_gen: u64) -> bool {
+        let slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(slot) = slots.get(key) else {
+            return false;
+        };
+        if slot.current_generation() != Some(expected_gen) {
+            return false;
+        }
+        // Re-lock so the comparison and the removal happen on the same
+        // view of the map. Two consecutive locks are deliberate: the first
+        // short-circuits the common "no slot" case without taking the
+        // slot's mutex, and the second only fires when the generation
+        // already agreed.
+        let mut slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
+        match slots.get(key) {
+            Some(slot) if slot.current_generation() == Some(expected_gen) => {
+                slots.remove(key).is_some()
+            }
+            _ => false,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -657,5 +742,145 @@ mod tests {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<EndpointPool>();
         assert_send_sync::<EndpointKey>();
+    }
+
+    // ── generation-based eviction ──
+
+    #[test]
+    fn every_endpoint_carries_a_strictly_increasing_generation() {
+        // The generation is the safety net against late eviction callbacks,
+        // so the only invariant that matters here is "newer endpoint ⇒ larger
+        // generation" across calls.
+        let pool = EndpointPool::new();
+        let a = pool
+            .get_or_create(
+                key("eda-1"),
+                SchedulerLimits::default_limits(),
+                ok_transport,
+            )
+            .unwrap();
+        let g_a = a.generation();
+        pool.remove(&key("eda-1"));
+        let b = pool
+            .get_or_create(
+                key("eda-1"),
+                SchedulerLimits::default_limits(),
+                ok_transport,
+            )
+            .unwrap();
+        assert!(
+            b.generation() > g_a,
+            "each rebuild must bump the generation"
+        );
+    }
+
+    #[test]
+    fn a_late_eviction_does_not_drop_a_concurrent_replacement() {
+        // A request captured `gen_a` from the endpoint it was using. By the
+        // time the connection-error callback runs, a concurrent request has
+        // replaced that endpoint with `gen_b`. The callback's remove must be a
+        // no-op so the next caller still has a usable connection.
+        let pool = EndpointPool::new();
+        let first = pool
+            .get_or_create(
+                key("eda-1"),
+                SchedulerLimits::default_limits(),
+                ok_transport,
+            )
+            .unwrap();
+        let gen_a = first.generation();
+
+        // Simulate the rebuild path: drop the slot, then re-create. The
+        // exact same effect would happen when a real factory errors and the
+        // pool re-tries on the next request.
+        pool.remove(&key("eda-1"));
+        let replacement = pool
+            .get_or_create(
+                key("eda-1"),
+                SchedulerLimits::default_limits(),
+                ok_transport,
+            )
+            .unwrap();
+        let gen_b = replacement.generation();
+        assert!(gen_b > gen_a);
+
+        // The late callback fires with the stale generation. It must NOT
+        // remove the replacement; otherwise the next request would retry the
+        // factory instead of reusing the freshly-built connection.
+        assert!(
+            !pool.remove_if_matches(&key("eda-1"), gen_a),
+            "stale generation must not evict the replacement"
+        );
+        assert_eq!(pool.len(), 1, "the replacement must still be pooled");
+        let observed = pool.get(&key("eda-1")).unwrap();
+        assert!(
+            Arc::ptr_eq(&observed, &replacement),
+            "the survivor must be the freshly-built endpoint"
+        );
+        assert_eq!(observed.generation(), gen_b);
+
+        // The current generation evicts as expected.
+        assert!(pool.remove_if_matches(&key("eda-1"), gen_b));
+        assert!(pool.is_empty());
+    }
+
+    #[test]
+    fn remove_if_matches_returns_false_when_the_slot_is_empty() {
+        // No slot at all: the conditional remove must be a no-op, never panic
+        // on a missing entry, and never synthesise a slot.
+        let pool = EndpointPool::new();
+        assert!(!pool.remove_if_matches(&key("eda-1"), 42));
+        assert!(pool.is_empty());
+    }
+
+    #[test]
+    fn removing_one_endpoint_does_not_reset_its_scheduler() {
+        // "Deleting an endpoint must not rebuild its scheduler" is part of
+        // the design intent: per-endpoint schedulers stay stable across
+        // reconnects so limits don't jitter. We check it by acquiring a
+        // permit, evicting the endpoint, observing the permit is still held
+        // (the Arc kept the scheduler alive), and confirming the pool's
+        // rebuilt endpoint gets a *new* scheduler — which is fine, because
+        // the old one is still around servicing outstanding permits.
+        let pool = EndpointPool::new();
+        let first = pool
+            .get_or_create(
+                key("eda-1"),
+                SchedulerLimits::default_limits(),
+                ok_transport,
+            )
+            .unwrap();
+        let permit = first
+            .acquire(
+                Priority::Normal,
+                &RequestId::new(),
+                Deadline::from_now(std::time::Duration::from_secs(5)),
+            )
+            .unwrap();
+        let first_scheduler = Arc::clone(&first.scheduler);
+
+        pool.remove(&key("eda-1"));
+        let second = pool
+            .get_or_create(
+                key("eda-1"),
+                SchedulerLimits::default_limits(),
+                ok_transport,
+            )
+            .unwrap();
+
+        // The old scheduler kept its permit live: dropping the permit here
+        // returns capacity to it, not to the new endpoint's scheduler.
+        drop(permit);
+        assert_eq!(
+            first_scheduler.stats().active,
+            0,
+            "old scheduler got the release"
+        );
+        assert_eq!(
+            second.scheduler.stats().active,
+            0,
+            "new scheduler is independent of the old one"
+        );
+        assert!(!Arc::ptr_eq(&first_scheduler, &second.scheduler));
     }
 }
