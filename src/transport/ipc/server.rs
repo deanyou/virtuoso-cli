@@ -313,6 +313,13 @@ pub fn serve_one(
 /// (phase 2 waits on that), and a `Shutdown` request is answered with an ack,
 /// fires the token, and closes the connection — the accept loop in [`run`]
 /// observes the token and stops admitting.
+//
+// `#[allow(dead_code)]`: kept alongside the pooled entry point for
+// completeness and as a building block for the non-pooled daemon path. The
+// transport daemon only calls [`run_with_pool`] today, so neither this
+// function nor [`run`] has an in-tree caller. Removing them is a separate
+// change from this PR's pool/scheduler wiring.
+#[allow(dead_code)]
 pub fn serve_one_with_shutdown(
     stream: UnixStream,
     transport: Arc<dyn RemoteTransport>,
@@ -503,6 +510,7 @@ fn serve_loop<F, G>(
 /// meters the request, and a connection-level failure evicts the connection
 /// so the next request reconnects.
 #[cfg(feature = "native-ssh")]
+#[allow(clippy::too_many_arguments)]
 pub fn serve_one_pooled(
     stream: UnixStream,
     pool: Arc<EndpointPool>,
@@ -817,6 +825,13 @@ where
 /// tests so the shared contract suite can exercise the IPC path without the
 /// feature.
 #[cfg(feature = "native-ssh")]
+//
+// `#[allow(dead_code)]`: the daemon now exclusively uses [`run_with_pool`]
+// (see `commands::transport_daemon`), so this non-pooled entry point is no
+// longer called in-tree. It is kept as the symmetric counterpart of the
+// pooled entry point and the documented hook for ad-hoc daemons. Removal is
+// tracked separately from the pool/scheduler wiring in this PR.
+#[allow(dead_code)]
 pub fn run(
     socket_path: &Path,
     transport: Arc<dyn RemoteTransport>,
@@ -853,6 +868,7 @@ pub fn run(
 /// [`serve_one_pooled`], so requests to the same endpoint key share one
 /// transport and a connection-level failure reconnects on the next request.
 #[cfg(feature = "native-ssh")]
+#[allow(clippy::too_many_arguments)]
 pub fn run_with_pool(
     socket_path: &Path,
     pool: Arc<EndpointPool>,
