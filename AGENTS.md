@@ -160,3 +160,8 @@ where `dirs::home_dir()` reads `FOLDERID_Profile` and ignores `HOME`).
 快速检查用 `scripts/xdotool_cli.py`（env/state/find/shot/click/type/key/drag/scroll/wait/smoke）。
 场景 DSL 规范见 `references/scenario-schema.md`，xdotool 命令参考见 `references/xdotool-cheatsheet.md`。
 测试：`cd .claude/skills/virtuoso-gui-debug && python3 -m unittest discover tests`。
+
+**CI 会跑这些测试**：`.github/workflows/skill-tests.yml` 在 `.claude/skills/**` 变更时触发，
+对 Python 3.9 / 3.13 各跑一次（语法检查 + 全部 skill 的 unittest 套件，脚本见
+`.github/scripts/run-skill-tests.sh`）。纯 Rust 的 PR 不会触发它，因此它仍是 skill 类改动的
+唯一自动化验证 —— 但**不要**因为 Rust 工作流全绿就假定 skill 脚本没问题。
