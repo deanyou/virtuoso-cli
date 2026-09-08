@@ -251,6 +251,22 @@ impl ConfigFile {
         false
     }
 
+    /// Whether the key is present in **only** the named profile section.
+    ///
+    /// `has(key, Some(profile))` falls through to the global section when the
+    /// profile section lacks the key — the behaviour you want when *reading*,
+    /// but the wrong question when you need to attribute a value to its actual
+    /// layer for `vcli config check`. The report uses this accessor to decide
+    /// between [`crate::config::ConfigSource::FileProfile`] and `FileGlobal`.
+    #[allow(dead_code)]
+    pub(crate) fn profile_section_has(&self, key: &str, profile: &str) -> bool {
+        let friendly = file_key(key);
+        let env = env_var_for(&friendly);
+        self.profiles
+            .get(profile)
+            .is_some_and(|section| section.contains_key(&friendly) || section.contains_key(&env))
+    }
+
     /// Set a key in the global section, or in `[profile.<name>]`.
     pub fn set(&mut self, profile: Option<&str>, key: &str, value: &str) {
         let scalar = Scalar::Text(value.to_string());

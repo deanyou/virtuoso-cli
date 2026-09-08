@@ -113,6 +113,10 @@ enum Commands {
         if_not_exists: bool,
     },
 
+    /// Inspect and validate the resolved configuration
+    #[command(subcommand)]
+    Config(ConfigCmd),
+
     /// Manage multiple Virtuoso targets (multi-host connection pools)
     #[command(subcommand)]
     Target(TargetCmd),
@@ -325,6 +329,31 @@ enum ProfileCmd {
         /// Clear ./.vcli-profile
         #[arg(long, conflicts_with_all = &["venv", "user"])]
         local: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigCmd {
+    /// Explain where each resolved value came from (env / file / target / default)
+    #[command(
+        long_about = "Show the resolved configuration and the source of every value.\n\n\
+            Walks the same layered lookup the runtime uses (VB_<KEY>_<PROFILE> -> \
+            VB_<KEY> -> config.toml [profile.<active>] -> config.toml global -> \
+            built-in default, or a targets.yaml entry when --target is set), and \
+            reports which layer produced each field. Use this when 'why is my \
+            timeout 120 seconds?' needs an answer that doesn't require reading code.\n\n\
+            Examples:\n  \
+            vcli config check\n  \
+            vcli config check --format json | jq '.entries[] | select(.key == \"VB_TIMEOUT\")'\n  \
+            vcli config check --require-explicit  # exit non-zero when any field fell to a default"
+    )]
+    Check {
+        /// Exit non-zero if any resolved value came from a built-in default.
+        /// Useful in CI: a "missing env config" reviewer can run this and
+        /// refuse to merge a green build that didn't actually configure the
+        /// daemon.
+        #[arg(long)]
+        require_explicit: bool,
     },
 }
 
@@ -1750,6 +1779,12 @@ fn dispatch_tunnel(
     }
 }
 
+fn dispatch_config(cmd: ConfigCmd, format: OutputFormat) -> error::Result<serde_json::Value> {
+    match cmd {
+        ConfigCmd::Check { require_explicit } => commands::config::check(format, require_explicit),
+    }
+}
+
 fn dispatch_profile(
     cmd: ProfileCmd,
     cli_profile: Option<String>,
@@ -2591,7 +2626,7 @@ fn main() {
     use crate::target::resolve::{resolve_from_selection, resolve_selection, Selection};
     let needs_config = !matches!(
         &cli.command,
-        Commands::Target(_) | Commands::Profile(_) | Commands::Init { .. }
+        Commands::Target(_) | Commands::Profile(_) | Commands::Init { .. } | Commands::Config(_)
     );
     let ctx: Option<crate::context::CommandContext> = if needs_config {
         let selection = match resolve_selection(cli.target.as_deref(), cli.profile.as_deref()) {
@@ -2697,6 +2732,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
+        Commands::Config(cmd) => dispatch_config(cmd, format),
         Commands::Target(cmd) => dispatch_target(cmd, format),
         // Compiled only with `native-ssh`; other builds have no such subcommand
         // at all, so there is nothing to dispatch. `run_with` blocks forever
