@@ -1,57 +1,92 @@
+use crate::config_file::{self, ConfigFile};
 use crate::error::{Result, VirtuosoError};
 use serde_json::{json, Value};
-use std::io::Write;
-use std::path::Path;
 
-const ENV_TEMPLATE: &str = r#"# Virtuoso CLI Configuration
-# Remote host (SSH alias or hostname)
-VB_REMOTE_HOST=
+/// Written with every key commented out: an uncommented `remote_host = ""`
+/// would set the value to an empty string rather than leave it unset, and the
+/// user would have no way to tell "not configured" from "configured to blank".
+const CONFIG_TEMPLATE: &str = r#"# Virtuoso CLI configuration
+#
+# Resolution order (highest wins):
+#   1. <KEY>_<PROFILE> environment variable
+#   2. <KEY> environment variable
+#   3. [profile.<active>] section in this file
+#   4. global section in this file
+#   5. built-in default
+#
+# Uncomment a line to set it. A key left commented out is simply unset.
 
-# Remote user (optional, defaults to current user)
-# VB_REMOTE_USER=
+# SSH host to connect to (alias or hostname).
+# remote_host = "eda-server"
 
-# SSH port (default: 65432)
-VB_PORT=65432
+# SSH login user (default: your local username).
+# remote_user = ""
 
-# Jump/bastion host (optional)
-# VB_JUMP_HOST=
-# VB_JUMP_USER=
+# Direct port (default: a stable per-user hash).
+# port = 65432
 
-# Timeout in seconds (default: 30)
-VB_TIMEOUT=30
+# Command timeout in seconds (default: 30).
+# timeout = 30
 
-# Keep remote files after stopping (default: false)
-VB_KEEP_REMOTE_FILES=false
+# Read timeout in seconds (default: 120).
+# read_timeout = 120
 
-# Spectre command (default: spectre)
-# VB_SPECTRE_CMD=spectre
+# Bastion / jump host.
+# jump_host = ""
+# jump_user = ""
 
-# Spectre extra arguments
-# VB_SPECTRE_ARGS=
+# SSH port (default: 22).
+# ssh_port = 22
+
+# SSH private key path.
+# ssh_key = "~/.ssh/id_ed25519"
+
+# Keep remote files after a tunnel stops (default: false).
+# keep_remote_files = false
+
+# Spectre binary (default: spectre) and extra arguments.
+# spectre_cmd = "spectre"
+# spectre_args = ""
+
+# Per-profile overrides. Copy this block and rename it to match a profile
+# selected with `vcli profile bind --user` or `export VB_PROFILE=<name>`.
+# [profile.production]
+# remote_host = "eda-prod"
 "#;
 
 pub fn run(if_not_exists: bool) -> Result<Value> {
-    let env_path = Path::new(".env");
+    let path = config_file::path();
 
-    if env_path.exists() {
+    if path.exists() {
         if if_not_exists {
             return Ok(json!({
                 "status": "skipped",
-                "reason": ".env already exists",
-                "path": ".env",
+                "reason": "config file already exists",
+                "path": path,
             }));
         }
-        return Err(VirtuosoError::Conflict(
-            ".env already exists (use --if-not-exists to skip)".into(),
-        ));
+        return Err(VirtuosoError::Conflict(format!(
+            "{} already exists (use --if-not-exists to skip)",
+            path.display()
+        )));
     }
 
-    let mut file = std::fs::File::create(env_path)?;
-    file.write_all(ENV_TEMPLATE.as_bytes())?;
+    // Parse the template the same way a real config file is parsed: if the
+    // shipped template is ever not valid TOML, `vcli init` fails here instead
+    // of handing the user a file that breaks their next command.
+    ConfigFile::parse(CONFIG_TEMPLATE, &path)?;
+
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(&path, CONFIG_TEMPLATE)?;
 
     Ok(json!({
         "status": "created",
-        "path": ".env",
-        "next_step": "Edit .env and set VB_REMOTE_HOST, then run: virtuoso tunnel start",
+        "path": path.display().to_string(),
+        "next_step": format!(
+            "Edit {} and uncomment remote_host, then run: vcli tunnel start",
+            path.display()
+        ),
     }))
 }

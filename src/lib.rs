@@ -5,6 +5,7 @@ pub mod client;
 pub mod command_log;
 pub mod commands;
 pub mod config;
+pub mod config_file;
 pub mod context;
 pub mod error;
 pub mod exit_codes;

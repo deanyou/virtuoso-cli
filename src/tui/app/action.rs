@@ -40,7 +40,13 @@ pub fn handle_action(app: &mut App, action: Action) {
             }
         }
         Action::SaveConfig => match crate::tui::app::data::save_config(app) {
-            Ok(_) => app.set_status("Config saved to .env", StatusKind::Ok),
+            Ok(()) => {
+                let path = crate::config_file::path();
+                app.set_status(
+                    format!("Config saved to {}", path.display()),
+                    StatusKind::Ok,
+                )
+            }
             Err(e) => app.set_status(format!("Save failed: {e}"), StatusKind::Err),
         },
         Action::Status(msg, kind) => app.set_status(msg, kind),

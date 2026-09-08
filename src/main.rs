@@ -7,6 +7,7 @@ mod client;
 mod command_log;
 mod commands;
 mod config;
+mod config_file;
 mod context;
 mod error;
 mod exit_codes;
@@ -16,6 +17,7 @@ mod models;
 mod ocean;
 mod output;
 mod plugins;
+mod profile;
 mod rpc;
 mod runtime_paths;
 mod skill_finder;
@@ -96,15 +98,17 @@ enum FormatArg {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Create .env template with default configuration
+    /// Create a config.toml template with commented defaults
     #[command(
-        long_about = "Create a .env configuration template in the current directory.\n\n\
+        long_about = "Create a config.toml template in the vcli config directory.\n\n\
+            The path honours VB_CONFIG_DIR / VB_HOME / XDG_CONFIG_HOME, and is the\n\
+            same file `vcli` reads at startup — so edits take effect immediately.\n\n\
             Examples:\n  \
             virtuoso init\n  \
             virtuoso init --if-not-exists"
     )]
     Init {
-        /// Skip if .env already exists (exit 0 instead of error)
+        /// Skip if config.toml already exists (exit 0 instead of error)
         #[arg(long)]
         if_not_exists: bool,
     },
@@ -264,7 +268,8 @@ enum ProfileCmd {
             Resolution order:\n  \
             1. VB_PROFILE env var\n  \
             2. $VIRTUAL_ENV/.vcli-profile (Python venv binding)\n  \
-            3. ~/.vcli/.env VB_PROFILE=... (user-level default)\n\n\
+            3. ~/.vcli/profile (user-level default; legacy ~/.vcli/.env VB_PROFILE=... \
+            is still read but deprecated)\n\n\
             Examples:\n  \
             virtuoso profile show\n  \
             virtuoso profile show --format json"
@@ -277,7 +282,7 @@ enum ProfileCmd {
             that profile automatically. One of --venv, --user, or --local is required.\n\n\
             Scopes:\n  \
             --venv : write $VIRTUAL_ENV/.vcli-profile  (project Python venv)\n  \
-            --user : write ~/.vcli/.env VB_PROFILE=...  (user-level default)\n  \
+            --user : write ~/.vcli/profile  (user-level default)\n  \
             --local: write ./.vcli-profile  (current working dir)\n\n\
             Examples:\n  \
             virtuoso profile bind t28_digital --venv\n  \
@@ -291,7 +296,7 @@ enum ProfileCmd {
         #[arg(long, conflicts_with_all = &["user", "local"])]
         venv: bool,
 
-        /// Bind to ~/.vcli/.env VB_PROFILE=
+        /// Bind to ~/.vcli/profile (user-level default)
         #[arg(long, conflicts_with_all = &["venv", "local"])]
         user: bool,
 
@@ -312,7 +317,8 @@ enum ProfileCmd {
         #[arg(long, conflicts_with_all = &["user", "local"])]
         venv: bool,
 
-        /// Clear ~/.vcli/.env VB_PROFILE= line
+        /// Clear the user-level ~/.vcli/profile binding (and the deprecated
+        /// VB_PROFILE= line in ~/.vcli/.env)
         #[arg(long, conflicts_with_all = &["venv", "local"])]
         user: bool,
 
@@ -1763,9 +1769,11 @@ fn dispatch_profile(
                 "resolution_order": [
                     "1. explicit profile= argument / CLI -p/--profile",
                     "2. process env VB_PROFILE",
-                    "3. $VIRTUAL_ENV/.vcli-profile (venv binding)",
-                    "4. ~/.vcli/.env VB_PROFILE= (user-level default)",
-                    "5. None (legacy default)",
+                    "3. VCLI_ENV_PATH file (explicitly requested env file)",
+                    "4. $VIRTUAL_ENV/.vcli-profile (venv binding)",
+                    "5. ~/.vcli/profile (user-level default)",
+                    "6. ~/.vcli/.env VB_PROFILE= (deprecated fallback)",
+                    "7. None (legacy default)",
                 ],
             }))
         }
@@ -2648,11 +2656,15 @@ fn main() {
         "info"
     };
 
+    // Diagnostics go to **stderr**, never stdout: every command has a
+    // `--format json` mode whose stdout is meant to be piped (`| jq`), and a
+    // single tracing line on stdout would make that output unparseable.
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level)),
         )
         .with_target(false)
+        .with_writer(std::io::stderr)
         .init();
 
     // Initialize auth (reads VCLI_API_KEY from env)

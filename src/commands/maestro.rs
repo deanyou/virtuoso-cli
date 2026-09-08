@@ -1422,7 +1422,7 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
 /// Export the netlist for a single (session, test, corner) tuple.
 ///
 /// Flow:
-///   1. Validate that VB_REMOTE_HOST is configured (set in profile / .env).
+///   1. Validate that VB_REMOTE_HOST is configured (env or config.toml).
 ///   2. Validate the local `output_dir` is safe to use — nonexistent,
 ///      an existing empty directory, or absent are all OK; a non-empty
 ///      directory or a non-directory path is rejected so existing
@@ -1486,7 +1486,8 @@ pub fn create_corner_netlist(
     {
         return Err(VirtuosoError::Config(
             "VB_REMOTE_HOST is required for `vcli maestro export-netlist`. \
-             Set it in your profile or .env (e.g. VB_REMOTE_HOST=eda-server)."
+             Set it in the environment (VB_REMOTE_HOST=eda-server) or in \
+             config.toml (run `vcli init` to create one)."
                 .into(),
         ));
     }

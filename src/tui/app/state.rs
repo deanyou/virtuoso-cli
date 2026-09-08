@@ -55,11 +55,18 @@ pub struct StatusToast {
     pub at: Instant,
 }
 
-/// A single .env config field.
+/// A single editable configuration field.
+///
+/// `value` is what `config.toml` holds — the thing the editor edits.
+/// `env_override` is set when an environment variable outranks it, so the UI
+/// can say so: editing `value` will not change what vcli actually uses until
+/// the variable is unset.
 pub struct ConfigField {
     pub key: String,
     pub value: String,
     pub hint: &'static str,
+    /// `(variable name, value)` of the environment variable that wins.
+    pub env_override: Option<(String, String)>,
 }
 
 pub struct App {

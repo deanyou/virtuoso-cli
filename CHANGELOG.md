@@ -30,6 +30,23 @@ All notable changes to this project will be documented in this file.
   `/usr/local/bin` → `~/.local/bin`, `~/.cargo/bin`. Existing `cargo install` layouts
   under `~/.cargo/bin` still work but are now the **lowest** priority: a shared install
   wins over a per-user one. Set `RB_DAEMON_PATH` to force a specific binary.
+- **`.env` files are no longer read** (RFC #83). `Config::from_env()` used to walk
+  cwd → parent → … looking for a `.env` and load it into the process environment, so
+  a value's origin was invisible and a stray file two directories up could change
+  behaviour. Configuration now comes from the process environment only.
+- The user-level profile binding moved from `~/.vcli/.env` (`VB_PROFILE=…`) to
+  **`~/.vcli/profile`**, whose sole content is the profile name — the same format the
+  venv (`$VIRTUAL_ENV/.vcli-profile`) and local (`./.vcli-profile`) bindings already
+  use, so all three scopes now share one reader. `vcli profile bind <name> --user`
+  writes the new file; `vcli profile clear --user` removes it *and* strips the
+  `VB_PROFILE=` line from the legacy `~/.vcli/.env`.
+
+### Deprecated
+
+- `~/.vcli/.env` `VB_PROFILE=…` is still honoured as a **fallback** but logs a
+  deprecation warning pointing at `vcli profile bind <name> --user` or an exported
+  `VB_PROFILE`. The fallback goes away in a future release.
+- The `dotenvy` dependency is gone.
 
 ## [1.3.4] - 2026-09-04
 
