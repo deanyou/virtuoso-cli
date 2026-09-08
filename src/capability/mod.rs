@@ -330,6 +330,21 @@ mod tests {
     }
 
     #[test]
+    fn set_param_permitted_by_schematic_not_admin() {
+        // Sizing a device (schematic.set_param) is a structured schematic write:
+        // it must be reachable with the ordinary Schematic capability, WITHOUT
+        // Admin — the same gate as its read twin schematic.get_params. This is
+        // the crux of the self-lock the typed binding resolves.
+        let sch = CapabilitySet(HashSet::from([Capability::Schematic]));
+        assert!(sch.permits_method("schematic.set_param"));
+        assert!(sch.permits_method("schematic.get_params"));
+
+        // Without Schematic (and without Admin), it is correctly denied.
+        let other = CapabilitySet(HashSet::from([Capability::Maestro]));
+        assert!(!other.permits_method("schematic.set_param"));
+    }
+
+    #[test]
     fn admin_allows_everything() {
         let caps = CapabilitySet(HashSet::from([Capability::Admin]));
         assert!(caps.permits_method("schematic.place"));

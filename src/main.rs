@@ -1403,6 +1403,19 @@ enum SchematicCmd {
         inst: String,
     },
 
+    /// Set one CDF parameter of a specific instance (e.g. size a device)
+    SetParam {
+        /// Instance name (e.g. M1)
+        #[arg(long)]
+        inst: String,
+        /// Parameter name (e.g. w, l, nf, fingers)
+        #[arg(long)]
+        param: String,
+        /// New value (e.g. 4u)
+        #[arg(long)]
+        value: String,
+    },
+
     /// Polish net labels — cosmetic preset, auto-rotation, or repositioning
     PolishLabel {
         /// Net name whose labels to polish
@@ -2455,6 +2468,9 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
         SchematicCmd::ListNets => commands::schematic::list_nets(),
         SchematicCmd::ListPins => commands::schematic::list_pins(),
         SchematicCmd::GetParams { inst } => commands::schematic::get_params(&inst),
+        SchematicCmd::SetParam { inst, param, value } => {
+            commands::schematic::set_param(&inst, &param, &value)
+        }
         SchematicCmd::PolishLabel {
             net,
             preset,

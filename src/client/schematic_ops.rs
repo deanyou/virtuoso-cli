@@ -371,6 +371,30 @@ mod tests {
     }
 
     #[test]
+    fn set_instance_param_generates_guarded_escaped_write() {
+        let s = ops().set_instance_param("M0", "w", "4u");
+        // read-only guard present (same as every other write op)
+        assert!(
+            s.contains("geGetEditCellView"),
+            "guard must be present: {s}"
+        );
+        // uses the property-write primitive, not a raw eval
+        assert!(s.contains("dbReplaceProp"), "must use dbReplaceProp: {s}");
+        assert!(
+            s.contains("\"M0\"") && s.contains("\"w\"") && s.contains("\"4u\""),
+            "inst/param/value must appear quoted: {s}"
+        );
+    }
+
+    #[test]
+    fn set_instance_param_escapes_all_inputs() {
+        let s = ops().set_instance_param(r#"M"0"#, r#"w"x"#, r#"4u"y"#);
+        assert!(s.contains(r#"M\"0"#), "inst name must be escaped: {s}");
+        assert!(s.contains(r#"w\"x"#), "param name must be escaped: {s}");
+        assert!(s.contains(r#"4u\"y"#), "value must be escaped: {s}");
+    }
+
+    #[test]
     fn create_wire_label_contains_guard() {
         let s = ops().create_wire_label("GND", (50, 50));
         assert!(s.contains("geGetEditCellView"), "{s}");
