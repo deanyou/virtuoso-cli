@@ -25,11 +25,15 @@
 //!   rather than silently misbehaving.
 //!
 //! The contract methods are synchronous; russh is async. The module owns one
-//! current-thread tokio runtime per transport (kept in `SessionState`), and
-//! each operation `block_on`s its async work against the shared runtime while
-//! holding the session mutex. That keeps the async runtime entirely inside
-//! this module (never shared with the synchronous business layer) while the
-//! SSH connection itself survives across operations.
+//! multi-thread tokio runtime per transport (kept in `SessionState`) so the
+//! russh session task — including its keepalive loop — keeps running even
+//! between operations. Each operation drives its async work through
+//! `block_on` against that shared runtime. The session handle is guarded only
+//! while a channel is being opened; once the channel exists it is independent
+//! of the handle, so concurrent commands run on separate channels without
+//! serialising. Waiting for the handle, establishing the connection (connect +
+//! auth + reconnect retries) and the operation itself all share the request's
+//! deadline budget.
 
 #![cfg(feature = "native-ssh")]
 
@@ -38,6 +42,7 @@ use std::process::Command as SyncCommand;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
 
 use base64::Engine;
 use russh::client::{self, Handler};
@@ -214,9 +219,13 @@ fn map_russh_error(e: russh::Error) -> TransportError {
     }
 }
 
-/// A fresh current-thread runtime for one synchronous call into russh.
+/// A fresh multi-thread runtime for the native transport. The worker threads
+/// keep the russh session task — and its keepalive probe loop — running even
+/// when no operation is in flight; a current-thread runtime would suspend the
+/// whole connection between `block_on` calls, making keepalive and liveness
+/// detection unreliable.
 fn make_runtime() -> Result<tokio::runtime::Runtime, TransportError> {
-    tokio::runtime::Builder::new_current_thread()
+    tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| TransportError::LocalIo(format!("failed to start async runtime: {e}")))
@@ -442,14 +451,21 @@ async fn sftp_read_all(file: &mut russh_sftp::client::fs::File) -> Result<Vec<u8
 ///
 /// P1-2 keeps the connection alive across operations instead of the step-3
 /// behaviour of establishing and disconnecting for every command. The russh
-/// handle lives here, protected by a mutex (russh's `Handle` is not `Clone` —
-/// its reply channel is a single consumer, so concurrent commands are
-/// serialised on this mutex). Connection-level failures clear the slot so the
-/// next operation re-establishes; the endpoint pool's generation guard
-/// decides whether the whole endpoint is replaced.
+/// handle lives here in a `(generation, handle)` pair: opening a channel only
+/// borrows the handle briefly (russh's `channel_open_session` takes `&self`),
+/// so once a channel exists the lock is released and independent channels run
+/// concurrently. `generation` is bumped on every (re)establishment so a late
+/// connection-level failure from a stale request can never evict a
+/// replacement built concurrently — eviction matches the generation it
+/// started with. Connection-level failures still clear the slot so the next
+/// operation re-establishes; the endpoint pool's generation guard decides
+/// whether the whole endpoint is replaced.
 struct SessionState {
-    inner: Mutex<Option<client::Handle<NativeClientHandler>>>,
+    inner: AsyncMutex<Option<(u64, client::Handle<NativeClientHandler>)>>,
     runtime: tokio::runtime::Runtime,
+    /// Monotonic connection generation: incremented on every establishment.
+    /// Stale requests compare against it before clearing the slot.
+    epoch: AtomicU64,
     /// Number of SSH connections ever established by this transport. Exposed
     /// for tests and acceptance: "handshakes", not factory calls.
     connections: AtomicU64,
@@ -467,8 +483,9 @@ impl std::fmt::Debug for SessionState {
 impl SessionState {
     fn new() -> Result<Self, TransportError> {
         Ok(Self {
-            inner: Mutex::new(None),
+            inner: AsyncMutex::new(None),
             runtime: make_runtime()?,
+            epoch: AtomicU64::new(0),
             connections: AtomicU64::new(0),
         })
     }
@@ -539,42 +556,77 @@ impl NativeTransport {
         })
     }
 
-    /// Serialise an operation on the single live SSH connection: lock, ensure a
-    /// session (establishing lazily), run `f` against the shared runtime, and
-    /// clear the connection on a connection-level failure so the next
-    /// operation re-establishes. `f` receives the session handle, the module
-    /// runtime and the remaining deadline, and drives its own async work with
-    /// `block_on` (a `timeout` around it preserves the deadline contract).
-    fn with_session<T>(
+    /// Open a session channel on the live SSH connection and run `f` on it.
+    ///
+    /// Locking, establishment and channel-open all share the request's
+    /// deadline: waiting for the handle (a concurrent command's short
+    /// critical section), connecting + authenticating (with reconnect
+    /// retries) and the server confirming the channel cannot overrun the
+    /// budget. The handle lock is released as soon as the channel exists —
+    /// russh channels are independent once opened — so concurrent commands
+    /// run on separate channels instead of serialising on the handle.
+    /// Connection-level failures from `f` clear the slot, but only when it
+    /// still holds the same generation this call started with, so a late
+    /// failure from a stale request never evicts a replacement connection.
+    fn with_channel<T>(
         &self,
         deadline: Deadline,
         req_id: &RequestId,
         f: impl FnOnce(
-            &mut client::Handle<NativeClientHandler>,
+            russh::Channel<russh::client::Msg>,
             &tokio::runtime::Runtime,
             Duration,
         ) -> Result<T, TransportError>,
     ) -> Result<T, TransportError> {
-        let mut guard = self.session.inner.lock().unwrap_or_else(|e| e.into_inner());
         if deadline.is_expired() {
             return Err(TransportError::QueueTimeout {
                 request: req_id.clone(),
                 after_secs: 0,
             });
         }
-        if guard.as_ref().is_none_or(|h| h.is_closed()) {
-            let established = self
-                .session
-                .runtime
-                .block_on(establish_with_retry(&self.config, deadline))?;
-            self.session.connections.fetch_add(1, Ordering::Relaxed);
-            *guard = Some(established);
-        }
-        let remaining = deadline.remaining();
         let rt = &self.session.runtime;
-        let result = f(guard.as_mut().expect("session"), rt, remaining);
+        let (epoch, channel) = {
+            let remaining = deadline.remaining();
+            rt.block_on(async move {
+                tokio::time::timeout(remaining, async move {
+                    // Lock wait, establishment and channel-open all consume
+                    // the request's remaining budget (P1-2 / P1-3).
+                    let mut guard = self.session.inner.lock().await;
+                    if guard.as_ref().is_none_or(|(_, h)| h.is_closed()) {
+                        let established = establish_with_retry(&self.config, deadline).await?;
+                        self.session.connections.fetch_add(1, Ordering::Relaxed);
+                        let epoch = self.session.epoch.fetch_add(1, Ordering::Relaxed) + 1;
+                        *guard = Some((epoch, established));
+                    }
+                    let (epoch, handle) = guard.as_ref().expect("session");
+                    let channel = handle
+                        .channel_open_session()
+                        .await
+                        .map_err(map_russh_error)?;
+                    Ok::<(u64, russh::Channel<russh::client::Msg>), TransportError>((
+                        *epoch, channel,
+                    ))
+                })
+                .await
+                .map_err(|_| TransportError::ExecutionTimeout {
+                    request: req_id.clone(),
+                    after_secs: remaining.as_secs().max(1),
+                    remote_terminated: false,
+                })?
+            })?
+        };
+        // The handle lock was released above: the channel is independent, so
+        // another command can open its own channel and run concurrently.
+        let result = f(channel, rt, deadline.remaining());
         if matches!(&result, Err(e) if FailureClass::of(e) == FailureClass::Transient) {
-            *guard = None;
+            // Generation-matched eviction: never drop a replacement built by
+            // a concurrent request after our connection died.
+            rt.block_on(async move {
+                let mut guard = self.session.inner.lock().await;
+                if guard.as_ref().map(|(e, _)| *e) == Some(epoch) {
+                    *guard = None;
+                }
+            });
         }
         result
     }
@@ -590,13 +642,10 @@ impl NativeTransport {
         req_id: &RequestId,
     ) -> Result<RawOutput, TransportError> {
         let cmd = command.to_owned();
-        self.with_session(deadline, req_id, move |session, rt, remaining| {
+        self.with_channel(deadline, req_id, move |channel, rt, remaining| {
             rt.block_on(async move {
                 tokio::time::timeout(remaining, async move {
-                    let mut channel = session
-                        .channel_open_session()
-                        .await
-                        .map_err(map_russh_error)?;
+                    let mut channel = channel;
                     channel.exec(false, cmd).await.map_err(map_russh_error)?;
                     if let Some(data) = stdin {
                         channel.data_bytes(data).await.map_err(map_russh_error)?;
@@ -640,13 +689,9 @@ impl NativeTransport {
         deadline: Deadline,
         req_id: &RequestId,
     ) -> Result<SftpSession, TransportError> {
-        self.with_session(deadline, req_id, move |session, rt, remaining| {
+        self.with_channel(deadline, req_id, move |channel, rt, remaining| {
             rt.block_on(async move {
                 tokio::time::timeout(remaining, async move {
-                    let channel = session
-                        .channel_open_session()
-                        .await
-                        .map_err(map_russh_error)?;
                     channel.request_subsystem(true, "sftp").await.map_err(|e| {
                         TransportError::UnsupportedOperation(format!(
                             "sftp subsystem unavailable: {e}"
@@ -801,13 +846,7 @@ impl Drop for NativeTransport {
         if Arc::strong_count(&self.session) > 1 {
             return;
         }
-        if let Some(session) = self
-            .session
-            .inner
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .take()
-        {
+        if let Some((_, session)) = self.session.inner.blocking_lock().take() {
             let rt = &self.session.runtime;
             rt.block_on(async move {
                 let _ = session
@@ -827,19 +866,89 @@ impl RemoteTransport for NativeTransport {
             });
         }
         let req_id = RequestId::new();
-        // test_connection is an explicit idempotent probe: reuse the persistent
-        // connection (establishing lazily) or report a real failure. Host-key /
-        // auth failures are real errors, not "unreachable".
-        match self.with_session(deadline, &req_id, |_, _, _| Ok(true)) {
-            Ok(_) => Ok(true),
-            Err(e) => match e {
-                TransportError::ConnectionFailed(_)
-                | TransportError::HostKeyUnknown { .. }
-                | TransportError::HostKeyChanged { .. }
-                | TransportError::HostKeyPolicyUnsupported(_)
-                | TransportError::AuthenticationFailed(_) => Err(e),
-                _ => Ok(false),
-            },
+        let rt = &self.session.runtime;
+        // test_connection is an explicit liveness probe. If a session already
+        // exists it is probed in place (an SSH ping/pong) and, when the remote
+        // has gone away, reported unhealthy — never silently re-established,
+        // so callers can observe the disconnect. Only when no session exists
+        // yet does the probe establish one, as a reachability check. Host-key
+        // / auth failures are real errors, not "unreachable".
+        let (epoch, probe): (u64, Result<(), TransportError>) = {
+            let remaining = deadline.remaining();
+            rt.block_on(async move {
+                tokio::time::timeout(remaining, async move {
+                    let mut guard = self.session.inner.lock().await;
+                    match guard.as_ref() {
+                        // No session yet: this is the reachability case, so
+                        // establish (lazily) and ping the fresh handle.
+                        None => {
+                            let established = establish_with_retry(&self.config, deadline).await?;
+                            self.session.connections.fetch_add(1, Ordering::Relaxed);
+                            let epoch = self.session.epoch.fetch_add(1, Ordering::Relaxed) + 1;
+                            *guard = Some((epoch, established));
+                        }
+                        // Session ended: evict it and report unavailable. Do
+                        // not reconnect — the caller must observe the break.
+                        Some((_, handle)) if handle.is_closed() => {
+                            *guard = None;
+                            return Ok::<(u64, Result<(), TransportError>), TransportError>((
+                                0,
+                                Err(TransportError::ConnectionFailed(
+                                    "session closed since last use".into(),
+                                )),
+                            ));
+                        }
+                        Some(_) => {}
+                    }
+                    let (epoch, handle) = guard.as_ref().expect("session");
+                    let ping = handle.send_ping().await.map_err(map_russh_error);
+                    let probe = match ping {
+                        Ok(()) => {
+                            // russh's send_ping resolves its reply channel even
+                            // when the session is tearing down; only a session
+                            // that is still open proves the remote answered.
+                            if handle.is_closed() {
+                                Err(TransportError::ConnectionFailed(
+                                    "session closed during liveness probe".into(),
+                                ))
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        Err(e) => Err(e),
+                    };
+                    Ok::<(u64, Result<(), TransportError>), TransportError>((*epoch, probe))
+                })
+                .await
+                .map_err(|_| TransportError::ExecutionTimeout {
+                    request: req_id.clone(),
+                    after_secs: remaining.as_secs().max(1),
+                    remote_terminated: false,
+                })?
+            })?
+        };
+        match probe {
+            Ok(()) => Ok(true),
+            Err(e) => {
+                if FailureClass::of(&e) == FailureClass::Transient {
+                    // Generation-matched eviction: a stale request's failure
+                    // must not drop a replacement connection.
+                    rt.block_on(async move {
+                        let mut guard = self.session.inner.lock().await;
+                        if guard.as_ref().map(|(g, _)| *g) == Some(epoch) {
+                            *guard = None;
+                        }
+                    });
+                }
+                match e {
+                    TransportError::ConnectionFailed(_)
+                    | TransportError::HostKeyUnknown { .. }
+                    | TransportError::HostKeyChanged { .. }
+                    | TransportError::HostKeyPolicyUnsupported(_)
+                    | TransportError::AuthenticationFailed(_) => Err(e),
+                    _ => Ok(false),
+                }
+            }
         }
     }
 
@@ -1075,6 +1184,8 @@ impl RemoteTransport for NativeTransport {
 mod tests {
     use super::*;
     use crate::transport::contract::test_support::shared_contract_suite;
+    use russh::server::{self, Auth, Session};
+    use tokio::sync::oneshot;
 
     fn cfg_with(host: &str, key: Option<&str>, jump: Option<&str>) -> Config {
         Config {
@@ -1133,7 +1244,7 @@ mod tests {
         assert_eq!(t2.session.connections.load(Ordering::Relaxed), 0);
         // The slot starts empty: the first operation establishes lazily.
         assert!(
-            t.session.inner.lock().unwrap().is_none(),
+            t.session.inner.blocking_lock().is_none(),
             "connection must be lazy (nothing established at construction)"
         );
     }
@@ -1496,6 +1607,375 @@ mod tests {
                 Err(TransportError::UnsupportedOperation(_))
             ),
             "stop_local_forward must be UnsupportedOperation on the native backend"
+        );
+    }
+
+    // ===== In-process SSH server harness =====
+    //
+    // These tests drive the real native transport against an in-process russh
+    // SSH server, so the behaviour assertions — connection reuse, concurrent
+    // channels, deadline-bounded lock waits, establishment timeouts and
+    // liveness probes — run against actual SSH wire traffic, not mocks.
+
+    #[derive(Clone, Default)]
+    struct ServerBehavior {
+        /// Delay the exec reply when the command equals this (key, delay) pair.
+        exec_delay_for: Option<(String, Duration)>,
+        /// Never complete authentication: connection establishment hangs.
+        hold_auth: bool,
+        /// Reply to every exec with this payload and exit status 0.
+        exec_reply: Option<Vec<u8>>,
+        /// Disconnect the session when an exec whose command equals this
+        /// arrives (simulates the remote going away mid-use).
+        disconnect_on_exec: Option<String>,
+    }
+
+    #[derive(Clone)]
+    struct TestHandler {
+        behavior: Arc<ServerBehavior>,
+    }
+
+    impl server::Handler for TestHandler {
+        type Error = russh::Error;
+
+        async fn auth_none(&mut self, _user: &str) -> Result<Auth, Self::Error> {
+            if self.behavior.hold_auth {
+                return std::future::pending::<Result<Auth, Self::Error>>().await;
+            }
+            Ok(Auth::reject())
+        }
+
+        async fn auth_publickey(
+            &mut self,
+            _user: &str,
+            _key: &russh::keys::PublicKey,
+        ) -> Result<Auth, Self::Error> {
+            if self.behavior.hold_auth {
+                return std::future::pending::<Result<Auth, Self::Error>>().await;
+            }
+            Ok(Auth::Accept)
+        }
+
+        async fn channel_open_session(
+            &mut self,
+            _channel: russh::Channel<russh::server::Msg>,
+            reply: server::ChannelOpenHandle,
+            _session: &mut Session,
+        ) -> Result<(), Self::Error> {
+            reply.accept().await;
+            Ok(())
+        }
+
+        async fn exec_request(
+            &mut self,
+            channel: russh::ChannelId,
+            data: &[u8],
+            session: &mut Session,
+        ) -> Result<(), Self::Error> {
+            let cmd = String::from_utf8_lossy(data).to_string();
+            if self
+                .behavior
+                .disconnect_on_exec
+                .as_ref()
+                .is_some_and(|needle| needle == &cmd)
+            {
+                session.disconnect(russh::Disconnect::ByApplication, "test shutdown", "")?;
+                return Ok(());
+            }
+            if let Some((needle, delay)) = &self.behavior.exec_delay_for {
+                if cmd == *needle {
+                    tokio::time::sleep(*delay).await;
+                }
+            }
+            match &self.behavior.exec_reply {
+                Some(payload) => {
+                    session.data(channel, payload.clone())?;
+                    session.exit_status_request(channel, 0)?;
+                    session.eof(channel)?;
+                    session.close(channel)?;
+                    Ok(())
+                }
+                None => std::future::pending::<Result<(), Self::Error>>().await,
+            }
+        }
+    }
+
+    impl Drop for TestServer {
+        fn drop(&mut self) {
+            self.stop();
+        }
+    }
+
+    struct TestServer {
+        port: u16,
+        pub_key: russh::keys::PublicKey,
+        shutdown_tx: Option<oneshot::Sender<()>>,
+        _runtime: tokio::runtime::Runtime,
+    }
+
+    impl TestServer {
+        fn start(behavior: ServerBehavior) -> Self {
+            let server_key =
+                russh::keys::PrivateKey::random(&mut rand::rng(), russh::keys::Algorithm::Ed25519)
+                    .expect("generate server ed25519 key");
+            let pub_key = server_key.public_key().clone();
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("server runtime");
+            let (port_tx, port_rx) = oneshot::channel();
+            let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+            let behavior = Arc::new(behavior);
+            runtime.spawn(async move {
+                let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+                    .await
+                    .expect("bind test server");
+                let port = listener.local_addr().unwrap().port();
+                let _ = port_tx.send(port);
+                let config = Arc::new(server::Config {
+                    keys: vec![server_key],
+                    ..Default::default()
+                });
+                let mut sessions = Vec::new();
+                loop {
+                    tokio::select! {
+                        _ = &mut shutdown_rx => break,
+                        accepted = listener.accept() => {
+                            let (stream, _) = accepted.expect("accept client");
+                            let cfg = Arc::clone(&config);
+                            let bh = Arc::clone(&behavior);
+                            sessions.push(tokio::spawn(async move {
+                                let _ = server::run_stream(cfg, stream, TestHandler { behavior: bh })
+                                    .await;
+                            }));
+                        }
+                    }
+                }
+                drop(listener);
+                for s in sessions {
+                    s.abort();
+                }
+            });
+            let port = port_rx.blocking_recv().expect("test server port");
+            TestServer {
+                port,
+                pub_key: pub_key.clone(),
+                shutdown_tx: Some(shutdown_tx),
+                _runtime: runtime,
+            }
+        }
+
+        fn stop(&mut self) {
+            if let Some(tx) = self.shutdown_tx.take() {
+                let _ = tx.send(());
+            }
+        }
+    }
+
+    fn dl(secs: u64) -> Deadline {
+        Deadline::from_now(Duration::from_secs(secs))
+    }
+
+    /// Build a `NativeTransport` pointed at the in-process server, with a
+    /// freshly generated client identity and a known_hosts entry trusting the
+    /// server key. Returns the transport plus the temp dir that keeps the
+    /// client key file alive.
+    fn test_transport(
+        server: &TestServer,
+        keepalive: Duration,
+        keepalive_failures: u32,
+    ) -> (NativeTransport, tempfile::TempDir) {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let key_path = dir.path().join("client_ed25519");
+        let client_key =
+            russh::keys::PrivateKey::random(&mut rand::rng(), russh::keys::Algorithm::Ed25519)
+                .expect("generate client ed25519 key");
+        let openssh = client_key
+            .to_openssh(russh::keys::ssh_key::LineEnding::LF)
+            .expect("encode client key");
+        std::fs::write(&key_path, openssh.as_bytes()).expect("write client key");
+
+        let mut kh = KnownHosts::memory();
+        let b64 = base64::engine::general_purpose::STANDARD
+            .encode(server.pub_key.to_bytes().expect("encode server host key"));
+        kh.trust("127.0.0.1", Some(server.port), &KeyType::SshEd25519, &b64)
+            .expect("trust server host key");
+
+        let session = Arc::new(SessionState::new().expect("session state"));
+        let t = NativeTransport {
+            config: NativeTransportConfig {
+                host: "127.0.0.1".into(),
+                user: Some("test".into()),
+                ssh_port: server.port,
+                jump_host: None,
+                key_path: Some(key_path),
+                known_hosts: vec![kh],
+                connect_timeout: Duration::from_secs(10),
+                keepalive: KeepalivePolicy {
+                    interval: keepalive,
+                    max_failures: keepalive_failures,
+                },
+                reconnect: ReconnectPolicy {
+                    max_attempts: 2,
+                    max_delay: Duration::from_secs(1),
+                    base: Duration::from_millis(50),
+                },
+            },
+            session,
+        };
+        (t, dir)
+    }
+
+    /// Real handshake reuse across sequential operations on one transport:
+    /// three operations, exactly one SSH connection.
+    #[test]
+    fn native_reuses_one_live_connection_across_operations() {
+        let server = TestServer::start(ServerBehavior {
+            exec_reply: Some(b"ok".to_vec()),
+            ..Default::default()
+        });
+        let (t, _dir) = test_transport(&server, Duration::from_secs(30), 3);
+        let rid = RequestId::new();
+        let r1 = t
+            .exec_command("echo", None, dl(10), &rid)
+            .expect("first exec");
+        assert_eq!(r1.stdout, b"ok");
+        let r2 = t
+            .exec_command("echo", None, dl(10), &rid)
+            .expect("second exec");
+        assert_eq!(r2.stdout, b"ok");
+        assert!(
+            t.test_connection(dl(10)).expect("liveness probe"),
+            "probe must succeed while the server is up"
+        );
+        assert_eq!(
+            t.session.connections.load(Ordering::Relaxed),
+            1,
+            "three operations must share exactly one real SSH connection"
+        );
+    }
+
+    /// P1-2 concurrency: a slow command on one channel must not block a fast
+    /// command — each operation opens its own channel and the handle lock is
+    /// released as soon as the channel exists.
+    #[test]
+    fn concurrent_commands_run_on_independent_channels() {
+        let server = TestServer::start(ServerBehavior {
+            exec_delay_for: Some(("slow".to_string(), Duration::from_millis(600))),
+            exec_reply: Some(b"ok".to_vec()),
+            ..Default::default()
+        });
+        let (t, _dir) = test_transport(&server, Duration::from_secs(30), 3);
+        let rid = RequestId::new();
+        t.exec_command("warm", None, dl(10), &rid).expect("warmup");
+        let slow_rid = rid.clone();
+        let slow = {
+            let t = t.clone();
+            std::thread::spawn(move || t.exec_command("slow", None, dl(10), &slow_rid))
+        };
+        // Give the slow command time to open its channel and start sleeping on
+        // the server, then run a fast command on a second channel.
+        std::thread::sleep(Duration::from_millis(150));
+        let started = std::time::Instant::now();
+        let fast = t
+            .exec_command("fast", None, dl(10), &rid)
+            .expect("fast exec");
+        let fast_elapsed = started.elapsed();
+        assert_eq!(fast.stdout, b"ok");
+        assert!(
+            fast_elapsed < Duration::from_millis(500),
+            "fast command must not wait for the slow command's channel (got {fast_elapsed:?})"
+        );
+        let slow_out = slow.join().expect("slow thread").expect("slow exec");
+        assert_eq!(slow_out.stdout, b"ok");
+        assert_eq!(
+            t.session.connections.load(Ordering::Relaxed),
+            1,
+            "both channels must share one connection"
+        );
+    }
+
+    /// P1-2 lock wait + P1-3 establishment budget: while one request is stuck
+    /// establishing (holding the handle lock), a second request with a short
+    /// deadline must return within its own budget instead of waiting for the
+    /// first to finish.
+    #[test]
+    fn lock_wait_and_establishment_respect_the_request_deadline() {
+        let server = TestServer::start(ServerBehavior {
+            hold_auth: true,
+            ..Default::default()
+        });
+        let (t, _dir) = test_transport(&server, Duration::from_secs(30), 3);
+        let rid = RequestId::new();
+        let stuck_rid = rid.clone();
+        let stuck = {
+            let t = t.clone();
+            std::thread::spawn(move || t.exec_command("a", None, dl(10), &stuck_rid))
+        };
+        std::thread::sleep(Duration::from_millis(300));
+        let started = std::time::Instant::now();
+        let short = t.exec_command("b", None, dl(1), &rid);
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "waiting for the handle must be bounded by the request deadline (got {elapsed:?})"
+        );
+        assert!(
+            short.is_err(),
+            "establishment hangs under hold_auth, so the short request must time out"
+        );
+        let _ = stuck.join().expect("stuck thread");
+    }
+
+    /// P1-1 liveness: after the remote goes away, test_connection must stop
+    /// reporting healthy — the probe is a real ping/pong, not a cached
+    /// success based on the handle existing.
+    #[test]
+    fn test_connection_reports_unhealthy_after_remote_disconnect() {
+        let server = TestServer::start(ServerBehavior {
+            exec_reply: Some(b"ok".to_vec()),
+            disconnect_on_exec: Some("die".into()),
+            ..Default::default()
+        });
+        let (t, _dir) = test_transport(&server, Duration::from_secs(30), 3);
+        let rid = RequestId::new();
+        t.exec_command("warm", None, dl(10), &rid).expect("warmup");
+        assert!(
+            t.test_connection(dl(10)).expect("healthy probe"),
+            "probe is healthy while the server is up"
+        );
+        // The remote tears the session down mid-use; the exec fails, and the
+        // liveness probe afterwards must not report healthy.
+        let _ = t.exec_command("die", None, dl(5), &rid);
+        std::thread::sleep(Duration::from_millis(800));
+        let probe = t.test_connection(dl(3));
+        assert!(
+            probe != Ok(true),
+            "probe after remote disconnect must not report healthy: {probe:?}"
+        );
+    }
+
+    /// P1-1 background liveness: the shared multi-thread runtime keeps the
+    /// connection alive across an idle gap (longer than a short keepalive
+    /// interval would be) — no reconnect happens and the next probe succeeds.
+    #[test]
+    fn idle_connection_stays_alive_on_the_multi_thread_runtime() {
+        let server = TestServer::start(ServerBehavior {
+            exec_reply: Some(b"ok".to_vec()),
+            ..Default::default()
+        });
+        let (t, _dir) = test_transport(&server, Duration::from_secs(30), 3);
+        let rid = RequestId::new();
+        t.exec_command("warm", None, dl(10), &rid).expect("warmup");
+        std::thread::sleep(Duration::from_secs(2));
+        assert!(
+            t.test_connection(dl(5)).expect("probe after idle"),
+            "connection must stay usable after an idle gap"
+        );
+        assert_eq!(
+            t.session.connections.load(Ordering::Relaxed),
+            1,
+            "no reconnect: the idle connection was kept alive"
         );
     }
 }
