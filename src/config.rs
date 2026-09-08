@@ -1545,12 +1545,14 @@ targets:
 
     #[test]
     #[serial]
+    // `dirs::home_dir()` honours `$HOME` on unix only; on Windows it reads
+    // `USERPROFILE`, so pointing `HOME` at a tempdir would not make the
+    // `.env` visible and the warning would never fire.
+    #[cfg(unix)]
     fn report_legacy_env_dotenv_fallback_emits_warning() {
         let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
         // Pretend `~/.vcli/.env` exists with VB_PROFILE=set, by setting HOME
-        // to a tempdir. dirs::home_dir() reads $HOME on unix so this works
-        // for the macOS / Linux runner; the cfg gate below skips Windows
-        // where dirs::home_dir ignores HOME.
+        // to a tempdir.
         let prev_home = std::env::var_os("HOME");
         let dir = tempfile::tempdir().expect("home");
         std::fs::create_dir_all(dir.path().join(".vcli")).expect("mkdir");
