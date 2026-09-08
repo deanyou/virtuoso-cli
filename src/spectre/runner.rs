@@ -684,8 +684,14 @@ impl SpectreOutcomeClassifier {
 }
 
 impl SpectreSimulator {
-    pub fn from_env() -> Result<Self> {
-        let cfg = crate::config::Config::from_env()?;
+    /// Construct a simulator from an already-resolved [`Config`].
+    ///
+    /// P0-A identity closure: migrated command families resolve the Config once
+    /// in `main()` and hand it down via `CommandContext`; this constructor lets
+    /// `sim run-async` / `sim run-parallel` use that pre-resolved config instead
+    /// of re-reading the environment (which could drift if env vars change
+    /// between the selection step and the command dispatch).
+    pub fn from_config(cfg: &crate::config::Config) -> Result<Self> {
         let remote = cfg.is_remote();
 
         // Built the same way it always was, then wrapped: this deliberately
@@ -695,7 +701,7 @@ impl SpectreSimulator {
         let transport = if remote {
             // OpenSSH-only lifecycle: reject an explicit `native` request so it
             // is never silently downgraded to OpenSSH.
-            crate::transport::backend::require_openssh(&cfg)?;
+            crate::transport::backend::require_openssh(cfg)?;
             let mut runner =
                 crate::transport::ssh::SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
             if let Some(ref user) = cfg.remote_user {
@@ -723,8 +729,8 @@ impl SpectreSimulator {
         };
 
         Ok(Self {
-            spectre_cmd: cfg.spectre_cmd,
-            spectre_args: cfg.spectre_args,
+            spectre_cmd: cfg.spectre_cmd.clone(),
+            spectre_args: cfg.spectre_args.clone(),
             timeout: cfg.timeout,
             work_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             output_format: "psfascii".into(),
@@ -734,13 +740,18 @@ impl SpectreSimulator {
             remote_work_dir: None,
             keep_remote_files: cfg.keep_remote_files,
             max_workers: cfg.spectre_max_workers,
-            cadence_cshrc: cfg.cadence_cshrc,
-            spectre_bin: cfg.spectre_bin,
+            cadence_cshrc: cfg.cadence_cshrc.clone(),
+            spectre_bin: cfg.spectre_bin.clone(),
             strict_psf: std::env::var("VB_STRICT_PSF")
                 .map(|v| v == "1" || v.to_lowercase() == "true")
                 .unwrap_or(false),
             sink: Arc::new(crate::streaming::NullSink),
         })
+    }
+
+    pub fn from_env() -> Result<Self> {
+        let cfg = crate::config::Config::from_env()?;
+        Self::from_config(&cfg)
     }
 
     pub fn with_sink(mut self, sink: Arc<dyn JobEventSink>) -> Self {

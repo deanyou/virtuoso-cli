@@ -580,10 +580,10 @@ pub fn netlist(
 
 // ── Async job commands ──────────────────────────────────────────────
 
-pub fn run_async(netlist_path: &str) -> Result<Value> {
+pub fn run_async(ctx: &crate::context::CommandContext, netlist_path: &str) -> Result<Value> {
     let content = std::fs::read_to_string(netlist_path)
         .map_err(|e| VirtuosoError::Config(format!("Cannot read netlist '{netlist_path}': {e}")))?;
-    let sim = SpectreSimulator::from_env()?;
+    let sim = SpectreSimulator::from_config(ctx.config())?;
     let job = sim.run_async(&content)?;
     Ok(json!({
         "status": "launched",
@@ -603,7 +603,10 @@ pub fn run_async(netlist_path: &str) -> Result<Value> {
 ///
 /// For each entry, the path is read as netlist content and passed to
 /// SpectreSimulator::run_parallel().
-pub fn run_parallel(inputs: &[(String, String)]) -> Result<Value> {
+pub fn run_parallel(
+    ctx: &crate::context::CommandContext,
+    inputs: &[(String, String)],
+) -> Result<Value> {
     if inputs.is_empty() {
         return Err(VirtuosoError::Config(
             "run-parallel requires at least one input (label:path pair)".into(),
@@ -623,7 +626,7 @@ pub fn run_parallel(inputs: &[(String, String)]) -> Result<Value> {
         netlists.push((label.clone(), content));
     }
 
-    let sim = SpectreSimulator::from_env()?;
+    let sim = SpectreSimulator::from_config(ctx.config())?;
     let results = sim.run_parallel(&netlists);
 
     Ok(parallel_report(results, inputs.len()))
