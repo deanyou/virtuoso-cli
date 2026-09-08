@@ -1,6 +1,6 @@
 # P0-A · 配置调用链盘点（Config Call-Chain Inventory）
 
-> 日期：2026-09-05
+> 日期：2026-09-08（更新）
 > 目标：为「命令层显式接收已解析 Config（CommandContext）」的改造提供量化依据。
 > 对应外部审阅项：F06（删除 env 桥接还不够，调用链必须接收同一配置）、F05（配置摘要/身份校验）。
 
@@ -65,13 +65,19 @@
 
 ## 5. CommandContext 迁移进度（P0-A 进行中）
 
-| 命令族 | 状态 |
-|---|---|
-| tunnel（start/stop/restart/status/diagnose/attach/detach） | ✅ 已迁移：接收 `&CommandContext`，经 `ctx.config()` / `SSHClient::from_config` / `VirtuosoClient::from_context` 使用单次解析配置 |
-| `VirtuosoClient` | ✅ `from_context(ctx)` 新入口；`from_config(cfg, target_id)` 拆出；构造时做会话目标归属校验 |
-| session 命令族 | ⏳ 未迁移（仍经 env 重读） |
-| spectre/runner、skill、maestro 等 | ⏳ 未迁移（仍经 env 重读） |
-| env 桥接（`VB_TARGET`） | ⚠️ 保留给未迁移命令族；与 CommandContext 共用同一 `resolve_selection`，保证一致性 |
+> 状态图例：✅ 已合并入 main / 🔄 部分交付（核心已合入，完整语义待补）/ ⏳ 待实现 / ⚠️ 临时桥接保留
+
+| 命令族 / 组件 | 状态 | 说明 |
+|---|---|---|
+| target 选择基础（Resolver + CommandContext） | ✅ 已合并（#75） | `target::resolve` 优先级、冲突检测、失效 active_target 报错；`CommandContext { config, target_id, config_digest }` |
+| tunnel 命令族（start/stop/restart/status/diagnose/attach/detach） | ✅ 已合并（#75） | 接收 `&CommandContext`，经 `ctx.config()` / `SSHClient::from_config` / `VirtuosoClient::from_context` 使用单次解析配置；tunnel state 按 profile 隔离；统一归属校验 |
+| `VirtuosoClient` | ✅ 已合并（#75） | `from_context(ctx)` 新入口；`from_config(cfg, target_id)` 拆出；构造时做会话目标归属校验 |
+| session list/show | ✅ 已合并（#89，2026-09-08） | 接收 `&CommandContext`；共享探测判定函数（`resolve_probe_endpoint`）；远端隧道路径 6 步验证链；本地直连路径；show 两阶段（缓存元数据始终展示 + 在线探测仅在验证通过时）；list 三状态（`endpoint_match`/`tunnel_verified`/`probe_status`）；不再删除 session 文件；`allow_cross_user_daemon` 配置 |
+| session current/cleanup/history/heartbeat | ⏳ 待实现 | 仍为全局缓存语义，尤其 cleanup 需要先明确目标作用域和删除条件 |
+| spectre/runner | ⏳ 待实现 | 仍经 env 重读（`src/spectre/runner.rs:688`） |
+| skill/maestro/window 等命令族 | ⏳ 待实现 | 仍经 `VirtuosoClient::from_env()` 重读 |
+| env 桥接（`VB_TARGET`） | ⚠️ 临时保留 | 保留给未迁移命令族；与 CommandContext 共用同一 `resolve_selection`，保证一致性；全部命令族迁移完成后删除 |
+| daemon 配置身份校验（Hello target_id/config_digest） | ⏳ 待实现 | `Config::digest()` 字段已存在，但主线 IPC 尚未接入 target_id/config_digest 校验 |
 
 - 端到端验证：`tunnel start --dry-run` 对 `--target`/`VB_TARGET`/active_target/
   `--profile` 四种选择均正确解析；目标缺失 exit 3、失效 active_target exit 2；
@@ -125,10 +131,43 @@
 | 绑定标记未按端口匹配：ssh 若在别的端口上完成绑定，也可能被当成目标端口的证明 | 标记串含端口（`…listening on 127.0.0.1 port <n>`），新增单测 `wait_for_forward_ignores_bind_marker_for_another_port` 固定该行为 |
 | `String::from_utf8_lossy(&log.lock().unwrap()[..])` 借用临时 `MutexGuard`（E0716，编译不通过）；且 `wait_for_forward` 头部残留两份重复文档块 | 抽出 `snapshot()` 辅助函数返回自有 `String`（并对 poisoned mutex 降级取值）；合并重复文档块 |
 
-## 6. 待办（下一步）
+## 6. 整体方案状态（2026-09-08 更新）
 
-- 迁移 session 命令族（list/show/current/cleanup/history）到 `&CommandContext`；
-- 迁移 spectre/runner 与其余 `VirtuosoClient::from_env()` 调用点（76 处总量）；
-- 删除 `main()` 的 `VB_TARGET` env 桥接 + `config.rs` 的 `VB_TARGET` 分支
-  （全部命令族迁移完成后）；
-- `config_digest` 接入 daemon Hello 校验（P0-B 前哨，F05）。
+### 已合并入 main
+
+| PR | 内容 | 合并日期 |
+|---|---|---|
+| #75 | target 选择、CommandContext 基础、tunnel 隔离 | 2026-09 上旬 |
+| #78 | endpoint 对象池、调度器接入 | 2026-09 上旬 |
+| #87 | native SSH 跨请求复用、并发 channel、保活 | 2026-09 上旬 |
+| #89 | session list/show 身份验证迁移 | 2026-09-08 |
+
+### 部分交付（核心已合入，完整语义待补）
+
+- **native SSH 长连接（#87）**：跨请求复用、并发 channel、保活已合并；但完整 drain、退出清理、故障恢复尚未完成（见 issue #80）；当前源码仍由每个 NativeTransport 创建自己的 runtime，与原方案"daemon 统一共享、限制线程资源"的目标还有差距。**不应继续笼统写"P0-B 暂缓"。**
+
+### 进行中
+
+- **#88**：dotenv 移除、config.toml 统一配置层（用户单独处理）。四项审查问题尚无新提交修复：统一配置键名、可靠 TOML 序列化、传播 profile 清理错误、隔离配置测试。
+
+### 待实现（按优先级）
+
+1. **收尾 #88**：配置层重构完成后，所有命令族的配置来源需对齐 config.toml 模型。
+2. **重做 config check**：基于 #88 修复后的配置层，解释每个值来自 env / target / config.toml / 默认值；来源记录在解析时同步完成；必须处理解析失败路径；脱敏覆盖错误信息。（旧 PR #73 已关闭）
+3. **完成 P0-A 配置与身份闭环**：
+   - 迁移 session 剩余命令（current/cleanup/history/heartbeat），cleanup 需先明确目标作用域和删除条件
+   - 迁移 spectre/runner
+   - 迁移 skill/maestro/window 等其余命令族
+   - 全部接通后删除 env 桥接（`main()` 的 `VB_TARGET` 同步 + `config.rs` 的 `VB_TARGET` 分支）
+4. **接通 daemon 配置身份校验**：Hello 在执行前验证 target_id、config_digest 和实例身份；配置漂移时拒绝旧实例。
+5. **完成连接生命周期**：按 issue #80 补 drain、退出清理、故障恢复与端到端验收。
+
+### 独立任务（可单独排队）
+
+- issue #84：补 typed RPC 参数写入，避免普通原理图编辑被迫授予 Admin。
+- issue #86：共享 daemon 搜索优先级与目录信任边界；共享部署本身已由 #85 合并，无需重做 #76。
+
+## 7. 本地环境已知问题（不构成合并阻塞）
+
+- `wait_for_forward_*` 系列测试在本地 macOS 偶发失败（`tunnel forward never established in time`）；CI（Ubuntu/macOS/Windows）均未复现；基线对照确认 `rejects_unrelated_listener_when_ssh_fails_late` 在 main 同失败；根因未定。
+- `cargo fmt` 曾段错误，本机使用 `rustfmt --edition 2021 --check $(find src tests -name '*.rs')` 替代；CI 使用标准 `cargo fmt --check`。
