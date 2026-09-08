@@ -211,3 +211,81 @@ fn test_config_digest_distinguishes_port_explicit() {
         "digest must be deterministic for identical configs"
     );
 }
+
+/// `VB_ALLOW_CROSS_USER_DAEMON` must resolve through the same layered lookup
+/// as every other field, and must stay `false` when nothing sets it.
+#[serial_test::serial]
+#[test]
+fn test_allow_cross_user_daemon_defaults_to_false() {
+    let _g = EnvGuard::shield("VB_ALLOW_CROSS_USER_DAEMON");
+    let _t = shield_target();
+    let (_dir, _cg) = isolate_config_dir();
+    let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
+    assert!(
+        !config.allow_cross_user_daemon,
+        "the cross-user warning must stay enabled unless explicitly suppressed"
+    );
+}
+
+/// The spelling set that shipped with this field (`1` / `true` / `yes` / `on`,
+/// case-insensitive) must keep working, and every other value must fall back to
+/// the conservative `false` rather than erroring.
+#[serial_test::serial]
+#[test]
+fn test_allow_cross_user_daemon_env_spellings() {
+    let _t = shield_target();
+    let (_dir, _cg) = isolate_config_dir();
+    for spelling in ["1", "true", "TRUE", "yes", "on", " On "] {
+        let _g = EnvGuard::set("VB_ALLOW_CROSS_USER_DAEMON", spelling);
+        let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
+        assert!(
+            config.allow_cross_user_daemon,
+            "{spelling:?} must enable the suppression"
+        );
+    }
+    for spelling in ["0", "false", "off", "no", "maybe", ""] {
+        let _g = EnvGuard::set("VB_ALLOW_CROSS_USER_DAEMON", spelling);
+        let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
+        assert!(
+            !config.allow_cross_user_daemon,
+            "{spelling:?} must leave the warning enabled"
+        );
+    }
+}
+
+/// A target's `allow_cross_user_daemon` must reach the resolved `Config`.
+#[serial_test::serial]
+#[test]
+fn test_allow_cross_user_daemon_from_target() {
+    use virtuoso_cli::target::TargetConfig;
+
+    let on = TargetConfig {
+        allow_cross_user_daemon: Some(true),
+        ..Default::default()
+    };
+    let cfg = virtuoso_cli::config::Config::from_target(&on, "t-on").unwrap();
+    assert!(cfg.allow_cross_user_daemon);
+
+    let unset = TargetConfig::default();
+    let cfg = virtuoso_cli::config::Config::from_target(&unset, "t-off").unwrap();
+    assert!(!cfg.allow_cross_user_daemon);
+}
+
+/// `digest()` is the config identity used for tunnel drift detection and daemon
+/// Hello validation. This field only silences an informational warning, so it is
+/// deliberately NOT part of that identity: flipping it must not invalidate an
+/// existing connection.
+#[serial_test::serial]
+#[test]
+fn test_digest_ignores_allow_cross_user_daemon() {
+    use virtuoso_cli::target::TargetConfig;
+
+    let base = virtuoso_cli::config::Config::from_target(&TargetConfig::default(), "t").unwrap();
+    let mut silenced = base.clone();
+    silenced.allow_cross_user_daemon = true;
+    assert_eq!(
+        base.digest(),
+        silenced.digest(),
+        "warning suppression must not change the config identity"
+    );
+}
