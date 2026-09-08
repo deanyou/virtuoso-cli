@@ -383,6 +383,47 @@ mod session_info_tests {
     use std::fs;
     use tempfile::TempDir;
 
+    fn make_config(
+        remote_host: Option<&str>,
+        remote_user: Option<&str>,
+        jump_host: Option<&str>,
+        jump_user: Option<&str>,
+    ) -> crate::config::Config {
+        crate::config::Config {
+            profile: None,
+            remote_host: remote_host.map(String::from),
+            remote_user: remote_user.map(String::from),
+            port: 65432,
+            port_explicit: true,
+            jump_host: jump_host.map(String::from),
+            jump_user: jump_user.map(String::from),
+            ssh_port: None,
+            ssh_key: None,
+            ssh_config: None,
+            ssh_backend: None,
+            disable_control_master: false,
+            timeout: 30,
+            read_timeout: 120,
+            keep_remote_files: false,
+            spectre_cmd: "spectre".into(),
+            spectre_args: vec![],
+            spectre_max_workers: 8,
+            ssh_max_sessions: 10,
+            ssh_max_bulk_sessions: 2,
+            ssh_reconnect_max_attempts: 8,
+            ssh_reconnect_max_delay: 30,
+            ssh_keepalive_interval: 30,
+            ssh_keepalive_failures: 3,
+            transport_shutdown_grace: 10,
+            cadence_cshrc: None,
+            spectre_bin: None,
+            roles: crate::config::RemoteRoles::default(),
+            transport_daemon_socket: None,
+            transport_daemon_token: None,
+            allow_cross_user_daemon: false,
+        }
+    }
+
     fn make_session(id: &str, port: u16) -> SessionInfo {
         SessionInfo {
             id: id.into(),
@@ -585,7 +626,9 @@ mod session_info_tests {
         fs::remove_file(dir.join(format!("{id}.json"))).ok();
         write_session(&dir, &make_session(&id, port));
 
-        let result = crate::commands::session::cleanup().unwrap();
+        let cfg = make_config(None, None, None, None);
+        let ctx = crate::context::CommandContext::new(cfg, None).unwrap();
+        let result = crate::commands::session::cleanup(&ctx, false).unwrap();
         let removed: Vec<String> = result["sessions"]
             .as_array()
             .unwrap()
@@ -614,7 +657,9 @@ mod session_info_tests {
         fs::remove_file(dir.join(format!("{id}.json"))).ok();
         write_session(&dir, &make_session(&id, port));
 
-        let result = crate::commands::session::cleanup().unwrap();
+        let cfg = make_config(None, None, None, None);
+        let ctx = crate::context::CommandContext::new(cfg, None).unwrap();
+        let result = crate::commands::session::cleanup(&ctx, false).unwrap();
         let removed: Vec<String> = result["sessions"]
             .as_array()
             .unwrap()
@@ -1535,6 +1580,42 @@ mod history_tests {
     use crate::history::{append_cmd, append_skill, history_dir, load_cmd, load_skill};
     use std::fs;
 
+    fn make_config() -> crate::config::Config {
+        crate::config::Config {
+            profile: None,
+            remote_host: None,
+            remote_user: None,
+            port: 65432,
+            port_explicit: true,
+            jump_host: None,
+            jump_user: None,
+            ssh_port: None,
+            ssh_key: None,
+            ssh_config: None,
+            ssh_backend: None,
+            disable_control_master: false,
+            timeout: 30,
+            read_timeout: 120,
+            keep_remote_files: false,
+            spectre_cmd: "spectre".into(),
+            spectre_args: vec![],
+            spectre_max_workers: 8,
+            ssh_max_sessions: 10,
+            ssh_max_bulk_sessions: 2,
+            ssh_reconnect_max_attempts: 8,
+            ssh_reconnect_max_delay: 30,
+            ssh_keepalive_interval: 30,
+            ssh_keepalive_failures: 3,
+            transport_shutdown_grace: 10,
+            cadence_cshrc: None,
+            spectre_bin: None,
+            roles: crate::config::RemoteRoles::default(),
+            transport_daemon_socket: None,
+            transport_daemon_token: None,
+            allow_cross_user_daemon: false,
+        }
+    }
+
     fn rm_skill(session_id: &str) {
         let _ = fs::remove_file(history_dir().join(format!("{session_id}.jsonl")));
     }
@@ -1697,7 +1778,9 @@ mod history_tests {
         append_skill(id, "car(list())", true, "nil");
         append_skill(id, "t", true, "t");
 
-        let result = crate::commands::session::history(id, false, false, 50).unwrap();
+        let cfg = make_config();
+        let ctx = crate::context::CommandContext::new(cfg, None).unwrap();
+        let result = crate::commands::session::history(&ctx, id, false, false, 50).unwrap();
         assert_eq!(result["status"], "success");
         assert_eq!(result["session"], id);
         assert!(result["skill"].is_array());
@@ -1717,7 +1800,9 @@ mod history_tests {
         rm_skill(id);
         append_skill(id, "t", true, "t");
 
-        let result = crate::commands::session::history(id, true, false, 50).unwrap();
+        let cfg = make_config();
+        let ctx = crate::context::CommandContext::new(cfg, None).unwrap();
+        let result = crate::commands::session::history(&ctx, id, true, false, 50).unwrap();
         assert!(!result["skill"].as_array().unwrap().is_empty());
         assert_eq!(
             result["cmd"].as_array().unwrap().len(),
@@ -1733,7 +1818,9 @@ mod history_tests {
         let session_id = "rt-hist-cmd-cmdonly-77777";
         append_cmd(&["vcli".to_string()], Some(session_id), 0);
 
-        let result = crate::commands::session::history(session_id, false, true, 50).unwrap();
+        let cfg = make_config();
+        let ctx = crate::context::CommandContext::new(cfg, None).unwrap();
+        let result = crate::commands::session::history(&ctx, session_id, false, true, 50).unwrap();
         assert_eq!(
             result["skill"].as_array().unwrap().len(),
             0,
