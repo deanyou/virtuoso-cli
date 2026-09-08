@@ -14,23 +14,28 @@
 //!   SFTP subsystem (design step 4) with an exec `cat` fallback for remotes
 //!   that do not advertise sftp, and directories keep tar-over-exec
 //!   (matching the OpenSSH backend);
-//! - ❌ connection pooling / channel scheduling — each operation reconnects
-//!   (the design's reuse requirement is step 4's daemon);
+//! - ✅ connection reuse (P1-2): one live SSH connection per transport,
+//!   established lazily and reused across operations; connection-level
+//!   failures clear the slot so the next operation re-establishes. Verified
+//!   by handshake count (not factory calls); the endpoint pool drives
+//!   generation/reconnect policy;
 //! - ❌ `ProxyJump` / jump-host routing, SOCKS5, RAMIC `direct-tcpip` forward,
 //!   agent/password/keyboard-interactive auth, and the IPC transport-daemon —
 //!   all later increments. Those paths return a clear `UnsupportedOperation`
 //!   rather than silently misbehaving.
 //!
-//! The contract methods are synchronous; russh is async. Each call spins up a
-//! fresh current-thread tokio runtime and `block_on`s the async work. That is
-//! deliberate: it keeps the async runtime entirely inside this module (never
-//! shared with the synchronous business layer) and avoids holding a `!Sync` russh
-//! session across a `&mut self` boundary.
+//! The contract methods are synchronous; russh is async. The module owns one
+//! current-thread tokio runtime per transport (kept in `SessionState`), and
+//! each operation `block_on`s its async work against the shared runtime while
+//! holding the session mutex. That keeps the async runtime entirely inside
+//! this module (never shared with the synchronous business layer) while the
+//! SSH connection itself survives across operations.
 
 #![cfg(feature = "native-ssh")]
 
 use std::path::{Path, PathBuf};
 use std::process::Command as SyncCommand;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -38,7 +43,6 @@ use base64::Engine;
 use russh::client::{self, Handler};
 use russh::keys::{load_secret_key, PrivateKeyWithHashAlg, PublicKeyOrCertificate};
 use russh::ChannelMsg;
-use russh::Disconnect;
 use sha2::{Digest, Sha256};
 use shlex;
 
@@ -375,55 +379,7 @@ fn establishment_seed() -> u64 {
     nanos ^ ((std::process::id() as u64) << 32)
 }
 
-/// Open an exec channel, optionally feed `stdin`, and drain stdout/stderr/status.
-async fn exec_command(
-    cfg: &NativeTransportConfig,
-    command: &str,
-    stdin: Option<Vec<u8>>,
-    deadline: Deadline,
-) -> Result<RawOutput, TransportError> {
-    let session = establish_with_retry(cfg, deadline).await?;
-    let mut channel = session
-        .channel_open_session()
-        .await
-        .map_err(map_russh_error)?;
-    channel
-        .exec(false, command.to_owned())
-        .await
-        .map_err(map_russh_error)?;
-    if let Some(data) = stdin {
-        channel.data_bytes(data).await.map_err(map_russh_error)?;
-        channel.eof().await.map_err(map_russh_error)?;
-    }
-
-    let mut stdout = Vec::new();
-    let mut stderr = Vec::new();
-    let mut exit_status: i32 = -1;
-    while let Some(msg) = channel.wait().await {
-        match msg {
-            ChannelMsg::Data { data } => stdout.extend_from_slice(&data),
-            ChannelMsg::ExtendedData { data, ext: 1 } => stderr.extend_from_slice(&data),
-            ChannelMsg::ExtendedData { .. } => {}
-            ChannelMsg::ExitStatus { exit_status: c } => exit_status = c as i32,
-            ChannelMsg::ExitSignal { .. } => exit_status = -1,
-            _ => {}
-        }
-    }
-    session
-        .disconnect(Disconnect::ByApplication, "", "English")
-        .await
-        .ok();
-    Ok(RawOutput {
-        stdout,
-        stderr,
-        exit_status,
-    })
-}
-
-/// 64 KiB SFTP write/read windows — small enough to stay beneath the SSH
-/// channel's max packet size while streaming large files without buffering
-/// them entirely in memory (design: "the daemon streams the local file
-/// itself", never the whole buffer across one frame).
+/// Upload window for the streaming SFTP write/read paths.
 const SFTP_CHUNK: usize = 64 * 1024;
 
 /// Whether an SFTP attempt failed because the remote did not advertise the
@@ -432,123 +388,6 @@ const SFTP_CHUNK: usize = 64 * 1024;
 /// transfer that directories already rely on.
 fn sftp_unavailable(e: &TransportError) -> bool {
     matches!(e, TransportError::UnsupportedOperation(_))
-}
-
-/// Establish a session and open the SFTP subsystem channel.
-///
-/// Returns the russh handle (kept alive for the duration of the file op) and a
-/// high-level [`SftpSession`]. A server that does not advertise sftp surfaces
-/// as [`TransportError::UnsupportedOperation`].
-async fn open_sftp(
-    cfg: &NativeTransportConfig,
-    deadline: Deadline,
-) -> Result<(client::Handle<NativeClientHandler>, SftpSession), TransportError> {
-    let session = establish_with_retry(cfg, deadline).await?;
-    let channel = session
-        .channel_open_session()
-        .await
-        .map_err(map_russh_error)?;
-    // A server that rejects the subsystem returns an error here; map it to
-    // `UnsupportedOperation` so the caller can fall back to exec transfer.
-    channel.request_subsystem(true, "sftp").await.map_err(|e| {
-        TransportError::UnsupportedOperation(format!(
-            "sftp subsystem unavailable on {}: {e}",
-            cfg.host
-        ))
-    })?;
-    let stream = channel.into_stream();
-    let sftp = SftpSession::new(stream).await.map_err(|e| {
-        TransportError::UnsupportedOperation(format!(
-            "sftp session init failed on {}: {e}",
-            cfg.host
-        ))
-    })?;
-    Ok((session, sftp))
-}
-
-/// Upload `data` to `remote` over the SFTP subsystem, streaming in 64 KiB
-/// windows. A missing sftp subsystem surfaces as `UnsupportedOperation`.
-async fn upload_via_sftp(
-    cfg: &NativeTransportConfig,
-    remote: &Path,
-    data: Vec<u8>,
-    deadline: Deadline,
-) -> Result<(), TransportError> {
-    let (_session, sftp) = open_sftp(cfg, deadline).await?;
-    let remote_str = remote.to_string_lossy().into_owned();
-    // Atomic upload: write to a staging file first, then rename into place.
-    // A failed upload leaves only the staging file (never a half-written target).
-    // Use a per-request UUID so concurrent uploads to the same target never
-    // share a staging file (PID alone is insufficient — same process can issue
-    // multiple concurrent transfers).
-    let staging = format!("{remote_str}.tmp.{}", uuid::Uuid::new_v4());
-    let mut file =
-        sftp.create(&staging)
-            .await
-            .map_err(|e| TransportError::TransferInterrupted {
-                request: RequestId::new(),
-                reason: format!("sftp create {staging}: {e}"),
-            })?;
-    sftp_write_all(&mut file, &data).await?;
-    drop(file);
-    // Atomic publish via exec `mv` — SFTP rename is not universally supported
-    // by all servers, and `mv` is atomic on the same filesystem.
-    let mv_cmd = format!(
-        "mv -f {src} {dst} && rm -f {src}",
-        src = shell_quote(&staging),
-        dst = shell_quote(&remote_str)
-    );
-    let mv_result = exec_command(cfg, &mv_cmd, None, deadline).await;
-    match mv_result {
-        Ok(r) if r.exit_status == 0 => Ok(()),
-        Ok(r) => {
-            // Best-effort cleanup of staging file on failure.
-            let _ = exec_command(
-                cfg,
-                &format!("rm -f {}", shell_quote(&staging)),
-                None,
-                deadline,
-            )
-            .await;
-            Err(TransportError::TransferInterrupted {
-                request: RequestId::new(),
-                reason: format!(
-                    "atomic rename failed: {}",
-                    String::from_utf8_lossy(&r.stderr)
-                ),
-            })
-        }
-        Err(e) => {
-            let _ = exec_command(
-                cfg,
-                &format!("rm -f {}", shell_quote(&staging)),
-                None,
-                deadline,
-            )
-            .await;
-            Err(e)
-        }
-    }
-}
-
-/// Download `remote` over the SFTP subsystem, streaming in 64 KiB windows into
-/// a local buffer. A missing sftp subsystem surfaces as `UnsupportedOperation`.
-async fn download_via_sftp(
-    cfg: &NativeTransportConfig,
-    remote: &Path,
-    deadline: Deadline,
-) -> Result<Vec<u8>, TransportError> {
-    let (_session, sftp) = open_sftp(cfg, deadline).await?;
-    let remote_str = remote.to_string_lossy().into_owned();
-    let mut file =
-        sftp.open(&remote_str)
-            .await
-            .map_err(|e| TransportError::TransferInterrupted {
-                request: RequestId::new(),
-                reason: format!("sftp open {remote_str}: {e}"),
-            })?;
-    let buf = sftp_read_all(&mut file).await?;
-    Ok(buf)
 }
 
 /// Stream `data` to an open SFTP `File` in [`SFTP_CHUNK`] windows and flush.
@@ -599,35 +438,49 @@ async fn sftp_read_all(file: &mut russh_sftp::client::fs::File) -> Result<Vec<u8
     Ok(buf)
 }
 
-/// Run `fut` on a fresh runtime, bounding it by `deadline`. A timeout surfaces as
-/// `ExecutionTimeout` carrying `req_id` (termination unproven — conservative).
-fn block_with_deadline<F, Fut, T>(
-    deadline: Deadline,
-    req_id: RequestId,
-    fut: F,
-) -> Result<T, TransportError>
-where
-    F: FnOnce() -> Fut,
-    Fut: std::future::Future<Output = Result<T, TransportError>>,
-{
-    let rt = make_runtime()?;
-    let span = deadline.remaining();
-    rt.block_on(async move {
-        match tokio::time::timeout(span, fut()).await {
-            Ok(r) => r,
-            Err(_) => Err(TransportError::ExecutionTimeout {
-                request: req_id,
-                after_secs: span.as_secs().max(1),
-                remote_terminated: false,
-            }),
-        }
-    })
+/// Shared state for the native transport's single live SSH connection.
+///
+/// P1-2 keeps the connection alive across operations instead of the step-3
+/// behaviour of establishing and disconnecting for every command. The russh
+/// handle lives here, protected by a mutex (russh's `Handle` is not `Clone` —
+/// its reply channel is a single consumer, so concurrent commands are
+/// serialised on this mutex). Connection-level failures clear the slot so the
+/// next operation re-establishes; the endpoint pool's generation guard
+/// decides whether the whole endpoint is replaced.
+struct SessionState {
+    inner: Mutex<Option<client::Handle<NativeClientHandler>>>,
+    runtime: tokio::runtime::Runtime,
+    /// Number of SSH connections ever established by this transport. Exposed
+    /// for tests and acceptance: "handshakes", not factory calls.
+    connections: AtomicU64,
 }
 
-/// The native transport: a resolved endpoint plus the sync bridge.
+impl std::fmt::Debug for SessionState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionState")
+            .field("connections", &self.connections)
+            .field("runtime", &self.runtime)
+            .finish()
+    }
+}
+
+impl SessionState {
+    fn new() -> Result<Self, TransportError> {
+        Ok(Self {
+            inner: Mutex::new(None),
+            runtime: make_runtime()?,
+            connections: AtomicU64::new(0),
+        })
+    }
+}
+
+/// The native transport: a resolved endpoint plus a persistent SSH connection
+/// (established lazily, reused across operations until a connection-level
+/// failure clears it).
 #[derive(Clone, Debug)]
 pub struct NativeTransport {
     config: NativeTransportConfig,
+    session: Arc<SessionState>,
 }
 
 impl NativeTransport {
@@ -669,6 +522,7 @@ impl NativeTransport {
         let keepalive = KeepalivePolicy::from_config(config)?;
         let reconnect = ReconnectPolicy::from_config(config)?;
 
+        let session = Arc::new(SessionState::new()?);
         Ok(NativeTransport {
             config: NativeTransportConfig {
                 host,
@@ -681,7 +535,286 @@ impl NativeTransport {
                 keepalive,
                 reconnect,
             },
+            session,
         })
+    }
+
+    /// Serialise an operation on the single live SSH connection: lock, ensure a
+    /// session (establishing lazily), run `f` against the shared runtime, and
+    /// clear the connection on a connection-level failure so the next
+    /// operation re-establishes. `f` receives the session handle, the module
+    /// runtime and the remaining deadline, and drives its own async work with
+    /// `block_on` (a `timeout` around it preserves the deadline contract).
+    fn with_session<T>(
+        &self,
+        deadline: Deadline,
+        req_id: &RequestId,
+        f: impl FnOnce(
+            &mut client::Handle<NativeClientHandler>,
+            &tokio::runtime::Runtime,
+            Duration,
+        ) -> Result<T, TransportError>,
+    ) -> Result<T, TransportError> {
+        let mut guard = self.session.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if deadline.is_expired() {
+            return Err(TransportError::QueueTimeout {
+                request: req_id.clone(),
+                after_secs: 0,
+            });
+        }
+        if guard.as_ref().is_none_or(|h| h.is_closed()) {
+            let established = self
+                .session
+                .runtime
+                .block_on(establish_with_retry(&self.config, deadline))?;
+            self.session.connections.fetch_add(1, Ordering::Relaxed);
+            *guard = Some(established);
+        }
+        let remaining = deadline.remaining();
+        let rt = &self.session.runtime;
+        let result = f(guard.as_mut().expect("session"), rt, remaining);
+        if matches!(&result, Err(e) if FailureClass::of(e) == FailureClass::Transient) {
+            *guard = None;
+        }
+        result
+    }
+
+    /// Run `command` on the persistent SSH connection, reusing the live
+    /// session when present. The channel is closed after the command; the
+    /// connection itself is kept for the next operation.
+    fn exec_command(
+        &self,
+        command: &str,
+        stdin: Option<Vec<u8>>,
+        deadline: Deadline,
+        req_id: &RequestId,
+    ) -> Result<RawOutput, TransportError> {
+        let cmd = command.to_owned();
+        self.with_session(deadline, req_id, move |session, rt, remaining| {
+            rt.block_on(async move {
+                tokio::time::timeout(remaining, async move {
+                    let mut channel = session
+                        .channel_open_session()
+                        .await
+                        .map_err(map_russh_error)?;
+                    channel.exec(false, cmd).await.map_err(map_russh_error)?;
+                    if let Some(data) = stdin {
+                        channel.data_bytes(data).await.map_err(map_russh_error)?;
+                        channel.eof().await.map_err(map_russh_error)?;
+                    }
+                    let mut stdout = Vec::new();
+                    let mut stderr = Vec::new();
+                    let mut exit_status: i32 = -1;
+                    while let Some(msg) = channel.wait().await {
+                        match msg {
+                            ChannelMsg::Data { data } => stdout.extend_from_slice(&data),
+                            ChannelMsg::ExtendedData { data, ext: 1 } => {
+                                stderr.extend_from_slice(&data)
+                            }
+                            ChannelMsg::ExtendedData { .. } => {}
+                            ChannelMsg::ExitStatus { exit_status: c } => exit_status = c as i32,
+                            ChannelMsg::ExitSignal { .. } => exit_status = -1,
+                            _ => {}
+                        }
+                    }
+                    Ok(RawOutput {
+                        stdout,
+                        stderr,
+                        exit_status,
+                    })
+                })
+                .await
+                .map_err(|_| TransportError::ExecutionTimeout {
+                    request: req_id.clone(),
+                    after_secs: remaining.as_secs().max(1),
+                    remote_terminated: false,
+                })?
+            })
+        })
+    }
+
+    /// Open the SFTP subsystem on the persistent connection. The SSH
+    /// connection is reused; only a fresh SFTP channel is opened per call.
+    fn open_sftp(
+        &self,
+        deadline: Deadline,
+        req_id: &RequestId,
+    ) -> Result<SftpSession, TransportError> {
+        self.with_session(deadline, req_id, move |session, rt, remaining| {
+            rt.block_on(async move {
+                tokio::time::timeout(remaining, async move {
+                    let channel = session
+                        .channel_open_session()
+                        .await
+                        .map_err(map_russh_error)?;
+                    channel.request_subsystem(true, "sftp").await.map_err(|e| {
+                        TransportError::UnsupportedOperation(format!(
+                            "sftp subsystem unavailable: {e}"
+                        ))
+                    })?;
+                    let stream = channel.into_stream();
+                    let sftp = SftpSession::new(stream).await.map_err(|e| {
+                        TransportError::UnsupportedOperation(format!(
+                            "sftp session init failed: {e}"
+                        ))
+                    })?;
+                    Ok(sftp)
+                })
+                .await
+                .map_err(|_| TransportError::ExecutionTimeout {
+                    request: req_id.clone(),
+                    after_secs: remaining.as_secs().max(1),
+                    remote_terminated: false,
+                })?
+            })
+        })
+    }
+
+    /// Upload `data` to `remote` over the SFTP subsystem on the persistent
+    /// connection, streaming in 64 KiB windows. A missing sftp subsystem
+    /// surfaces as `UnsupportedOperation` so the caller can fall back to the
+    /// exec `cat` pipe.
+    fn upload_via_sftp(
+        &self,
+        remote: &Path,
+        data: Vec<u8>,
+        deadline: Deadline,
+        req_id: &RequestId,
+    ) -> Result<(), TransportError> {
+        if deadline.is_expired() {
+            return Err(TransportError::QueueTimeout {
+                request: req_id.clone(),
+                after_secs: 0,
+            });
+        }
+        let sftp = self.open_sftp(deadline, req_id)?;
+        let remaining = deadline.remaining();
+        let remote_str = remote.to_string_lossy().into_owned();
+        // Atomic upload: write to a staging file first, then rename into place.
+        // A failed upload leaves only the staging file (never a half-written
+        // target). Per-request UUID so concurrent uploads to the same target
+        // never share a staging file.
+        let staging = format!("{remote_str}.tmp.{}", uuid::Uuid::new_v4());
+        let staging_name = staging.clone();
+        let rt = &self.session.runtime;
+        let staged: Result<(), TransportError> = rt.block_on(async move {
+            tokio::time::timeout(remaining, async move {
+                let mut file = sftp.create(&staging_name).await.map_err(|e| {
+                    TransportError::TransferInterrupted {
+                        request: req_id.clone(),
+                        reason: format!("sftp create {staging_name}: {e}"),
+                    }
+                })?;
+                sftp_write_all(&mut file, &data).await?;
+                drop(file);
+                Ok(())
+            })
+            .await
+            .map_err(|_| TransportError::ExecutionTimeout {
+                request: req_id.clone(),
+                after_secs: remaining.as_secs().max(1),
+                remote_terminated: false,
+            })?
+        });
+        staged?;
+        // Atomic publish via exec `mv` — SFTP rename is not universally
+        // supported, and `mv` is atomic on the same filesystem.
+        let mv_cmd = format!(
+            "mv -f {src} {dst} && rm -f {src}",
+            src = shell_quote(&staging),
+            dst = shell_quote(&remote_str)
+        );
+        let mv_result = self.exec_command(&mv_cmd, None, deadline, req_id);
+        match mv_result {
+            Ok(r) if r.exit_status == 0 => Ok(()),
+            Ok(r) => {
+                let _ = self.exec_command(
+                    &format!("rm -f {}", shell_quote(&staging)),
+                    None,
+                    deadline,
+                    req_id,
+                );
+                Err(TransportError::TransferInterrupted {
+                    request: req_id.clone(),
+                    reason: format!(
+                        "atomic rename failed: {}",
+                        String::from_utf8_lossy(&r.stderr)
+                    ),
+                })
+            }
+            Err(e) => {
+                let _ = self.exec_command(
+                    &format!("rm -f {}", shell_quote(&staging)),
+                    None,
+                    deadline,
+                    req_id,
+                );
+                Err(e)
+            }
+        }
+    }
+
+    /// Download `remote` over the SFTP subsystem on the persistent connection,
+    /// streaming in 64 KiB windows into a local buffer. A missing sftp
+    /// subsystem surfaces as `UnsupportedOperation`.
+    fn download_via_sftp(
+        &self,
+        remote: &Path,
+        deadline: Deadline,
+        req_id: &RequestId,
+    ) -> Result<Vec<u8>, TransportError> {
+        if deadline.is_expired() {
+            return Err(TransportError::QueueTimeout {
+                request: req_id.clone(),
+                after_secs: 0,
+            });
+        }
+        let sftp = self.open_sftp(deadline, req_id)?;
+        let remaining = deadline.remaining();
+        let remote_str = remote.to_string_lossy().into_owned();
+        let rt = &self.session.runtime;
+        let fetched: Result<Vec<u8>, TransportError> = rt.block_on(async move {
+            tokio::time::timeout(remaining, async move {
+                let mut file = sftp.open(&remote_str).await.map_err(|e| {
+                    TransportError::TransferInterrupted {
+                        request: req_id.clone(),
+                        reason: format!("sftp open {remote_str}: {e}"),
+                    }
+                })?;
+                sftp_read_all(&mut file).await
+            })
+            .await
+            .map_err(|_| TransportError::ExecutionTimeout {
+                request: req_id.clone(),
+                after_secs: remaining.as_secs().max(1),
+                remote_terminated: false,
+            })?
+        });
+        fetched
+    }
+}
+
+impl Drop for NativeTransport {
+    fn drop(&mut self) {
+        // Only the last clone of a transport tears the shared connection down;
+        // an earlier clone must be able to keep using it.
+        if Arc::strong_count(&self.session) > 1 {
+            return;
+        }
+        if let Some(session) = self
+            .session
+            .inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
+            let rt = &self.session.runtime;
+            rt.block_on(async move {
+                let _ = session
+                    .disconnect(russh::Disconnect::ByApplication, "", "English")
+                    .await;
+            });
+        }
     }
 }
 
@@ -693,24 +826,21 @@ impl RemoteTransport for NativeTransport {
                 after_secs: 0,
             });
         }
-        let cfg = self.config.clone();
-        block_with_deadline(deadline, RequestId::new(), move || async move {
-            // test_connection is an explicit idempotent probe, so re-establishing
-            // the path within the deadline is allowed here.
-            match establish_with_retry(&cfg, deadline).await {
-                Ok(_) => Ok(true),
-                // A connection-level failure means the host is not reachable;
-                // host-key / auth failures are real errors, not "unreachable".
-                Err(e) => match e {
-                    TransportError::ConnectionFailed(_)
-                    | TransportError::HostKeyUnknown { .. }
-                    | TransportError::HostKeyChanged { .. }
-                    | TransportError::HostKeyPolicyUnsupported(_)
-                    | TransportError::AuthenticationFailed(_) => Err(e),
-                    _ => Ok(false),
-                },
-            }
-        })
+        let req_id = RequestId::new();
+        // test_connection is an explicit idempotent probe: reuse the persistent
+        // connection (establishing lazily) or report a real failure. Host-key /
+        // auth failures are real errors, not "unreachable".
+        match self.with_session(deadline, &req_id, |_, _, _| Ok(true)) {
+            Ok(_) => Ok(true),
+            Err(e) => match e {
+                TransportError::ConnectionFailed(_)
+                | TransportError::HostKeyUnknown { .. }
+                | TransportError::HostKeyChanged { .. }
+                | TransportError::HostKeyPolicyUnsupported(_)
+                | TransportError::AuthenticationFailed(_) => Err(e),
+                _ => Ok(false),
+            },
+        }
     }
 
     fn run_command(&self, req: &CommandRequest) -> Result<CommandResult, TransportError> {
@@ -720,18 +850,13 @@ impl RemoteTransport for NativeTransport {
                 after_secs: 0,
             });
         }
-        let cfg = self.config.clone();
-        let cmd = req.command.clone();
-        let req_id = req.id.clone();
-        block_with_deadline(req.deadline, req_id, move || async move {
-            let raw = exec_command(&cfg, &cmd, None, req.deadline).await?;
-            Ok(CommandResult {
-                exit_status: raw.exit_status,
-                stdout: String::from_utf8_lossy(&raw.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&raw.stderr).into_owned(),
-                success: raw.exit_status == 0,
-                duration: Duration::ZERO,
-            })
+        let raw = self.exec_command(&req.command, None, req.deadline, &req.id)?;
+        Ok(CommandResult {
+            exit_status: raw.exit_status,
+            stdout: String::from_utf8_lossy(&raw.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&raw.stderr).into_owned(),
+            success: raw.exit_status == 0,
+            duration: Duration::ZERO,
         })
     }
 
@@ -742,66 +867,57 @@ impl RemoteTransport for NativeTransport {
                 after_secs: 0,
             });
         }
-        let cfg = self.config.clone();
-        let local = req.local.clone();
-        let remote = req.remote.clone();
-        let req_id = req.id.clone();
-        block_with_deadline(req.deadline, req_id, move || async move {
-            let bytes = std::fs::read(&local)
-                .map_err(|e| TransportError::LocalIo(format!("read {}: {e}", local.display())))?;
-            // Single files stream over the SFTP subsystem (design step 4). Where
-            // the remote does not advertise sftp, fall back to the exec `cat`
-            // pipe that directories already rely on.
-            // Clone for the SFTP attempt; the exec fallback still needs the
-            // original bytes if the remote lacks the sftp subsystem.
-            match upload_via_sftp(&cfg, Path::new(&remote), bytes.clone(), req.deadline).await {
-                Ok(()) => Ok(()),
-                Err(e) if sftp_unavailable(&e) => {
-                    // Atomic upload via exec: write to staging file, then mv.
-                    let staging = format!("{remote}.tmp.{}", uuid::Uuid::new_v4());
-                    let cmd = format!("cat > {}", shell_quote(&staging));
-                    let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
-                    if raw.exit_status != 0 {
-                        let _ = exec_command(
-                            &cfg,
-                            &format!("rm -f {}", shell_quote(&staging)),
-                            None,
-                            req.deadline,
-                        )
-                        .await;
-                        return Err(TransportError::TransferInterrupted {
-                            request: req.id.clone(),
-                            reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
-                        });
-                    }
-                    // Atomic publish.
-                    let mv_cmd = format!(
-                        "mv -f {src} {dst} && rm -f {src}",
-                        src = shell_quote(&staging),
-                        dst = shell_quote(&remote)
+        let bytes = std::fs::read(&req.local)
+            .map_err(|e| TransportError::LocalIo(format!("read {}: {e}", req.local.display())))?;
+        // Single files stream over the SFTP subsystem (design step 4). Where
+        // the remote does not advertise sftp, fall back to the exec `cat` pipe
+        // that directories already rely on. Clone for the SFTP attempt; the
+        // exec fallback still needs the original bytes.
+        match self.upload_via_sftp(Path::new(&req.remote), bytes.clone(), req.deadline, &req.id) {
+            Ok(()) => Ok(()),
+            Err(e) if sftp_unavailable(&e) => {
+                // Atomic upload via exec: write to staging file, then mv.
+                let staging = format!("{}.tmp.{}", req.remote, uuid::Uuid::new_v4());
+                let cmd = format!("cat > {}", shell_quote(&staging));
+                let raw = self.exec_command(&cmd, Some(bytes), req.deadline, &req.id)?;
+                if raw.exit_status != 0 {
+                    let _ = self.exec_command(
+                        &format!("rm -f {}", shell_quote(&staging)),
+                        None,
+                        req.deadline,
+                        &req.id,
                     );
-                    let mv_raw = exec_command(&cfg, &mv_cmd, None, req.deadline).await?;
-                    if mv_raw.exit_status != 0 {
-                        let _ = exec_command(
-                            &cfg,
-                            &format!("rm -f {}", shell_quote(&staging)),
-                            None,
-                            req.deadline,
-                        )
-                        .await;
-                        return Err(TransportError::TransferInterrupted {
-                            request: req.id.clone(),
-                            reason: format!(
-                                "atomic rename failed: {}",
-                                String::from_utf8_lossy(&mv_raw.stderr)
-                            ),
-                        });
-                    }
-                    Ok(())
+                    return Err(TransportError::TransferInterrupted {
+                        request: req.id.clone(),
+                        reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
+                    });
                 }
-                Err(e) => Err(e),
+                // Atomic publish.
+                let mv_cmd = format!(
+                    "mv -f {src} {dst} && rm -f {src}",
+                    src = shell_quote(&staging),
+                    dst = shell_quote(&req.remote)
+                );
+                let mv_raw = self.exec_command(&mv_cmd, None, req.deadline, &req.id)?;
+                if mv_raw.exit_status != 0 {
+                    let _ = self.exec_command(
+                        &format!("rm -f {}", shell_quote(&staging)),
+                        None,
+                        req.deadline,
+                        &req.id,
+                    );
+                    return Err(TransportError::TransferInterrupted {
+                        request: req.id.clone(),
+                        reason: format!(
+                            "atomic rename failed: {}",
+                            String::from_utf8_lossy(&mv_raw.stderr)
+                        ),
+                    });
+                }
+                Ok(())
             }
-        })
+            Err(e) => Err(e),
+        }
     }
 
     fn upload_text(&self, req: &UploadTextRequest) -> Result<(), TransportError> {
@@ -811,52 +927,45 @@ impl RemoteTransport for NativeTransport {
                 after_secs: 0,
             });
         }
-        let cfg = self.config.clone();
         let bytes = req.text.clone().into_bytes();
-        let remote = req.remote.clone();
-        let req_id = req.id.clone();
-        block_with_deadline(req.deadline, req_id, move || async move {
-            // Atomic upload: write to staging, then mv into place.
-            let staging = format!("{remote}.tmp.{}", uuid::Uuid::new_v4());
-            let cmd = format!("cat > {}", shell_quote(&staging));
-            let raw = exec_command(&cfg, &cmd, Some(bytes), req.deadline).await?;
-            if raw.exit_status != 0 {
-                let _ = exec_command(
-                    &cfg,
-                    &format!("rm -f {}", shell_quote(&staging)),
-                    None,
-                    req.deadline,
-                )
-                .await;
-                return Err(TransportError::TransferInterrupted {
-                    request: req.id.clone(),
-                    reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
-                });
-            }
-            let mv_cmd = format!(
-                "mv -f {src} {dst} && rm -f {src}",
-                src = shell_quote(&staging),
-                dst = shell_quote(&remote)
+        // Atomic upload: write to staging, then mv into place.
+        let staging = format!("{}.tmp.{}", req.remote, uuid::Uuid::new_v4());
+        let cmd = format!("cat > {}", shell_quote(&staging));
+        let raw = self.exec_command(&cmd, Some(bytes), req.deadline, &req.id)?;
+        if raw.exit_status != 0 {
+            let _ = self.exec_command(
+                &format!("rm -f {}", shell_quote(&staging)),
+                None,
+                req.deadline,
+                &req.id,
             );
-            let mv_raw = exec_command(&cfg, &mv_cmd, None, req.deadline).await?;
-            if mv_raw.exit_status != 0 {
-                let _ = exec_command(
-                    &cfg,
-                    &format!("rm -f {}", shell_quote(&staging)),
-                    None,
-                    req.deadline,
-                )
-                .await;
-                return Err(TransportError::TransferInterrupted {
-                    request: req.id.clone(),
-                    reason: format!(
-                        "atomic rename failed: {}",
-                        String::from_utf8_lossy(&mv_raw.stderr)
-                    ),
-                });
-            }
-            Ok(())
-        })
+            return Err(TransportError::TransferInterrupted {
+                request: req.id.clone(),
+                reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
+            });
+        }
+        let mv_cmd = format!(
+            "mv -f {src} {dst} && rm -f {src}",
+            src = shell_quote(&staging),
+            dst = shell_quote(&req.remote)
+        );
+        let mv_raw = self.exec_command(&mv_cmd, None, req.deadline, &req.id)?;
+        if mv_raw.exit_status != 0 {
+            let _ = self.exec_command(
+                &format!("rm -f {}", shell_quote(&staging)),
+                None,
+                req.deadline,
+                &req.id,
+            );
+            return Err(TransportError::TransferInterrupted {
+                request: req.id.clone(),
+                reason: format!(
+                    "atomic rename failed: {}",
+                    String::from_utf8_lossy(&mv_raw.stderr)
+                ),
+            });
+        }
+        Ok(())
     }
 
     fn download_file(&self, req: &DownloadFileRequest) -> Result<(), TransportError> {
@@ -866,20 +975,13 @@ impl RemoteTransport for NativeTransport {
                 after_secs: 0,
             });
         }
-        let cfg = self.config.clone();
-        let remote = req.remote.clone();
-        let local = req.local.clone();
-        let req_id = req.id.clone();
-        block_with_deadline(req.deadline, req_id, move || async move {
-            // Atomic download: write to a local staging file, then rename.
-            // A failed download never leaves a half-written target file.
-            // Use a per-request UUID so concurrent downloads to the same target
-            // never share a staging file.
-            let local_staging = format!("{}.tmp.{}", local.display(), uuid::Uuid::new_v4());
-            let local_staging_path = std::path::PathBuf::from(&local_staging);
+        // Atomic download: write to a local staging file, then rename.
+        // A failed download never leaves a half-written target file.
+        let local_staging = format!("{}.tmp.{}", req.local.display(), uuid::Uuid::new_v4());
+        let local_staging_path = std::path::PathBuf::from(&local_staging);
 
-            let write_result = match download_via_sftp(&cfg, Path::new(&remote), req.deadline).await
-            {
+        let write_result =
+            match self.download_via_sftp(Path::new(&req.remote), req.deadline, &req.id) {
                 Ok(bytes) => {
                     std::fs::write(&local_staging_path, &bytes).map_err(|e| {
                         TransportError::LocalIo(format!("write {}: {e}", local_staging))
@@ -887,8 +989,8 @@ impl RemoteTransport for NativeTransport {
                     Ok(())
                 }
                 Err(e) if sftp_unavailable(&e) => {
-                    let cmd = format!("cat {}", shell_quote(&remote));
-                    let raw = exec_command(&cfg, &cmd, None, req.deadline).await?;
+                    let cmd = format!("cat {}", shell_quote(&req.remote));
+                    let raw = self.exec_command(&cmd, None, req.deadline, &req.id)?;
                     if raw.exit_status != 0 {
                         let _ = std::fs::remove_file(&local_staging_path);
                         return Err(TransportError::TransferInterrupted {
@@ -904,25 +1006,24 @@ impl RemoteTransport for NativeTransport {
                 Err(e) => Err(e),
             };
 
-            match write_result {
-                Ok(()) => {
-                    // Atomic publish: rename staging to target.
-                    std::fs::rename(&local_staging_path, &local).map_err(|e| {
-                        let _ = std::fs::remove_file(&local_staging_path);
-                        TransportError::LocalIo(format!(
-                            "atomic rename {} -> {}: {e}",
-                            local_staging,
-                            local.display()
-                        ))
-                    })?;
-                    Ok(())
-                }
-                Err(e) => {
+        match write_result {
+            Ok(()) => {
+                // Atomic publish: rename staging to target.
+                std::fs::rename(&local_staging_path, &req.local).map_err(|e| {
                     let _ = std::fs::remove_file(&local_staging_path);
-                    Err(e)
-                }
+                    TransportError::LocalIo(format!(
+                        "atomic rename {} -> {}: {e}",
+                        local_staging,
+                        req.local.display()
+                    ))
+                })?;
+                Ok(())
             }
-        })
+            Err(e) => {
+                let _ = std::fs::remove_file(&local_staging_path);
+                Err(e)
+            }
+        }
     }
 
     fn download_dir(&self, req: &DownloadDirRequest) -> Result<(), TransportError> {
@@ -932,45 +1033,41 @@ impl RemoteTransport for NativeTransport {
                 after_secs: 0,
             });
         }
-        let cfg = self.config.clone();
-        let remote = req.remote.clone();
-        let local = req.local.clone();
-        let req_id = req.id.clone();
-        block_with_deadline(req.deadline, req_id, move || async move {
-            let cmd = format!("tar -cf - -C {} .", shell_quote(&remote));
-            let raw = exec_command(&cfg, &cmd, None, req.deadline).await?;
-            if raw.exit_status != 0 {
-                return Err(TransportError::TransferInterrupted {
-                    request: req.id.clone(),
-                    reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
-                });
-            }
-            std::fs::create_dir_all(&local)
-                .map_err(|e| TransportError::LocalIo(format!("create {}: {e}", local.display())))?;
-            // Untar locally. The remote side already produced the tar stream, so
-            // the local `tar` requirement mirrors the OpenSSH backend's remote
-            // `tar` requirement (no extra remote toolchain divergence).
-            let tmp = local.join(format!(".vcli-dl-{}.tar", std::process::id()));
-            std::fs::write(&tmp, &raw.stdout)
-                .map_err(|e| TransportError::LocalIo(format!("stage tar: {e}")))?;
-            let status = SyncCommand::new("tar")
-                .arg("-xf")
-                .arg(&tmp)
-                .arg("-C")
-                .arg(&local)
-                .status();
-            let _ = std::fs::remove_file(&tmp);
-            match status {
-                Ok(s) if s.success() => Ok(()),
-                Ok(s) => Err(TransportError::TransferInterrupted {
-                    request: req.id.clone(),
-                    reason: format!("local tar exited with {s}"),
-                }),
-                Err(e) => Err(TransportError::LocalIo(format!(
-                    "failed to run local tar (required for download_dir): {e}"
-                ))),
-            }
-        })
+        let cmd = format!("tar -cf - -C {} .", shell_quote(&req.remote));
+        let raw = self.exec_command(&cmd, None, req.deadline, &req.id)?;
+        if raw.exit_status != 0 {
+            return Err(TransportError::TransferInterrupted {
+                request: req.id.clone(),
+                reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
+            });
+        }
+        std::fs::create_dir_all(&req.local)
+            .map_err(|e| TransportError::LocalIo(format!("create {}: {e}", req.local.display())))?;
+        // Untar locally. The remote side already produced the tar stream, so
+        // the local `tar` requirement mirrors the OpenSSH backend's remote
+        // `tar` requirement (no extra remote toolchain divergence).
+        let tmp = req
+            .local
+            .join(format!(".vcli-dl-{}.tar", std::process::id()));
+        std::fs::write(&tmp, &raw.stdout)
+            .map_err(|e| TransportError::LocalIo(format!("stage tar: {e}")))?;
+        let status = SyncCommand::new("tar")
+            .arg("-xf")
+            .arg(&tmp)
+            .arg("-C")
+            .arg(&req.local)
+            .status();
+        let _ = std::fs::remove_file(&tmp);
+        match status {
+            Ok(s) if s.success() => Ok(()),
+            Ok(s) => Err(TransportError::TransferInterrupted {
+                request: req.id.clone(),
+                reason: format!("local tar exited with {s}"),
+            }),
+            Err(e) => Err(TransportError::LocalIo(format!(
+                "failed to run local tar (required for download_dir): {e}"
+            ))),
+        }
     }
 }
 
@@ -1012,6 +1109,33 @@ mod tests {
             transport_daemon_socket: None,
             transport_daemon_token: None,
         }
+    }
+
+    #[test]
+    fn transport_reuses_the_session_slot_between_operations() {
+        // P1-2 acceptance at the unit level: one transport owns one live
+        // session slot plus a handshake counter, and every clone shares it
+        // (the pool clones transports). Actual handshake reuse is verified
+        // end-to-end by the native-pool probe against a real host — this
+        // locks the structure that makes that reuse possible.
+        let t = NativeTransport::from_config(&cfg_with("h", Some("/tmp/k"), None))
+            .expect("from_config builds without a jump host");
+        assert_eq!(
+            t.session.connections.load(Ordering::Relaxed),
+            0,
+            "no SSH connection has been established yet"
+        );
+        let t2 = t.clone();
+        assert!(
+            Arc::ptr_eq(&t.session, &t2.session),
+            "clones must share one SessionState (one live connection)"
+        );
+        assert_eq!(t2.session.connections.load(Ordering::Relaxed), 0);
+        // The slot starts empty: the first operation establishes lazily.
+        assert!(
+            t.session.inner.lock().unwrap().is_none(),
+            "connection must be lazy (nothing established at construction)"
+        );
     }
 
     #[test]
@@ -1331,9 +1455,12 @@ mod tests {
         // rather than silently attempting a single-hop connection. The guard
         // returns before any russh connect, so no network is touched.
         let rt = make_runtime().expect("runtime");
+        // The transport owns a tokio runtime (SessionState); construct it
+        // outside the test's block_on so dropping it happens on a plain
+        // thread, not inside an async context (tokio rejects that).
+        let t = NativeTransport::from_config(&cfg_with("h", Some("/tmp/k"), Some("jump")))
+            .expect("from_config accepts a jump host (deferred, not rejected at construction)");
         rt.block_on(async {
-            let t = NativeTransport::from_config(&cfg_with("h", Some("/tmp/k"), Some("jump")))
-                .expect("from_config accepts a jump host (deferred, not rejected at construction)");
             let err = establish(&t.config).await;
             assert!(
                 matches!(err, Err(TransportError::UnsupportedOperation(_))),
