@@ -505,13 +505,7 @@ impl VirtuosoClient {
         view: &str,
         mode: &str,
     ) -> Result<VirtuosoResult> {
-        let lib = escape_skill_string(lib);
-        let cell = escape_skill_string(cell);
-        let view = escape_skill_string(view);
-        let mode = escape_skill_string(mode);
-        let skill = format!(
-            r#"geOpenCellView(?libName "{lib}" ?cellName "{cell}" ?viewName "{view}" ?mode "{mode}")"#
-        );
+        let skill = build_open_cell_view_skill(lib, cell, view, mode);
         // Use unchecked — capability check done at RPC dispatch level
         self.execute_skill_unchecked(&skill, None)
     }
@@ -987,6 +981,47 @@ fn build_fetch_skill(list_expr: &str, fields: &[&str]) -> String {
     format!("mapcar(lambda((o) list({fields_str})) {list_expr})")
 }
 
+/// Build the SKILL for `cell.open`.
+///
+/// IC23 opens a GUI editor window via `deOpenCellView`; `geOpenCellView` is
+/// undefined in IC23 (eval: undefined function). `deOpenCellView` takes viewType
+/// as a positional arg, so map the common view names to their DFII viewType
+/// (these names are Cadence-standard, version/PDK-independent). Unknown views
+/// fall back to the view name itself, matching the maestro convention
+/// (view "maestro" -> viewType "maestro").
+///
+/// Existence guard (CRITICAL): calling `deOpenCellView` on a cell that does NOT
+/// exist pops a modal "New File" dialog on Virtuoso's main thread, which blocks
+/// the SKILL bridge indefinitely — every subsequent call times out until a human
+/// dismisses the dialog, and the process that would dismiss it is the blocked
+/// one. So never let `deOpenCellView` hit a missing cell:
+///
+///   * probe existence with `ddGetObj` (pure metadata query, raises no GUI);
+///   * if missing and the mode is writable (anything but `"r"`), create the
+///     cellview headlessly with `dbOpenCellViewByType` + `dbSave` + `dbClose`
+///     (create-if-absent, matching mode `"a"` semantics) — no dialog;
+///   * if missing and read-only, error out cleanly instead of freezing.
+///
+/// By the time `deOpenCellView` runs the cell is guaranteed to exist, so the
+/// modal path is unreachable by construction rather than merely unlikely.
+fn build_open_cell_view_skill(lib: &str, cell: &str, view: &str, mode: &str) -> String {
+    let view_type = match view {
+        "layout" => "maskLayout",
+        "symbol" => "schematicSymbol",
+        other => other,
+    };
+    let lib = escape_skill_string(lib);
+    let cell = escape_skill_string(cell);
+    let view_type = escape_skill_string(view_type);
+    let view = escape_skill_string(view);
+    let mode = escape_skill_string(mode);
+    // deOpenCellView(libName cellName viewName viewType winSpec mode);
+    // winSpec = nil -> open in a new window.
+    format!(
+        r#"let((exists writable) writable = !(strcmp("{mode}" "r")==0) exists = ddGetObj("{lib}" "{cell}" "{view}") when(!exists if(writable then let((ncv) ncv = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "{view_type}" "a") when(ncv dbSave(ncv) dbClose(ncv))) else error("cell.open: {lib}/{cell}/{view} not found and mode is read-only — create it first"))) deOpenCellView("{lib}" "{cell}" "{view}" "{view_type}" nil "{mode}"))"#
+    )
+}
+
 /// Read a file from the remote filesystem via SKILL's infile/gets channel.
 ///
 /// This is the CORRECT way to read file contents in Virtuoso SKILL — NOT via
@@ -1130,6 +1165,51 @@ mod tests {
     #[test]
     fn escape_backslash() {
         assert_eq!(escape_skill_string("a\\b"), "a\\\\b");
+    }
+
+    #[test]
+    fn open_cell_view_probes_before_opening() {
+        // The whole point of the guard: ddGetObj (metadata, no GUI) must be
+        // evaluated before deOpenCellView, which pops a modal dialog — and
+        // hangs the bridge — if the cell is missing.
+        let s = build_open_cell_view_skill("LIB", "CELL", "schematic", "a");
+        let probe = s.find("ddGetObj(").expect("guard must probe with ddGetObj");
+        let open = s.find("deOpenCellView(").expect("must open via deOpenCellView");
+        assert!(probe < open, "ddGetObj must precede deOpenCellView: {s}");
+        // geOpenCellView is undefined on IC23 — it must not reappear.
+        assert!(!s.contains("geOpenCellView"), "{s}");
+    }
+
+    #[test]
+    fn open_cell_view_read_only_errors_instead_of_creating() {
+        // Missing + read-only must take the error branch, never the create
+        // branch: creating a cell the caller asked to only read is a silent
+        // write to someone else's library.
+        let s = build_open_cell_view_skill("LIB", "CELL", "schematic", "r");
+        assert!(s.contains(r#"strcmp("r" "r")"#), "{s}");
+        assert!(s.contains("read-only"), "{s}");
+        assert!(s.contains("dbOpenCellViewByType"), "{s}");
+    }
+
+    #[test]
+    fn open_cell_view_maps_view_to_dfii_view_type() {
+        // deOpenCellView takes viewType positionally; these are the
+        // Cadence-standard names.
+        let layout = build_open_cell_view_skill("L", "C", "layout", "a");
+        assert!(layout.contains(r#""layout" "maskLayout""#), "{layout}");
+
+        let symbol = build_open_cell_view_skill("L", "C", "symbol", "a");
+        assert!(symbol.contains(r#""symbol" "schematicSymbol""#), "{symbol}");
+
+        // Unknown views fall back to the view name, per the maestro convention.
+        let maestro = build_open_cell_view_skill("L", "C", "maestro", "a");
+        assert!(maestro.contains(r#""maestro" "maestro""#), "{maestro}");
+    }
+
+    #[test]
+    fn open_cell_view_escapes_its_arguments() {
+        let s = build_open_cell_view_skill(r#"L"IB"#, "CELL", "schematic", "a");
+        assert!(s.contains(r#"L\"IB"#), "{s}");
     }
 
     #[test]
