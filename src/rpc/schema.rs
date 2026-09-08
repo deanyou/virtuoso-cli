@@ -226,6 +226,31 @@ pub fn standard_schema() -> RpcSchema {
             }],
             returns: "JSON object of param name→value".into(),
         },
+        Method {
+            name: "schematic.set_param".into(),
+            summary: "Set one CDF parameter of a specific instance".into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Instance name (e.g. M1)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "param".into(),
+                    ptype: "string".into(),
+                    description: "Parameter name (e.g. w, l, nf, fingers)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "value".into(),
+                    ptype: "string".into(),
+                    description: "New value (e.g. 4u)".into(),
+                    required: true,
+                },
+            ],
+            returns: "JSON object {instance, param, value, status}".into(),
+        },
         // ── Window ────────────────────────────────────────────────────
         Method {
             name: "window.list".into(),

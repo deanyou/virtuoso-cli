@@ -520,6 +520,29 @@ pub fn get_params(inst: &str) -> Result<Value> {
     Ok(json!({"instance": inst, "params": parse_skill_json(&r.output)?}))
 }
 
+/// Set one CDF parameter of a schematic instance.
+///
+/// Routes through the typed RPC dispatcher (`schematic.set_param`) rather than
+/// the raw-SKILL `execute_skill` path its read twin `get_params` uses. This
+/// keeps the CLI and the RPC method on **one route**: both go through the
+/// per-domain `permits_method` capability gate (Schematic, not Admin) and the
+/// audit log, so `vcli schematic set-param` works under the default,
+/// non-Admin capability set — the whole point of the typed surface.
+pub fn set_param(inst: &str, param: &str, value: &str) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+    let request = crate::rpc::dispatcher::RpcRequest {
+        method: "schematic.set_param".into(),
+        params: json!({ "inst": inst, "param": param, "value": value }),
+        api_key: std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty()),
+    };
+    // `schematic::*` has not been migrated to `CommandContext` yet (P0-A), so
+    // there is no ctx to thread down from `dispatch_schematic`. Resolve one
+    // here from the same environment `VirtuosoClient::from_env` just used, so
+    // the dispatcher sees the identical configuration.
+    let ctx = crate::context::CommandContext::new(crate::config::Config::from_env()?, None)?;
+    crate::rpc::dispatcher::RpcDispatcher::new(ctx).dispatch(&client, request)
+}
+
 /// Polish net labels with cosmetic presets, auto-rotation, or offset repositioning.
 ///
 /// preset: "readable" (fontSize 0.125, centerCenter) or "compact" (fontSize 0.0625, centerLeft)

@@ -307,6 +307,19 @@ impl RpcDispatcher {
                     parse_skill_json(&r.output)
                 }
             }
+            "set_param" => {
+                let inst = json_str(params.get("inst"), "inst")?;
+                let param = json_str(params.get("param"), "param")?;
+                let value = json_str(params.get("value"), "value")?;
+                let skill = ops.set_instance_param(&inst, &param, &value);
+                execute_required_skill(client, &skill, "set instance parameter")?;
+                Ok(serde_json::json!({
+                    "instance": inst,
+                    "param": param,
+                    "value": value,
+                    "status": "ok"
+                }))
+            }
             "polish_label" => {
                 let net = json_str(params.get("net"), "net")?;
                 let preset = json_str_or(params.get("preset"), "readable")?;
@@ -977,6 +990,14 @@ mod tests {
         );
         assert!(names.contains(&"schematic.save"), "should have save");
         assert!(names.contains(&"schematic.check"), "should have check");
+        assert!(
+            names.contains(&"schematic.get_params"),
+            "should have get_params"
+        );
+        assert!(
+            names.contains(&"schematic.set_param"),
+            "should have set_param"
+        );
     }
 
     #[test]
@@ -1339,8 +1360,8 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 76 methods (73 prior + symbol.inspect/generate + library.list)
-        assert_eq!(schema.methods.len(), 76, "should have exactly 76 methods");
+        // Should have 77 methods (76 prior + schematic.set_param)
+        assert_eq!(schema.methods.len(), 77, "should have exactly 77 methods");
     }
 
     #[test]
