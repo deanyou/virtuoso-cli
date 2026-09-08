@@ -675,16 +675,31 @@ pub fn cleanup(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
         // breaking existing cleanup semantics for non-target invocations.
         //
         // Target mode: use the shared verification chain. A session is "dead"
-        // only if the probe was actually attempted and the port was unreachable.
-        // Identity-skipped sessions are preserved (they may be valid remote
-        // sessions that just can't be verified from this machine).
+        // only if we have DEFINITIVE evidence that the remote daemon is down.
+        // `forward_port_unreachable` does NOT qualify: the full tunnel chain
+        // passed (SSH process alive, identity verified, not reused) — only the
+        // local forward leg is unreachable. That could be a local firewall /
+        // forwarding issue while the remote daemon is still healthy. Deleting
+        // the cached session here would lose a recoverable entry. Preserve the
+        // file and report "cannot_verify" so the operator can investigate.
         let (is_dead, skip_reason) = if is_target {
             match resolve_probe_endpoint(ctx, s) {
                 Ok(_) => (false, None),
                 Err(skip) => {
-                    let dead = skip.reason == "forward_port_unreachable"
-                        || skip.reason == "local_port_unreachable";
-                    (dead, Some(skip.reason))
+                    let is_definitive_death = skip.reason == "local_port_unreachable";
+                    let reason: String = if is_definitive_death {
+                        skip.reason.into()
+                    } else if skip.reason == "forward_port_unreachable" {
+                        // Tunnel verified, local leg down — cannot confirm
+                        // remote death. Preserve, don't delete.
+                        "cannot_verify:forward_port_unreachable".into()
+                    } else {
+                        // Other skip reasons (no_tunnel, mismatch, etc.) —
+                        // session doesn't match this context OR tunnel state
+                        // is incomplete; preserve the cache.
+                        format!("cannot_verify:{}", skip.reason)
+                    };
+                    (is_definitive_death, Some(reason))
                 }
             }
         } else {
