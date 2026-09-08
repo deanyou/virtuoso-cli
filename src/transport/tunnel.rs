@@ -1040,9 +1040,13 @@ mod tests {
     use super::is_ssh_executable;
     use super::{
         classify_ssh_pid, daemon_lifecycle, decide_stop, profiled_bridge_leaf, profiled_env_key,
-        setup_dir_for_profile, stop_saved_tunnel, verdict_to_decision, verify_ssh_pid,
-        wait_for_forward, PidVerdict, StopDecision, TunnelState, Verdict,
+        setup_dir_for_profile, verdict_to_decision, wait_for_forward, PidVerdict, StopDecision,
+        TunnelState, Verdict,
     };
+    // Used only by non-Windows tunnel tests (which are cfg'd out on Windows).
+    #[cfg(not(target_os = "windows"))]
+    use super::{stop_saved_tunnel, verify_ssh_pid};
+    #[cfg(not(target_os = "windows"))]
     use crate::config::Config;
     use serial_test::serial;
 

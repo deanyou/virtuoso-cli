@@ -58,7 +58,7 @@ libc = "0.2"
 ratatui = "0.30"
 crossterm = "0.29"
 unicode-width = "0.2"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "io-util"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "io-util", "net", "sync"] }
 regex = "1"
 toml = "1.1"
 num_cpus = "1"
@@ -74,6 +74,9 @@ russh-sftp = { version = "2", optional = true }
 # half-written env while another test holds it. `#[serial]` covers both sides
 # with one mechanism.
 serial_test = "4"
+# In-process SSH server harness for native-transport behaviour tests (russh's
+# `PrivateKey::random` requires a rand 0.10 RNG).
+rand = { version = "0.10", features = ["thread_rng"] }
 
 [profile.release]
 lto = true

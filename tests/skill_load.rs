@@ -74,6 +74,7 @@ impl Bridge {
             .unwrap()
     }
 
+    #[allow(dead_code)] // exercised only by the live Virtuoso probe variants
     fn file(&self) -> std::path::PathBuf {
         let path = self.dir.path().join("probe with spaces.ils");
         std::fs::write(&path, "procedure(vcliTestProbe() 42)\nt\n").unwrap();
@@ -91,6 +92,7 @@ impl Drop for Bridge {
     }
 }
 
+#[allow(dead_code)] // exercised only by the live Virtuoso probe variants
 fn assert_success(out: &Output) {
     assert!(
         out.status.success(),

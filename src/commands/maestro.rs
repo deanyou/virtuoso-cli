@@ -2333,6 +2333,7 @@ mod tests {
 
     /// Build a valid staging tree (one regular file + one nested regular
     /// file) under the given staging root. Used by every publish test.
+    #[allow(dead_code)] // some feature/test combinations use inline literals instead
     fn make_nested_staging(staging: &Path) {
         std::fs::create_dir(staging.join("sub")).unwrap();
         std::fs::write(staging.join("top.txt"), b"TOP").unwrap();
