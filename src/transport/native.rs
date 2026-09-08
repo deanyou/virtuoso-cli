@@ -619,13 +619,22 @@ impl NativeTransport {
         // another command can open its own channel and run concurrently.
         let result = f(channel, rt, deadline.remaining());
         if matches!(&result, Err(e) if FailureClass::of(e) == FailureClass::Transient) {
-            // Generation-matched eviction: never drop a replacement built by
-            // a concurrent request after our connection died.
-            rt.block_on(async move {
-                let mut guard = self.session.inner.lock().await;
-                if guard.as_ref().map(|(e, _)| *e) == Some(epoch) {
-                    *guard = None;
-                }
+            // Generation-matched eviction: never drop a replacement built by a
+            // concurrent request after our connection died. Bounded by the
+            // request's remaining deadline — a concurrent re-establishment
+            // holding the handle lock must never delay this request's error
+            // return. If the lock is not reachable in time the stale slot is
+            // left in place; the next operation re-detects it via is_closed()
+            // / lazy establishment, so failure marking stays effective.
+            let remaining = deadline.remaining();
+            let _ = rt.block_on(async move {
+                tokio::time::timeout(remaining, async move {
+                    let mut guard = self.session.inner.lock().await;
+                    if guard.as_ref().map(|(e, _)| *e) == Some(epoch) {
+                        *guard = None;
+                    }
+                })
+                .await
             });
         }
         result
@@ -932,12 +941,19 @@ impl RemoteTransport for NativeTransport {
             Err(e) => {
                 if FailureClass::of(&e) == FailureClass::Transient {
                     // Generation-matched eviction: a stale request's failure
-                    // must not drop a replacement connection.
-                    rt.block_on(async move {
-                        let mut guard = self.session.inner.lock().await;
-                        if guard.as_ref().map(|(g, _)| *g) == Some(epoch) {
-                            *guard = None;
-                        }
+                    // must not drop a replacement connection. Bounded by the
+                    // request's remaining deadline for the same reason as the
+                    // with_channel cleanup: never block the probe's error
+                    // return behind a concurrent re-establishment.
+                    let remaining = deadline.remaining();
+                    let _ = rt.block_on(async move {
+                        tokio::time::timeout(remaining, async move {
+                            let mut guard = self.session.inner.lock().await;
+                            if guard.as_ref().map(|(g, _)| *g) == Some(epoch) {
+                                *guard = None;
+                            }
+                        })
+                        .await
                     });
                 }
                 match e {
@@ -1185,6 +1201,12 @@ mod tests {
     use super::*;
     use crate::transport::contract::test_support::shared_contract_suite;
     use russh::server::{self, Auth, Session};
+    use std::io;
+    use std::pin::Pin;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::Arc;
+    use std::task::{Context, Poll};
+    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
     use tokio::sync::oneshot;
 
     fn cfg_with(host: &str, key: Option<&str>, jump: Option<&str>) -> Config {
@@ -1628,6 +1650,102 @@ mod tests {
         /// Disconnect the session when an exec whose command equals this
         /// arrives (simulates the remote going away mid-use).
         disconnect_on_exec: Option<String>,
+        /// Sleep, then disconnect, when the exec command equals this (key,
+        /// delay) pair — widens the failing exec's window so a test can take
+        /// the handle lock while the stale request is still in flight.
+        disconnect_delay_for: Option<(String, Duration)>,
+        /// When the exec command equals this, signal `started` and then block
+        /// on `release` before replying — a deterministic slow-command gate.
+        gate_on_exec: Option<(String, Gate)>,
+    }
+
+    /// Deterministic slow-command gate. The server signals `started` the
+    /// moment the gated command arrives, then waits on `release` before
+    /// replying. The test waits on `started` (so it knows the slow command is
+    /// actually in progress), runs a fast command, and only then releases the
+    /// slow one — no sleep-based timing guesses.
+    #[derive(Clone, Default)]
+    struct Gate {
+        started: Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>,
+        release: Arc<tokio::sync::Notify>,
+    }
+
+    impl Gate {
+        fn new() -> Self {
+            Self::default()
+        }
+
+        fn signal_started(&self) {
+            let mut g = self.started.0.lock().unwrap();
+            *g = true;
+            self.started.1.notify_all();
+        }
+
+        fn wait_started(&self) {
+            let mut g = self.started.0.lock().unwrap();
+            while !*g {
+                g = self.started.1.wait(g).unwrap();
+            }
+        }
+
+        fn release(&self) {
+            self.release.notify_waiters();
+        }
+
+        async fn wait_release(&self) {
+            self.release.notified().await;
+        }
+    }
+
+    /// Wraps the server-side TCP stream and counts bytes read from the
+    /// client. SSH payloads are encrypted, so a count of *packets* is not
+    /// visible here, but during a quiet idle gap the only traffic a client
+    /// sends is keepalive global requests — a growing receive byte count is
+    /// direct evidence the keepalive loop is running on the background
+    /// runtime.
+    struct CountingStream<S> {
+        inner: S,
+        received: Arc<AtomicU64>,
+    }
+
+    impl<S> CountingStream<S> {
+        fn new(inner: S, received: Arc<AtomicU64>) -> Self {
+            Self { inner, received }
+        }
+    }
+
+    impl<S: AsyncRead + Unpin> AsyncRead for CountingStream<S> {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            let before = buf.filled().len();
+            let result = Pin::new(&mut self.inner).poll_read(cx, buf);
+            if result.is_ready() {
+                let n = buf.filled().len().saturating_sub(before);
+                self.received.fetch_add(n as u64, Ordering::Relaxed);
+            }
+            result
+        }
+    }
+
+    impl<S: AsyncWrite + Unpin> AsyncWrite for CountingStream<S> {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<io::Result<usize>> {
+            Pin::new(&mut self.inner).poll_write(cx, buf)
+        }
+
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            Pin::new(&mut self.inner).poll_flush(cx)
+        }
+
+        fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            Pin::new(&mut self.inner).poll_shutdown(cx)
+        }
     }
 
     #[derive(Clone)]
@@ -1682,6 +1800,36 @@ mod tests {
                 session.disconnect(russh::Disconnect::ByApplication, "test shutdown", "")?;
                 return Ok(());
             }
+            if let Some((needle, delay)) = &self.behavior.disconnect_delay_for {
+                if cmd == *needle {
+                    tokio::time::sleep(*delay).await;
+                    session.disconnect(russh::Disconnect::ByApplication, "test shutdown", "")?;
+                    return Ok(());
+                }
+            }
+            if let Some((needle, gate)) = &self.behavior.gate_on_exec {
+                if cmd == *needle {
+                    gate.signal_started();
+                    // Schedule the delayed reply on a separate task so the
+                    // gated command does not block the connection's request
+                    // handling (a real sshd services channels independently;
+                    // the test server must behave the same or the client-side
+                    // concurrency claim cannot be exercised).
+                    let handle = session.handle();
+                    let gate = gate.clone();
+                    let payload = self.behavior.exec_reply.clone();
+                    tokio::spawn(async move {
+                        gate.wait_release().await;
+                        if let Some(payload) = payload {
+                            let _ = handle.data(channel, payload).await;
+                            let _ = handle.exit_status_request(channel, 0).await;
+                            let _ = handle.eof(channel).await;
+                            let _ = handle.close(channel).await;
+                        }
+                    });
+                    return Ok(());
+                }
+            }
             if let Some((needle, delay)) = &self.behavior.exec_delay_for {
                 if cmd == *needle {
                     tokio::time::sleep(*delay).await;
@@ -1710,6 +1858,7 @@ mod tests {
         port: u16,
         pub_key: russh::keys::PublicKey,
         shutdown_tx: Option<oneshot::Sender<()>>,
+        bytes_received: Arc<AtomicU64>,
         _runtime: tokio::runtime::Runtime,
     }
 
@@ -1726,6 +1875,8 @@ mod tests {
             let (port_tx, port_rx) = oneshot::channel();
             let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
             let behavior = Arc::new(behavior);
+            let bytes_received = Arc::new(AtomicU64::new(0));
+            let br_total = Arc::clone(&bytes_received);
             runtime.spawn(async move {
                 let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
                     .await
@@ -1744,7 +1895,9 @@ mod tests {
                             let (stream, _) = accepted.expect("accept client");
                             let cfg = Arc::clone(&config);
                             let bh = Arc::clone(&behavior);
+                            let br = Arc::clone(&br_total);
                             sessions.push(tokio::spawn(async move {
+                                let stream = CountingStream::new(stream, br);
                                 let _ = server::run_stream(cfg, stream, TestHandler { behavior: bh })
                                     .await;
                             }));
@@ -1761,6 +1914,7 @@ mod tests {
                 port,
                 pub_key: pub_key.clone(),
                 shutdown_tx: Some(shutdown_tx),
+                bytes_received,
                 _runtime: runtime,
             }
         }
@@ -1857,11 +2011,18 @@ mod tests {
 
     /// P1-2 concurrency: a slow command on one channel must not block a fast
     /// command — each operation opens its own channel and the handle lock is
-    /// released as soon as the channel exists.
+    /// released as soon as the channel exists. The slow command is gated with
+    /// a synchronisation signal rather than a sleep: the test waits until the
+    /// server confirms the slow command is in flight, runs the fast command,
+    /// asserts it completes, and only then releases the slow command. A
+    /// serialising implementation would hold the handle lock until the slow
+    /// command finished, so the fast command could not complete before the
+    /// release.
     #[test]
     fn concurrent_commands_run_on_independent_channels() {
+        let gate = Arc::new(Gate::new());
         let server = TestServer::start(ServerBehavior {
-            exec_delay_for: Some(("slow".to_string(), Duration::from_millis(600))),
+            gate_on_exec: Some(("slow".to_string(), (*gate).clone())),
             exec_reply: Some(b"ok".to_vec()),
             ..Default::default()
         });
@@ -1873,9 +2034,10 @@ mod tests {
             let t = t.clone();
             std::thread::spawn(move || t.exec_command("slow", None, dl(10), &slow_rid))
         };
-        // Give the slow command time to open its channel and start sleeping on
-        // the server, then run a fast command on a second channel.
-        std::thread::sleep(Duration::from_millis(150));
+        // Deterministic: wait until the slow command has actually started on
+        // the server (its channel is open and the exec is being processed)
+        // before touching the fast command.
+        gate.wait_started();
         let started = std::time::Instant::now();
         let fast = t
             .exec_command("fast", None, dl(10), &rid)
@@ -1886,6 +2048,9 @@ mod tests {
             fast_elapsed < Duration::from_millis(500),
             "fast command must not wait for the slow command's channel (got {fast_elapsed:?})"
         );
+        // The slow command is still blocked: release it and only then may it
+        // complete — proving the fast command finished first.
+        gate.release();
         let slow_out = slow.join().expect("slow thread").expect("slow exec");
         assert_eq!(slow_out.stdout, b"ok");
         assert_eq!(
@@ -1927,6 +2092,91 @@ mod tests {
         let _ = stuck.join().expect("stuck thread");
     }
 
+    /// P1 failure-cleanup deadline: after a stale request's connection-level
+    /// failure, the generation-matched eviction must be bounded by the
+    /// request's remaining deadline — it must never block behind a concurrent
+    /// slow re-establishment holding the handle lock. The concurrent
+    /// re-establishment is simulated by holding the lock (the deterministic
+    /// equivalent of a connection stuck in authentication, as hold_auth would
+    /// produce), and the stale request's operation returns a transient
+    /// connection failure mid-flight. The stale request must return on its own
+    /// deadline — before the lock is released — and the closed handle must
+    /// still be replaced by the next operation even when the eviction was
+    /// skipped.
+    #[test]
+    fn stale_failure_cleanup_is_bounded_by_the_request_deadline() {
+        let server = TestServer::start(ServerBehavior {
+            exec_reply: Some(b"ok".to_vec()),
+            // "die" sleeps 800 ms, then disconnects — a real connection death.
+            disconnect_delay_for: Some(("die".to_string(), Duration::from_millis(800))),
+            ..Default::default()
+        });
+        let (t, _dir) = test_transport(&server, Duration::from_secs(30), 3);
+        let rid = RequestId::new();
+        t.exec_command("warm", None, dl(10), &rid).expect("warmup");
+        // A: drive with_channel directly; its operation kills the connection
+        // mid-flight (server disconnect) and then fails with a transient
+        // connection error — the path whose cleanup must respect the
+        // deadline. B takes the handle lock while A's operation is still in
+        // flight.
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        let a_rid = rid.clone();
+        let a = {
+            let t = t.clone();
+            let done_tx = done_tx.clone();
+            std::thread::spawn(move || {
+                let result: Result<(), TransportError> =
+                    t.with_channel(dl(2), &a_rid, |channel, rt, _remaining| {
+                        // Real mid-use death: the server disconnects ~800 ms
+                        // after receiving "die".
+                        rt.block_on(async move {
+                            let mut ch = channel;
+                            let _ = ch.exec(false, "die".to_string()).await;
+                            let _ = tokio::time::timeout(Duration::from_millis(1500), async {
+                                while ch.wait().await.is_some() {}
+                            })
+                            .await;
+                        });
+                        Err(TransportError::ConnectionFailed(
+                            "simulated mid-use connection failure".into(),
+                        ))
+                    });
+                let _ = done_tx.send(());
+                result
+            })
+        };
+        // Take the handle lock while A's operation is in flight, simulating a
+        // concurrent re-establishment stuck in auth. Hold it well past A's
+        // deadline.
+        std::thread::sleep(Duration::from_millis(150));
+        let guard = t.session.inner.blocking_lock();
+        std::thread::sleep(Duration::from_secs(3));
+        let returned_early = done_rx.recv_timeout(Duration::from_millis(300)).is_ok();
+        drop(guard);
+        assert!(
+            returned_early,
+            "stale request's cleanup must be bounded by its remaining deadline and must not wait \
+             for the concurrent re-establishment to release the handle lock"
+        );
+        let a_res = a.join().expect("stale thread");
+        assert!(
+            a_res.is_err(),
+            "the stale request must surface its connection failure"
+        );
+        // Eviction may have been skipped (the lock was unreachable before the
+        // deadline); the dead handle must still be re-detected and replaced by
+        // the next operation — failure marking stays effective.
+        let final_res = t
+            .exec_command("final", None, dl(5), &rid)
+            .expect("next operation rebuilds");
+        assert_eq!(final_res.stdout, b"ok");
+        assert_eq!(
+            t.session.connections.load(Ordering::Relaxed),
+            2,
+            "the dead session must be replaced by a fresh connection"
+        );
+    }
+
     /// P1-1 liveness: after the remote goes away, test_connection must stop
     /// reporting healthy — the probe is a real ping/pong, not a cached
     /// success based on the handle existing.
@@ -1955,19 +2205,31 @@ mod tests {
         );
     }
 
-    /// P1-1 background liveness: the shared multi-thread runtime keeps the
-    /// connection alive across an idle gap (longer than a short keepalive
-    /// interval would be) — no reconnect happens and the next probe succeeds.
+    /// P1-1 background liveness: with a short keepalive interval, the shared
+    /// multi-thread runtime keeps sending keepalives while the transport is
+    /// idle — the server must observe incoming traffic during a quiet gap
+    /// longer than several keepalive periods, with no client-side operation
+    /// and no reconnect.
     #[test]
-    fn idle_connection_stays_alive_on_the_multi_thread_runtime() {
+    fn idle_connection_sends_keepalives_on_the_background_runtime() {
         let server = TestServer::start(ServerBehavior {
             exec_reply: Some(b"ok".to_vec()),
             ..Default::default()
         });
-        let (t, _dir) = test_transport(&server, Duration::from_secs(30), 3);
+        // 500 ms keepalive interval; idle for 1.6 s = >3 periods.
+        let (t, _dir) = test_transport(&server, Duration::from_millis(500), 3);
         let rid = RequestId::new();
         t.exec_command("warm", None, dl(10), &rid).expect("warmup");
-        std::thread::sleep(Duration::from_secs(2));
+        let before = server.bytes_received.load(Ordering::Relaxed);
+        // No client operation: only the background keepalive loop may produce
+        // traffic on the wire.
+        std::thread::sleep(Duration::from_millis(1600));
+        let after = server.bytes_received.load(Ordering::Relaxed);
+        assert!(
+            after > before,
+            "the server must receive keepalive traffic while the transport is idle \
+             (before={before} after={after})"
+        );
         assert!(
             t.test_connection(dl(5)).expect("probe after idle"),
             "connection must stay usable after an idle gap"
