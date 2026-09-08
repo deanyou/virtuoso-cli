@@ -117,14 +117,14 @@ fn vcli_profile_subcommand_runs() {
 fn vcli_profile_bind_user_then_clear() {
     // End-to-end: bind a profile to user-level, observe it via show,
     // then clear. Verifies the CLI plumbing works all the way through.
-    use std::env;
-    let home = env::var("HOME").expect("HOME must be set for this test");
-    let env_file = PathBuf::from(&home).join(".vcli").join(".env");
-    let backup = if env_file.exists() {
-        Some(std::fs::read_to_string(&env_file).unwrap())
-    } else {
-        None
-    };
+    // Redirect HOME to a scratch dir so the CLI's `~/.vcli` writes land in a
+    // throwaway location. This test used to write the *real* `~/.vcli/.env`,
+    // which both corrupted the developer's machine and made the assertions
+    // depend on whatever happened to be there.
+    let scratch = tempfile::tempdir().expect("scratch home");
+    let home = scratch.path();
+    let profile_file = home.join(".vcli").join("profile");
+    let env_file = home.join(".vcli").join(".env");
 
     // Test is single-threaded for the duration via test-threads=1 in CI,
     // OR the underlying lib's Mutex serializes its own tests. We
@@ -143,6 +143,7 @@ fn vcli_profile_bind_user_then_clear() {
             "--format",
             "json",
         ])
+        .env("HOME", home)
         .output()
         .expect("vcli profile bind --user");
     assert!(
@@ -155,17 +156,19 @@ fn vcli_profile_bind_user_then_clear() {
     assert_eq!(parsed["scope"], "user");
     assert_eq!(parsed["profile"], test_profile);
 
-    // 2. Verify ~/.vcli/.env contains it
-    let content = std::fs::read_to_string(&env_file).unwrap();
-    assert!(
-        content.contains(&format!("VB_PROFILE={test_profile}")),
-        "expected VB_PROFILE={test_profile} in {}; got: {content}",
-        env_file.display()
+    // 2. Verify ~/.vcli/profile contains it (sole content is the name)
+    let content = std::fs::read_to_string(&profile_file).unwrap();
+    assert_eq!(
+        content.trim(),
+        test_profile,
+        "expected {test_profile} in {}; got: {content}",
+        profile_file.display()
     );
 
     // 3. Show
     let show = Command::new(&bin)
         .args(["profile", "show", "--format", "json"])
+        .env("HOME", home)
         .env("VB_PROFILE", test_profile)
         .output()
         .expect("vcli profile show");
@@ -180,6 +183,7 @@ fn vcli_profile_bind_user_then_clear() {
     // 4. Clear
     let clear = Command::new(&bin)
         .args(["profile", "clear", "--user", "--format", "json"])
+        .env("HOME", home)
         .output()
         .expect("vcli profile clear --user");
     assert!(
@@ -189,18 +193,65 @@ fn vcli_profile_bind_user_then_clear() {
     );
 
     // 5. Verify gone
+    assert!(
+        !profile_file.exists(),
+        "the user binding should be removed; still there: {content}",
+        content = std::fs::read_to_string(&profile_file).unwrap_or_default()
+    );
+
+    // 6. The deprecated `~/.vcli/.env` VB_PROFILE= is still honoured as a
+    //    fallback, and `clear` must neutralise it too — otherwise a stale
+    //    legacy line resurrects a profile the user just cleared.
+    std::fs::write(&env_file, format!("VB_PROFILE={test_profile}\n")).unwrap();
+    let show = Command::new(&bin)
+        .args(["profile", "show", "--format", "json"])
+        .env("HOME", home)
+        .env_remove("VB_PROFILE")
+        .output()
+        .expect("vcli profile show (legacy fallback)");
+    assert!(show.status.success());
+    let parsed: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
+    assert_eq!(parsed["profile"], test_profile);
+    assert_eq!(
+        parsed["source"], "user_env",
+        "the legacy .env should resolve as the deprecated fallback"
+    );
+
+    let clear = Command::new(&bin)
+        .args(["profile", "clear", "--user", "--format", "json"])
+        .env("HOME", home)
+        .output()
+        .expect("vcli profile clear --user (legacy)");
+    assert!(clear.status.success());
     let content = std::fs::read_to_string(&env_file).unwrap_or_default();
     assert!(
         !content.contains(test_profile),
-        "VB_PROFILE should be cleared; got: {content}"
+        "the legacy VB_PROFILE line should be stripped; got: {content}"
     );
+}
 
-    // Restore backup
-    if let Some(b) = backup {
-        std::fs::write(&env_file, b).unwrap();
-    } else if env_file.exists() {
-        std::fs::remove_file(&env_file).unwrap();
-    }
+#[cfg(unix)]
+#[test]
+fn vcli_profile_user_scope_does_not_touch_the_real_home() {
+    // Regression guard: the CLI must not create anything under the real
+    // `$HOME/.vcli` when HOME is redirected, and `profile show` must report
+    // the "default" source for a scratch home with no bindings.
+    let scratch = tempfile::tempdir().expect("scratch home");
+    let home = scratch.path();
+
+    let show = Command::new(vcli_bin())
+        .args(["profile", "show", "--format", "json"])
+        .env("HOME", home)
+        .env_remove("VB_PROFILE")
+        .output()
+        .expect("vcli profile show");
+    assert!(show.status.success());
+    let parsed: serde_json::Value = serde_json::from_slice(&show.stdout).unwrap();
+    assert_eq!(parsed["source"], "default");
+    assert!(
+        !home.join(".vcli").join("profile").exists(),
+        "show must not create a binding"
+    );
 }
 
 #[test]
