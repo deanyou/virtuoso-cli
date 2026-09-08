@@ -5,8 +5,13 @@ use crate::models::SessionInfo;
 use crate::skill_finder::{SKILLFinder, SearchMode};
 use serde_json::{json, Value};
 
-pub fn exec(code: &str, timeout: u64, readonly: bool) -> Result<Value> {
-    let mut client = VirtuosoClient::from_env()?;
+pub fn exec(
+    ctx: &crate::context::CommandContext,
+    code: &str,
+    timeout: u64,
+    readonly: bool,
+) -> Result<Value> {
+    let mut client = VirtuosoClient::from_context(ctx)?;
     if readonly {
         client = client.with_sandbox_mode();
     }
@@ -111,8 +116,8 @@ pub fn broadcast(code: &str, timeout: u64) -> Result<Value> {
     }))
 }
 
-pub fn load(file: &str, skillpp: bool) -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn load(ctx: &crate::context::CommandContext, file: &str, skillpp: bool) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
 
     let result = client.load_il(file, skillpp)?;
     let skillpp_mode = result.metadata.contains_key("skillpp_mode");
@@ -136,7 +141,11 @@ pub fn load(file: &str, skillpp: bool) -> Result<Value> {
 /// Supports two input modes:
 /// - `code` provided directly: single expression or multi-line block
 /// - `stdin == true`: read from stdin (avoids shell quoting pain)
-pub fn eval(code: Option<String>, stdin: bool) -> Result<Value> {
+pub fn eval(
+    ctx: &crate::context::CommandContext,
+    code: Option<String>,
+    stdin: bool,
+) -> Result<Value> {
     use std::io::Read;
 
     // Input validation: mutually exclusive modes
@@ -171,7 +180,7 @@ pub fn eval(code: Option<String>, stdin: bool) -> Result<Value> {
     // - Embedded newlines flow through unchanged
     let wrapped = format!("progn(\n{}\n)", skill);
 
-    let client = VirtuosoClient::from_env()?;
+    let client = VirtuosoClient::from_context(ctx)?;
     let result = client.execute_skill(&wrapped, None)?;
 
     Ok(json!({
@@ -197,6 +206,7 @@ pub fn eval(code: Option<String>, stdin: bool) -> Result<Value> {
 /// * `include_desc` - When `true`, also match against the description field,
 ///   not just the function name. Useful for "what function does X" queries.
 pub fn find(
+    ctx: &crate::context::CommandContext,
     query: &str,
     mode: &str,
     limit: usize,
@@ -204,14 +214,14 @@ pub fn find(
     include_desc: bool,
 ) -> Result<Value> {
     let search_mode: SearchMode = mode.parse().unwrap_or(SearchMode::Fuzzy);
-    let cfg = Config::from_env()?;
+    let cfg = ctx.config();
 
     let mut finder = SKILLFinder::new();
 
     if cfg.is_remote() {
         // Remote mode: use cache or sync. Reject an explicit `native` backend
         // before any ssh/scp sync runs, so the mismatch is never swallowed.
-        crate::transport::backend::require_openssh(&cfg)?;
+        crate::transport::backend::require_openssh(cfg)?;
         let host = cfg.remote_host.clone().unwrap_or_default();
         let target = cfg.ssh_target();
         let cshrc = cfg.cadence_cshrc.as_deref();
@@ -224,7 +234,7 @@ pub fn find(
         let _ = crate::skill_finder::load_or_sync(&mut finder, &host, &target, cshrc)?;
     } else {
         // Local mode: find from local Cadence installation
-        let finder_dir = find_skill_finder_dir(&cfg)?;
+        let finder_dir = find_skill_finder_dir(cfg)?;
         if let Some(dir) = finder_dir {
             finder.load(&dir).map_err(|e| {
                 VirtuosoError::Config(format!("failed to load SKILL Finder: {}", e))
@@ -257,12 +267,12 @@ pub fn find(
 /// Get detailed More Info documentation for a specific SKILL function.
 ///
 /// This queries the Cadence More Info system via the Virtuoso bridge.
-pub fn info(func_name: &str) -> Result<Value> {
+pub fn info(ctx: &crate::context::CommandContext, func_name: &str) -> Result<Value> {
     if func_name.is_empty() {
         return Err(VirtuosoError::Config("function name is required".into()));
     }
 
-    let client = VirtuosoClient::from_env()?;
+    let client = VirtuosoClient::from_context(ctx)?;
 
     // Use Virtuoso's More Info system via SKILL
     let skill_code = format!(
@@ -411,16 +421,21 @@ exit 1"#,
 }
 
 /// Sync SKILL Finder cache from remote server.
-pub fn sync_cache(host: Option<&str>, cshrc: Option<&str>, verbose: bool) -> Result<Value> {
-    let cfg = Config::from_env()?;
-    crate::transport::backend::require_openssh(&cfg)?;
+pub fn sync_cache(
+    ctx: &crate::context::CommandContext,
+    host: Option<&str>,
+    cshrc: Option<&str>,
+    verbose: bool,
+) -> Result<Value> {
+    let cfg = ctx.config();
+    crate::transport::backend::require_openssh(cfg)?;
     let target_host = host
         .map(String::from)
         .or(cfg.remote_host.clone())
         .ok_or_else(|| VirtuosoError::Config("Remote host required for sync".into()))?;
 
     let target = cfg.ssh_target();
-    let target_cshrc = cshrc.map(String::from).or(cfg.cadence_cshrc);
+    let target_cshrc = cshrc.map(String::from).or(cfg.cadence_cshrc.clone());
     let target_cshrc_ref = target_cshrc.as_deref();
 
     let old_count = crate::skill_finder::cache_file_count(&target_host);
@@ -457,8 +472,12 @@ pub fn sync_cache(host: Option<&str>, cshrc: Option<&str>, verbose: bool) -> Res
 }
 
 /// Show or clear SKILL Finder cache.
-pub fn show_cache(host: Option<&str>, clear: bool) -> Result<Value> {
-    let cfg = Config::from_env()?;
+pub fn show_cache(
+    ctx: &crate::context::CommandContext,
+    host: Option<&str>,
+    clear: bool,
+) -> Result<Value> {
+    let cfg = ctx.config();
     let target_host = host
         .map(String::from)
         .or(cfg.remote_host.clone())

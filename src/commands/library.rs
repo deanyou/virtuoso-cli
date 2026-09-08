@@ -4,8 +4,8 @@ use crate::client::skill_sexp::{parse_sexp, sexp_to_str_list};
 use crate::error::{Result, VirtuosoError};
 use serde_json::{json, Value};
 
-pub fn list() -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn list(ctx: &crate::context::CommandContext) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
     // Use unchecked — capability check already passed at RPC dispatch level
     let r = client.execute_skill_unchecked(&LibraryOps.list(), Some(client.read_timeout()))?;
     if !r.skill_ok() {

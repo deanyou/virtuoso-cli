@@ -2120,33 +2120,39 @@ fn parse_bind_scope(
     }
 }
 
-fn dispatch_skill(cmd: SkillCmd) -> error::Result<serde_json::Value> {
+fn dispatch_skill(
+    cmd: SkillCmd,
+    ctx: &crate::context::CommandContext,
+) -> error::Result<serde_json::Value> {
     match cmd {
         SkillCmd::Exec {
             code,
             timeout,
             readonly,
-        } => commands::skill::exec(&code, timeout, readonly),
-        SkillCmd::Load { file, skillpp } => commands::skill::load(&file, skillpp),
+        } => commands::skill::exec(ctx, &code, timeout, readonly),
+        SkillCmd::Load { file, skillpp } => commands::skill::load(ctx, &file, skillpp),
         SkillCmd::Broadcast { code, timeout } => commands::skill::broadcast(&code, timeout),
-        SkillCmd::Eval { code, stdin } => commands::skill::eval(code, stdin),
+        SkillCmd::Eval { code, stdin } => commands::skill::eval(ctx, code, stdin),
         SkillCmd::Find {
             query,
             mode,
             limit,
             include_desc,
-        } => commands::skill::find(&query, &mode, limit, false, include_desc),
-        SkillCmd::Info { func } => commands::skill::info(&func),
+        } => commands::skill::find(ctx, &query, &mode, limit, false, include_desc),
+        SkillCmd::Info { func } => commands::skill::info(ctx, &func),
         SkillCmd::Sync {
             host,
             cshrc,
             verbose,
-        } => commands::skill::sync_cache(host.as_deref(), cshrc.as_deref(), verbose),
-        SkillCmd::Cache { host, clear } => commands::skill::show_cache(host.as_deref(), clear),
+        } => commands::skill::sync_cache(ctx, host.as_deref(), cshrc.as_deref(), verbose),
+        SkillCmd::Cache { host, clear } => commands::skill::show_cache(ctx, host.as_deref(), clear),
     }
 }
 
-fn dispatch_cell(cmd: CellCmd) -> error::Result<serde_json::Value> {
+fn dispatch_cell(
+    cmd: CellCmd,
+    ctx: &crate::context::CommandContext,
+) -> error::Result<serde_json::Value> {
     match cmd {
         CellCmd::Open {
             lib,
@@ -2154,10 +2160,10 @@ fn dispatch_cell(cmd: CellCmd) -> error::Result<serde_json::Value> {
             view,
             mode,
             dry_run,
-        } => commands::cell::open(&lib, &cell, &view, &mode, dry_run),
-        CellCmd::Save => commands::cell::save(),
-        CellCmd::Close => commands::cell::close(),
-        CellCmd::Info => commands::cell::info(),
+        } => commands::cell::open(ctx, &lib, &cell, &view, &mode, dry_run),
+        CellCmd::Save => commands::cell::save(ctx),
+        CellCmd::Close => commands::cell::close(ctx),
+        CellCmd::Info => commands::cell::info(ctx),
     }
 }
 
@@ -2473,14 +2479,17 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
     }
 }
 
-fn dispatch_symbol(cmd: SymbolCmd) -> error::Result<serde_json::Value> {
+fn dispatch_symbol(
+    cmd: SymbolCmd,
+    ctx: &crate::context::CommandContext,
+) -> error::Result<serde_json::Value> {
     match cmd {
         SymbolCmd::Inspect {
             lib,
             cell,
             view,
             view_type,
-        } => commands::symbol::inspect(&lib, &cell, &view, &view_type),
+        } => commands::symbol::inspect(ctx, &lib, &cell, &view, &view_type),
         SymbolCmd::Generate {
             lib,
             cell,
@@ -2488,6 +2497,7 @@ fn dispatch_symbol(cmd: SymbolCmd) -> error::Result<serde_json::Value> {
             symbol_view,
             sort_pins,
         } => commands::symbol::generate(
+            ctx,
             &lib,
             &cell,
             &schematic_view,
@@ -2497,9 +2507,12 @@ fn dispatch_symbol(cmd: SymbolCmd) -> error::Result<serde_json::Value> {
     }
 }
 
-fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
+fn dispatch_window(
+    cmd: WindowCmd,
+    ctx: &crate::context::CommandContext,
+) -> error::Result<serde_json::Value> {
     match cmd {
-        WindowCmd::List => commands::window::list(),
+        WindowCmd::List => commands::window::list(ctx),
         WindowCmd::DismissDialog {
             action,
             dry_run,
@@ -2509,20 +2522,21 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
         } => {
             if x11 {
                 commands::window::dismiss_dialog_x11(
+                    ctx,
                     &action,
                     dry_run,
                     display.as_deref(),
                     window_id.as_deref(),
                 )
             } else {
-                commands::window::dismiss_dialog(&action, dry_run)
+                commands::window::dismiss_dialog(ctx, &action, dry_run)
             }
         }
         WindowCmd::ListDialogsX11 { display } => {
-            commands::window::list_dialogs_x11(display.as_deref())
+            commands::window::list_dialogs_x11(ctx, display.as_deref())
         }
         WindowCmd::ListWindowsX11 { display } => {
-            commands::window::list_windows_x11(display.as_deref())
+            commands::window::list_windows_x11(ctx, display.as_deref())
         }
         WindowCmd::DismissWindowX11 {
             window_id,
@@ -2531,13 +2545,14 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             action,
             display,
         } => commands::window::dismiss_window_x11(
+            ctx,
             window_id.as_deref().or(window_id_pos.as_deref()),
             pid,
             &action,
             display.as_deref(),
         ),
         WindowCmd::Screenshot { path, window } => {
-            commands::window::screenshot(&path, window.as_deref())
+            commands::window::screenshot(ctx, &path, window.as_deref())
         }
         WindowCmd::ActionX11 {
             window_id,
@@ -2553,6 +2568,7 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             display_override,
             direct,
         } => commands::window::action_x11(
+            ctx,
             &window_id,
             pid,
             &display,
@@ -2574,6 +2590,7 @@ fn dispatch_window(cmd: WindowCmd) -> error::Result<serde_json::Value> {
             display_override,
             timeout,
         } => commands::window::action_x11_batch(
+            ctx,
             &file,
             direct,
             pid,
@@ -2590,18 +2607,21 @@ fn dispatch_diag(cmd: DiagCmd) -> error::Result<serde_json::Value> {
     }
 }
 
-fn dispatch_tx(cmd: TxCmd) -> error::Result<serde_json::Value> {
+fn dispatch_tx(
+    cmd: TxCmd,
+    ctx: &crate::context::CommandContext,
+) -> error::Result<serde_json::Value> {
     match cmd {
         TxCmd::Begin {
             id,
             lib,
             cell,
             view,
-        } => commands::transaction::begin(&id, &lib, &cell, &view),
-        TxCmd::Commit => commands::transaction::commit(),
-        TxCmd::Rollback => commands::transaction::rollback(),
-        TxCmd::Diff => commands::transaction::diff(),
-        TxCmd::Status => commands::transaction::status(),
+        } => commands::transaction::begin(ctx, &id, &lib, &cell, &view),
+        TxCmd::Commit => commands::transaction::commit(ctx),
+        TxCmd::Rollback => commands::transaction::rollback(ctx),
+        TxCmd::Diff => commands::transaction::diff(ctx),
+        TxCmd::Status => commands::transaction::status(ctx),
     }
 }
 
@@ -2817,15 +2837,15 @@ fn main() {
                 dispatch_profile(cmd, cli.profile.clone())
             }
         }
-        Commands::Skill(cmd) => dispatch_skill(cmd),
-        Commands::Cell(cmd) => dispatch_cell(cmd),
+        Commands::Skill(cmd) => dispatch_skill(cmd, ctx.as_ref().unwrap()),
+        Commands::Cell(cmd) => dispatch_cell(cmd, ctx.as_ref().unwrap()),
         Commands::Sim(cmd) => dispatch_sim(cmd, ctx.as_ref().unwrap()),
         Commands::Process(cmd) => dispatch_process(cmd, ctx.as_ref().unwrap()),
         Commands::Design(cmd) => dispatch_design(cmd, format),
         Commands::Maestro(cmd) => dispatch_maestro(cmd),
         Commands::Schematic(cmd) => dispatch_schematic(cmd),
-        Commands::Symbol(cmd) => dispatch_symbol(cmd),
-        Commands::Library(LibraryCmd::List) => commands::library::list(),
+        Commands::Symbol(cmd) => dispatch_symbol(cmd, ctx.as_ref().unwrap()),
+        Commands::Library(LibraryCmd::List) => commands::library::list(ctx.as_ref().unwrap()),
         Commands::Session(cmd) => match cmd {
             SessionCmd::List => commands::session::list(ctx.as_ref().unwrap(), format),
             SessionCmd::Show { id } => commands::session::show(ctx.as_ref().unwrap(), &id, format),
@@ -2849,9 +2869,9 @@ fn main() {
                 }
             }
         },
-        Commands::Tx(cmd) => dispatch_tx(cmd),
+        Commands::Tx(cmd) => dispatch_tx(cmd, ctx.as_ref().unwrap()),
         Commands::Rpc(cmd) => dispatch_rpc(cmd),
-        Commands::Window(cmd) => dispatch_window(cmd),
+        Commands::Window(cmd) => dispatch_window(cmd, ctx.as_ref().unwrap()),
         Commands::Diag(cmd) => dispatch_diag(cmd),
         Commands::Schema { all, noun, verb } => {
             let schema = if all || noun.is_none() {
