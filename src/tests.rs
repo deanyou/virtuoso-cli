@@ -1832,6 +1832,46 @@ mod history_tests {
 
 #[cfg(test)]
 mod skill_command_tests {
+    /// Build a minimal CommandContext for tests that exercise validation
+    /// (which runs before ctx is actually used). Mirrors config_tests::make_config.
+    use crate::config::Config;
+    fn test_ctx() -> crate::context::CommandContext {
+        let cfg = Config {
+            profile: None,
+            remote_host: None,
+            remote_user: None,
+            port: 65432,
+            port_explicit: false,
+            jump_host: None,
+            jump_user: None,
+            ssh_port: None,
+            ssh_key: None,
+            ssh_config: None,
+            ssh_backend: None,
+            disable_control_master: false,
+            timeout: 30,
+            read_timeout: 120,
+            keep_remote_files: false,
+            spectre_cmd: "spectre".into(),
+            spectre_args: vec![],
+            spectre_max_workers: 8,
+            ssh_max_sessions: 10,
+            ssh_max_bulk_sessions: 2,
+            ssh_reconnect_max_attempts: 8,
+            ssh_reconnect_max_delay: 30,
+            ssh_keepalive_interval: 30,
+            ssh_keepalive_failures: 3,
+            transport_shutdown_grace: 10,
+            cadence_cshrc: None,
+            spectre_bin: None,
+            roles: crate::config::RemoteRoles::default(),
+            transport_daemon_socket: None,
+            transport_daemon_token: None,
+            allow_cross_user_daemon: false,
+        };
+        crate::context::CommandContext::new(cfg, None).expect("failed to build test CommandContext")
+    }
+
     /// Test that eval's progn wrapping is correct for various inputs.
     #[test]
     fn eval_progn_wrapping_single_expression() {
@@ -1865,7 +1905,8 @@ mod skill_command_tests {
         use crate::commands::skill;
         use crate::error::VirtuosoError;
 
-        let result = skill::eval(Some("   ".to_string()), false);
+        let ctx = test_ctx();
+        let result = skill::eval(&ctx, Some("   ".to_string()), false);
         assert!(matches!(result, Err(VirtuosoError::Config(_))));
     }
 
@@ -1874,7 +1915,8 @@ mod skill_command_tests {
         use crate::commands::skill;
         use crate::error::VirtuosoError;
 
-        let result = skill::eval(None, false);
+        let ctx = test_ctx();
+        let result = skill::eval(&ctx, None, false);
         assert!(matches!(result, Err(VirtuosoError::Config(_))));
     }
 
@@ -1883,7 +1925,8 @@ mod skill_command_tests {
         use crate::commands::skill;
         use crate::error::VirtuosoError;
 
-        let result = skill::eval(Some("code".to_string()), true);
+        let ctx = test_ctx();
+        let result = skill::eval(&ctx, Some("code".to_string()), true);
         assert!(matches!(result, Err(VirtuosoError::Config(_))));
     }
 
@@ -1926,7 +1969,8 @@ mod skill_command_tests {
         use crate::commands::skill;
         use crate::error::VirtuosoError;
 
-        let result = skill::eval(Some(String::new()), true);
+        let ctx = test_ctx();
+        let result = skill::eval(&ctx, Some(String::new()), true);
         assert!(matches!(result, Err(VirtuosoError::Config(_))));
     }
 }

@@ -4,8 +4,14 @@ use crate::client::symbol_ops::SymbolOps;
 use crate::error::{Result, VirtuosoError};
 use serde_json::{json, Value};
 
-pub fn inspect(lib: &str, cell: &str, view: &str, view_type: &str) -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn inspect(
+    ctx: &crate::context::CommandContext,
+    lib: &str,
+    cell: &str,
+    view: &str,
+    view_type: &str,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
     let r = client.execute_skill(
         &SymbolOps::new().inspect(lib, cell, view, view_type),
         Some(client.read_timeout()),
@@ -37,6 +43,7 @@ pub fn inspect(lib: &str, cell: &str, view: &str, view_type: &str) -> Result<Val
 }
 
 pub fn generate(
+    ctx: &crate::context::CommandContext,
     lib: &str,
     cell: &str,
     schematic_view: &str,
@@ -55,7 +62,7 @@ pub fn generate(
             ));
         }
     }
-    let client = VirtuosoClient::from_env()?;
+    let client = VirtuosoClient::from_context(ctx)?;
     let r = client.execute_skill(
         &SymbolOps::new().generate(lib, cell, schematic_view, symbol_view, sort_pins),
         Some(client.read_timeout()),

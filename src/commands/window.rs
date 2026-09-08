@@ -118,8 +118,8 @@ lazy_static::lazy_static! {
 ///   "ADE Explorer Editing: LIB/CELL/maestro"
 ///   "ADE Explorer Reading: ..."
 ///   "Virtuoso Schematic Editor"
-pub fn list() -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn list(ctx: &crate::context::CommandContext) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
     let r = client.execute_skill(&client.window.list_windows(), None)?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
@@ -142,8 +142,12 @@ pub fn list() -> Result<Value> {
 /// When `use_x11` is true, the call goes through the X11 SSH bypass
 /// (`transport::x11::dismiss`) instead of SKILL. This is the only path
 /// that works when a modal has deadlocked the SKILL channel itself.
-pub fn dismiss_dialog(action: &str, dry_run: bool) -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn dismiss_dialog(
+    ctx: &crate::context::CommandContext,
+    action: &str,
+    dry_run: bool,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
     if dry_run {
         let r = client.execute_skill(&client.window.get_dialog_info(), None)?;
         let raw = r.output.trim_matches('"');
@@ -167,16 +171,18 @@ pub fn dismiss_dialog(action: &str, dry_run: bool) -> Result<Value> {
 /// Useful as a "dry-run" alternative when SKILL is deadlocked and you want
 /// to see what dialogs are present before deciding which action to send.
 /// Works locally when VB_REMOTE_HOST is absent, otherwise via SSH.
-pub fn list_dialogs_x11(explicit_display: Option<&str>) -> Result<Value> {
-    use crate::config::Config;
+pub fn list_dialogs_x11(
+    ctx: &crate::context::CommandContext,
+    explicit_display: Option<&str>,
+) -> Result<Value> {
     use crate::transport::x11;
 
-    let config = Config::from_env()?;
-    let runner = x11::transport_for_config(&config)?;
+    let config = ctx.config();
+    let runner = x11::transport_for_config(config)?;
     let user = config.remote_user.as_deref();
     let (env, dialogs) = x11::list_dialogs(
         runner.as_ref(),
-        &x11::client_id_for(&config),
+        &x11::client_id_for(config),
         user,
         explicit_display,
     )?;
@@ -199,12 +205,12 @@ pub fn list_dialogs_x11(explicit_display: Option<&str>) -> Result<Value> {
 /// Adopted from <https://github.com/Arcadia-1/virtuoso-bridge-lite>
 /// (MIT, 2026-05; helper vendored in resources/x11_dismiss_dialog.py).
 pub fn dismiss_dialog_x11(
+    ctx: &crate::context::CommandContext,
     action: &str,
     dry_run: bool,
     explicit_display: Option<&str>,
     window_id: Option<&str>,
 ) -> Result<Value> {
-    use crate::config::Config;
     use crate::transport::x11;
 
     if !["enter", "escape", "alt-y", "alt-n", "alt-o"].contains(&action) {
@@ -213,12 +219,12 @@ pub fn dismiss_dialog_x11(
             action
         )));
     }
-    let config = Config::from_env()?;
-    let runner = x11::transport_for_config(&config)?;
+    let config = ctx.config();
+    let runner = x11::transport_for_config(config)?;
     let user = config.remote_user.as_deref();
     let result = x11::dismiss(
         runner.as_ref(),
-        &x11::client_id_for(&config),
+        &x11::client_id_for(config),
         user,
         explicit_display,
         action,
@@ -255,16 +261,18 @@ pub fn dismiss_dialog_x11(
 /// along with its WM frame and dismiss id. Use this when you want to see
 /// what's on screen before picking a target. Works locally when VB_REMOTE_HOST
 /// is absent.
-pub fn list_windows_x11(explicit_display: Option<&str>) -> Result<Value> {
-    use crate::config::Config;
+pub fn list_windows_x11(
+    ctx: &crate::context::CommandContext,
+    explicit_display: Option<&str>,
+) -> Result<Value> {
     use crate::transport::x11;
 
-    let config = Config::from_env()?;
-    let runner = x11::transport_for_config(&config)?;
+    let config = ctx.config();
+    let runner = x11::transport_for_config(config)?;
     let user = config.remote_user.as_deref();
     let (env, windows) = x11::list_windows(
         runner.as_ref(),
-        &x11::client_id_for(&config),
+        &x11::client_id_for(config),
         user,
         explicit_display,
     )?;
@@ -282,16 +290,16 @@ pub fn list_windows_x11(explicit_display: Option<&str>) -> Result<Value> {
 /// (typically an X resource id like `0x2e01f16`). Works locally when VB_REMOTE_HOST
 /// is absent.
 pub fn dismiss_window_x11(
+    ctx: &crate::context::CommandContext,
     window_id: Option<&str>,
     pid: Option<u32>,
     action: &str,
     explicit_display: Option<&str>,
 ) -> Result<Value> {
-    use crate::config::Config;
     use crate::transport::x11;
 
-    let config = Config::from_env()?;
-    let runner = x11::transport_for_config(&config)?;
+    let config = ctx.config();
+    let runner = x11::transport_for_config(config)?;
     let user = config.remote_user.as_deref();
 
     // Resolve the target window id. Precedence: explicit --window-id (or the
@@ -305,7 +313,7 @@ pub fn dismiss_window_x11(
             // to discover dismiss_ids.
             let (_env, windows) = x11::list_windows(
                 runner.as_ref(),
-                &x11::client_id_for(&config),
+                &x11::client_id_for(config),
                 user,
                 explicit_display,
             )?;
@@ -334,7 +342,7 @@ pub fn dismiss_window_x11(
 
     let result = x11::dismiss_window(
         runner.as_ref(),
-        &x11::client_id_for(&config),
+        &x11::client_id_for(config),
         user,
         explicit_display,
         &id,
@@ -366,8 +374,12 @@ pub fn dismiss_window_x11(
 /// Capture a screenshot of the current (or pattern-matched) Virtuoso window.
 ///
 /// Saves to --path as PNG. Requires IC23.1+ (hiGetWindowScreenDump).
-pub fn screenshot(path: &str, window_pattern: Option<&str>) -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn screenshot(
+    ctx: &crate::context::CommandContext,
+    path: &str,
+    window_pattern: Option<&str>,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
     let skill = match window_pattern {
         Some(pat) => client.window.screenshot_by_pattern(path, pat),
         None => client.window.screenshot(path),
@@ -402,6 +414,7 @@ pub fn screenshot(path: &str, window_pattern: Option<&str>) -> Result<Value> {
 /// It validates parameters, calls the transport layer, and returns structured JSON.
 #[allow(clippy::too_many_arguments)]
 pub fn action_x11(
+    ctx: &crate::context::CommandContext,
     window_id: &str,
     pid: Option<u32>,
     display: &str,
@@ -415,7 +428,6 @@ pub fn action_x11(
     explicit_display: Option<&str>,
     direct: bool,
 ) -> Result<Value> {
-    use crate::config::Config;
     use crate::transport::x11;
 
     let op = x11::X11Operation::from_str(operation)?;
@@ -423,12 +435,12 @@ pub fn action_x11(
         window_id, pid, display, operation, x, y, text, button, output_dir,
     )?;
 
-    let config = Config::from_env()?;
-    let runner: Arc<dyn RemoteTransport> = x11::transport_for_config(&config)?;
+    let config = ctx.config();
+    let runner: Arc<dyn RemoteTransport> = x11::transport_for_config(config)?;
     let user = config.remote_user.as_deref();
     let actual_display = explicit_display.unwrap_or(display);
 
-    let client_id = x11::client_id_for(&config);
+    let client_id = x11::client_id_for(config);
     let inputs = x11::ActionX11Inputs {
         window_id,
         pid,
@@ -458,6 +470,7 @@ pub fn action_x11(
 /// scan for maximum throughput.
 #[allow(clippy::too_many_arguments)]
 pub fn action_x11_batch(
+    ctx: &crate::context::CommandContext,
     file_path: &str,
     direct: bool,
     default_pid: Option<u32>,
@@ -465,7 +478,6 @@ pub fn action_x11_batch(
     explicit_display: Option<&str>,
     timeout_secs: u64,
 ) -> Result<Value> {
-    use crate::config::Config;
     use crate::transport::x11;
     use std::io::{BufRead, BufReader};
 
@@ -492,10 +504,10 @@ pub fn action_x11_batch(
         ));
     }
 
-    let config = Config::from_env()?;
-    let runner: Arc<dyn RemoteTransport> = x11::transport_for_config(&config)?;
+    let config = ctx.config();
+    let runner: Arc<dyn RemoteTransport> = x11::transport_for_config(config)?;
     let user = config.remote_user.as_deref();
-    let client_id = x11::client_id_for(&config);
+    let client_id = x11::client_id_for(config);
     let effective_default_display = explicit_display.or(default_display);
 
     let batch_inputs = x11::BatchX11Inputs {

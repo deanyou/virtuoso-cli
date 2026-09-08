@@ -6,6 +6,7 @@
 use crate::auth::{check_auth, log_rpc};
 use crate::client::bridge::{escape_skill_string, VirtuosoClient};
 use crate::commands;
+use crate::context::CommandContext;
 use crate::error::{Result, VirtuosoError};
 use crate::models::VirtuosoResult;
 use once_cell::sync::Lazy;
@@ -139,32 +140,36 @@ impl RpcDispatcher {
 
         match domain {
             "schematic" => Self::dispatch_schematic(client, op, params),
-            "symbol" => match op {
-                "inspect" => {
-                    let lib = json_str(params.get("lib"), "lib")?;
-                    let cell = json_str(params.get("cell"), "cell")?;
-                    let view = json_str_or(params.get("view"), "symbol")?;
-                    let view_type = json_str_or(params.get("view_type"), "schematicSymbol")?;
-                    crate::commands::symbol::inspect(&lib, &cell, &view, &view_type)
+            "symbol" => {
+                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                match op {
+                    "inspect" => {
+                        let lib = json_str(params.get("lib"), "lib")?;
+                        let cell = json_str(params.get("cell"), "cell")?;
+                        let view = json_str_or(params.get("view"), "symbol")?;
+                        let view_type = json_str_or(params.get("view_type"), "schematicSymbol")?;
+                        crate::commands::symbol::inspect(&ctx, &lib, &cell, &view, &view_type)
+                    }
+                    "generate" => {
+                        let lib = json_str(params.get("lib"), "lib")?;
+                        let cell = json_str(params.get("cell"), "cell")?;
+                        let src = json_str_or(params.get("schematic_view"), "schematic")?;
+                        let dst = json_str_or(params.get("symbol_view"), "symbol")?;
+                        let sort = params.get("sort_pins").and_then(Value::as_str);
+                        crate::commands::symbol::generate(&ctx, &lib, &cell, &src, &dst, sort)
+                    }
+                    _ => Err(VirtuosoError::NotFound(format!(
+                        "unknown symbol method '{op}'"
+                    ))),
                 }
-                "generate" => {
-                    let lib = json_str(params.get("lib"), "lib")?;
-                    let cell = json_str(params.get("cell"), "cell")?;
-                    let src = json_str_or(params.get("schematic_view"), "schematic")?;
-                    let dst = json_str_or(params.get("symbol_view"), "symbol")?;
-                    let sort = params.get("sort_pins").and_then(Value::as_str);
-                    crate::commands::symbol::generate(&lib, &cell, &src, &dst, sort)
-                }
-                _ => Err(VirtuosoError::NotFound(format!(
-                    "unknown symbol method '{op}'"
-                ))),
-            },
+            }
             "library" => match op {
                 "list"
                     if params.is_null()
                         || params.as_object().map(|m| m.is_empty()).unwrap_or(false) =>
                 {
-                    crate::commands::library::list()
+                    let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                    crate::commands::library::list(&ctx)
                 }
                 _ => Err(VirtuosoError::NotFound(format!(
                     "unknown library method '{op}'"
@@ -589,14 +594,18 @@ impl RpcDispatcher {
                     .unwrap_or(false);
                 let display = params.get("display").and_then(|v| v.as_str());
                 let window_id = params.get("window_id").and_then(|v| v.as_str());
-                crate::commands::window::dismiss_dialog_x11(&action, dry_run, display, window_id)
+                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                crate::commands::window::dismiss_dialog_x11(
+                    &ctx, &action, dry_run, window_id, display,
+                )
             }
             "list_windows_x11" => {
                 // Enumerate every Virtuoso-related X11 window (no keypress).
                 // Returns { display, windows, count }. Use the `dismiss_id`
                 // from each entry to feed `dismiss_window_x11` next.
                 let display = params.get("display").and_then(|v| v.as_str());
-                crate::commands::window::list_windows_x11(display)
+                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                crate::commands::window::list_windows_x11(&ctx, display)
             }
             "dismiss_window_x11" => {
                 // Dismiss a SPECIFIC window by id (typically the dismiss_id
@@ -608,7 +617,8 @@ impl RpcDispatcher {
                 let pid = params.get("pid").and_then(|v| v.as_u64()).map(|n| n as u32);
                 let action = json_str_or(params.get("action"), "enter")?;
                 let display = params.get("display").and_then(|v| v.as_str());
-                crate::commands::window::dismiss_window_x11(window_id, pid, &action, display)
+                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                crate::commands::window::dismiss_window_x11(&ctx, window_id, pid, &action, display)
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown window method '{}'",
@@ -819,6 +829,7 @@ impl RpcDispatcher {
                 }))
             }
             "eval" => {
+                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
                 let code = params
                     .get("code")
                     .and_then(|v| v.as_str().map(String::from));
@@ -826,10 +837,11 @@ impl RpcDispatcher {
                     .get("stdin")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                let r = commands::skill::eval(code, stdin)?;
+                let r = commands::skill::eval(&ctx, code, stdin)?;
                 Ok(r)
             }
             "find" => {
+                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
                 let query = json_str(params.get("query"), "query")?;
                 let mode = params
                     .get("mode")
@@ -844,23 +856,26 @@ impl RpcDispatcher {
                     .get("refresh")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                commands::skill::find(&query, mode, limit, refresh, include_desc)
+                commands::skill::find(&ctx, mode, &query, limit, include_desc, refresh)
             }
             "info" => {
+                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
                 let func = json_str(params.get("func"), "func")?;
-                commands::skill::info(&func)
+                commands::skill::info(&ctx, &func)
             }
             "sync" => {
+                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
                 let host = params.get("host").and_then(|v| v.as_str());
-                commands::skill::sync_cache(host, None, false)
+                commands::skill::sync_cache(&ctx, None, host, false)
             }
             "cache" => {
+                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
                 let host = params.get("host").and_then(|v| v.as_str());
                 let clear = params
                     .get("clear")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                commands::skill::show_cache(host, clear)
+                commands::skill::show_cache(&ctx, host, clear)
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown skill method '{}'",

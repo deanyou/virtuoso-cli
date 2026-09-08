@@ -2,7 +2,14 @@ use crate::client::bridge::VirtuosoClient;
 use crate::error::Result;
 use serde_json::{json, Value};
 
-pub fn open(lib: &str, cell: &str, view: &str, mode: &str, dry_run: bool) -> Result<Value> {
+pub fn open(
+    ctx: &crate::context::CommandContext,
+    lib: &str,
+    cell: &str,
+    view: &str,
+    mode: &str,
+    dry_run: bool,
+) -> Result<Value> {
     if dry_run {
         return Ok(json!({
             "action": "open",
@@ -17,7 +24,7 @@ pub fn open(lib: &str, cell: &str, view: &str, mode: &str, dry_run: bool) -> Res
         }));
     }
 
-    let client = VirtuosoClient::from_env()?;
+    let client = VirtuosoClient::from_context(ctx)?;
     let result = client.open_cell_view(lib, cell, view, mode)?;
 
     Ok(json!({
@@ -30,8 +37,8 @@ pub fn open(lib: &str, cell: &str, view: &str, mode: &str, dry_run: bool) -> Res
     }))
 }
 
-pub fn save() -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn save(ctx: &crate::context::CommandContext) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
     let result = client.save_current_cellview()?;
 
     Ok(json!({
@@ -40,8 +47,8 @@ pub fn save() -> Result<Value> {
     }))
 }
 
-pub fn close() -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn close(ctx: &crate::context::CommandContext) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
     let result = client.close_current_cellview()?;
 
     Ok(json!({
@@ -50,8 +57,8 @@ pub fn close() -> Result<Value> {
     }))
 }
 
-pub fn info() -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn info(ctx: &crate::context::CommandContext) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
     let (lib, cell, view) = client.get_current_design()?;
 
     Ok(json!({
