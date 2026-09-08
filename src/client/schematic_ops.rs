@@ -154,16 +154,22 @@ impl SchematicOps {
         )
     }
 
-    /// Assign net name to instance terminal.
-    /// Finds the instTerm by name and connects it to a named net via dbConnectToNet.
-    /// No wire drawing coordinates needed — purely a logical connection.
+    /// Assign a named net to an instance terminal — a purely logical connection,
+    /// no wire coordinates.
+    ///
+    /// A freshly-placed instance has an empty `instTerms` list (instTerms are
+    /// materialized lazily on connection), so the terminal must be resolved from
+    /// the *master*'s terminal list and connected with `dbCreateInstTerm`, which
+    /// takes the master-terminal db object (not a name string). If an instTerm
+    /// already exists on a *different* net, `dbCreateInstTerm` refuses to move it,
+    /// so we delete the stale instTerm first, making reassignment idempotent.
     pub fn assign_net(&self, inst_name: &str, term_name: &str, net_name: &str) -> String {
         let inst_name = escape_skill_string(inst_name);
         let term_name = escape_skill_string(term_name);
         let net_name = escape_skill_string(net_name);
         let guard = cv_guard();
         format!(
-            r#"let((cv inst iterm net) cv = geGetEditCellView() {guard} inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0)) iterm = car(setof(x inst~>instTerms strcmp(x~>name "{term_name}")==0)) net = dbMakeNet(cv "{net_name}") when(iterm dbConnectToNet(iterm net)))"#
+            r#"let((cv inst mterm net existing it) cv = geGetEditCellView() {guard} inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0)) when(!inst error("assign_net: instance not found: {inst_name}")) mterm = car(setof(mt inst~>master~>terminals strcmp(mt~>name "{term_name}")==0)) when(!mterm error("assign_net: terminal not on master: {term_name}")) net = dbMakeNet(cv "{net_name}") existing = car(setof(x inst~>instTerms strcmp(x~>name "{term_name}")==0)) when(existing && !(strcmp(existing~>net~>name "{net_name}")==0) dbDeleteObject(existing) existing = nil) it = if(existing existing dbCreateInstTerm(net inst mterm)) when(!it error("assign_net: connect failed for {inst_name}/{term_name}")) it)"#
         )
     }
 
@@ -334,9 +340,17 @@ mod tests {
     }
 
     #[test]
-    fn assign_net_uses_dbconnect() {
+    fn assign_net_uses_dbcreateinstterm() {
         let s = ops().assign_net("M1", "G", "VIN");
-        assert!(s.contains("dbConnectToNet"), "must use dbConnectToNet: {s}");
+        // must connect via the master-terminal db object, not the (lazy/empty) instTerms
+        assert!(
+            s.contains("dbCreateInstTerm"),
+            "must use dbCreateInstTerm: {s}"
+        );
+        assert!(
+            s.contains("master~>terminals"),
+            "terminal must be resolved from the master: {s}"
+        );
         assert!(
             !s.contains("schCreateWire"),
             "must not use schCreateWire: {s}"
