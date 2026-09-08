@@ -43,12 +43,40 @@ pub(crate) struct ProbeSkip {
 /// Shared entry point: resolve a probe endpoint for a session under the
 /// given context. Returns `Ok(endpoint)` if probing is allowed,
 /// `Err(skip)` otherwise (caller shows cached data).
+///
+/// Loads TunnelState internally; for batch callers (e.g. `list`) use
+/// `resolve_probe_endpoint_with_state` to avoid reloading the same state
+/// file for every session.
 pub(crate) fn resolve_probe_endpoint(
     ctx: &CommandContext,
     session: &SessionInfo,
 ) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
+    let state = if ctx.config().is_remote() {
+        match TunnelState::load_with_profile(ctx.config().profile.as_deref()) {
+            Ok(Some(s)) => Some(s),
+            Ok(None) => None,
+            Err(_) => {
+                return Err(ProbeSkip {
+                    reason: "tunnel_state_error",
+                })
+            }
+        }
+    } else {
+        None
+    };
+    resolve_probe_endpoint_with_state(ctx, session, state.as_ref())
+}
+
+/// Like `resolve_probe_endpoint`, but accepts a pre-loaded `TunnelState`
+/// for efficiency. Used by `list()` which loads state once and reuses it
+/// across all sessions. `state` may be `None` (no tunnel exists).
+pub(crate) fn resolve_probe_endpoint_with_state(
+    ctx: &CommandContext,
+    session: &SessionInfo,
+    state: Option<&TunnelState>,
+) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
     if ctx.config().is_remote() {
-        resolve_remote_tunnel(ctx, session)
+        resolve_remote_tunnel(ctx, session, state)
     } else {
         resolve_local_direct(ctx, session)
     }
@@ -101,9 +129,8 @@ fn resolve_local_direct(
 fn resolve_remote_tunnel(
     ctx: &CommandContext,
     session: &SessionInfo,
+    state: Option<&TunnelState>,
 ) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
-    let cfg = ctx.config();
-
     // Step 1: session ownership.
     if ctx.target_id().is_some() && ctx.validate_session_ownership(session).is_err() {
         return Err(ProbeSkip {
@@ -111,17 +138,12 @@ fn resolve_remote_tunnel(
         });
     }
 
-    // Step 2: TunnelState load + basic checks.
-    let state = match TunnelState::load_with_profile(cfg.profile.as_deref()) {
-        Ok(Some(s)) => s,
-        Ok(None) => {
+    // Step 2: TunnelState basic checks (state is pre-loaded by caller).
+    let state = match state {
+        Some(s) => s,
+        None => {
             return Err(ProbeSkip {
                 reason: "no_tunnel",
-            })
-        }
-        Err(_) => {
-            return Err(ProbeSkip {
-                reason: "tunnel_state_error",
             })
         }
     };
@@ -153,7 +175,7 @@ fn resolve_remote_tunnel(
     }
 
     // Step 4: state matches current context.
-    if ctx.validate_tunnel_ownership(&state).is_err() {
+    if ctx.validate_tunnel_ownership(state).is_err() {
         return Err(ProbeSkip {
             reason: "tunnel_context_mismatch",
         });
@@ -220,12 +242,47 @@ fn resolve_remote_tunnel(
     Ok(ProbeEndpoint::RemoteTunnel { port: state.port })
 }
 
+/// Get the system hostname via libc::gethostname(2). Returns None on
+/// failure or if the hostname is empty. This is preferred over reading
+/// $HOSTNAME, which is not guaranteed to be set in every process
+/// environment (e.g. non-login shells, CI containers).
+fn system_hostname() -> Option<String> {
+    unsafe {
+        let mut buf = [0u8; 256];
+        if libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) != 0 {
+            return None;
+        }
+        let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+        if len == 0 {
+            return None;
+        }
+        String::from_utf8(buf[..len].to_vec()).ok()
+    }
+}
+
+/// Compare two hostnames, allowing short-name vs FQDN equivalence.
+///
+/// - Exact match (case-sensitive, as hostnames are on Unix).
+/// - Short-name match: if either contains a dot, compare the part before
+///   the first dot. This lets "compute-eda-42" match
+///   "compute-eda-42.internal.corp".
+fn hostnames_match(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    let a_short = a.split('.').next().unwrap_or(a);
+    let b_short = b.split('.').next().unwrap_or(b);
+    !a_short.is_empty() && a_short == b_short
+}
+
 /// Check whether a session belongs to this machine, given the config.
 ///
 /// - If `cfg.remote_host` is set, the session is local only if its host
 ///   matches exactly.
 /// - If `cfg.remote_host` is unset, we check known local hostnames
-///   (`localhost`, `127.0.0.1`, `::1`) and the `HOSTNAME` env var.
+///   (`localhost`, `127.0.0.1`, `::1`), the system hostname (via
+///   libc::gethostname, with short/FQDN equivalence), and finally the
+///   `HOSTNAME` env var as a last resort.
 /// - Anything that cannot be confirmed is treated as NOT local (skip probe).
 fn is_local_session(cfg: &Config, session: &SessionInfo) -> bool {
     const LOCAL_HOSTNAMES: &[&str] = &["localhost", "127.0.0.1", "::1"];
@@ -238,9 +295,16 @@ fn is_local_session(cfg: &Config, session: &SessionInfo) -> bool {
         return true;
     }
 
-    // Fall back to HOSTNAME env var (commonly set on Linux/macOS).
-    if let Ok(sys_hostname) = std::env::var("HOSTNAME") {
-        if !sys_hostname.is_empty() && session.host == sys_hostname {
+    // System hostname (preferred — does not depend on process env).
+    if let Some(sys_host) = system_hostname() {
+        if !sys_host.is_empty() && hostnames_match(&sys_host, &session.host) {
+            return true;
+        }
+    }
+
+    // Fall back to HOSTNAME env var (may not be set in all environments).
+    if let Ok(env_host) = std::env::var("HOSTNAME") {
+        if !env_host.is_empty() && hostnames_match(&env_host, &session.host) {
             return true;
         }
     }
@@ -329,18 +393,19 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         .map(|s| {
             if has_target {
                 let endpoint_match = compute_endpoint_match(ctx, s);
-                let (tunnel_verified, probe_status) = match &tunnel_state {
-                    Some(state)
-                        if state.mode.as_deref() == Some("attached")
-                            && state.attached_session_id.as_deref() == Some(&s.id) =>
-                    {
-                        if tcp_reachable(state.port) {
-                            (true, "reachable")
-                        } else {
-                            (true, "unreachable")
-                        }
-                    }
-                    _ => (false, "not_probed"),
+                // Use the SHARED verification chain (same 6-step path as
+                // show). tunnel_verified=true only when the full chain
+                // passes, OR when the only failure is
+                // forward_port_unreachable (identity verified, port just
+                // down). Any earlier failure (wrong host, dead process,
+                // mismatched session id, …) → tunnel_verified=false.
+                let probe_result = resolve_probe_endpoint_with_state(ctx, s, tunnel_state.as_ref());
+                let (tunnel_verified, probe_status) = match probe_result {
+                    Ok(_) => (true, "reachable"),
+                    Err(ProbeSkip {
+                        reason: "forward_port_unreachable",
+                    }) => (true, "unreachable"),
+                    Err(_) => (false, "not_probed"),
                 };
                 json!({
                     "id": s.id,
@@ -526,6 +591,10 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
     let endpoint_match = compute_endpoint_match(ctx, &s);
 
     // Phase 2: resolve a probe endpoint, then probe if allowed.
+    // daemon_responsive is Option<bool>: Some(_) = probe ran, None = skipped.
+    // daemon_user / daemon_version hold the LIVE probe values when probe
+    // succeeded; the output layer falls back to s.daemon_user / s.daemon_version
+    // (cached) when probe was skipped.
     let (
         daemon_user,
         daemon_user_warning,
@@ -565,7 +634,7 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
             (
                 user,
                 user_warn,
-                alive,
+                Some(alive),
                 ver,
                 ver_warn,
                 false,
@@ -575,10 +644,11 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
             )
         }
         Err(skip) => (
+            // Probe skipped: use cached values from the session file.
+            s.daemon_user.clone(),
             None,
-            None,
-            false,
-            None,
+            None, // responsive unknown — not "false"
+            s.daemon_version.clone(),
             None,
             true,
             Some(skip.reason),
@@ -591,8 +661,8 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
     let cross_user_warning = check_cross_user(ctx.config(), &s, daemon_user.as_deref());
 
     // Stale-daemon hint only when the probe actually ran and the daemon
-    // didn't respond.
-    let stale_daemon_hint = if !probe_skipped && !daemon_responsive {
+    // didn't respond (daemon_responsive == Some(false)).
+    let stale_daemon_hint = if !probe_skipped && daemon_responsive == Some(false) {
         Some(
             "CIW daemon port is bound but the daemon is not responding to SKILL.\n\
              In the Virtuoso CIW, run:\n\
@@ -623,6 +693,10 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
         || daemon_user_warning.is_some()
         || stale_daemon_hint.is_some();
 
+    // data_source: "live" when probe ran, "cached" when skipped (values
+    // come from the session file).
+    let data_source = if probe_skipped { "cached" } else { "live" };
+
     Ok(json!({
         "status": if has_warnings { "warning" } else { "success" },
         "session": {
@@ -636,6 +710,7 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
             "daemon_responsive": daemon_responsive,
             "daemon_user": daemon_user,
             "daemon_version": daemon_version,
+            "data_source": data_source,
             "cli_version": env!("CARGO_PKG_VERSION"),
         },
         "probe": {
@@ -1350,6 +1425,306 @@ mod tests {
                 })
             ),
             "session host mismatch should return ownership_mismatch, got {r:?}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // hostnames_match — short-name / FQDN equivalence
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn hostnames_match_exact() {
+        assert!(hostnames_match("compute-eda-42", "compute-eda-42"));
+    }
+
+    #[test]
+    fn hostnames_match_short_vs_fqdn() {
+        assert!(hostnames_match(
+            "compute-eda-42",
+            "compute-eda-42.internal.corp"
+        ));
+        assert!(hostnames_match(
+            "compute-eda-42.internal.corp",
+            "compute-eda-42"
+        ));
+    }
+
+    #[test]
+    fn hostnames_match_different_hosts() {
+        assert!(!hostnames_match("compute-eda-42", "compute-eda-43"));
+        assert!(!hostnames_match(
+            "compute-eda-42.internal.corp",
+            "compute-eda-43.internal.corp"
+        ));
+    }
+
+    #[test]
+    fn hostnames_match_empty_short_name() {
+        // A hostname that is just ".domain" has empty short name — must not
+        // match everything.
+        assert!(!hostnames_match(".example.com", "anything"));
+    }
+
+    // ------------------------------------------------------------------
+    // resolve_probe_endpoint_with_state — same ID, wrong tunnel
+    // ------------------------------------------------------------------
+
+    #[test]
+    #[serial]
+    fn with_state_same_id_but_wrong_remote_host_is_not_verified() {
+        // TunnelState has matching attached_session_id but points at a
+        // DIFFERENT remote host than the session. The shared chain must
+        // reject it (tunnel_host_mismatch) — list must NOT mark this
+        // tunnel_verified=true.
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        // State: same session ID, but remote_host is wrong.
+        let state = make_tunnel_state(
+            "remote-eda-99", // wrong host
+            40000,
+            14000,
+            std::process::id(),
+            Some(1),
+            Some(&s.id),
+            Some("attached"),
+        );
+
+        let r = resolve_probe_endpoint_with_state(&ctx, &s, Some(&state));
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_host_mismatch"
+                })
+            ),
+            "wrong remote host must be rejected, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn with_state_same_id_but_wrong_remote_port_is_not_verified() {
+        // TunnelState has matching session_id and host, but remote_bridge_port
+        // differs from session.port. Must reject.
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        let state = make_tunnel_state(
+            "remote-eda-01",
+            40999, // wrong remote port
+            14000,
+            std::process::id(),
+            Some(1),
+            Some(&s.id),
+            Some("attached"),
+        );
+
+        let r = resolve_probe_endpoint_with_state(&ctx, &s, Some(&state));
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_remote_port_mismatch"
+                })
+            ),
+            "wrong remote port must be rejected, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn with_state_dead_process_is_not_verified() {
+        // TunnelState passes host/port/id checks but the recorded PID is
+        // dead. Must reject with tunnel_process_dead.
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        let state = make_tunnel_state(
+            "remote-eda-01",
+            40000,
+            14000,
+            99999, // dead PID
+            Some(1),
+            Some(&s.id),
+            Some("attached"),
+        );
+
+        let r = resolve_probe_endpoint_with_state(&ctx, &s, Some(&state));
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_process_dead"
+                })
+            ),
+            "dead PID must be rejected, got {r:?}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // CacheDirGuard — redirect VB_CACHE_DIR for list/show integration tests
+    // ------------------------------------------------------------------
+
+    struct CacheDirGuard {
+        original: Option<String>,
+        _tempdir: tempfile::TempDir,
+    }
+
+    impl CacheDirGuard {
+        fn new() -> Self {
+            let original = std::env::var("VB_CACHE_DIR").ok();
+            let tempdir = tempfile::tempdir().expect("failed to create temp dir");
+            std::env::set_var("VB_CACHE_DIR", tempdir.path());
+            Self {
+                original,
+                _tempdir: tempdir,
+            }
+        }
+    }
+
+    impl Drop for CacheDirGuard {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(v) => std::env::set_var("VB_CACHE_DIR", v),
+                None => std::env::remove_var("VB_CACHE_DIR"),
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // list — integration tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    #[serial]
+    fn list_target_mode_does_not_delete_dead_session_files() {
+        // In target mode, list must show ALL cached sessions and NEVER
+        // delete files — even if the local port is unreachable.
+        let _cache = CacheDirGuard::new();
+        let _state = StateDirGuard::new();
+
+        // Create a session file with an unreachable port.
+        let mut s = session();
+        s.port = 1; // unreachable
+        s.save_to_session_file();
+
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let result = list(&ctx, OutputFormat::Json).expect("list should succeed");
+
+        // The session should appear in the list.
+        let sessions = result["sessions"].as_array().expect("sessions array");
+        assert_eq!(sessions.len(), 1, "dead session should still be listed");
+        assert_eq!(sessions[0]["id"], s.id);
+
+        // probe_status should be not_probed (tunnel_verified=false).
+        assert_eq!(sessions[0]["probe_status"], "not_probed");
+        assert_eq!(sessions[0]["tunnel_verified"], false);
+
+        // File must still exist (not deleted).
+        let path = SessionInfo::sessions_dir().join(format!("{}.json", s.id));
+        assert!(path.exists(), "session file must NOT be deleted by list");
+    }
+
+    #[test]
+    #[serial]
+    fn list_target_mode_shows_unattached_remote_session() {
+        // A remote session that has no attached tunnel must still appear
+        // in target-mode list, with tunnel_verified=false and
+        // probe_status=not_probed.
+        let _cache = CacheDirGuard::new();
+        let _state = StateDirGuard::new();
+
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+        s.save_to_session_file();
+
+        // No TunnelState saved → unattached.
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let result = list(&ctx, OutputFormat::Json).expect("list should succeed");
+
+        let sessions = result["sessions"].as_array().expect("sessions array");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0]["tunnel_verified"], false);
+        assert_eq!(sessions[0]["probe_status"], "not_probed");
+        // endpoint_match should be "match" (host+port match the target).
+        assert_eq!(sessions[0]["endpoint_match"], "match");
+    }
+
+    // ------------------------------------------------------------------
+    // show — integration tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    #[serial]
+    fn show_skipped_probe_preserves_cached_metadata() {
+        // When probe is skipped (no tunnel), show must return the cached
+        // daemon_user / daemon_version from the session file, with
+        // data_source="cached" and daemon_responsive=null.
+        let _cache = CacheDirGuard::new();
+        let _state = StateDirGuard::new();
+
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+        s.daemon_user = Some("cacheduser".into());
+        s.daemon_version = Some("1.2.3-cached".into());
+        s.save_to_session_file();
+
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let result = show(&ctx, &s.id, OutputFormat::Json).expect("show should succeed");
+
+        // Cached values must be present.
+        assert_eq!(result["session"]["daemon_user"], "cacheduser");
+        assert_eq!(result["session"]["daemon_version"], "1.2.3-cached");
+        assert_eq!(result["session"]["data_source"], "cached");
+
+        // daemon_responsive must be null (not false — we never probed).
+        assert!(
+            result["session"]["daemon_responsive"].is_null(),
+            "daemon_responsive should be null when probe skipped, got {}",
+            result["session"]["daemon_responsive"]
+        );
+
+        // Probe must be marked skipped.
+        assert_eq!(result["probe"]["skipped"], true);
+        assert_eq!(result["probe"]["skip_reason"], "no_tunnel");
+    }
+
+    #[test]
+    #[serial]
+    fn show_skipped_probe_does_not_mutate_session_file() {
+        // When probe is skipped, show must NOT write back to the session
+        // file (no mutation).
+        let _cache = CacheDirGuard::new();
+        let _state = StateDirGuard::new();
+
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+        s.daemon_user = Some("originaluser".into());
+        s.save_to_session_file();
+
+        let path = SessionInfo::sessions_dir().join(format!("{}.json", s.id));
+        let before = std::fs::read_to_string(&path).expect("read before");
+
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let _ = show(&ctx, &s.id, OutputFormat::Json).expect("show should succeed");
+
+        let after = std::fs::read_to_string(&path).expect("read after");
+        assert_eq!(
+            before, after,
+            "session file must NOT be mutated when probe is skipped"
         );
     }
 }
