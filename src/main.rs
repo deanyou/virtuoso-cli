@@ -2652,11 +2652,15 @@ fn main() {
         "info"
     };
 
+    // Diagnostics go to **stderr**, never stdout: every command has a
+    // `--format json` mode whose stdout is meant to be piped (`| jq`), and a
+    // single tracing line on stdout would make that output unparseable.
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level)),
         )
         .with_target(false)
+        .with_writer(std::io::stderr)
         .init();
 
     // Initialize auth (reads VCLI_API_KEY from env)
