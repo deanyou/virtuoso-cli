@@ -174,6 +174,12 @@ pub struct Config {
     /// Auth token for the transport daemon IPC connection (VB_TRANSPORT_DAEMON_TOKEN).
     /// Must match the token the daemon was started with. Unix-only.
     pub transport_daemon_token: Option<String>,
+    /// If true, suppress the cross-user daemon warning when the daemon's Unix
+    /// $USER differs from the configured `remote_user`. Set via
+    /// `VB_ALLOW_CROSS_USER_DAEMON=1` (env/profile) or `allow_cross_user_daemon: true`
+    /// in a target config. Does NOT bypass target/session ownership validation —
+    /// only silences the informational cross-user warning.
+    pub allow_cross_user_daemon: bool,
 }
 
 impl std::fmt::Debug for Config {
@@ -425,6 +431,14 @@ impl Config {
             },
             transport_daemon_socket: Self::env_with_profile("VB_TRANSPORT_DAEMON_SOCKET", profile),
             transport_daemon_token: Self::env_with_profile("VB_TRANSPORT_DAEMON_TOKEN", profile),
+            allow_cross_user_daemon: Self::env_with_profile("VB_ALLOW_CROSS_USER_DAEMON", profile)
+                .map(|v| {
+                    matches!(
+                        v.trim().to_ascii_lowercase().as_str(),
+                        "1" | "true" | "yes" | "on"
+                    )
+                })
+                .unwrap_or(false),
         })
     }
 
@@ -497,6 +511,7 @@ impl Config {
             roles: RemoteRoles::default(),
             transport_daemon_socket: target.transport_daemon_socket.clone(),
             transport_daemon_token: target.transport_daemon_token.clone(),
+            allow_cross_user_daemon: target.allow_cross_user_daemon.unwrap_or(false),
         })
     }
 

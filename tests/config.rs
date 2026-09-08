@@ -149,6 +149,7 @@ fn test_config_digest_distinguishes_port_explicit() {
         roles: Default::default(),
         transport_daemon_socket: None,
         transport_daemon_token: None,
+        allow_cross_user_daemon: false,
     };
     let mut explicit = base.clone();
     explicit.port_explicit = true;

@@ -66,6 +66,10 @@ pub struct TargetConfig {
     pub transport_daemon_socket: Option<String>,
     /// Transport daemon auth token
     pub transport_daemon_token: Option<String>,
+    /// If true, suppress the cross-user daemon warning when the daemon's Unix
+    /// $USER differs from `remote_user`. Does NOT bypass ownership validation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_cross_user_daemon: Option<bool>,
     /// Human-readable description
     pub description: Option<String>,
 }
