@@ -242,34 +242,70 @@ fn resolve_remote_tunnel(
     Ok(ProbeEndpoint::RemoteTunnel { port: state.port })
 }
 
-/// Get the system hostname via libc::gethostname(2). Returns None on
-/// failure or if the hostname is empty. This is preferred over reading
-/// $HOSTNAME, which is not guaranteed to be set in every process
-/// environment (e.g. non-login shells, CI containers).
+/// Get the system hostname in a cross-platform way.
+///
+/// - **Unix** (Linux, macOS, BSD): `libc::gethostname(2)`.
+/// - **Windows**: `%COMPUTERNAME%` env var (libc crate does not provide
+///   `gethostname` on Windows).
+/// - **Other / fallback**: `$HOSTNAME` env var.
+///
+/// Returns None on failure or if the hostname is empty.
 fn system_hostname() -> Option<String> {
-    unsafe {
-        let mut buf = [0u8; 256];
-        if libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) != 0 {
-            return None;
+    #[cfg(unix)]
+    {
+        unsafe {
+            let mut buf = [0u8; 256];
+            if libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) != 0 {
+                return None;
+            }
+            let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+            if len == 0 {
+                return None;
+            }
+            String::from_utf8(buf[..len].to_vec()).ok()
         }
-        let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-        if len == 0 {
-            return None;
-        }
-        String::from_utf8(buf[..len].to_vec()).ok()
+    }
+    #[cfg(windows)]
+    {
+        std::env::var("COMPUTERNAME").ok().filter(|s| !s.is_empty())
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        std::env::var("HOSTNAME").ok().filter(|s| !s.is_empty())
     }
 }
 
-/// Compare two hostnames, allowing short-name vs FQDN equivalence.
+/// Returns true if `s` parses as an IP address (IPv4 or IPv6). IP addresses
+/// must always be compared exactly — no short-name matching.
+fn is_ip_address(s: &str) -> bool {
+    s.parse::<std::net::IpAddr>().is_ok()
+}
+
+/// Compare two hostnames with strict matching rules.
 ///
-/// - Exact match (case-sensitive, as hostnames are on Unix).
-/// - Short-name match: if either contains a dot, compare the part before
-///   the first dot. This lets "compute-eda-42" match
-///   "compute-eda-42.internal.corp".
+/// - **Exact match** always wins.
+/// - **IP addresses** (either side) must match exactly — no truncation.
+/// - **Two fully-qualified names** (both contain a dot) must match exactly.
+///   `compute-42.prod.example` does NOT match `compute-42.test.example`.
+/// - **Short name vs FQDN**: if exactly one side has no dot (a short
+///   hostname), compare the short side against the first label of the FQDN.
+///   `compute-42` matches `compute-42.internal.corp`.
 fn hostnames_match(a: &str, b: &str) -> bool {
     if a == b {
         return true;
     }
+    // IP addresses: exact match only.
+    if is_ip_address(a) || is_ip_address(b) {
+        return false;
+    }
+    let a_has_dot = a.contains('.');
+    let b_has_dot = b.contains('.');
+    // Both are FQDNs: exact match only (already failed above).
+    if a_has_dot && b_has_dot {
+        return false;
+    }
+    // At least one side is a short hostname (no dot). Allow first-label
+    // comparison.
     let a_short = a.split('.').next().unwrap_or(a);
     let b_short = b.split('.').next().unwrap_or(b);
     !a_short.is_empty() && a_short == b_short
@@ -280,9 +316,12 @@ fn hostnames_match(a: &str, b: &str) -> bool {
 /// - If `cfg.remote_host` is set, the session is local only if its host
 ///   matches exactly.
 /// - If `cfg.remote_host` is unset, we check known local hostnames
-///   (`localhost`, `127.0.0.1`, `::1`), the system hostname (via
-///   libc::gethostname, with short/FQDN equivalence), and finally the
-///   `HOSTNAME` env var as a last resort.
+///   (`localhost`, `127.0.0.1`, `::1`), then the system hostname (via
+///   `system_hostname()`, with strict `hostnames_match()` rules). If the
+///   system hostname is available but does NOT match, we return false
+///   immediately — `$HOSTNAME` is not allowed to override an authoritative
+///   system-name mismatch.
+/// - `$HOSTNAME` is consulted only when the system hostname is unavailable.
 /// - Anything that cannot be confirmed is treated as NOT local (skip probe).
 fn is_local_session(cfg: &Config, session: &SessionInfo) -> bool {
     const LOCAL_HOSTNAMES: &[&str] = &["localhost", "127.0.0.1", "::1"];
@@ -295,14 +334,16 @@ fn is_local_session(cfg: &Config, session: &SessionInfo) -> bool {
         return true;
     }
 
-    // System hostname (preferred — does not depend on process env).
+    // System hostname (authoritative — does not depend on process env).
+    // If available and non-empty, its verdict is final: a mismatch here is
+    // NOT overridden by $HOSTNAME below.
     if let Some(sys_host) = system_hostname() {
-        if !sys_host.is_empty() && hostnames_match(&sys_host, &session.host) {
-            return true;
+        if !sys_host.is_empty() {
+            return hostnames_match(&sys_host, &session.host);
         }
     }
 
-    // Fall back to HOSTNAME env var (may not be set in all environments).
+    // $HOSTNAME fallback — only when system hostname is unavailable.
     if let Ok(env_host) = std::env::var("HOSTNAME") {
         if !env_host.is_empty() && hostnames_match(&env_host, &session.host) {
             return true;
@@ -400,11 +441,23 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
                 // down). Any earlier failure (wrong host, dead process,
                 // mismatched session id, …) → tunnel_verified=false.
                 let probe_result = resolve_probe_endpoint_with_state(ctx, s, tunnel_state.as_ref());
+                // Distinguish local direct vs remote tunnel:
+                // - Local direct: tunnel_verified=false (no tunnel exists),
+                //   probe_status=reachable/unreachable based on port check.
+                // - Remote tunnel: tunnel_verified=true only when the full
+                //   6-step chain passes (or the only failure is
+                //   forward_port_unreachable, meaning identity verified but
+                //   port is down).
+                // - Any other failure → tunnel_verified=false, not_probed.
                 let (tunnel_verified, probe_status) = match probe_result {
-                    Ok(_) => (true, "reachable"),
+                    Ok(ProbeEndpoint::Local { .. }) => (false, "reachable"),
+                    Ok(ProbeEndpoint::RemoteTunnel { .. }) => (true, "reachable"),
                     Err(ProbeSkip {
                         reason: "forward_port_unreachable",
                     }) => (true, "unreachable"),
+                    Err(ProbeSkip {
+                        reason: "local_port_unreachable",
+                    }) => (false, "unreachable"),
                     Err(_) => (false, "not_probed"),
                 };
                 json!({
@@ -1064,6 +1117,15 @@ mod tests {
         CommandContext::new(cfg, Some("test-target".into())).expect("ctx")
     }
 
+    /// Helper: construct a local-target CommandContext (no remote_host).
+    fn local_ctx() -> CommandContext {
+        let mut cfg = test_config(None, false);
+        cfg.remote_host = None;
+        cfg.port = 0;
+        cfg.port_explicit = false;
+        CommandContext::new(cfg, Some("local-target".into())).expect("ctx")
+    }
+
     #[test]
     fn probe_local_direct_skipped_when_session_is_remote() {
         // Local config (no remote_host) + a session whose host is a remote
@@ -1465,6 +1527,36 @@ mod tests {
         assert!(!hostnames_match(".example.com", "anything"));
     }
 
+    #[test]
+    fn hostnames_match_different_domains_same_short_label() {
+        // Two FQDNs with the same first label but different domains must
+        // NOT match. compute-42.prod.example ≠ compute-42.test.example.
+        assert!(!hostnames_match(
+            "compute-42.prod.example",
+            "compute-42.test.example"
+        ));
+        assert!(!hostnames_match(
+            "compute-42.prod.example",
+            "compute-42.prod.other"
+        ));
+    }
+
+    #[test]
+    fn hostnames_match_different_ips() {
+        // IP addresses must match exactly — no first-octet truncation.
+        assert!(!hostnames_match("192.168.1.1", "192.168.1.2"));
+        assert!(!hostnames_match("10.0.0.1", "10.0.0.2"));
+        // IP vs hostname with same first label must not match.
+        assert!(!hostnames_match("192.168.1.1", "192"));
+    }
+
+    #[test]
+    fn hostnames_match_short_vs_fqdn_same_label() {
+        // A short hostname DOES match an FQDN whose first label is the same.
+        assert!(hostnames_match("compute-42", "compute-42.internal.corp"));
+        assert!(hostnames_match("compute-42.internal.corp", "compute-42"));
+    }
+
     // ------------------------------------------------------------------
     // resolve_probe_endpoint_with_state — same ID, wrong tunnel
     // ------------------------------------------------------------------
@@ -1659,6 +1751,64 @@ mod tests {
         assert_eq!(sessions[0]["probe_status"], "not_probed");
         // endpoint_match should be "match" (host+port match the target).
         assert_eq!(sessions[0]["endpoint_match"], "match");
+    }
+
+    #[test]
+    #[serial]
+    fn list_local_target_marks_direct_connection_not_tunnel() {
+        // A local target (no remote_host) with a reachable local session must
+        // show tunnel_verified=false (no SSH tunnel exists — this is a direct
+        // local connection) and probe_status=reachable.
+        let _cache = CacheDirGuard::new();
+
+        // Bind a real listener to simulate a local daemon port.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("local addr").port();
+
+        let mut s = session();
+        s.host = "localhost".into();
+        s.port = port;
+        s.save_to_session_file();
+
+        let ctx = local_ctx();
+        let result = list(&ctx, OutputFormat::Json).expect("list should succeed");
+
+        let sessions = result["sessions"].as_array().expect("sessions array");
+        assert_eq!(sessions.len(), 1, "local session should be listed");
+        // Local direct connection: tunnel_verified must be false.
+        assert_eq!(
+            sessions[0]["tunnel_verified"], false,
+            "local direct connection must not be marked tunnel_verified"
+        );
+        assert_eq!(
+            sessions[0]["probe_status"], "reachable",
+            "reachable local port should show probe_status=reachable"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn list_local_target_unreachable_port_shows_unreachable() {
+        // A local target with an unreachable local port must show
+        // tunnel_verified=false and probe_status=unreachable (not
+        // not_probed — we did attempt the probe).
+        let _cache = CacheDirGuard::new();
+
+        let mut s = session();
+        s.host = "localhost".into();
+        s.port = 1; // effectively never bound
+        s.save_to_session_file();
+
+        let ctx = local_ctx();
+        let result = list(&ctx, OutputFormat::Json).expect("list should succeed");
+
+        let sessions = result["sessions"].as_array().expect("sessions array");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0]["tunnel_verified"], false);
+        assert_eq!(
+            sessions[0]["probe_status"], "unreachable",
+            "unreachable local port should show probe_status=unreachable, not not_probed"
+        );
     }
 
     // ------------------------------------------------------------------
