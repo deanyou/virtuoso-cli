@@ -2161,7 +2161,10 @@ fn dispatch_cell(cmd: CellCmd) -> error::Result<serde_json::Value> {
     }
 }
 
-fn dispatch_sim(cmd: SimCmd) -> error::Result<serde_json::Value> {
+fn dispatch_sim(
+    cmd: SimCmd,
+    ctx: &crate::context::CommandContext,
+) -> error::Result<serde_json::Value> {
     match cmd {
         SimCmd::Setup {
             lib,
@@ -2216,7 +2219,7 @@ fn dispatch_sim(cmd: SimCmd) -> error::Result<serde_json::Value> {
             recreate,
             with_analysis,
         } => commands::sim::netlist(&lib, &cell, &view, recreate, &with_analysis),
-        SimCmd::RunAsync { netlist } => commands::sim::run_async(&netlist),
+        SimCmd::RunAsync { netlist } => commands::sim::run_async(ctx, &netlist),
         SimCmd::JobStatus { id } => commands::sim::job_status(&id),
         SimCmd::JobList => commands::sim::job_list(),
         SimCmd::JobCancel { id } => commands::sim::job_cancel(&id),
@@ -2251,13 +2254,16 @@ fn dispatch_sim(cmd: SimCmd) -> error::Result<serde_json::Value> {
                     }
                 })
                 .collect();
-            commands::sim::run_parallel(&parsed)
+            commands::sim::run_parallel(ctx, &parsed)
         }
         SimCmd::CheckLicense => commands::sim::check_license(),
     }
 }
 
-fn dispatch_process(cmd: ProcessCmd) -> error::Result<serde_json::Value> {
+fn dispatch_process(
+    cmd: ProcessCmd,
+    ctx: &crate::context::CommandContext,
+) -> error::Result<serde_json::Value> {
     match cmd {
         ProcessCmd::Char {
             lib,
@@ -2298,6 +2304,7 @@ fn dispatch_process(cmd: ProcessCmd) -> error::Result<serde_json::Value> {
                     }
                 });
                 commands::process::char_netlist(
+                    ctx,
                     &r#type,
                     &l_vals,
                     vgs_start,
@@ -2313,8 +2320,8 @@ fn dispatch_process(cmd: ProcessCmd) -> error::Result<serde_json::Value> {
                 )
             } else {
                 commands::process::char(
-                    &lib, &cell, &view, &inst, &r#type, &l_vals, vgs_start, vgs_stop, vgs_step,
-                    &output, timeout,
+                    ctx, &lib, &cell, &view, &inst, &r#type, &l_vals, vgs_start, vgs_stop,
+                    vgs_step, &output, timeout,
                 )
             }
         }
@@ -2812,8 +2819,8 @@ fn main() {
         }
         Commands::Skill(cmd) => dispatch_skill(cmd),
         Commands::Cell(cmd) => dispatch_cell(cmd),
-        Commands::Sim(cmd) => dispatch_sim(cmd),
-        Commands::Process(cmd) => dispatch_process(cmd),
+        Commands::Sim(cmd) => dispatch_sim(cmd, ctx.as_ref().unwrap()),
+        Commands::Process(cmd) => dispatch_process(cmd, ctx.as_ref().unwrap()),
         Commands::Design(cmd) => dispatch_design(cmd, format),
         Commands::Maestro(cmd) => dispatch_maestro(cmd),
         Commands::Schematic(cmd) => dispatch_schematic(cmd),

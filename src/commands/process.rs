@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 
 #[allow(clippy::too_many_arguments)]
 pub fn char(
+    ctx: &crate::context::CommandContext,
     lib: &str,
     cell: &str,
     view: &str,
@@ -17,7 +18,7 @@ pub fn char(
     output: &str,
     timeout: u64,
 ) -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+    let client = VirtuosoClient::from_context(ctx)?;
 
     client.execute_skill("simulator('spectre)", None)?;
     let design_result = client.execute_skill(
@@ -121,6 +122,7 @@ pub fn char(
 /// Generates a netlist for each L, runs spectre, parses PSF ASCII oppoint results.
 #[allow(clippy::too_many_arguments)]
 pub fn char_netlist(
+    ctx: &crate::context::CommandContext,
     device_type: &str,
     l_values: &[f64],
     vgs_start: f64,
@@ -135,9 +137,7 @@ pub fn char_netlist(
     vds: f64,
 ) -> Result<Value> {
     let is_pmos = device_type == "pmos";
-    let spectre_cmd = crate::config::Config::from_env()
-        .map(|c| c.spectre_cmd)
-        .unwrap_or_else(|_| "spectre".into());
+    let spectre_cmd = ctx.config().spectre_cmd.clone();
 
     let mut all_data: Vec<Value> = Vec::new();
     let mut total_points = 0;
