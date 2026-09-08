@@ -2668,22 +2668,39 @@ fn main() {
         }
         // P0-A: single immutable Config for this invocation. Migrated commands
         // receive it through CommandContext and must not re-read env.
+        //
+        // For `Commands::Config` (i.e. `vcli config check`), resolve errors are
+        // DEFERRED — `build_report()` reports them as JSON diagnostics with
+        // valid=false. Otherwise `--target nonexistent config check` (or any
+        // invalid-but-diagnosable config) would exit with a stderr message
+        // BEFORE the report could be emitted, hiding the structured payload.
         let resolved = match resolve_from_selection(selection) {
-            Ok(r) => r,
+            Ok(r) => Some(r),
             Err(e) => {
-                eprintln!("Error: {e}");
-                std::process::exit(match e {
-                    crate::error::VirtuosoError::NotFound(_) => exit_codes::NOT_FOUND,
-                    _ => exit_codes::USAGE_ERROR,
-                });
+                if matches!(cli.command, Commands::Config(_)) {
+                    None
+                } else {
+                    eprintln!("Error: {e}");
+                    std::process::exit(match e {
+                        crate::error::VirtuosoError::NotFound(_) => exit_codes::NOT_FOUND,
+                        _ => exit_codes::USAGE_ERROR,
+                    });
+                }
             }
         };
-        match crate::context::CommandContext::from_resolved(&resolved) {
-            Ok(c) => Some(c),
-            Err(e) => {
-                eprintln!("Error: {e}");
-                std::process::exit(exit_codes::USAGE_ERROR);
-            }
+        match resolved {
+            Some(resolved) => match crate::context::CommandContext::from_resolved(&resolved) {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    if matches!(cli.command, Commands::Config(_)) {
+                        None
+                    } else {
+                        eprintln!("Error: {e}");
+                        std::process::exit(exit_codes::USAGE_ERROR);
+                    }
+                }
+            },
+            None => None,
         }
     } else {
         None

@@ -216,26 +216,10 @@ impl ConfigFile {
     /// the resolution layer, or the friendly file name (`remote_host`) passed by
     /// the TUI. Both spellings are accepted so a hand-edited file is robust.
     pub fn get(&self, key: &str, profile: Option<&str>) -> Option<String> {
-        // Accept the value under either spelling: the friendly file key
-        // (`remote_host`, written by init/TUI) and the upper-case env-var form
-        // (`VB_REMOTE_HOST`, written by a buggy early build). This makes the
-        // lookup symmetric — a query in either style finds a file written in
-        // either style. Both candidates are derived from the friendly key so an
-        // already-upper-case query is not double-prefixed (`VB_VB_…`).
-        let friendly = file_key(key);
-        let env = env_var_for(&friendly);
-        let candidates = [friendly.as_str(), env.as_str()];
-        for candidate in candidates {
-            if let Some(p) = profile {
-                if let Some(v) = self.profiles.get(p).and_then(|s| s.get(candidate)) {
-                    return Some(v.as_text());
-                }
-            }
-            if let Some(v) = self.global.get(candidate) {
-                return Some(v.as_text());
-            }
-        }
-        None
+        // Layer-first, then key-spelling — same precedence as `get_with_loc`.
+        // Keep the two in sync by delegating; any change to lookup order must
+        // live in ONE place.
+        self.get_with_loc(key, profile).map(|(v, _)| v)
     }
 
     /// Like [`ConfigFile::get`], but also reports **where** the key was found so
@@ -260,9 +244,16 @@ impl ConfigFile {
         let friendly = file_key(key);
         let env = env_var_for(&friendly);
         let candidates = [friendly.as_str(), env.as_str()];
-        for candidate in candidates {
-            if let Some(p) = profile {
-                if let Some(section) = self.profiles.get(p) {
+
+        // Layer-first, then key-spelling. Within a layer we try every
+        // candidate key before falling through to the next layer — otherwise
+        // `timeout` in `[global]` would shadow `VB_TIMEOUT` in
+        // `[profile.<name>]` even though the latter is the higher-precedence
+        // layer. The correct order is: ALL profile candidates, THEN all
+        // global candidates.
+        if let Some(p) = profile {
+            if let Some(section) = self.profiles.get(p) {
+                for candidate in candidates {
                     if let Some(v) = section.get(candidate) {
                         return Some((
                             v.as_text(),
@@ -274,6 +265,8 @@ impl ConfigFile {
                     }
                 }
             }
+        }
+        for candidate in candidates {
             if let Some(v) = self.global.get(candidate) {
                 return Some((
                     v.as_text(),
