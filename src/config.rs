@@ -257,6 +257,20 @@ struct Layers<'a> {
 /// so a user can ask "why did this 30-second timeout become 120?" and get an
 /// answer that names the actual env var, the exact `[profile.<name>]` section
 /// or the defaulting code path.
+/// How a [`ConfigSource::Default`] value was derived.
+///
+/// `Hardcoded` values are compile-time constants (e.g. `timeout = 30`).
+/// `Derived` values are computed at runtime from the environment (e.g. the
+/// default bridge port is picked by the OS when `port = 0`). Surfacing this
+/// distinction lets a user tell "I didn't set it, and the code picked 30"
+/// apart from "I didn't set it, and the OS picked 40163".
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DefaultKind {
+    Hardcoded,
+    Derived,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "layer", rename_all = "snake_case")]
 pub enum ConfigSource {
@@ -270,12 +284,13 @@ pub enum ConfigSource {
     /// `config.toml` global section.
     FileGlobal { file: PathBuf },
     /// An active `targets.yaml` entry whose field overrode this setting.
-    /// `target` is the target name as set by `--target` / `VB_TARGET` /
-    /// `active_target` in `targets.yaml`.
-    Target { target: String },
-    /// No higher-precedence layer supplied a value; `default` documents the
-    /// constant the resolver fell through to.
-    Default { default: String },
+    /// `target` is the target name; `file` is the absolute path of the
+    /// `targets.yaml` that owned it (so a user can `vim` it).
+    Target { target: String, file: PathBuf },
+    /// No higher-precedence layer supplied a value. `default` documents the
+    /// constant the resolver fell through to; `kind` distinguishes compile-time
+    /// constants from runtime-derived values (e.g. OS-assigned ports).
+    Default { default: String, kind: DefaultKind },
 }
 
 /// One resolved key, with its value and provenance.
@@ -284,6 +299,21 @@ pub struct ConfigEntry {
     pub key: &'static str,
     pub value: String,
     pub source: ConfigSource,
+}
+
+/// One diagnostic entry in a [`ConfigReport`].
+///
+/// Diagnostics are structured errors/warnings with stable codes so CI and
+/// scripts can match on them without parsing human-readable text. `level`
+/// is `"error"` (blocks usage) or `"warning"` (advisory). `field` names the
+/// config key or subsystem the diagnostic applies to (e.g. `"VB_TIMEOUT"`,
+/// `"targets.yaml"`, `"config.toml"`).
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfigDiagnostic {
+    pub code: &'static str,
+    pub level: &'static str,
+    pub field: String,
+    pub message: String,
 }
 
 /// Aggregated report of the resolved configuration.
@@ -296,7 +326,14 @@ pub struct ConfigEntry {
 pub struct ConfigReport {
     pub profile: Option<String>,
     pub active_target: Option<String>,
+    /// Path of the config.toml that was read, if any. In target mode this is
+    /// `None` because targets.yaml drives resolution and config.toml is not
+    /// consulted — callers should check `active_target.is_some()` to tell
+    /// "not applicable" apart from "file missing".
     pub config_file: Option<PathBuf>,
+    /// Path of the targets.yaml that was read, if a target is active. `None`
+    /// in legacy mode.
+    pub targets_file: Option<PathBuf>,
     /// Resolution precedence, highest first, with the key spelling each layer
     /// expects. Surfaced in `--format json` so a user can verify the order
     /// without reading code.
@@ -306,6 +343,16 @@ pub struct ConfigReport {
     /// fallback being read). Empty when nothing to warn about. Failures
     /// here don't elevate the process exit code — they are advisory.
     pub warnings: Vec<String>,
+    /// Structured diagnostics with stable codes. Includes both parse failures
+    /// (e.g. invalid port, missing target) and advisory warnings.
+    pub diagnostics: Vec<ConfigDiagnostic>,
+    /// `false` when any diagnostic is `level = "error"` — the config cannot
+    /// be used as-is. `true` when only warnings (or nothing) were found.
+    pub valid: bool,
+    /// Config digest (hex-encoded) when resolution succeeded. `None` when a
+    /// hard error prevented a complete config from being built (e.g. targets
+    /// file unreadable, target not found).
+    pub digest: Option<String>,
 }
 
 impl ConfigReport {
@@ -357,7 +404,14 @@ fn report_ssh_port(cfg: &Config) -> String {
         .unwrap_or_else(|| "22".into())
 }
 fn report_ssh_key(cfg: &Config) -> String {
-    cfg.ssh_key.clone().unwrap_or_default()
+    // The key path may contain sensitive info (username, custom paths).
+    // Show only "set" / "unset" to avoid leaking it through a config-check
+    // snapshot or terminal scrollback — same policy as transport_daemon_token.
+    if cfg.ssh_key.is_some() {
+        "***set***".to_string()
+    } else {
+        String::new()
+    }
 }
 fn report_ssh_config(cfg: &Config) -> String {
     cfg.ssh_config.clone().unwrap_or_default()
@@ -566,16 +620,19 @@ fn build_report_from_target(
         let source = if target_provided {
             ConfigSource::Target {
                 target: target_name.to_string(),
-            }
-        } else if value.is_empty() && matches_default(spec.key, &value) {
-            // An empty string when the default *is* empty — the user really
-            // didn't set this anywhere.
-            ConfigSource::Default {
-                default: spec.default.to_string(),
+                file: crate::target::TargetManager::default_config_path(),
             }
         } else {
+            // None from the target means the runtime applied its built-in default.
+            // Port is derived (OS-assigned when 0); everything else is hardcoded.
+            let kind = if spec.key == "VB_PORT" {
+                DefaultKind::Derived
+            } else {
+                DefaultKind::Hardcoded
+            };
             ConfigSource::Default {
                 default: spec.default.to_string(),
+                kind,
             }
         };
         report.entries.push(ConfigEntry {
@@ -634,19 +691,6 @@ fn target_provides(key: &str, t: &crate::target::TargetConfig) -> bool {
         | "VB_REMOTE_SCRATCH_ROOT" => false,
         _ => false,
     }
-}
-
-/// Compare the resolved value to the static default for a key.
-///
-/// Used to detect "the value equals the constant default — that came from
-/// the default, not from anywhere higher up." Empty-string equality is the
-/// common case (e.g. `remote_host` defaults to `""`).
-fn matches_default(key: &str, value: &str) -> bool {
-    KEY_SPECS
-        .iter()
-        .find(|s| s.key == key)
-        .map(|s| s.default == value)
-        .unwrap_or(false)
 }
 
 impl Layers<'_> {
@@ -1125,13 +1169,16 @@ impl Config {
     /// * **legacy mode** (no `VB_TARGET`, or unknown target): the full
     ///   four-layer precedence is consulted.
     ///
-    /// Returns [`VirtuosoError::Config`] when reading or parsing the file
-    /// fails — same hard-error policy as the live path.
+    /// This function never returns `Err` — resolution failures are captured as
+    /// [`ConfigDiagnostic`] entries with `level = "error"` and `valid = false`
+    /// so `vcli config check --format json` always produces a valid document
+    /// (with a non-zero exit code driven by the caller).
     pub fn build_report(profile: Option<&str>) -> Result<ConfigReport> {
         let mut report = ConfigReport {
             profile: profile.map(|s| s.to_string()),
             active_target: None,
             config_file: None,
+            targets_file: None,
             precedence: [
                 "<KEY>_<PROFILE> env",
                 "<KEY> env",
@@ -1140,6 +1187,9 @@ impl Config {
             ],
             entries: Vec::with_capacity(KEY_SPECS.len()),
             warnings: Vec::new(),
+            diagnostics: Vec::new(),
+            valid: true,
+            digest: None,
         };
 
         // Active target detection — mirrors from_env_resolve's honor_vb_target
@@ -1163,12 +1213,19 @@ impl Config {
                         let t = l.trim();
                         t.starts_with("VB_PROFILE=") && !t["VB_PROFILE=".len()..].trim().is_empty()
                     }) {
-                        report.warnings.push(format!(
+                        let msg = format!(
                             "{}: VB_PROFILE= is a deprecated fallback. Run `vcli profile bind \
                              <name> --user` (or export VB_PROFILE in your shell) — this file \
                              will stop being read in a future release.",
                             legacy_env.display()
-                        ));
+                        );
+                        report.warnings.push(msg.clone());
+                        report.diagnostics.push(ConfigDiagnostic {
+                            code: "LEGACY_ENV_PROFILE",
+                            level: "warning",
+                            field: "profile".into(),
+                            message: msg,
+                        });
                     }
                 }
             }
@@ -1176,16 +1233,78 @@ impl Config {
 
         if let Some(ref target_name) = report.active_target.clone() {
             // Target mode: load the target and trace every key to it.
-            let manager = crate::target::TargetManager::load()
-                .map_err(|e| VirtuosoError::Config(format!("failed to load targets: {e}")))?;
-            let target = manager.get(target_name).ok_or_else(|| {
-                VirtuosoError::Config(format!("target '{}' not found", target_name))
-            })?;
-            return Ok(build_report_from_target(target, target_name, report));
+            report.targets_file = Some(crate::target::TargetManager::default_config_path());
+            let manager = match crate::target::TargetManager::load() {
+                Ok(m) => m,
+                Err(e) => {
+                    let msg = format!("failed to load targets: {e}");
+                    report.diagnostics.push(ConfigDiagnostic {
+                        code: "TARGETS_LOAD_FAILED",
+                        level: "error",
+                        field: "targets.yaml".into(),
+                        message: msg.clone(),
+                    });
+                    report.valid = false;
+                    report.warnings.push(msg);
+                    return Ok(report);
+                }
+            };
+            let target = match manager.get(target_name) {
+                Some(t) => t,
+                None => {
+                    let msg = format!("target '{}' not found", target_name);
+                    report.diagnostics.push(ConfigDiagnostic {
+                        code: "TARGET_NOT_FOUND",
+                        level: "error",
+                        field: target_name.clone(),
+                        message: msg.clone(),
+                    });
+                    report.valid = false;
+                    report.warnings.push(msg);
+                    return Ok(report);
+                }
+            };
+            let mut report = build_report_from_target(target, target_name, report);
+            // Compute digest from the synthetic config so the report carries the
+            // same identity the runtime would use.
+            if let Ok(cfg) = Config::from_target(target, target_name) {
+                report.digest = Some(cfg.digest());
+            }
+            return Ok(report);
         }
 
         // Legacy mode: walk the four-layer precedence for every known key.
-        let file = ConfigFile::load()?;
+        let file = match ConfigFile::load() {
+            Ok(f) => f,
+            Err(e) => {
+                let msg = format!("failed to load config.toml: {e}");
+                report.diagnostics.push(ConfigDiagnostic {
+                    code: "CONFIG_LOAD_FAILED",
+                    level: "error",
+                    field: "config.toml".into(),
+                    message: msg.clone(),
+                });
+                report.valid = false;
+                report.warnings.push(msg);
+                // Still report defaults so the user sees what would be used.
+                for spec in KEY_SPECS {
+                    let kind = if spec.key == "VB_PORT" {
+                        DefaultKind::Derived
+                    } else {
+                        DefaultKind::Hardcoded
+                    };
+                    report.entries.push(ConfigEntry {
+                        key: spec.key,
+                        value: spec.default.to_string(),
+                        source: ConfigSource::Default {
+                            default: spec.default.to_string(),
+                            kind,
+                        },
+                    });
+                }
+                return Ok(report);
+            }
+        };
         report.config_file = file.as_ref().map(|_| crate::config_file::path());
         let lz = Layers {
             profile,
@@ -1194,12 +1313,20 @@ impl Config {
         for spec in KEY_SPECS {
             let (raw, source) = match lz.raw_with_source(spec.key) {
                 Some((v, s)) => (v, s),
-                None => (
-                    spec.default.to_string(),
-                    ConfigSource::Default {
-                        default: spec.default.to_string(),
-                    },
-                ),
+                None => {
+                    let kind = if spec.key == "VB_PORT" {
+                        DefaultKind::Derived
+                    } else {
+                        DefaultKind::Hardcoded
+                    };
+                    (
+                        spec.default.to_string(),
+                        ConfigSource::Default {
+                            default: spec.default.to_string(),
+                            kind,
+                        },
+                    )
+                }
             };
             // Apply the same scalar validators as the live path so a value
             // that would fail at runtime shows up here *with the same error
@@ -1218,12 +1345,24 @@ impl Config {
                         value: raw.clone(),
                         source,
                     });
-                    report.warnings.push(format!(
+                    let msg = format!(
                         "{}: {e} — this value would fail to parse at runtime",
                         spec.key
-                    ));
+                    );
+                    report.warnings.push(msg.clone());
+                    report.diagnostics.push(ConfigDiagnostic {
+                        code: "VALUE_PARSE_FAILED",
+                        level: "warning",
+                        field: spec.key.to_string(),
+                        message: msg,
+                    });
                 }
             }
+        }
+        // Compute digest from the resolved config so the report carries the
+        // same identity the runtime would use.
+        if let Ok(cfg) = Config::from_env_with_profile(profile) {
+            report.digest = Some(cfg.digest());
         }
         Ok(report)
     }
@@ -1537,7 +1676,7 @@ targets:
             .find(|e| e.key == "VB_REMOTE_HOST")
             .expect("entry exists");
         assert_eq!(e.value, "target-host");
-        assert!(matches!(&e.source, ConfigSource::Target { target } if target == "prod"));
+        assert!(matches!(&e.source, ConfigSource::Target { target, .. } if target == "prod"));
         // Clean up the VB_TARGETS_FILE we added — Drop on EnvGuard doesn't
         // know about it because it's not in the spec list.
         std::env::remove_var("VB_TARGETS_FILE");

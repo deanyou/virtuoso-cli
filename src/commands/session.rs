@@ -547,51 +547,215 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
     }))
 }
 
-pub fn current() -> Result<Value> {
-    let live = SessionInfo::list_alive();
-    match live.len() {
-        0 => Ok(
-            json!({"status": "success", "session": null, "note": "no live sessions; VB_PORT will be used"}),
-        ),
+/// Show the current (active) session for the selected target.
+///
+/// Uses the same shared verification chain as `list` / `show`
+/// (`resolve_probe_endpoint`) rather than the legacy `list_alive()` which
+/// only checks local port reachability and can misclassify remote sessions.
+///
+/// Target mode: only considers sessions whose endpoint matches the current
+/// target. Legacy mode: considers all locally-reachable sessions (preserves
+/// existing behaviour for non-target invocations).
+pub fn current(ctx: &CommandContext) -> Result<Value> {
+    let all = SessionInfo::list().unwrap_or_default();
+    let is_target = ctx.target_id().is_some();
+
+    let mut reachable: Vec<&SessionInfo> = Vec::new();
+    let mut skipped: Vec<(String, String)> = Vec::new(); // (id, reason)
+
+    for s in &all {
+        // Target mode: skip sessions that don't match the target endpoint.
+        if is_target {
+            match compute_endpoint_match(ctx, s) {
+                "match" => {}
+                "mismatch" => {
+                    skipped.push((s.id.clone(), "endpoint_mismatch".into()));
+                    continue;
+                }
+                _ => {
+                    // Legacy/unverifiable — still consider if reachable.
+                }
+            }
+        }
+
+        // Determine liveness.
+        //
+        // Legacy mode (no target): preserve the original `list_alive()` behaviour
+        // — a session whose local port is reachable is alive.
+        //
+        // Target mode: use the shared verification chain. Only sessions whose
+        // probe endpoint resolves successfully are considered reachable.
+        let is_reachable = if is_target {
+            resolve_probe_endpoint(ctx, s).is_ok()
+        } else {
+            s.is_alive()
+        };
+
+        if is_reachable {
+            reachable.push(s);
+        } else if is_target {
+            // In target mode, record why a matching session was not reachable.
+            if let Err(skip) = resolve_probe_endpoint(ctx, s) {
+                skipped.push((s.id.clone(), skip.reason.into()));
+            }
+        }
+    }
+
+    match reachable.len() {
+        0 => Ok(json!({
+            "status": "success",
+            "session": null,
+            "target": ctx.target_id(),
+            "note": if is_target {
+                "no reachable sessions for this target; check tunnel attach"
+            } else {
+                "no live sessions; VB_PORT will be used"
+            },
+            "skipped_count": skipped.len(),
+        })),
         1 => Ok(json!({
             "status": "success",
-            "session": live[0].id,
-            "port": live[0].port,
+            "session": reachable[0].id,
+            "port": reachable[0].port,
+            "host": reachable[0].host,
+            "target": ctx.target_id(),
             "auto_selected": true,
+            "endpoint_match": if is_target { "match" } else { "unchecked" },
         })),
         _ => {
-            let ids: Vec<&str> = live.iter().map(|s| s.id.as_str()).collect();
+            let ids: Vec<&str> = reachable.iter().map(|s| s.id.as_str()).collect();
             Ok(json!({
                 "status": "ambiguous",
                 "sessions": ids,
+                "target": ctx.target_id(),
                 "note": "use --session <id> to select one",
             }))
         }
     }
 }
 
-pub fn cleanup() -> Result<Value> {
+/// Remove dead session records.
+///
+/// Uses the shared verification chain (`resolve_probe_endpoint`) to determine
+/// whether a session is dead, rather than the legacy `is_alive()` which only
+/// checks local port reachability and can misclassify remote sessions that
+/// haven't been attached yet.
+///
+/// Target mode: only removes sessions whose endpoint matches the current target.
+/// Legacy mode: preserves existing global cleanup behaviour.
+///
+/// `dry_run`: when true, reports what would be removed without deleting files.
+pub fn cleanup(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
     let all = SessionInfo::list().unwrap_or_default();
     let dir = SessionInfo::sessions_dir();
-    let mut removed = Vec::new();
+    let is_target = ctx.target_id().is_some();
+
+    let mut removed: Vec<String> = Vec::new();
+    let mut skipped: Vec<(String, String)> = Vec::new(); // (id, reason)
+
     for s in &all {
-        if !s.is_alive() {
-            let path = dir.join(format!("{}.json", s.id));
-            if std::fs::remove_file(&path).is_ok() {
-                removed.push(s.id.clone());
+        // Target mode: skip sessions that don't match the target endpoint.
+        if is_target {
+            match compute_endpoint_match(ctx, s) {
+                "match" => {}
+                "mismatch" => {
+                    skipped.push((s.id.clone(), "endpoint_mismatch".into()));
+                    continue;
+                }
+                _ => {
+                    // Legacy/unverifiable — still evaluate.
+                }
             }
         }
+
+        // Determine liveness.
+        //
+        // Legacy mode (no target): preserve the original `is_alive()` behaviour
+        // — a session whose local port is unreachable is dead. This avoids
+        // breaking existing cleanup semantics for non-target invocations.
+        //
+        // Target mode: use the shared verification chain. A session is "dead"
+        // only if the probe was actually attempted and the port was unreachable.
+        // Identity-skipped sessions are preserved (they may be valid remote
+        // sessions that just can't be verified from this machine).
+        let (is_dead, skip_reason) = if is_target {
+            match resolve_probe_endpoint(ctx, s) {
+                Ok(_) => (false, None),
+                Err(skip) => {
+                    let dead = skip.reason == "forward_port_unreachable"
+                        || skip.reason == "local_port_unreachable";
+                    (dead, Some(skip.reason))
+                }
+            }
+        } else {
+            (!s.is_alive(), None)
+        };
+
+        if is_dead {
+            if dry_run {
+                removed.push(s.id.clone());
+            } else {
+                let path = dir.join(format!("{}.json", s.id));
+                if std::fs::remove_file(&path).is_ok() {
+                    removed.push(s.id.clone());
+                } else {
+                    skipped.push((s.id.clone(), "remove_failed".into()));
+                }
+            }
+        } else {
+            let reason = match skip_reason {
+                Some(r) => format!("skipped:{}", r),
+                None => "reachable".into(),
+            };
+            skipped.push((s.id.clone(), reason));
+        }
     }
+
     Ok(json!({
         "status": "success",
+        "dry_run": dry_run,
+        "target": ctx.target_id(),
         "removed": removed.len(),
         "sessions": removed,
+        "skipped_count": skipped.len(),
+        "skipped": skipped.iter().map(|(id, reason)| json!({"id": id, "reason": reason})).collect::<Vec<_>>(),
     }))
 }
 
-pub fn history(id: &str, only_skill: bool, only_cmd: bool, limit: usize) -> Result<Value> {
+/// Show command/SKILL history for a session.
+///
+/// Read-only: history files are per-session logs and don't require a live
+/// connection. The session's endpoint ownership is verified against the
+/// current target context; a mismatch surfaces as a warning but does not
+/// block reading (history is local cache, not a connection operation).
+pub fn history(
+    ctx: &CommandContext,
+    id: &str,
+    only_skill: bool,
+    only_cmd: bool,
+    limit: usize,
+) -> Result<Value> {
     let show_skill = !only_cmd;
     let show_cmd = !only_skill;
+
+    // Load session metadata for ownership verification (best-effort).
+    let session_meta = SessionInfo::load(id).ok();
+    let (endpoint_match, ownership_warning) = match (&session_meta, ctx.target_id()) {
+        (Some(s), Some(_)) => {
+            let m = compute_endpoint_match(ctx, s);
+            let warning = if m == "mismatch" {
+                Some(format!(
+                    "session {} endpoint does not match target {}; showing history anyway",
+                    id,
+                    ctx.target_id().unwrap_or_default()
+                ))
+            } else {
+                None
+            };
+            (m.to_string(), warning)
+        }
+        _ => ("unchecked".to_string(), None),
+    };
 
     let skill_entries: Vec<Value> = if show_skill {
         crate::history::load_skill(id, limit)
@@ -613,14 +777,22 @@ pub fn history(id: &str, only_skill: bool, only_cmd: bool, limit: usize) -> Resu
         vec![]
     };
 
-    Ok(json!({
+    let mut result = json!({
         "status": "success",
         "session": id,
+        "target": ctx.target_id(),
+        "endpoint_match": endpoint_match,
         "skill_count": skill_entries.len(),
         "cmd_count": cmd_entries.len(),
         "skill": skill_entries,
         "cmd": cmd_entries,
-    }))
+    });
+
+    if let Some(warning) = ownership_warning {
+        result["ownership_warning"] = json!(warning);
+    }
+
+    Ok(result)
 }
 
 /// Show details for a specific session.

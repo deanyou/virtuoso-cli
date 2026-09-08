@@ -1496,7 +1496,11 @@ enum SessionCmd {
     Current,
 
     /// Remove stale session files for daemons that are no longer running
-    Cleanup,
+    Cleanup {
+        /// Report what would be removed without deleting files
+        #[arg(long)]
+        dry_run: bool,
+    },
 
     /// Show SKILL and command history for a session
     History {
@@ -2773,14 +2777,16 @@ fn main() {
         Commands::Session(cmd) => match cmd {
             SessionCmd::List => commands::session::list(ctx.as_ref().unwrap(), format),
             SessionCmd::Show { id } => commands::session::show(ctx.as_ref().unwrap(), &id, format),
-            SessionCmd::Current => commands::session::current(),
-            SessionCmd::Cleanup => commands::session::cleanup(),
+            SessionCmd::Current => commands::session::current(ctx.as_ref().unwrap()),
+            SessionCmd::Cleanup { dry_run } => {
+                commands::session::cleanup(ctx.as_ref().unwrap(), dry_run)
+            }
             SessionCmd::History {
                 id,
                 skill,
                 cmd,
                 limit,
-            } => commands::session::history(&id, skill, cmd, limit),
+            } => commands::session::history(ctx.as_ref().unwrap(), &id, skill, cmd, limit),
             SessionCmd::Heartbeat { interval } => {
                 let hb = virtuoso_cli::session::SessionHeartbeat::new(interval);
                 hb.start();
