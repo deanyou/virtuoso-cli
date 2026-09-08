@@ -113,6 +113,21 @@ impl Scalar {
     }
 }
 
+/// Where inside `config.toml` a key was actually resolved.
+///
+/// Returned by [`crate::config_file::ConfigFile::get_with_loc`] so the caller
+/// can distinguish "value came from a `[profile.<name>]` section" from "value
+/// fell through to the global section" in a single lookup.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum FileLoc {
+    /// Hit a `[profile.<name>]` section. `actual_key` is the real TOML key
+    /// (friendly or upper-case spelling) that matched.
+    Profile { profile: String, actual_key: String },
+    /// Hit the top-level global section. `actual_key` is the real TOML key
+    /// that matched.
+    Global { actual_key: String },
+}
+
 /// A parsed `config.toml`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ConfigFile {
@@ -223,6 +238,54 @@ impl ConfigFile {
         None
     }
 
+    /// Like [`ConfigFile::get`], but also reports **where** the key was found so
+    /// callers can attribute the value to a precise layer in a single lookup.
+    ///
+    /// Returns `Some((value, loc))` where `loc` records the actual section hit —
+    /// `FileLoc::Profile { profile }` if the value came from a
+    /// `[profile.<name>]` section, or `FileLoc::Global` if it fell through to
+    /// the top-level `[global]` section.
+    ///
+    /// This consolidates what used to be two separate passes:
+    /// `profile_section_has` (probe) followed by `get` (read). The returns from
+    /// those two passes could disagree on which key matched, which is how a
+    /// `vbSshKey` in the global section used to be misattributed as coming from
+    /// a `[profile.<name>]` section that only had `VB_SSH_KEY`. A single walk
+    /// sees one truth.
+    pub(crate) fn get_with_loc(
+        &self,
+        key: &str,
+        profile: Option<&str>,
+    ) -> Option<(String, FileLoc)> {
+        let friendly = file_key(key);
+        let env = env_var_for(&friendly);
+        let candidates = [friendly.as_str(), env.as_str()];
+        for candidate in candidates {
+            if let Some(p) = profile {
+                if let Some(section) = self.profiles.get(p) {
+                    if let Some(v) = section.get(candidate) {
+                        return Some((
+                            v.as_text(),
+                            FileLoc::Profile {
+                                profile: p.to_string(),
+                                actual_key: candidate.to_string(),
+                            },
+                        ));
+                    }
+                }
+            }
+            if let Some(v) = self.global.get(candidate) {
+                return Some((
+                    v.as_text(),
+                    FileLoc::Global {
+                        actual_key: candidate.to_string(),
+                    },
+                ));
+            }
+        }
+        None
+    }
+
     /// Whether the key is present in the file — the `[profile.<name>]` section
     /// when `profile` is given, otherwise the global section. Used by the TUI to
     /// show whether a value comes from the file (and is therefore something the
@@ -249,22 +312,6 @@ impl ConfigFile {
             }
         }
         false
-    }
-
-    /// Whether the key is present in **only** the named profile section.
-    ///
-    /// `has(key, Some(profile))` falls through to the global section when the
-    /// profile section lacks the key — the behaviour you want when *reading*,
-    /// but the wrong question when you need to attribute a value to its actual
-    /// layer for `vcli config check`. The report uses this accessor to decide
-    /// between [`crate::config::ConfigSource::FileProfile`] and `FileGlobal`.
-    #[allow(dead_code)]
-    pub(crate) fn profile_section_has(&self, key: &str, profile: &str) -> bool {
-        let friendly = file_key(key);
-        let env = env_var_for(&friendly);
-        self.profiles
-            .get(profile)
-            .is_some_and(|section| section.contains_key(&friendly) || section.contains_key(&env))
     }
 
     /// Set a key in the global section, or in `[profile.<name>]`.

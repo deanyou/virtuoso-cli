@@ -1,4 +1,4 @@
-use crate::config_file::ConfigFile;
+use crate::config_file::{ConfigFile, FileLoc};
 use crate::error::{Result, VirtuosoError};
 use serde::Serialize;
 use std::env;
@@ -751,31 +751,21 @@ impl Layers<'_> {
             }
         }
         if let Some(file) = self.file {
-            // Probe whether the *profile section* itself owns the key, not
-            // whether `ConfigFile::get` returns a value. `get` falls through
-            // to global on a miss — if we trusted it, an absent profile key
-            // would be misattributed as FileProfile instead of FileGlobal.
-            let profile_owns = self
-                .profile
-                .is_some_and(|p| file.profile_section_has(key, p));
-            if profile_owns {
-                let v = file
-                    .get(key, self.profile)
-                    .expect("profile_section_has said the value is there");
-                return Some((
-                    v,
-                    ConfigSource::FileProfile {
+            // One walk, one truth. `get_with_loc` returns the value and the
+            // precise layer it was read from, so we never have to first probe
+            // with `profile_section_has` and read again with `get`. The two
+            // passes could disagree on which spelling matched, misattributing a
+            // global value to a profile section (and vice versa).
+            if let Some((v, loc)) = file.get_with_loc(key, self.profile) {
+                let source = match loc {
+                    FileLoc::Profile { .. } => ConfigSource::FileProfile {
                         file: crate::config_file::path(),
                     },
-                ));
-            }
-            if let Some(v) = file.get(key, None) {
-                return Some((
-                    v,
-                    ConfigSource::FileGlobal {
+                    FileLoc::Global { .. } => ConfigSource::FileGlobal {
                         file: crate::config_file::path(),
                     },
-                ));
+                };
+                return Some((v, source));
             }
         }
         None
@@ -841,6 +831,94 @@ impl Layers<'_> {
                 .as_str(),
             "1" | "true" | "yes" | "on"
         )
+    }
+
+    /// Resolve every field from these layers into a [`Config`].
+    ///
+    /// The field-by-field read logic here is IDENTICAL to the read logic in
+    /// `Config::from_env_resolve`. It lives on `Layers` so the legacy-mode
+    /// call site in `build_report` can reuse the SAME `Layers` (and therefore
+    /// the SAME `ConfigFile` snapshot) for both per-field provenance tracing
+    /// and digest construction — eliminating the redundant second
+    /// `ConfigFile::load()` that used to happening there.
+    ///
+    /// Target-mode must NOT use this path — see
+    /// [`Config::from_target`].
+    fn to_config(&self) -> Result<Config> {
+        let port: u16 = self.parsed_or("VB_PORT", Config::default_port())?;
+        let port_explicit = self.raw("VB_PORT").is_some();
+        if port == 0 {
+            return Err(VirtuosoError::Config(
+                "VB_PORT must be between 1 and 65535".into(),
+            ));
+        }
+        Ok(Config {
+            profile: self.profile.map(|s| s.to_string()),
+            remote_host: self.text("VB_REMOTE_HOST"),
+            remote_user: self.text("VB_REMOTE_USER"),
+            port,
+            port_explicit,
+            jump_host: self.text("VB_JUMP_HOST"),
+            jump_user: self.text("VB_JUMP_USER"),
+            ssh_port: self.parsed("VB_SSH_PORT")?,
+            ssh_key: self.text("VB_SSH_KEY"),
+            ssh_config: self.text("VB_SSH_CONFIG"),
+            ssh_backend: self.text("VB_SSH_BACKEND"),
+            disable_control_master: self.flag("VB_DISABLE_CONTROL_MASTER")?,
+            timeout: self.parsed_or("VB_TIMEOUT", 30)?,
+            read_timeout: self.parsed_or("VB_READ_TIMEOUT", 120)?,
+            keep_remote_files: self.flag("VB_KEEP_REMOTE_FILES")?,
+            spectre_cmd: self.text_or("VB_SPECTRE_CMD", "spectre"),
+            spectre_args: match self.text("VB_SPECTRE_ARGS") {
+                None => Vec::new(),
+                Some(v) => shlex::split(&v).ok_or_else(|| {
+                    VirtuosoError::Config(format!(
+                        "VB_SPECTRE_ARGS contains invalid shell syntax: {v}"
+                    ))
+                })?,
+            },
+            spectre_max_workers: self.parsed_or("VB_SPECTRE_MAX_WORKERS", 8)?,
+            ssh_max_sessions: self.parsed_or(
+                "VB_SSH_MAX_SESSIONS",
+                crate::transport::scheduler::SchedulerLimits::DEFAULT_TOTAL,
+            )?,
+            ssh_max_bulk_sessions: self.parsed_or(
+                "VB_SSH_MAX_BULK_SESSIONS",
+                crate::transport::scheduler::SchedulerLimits::DEFAULT_BULK,
+            )?,
+            ssh_reconnect_max_attempts: self.parsed_or(
+                "VB_SSH_RECONNECT_MAX_ATTEMPTS",
+                crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_ATTEMPTS,
+            )?,
+            ssh_reconnect_max_delay: self.parsed_or(
+                "VB_SSH_RECONNECT_MAX_DELAY",
+                crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_DELAY,
+            )?,
+            ssh_keepalive_interval: self.parsed_or(
+                "VB_SSH_KEEPALIVE_INTERVAL",
+                crate::transport::lifecycle::KeepalivePolicy::DEFAULT_INTERVAL,
+            )?,
+            ssh_keepalive_failures: self.parsed_or(
+                "VB_SSH_KEEPALIVE_FAILURES",
+                crate::transport::lifecycle::KeepalivePolicy::DEFAULT_FAILURES,
+            )?,
+            transport_shutdown_grace: self.parsed_or(
+                "VB_TRANSPORT_SHUTDOWN_GRACE",
+                crate::transport::lifecycle::ShutdownCoordinator::DEFAULT_GRACE,
+            )?,
+            cadence_cshrc: self.text("VB_CADENCE_CSHRC"),
+            spectre_bin: self.text("VB_SPECTRE_BIN"),
+            roles: RemoteRoles {
+                gui_host: self.text("VB_GUI_HOST"),
+                deploy_host: self.text("VB_DEPLOY_HOST"),
+                daemon_host: self.text("VB_DAEMON_HOST"),
+                spectre_host: self.text("VB_SPECTRE_HOST"),
+                scratch_root: self.text("VB_REMOTE_SCRATCH_ROOT"),
+            },
+            transport_daemon_socket: self.text("VB_TRANSPORT_DAEMON_SOCKET"),
+            transport_daemon_token: self.text("VB_TRANSPORT_DAEMON_TOKEN"),
+            allow_cross_user_daemon: self.flag_truthy("VB_ALLOW_CROSS_USER_DAEMON"),
+        })
     }
 }
 
@@ -975,93 +1053,16 @@ impl Config {
         // above returns before reaching here on purpose: a target's identity
         // comes from targets.yaml alone and must not be diluted by
         // config.toml.
+        //
+        // `Layers::to_config` centralises the field-by-field read so that
+        // `build_report` and `from_env_resolve` share ONE code path — any
+        // change to a field's resolution rule only needs to live in ONE place.
         let file = ConfigFile::load()?;
         let lz = Layers {
             profile,
             file: file.as_ref(),
         };
-
-        let port: u16 = lz.parsed_or("VB_PORT", Self::default_port())?;
-        let port_explicit = lz.raw("VB_PORT").is_some();
-
-        if port == 0 {
-            return Err(VirtuosoError::Config(
-                "VB_PORT must be between 1 and 65535".into(),
-            ));
-        }
-
-        let sessions_dir = Some(crate::runtime_paths::cache_subdir(&["sessions"]));
-        if let Some(ref d) = sessions_dir {
-            tracing::debug!("session dir: {}", d.display());
-        }
-
-        Ok(Self {
-            profile: profile.map(|s| s.to_string()),
-            remote_host: lz.text("VB_REMOTE_HOST"),
-            remote_user: lz.text("VB_REMOTE_USER"),
-            port,
-            port_explicit,
-            jump_host: lz.text("VB_JUMP_HOST"),
-            jump_user: lz.text("VB_JUMP_USER"),
-            ssh_port: lz.parsed("VB_SSH_PORT")?,
-            ssh_key: lz.text("VB_SSH_KEY"),
-            ssh_config: lz.text("VB_SSH_CONFIG"),
-            ssh_backend: lz.text("VB_SSH_BACKEND"),
-            disable_control_master: lz.flag("VB_DISABLE_CONTROL_MASTER")?,
-            timeout: lz.parsed_or("VB_TIMEOUT", 30)?,
-            read_timeout: lz.parsed_or("VB_READ_TIMEOUT", 120)?,
-            keep_remote_files: lz.flag("VB_KEEP_REMOTE_FILES")?,
-            spectre_cmd: lz.text_or("VB_SPECTRE_CMD", "spectre"),
-            spectre_args: match lz.text("VB_SPECTRE_ARGS") {
-                None => Vec::new(),
-                Some(v) => shlex::split(&v).ok_or_else(|| {
-                    VirtuosoError::Config(format!(
-                        "VB_SPECTRE_ARGS contains invalid shell syntax: {v}"
-                    ))
-                })?,
-            },
-            spectre_max_workers: lz.parsed_or("VB_SPECTRE_MAX_WORKERS", 8)?,
-            ssh_max_sessions: lz.parsed_or(
-                "VB_SSH_MAX_SESSIONS",
-                crate::transport::scheduler::SchedulerLimits::DEFAULT_TOTAL,
-            )?,
-            ssh_max_bulk_sessions: lz.parsed_or(
-                "VB_SSH_MAX_BULK_SESSIONS",
-                crate::transport::scheduler::SchedulerLimits::DEFAULT_BULK,
-            )?,
-            ssh_reconnect_max_attempts: lz.parsed_or(
-                "VB_SSH_RECONNECT_MAX_ATTEMPTS",
-                crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_ATTEMPTS,
-            )?,
-            ssh_reconnect_max_delay: lz.parsed_or(
-                "VB_SSH_RECONNECT_MAX_DELAY",
-                crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_DELAY,
-            )?,
-            ssh_keepalive_interval: lz.parsed_or(
-                "VB_SSH_KEEPALIVE_INTERVAL",
-                crate::transport::lifecycle::KeepalivePolicy::DEFAULT_INTERVAL,
-            )?,
-            ssh_keepalive_failures: lz.parsed_or(
-                "VB_SSH_KEEPALIVE_FAILURES",
-                crate::transport::lifecycle::KeepalivePolicy::DEFAULT_FAILURES,
-            )?,
-            transport_shutdown_grace: lz.parsed_or(
-                "VB_TRANSPORT_SHUTDOWN_GRACE",
-                crate::transport::lifecycle::ShutdownCoordinator::DEFAULT_GRACE,
-            )?,
-            cadence_cshrc: lz.text("VB_CADENCE_CSHRC"),
-            spectre_bin: lz.text("VB_SPECTRE_BIN"),
-            roles: RemoteRoles {
-                gui_host: lz.text("VB_GUI_HOST"),
-                deploy_host: lz.text("VB_DEPLOY_HOST"),
-                daemon_host: lz.text("VB_DAEMON_HOST"),
-                spectre_host: lz.text("VB_SPECTRE_HOST"),
-                scratch_root: lz.text("VB_REMOTE_SCRATCH_ROOT"),
-            },
-            transport_daemon_socket: lz.text("VB_TRANSPORT_DAEMON_SOCKET"),
-            transport_daemon_token: lz.text("VB_TRANSPORT_DAEMON_TOKEN"),
-            allow_cross_user_daemon: lz.flag_truthy("VB_ALLOW_CROSS_USER_DAEMON"),
-        })
+        lz.to_config()
     }
 
     /// Derive a stable default port from the current username.
@@ -1409,15 +1410,16 @@ impl Config {
                 }
             }
         }
-        // Compute digest from the resolved config so the report carries the
-        // same identity the runtime would use. If this fails, the runtime
-        // would also refuse to start — the report must reflect that.
-        match Config::from_env_with_profile(profile) {
+        // Compute digest from the SAME `Layers` (and therefore the SAME
+        // `ConfigFile` snapshot) the per-field loop just traced. This is the
+        // single-snapshot rule in action: `build_report` does ONE
+        // `ConfigFile::load()` and uses its result for both provenance and
+        // identity. Previously this called `Config::from_env_with_profile()`
+        // which re-loaded `config.toml` — two snapshots, double I/O, and a
+        // window where the file could change between the two passes.
+        match lz.to_config() {
             Ok(cfg) => report.digest = Some(cfg.digest()),
             Err(e) => {
-                // Don't short-circuit: the loop above already traced every
-                // key. Record the failure and return the full report so the
-                // user sees both the per-field breakdown AND the fatal error.
                 let msg = format!(
                     "failed to build Config from the merged resolution: {e} — \
                      the runtime would refuse to start"
