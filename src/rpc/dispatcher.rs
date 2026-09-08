@@ -365,6 +365,19 @@ impl RpcDispatcher {
                     commands::schematic::label_term(&inst, &term, &net, &cosmetic, auto_rotate)?;
                 Ok(r)
             }
+            "assign_net" => {
+                let inst = json_str(params.get("inst"), "inst")?;
+                let term = json_str(params.get("term"), "term")?;
+                let net = json_str(params.get("net"), "net")?;
+                let skill = ops.assign_net(&inst, &term, &net);
+                execute_required_skill(client, &skill, "assign net")?;
+                Ok(serde_json::json!({
+                    "instance": inst,
+                    "term": term,
+                    "net": net,
+                    "status": "ok"
+                }))
+            }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown schematic method '{}'",
                 op
@@ -1009,6 +1022,10 @@ mod tests {
             names.contains(&"schematic.set_param"),
             "should have set_param"
         );
+        assert!(
+            names.contains(&"schematic.assign_net"),
+            "should have assign_net"
+        );
     }
 
     #[test]
@@ -1371,8 +1388,8 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 77 methods (76 prior + schematic.set_param)
-        assert_eq!(schema.methods.len(), 77, "should have exactly 77 methods");
+        // Should have 78 methods (76 base + schematic.set_param + schematic.assign_net)
+        assert_eq!(schema.methods.len(), 78, "should have exactly 78 methods");
     }
 
     #[test]
