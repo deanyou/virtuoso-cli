@@ -503,6 +503,27 @@ fn report_allow_cross_user_daemon(cfg: &Config) -> String {
     cfg.allow_cross_user_daemon.to_string()
 }
 
+/// Sanitise a raw (string) config value for `vcli config check` output.
+///
+/// The legacy report path reads values as plain strings from env/file and
+/// never builds a `&Config`, so it cannot call the `display:` functions
+/// (which take `&Config`). This helper mirrors the policy of those functions
+/// without requiring a full `Config`: sensitive fields are replaced with
+/// `"***set***"` when non-empty, everything else is returned unchanged.
+///
+/// Keys covered here MUST stay in sync with the `display:` functions in
+/// [`KEY_SPECS`] that mask values — currently [`report_transport_daemon_token`]
+/// and [`report_ssh_key`].
+fn sanitize_raw_value(key: &str, raw: &str) -> String {
+    if raw.is_empty() {
+        return raw.to_string();
+    }
+    match key {
+        "VB_TRANSPORT_DAEMON_TOKEN" | "VB_SSH_KEY" => "***set***".to_string(),
+        _ => raw.to_string(),
+    }
+}
+
 // ----- Validators (mirror the runtime parsers in from_env_resolve) ----------
 
 fn v_text(_raw: &str) -> std::result::Result<(), String> {
@@ -1266,9 +1287,27 @@ impl Config {
             };
             let mut report = build_report_from_target(target, target_name, report);
             // Compute digest from the synthetic config so the report carries the
-            // same identity the runtime would use.
-            if let Ok(cfg) = Config::from_target(target, target_name) {
-                report.digest = Some(cfg.digest());
+            // same identity the runtime would use. If construction fails here
+            // the same error would block the live path — surface it as an
+            // error rather than returning a misleading valid=true + empty
+            // digest.
+            match Config::from_target(target, target_name) {
+                Ok(cfg) => report.digest = Some(cfg.digest()),
+                Err(e) => {
+                    let msg = format!(
+                        "resolved target '{}' failed to build a Config: {e} — \
+                         the same error would block the runtime",
+                        target_name
+                    );
+                    report.valid = false;
+                    report.warnings.push(msg.clone());
+                    report.diagnostics.push(ConfigDiagnostic {
+                        code: "TARGET_CONFIG_BUILD_FAILED",
+                        level: "error",
+                        field: target_name.clone(),
+                        message: msg,
+                    });
+                }
             }
             return Ok(report);
         }
@@ -1333,16 +1372,21 @@ impl Config {
             // message*. We surface parse failures as warnings rather than
             // aborting — the user is asking "what would happen?", not
             // "tunnel now".
+            //
+            // Sanitise sensitive values (tokens, key paths) before they reach
+            // JSON / table output. Returns e.g. "***set***" in place of the
+            // raw secret when the key is sensitive and the value is non-empty.
+            let display_value = sanitize_raw_value(spec.key, &raw);
             match (spec.validate)(&raw) {
                 Ok(()) => report.entries.push(ConfigEntry {
                     key: spec.key,
-                    value: raw.clone(),
+                    value: display_value,
                     source,
                 }),
                 Err(e) => {
                     report.entries.push(ConfigEntry {
                         key: spec.key,
-                        value: raw.clone(),
+                        value: display_value,
                         source,
                     });
                     let msg = format!(
@@ -1350,9 +1394,15 @@ impl Config {
                         spec.key
                     );
                     report.warnings.push(msg.clone());
+                    // A value that cannot be parsed is NOT a valid runtime
+                    // config — mark the report invalid so --format json carries
+                    // valid=false and the exit code is non-zero. Previously
+                    // this only produced a warning, so an invalid timeout etc.
+                    // slipped through as valid=true + exit 0.
+                    report.valid = false;
                     report.diagnostics.push(ConfigDiagnostic {
                         code: "VALUE_PARSE_FAILED",
-                        level: "warning",
+                        level: "error",
                         field: spec.key.to_string(),
                         message: msg,
                     });
@@ -1360,9 +1410,28 @@ impl Config {
             }
         }
         // Compute digest from the resolved config so the report carries the
-        // same identity the runtime would use.
-        if let Ok(cfg) = Config::from_env_with_profile(profile) {
-            report.digest = Some(cfg.digest());
+        // same identity the runtime would use. If this fails, the runtime
+        // would also refuse to start — the report must reflect that.
+        match Config::from_env_with_profile(profile) {
+            Ok(cfg) => report.digest = Some(cfg.digest()),
+            Err(e) => {
+                // Don't short-circuit: the loop above already traced every
+                // key. Record the failure and return the full report so the
+                // user sees both the per-field breakdown AND the fatal error.
+                let msg = format!(
+                    "failed to build Config from the merged resolution: {e} — \
+                     the runtime would refuse to start"
+                );
+                report.valid = false;
+                report.warnings.push(msg.clone());
+                report.diagnostics.push(ConfigDiagnostic {
+                    code: "CONFIG_BUILD_FAILED",
+                    level: "error",
+                    field: "config".into(),
+                    message: msg,
+                });
+                report.digest = None;
+            }
         }
         Ok(report)
     }
