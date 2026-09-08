@@ -2216,19 +2216,31 @@ mod tests {
             exec_reply: Some(b"ok".to_vec()),
             ..Default::default()
         });
-        // 500 ms keepalive interval; idle for 1.6 s = >3 periods.
+        // 500 ms keepalive interval; idle across >3 periods.
         let (t, _dir) = test_transport(&server, Duration::from_millis(500), 3);
         let rid = RequestId::new();
         t.exec_command("warm", None, dl(10), &rid).expect("warmup");
+        // Let the warmup's channel teardown traffic (eof/close) drain before
+        // the baseline, so the observation cannot be attributed to it.
+        std::thread::sleep(Duration::from_millis(600));
         let before = server.bytes_received.load(Ordering::Relaxed);
         // No client operation: only the background keepalive loop may produce
-        // traffic on the wire.
-        std::thread::sleep(Duration::from_millis(1600));
+        // traffic. Sample across two consecutive keepalive periods and require
+        // sustained growth in each — a one-shot teardown burst can never
+        // satisfy both mid > before and after > mid.
+        std::thread::sleep(Duration::from_millis(600));
+        let mid = server.bytes_received.load(Ordering::Relaxed);
+        std::thread::sleep(Duration::from_millis(600));
         let after = server.bytes_received.load(Ordering::Relaxed);
         assert!(
-            after > before,
-            "the server must receive keepalive traffic while the transport is idle \
-             (before={before} after={after})"
+            mid > before,
+            "the server must receive keepalive traffic in the first idle period \
+             (before={before} mid={mid})"
+        );
+        assert!(
+            after > mid,
+            "keepalive traffic must continue across the second idle period \
+             (mid={mid} after={after})"
         );
         assert!(
             t.test_connection(dl(5)).expect("probe after idle"),
