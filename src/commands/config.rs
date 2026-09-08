@@ -27,18 +27,22 @@ pub fn check(format: OutputFormat, require_explicit: bool) -> Result<Value> {
     let value = match format {
         OutputFormat::Json => json!({
             "status": status,
+            "valid": report.valid,
             "profile": report.profile,
             "active_target": report.active_target,
             "config_file": report.config_file,
+            "targets_file": report.targets_file,
+            "digest": report.digest,
             "precedence": report.precedence,
             "entries": entries_json(&report),
             "warnings": report.warnings,
+            "diagnostics": report.diagnostics,
             // main() reads "dry_run" to pick DRY_RUN_OK (10) over SUCCESS (0);
-            // we re-use that mechanism so `--require-explicit` propagates a
-            // non-zero exit without dragging a second channel through the
-            // dispatch result. The status string above remains the
+            // we re-use that mechanism so `--require-explicit` or a hard error
+            // propagates a non-zero exit without dragging a second channel
+            // through the dispatch result. The status string above remains the
             // human-readable signal; this is the exit-code driver.
-            "dry_run": status == "fail",
+            "dry_run": status == "fail" || status == "error",
         }),
         OutputFormat::Table => render_table(&report, status),
     };
@@ -82,13 +86,20 @@ fn source_label(src: &ConfigSource) -> String {
             format!("file[profile]={}", file.display())
         }
         ConfigSource::FileGlobal { file } => format!("file[global]={}", file.display()),
-        ConfigSource::Target { target } => format!("target[{target}]"),
-        ConfigSource::Default { default } => format!("default={default}"),
+        ConfigSource::Target { target, file } => {
+            format!("target[{target}]={}", file.display())
+        }
+        ConfigSource::Default { default, kind } => match kind {
+            crate::config::DefaultKind::Hardcoded => format!("default={default}"),
+            crate::config::DefaultKind::Derived => format!("default(derived)={default}"),
+        },
     }
 }
 
 fn status_for(report: &ConfigReport, require_explicit: bool) -> &'static str {
-    if !report.warnings.is_empty() {
+    if !report.valid {
+        "error"
+    } else if !report.warnings.is_empty() {
         "warn"
     } else if require_explicit && !report.all_explicit() {
         "fail"
