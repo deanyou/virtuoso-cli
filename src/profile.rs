@@ -10,6 +10,12 @@
 //!
 //! This mirrors virtuoso-bridge-lite's profile resolution ladder, adapted for vcli.
 
+// Declared in the binary crates (vcli/vtui) as well as the lib, so this module
+// is compiled a second time there where most of its items are unused. Those
+// copies are intentionally inert (the binaries call the lib's `pub` API); the
+// duplicate's dead code is expected, not a regression.
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 use std::{env, fs};
 
@@ -352,19 +358,25 @@ fn clear_user_profile_in(dir: &std::path::Path) -> std::io::Result<()> {
     if path.exists() {
         fs::remove_file(&path)?;
     }
-    clear_legacy_user_env_profile_in(dir);
+    clear_legacy_user_env_profile_in(dir)?;
     Ok(())
 }
 
 /// Strip the `VB_PROFILE=` line from the deprecated `~/.vcli/.env`.
-fn clear_legacy_user_env_profile_in(dir: &std::path::Path) {
+///
+/// Errors are propagated: if the legacy file exists but cannot be read, or
+/// (when it carries a `VB_PROFILE=` line) cannot be rewritten, the caller must
+/// hear about it rather than believe the binding was cleared. A stale,
+/// read-only `VB_PROFILE=` would otherwise resurrect the profile on the very
+/// next resolution — silently undoing the clear. A read-only file that carries
+/// no `VB_PROFILE=` line is left untouched (no write attempted) so it is not
+/// reported as a failure.
+fn clear_legacy_user_env_profile_in(dir: &std::path::Path) -> std::io::Result<()> {
     let path = user_env_path_in(dir);
     if !path.exists() {
-        return;
+        return Ok(());
     }
-    let Ok(content) = fs::read_to_string(&path) else {
-        return;
-    };
+    let content = fs::read_to_string(&path)?;
     let kept: Vec<String> = content
         .lines()
         .filter(|l| !l.trim_start().starts_with("VB_PROFILE="))
@@ -375,7 +387,10 @@ fn clear_legacy_user_env_profile_in(dir: &std::path::Path) {
     } else {
         format!("{}\n", kept.join("\n"))
     };
-    let _ = fs::write(&path, body);
+    if body != content {
+        fs::write(&path, &body)?;
+    }
+    Ok(())
 }
 
 /// Bind a profile to the current working directory: `./.vcli-profile`.
@@ -511,6 +526,34 @@ mod tests {
             content.contains("VB_PORT=12345"),
             "other lines still preserved"
         );
+    }
+
+    /// A read-only legacy `.env` that still carries `VB_PROFILE=` must make
+    /// `clear_user_profile` fail rather than report success — otherwise the stale
+    /// binding silently resurrects on the next resolution. (Unix file perms.)
+    #[test]
+    #[cfg(unix)]
+    fn test_clear_user_profile_propagates_legacy_write_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path();
+        let env_path = user_env_path_in(dir);
+
+        fs::write(&env_path, "VB_PROFILE=stale\nOTHER=1\n").unwrap();
+        let mut perms = fs::metadata(&env_path).unwrap().permissions();
+        perms.set_mode(0o444);
+        fs::set_permissions(&env_path, perms).unwrap();
+
+        let result = clear_user_profile_in(dir);
+        assert!(
+            result.is_err(),
+            "read-only legacy VB_PROFILE= must surface an error, got Ok"
+        );
+
+        // Restore writability so the temp dir can be cleaned up.
+        let mut perms = fs::metadata(&env_path).unwrap().permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(&env_path, perms).unwrap();
     }
 
     /// The user scope resolves `<config dir>/profile` before the deprecated

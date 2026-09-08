@@ -58,11 +58,23 @@ fn shield_target() -> EnvGuard {
     EnvGuard::shield("VB_TARGET")
 }
 
+/// Isolate the configuration file source: point `VB_CONFIG_DIR` at a fresh temp
+/// dir that contains no `config.toml`, so `ConfigFile::load` returns `None` and
+/// no user configuration (e.g. a real `~/.vcli/config.toml` carrying
+/// `timeout = 60`) can leak into a default-value assertion. Returns the temp dir
+/// (kept alive for the test's duration) and the env guard.
+fn isolate_config_dir() -> (tempfile::TempDir, EnvGuard) {
+    let dir = tempfile::tempdir().unwrap();
+    let guard = EnvGuard::set("VB_CONFIG_DIR", dir.path().to_str().unwrap());
+    (dir, guard)
+}
+
 /// Test that Config can be created without panicking.
 #[serial_test::serial]
 #[test]
 fn test_config_from_env_works() {
     let _g = shield_target();
+    let (_dir, _cg) = isolate_config_dir();
     let result = virtuoso_cli::config::Config::from_env_with_profile(None);
     assert!(result.is_ok());
     // Should have a valid config with reasonable defaults
@@ -72,12 +84,14 @@ fn test_config_from_env_works() {
 }
 
 /// Test that spectre_max_workers has a reasonable default, verified in
-/// isolation (no ambient `VB_SPECTRE_MAX_WORKERS`, no target file).
+/// isolation (no ambient `VB_SPECTRE_MAX_WORKERS`, no target file, no user
+/// config file).
 #[serial_test::serial]
 #[test]
 fn test_config_spectre_max_workers_default() {
     let _g = EnvGuard::shield("VB_SPECTRE_MAX_WORKERS");
     let _t = shield_target();
+    let (_dir, _cg) = isolate_config_dir();
     let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
     // Should be 8 by default
     assert_eq!(config.spectre_max_workers, 8);
@@ -85,29 +99,63 @@ fn test_config_spectre_max_workers_default() {
 
 /// The default timeout is 30, verified in isolation.
 ///
-/// Both `VB_TIMEOUT` and `VB_TARGET` are shielded, so neither an exported
-/// timeout nor an ambient target selection can leak in. The prior values are
-/// restored on drop.
+/// `VB_TIMEOUT` and `VB_TARGET` are shielded, and the config file source is
+/// redirected to an empty temp dir, so neither an exported timeout nor a user's
+/// real `~/.vcli/config.toml` can leak in. The prior values are restored on
+/// drop.
 #[serial_test::serial]
 #[test]
 fn test_config_timeout_default_isolated() {
     let _g = EnvGuard::shield("VB_TIMEOUT");
     let _t = shield_target();
+    let (_dir, _cg) = isolate_config_dir();
     let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
     assert_eq!(config.timeout, 30);
 }
 
 /// An explicit ambient `VB_TIMEOUT` overrides the default. `45` differs from
 /// the default (30) and from the value this machine used to keep in `~/.env`,
-/// so a pass proves the process env var wins. `VB_TARGET` is shielded so the
-/// parse stays on the legacy path.
+/// so a pass proves the process env var wins. `VB_TARGET` is shielded and the
+/// config file source is isolated so the parse stays on the legacy path.
 #[serial_test::serial]
 #[test]
 fn test_config_timeout_env_override_wins() {
     let _g = EnvGuard::set("VB_TIMEOUT", "45");
     let _t = shield_target();
+    let (_dir, _cg) = isolate_config_dir();
     let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
     assert_eq!(config.timeout, 45);
+}
+
+/// P1 regression: a config file written with the friendly key that `vcli init`
+/// and the TUI produce (`remote_host`) must be read by the resolution layer,
+/// which passes the env-var name (`VB_REMOTE_HOST`).
+#[serial_test::serial]
+#[test]
+fn friendly_file_key_resolves_into_config() {
+    let _t = shield_target();
+    let _rg = EnvGuard::shield("VB_REMOTE_HOST");
+    let (_dir, _cg) = isolate_config_dir();
+    let path = virtuoso_cli::config_file::path();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "remote_host = \"eda-server\"\n").unwrap();
+    let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
+    assert_eq!(config.remote_host.as_deref(), Some("eda-server"));
+}
+
+/// P1 regression: a value the TUI persists through `ConfigFile` (friendly key)
+/// lands in `config.toml` and is picked up by the next resolution.
+#[serial_test::serial]
+#[test]
+fn tui_save_round_trips_through_config() {
+    let _t = shield_target();
+    let _rg = EnvGuard::shield("VB_REMOTE_HOST");
+    let (_dir, _cg) = isolate_config_dir();
+    let mut f = virtuoso_cli::config_file::ConfigFile::default();
+    f.set(None, "remote_host", "from-tui");
+    f.save().unwrap();
+    let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
+    assert_eq!(config.remote_host.as_deref(), Some("from-tui"));
 }
 
 /// `port_explicit` is part of the connection identity: the same numeric port

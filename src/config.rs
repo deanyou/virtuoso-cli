@@ -1,3 +1,4 @@
+use crate::config_file::ConfigFile;
 use crate::error::{Result, VirtuosoError};
 use std::env;
 use std::path::PathBuf;
@@ -227,6 +228,109 @@ impl std::fmt::Debug for Config {
     }
 }
 
+/// Layered lookup used while a [`Config`] is being built.
+///
+/// The configuration file is read **once**, by the caller, and every field is
+/// resolved against the parsed result — a `Config` has ~36 fields and none of
+/// them may touch the disk.
+///
+/// Precedence, highest first (RFC #83):
+///
+/// 1. `<KEY>_<PROFILE>` environment variable
+/// 2. `<KEY>` environment variable
+/// 3. `config.toml` `[profile.<PROFILE>]` section
+/// 4. `config.toml` global section
+/// 5. the caller's default
+///
+/// A value that is **set but unparseable** is an error rather than a silent
+/// fall back to the default: asking for a 45 second timeout must not quietly
+/// become 30. Only an unset value reaches the next layer.
+struct Layers<'a> {
+    profile: Option<&'a str>,
+    file: Option<&'a ConfigFile>,
+}
+
+impl Layers<'_> {
+    /// Profile-specific env, then general env, then the file.
+    fn raw(&self, key: &str) -> Option<String> {
+        if let Some(p) = self.profile {
+            if let Ok(v) = env::var(format!("{key}_{p}")) {
+                if !v.is_empty() {
+                    return Some(v);
+                }
+            }
+        }
+        if let Ok(v) = env::var(key) {
+            if !v.is_empty() {
+                return Some(v);
+            }
+        }
+        self.file.and_then(|f| f.get(key, self.profile))
+    }
+
+    fn text(&self, key: &str) -> Option<String> {
+        self.raw(key)
+    }
+
+    fn text_or(&self, key: &str, default: &str) -> String {
+        self.raw(key).unwrap_or_else(|| default.to_string())
+    }
+
+    /// Parse a `FromStr` value. `Ok(None)` when no layer supplies one.
+    fn parsed<T>(&self, key: &str) -> Result<Option<T>>
+    where
+        T: std::str::FromStr,
+        T::Err: std::fmt::Display,
+    {
+        match self.raw(key) {
+            None => Ok(None),
+            Some(v) => v
+                .parse()
+                .map(Some)
+                .map_err(|e| VirtuosoError::Config(format!("{key}: {v:?} is not valid: {e}"))),
+        }
+    }
+
+    /// [`Layers::parsed`] with the lowest-precedence layer folded in.
+    fn parsed_or<T>(&self, key: &str, default: T) -> Result<T>
+    where
+        T: std::str::FromStr,
+        T::Err: std::fmt::Display,
+    {
+        Ok(self.parsed::<T>(key)?.unwrap_or(default))
+    }
+
+    /// Boolean flag: `1` / `0` / `true` / `false` (case-insensitive).
+    /// Anything else that is *set* is an error, not `false`.
+    fn flag(&self, key: &str) -> Result<bool> {
+        match self.raw(key) {
+            None => Ok(false),
+            Some(v) if v == "1" || v.eq_ignore_ascii_case("true") => Ok(true),
+            Some(v) if v == "0" || v.eq_ignore_ascii_case("false") => Ok(false),
+            Some(v) => Err(VirtuosoError::Config(format!(
+                "{key}: expected true/false/1/0, got {v:?}"
+            ))),
+        }
+    }
+
+    /// Like [`Layers::flag`], but also accepts `yes` / `no` / `on` / `off`.
+    ///
+    /// `VB_ALLOW_CROSS_USER_DAEMON` shipped accepting those spellings, so they
+    /// keep working here. Unrecognised values still mean "off" rather than an
+    /// error: this field only *suppresses an informational warning*, so the
+    /// safe direction for an unreadable value is the conservative one.
+    fn flag_truthy(&self, key: &str) -> bool {
+        matches!(
+            self.raw(key)
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    }
+}
+
 impl Config {
     /// Read a config variable, checking profile-specific first (e.g. VB_REMOTE_HOST_prod).
     ///
@@ -333,9 +437,8 @@ impl Config {
     }
 
     fn from_env_resolve(profile: Option<&str>, honor_vb_target: bool) -> Result<Self> {
-        // No `.env` loading: configuration comes from the process environment
-        // only. See RFC #83 — an implicit cwd→parent `.env` lookup made it
-        // impossible to tell where a value came from.
+        // No `.env` loading (RFC #83): configuration comes from the process
+        // environment and from a single, fixed, queryable `config.toml`.
         if honor_vb_target {
             // TEMPORARY bridge (P0-A): main() resolves the target/profile
             // selection via target::resolve and syncs VB_TARGET here. This
@@ -355,12 +458,18 @@ impl Config {
             }
         }
 
-        let remote_host = Self::env_with_profile("VB_REMOTE_HOST", profile);
+        // One read, shared by every field below. The explicit-target branch
+        // above returns before reaching here on purpose: a target's identity
+        // comes from targets.yaml alone and must not be diluted by
+        // config.toml.
+        let file = ConfigFile::load()?;
+        let lz = Layers {
+            profile,
+            file: file.as_ref(),
+        };
 
-        let port: u16 = Self::env_with_profile("VB_PORT", profile)
-            .and_then(|v| v.parse().ok())
-            .unwrap_or_else(Self::default_port);
-        let port_explicit = Self::env_with_profile("VB_PORT", profile).is_some();
+        let port: u16 = lz.parsed_or("VB_PORT", Self::default_port())?;
+        let port_explicit = lz.raw("VB_PORT").is_some();
 
         if port == 0 {
             return Err(VirtuosoError::Config(
@@ -375,88 +484,70 @@ impl Config {
 
         Ok(Self {
             profile: profile.map(|s| s.to_string()),
-            remote_host,
-            remote_user: Self::env_with_profile("VB_REMOTE_USER", profile),
+            remote_host: lz.text("VB_REMOTE_HOST"),
+            remote_user: lz.text("VB_REMOTE_USER"),
             port,
             port_explicit,
-            jump_host: Self::env_with_profile("VB_JUMP_HOST", profile),
-            jump_user: Self::env_with_profile("VB_JUMP_USER", profile),
-            ssh_port: Self::env_with_profile("VB_SSH_PORT", profile).and_then(|v| v.parse().ok()),
-            ssh_key: Self::env_with_profile("VB_SSH_KEY", profile),
-            ssh_config: Self::env_with_profile("VB_SSH_CONFIG", profile),
-            ssh_backend: Self::env_with_profile("VB_SSH_BACKEND", profile),
-            disable_control_master: Self::env_with_profile("VB_DISABLE_CONTROL_MASTER", profile)
-                .map(|v| v == "1" || v.to_lowercase() == "true")
-                .unwrap_or(false),
-            timeout: Self::env_with_profile("VB_TIMEOUT", profile)
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(30),
-            read_timeout: Self::env_with_profile("VB_READ_TIMEOUT", profile)
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(120),
-            keep_remote_files: Self::env_with_profile("VB_KEEP_REMOTE_FILES", profile)
-                .map(|v| v == "1" || v.to_lowercase() == "true")
-                .unwrap_or(false),
-            spectre_cmd: Self::env_with_profile("VB_SPECTRE_CMD", profile)
-                .unwrap_or_else(|| "spectre".into()),
-            spectre_args: Self::env_with_profile("VB_SPECTRE_ARGS", profile)
-                .map(|v| {
-                    shlex::split(&v).ok_or_else(|| {
-                        VirtuosoError::Config(format!(
-                            "VB_SPECTRE_ARGS contains invalid shell syntax: {v}"
-                        ))
-                    })
-                })
-                .unwrap_or(Ok(Vec::new()))?,
-            spectre_max_workers: Self::env_with_profile("VB_SPECTRE_MAX_WORKERS", profile)
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(8),
-            ssh_max_sessions: Self::env_with_profile("VB_SSH_MAX_SESSIONS", profile)
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(crate::transport::scheduler::SchedulerLimits::DEFAULT_TOTAL),
-            ssh_max_bulk_sessions: Self::env_with_profile("VB_SSH_MAX_BULK_SESSIONS", profile)
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(crate::transport::scheduler::SchedulerLimits::DEFAULT_BULK),
-            ssh_reconnect_max_attempts: Self::env_with_profile(
-                "VB_SSH_RECONNECT_MAX_ATTEMPTS",
-                profile,
-            )
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_ATTEMPTS),
-            ssh_reconnect_max_delay: Self::env_with_profile("VB_SSH_RECONNECT_MAX_DELAY", profile)
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_DELAY),
-            ssh_keepalive_interval: Self::env_with_profile("VB_SSH_KEEPALIVE_INTERVAL", profile)
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(crate::transport::lifecycle::KeepalivePolicy::DEFAULT_INTERVAL),
-            ssh_keepalive_failures: Self::env_with_profile("VB_SSH_KEEPALIVE_FAILURES", profile)
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(crate::transport::lifecycle::KeepalivePolicy::DEFAULT_FAILURES),
-            transport_shutdown_grace: Self::env_with_profile(
-                "VB_TRANSPORT_SHUTDOWN_GRACE",
-                profile,
-            )
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(crate::transport::lifecycle::ShutdownCoordinator::DEFAULT_GRACE),
-            cadence_cshrc: Self::env_with_profile("VB_CADENCE_CSHRC", profile),
-            spectre_bin: Self::env_with_profile("VB_SPECTRE_BIN", profile),
-            roles: RemoteRoles {
-                gui_host: Self::env_with_profile("VB_GUI_HOST", profile),
-                deploy_host: Self::env_with_profile("VB_DEPLOY_HOST", profile),
-                daemon_host: Self::env_with_profile("VB_DAEMON_HOST", profile),
-                spectre_host: Self::env_with_profile("VB_SPECTRE_HOST", profile),
-                scratch_root: Self::env_with_profile("VB_REMOTE_SCRATCH_ROOT", profile),
+            jump_host: lz.text("VB_JUMP_HOST"),
+            jump_user: lz.text("VB_JUMP_USER"),
+            ssh_port: lz.parsed("VB_SSH_PORT")?,
+            ssh_key: lz.text("VB_SSH_KEY"),
+            ssh_config: lz.text("VB_SSH_CONFIG"),
+            ssh_backend: lz.text("VB_SSH_BACKEND"),
+            disable_control_master: lz.flag("VB_DISABLE_CONTROL_MASTER")?,
+            timeout: lz.parsed_or("VB_TIMEOUT", 30)?,
+            read_timeout: lz.parsed_or("VB_READ_TIMEOUT", 120)?,
+            keep_remote_files: lz.flag("VB_KEEP_REMOTE_FILES")?,
+            spectre_cmd: lz.text_or("VB_SPECTRE_CMD", "spectre"),
+            spectre_args: match lz.text("VB_SPECTRE_ARGS") {
+                None => Vec::new(),
+                Some(v) => shlex::split(&v).ok_or_else(|| {
+                    VirtuosoError::Config(format!(
+                        "VB_SPECTRE_ARGS contains invalid shell syntax: {v}"
+                    ))
+                })?,
             },
-            transport_daemon_socket: Self::env_with_profile("VB_TRANSPORT_DAEMON_SOCKET", profile),
-            transport_daemon_token: Self::env_with_profile("VB_TRANSPORT_DAEMON_TOKEN", profile),
-            allow_cross_user_daemon: Self::env_with_profile("VB_ALLOW_CROSS_USER_DAEMON", profile)
-                .map(|v| {
-                    matches!(
-                        v.trim().to_ascii_lowercase().as_str(),
-                        "1" | "true" | "yes" | "on"
-                    )
-                })
-                .unwrap_or(false),
+            spectre_max_workers: lz.parsed_or("VB_SPECTRE_MAX_WORKERS", 8)?,
+            ssh_max_sessions: lz.parsed_or(
+                "VB_SSH_MAX_SESSIONS",
+                crate::transport::scheduler::SchedulerLimits::DEFAULT_TOTAL,
+            )?,
+            ssh_max_bulk_sessions: lz.parsed_or(
+                "VB_SSH_MAX_BULK_SESSIONS",
+                crate::transport::scheduler::SchedulerLimits::DEFAULT_BULK,
+            )?,
+            ssh_reconnect_max_attempts: lz.parsed_or(
+                "VB_SSH_RECONNECT_MAX_ATTEMPTS",
+                crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_ATTEMPTS,
+            )?,
+            ssh_reconnect_max_delay: lz.parsed_or(
+                "VB_SSH_RECONNECT_MAX_DELAY",
+                crate::transport::lifecycle::ReconnectPolicy::DEFAULT_MAX_DELAY,
+            )?,
+            ssh_keepalive_interval: lz.parsed_or(
+                "VB_SSH_KEEPALIVE_INTERVAL",
+                crate::transport::lifecycle::KeepalivePolicy::DEFAULT_INTERVAL,
+            )?,
+            ssh_keepalive_failures: lz.parsed_or(
+                "VB_SSH_KEEPALIVE_FAILURES",
+                crate::transport::lifecycle::KeepalivePolicy::DEFAULT_FAILURES,
+            )?,
+            transport_shutdown_grace: lz.parsed_or(
+                "VB_TRANSPORT_SHUTDOWN_GRACE",
+                crate::transport::lifecycle::ShutdownCoordinator::DEFAULT_GRACE,
+            )?,
+            cadence_cshrc: lz.text("VB_CADENCE_CSHRC"),
+            spectre_bin: lz.text("VB_SPECTRE_BIN"),
+            roles: RemoteRoles {
+                gui_host: lz.text("VB_GUI_HOST"),
+                deploy_host: lz.text("VB_DEPLOY_HOST"),
+                daemon_host: lz.text("VB_DAEMON_HOST"),
+                spectre_host: lz.text("VB_SPECTRE_HOST"),
+                scratch_root: lz.text("VB_REMOTE_SCRATCH_ROOT"),
+            },
+            transport_daemon_socket: lz.text("VB_TRANSPORT_DAEMON_SOCKET"),
+            transport_daemon_token: lz.text("VB_TRANSPORT_DAEMON_TOKEN"),
+            allow_cross_user_daemon: lz.flag_truthy("VB_ALLOW_CROSS_USER_DAEMON"),
         })
     }
 

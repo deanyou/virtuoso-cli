@@ -7,6 +7,7 @@ mod client;
 mod command_log;
 mod commands;
 mod config;
+mod config_file;
 mod context;
 mod error;
 mod exit_codes;
@@ -16,6 +17,7 @@ mod models;
 mod ocean;
 mod output;
 mod plugins;
+mod profile;
 mod rpc;
 mod runtime_paths;
 mod skill_finder;
@@ -96,15 +98,17 @@ enum FormatArg {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Create .env template with default configuration
+    /// Create a config.toml template with commented defaults
     #[command(
-        long_about = "Create a .env configuration template in the current directory.\n\n\
+        long_about = "Create a config.toml template in the vcli config directory.\n\n\
+            The path honours VB_CONFIG_DIR / VB_HOME / XDG_CONFIG_HOME, and is the\n\
+            same file `vcli` reads at startup — so edits take effect immediately.\n\n\
             Examples:\n  \
             virtuoso init\n  \
             virtuoso init --if-not-exists"
     )]
     Init {
-        /// Skip if .env already exists (exit 0 instead of error)
+        /// Skip if config.toml already exists (exit 0 instead of error)
         #[arg(long)]
         if_not_exists: bool,
     },

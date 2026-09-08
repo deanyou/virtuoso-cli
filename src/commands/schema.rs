@@ -6,9 +6,9 @@ pub fn show(noun: Option<&str>, verb: Option<&str>) -> Value {
         "version": env!("CARGO_PKG_VERSION"),
         "commands": {
             "init": {
-                "description": "Create .env template with default configuration",
+                "description": "Create a config.toml template with commented defaults",
                 "flags": {
-                    "--if-not-exists": { "type": "bool", "default": false, "description": "Skip if .env already exists" },
+                    "--if-not-exists": { "type": "bool", "default": false, "description": "Skip if config.toml already exists" },
                     "--format": { "type": "enum", "values": ["json", "table"], "default": "auto", "description": "Output format" },
                 }
             },
