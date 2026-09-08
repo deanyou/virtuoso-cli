@@ -1,10 +1,10 @@
 //! Integration tests for Config parsing.
 //!
-//! Isolation contract: `Config::from_env_with_profile()` loads `.env` files
-//! from the current directory upward (so `~/.env` can leak values here), and
-//! honours the ambient `VB_TARGET` bridge (which can jump the parse into a
-//! target file). dotenvy's `load()` never overrides an already-set env var, so
-//! a test that must see a specific value sets that var explicitly first, using
+//! Isolation contract: `Config::from_env_with_profile()` reads the process
+//! environment and honours the ambient `VB_TARGET` bridge (which can jump the
+//! parse into a target file). There is no `.env` lookup any more (RFC #83), so
+//! the only way a value reaches the parser is an exported variable — a test
+//! that must see a specific value sets that var explicitly first, using
 //! [`EnvGuard`] so the original value is restored on drop (RAII).
 //!
 //! Every env-reading/writing test is `#[serial]`: mutating the process
@@ -29,10 +29,9 @@ impl EnvGuard {
         }
     }
 
-    /// Shield a variable from both the process env and any upward `.env`:
-    /// dotenvy skips already-set vars, and `Config` treats an empty value as
-    /// absent, so the parser falls back to its default. The original value is
-    /// restored on drop.
+    /// Shield a variable from the ambient process env: `Config` treats an
+    /// empty value as absent, so the parser falls back to its default. The
+    /// original value is restored on drop.
     fn shield(key: &str) -> Self {
         Self::set(key, "")
     }
@@ -86,9 +85,9 @@ fn test_config_spectre_max_workers_default() {
 
 /// The default timeout is 30, verified in isolation.
 ///
-/// Both `VB_TIMEOUT` and `VB_TARGET` are shielded: the upward `.env` (which on
-/// this machine sets `VB_TIMEOUT=60`) and any ambient target selection cannot
-/// leak in. The prior values are restored on drop.
+/// Both `VB_TIMEOUT` and `VB_TARGET` are shielded, so neither an exported
+/// timeout nor an ambient target selection can leak in. The prior values are
+/// restored on drop.
 #[serial_test::serial]
 #[test]
 fn test_config_timeout_default_isolated() {
@@ -98,10 +97,10 @@ fn test_config_timeout_default_isolated() {
     assert_eq!(config.timeout, 30);
 }
 
-/// An explicit ambient `VB_TIMEOUT` overrides both the default and any `.env`
-/// value. `45` differs from the default (30) and from this machine's `~/.env`
-/// (60), so a pass proves the process env var wins. `VB_TARGET` is shielded so
-/// the parse stays on the legacy path.
+/// An explicit ambient `VB_TIMEOUT` overrides the default. `45` differs from
+/// the default (30) and from the value this machine used to keep in `~/.env`,
+/// so a pass proves the process env var wins. `VB_TARGET` is shielded so the
+/// parse stays on the legacy path.
 #[serial_test::serial]
 #[test]
 fn test_config_timeout_env_override_wins() {

@@ -248,7 +248,7 @@ impl Config {
         // Use the hierarchical profile resolver:
         // 1. VB_PROFILE env var
         // 2. Virtualenv binding ($VIRTUAL_ENV/.vcli-profile)
-        // 3. User-level ~/.vcli/.env VB_PROFILE
+        // 3. User-level ~/.vcli/profile (deprecated fallback: ~/.vcli/.env)
         let profile = Self::resolve_profile();
         Self::from_env_with_profile(profile.as_deref())
     }
@@ -281,19 +281,36 @@ impl Config {
             }
         }
 
-        // 3. User-level ~/.vcli/.env VB_PROFILE
+        // 3. User-level ~/.vcli/profile (sole content is the profile name),
+        //    with ~/.vcli/.env VB_PROFILE= kept as a deprecated fallback.
         if let Some(home) = dirs::home_dir() {
-            let user_env = home.join(".vcli").join(".env");
+            let vcli_dir = home.join(".vcli");
+
+            let user_profile = vcli_dir.join("profile");
+            if let Ok(content) = std::fs::read_to_string(&user_profile) {
+                for line in content.lines() {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                        return Some(trimmed.to_string());
+                    }
+                }
+            }
+
+            let user_env = vcli_dir.join(".env");
             if user_env.exists() {
                 if let Ok(content) = std::fs::read_to_string(&user_env) {
                     for line in content.lines() {
                         let trimmed = line.trim();
-                        if trimmed.starts_with("VB_PROFILE=") {
-                            if let Some(value) = trimmed.strip_prefix("VB_PROFILE=") {
-                                let trimmed = value.trim();
-                                if !trimmed.is_empty() {
-                                    return Some(trimmed.to_string());
-                                }
+                        if let Some(value) = trimmed.strip_prefix("VB_PROFILE=") {
+                            let trimmed = value.trim();
+                            if !trimmed.is_empty() {
+                                tracing::warn!(
+                                    "reading VB_PROFILE from {} is deprecated and will be \
+                                     removed — run `vcli profile bind <name> --user` to \
+                                     migrate, or export VB_PROFILE in your shell",
+                                    user_env.display()
+                                );
+                                return Some(trimmed.to_string());
                             }
                         }
                     }
@@ -316,8 +333,9 @@ impl Config {
     }
 
     fn from_env_resolve(profile: Option<&str>, honor_vb_target: bool) -> Result<Self> {
-        load_dotenv_upward();
-
+        // No `.env` loading: configuration comes from the process environment
+        // only. See RFC #83 — an implicit cwd→parent `.env` lookup made it
+        // impossible to tell where a value came from.
         if honor_vb_target {
             // TEMPORARY bridge (P0-A): main() resolves the target/profile
             // selection via target::resolve and syncs VB_TARGET here. This
@@ -572,29 +590,6 @@ impl Config {
             (Some(host), Some(user)) => Some(format!("{user}@{host}")),
             (Some(host), None) => Some(host.clone()),
             _ => None,
-        }
-    }
-}
-
-/// Walk cwd → parent → … until a `.env` is found, then load it.
-/// Stops at filesystem root if no `.env` exists anywhere.
-fn load_dotenv_upward() {
-    let Ok(start) = std::env::current_dir() else {
-        return;
-    };
-    let mut dir = start.as_path();
-    loop {
-        let candidate = dir.join(".env");
-        if candidate.exists() {
-            match dotenvy::from_path(&candidate) {
-                Ok(()) => tracing::debug!("loaded .env from {}", candidate.display()),
-                Err(e) => tracing::warn!("failed to load .env from {}: {e}", candidate.display()),
-            }
-            return;
-        }
-        match dir.parent() {
-            Some(p) => dir = p,
-            None => return,
         }
     }
 }

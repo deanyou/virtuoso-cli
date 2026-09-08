@@ -264,7 +264,8 @@ enum ProfileCmd {
             Resolution order:\n  \
             1. VB_PROFILE env var\n  \
             2. $VIRTUAL_ENV/.vcli-profile (Python venv binding)\n  \
-            3. ~/.vcli/.env VB_PROFILE=... (user-level default)\n\n\
+            3. ~/.vcli/profile (user-level default; legacy ~/.vcli/.env VB_PROFILE=... \
+            is still read but deprecated)\n\n\
             Examples:\n  \
             virtuoso profile show\n  \
             virtuoso profile show --format json"
@@ -277,7 +278,7 @@ enum ProfileCmd {
             that profile automatically. One of --venv, --user, or --local is required.\n\n\
             Scopes:\n  \
             --venv : write $VIRTUAL_ENV/.vcli-profile  (project Python venv)\n  \
-            --user : write ~/.vcli/.env VB_PROFILE=...  (user-level default)\n  \
+            --user : write ~/.vcli/profile  (user-level default)\n  \
             --local: write ./.vcli-profile  (current working dir)\n\n\
             Examples:\n  \
             virtuoso profile bind t28_digital --venv\n  \
@@ -291,7 +292,7 @@ enum ProfileCmd {
         #[arg(long, conflicts_with_all = &["user", "local"])]
         venv: bool,
 
-        /// Bind to ~/.vcli/.env VB_PROFILE=
+        /// Bind to ~/.vcli/profile (user-level default)
         #[arg(long, conflicts_with_all = &["venv", "local"])]
         user: bool,
 
@@ -312,7 +313,8 @@ enum ProfileCmd {
         #[arg(long, conflicts_with_all = &["user", "local"])]
         venv: bool,
 
-        /// Clear ~/.vcli/.env VB_PROFILE= line
+        /// Clear the user-level ~/.vcli/profile binding (and the deprecated
+        /// VB_PROFILE= line in ~/.vcli/.env)
         #[arg(long, conflicts_with_all = &["venv", "local"])]
         user: bool,
 
@@ -1763,9 +1765,11 @@ fn dispatch_profile(
                 "resolution_order": [
                     "1. explicit profile= argument / CLI -p/--profile",
                     "2. process env VB_PROFILE",
-                    "3. $VIRTUAL_ENV/.vcli-profile (venv binding)",
-                    "4. ~/.vcli/.env VB_PROFILE= (user-level default)",
-                    "5. None (legacy default)",
+                    "3. VCLI_ENV_PATH file (explicitly requested env file)",
+                    "4. $VIRTUAL_ENV/.vcli-profile (venv binding)",
+                    "5. ~/.vcli/profile (user-level default)",
+                    "6. ~/.vcli/.env VB_PROFILE= (deprecated fallback)",
+                    "7. None (legacy default)",
                 ],
             }))
         }

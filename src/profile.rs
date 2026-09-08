@@ -4,8 +4,9 @@
 //! 1. Explicit `profile=` argument / CLI `-p/--profile`
 //! 2. Process environment `VB_PROFILE`
 //! 3. Virtualenv binding file (`$VIRTUAL_ENV/.vcli-profile`)
-//! 4. User-level `~/.vcli/.env` `VB_PROFILE`
-//! 5. `None` (legacy default behaviour)
+//! 4. Virtualenv binding file (`$VIRTUAL_ENV/.vcli-profile`)
+//! 5. User-level `~/.vcli/profile` (deprecated fallback: `~/.vcli/.env`)
+//! 6. `None` (legacy default behaviour)
 //!
 //! This mirrors virtuoso-bridge-lite's profile resolution ladder, adapted for vcli.
 
@@ -15,6 +16,9 @@ use std::{env, fs};
 /// Profile binding filename inside a virtualenv.
 const PROFILE_BINDING_FILENAME: &str = ".vcli-profile";
 
+/// Filename of the user-level profile binding inside `~/.vcli`.
+const USER_PROFILE_FILENAME: &str = "profile";
+
 /// User-level config directory.
 const USER_CONFIG_DIR: &str = ".vcli";
 
@@ -23,9 +27,11 @@ const USER_CONFIG_DIR: &str = ".vcli";
 pub struct ProfileResolution {
     /// The resolved profile name, or `None` for legacy default.
     pub profile: Option<String>,
-    /// Where the profile came from: "explicit", "environment", "venv", "user_env", "default".
+    /// Where the profile came from: "explicit", "environment", "runtime_env",
+    /// "venv", "user", "user_env" (deprecated `~/.vcli/.env` fallback),
+    /// "default".
     pub source: &'static str,
-    /// Path to the source file (for venv/user_env sources).
+    /// Path to the source file (for runtime_env/venv/user/user_env sources).
     pub path: Option<PathBuf>,
 }
 
@@ -53,9 +59,30 @@ fn user_config_dir() -> PathBuf {
         .join(USER_CONFIG_DIR)
 }
 
-/// Get the user-level .env file path (`~/.vcli/.env`).
+/// Get the user-level profile binding file path (`~/.vcli/profile`).
+///
+/// Sole content is the profile name — the same format the venv and local
+/// bindings use, so all three scopes share one reader.
+fn user_profile_path() -> PathBuf {
+    user_profile_path_in(&user_config_dir())
+}
+
+/// Legacy user-level `.env` path (`~/.vcli/.env`), kept only as a deprecated
+/// fallback. See RFC #83 — this file is no longer loaded as configuration, and
+/// reading `VB_PROFILE` out of it goes away in a future release.
 fn user_env_path() -> PathBuf {
-    user_config_dir().join(".env")
+    user_env_path_in(&user_config_dir())
+}
+
+/// [`user_profile_path`] inside an arbitrary config dir. Split out so tests
+/// can exercise the user scope without touching the real `~/.vcli`.
+fn user_profile_path_in(dir: &std::path::Path) -> PathBuf {
+    dir.join(USER_PROFILE_FILENAME)
+}
+
+/// [`user_env_path`] inside an arbitrary config dir.
+fn user_env_path_in(dir: &std::path::Path) -> PathBuf {
+    dir.join(".env")
 }
 
 /// Get the profile binding file path for the active virtualenv.
@@ -95,7 +122,12 @@ fn read_profile_file(path: &PathBuf) -> Option<String> {
     None
 }
 
-/// Read the VB_PROFILE from a .env file using dotenv.
+/// Read `VB_PROFILE=` out of an env-style `KEY=VALUE` file.
+///
+/// Deliberately a hand-rolled line scan: vcli no longer depends on `dotenvy`,
+/// and this is only ever used for the deprecated `~/.vcli/.env` fallback plus
+/// the explicitly-requested `VCLI_ENV_PATH` file — never for automatic
+/// discovery.
 fn read_profile_from_env_file(path: &PathBuf) -> Option<String> {
     if !path.exists() {
         return None;
@@ -172,13 +204,25 @@ pub fn resolve_profile_info(explicit: Option<&str>) -> ProfileResolution {
         }
     }
 
-    // 5. User-level ~/.vcli/.env VB_PROFILE
-    let user_env = user_env_path();
-    if let Some(profile) = read_profile_from_env_file(&user_env) {
+    // 5. User-level ~/.vcli/profile (deprecated fallback: ~/.vcli/.env)
+    let user_profile = user_profile_path();
+    if let Some(profile) = read_profile_file(&user_profile) {
+        return ProfileResolution {
+            profile: Some(profile),
+            source: "user",
+            path: Some(user_profile),
+        };
+    }
+    if let Some(profile) = read_profile_from_env_file(&user_env_path()) {
+        tracing::warn!(
+            "reading VB_PROFILE from {} is deprecated and will be removed — \
+             run `vcli profile bind <name> --user` to migrate, or export VB_PROFILE in your shell",
+            user_env_path().display()
+        );
         return ProfileResolution {
             profile: Some(profile),
             source: "user_env",
-            path: Some(user_env),
+            path: Some(user_env_path()),
         };
     }
 
@@ -246,7 +290,7 @@ pub fn read_venv_profile() -> (Option<PathBuf>, Option<String>) {
 
 /// Where to (un)bind a profile. Mirrors the resolution ladder:
 /// - `Venv`: $VIRTUAL_ENV/.vcli-profile  (project Python venv)
-/// - `User`: ~/.vcli/.env VB_PROFILE=    (user-level default)
+/// - `User`: ~/.vcli/profile            (user-level default)
 /// - `Local`: ./.vcli-profile            (current working dir)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BindScope {
@@ -265,10 +309,24 @@ impl BindScope {
     }
 }
 
-/// Bind a profile to the user-level default: `~/.vcli/.env` with
-/// `VB_PROFILE=<name>`. Replaces an existing `VB_PROFILE=` line, or
-/// appends a new one. Creates `~/.vcli/` if missing.
+/// Bind a profile to the user-level default: `~/.vcli/profile`, whose sole
+/// content is the profile name — the same format the venv and local bindings
+/// use. Creates `~/.vcli/` if missing.
 pub fn bind_user_profile(profile: &str) -> std::io::Result<PathBuf> {
+    bind_user_profile_in(&user_config_dir(), profile)
+}
+
+/// Remove the user-level profile binding. Idempotent.
+///
+/// Deletes `~/.vcli/profile`, and also strips the `VB_PROFILE=` line from the
+/// deprecated `~/.vcli/.env` (other lines preserved) so a stale legacy binding
+/// cannot resurrect the profile through the deprecated fallback.
+pub fn clear_user_profile() -> std::io::Result<()> {
+    clear_user_profile_in(&user_config_dir())
+}
+
+/// [`bind_user_profile`] against an arbitrary config dir.
+fn bind_user_profile_in(dir: &std::path::Path, profile: &str) -> std::io::Result<PathBuf> {
     let cleaned = clean_profile(profile).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -282,47 +340,32 @@ pub fn bind_user_profile(profile: &str) -> std::io::Result<PathBuf> {
         ));
     }
 
-    let path = user_env_path();
-    fs::create_dir_all(path.parent().unwrap())?;
-
-    // Read existing lines, replace VB_PROFILE= if present, else append.
-    let mut lines: Vec<String> = if path.exists() {
-        fs::read_to_string(&path)?
-            .lines()
-            .map(|l| l.to_string())
-            .collect()
-    } else {
-        Vec::new()
-    };
-
-    let mut replaced = false;
-    for line in lines.iter_mut() {
-        if line.trim_start().starts_with("VB_PROFILE=") {
-            *line = format!("VB_PROFILE={cleaned}");
-            replaced = true;
-        }
-    }
-    if !replaced {
-        lines.push(format!("VB_PROFILE={cleaned}"));
-    }
-
-    let body = if lines.is_empty() {
-        String::new()
-    } else {
-        format!("{}\n", lines.join("\n"))
-    };
-    fs::write(&path, body)?;
+    let path = user_profile_path_in(dir);
+    fs::create_dir_all(dir)?;
+    fs::write(&path, format!("{cleaned}\n"))?;
     Ok(path)
 }
 
-/// Remove the `VB_PROFILE=` line from `~/.vcli/.env` (other lines preserved).
-/// Idempotent: returns Ok(()) even if the line didn't exist.
-pub fn clear_user_profile() -> std::io::Result<()> {
-    let path = user_env_path();
-    if !path.exists() {
-        return Ok(());
+/// [`clear_user_profile`] against an arbitrary config dir.
+fn clear_user_profile_in(dir: &std::path::Path) -> std::io::Result<()> {
+    let path = user_profile_path_in(dir);
+    if path.exists() {
+        fs::remove_file(&path)?;
     }
-    let kept: Vec<String> = fs::read_to_string(&path)?
+    clear_legacy_user_env_profile_in(dir);
+    Ok(())
+}
+
+/// Strip the `VB_PROFILE=` line from the deprecated `~/.vcli/.env`.
+fn clear_legacy_user_env_profile_in(dir: &std::path::Path) {
+    let path = user_env_path_in(dir);
+    if !path.exists() {
+        return;
+    }
+    let Ok(content) = fs::read_to_string(&path) else {
+        return;
+    };
+    let kept: Vec<String> = content
         .lines()
         .filter(|l| !l.trim_start().starts_with("VB_PROFILE="))
         .map(|l| l.to_string())
@@ -332,8 +375,7 @@ pub fn clear_user_profile() -> std::io::Result<()> {
     } else {
         format!("{}\n", kept.join("\n"))
     };
-    fs::write(&path, body)?;
-    Ok(())
+    let _ = fs::write(&path, body);
 }
 
 /// Bind a profile to the current working directory: `./.vcli-profile`.
@@ -406,105 +448,82 @@ mod tests {
 
     // ---- Multi-scope binding tests ----
     //
-    // These tests touch the user-level ~/.vcli/.env file. To avoid
-    // races between parallel tests in the same process, they take
-    // this `Mutex` for the duration of the test.
+    // The user-scope tests used to write the real `~/.vcli`; they now run
+    // against a `tempfile::tempdir()` through the `*_in(dir, ...)` variants,
+    // so they are hermetic and safe to run in parallel.
 
-    use std::sync::Mutex;
-    static USER_PROFILE_LOCK: Mutex<()> = Mutex::new(());
-
-    /// Test that `bind_user_profile` writes the correct VB_PROFILE= line
-    /// into `~/.vcli/.env` and `clear_user_profile` removes it.
+    /// Test that `bind_user_profile` writes the profile name into
+    /// `<config dir>/profile` and `clear_user_profile` removes it again.
     #[test]
     fn test_bind_and_clear_user_profile() {
-        let _g = USER_PROFILE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        // Save existing ~/.vcli/.env if any.
-        let env_path = user_env_path();
-        let backup = if env_path.exists() {
-            Some(fs::read_to_string(&env_path).unwrap())
-        } else {
-            None
-        };
-
-        // Ensure no leftover VB_PROFILE= from a prior test.
-        let _ = clear_user_profile();
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path();
+        let profile_path = user_profile_path_in(dir);
 
         // Bind.
-        let path = bind_user_profile("t28_digital").unwrap();
-        assert!(path.exists());
-        let content = fs::read_to_string(&env_path).unwrap();
-        assert!(
-            content.contains("VB_PROFILE=t28_digital"),
-            "got: {content:?}"
-        );
+        let path = bind_user_profile_in(dir, "t28_digital").unwrap();
+        assert_eq!(path, profile_path);
+        let content = fs::read_to_string(&profile_path).unwrap();
+        assert_eq!(content.trim(), "t28_digital", "got: {content:?}");
 
-        // Re-bind: should replace, not duplicate.
-        bind_user_profile("analog_default").unwrap();
-        let content = fs::read_to_string(&env_path).unwrap();
+        // Re-bind: should replace, not append.
+        bind_user_profile_in(dir, "analog_default").unwrap();
+        let content = fs::read_to_string(&profile_path).unwrap();
+        assert_eq!(content.trim(), "analog_default", "got: {content:?}");
         assert!(
-            content.contains("VB_PROFILE=analog_default"),
-            "got: {content:?}"
-        );
-        assert!(
-            !content.contains("VB_PROFILE=t28_digital"),
+            !content.contains("t28_digital"),
             "old entry should be replaced"
         );
 
         // Clear.
-        clear_user_profile().unwrap();
-        let content = fs::read_to_string(&env_path).unwrap_or_default();
+        clear_user_profile_in(dir).unwrap();
         assert!(
-            !content.contains("VB_PROFILE="),
-            "VB_PROFILE should be cleared"
+            !profile_path.exists(),
+            "the user profile file should be gone"
         );
-
-        // Restore backup.
-        if let Some(b) = backup {
-            fs::write(&env_path, b).unwrap();
-        } else {
-            let _ = fs::remove_file(&env_path);
-        }
     }
 
-    /// `bind_user_profile` should preserve other lines in ~/.vcli/.env.
+    /// `clear_user_profile` must also strip `VB_PROFILE=` from the deprecated
+    /// `.env` (other lines preserved), otherwise a stale legacy binding would
+    /// resurrect the profile through the deprecated fallback.
     #[test]
-    fn test_bind_user_profile_preserves_other_lines() {
-        let _g = USER_PROFILE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let env_path = user_env_path();
-        let backup = if env_path.exists() {
-            Some(fs::read_to_string(&env_path).unwrap())
-        } else {
-            None
-        };
+    fn test_clear_user_profile_strips_legacy_env_binding() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path();
+        let env_path = user_env_path_in(dir);
 
-        // Seed with a non-VB_PROFILE line.
-        fs::create_dir_all(env_path.parent().unwrap()).unwrap();
-        fs::write(&env_path, "VB_REMOTE_HOST=eda-lab\nVB_PORT=12345\n").unwrap();
+        // Seed the legacy file with a VB_PROFILE line plus other settings.
+        fs::write(
+            &env_path,
+            "VB_PROFILE=stale\nVB_REMOTE_HOST=eda-lab\nVB_PORT=12345\n",
+        )
+        .unwrap();
 
-        // Bind.
-        bind_user_profile("myprofile").unwrap();
+        clear_user_profile_in(dir).unwrap();
 
-        let content = fs::read_to_string(&env_path).unwrap();
-        assert!(
-            content.contains("VB_REMOTE_HOST=eda-lab"),
-            "other lines preserved"
-        );
-        assert!(content.contains("VB_PORT=12345"), "other lines preserved");
-        assert!(content.contains("VB_PROFILE=myprofile"), "new line added");
-
-        clear_user_profile().unwrap();
         let content = fs::read_to_string(&env_path).unwrap();
         assert!(!content.contains("VB_PROFILE="), "VB_PROFILE cleared");
         assert!(
             content.contains("VB_REMOTE_HOST=eda-lab"),
             "other lines still preserved"
         );
+        assert!(
+            content.contains("VB_PORT=12345"),
+            "other lines still preserved"
+        );
+    }
 
-        if let Some(b) = backup {
-            fs::write(&env_path, b).unwrap();
-        } else {
-            let _ = fs::remove_file(&env_path);
-        }
+    /// The user scope resolves `<config dir>/profile` before the deprecated
+    /// `.env`, so a machine that has both is not stuck on the legacy value.
+    #[test]
+    fn test_user_profile_wins_over_legacy_env() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path();
+        fs::write(user_profile_path_in(dir), "from-profile-file\n").unwrap();
+        fs::write(user_env_path_in(dir), "VB_PROFILE=from-legacy-env\n").unwrap();
+
+        let resolved = read_profile_file(&user_profile_path_in(dir));
+        assert_eq!(resolved.as_deref(), Some("from-profile-file"));
     }
 
     /// Empty / whitespace-only profile names should be rejected.
