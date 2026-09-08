@@ -66,6 +66,32 @@ ssh ubuntu-docker "cat /tmp/virtuoso-daemon.log | grep PORT"
 - DISPLAY: `:5.0`
 - Session ID: `dean-user1-<PORT>`
 
+## SSH Connection Etiquette
+
+Rapid-fire `ssh` invocations from automation (one connection per command) can trip the remote
+sshd's connection protection (`MaxStartups` / Fail2ban), which shows up as:
+
+```
+ssh_exchange_identification: Connection closed by remote host
+```
+
+This is a **client-side connection-frequency issue, NOT a vcli bug**. vcli talks to the daemon
+over TCP (the session port from `vcli session list`), not SSH, so vcli never contributes to
+connection throttling.
+
+Mitigation:
+
+- **Batch commands**: pack multiple operations into one ssh call (e.g. one base64-encoded
+  script) instead of one ssh per command.
+- **Reuse connections**: for many sequential calls use SSH ControlMaster, e.g.
+  `ssh -o ControlMaster=auto -o ControlPath=/tmp/vcli-ssh-%r@%h:%p ...`.
+- **Back off on rejection**: after `Connection closed by remote host`, wait 60–120s before
+  retrying; the throttle is temporary.
+- **Prefer one round-trip**: for complex commands, base64-encode the script to avoid quoting
+  issues: `echo <b64> | base64 -d | bash`.
+- **Don't misread the symptom**: the remote session (daemon/vcli) keeps working during the
+  throttle; only the ssh control channel is refused.
+
 ## vcli GUI Debug 快速指南
 
 ### 一、连接 Session
