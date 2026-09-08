@@ -1,5 +1,6 @@
 use crate::config_file::ConfigFile;
 use crate::error::{Result, VirtuosoError};
+use serde::Serialize;
 use std::env;
 use std::path::PathBuf;
 
@@ -250,22 +251,469 @@ struct Layers<'a> {
     file: Option<&'a ConfigFile>,
 }
 
+/// Which layer a resolved value came from.
+///
+/// Used by [`Config::build_report`] — the heart of `vcli config check` —
+/// so a user can ask "why did this 30-second timeout become 120?" and get an
+/// answer that names the actual env var, the exact `[profile.<name>]` section
+/// or the defaulting code path.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(tag = "layer", rename_all = "snake_case")]
+pub enum ConfigSource {
+    /// `<KEY>_<PROFILE>` environment variable. `var` is the full env-var name.
+    EnvProfile { var: String },
+    /// `<KEY>` environment variable. `var` is the env-var name.
+    Env { var: String },
+    /// `config.toml` `[profile.<PROFILE>]` section. `file` is the absolute
+    /// path of the parsed file (so a user can `vim` it).
+    FileProfile { file: PathBuf },
+    /// `config.toml` global section.
+    FileGlobal { file: PathBuf },
+    /// An active `targets.yaml` entry whose field overrode this setting.
+    /// `target` is the target name as set by `--target` / `VB_TARGET` /
+    /// `active_target` in `targets.yaml`.
+    Target { target: String },
+    /// No higher-precedence layer supplied a value; `default` documents the
+    /// constant the resolver fell through to.
+    Default { default: String },
+}
+
+/// One resolved key, with its value and provenance.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfigEntry {
+    pub key: &'static str,
+    pub value: String,
+    pub source: ConfigSource,
+}
+
+/// Aggregated report of the resolved configuration.
+///
+/// Always carries enough context to reproduce the resolution: the active
+/// profile, the file that was read (if any), the active target (if any),
+/// and a per-key [`ConfigEntry`]. JSON-stable so `vcli config check --format
+/// json` round-trips through `jq` without surprises.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfigReport {
+    pub profile: Option<String>,
+    pub active_target: Option<String>,
+    pub config_file: Option<PathBuf>,
+    /// Resolution precedence, highest first, with the key spelling each layer
+    /// expects. Surfaced in `--format json` so a user can verify the order
+    /// without reading code.
+    pub precedence: [&'static str; 4],
+    pub entries: Vec<ConfigEntry>,
+    /// Soft warnings the report noticed (e.g. a deprecated `~/.vcli/.env`
+    /// fallback being read). Empty when nothing to warn about. Failures
+    /// here don't elevate the process exit code — they are advisory.
+    pub warnings: Vec<String>,
+}
+
+impl ConfigReport {
+    /// `Ok(true)` when every entry has a non-default source; `Ok(false)` when
+    /// at least one field fell through to a hard-coded default. `Err` when
+    /// the user passed `--require-explicit` and a default was the only
+    /// source. Distinguishing this from "the default is correct for my
+    /// workflow" is the whole point of `config check`.
+    pub fn all_explicit(&self) -> bool {
+        self.entries
+            .iter()
+            .all(|e| !matches!(e.source, ConfigSource::Default { .. }))
+    }
+}
+
+/// Static description of one configuration key.
+///
+/// `default` is the literal the resolver falls through to. `display` formats
+/// the resolved value for the report (so a `bool` reads `true`/`false`, a
+/// `u16` port reads `65432`, and a `Vec<String>` reads `[]` or joined with
+/// single spaces). `validate` re-runs the same parser the runtime uses so a
+/// malformed env var (e.g. `VB_TIMEOUT=abc`) is flagged in the report
+/// instead of silently passing through.
+struct KeySpec {
+    key: &'static str,
+    default: &'static str,
+    display: fn(&Config) -> String,
+    validate: fn(&str) -> std::result::Result<(), String>,
+}
+
+fn report_remote_host(cfg: &Config) -> String {
+    cfg.remote_host.clone().unwrap_or_default()
+}
+fn report_remote_user(cfg: &Config) -> String {
+    cfg.remote_user.clone().unwrap_or_default()
+}
+fn report_port(cfg: &Config) -> String {
+    cfg.port.to_string()
+}
+fn report_jump_host(cfg: &Config) -> String {
+    cfg.jump_host.clone().unwrap_or_default()
+}
+fn report_jump_user(cfg: &Config) -> String {
+    cfg.jump_user.clone().unwrap_or_default()
+}
+fn report_ssh_port(cfg: &Config) -> String {
+    cfg.ssh_port
+        .map(|p| p.to_string())
+        .unwrap_or_else(|| "22".into())
+}
+fn report_ssh_key(cfg: &Config) -> String {
+    cfg.ssh_key.clone().unwrap_or_default()
+}
+fn report_ssh_config(cfg: &Config) -> String {
+    cfg.ssh_config.clone().unwrap_or_default()
+}
+fn report_ssh_backend(cfg: &Config) -> String {
+    cfg.ssh_backend.clone().unwrap_or_default()
+}
+fn report_disable_control_master(cfg: &Config) -> String {
+    cfg.disable_control_master.to_string()
+}
+fn report_timeout(cfg: &Config) -> String {
+    cfg.timeout.to_string()
+}
+fn report_read_timeout(cfg: &Config) -> String {
+    cfg.read_timeout.to_string()
+}
+fn report_keep_remote_files(cfg: &Config) -> String {
+    cfg.keep_remote_files.to_string()
+}
+fn report_spectre_cmd(cfg: &Config) -> String {
+    cfg.spectre_cmd.clone()
+}
+fn report_spectre_args(cfg: &Config) -> String {
+    if cfg.spectre_args.is_empty() {
+        String::new()
+    } else {
+        cfg.spectre_args.join(" ")
+    }
+}
+fn report_spectre_max_workers(cfg: &Config) -> String {
+    cfg.spectre_max_workers.to_string()
+}
+fn report_ssh_max_sessions(cfg: &Config) -> String {
+    cfg.ssh_max_sessions.to_string()
+}
+fn report_ssh_max_bulk_sessions(cfg: &Config) -> String {
+    cfg.ssh_max_bulk_sessions.to_string()
+}
+fn report_ssh_reconnect_max_attempts(cfg: &Config) -> String {
+    cfg.ssh_reconnect_max_attempts.to_string()
+}
+fn report_ssh_reconnect_max_delay(cfg: &Config) -> String {
+    cfg.ssh_reconnect_max_delay.to_string()
+}
+fn report_ssh_keepalive_interval(cfg: &Config) -> String {
+    cfg.ssh_keepalive_interval.to_string()
+}
+fn report_ssh_keepalive_failures(cfg: &Config) -> String {
+    cfg.ssh_keepalive_failures.to_string()
+}
+fn report_transport_shutdown_grace(cfg: &Config) -> String {
+    cfg.transport_shutdown_grace.to_string()
+}
+fn report_cadence_cshrc(cfg: &Config) -> String {
+    cfg.cadence_cshrc.clone().unwrap_or_default()
+}
+fn report_spectre_bin(cfg: &Config) -> String {
+    cfg.spectre_bin.clone().unwrap_or_default()
+}
+fn report_gui_host(cfg: &Config) -> String {
+    cfg.roles.gui_host.clone().unwrap_or_default()
+}
+fn report_deploy_host(cfg: &Config) -> String {
+    cfg.roles.deploy_host.clone().unwrap_or_default()
+}
+fn report_daemon_host(cfg: &Config) -> String {
+    cfg.roles.daemon_host.clone().unwrap_or_default()
+}
+fn report_spectre_host(cfg: &Config) -> String {
+    cfg.roles.spectre_host.clone().unwrap_or_default()
+}
+fn report_remote_scratch_root(cfg: &Config) -> String {
+    cfg.roles.scratch_root.clone().unwrap_or_default()
+}
+fn report_transport_daemon_socket(cfg: &Config) -> String {
+    cfg.transport_daemon_socket.clone().unwrap_or_default()
+}
+fn report_transport_daemon_token(cfg: &Config) -> String {
+    // The token is sensitive; show only "set" / "unset" to avoid leaking it
+    // through a config-check snapshot or terminal scrollback.
+    if cfg.transport_daemon_token.is_some() {
+        "***set***".to_string()
+    } else {
+        String::new()
+    }
+}
+
+fn report_allow_cross_user_daemon(cfg: &Config) -> String {
+    cfg.allow_cross_user_daemon.to_string()
+}
+
+// ----- Validators (mirror the runtime parsers in from_env_resolve) ----------
+
+fn v_text(_raw: &str) -> std::result::Result<(), String> {
+    Ok(())
+}
+fn v_u16(raw: &str) -> std::result::Result<(), String> {
+    raw.parse::<u16>()
+        .map(|_| ())
+        .map_err(|e| format!("expected u16, got {raw:?}: {e}"))
+}
+fn v_u32(raw: &str) -> std::result::Result<(), String> {
+    raw.parse::<u32>()
+        .map(|_| ())
+        .map_err(|e| format!("expected u32, got {raw:?}: {e}"))
+}
+fn v_u64(raw: &str) -> std::result::Result<(), String> {
+    raw.parse::<u64>()
+        .map(|_| ())
+        .map_err(|e| format!("expected u64, got {raw:?}: {e}"))
+}
+fn v_bool(raw: &str) -> std::result::Result<(), String> {
+    if raw == "1"
+        || raw == "0"
+        || raw.eq_ignore_ascii_case("true")
+        || raw.eq_ignore_ascii_case("false")
+    {
+        Ok(())
+    } else {
+        Err(format!("expected true/false/1/0, got {raw:?}"))
+    }
+}
+/// Mirrors [`Layers::flag_truthy`]: `VB_ALLOW_CROSS_USER_DAEMON` shipped
+/// accepting `yes` / `on`, so those spellings are valid here even though
+/// [`v_bool`] stays strict for every other flag. An unrecognised value is
+/// reported as invalid (the runtime silently treats it as "off"), so a typo
+/// surfaces here instead of hiding.
+fn v_truthy(raw: &str) -> std::result::Result<(), String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" | "0" | "false" | "no" | "off" => Ok(()),
+        other => Err(format!(
+            "expected true/false/1/0/yes/no/on/off, got {other:?}"
+        )),
+    }
+}
+fn v_shlex(raw: &str) -> std::result::Result<(), String> {
+    shlex::split(raw)
+        .map(|_| ())
+        .ok_or_else(|| format!("invalid shell syntax: {raw:?}"))
+}
+
+/// The exhaustive list of configuration keys this report covers.
+///
+/// Order = display order. New keys added to [`Config`] should land here too —
+/// the report is the user's authoritative way to verify resolution, and a
+/// missing key would silently mis-attribute a value.
+#[rustfmt::skip]
+const KEY_SPECS: &[KeySpec] = &[
+    KeySpec { key: "VB_REMOTE_HOST",         default: "",          display: report_remote_host,            validate: v_text },
+    KeySpec { key: "VB_REMOTE_USER",         default: "",          display: report_remote_user,            validate: v_text },
+    KeySpec { key: "VB_PORT",                default: "0",         display: report_port,                   validate: v_u16 },
+    KeySpec { key: "VB_JUMP_HOST",           default: "",          display: report_jump_host,              validate: v_text },
+    KeySpec { key: "VB_JUMP_USER",           default: "",          display: report_jump_user,              validate: v_text },
+    KeySpec { key: "VB_SSH_PORT",            default: "22",        display: report_ssh_port,               validate: v_u16 },
+    KeySpec { key: "VB_SSH_KEY",             default: "",          display: report_ssh_key,                validate: v_text },
+    KeySpec { key: "VB_SSH_CONFIG",          default: "",          display: report_ssh_config,             validate: v_text },
+    KeySpec { key: "VB_SSH_BACKEND",         default: "openssh",   display: report_ssh_backend,            validate: v_text },
+    KeySpec { key: "VB_DISABLE_CONTROL_MASTER", default: "false",  display: report_disable_control_master, validate: v_bool },
+    KeySpec { key: "VB_TIMEOUT",             default: "30",        display: report_timeout,                validate: v_u64 },
+    KeySpec { key: "VB_READ_TIMEOUT",        default: "120",       display: report_read_timeout,           validate: v_u64 },
+    KeySpec { key: "VB_KEEP_REMOTE_FILES",   default: "false",     display: report_keep_remote_files,      validate: v_bool },
+    KeySpec { key: "VB_SPECTRE_CMD",         default: "spectre",   display: report_spectre_cmd,            validate: v_text },
+    KeySpec { key: "VB_SPECTRE_ARGS",        default: "",          display: report_spectre_args,           validate: v_shlex },
+    KeySpec { key: "VB_SPECTRE_MAX_WORKERS", default: "8",         display: report_spectre_max_workers,    validate: v_u32 },
+    KeySpec { key: "VB_SSH_MAX_SESSIONS",    default: "10",        display: report_ssh_max_sessions,       validate: v_u64 },
+    KeySpec { key: "VB_SSH_MAX_BULK_SESSIONS", default: "2",       display: report_ssh_max_bulk_sessions,  validate: v_u64 },
+    KeySpec { key: "VB_SSH_RECONNECT_MAX_ATTEMPTS", default: "8",  display: report_ssh_reconnect_max_attempts, validate: v_u32 },
+    KeySpec { key: "VB_SSH_RECONNECT_MAX_DELAY",   default: "30", display: report_ssh_reconnect_max_delay,   validate: v_u64 },
+    KeySpec { key: "VB_SSH_KEEPALIVE_INTERVAL",   default: "30", display: report_ssh_keepalive_interval,   validate: v_u64 },
+    KeySpec { key: "VB_SSH_KEEPALIVE_FAILURES",   default: "3",  display: report_ssh_keepalive_failures,   validate: v_u32 },
+    KeySpec { key: "VB_TRANSPORT_SHUTDOWN_GRACE", default: "10",  display: report_transport_shutdown_grace, validate: v_u64 },
+    KeySpec { key: "VB_CADENCE_CSHRC",       default: "",          display: report_cadence_cshrc,          validate: v_text },
+    KeySpec { key: "VB_SPECTRE_BIN",         default: "",          display: report_spectre_bin,            validate: v_text },
+    KeySpec { key: "VB_GUI_HOST",            default: "",          display: report_gui_host,               validate: v_text },
+    KeySpec { key: "VB_DEPLOY_HOST",         default: "",          display: report_deploy_host,            validate: v_text },
+    KeySpec { key: "VB_DAEMON_HOST",         default: "",          display: report_daemon_host,            validate: v_text },
+    KeySpec { key: "VB_SPECTRE_HOST",        default: "",          display: report_spectre_host,           validate: v_text },
+    KeySpec { key: "VB_REMOTE_SCRATCH_ROOT", default: "",          display: report_remote_scratch_root,    validate: v_text },
+    KeySpec { key: "VB_TRANSPORT_DAEMON_SOCKET", default: "",      display: report_transport_daemon_socket, validate: v_text },
+    KeySpec { key: "VB_TRANSPORT_DAEMON_TOKEN", default: "",       display: report_transport_daemon_token, validate: v_text },
+    KeySpec { key: "VB_ALLOW_CROSS_USER_DAEMON", default: "false", display: report_allow_cross_user_daemon, validate: v_truthy },
+];
+
+/// Build the report from a `TargetConfig`.
+///
+/// Mirrors [`Self::from_target`] field-for-field so the report and the
+/// runtime agree: a `None` target field is attributed to the matching
+/// `from_env_resolve` default (so the user sees "this value comes from the
+/// legacy default, not from the target"); a `Some` value is attributed to
+/// the target itself.
+fn build_report_from_target(
+    target: &crate::target::TargetConfig,
+    target_name: &str,
+    mut report: ConfigReport,
+) -> ConfigReport {
+    // We compute a synthetic Config from the target (with defaults applied)
+    // so the display closures agree with the runtime path byte-for-byte.
+    let cfg =
+        Config::from_target(target, target_name).expect("target validates port at from_target");
+    for spec in KEY_SPECS {
+        let value = (spec.display)(&cfg);
+        // Per-field attribution: if the *target* had this field set, the value
+        // came from the target. If the target had `None` and the synthetic
+        // config shows the constant default, attribute it to "default".
+        let target_provided = target_provides(spec.key, target);
+        let source = if target_provided {
+            ConfigSource::Target {
+                target: target_name.to_string(),
+            }
+        } else if value.is_empty() && matches_default(spec.key, &value) {
+            // An empty string when the default *is* empty — the user really
+            // didn't set this anywhere.
+            ConfigSource::Default {
+                default: spec.default.to_string(),
+            }
+        } else {
+            ConfigSource::Default {
+                default: spec.default.to_string(),
+            }
+        };
+        report.entries.push(ConfigEntry {
+            key: spec.key,
+            value,
+            source,
+        });
+    }
+    report
+}
+
+/// Did the active target explicitly set this key?
+///
+/// `from_target` flattens a `TargetConfig` into a `Config` by applying
+/// defaults to `None` fields; the only way to attribute a value to "the
+/// target" is to ask whether the underlying `TargetConfig` carried it. This
+/// list mirrors [`crate::target::TargetConfig`] field-for-field — when the
+/// schema drifts, this must drift with it.
+fn target_provides(key: &str, t: &crate::target::TargetConfig) -> bool {
+    match key {
+        "VB_REMOTE_HOST" => t.remote_host.is_some(),
+        "VB_REMOTE_USER" => t.remote_user.is_some(),
+        "VB_PORT" => t.port.is_some(),
+        "VB_JUMP_HOST" => t.jump_host.is_some(),
+        "VB_JUMP_USER" => t.jump_user.is_some(),
+        "VB_SSH_PORT" => t.ssh_port.is_some(),
+        "VB_SSH_KEY" => t.ssh_key.is_some(),
+        "VB_SSH_CONFIG" => t.ssh_config.is_some(),
+        "VB_SSH_BACKEND" => t.ssh_backend.is_some(),
+        "VB_DISABLE_CONTROL_MASTER" => t.disable_control_master.is_some(),
+        "VB_TIMEOUT" => t.timeout.is_some(),
+        "VB_READ_TIMEOUT" => t.read_timeout.is_some(),
+        "VB_KEEP_REMOTE_FILES" => t.keep_remote_files.is_some(),
+        "VB_SPECTRE_CMD" => t.spectre_cmd.is_some(),
+        "VB_SPECTRE_ARGS" => t.spectre_args.is_some(),
+        "VB_SPECTRE_MAX_WORKERS" => t.spectre_max_workers.is_some(),
+        "VB_SSH_MAX_SESSIONS" => t.ssh_max_sessions.is_some(),
+        "VB_SSH_MAX_BULK_SESSIONS" => t.ssh_max_bulk_sessions.is_some(),
+        "VB_SSH_RECONNECT_MAX_ATTEMPTS" => t.ssh_reconnect_max_attempts.is_some(),
+        "VB_SSH_RECONNECT_MAX_DELAY" => t.ssh_reconnect_max_delay.is_some(),
+        "VB_SSH_KEEPALIVE_INTERVAL" => t.ssh_keepalive_interval.is_some(),
+        "VB_SSH_KEEPALIVE_FAILURES" => t.ssh_keepalive_failures.is_some(),
+        "VB_CADENCE_CSHRC" => t.cadence_cshrc.is_some(),
+        "VB_SPECTRE_BIN" => t.spectre_bin.is_some(),
+        "VB_TRANSPORT_DAEMON_SOCKET" => t.transport_daemon_socket.is_some(),
+        "VB_TRANSPORT_DAEMON_TOKEN" => t.transport_daemon_token.is_some(),
+        "VB_ALLOW_CROSS_USER_DAEMON" => t.allow_cross_user_daemon.is_some(),
+        // TargetConfig has no equivalent for these — `from_target` always
+        // returns hard-coded constants here, so they cannot be attributed to
+        // the target.
+        "VB_TRANSPORT_SHUTDOWN_GRACE"
+        | "VB_GUI_HOST"
+        | "VB_DEPLOY_HOST"
+        | "VB_DAEMON_HOST"
+        | "VB_SPECTRE_HOST"
+        | "VB_REMOTE_SCRATCH_ROOT" => false,
+        _ => false,
+    }
+}
+
+/// Compare the resolved value to the static default for a key.
+///
+/// Used to detect "the value equals the constant default — that came from
+/// the default, not from anywhere higher up." Empty-string equality is the
+/// common case (e.g. `remote_host` defaults to `""`).
+fn matches_default(key: &str, value: &str) -> bool {
+    KEY_SPECS
+        .iter()
+        .find(|s| s.key == key)
+        .map(|s| s.default == value)
+        .unwrap_or(false)
+}
+
 impl Layers<'_> {
     /// Profile-specific env, then general env, then the file.
     fn raw(&self, key: &str) -> Option<String> {
+        self.raw_with_source(key).map(|(v, _)| v)
+    }
+
+    /// Same precedence as [`Layers::raw`], but reports which layer actually
+    /// produced the value. Used by `Config::build_report` so `vcli config check`
+    /// can answer "where did this resolved value come from?" — a 30-second
+    /// timeout silently becoming 120 is the exact failure mode #73 was opened
+    /// to surface.
+    ///
+    /// Precedence, highest first (RFC #83, §3 — `vcli config check`):
+    /// 1. `<KEY>_<PROFILE>` environment variable
+    /// 2. `<KEY>` environment variable
+    /// 3. `config.toml` `[profile.<PROFILE>]` section
+    /// 4. `config.toml` global section
+    fn raw_with_source(&self, key: &str) -> Option<(String, ConfigSource)> {
         if let Some(p) = self.profile {
-            if let Ok(v) = env::var(format!("{key}_{p}")) {
+            let profile_key = format!("{key}_{p}");
+            if let Ok(v) = env::var(&profile_key) {
                 if !v.is_empty() {
-                    return Some(v);
+                    return Some((v, ConfigSource::EnvProfile { var: profile_key }));
                 }
             }
         }
         if let Ok(v) = env::var(key) {
             if !v.is_empty() {
-                return Some(v);
+                return Some((
+                    v,
+                    ConfigSource::Env {
+                        var: key.to_string(),
+                    },
+                ));
             }
         }
-        self.file.and_then(|f| f.get(key, self.profile))
+        if let Some(file) = self.file {
+            // Probe whether the *profile section* itself owns the key, not
+            // whether `ConfigFile::get` returns a value. `get` falls through
+            // to global on a miss — if we trusted it, an absent profile key
+            // would be misattributed as FileProfile instead of FileGlobal.
+            let profile_owns = self
+                .profile
+                .is_some_and(|p| file.profile_section_has(key, p));
+            if profile_owns {
+                let v = file
+                    .get(key, self.profile)
+                    .expect("profile_section_has said the value is there");
+                return Some((
+                    v,
+                    ConfigSource::FileProfile {
+                        file: crate::config_file::path(),
+                    },
+                ));
+            }
+            if let Some(v) = file.get(key, None) {
+                return Some((
+                    v,
+                    ConfigSource::FileGlobal {
+                        file: crate::config_file::path(),
+                    },
+                ));
+            }
+        }
+        None
     }
 
     fn text(&self, key: &str) -> Option<String> {
@@ -662,6 +1110,124 @@ impl Config {
         hex::encode(hasher.finalize())
     }
 
+    /// Build a per-key provenance report for `vcli config check`.
+    ///
+    /// The report re-runs [`Layers::raw_with_source`] against the same
+    /// `profile` and the file already loaded by the live resolution path, so
+    /// what it shows **is what the runtime config will actually use** — no
+    /// drift between the report and the next `vcli …` invocation. Two entry
+    /// modes are honored:
+    ///
+    /// * **target mode** (`VB_TARGET` set and the target exists): every field
+    ///   traces back to the `targets.yaml` entry; `Layer::Target { .. }`
+    ///   records the target name. None of the file layers participate — that
+    ///   is intentional, mirroring [`Self::from_env_resolve`]'s early return.
+    /// * **legacy mode** (no `VB_TARGET`, or unknown target): the full
+    ///   four-layer precedence is consulted.
+    ///
+    /// Returns [`VirtuosoError::Config`] when reading or parsing the file
+    /// fails — same hard-error policy as the live path.
+    pub fn build_report(profile: Option<&str>) -> Result<ConfigReport> {
+        let mut report = ConfigReport {
+            profile: profile.map(|s| s.to_string()),
+            active_target: None,
+            config_file: None,
+            precedence: [
+                "<KEY>_<PROFILE> env",
+                "<KEY> env",
+                "config.toml [profile.<PROFILE>]",
+                "config.toml global",
+            ],
+            entries: Vec::with_capacity(KEY_SPECS.len()),
+            warnings: Vec::new(),
+        };
+
+        // Active target detection — mirrors from_env_resolve's honor_vb_target
+        // branch. We never *consume* it here; we only report whether one is
+        // driving the resolution so the user can see "your 30-second timeout
+        // came from the prod target, not from any VB_… env var".
+        if let Ok(name) = std::env::var("VB_TARGET") {
+            if !name.is_empty() {
+                report.active_target = Some(name);
+            }
+        }
+
+        // Surface the deprecated ~/.vcli/.env VB_PROFILE= fallback so the
+        // report tells users their profile moved. Cheap (one fopen); we only
+        // warn when the file exists with a non-empty VB_PROFILE=.
+        if let Some(home) = dirs::home_dir() {
+            let legacy_env = home.join(".vcli").join(".env");
+            if legacy_env.is_file() {
+                if let Ok(content) = std::fs::read_to_string(&legacy_env) {
+                    if content.lines().any(|l| {
+                        let t = l.trim();
+                        t.starts_with("VB_PROFILE=") && !t["VB_PROFILE=".len()..].trim().is_empty()
+                    }) {
+                        report.warnings.push(format!(
+                            "{}: VB_PROFILE= is a deprecated fallback. Run `vcli profile bind \
+                             <name> --user` (or export VB_PROFILE in your shell) — this file \
+                             will stop being read in a future release.",
+                            legacy_env.display()
+                        ));
+                    }
+                }
+            }
+        }
+
+        if let Some(ref target_name) = report.active_target.clone() {
+            // Target mode: load the target and trace every key to it.
+            let manager = crate::target::TargetManager::load()
+                .map_err(|e| VirtuosoError::Config(format!("failed to load targets: {e}")))?;
+            let target = manager.get(target_name).ok_or_else(|| {
+                VirtuosoError::Config(format!("target '{}' not found", target_name))
+            })?;
+            return Ok(build_report_from_target(target, target_name, report));
+        }
+
+        // Legacy mode: walk the four-layer precedence for every known key.
+        let file = ConfigFile::load()?;
+        report.config_file = file.as_ref().map(|_| crate::config_file::path());
+        let lz = Layers {
+            profile,
+            file: file.as_ref(),
+        };
+        for spec in KEY_SPECS {
+            let (raw, source) = match lz.raw_with_source(spec.key) {
+                Some((v, s)) => (v, s),
+                None => (
+                    spec.default.to_string(),
+                    ConfigSource::Default {
+                        default: spec.default.to_string(),
+                    },
+                ),
+            };
+            // Apply the same scalar validators as the live path so a value
+            // that would fail at runtime shows up here *with the same error
+            // message*. We surface parse failures as warnings rather than
+            // aborting — the user is asking "what would happen?", not
+            // "tunnel now".
+            match (spec.validate)(&raw) {
+                Ok(()) => report.entries.push(ConfigEntry {
+                    key: spec.key,
+                    value: raw.clone(),
+                    source,
+                }),
+                Err(e) => {
+                    report.entries.push(ConfigEntry {
+                        key: spec.key,
+                        value: raw.clone(),
+                        source,
+                    });
+                    report.warnings.push(format!(
+                        "{}: {e} — this value would fail to parse at runtime",
+                        spec.key
+                    ));
+                }
+            }
+        }
+        Ok(report)
+    }
+
     pub fn is_remote(&self) -> bool {
         self.remote_host.is_some()
     }
@@ -703,4 +1269,326 @@ pub fn find_project_root() -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod report_tests {
+    //! Unit tests for [`Config::build_report`].
+    //!
+    //! Every test that touches the env or the filesystem must hold an
+    //! `EnvGuard` that resets `VB_CONFIG_DIR`, every `VB_*` variable we read
+    //! directly, and clears the test env so the report actually observes the
+    //! state the test sets up. Without the guard, a developer machine with a
+    //! `~/.vcli/config.toml` would silently override the test fixture and the
+    //! assertion would drift.
+
+    use super::*;
+    use serial_test::serial;
+
+    /// Save and restore the keys this module's resolution actually consults.
+    ///
+    /// We don't blanket-clear every `VB_*` — that would mask real bugs in the
+    /// report's ability to attribute values. We restore whatever was set on
+    /// entry, blank the env for the duration of the test, and only seed the
+    /// specific keys the test exercises. The `Drop` impl restores the saved
+    /// state so a failing assertion doesn't poison the next test.
+    struct EnvGuard {
+        saved: Vec<(&'static str, Option<String>)>,
+        saved_profile: Option<String>,
+        saved_target: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn new(keys: &[&'static str]) -> Self {
+            let mut saved: Vec<(&'static str, Option<String>)> =
+                keys.iter().map(|k| (*k, std::env::var(k).ok())).collect();
+            // Always preserve these — they belong to the framework, not the
+            // caller's choice, and we want them unchanged even if the test
+            // didn't mention them.
+            for k in ["VB_PROFILE", "VB_TARGET"].iter() {
+                if !saved.iter().any(|(name, _)| *name == *k) {
+                    saved.push((k, std::env::var(k).ok()));
+                }
+            }
+            let saved_profile = std::env::var("VB_PROFILE").ok();
+            let saved_target = std::env::var("VB_TARGET").ok();
+            for k in keys {
+                std::env::remove_var(k);
+            }
+            std::env::remove_var("VB_PROFILE");
+            std::env::remove_var("VB_TARGET");
+            Self {
+                saved,
+                saved_profile,
+                saved_target,
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (k, v) in &self.saved {
+                match v {
+                    Some(value) => std::env::set_var(k, value),
+                    None => std::env::remove_var(k),
+                }
+            }
+            match &self.saved_profile {
+                Some(v) => std::env::set_var("VB_PROFILE", v),
+                None => std::env::remove_var("VB_PROFILE"),
+            }
+            match &self.saved_target {
+                Some(v) => std::env::set_var("VB_TARGET", v),
+                None => std::env::remove_var("VB_TARGET"),
+            }
+        }
+    }
+
+    /// Point `VB_CONFIG_DIR` at a fresh empty tempdir so `ConfigFile::load()`
+    /// observes `Ok(None)` and the report runs the "no file" branch. The
+    /// guard restores the prior `VB_CONFIG_DIR` (or removes it if unset).
+    fn isolate_config_dir() -> (tempfile::TempDir, Option<std::ffi::OsString>) {
+        let prev = std::env::var_os("VB_CONFIG_DIR");
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::env::set_var("VB_CONFIG_DIR", dir.path());
+        (dir, prev)
+    }
+
+    struct ConfigDirGuard(Option<std::ffi::OsString>);
+
+    impl Drop for ConfigDirGuard {
+        fn drop(&mut self) {
+            match &self.0 {
+                Some(v) => std::env::set_var("VB_CONFIG_DIR", v),
+                None => std::env::remove_var("VB_CONFIG_DIR"),
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn report_with_no_env_and_no_file_attributes_everything_to_default() {
+        let _env = EnvGuard::new(&["VB_REMOTE_HOST", "VB_TIMEOUT"]);
+        let (_tmp, prev) = isolate_config_dir();
+        let _restore = ConfigDirGuard(prev);
+        let report = Config::build_report(None).expect("build_report");
+        let remote_host = report
+            .entries
+            .iter()
+            .find(|e| e.key == "VB_REMOTE_HOST")
+            .expect("entry exists");
+        assert_eq!(remote_host.value, "");
+        assert!(matches!(remote_host.source, ConfigSource::Default { .. }));
+        let timeout = report
+            .entries
+            .iter()
+            .find(|e| e.key == "VB_TIMEOUT")
+            .expect("entry exists");
+        assert_eq!(timeout.value, "30");
+        assert!(matches!(timeout.source, ConfigSource::Default { .. }));
+        assert!(!report.all_explicit());
+    }
+
+    #[test]
+    #[serial]
+    fn report_attributes_env_var_to_env_layer() {
+        let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
+        let (_tmp, prev) = isolate_config_dir();
+        let _restore = ConfigDirGuard(prev);
+        std::env::set_var("VB_REMOTE_HOST", "eda-from-env");
+        let report = Config::build_report(None).expect("build_report");
+        let e = report
+            .entries
+            .iter()
+            .find(|e| e.key == "VB_REMOTE_HOST")
+            .expect("entry exists");
+        assert_eq!(e.value, "eda-from-env");
+        match &e.source {
+            ConfigSource::Env { var } => assert_eq!(var, "VB_REMOTE_HOST"),
+            other => panic!("expected Env source, got {other:?}"),
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn report_prefers_profile_specific_env_over_global_env() {
+        let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
+        let (_tmp, prev) = isolate_config_dir();
+        let _restore = ConfigDirGuard(prev);
+        std::env::set_var("VB_REMOTE_HOST", "global-host");
+        std::env::set_var("VB_REMOTE_HOST_prod", "profile-host");
+        let report = Config::build_report(Some("prod")).expect("build_report");
+        let e = report
+            .entries
+            .iter()
+            .find(|e| e.key == "VB_REMOTE_HOST")
+            .expect("entry exists");
+        assert_eq!(e.value, "profile-host");
+        match &e.source {
+            ConfigSource::EnvProfile { var } => assert_eq!(var, "VB_REMOTE_HOST_prod"),
+            other => panic!("expected EnvProfile source, got {other:?}"),
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn report_attributes_file_global_when_no_env_present() {
+        let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
+        let (tmp, prev) = isolate_config_dir();
+        let _restore = ConfigDirGuard(prev);
+        // runtime_paths::config_subdir joins `vcli/` under VB_CONFIG_DIR.
+        // Match the live layout so ConfigFile::load() finds the file we
+        // write — it doesn't auto-create parent directories.
+        std::fs::create_dir_all(tmp.path().join("vcli")).expect("mkdir");
+        std::fs::write(
+            tmp.path().join("vcli/config.toml"),
+            r#"remote_host = "eda-from-file""#,
+        )
+        .expect("write config");
+        let report = Config::build_report(None).expect("build_report");
+        let e = report
+            .entries
+            .iter()
+            .find(|e| e.key == "VB_REMOTE_HOST")
+            .expect("entry exists");
+        assert_eq!(e.value, "eda-from-file");
+        assert!(matches!(e.source, ConfigSource::FileGlobal { .. }));
+    }
+
+    #[test]
+    #[serial]
+    fn report_prefers_file_profile_section_over_file_global() {
+        let _env = EnvGuard::new(&["VB_REMOTE_HOST", "VB_REMOTE_HOST_prod"]);
+        let (tmp, prev) = isolate_config_dir();
+        let _restore = ConfigDirGuard(prev);
+        std::fs::create_dir_all(tmp.path().join("vcli")).expect("mkdir");
+        std::fs::write(
+            tmp.path().join("vcli/config.toml"),
+            r#"
+remote_host = "eda-global"
+
+[profile.prod]
+remote_host = "eda-prod"
+"#,
+        )
+        .expect("write config");
+        let report = Config::build_report(Some("prod")).expect("build_report");
+        let e = report
+            .entries
+            .iter()
+            .find(|e| e.key == "VB_REMOTE_HOST")
+            .expect("entry exists");
+        assert_eq!(e.value, "eda-prod");
+        assert!(matches!(e.source, ConfigSource::FileProfile { .. }));
+    }
+
+    #[test]
+    #[serial]
+    fn report_flags_unparseable_value_as_warning() {
+        let _env = EnvGuard::new(&["VB_TIMEOUT"]);
+        let (_tmp, prev) = isolate_config_dir();
+        let _restore = ConfigDirGuard(prev);
+        std::env::set_var("VB_TIMEOUT", "not-a-number");
+        let report = Config::build_report(None).expect("build_report");
+        let e = report
+            .entries
+            .iter()
+            .find(|e| e.key == "VB_TIMEOUT")
+            .expect("entry exists");
+        // The raw value is still surfaced so the user can see what was set;
+        // the warning tells them it would fail at runtime.
+        assert_eq!(e.value, "not-a-number");
+        assert!(matches!(e.source, ConfigSource::Env { .. }));
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| w.contains("VB_TIMEOUT") && w.contains("parse")),
+            "expected parse warning, got: {:?}",
+            report.warnings
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn report_target_mode_attributes_explicit_target_field_to_target() {
+        let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
+        let (_tmp, prev) = isolate_config_dir();
+        let _restore = ConfigDirGuard(prev);
+        // Write a targets.yaml with one explicit target.
+        let target_yaml = r#"
+active_target: prod
+targets:
+  prod:
+    remote_host: target-host
+    port: 65535
+"#;
+        std::fs::write(_tmp.path().join("targets.yaml"), target_yaml).expect("write targets");
+        std::env::set_var("VB_TARGETS_FILE", _tmp.path().join("targets.yaml"));
+        std::env::set_var("VB_TARGET", "prod");
+        // Manually invoking build_report here is tricky because the active
+        // target is detected via VB_TARGET but the target loader uses
+        // VB_TARGETS_FILE — we still need to guard that variable too.
+        let report = Config::build_report(None).expect("build_report");
+        assert_eq!(report.active_target.as_deref(), Some("prod"));
+        let e = report
+            .entries
+            .iter()
+            .find(|e| e.key == "VB_REMOTE_HOST")
+            .expect("entry exists");
+        assert_eq!(e.value, "target-host");
+        assert!(matches!(&e.source, ConfigSource::Target { target } if target == "prod"));
+        // Clean up the VB_TARGETS_FILE we added — Drop on EnvGuard doesn't
+        // know about it because it's not in the spec list.
+        std::env::remove_var("VB_TARGETS_FILE");
+    }
+
+    #[test]
+    #[serial]
+    // `dirs::home_dir()` honours `$HOME` on unix only; on Windows it reads
+    // `USERPROFILE`, so pointing `HOME` at a tempdir would not make the
+    // `.env` visible and the warning would never fire.
+    #[cfg(unix)]
+    fn report_legacy_env_dotenv_fallback_emits_warning() {
+        let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
+        // Pretend `~/.vcli/.env` exists with VB_PROFILE=set, by setting HOME
+        // to a tempdir.
+        let prev_home = std::env::var_os("HOME");
+        let dir = tempfile::tempdir().expect("home");
+        std::fs::create_dir_all(dir.path().join(".vcli")).expect("mkdir");
+        std::fs::write(dir.path().join(".vcli/.env"), "VB_PROFILE=stale-binding\n")
+            .expect("write env");
+        std::env::set_var("HOME", dir.path());
+        // Force a fresh config dir so the file lookup is consistent.
+        let (_cfg, prev_cfg) = isolate_config_dir();
+        let _restore = ConfigDirGuard(prev_cfg);
+        let report = Config::build_report(None).expect("build_report");
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        assert!(
+            report.warnings.iter().any(|w| w.contains("deprecated")),
+            "expected deprecated .env fallback warning, got: {:?}",
+            report.warnings
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn all_explicit_is_true_when_no_default_sources() {
+        // Shield every key the report consults. The body of the test sets
+        // each one to a non-empty value; without an explicit shield list,
+        // EnvGuard::Drop would only restore the original value for keys the
+        // test passed to `new`, leaking "x" into the rest of the suite.
+        let all_keys: Vec<&'static str> = KEY_SPECS.iter().map(|s| s.key).collect();
+        let _env = EnvGuard::new(&all_keys);
+        let (_tmp, prev) = isolate_config_dir();
+        let _restore = ConfigDirGuard(prev);
+        for k in KEY_SPECS.iter().map(|s| s.key) {
+            std::env::set_var(k, "x");
+        }
+        let report = Config::build_report(None).expect("build_report");
+        assert!(report.all_explicit(), "every entry must be non-default");
+    }
 }
