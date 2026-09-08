@@ -225,11 +225,22 @@ impl RpcDispatcher {
             }
             "place" => {
                 let master = json_str(params.get("master"), "master")?;
+                // `master` is documented as "lib/cell" (see standard_schema()).
+                // Split it into the separate library and cell names dbOpenCellView-
+                // ByType needs; previously the whole "lib/cell" string was passed as
+                // BOTH the lib and the cell, so no real cell (lib != cell, e.g.
+                // analogLib/res) could ever be resolved. The view is always "symbol"
+                // — placing a symbol is the correct behaviour for an instance.
+                let (lib, cell) = master.split_once('/').ok_or_else(|| {
+                    VirtuosoError::Execution(format!(
+                        "master must be in lib/cell format (e.g. analogLib/res), got '{master}'"
+                    ))
+                })?;
                 let name = json_str(params.get("name"), "name")?;
                 let x = json_i64_or(params.get("x"), 0);
                 let y = json_i64_or(params.get("y"), 0);
                 let orient = json_str_or(params.get("orient"), "R0")?;
-                let skill = ops.create_instance(&master, &master, "symbol", &name, (x, y), &orient);
+                let skill = ops.create_instance(lib, cell, "symbol", &name, (x, y), &orient);
                 execute_required_skill(client, &skill, "place instance")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
