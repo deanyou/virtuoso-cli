@@ -195,6 +195,8 @@ impl McpServer {
             params: arguments,
             api_key,
         };
-        crate::rpc::dispatcher::RpcDispatcher::dispatch(&client, request)
+        let ctx =
+            crate::context::CommandContext::new(crate::config::Config::from_env()?, None)?;
+        crate::rpc::dispatcher::RpcDispatcher::new(ctx).dispatch(&client, request)
     }
 }

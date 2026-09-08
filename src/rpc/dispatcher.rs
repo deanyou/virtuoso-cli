@@ -94,11 +94,17 @@ pub struct RpcRequest {
     pub api_key: Option<String>,
 }
 
-pub struct RpcDispatcher;
+pub struct RpcDispatcher {
+    ctx: CommandContext,
+}
 
 impl RpcDispatcher {
+    pub fn new(ctx: CommandContext) -> Self {
+        Self { ctx }
+    }
+
     /// Dispatch a JSON-RPC request to the appropriate handler.
-    pub fn dispatch(client: &VirtuosoClient, request: RpcRequest) -> Result<Value> {
+    pub fn dispatch(&self, client: &VirtuosoClient, request: RpcRequest) -> Result<Value> {
         let RpcRequest {
             method,
             params,
@@ -116,7 +122,7 @@ impl RpcDispatcher {
             )));
         }
 
-        let result = Self::dispatch_inner(client, &method, params.clone());
+        let result = Self::dispatch_inner(self, client, &method, params.clone());
 
         // Audit log — always log, regardless of success/failure
         let result_str = match &result {
@@ -128,7 +134,7 @@ impl RpcDispatcher {
         result
     }
 
-    fn dispatch_inner(client: &VirtuosoClient, method: &str, params: Value) -> Result<Value> {
+    fn dispatch_inner(&self, client: &VirtuosoClient, method: &str, params: Value) -> Result<Value> {
         let parts: Vec<&str> = method.splitn(2, '.').collect();
         if parts.len() != 2 {
             return Err(VirtuosoError::Execution(format!(
@@ -139,9 +145,9 @@ impl RpcDispatcher {
         let (domain, op) = (parts[0], parts[1]);
 
         match domain {
-            "schematic" => Self::dispatch_schematic(client, op, params),
+            "schematic" => self.dispatch_schematic(client, op, params),
             "symbol" => {
-                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                let ctx = &self.ctx;
                 match op {
                     "inspect" => {
                         let lib = json_str(params.get("lib"), "lib")?;
@@ -168,21 +174,21 @@ impl RpcDispatcher {
                     if params.is_null()
                         || params.as_object().map(|m| m.is_empty()).unwrap_or(false) =>
                 {
-                    let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                    let ctx = &self.ctx;
                     crate::commands::library::list(&ctx)
                 }
                 _ => Err(VirtuosoError::NotFound(format!(
                     "unknown library method '{op}'"
                 ))),
             },
-            "maestro" => Self::dispatch_maestro(client, op, params),
-            "window" => Self::dispatch_window(client, op, params),
-            "cell" => Self::dispatch_cell(client, op, params),
-            "tx" => Self::dispatch_tx(client, op, params),
-            "file" => Self::dispatch_file(client, op, params),
-            "util" => Self::dispatch_util(client, op, params),
-            "skill" => Self::dispatch_skill(client, op, params),
-            "sim" => Self::dispatch_sim(client, op, params),
+            "maestro" => self.dispatch_maestro(client, op, params),
+            "window" => self.dispatch_window(client, op, params),
+            "cell" => self.dispatch_cell(client, op, params),
+            "tx" => self.dispatch_tx(client, op, params),
+            "file" => self.dispatch_file(client, op, params),
+            "util" => self.dispatch_util(client, op, params),
+            "skill" => self.dispatch_skill(client, op, params),
+            "sim" => self.dispatch_sim(client, op, params),
             _ => {
                 // Try plugin registry for unknown domains
                 match crate::plugins::PluginRegistry::get_global() {
@@ -196,7 +202,7 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_schematic(client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
+    fn dispatch_schematic(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
         let ops = crate::client::schematic_ops::SchematicOps::new();
         match op {
             "open_cell_view" => {
@@ -332,7 +338,7 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_maestro(client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
+    fn dispatch_maestro(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
         let ops = crate::client::maestro_ops::MaestroOps;
         match op {
             "open_session" => {
@@ -531,7 +537,7 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_window(client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
+    fn dispatch_window(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
         let ops = crate::client::window_ops::WindowOps;
         match op {
             "list" => {
@@ -594,9 +600,9 @@ impl RpcDispatcher {
                     .unwrap_or(false);
                 let display = params.get("display").and_then(|v| v.as_str());
                 let window_id = params.get("window_id").and_then(|v| v.as_str());
-                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                let ctx = &self.ctx;
                 crate::commands::window::dismiss_dialog_x11(
-                    &ctx, &action, dry_run, window_id, display,
+                    ctx, &action, dry_run, window_id, display,
                 )
             }
             "list_windows_x11" => {
@@ -604,8 +610,8 @@ impl RpcDispatcher {
                 // Returns { display, windows, count }. Use the `dismiss_id`
                 // from each entry to feed `dismiss_window_x11` next.
                 let display = params.get("display").and_then(|v| v.as_str());
-                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
-                crate::commands::window::list_windows_x11(&ctx, display)
+                let ctx = &self.ctx;
+                crate::commands::window::list_windows_x11(ctx, display)
             }
             "dismiss_window_x11" => {
                 // Dismiss a SPECIFIC window by id (typically the dismiss_id
@@ -617,8 +623,8 @@ impl RpcDispatcher {
                 let pid = params.get("pid").and_then(|v| v.as_u64()).map(|n| n as u32);
                 let action = json_str_or(params.get("action"), "enter")?;
                 let display = params.get("display").and_then(|v| v.as_str());
-                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
-                crate::commands::window::dismiss_window_x11(&ctx, window_id, pid, &action, display)
+                let ctx = &self.ctx;
+                crate::commands::window::dismiss_window_x11(ctx, window_id, pid, &action, display)
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown window method '{}'",
@@ -627,7 +633,7 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_cell(client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
+    fn dispatch_cell(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
         match op {
             "open" => {
                 let lib = json_str(params.get("lib"), "lib")?;
@@ -691,7 +697,7 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_tx(client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
+    fn dispatch_tx(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
         match op {
             "begin" => {
                 let id = json_str(params.get("id"), "id")?;
@@ -742,7 +748,7 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_file(client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
+    fn dispatch_file(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
         match op {
             "upload" => {
                 let local = json_str(params.get("local"), "local")?;
@@ -763,7 +769,7 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_util(client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
+    fn dispatch_util(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
         match op {
             "version" => {
                 let version = client.version()?;
@@ -811,7 +817,7 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_skill(client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
+    fn dispatch_skill(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
         match op {
             "exec" => {
                 // Admin capability is checked by execute_skill (not execute_skill_unchecked)
@@ -829,7 +835,7 @@ impl RpcDispatcher {
                 }))
             }
             "eval" => {
-                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                let ctx = &self.ctx;
                 let code = params
                     .get("code")
                     .and_then(|v| v.as_str().map(String::from));
@@ -837,11 +843,11 @@ impl RpcDispatcher {
                     .get("stdin")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                let r = commands::skill::eval(&ctx, code, stdin)?;
+                let r = commands::skill::eval(ctx, code, stdin)?;
                 Ok(r)
             }
             "find" => {
-                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                let ctx = &self.ctx;
                 let query = json_str(params.get("query"), "query")?;
                 let mode = params
                     .get("mode")
@@ -856,26 +862,26 @@ impl RpcDispatcher {
                     .get("refresh")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                commands::skill::find(&ctx, mode, &query, limit, include_desc, refresh)
+                commands::skill::find(ctx, mode, &query, limit, include_desc, refresh)
             }
             "info" => {
-                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                let ctx = &self.ctx;
                 let func = json_str(params.get("func"), "func")?;
-                commands::skill::info(&ctx, &func)
+                commands::skill::info(ctx, &func)
             }
             "sync" => {
-                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                let ctx = &self.ctx;
                 let host = params.get("host").and_then(|v| v.as_str());
-                commands::skill::sync_cache(&ctx, None, host, false)
+                commands::skill::sync_cache(ctx, None, host, false)
             }
             "cache" => {
-                let ctx = CommandContext::new(crate::config::Config::from_env()?, None)?;
+                let ctx = &self.ctx;
                 let host = params.get("host").and_then(|v| v.as_str());
                 let clear = params
                     .get("clear")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                commands::skill::show_cache(&ctx, host, clear)
+                commands::skill::show_cache(ctx, host, clear)
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown skill method '{}'",
@@ -884,7 +890,7 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_sim(_client: &VirtuosoClient, op: &str, _params: Value) -> Result<Value> {
+    fn dispatch_sim(&self, _client: &VirtuosoClient, op: &str, _params: Value) -> Result<Value> {
         match op {
             "check_license" => {
                 let _ = _client;
