@@ -2623,14 +2623,16 @@ fn main() {
     // VB_TARGET/VB_PROFILE bridge — set from the SAME single selection to keep
     // every path consistent until their migration lands.
     //
-    // Config-management commands (target/profile/init) must keep working even
-    // when the current active target is stale or missing — they do not need a
-    // connection target, so they skip the whole resolution entirely. Only
-    // connection commands perform full selection + resolve.
+    // Target/profile/init management commands skip connection-target
+    // resolution — they manipulate targets/profiles rather than connect
+    // through them. `Config` (i.e. `config check`) is intentionally NOT
+    // excluded: it must report the config that the selected target/profile
+    // would produce, so `--target prod config check` diagnoses the prod
+    // target's settings.
     use crate::target::resolve::{resolve_from_selection, resolve_selection, Selection};
     let needs_config = !matches!(
         &cli.command,
-        Commands::Target(_) | Commands::Profile(_) | Commands::Init { .. } | Commands::Config(_)
+        Commands::Target(_) | Commands::Profile(_) | Commands::Init { .. }
     );
     let ctx: Option<crate::context::CommandContext> = if needs_config {
         let selection = match resolve_selection(cli.target.as_deref(), cli.profile.as_deref()) {
