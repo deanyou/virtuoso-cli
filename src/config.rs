@@ -445,6 +445,10 @@ fn report_transport_daemon_token(cfg: &Config) -> String {
     }
 }
 
+fn report_allow_cross_user_daemon(cfg: &Config) -> String {
+    cfg.allow_cross_user_daemon.to_string()
+}
+
 // ----- Validators (mirror the runtime parsers in from_env_resolve) ----------
 
 fn v_text(_raw: &str) -> std::result::Result<(), String> {
@@ -474,6 +478,19 @@ fn v_bool(raw: &str) -> std::result::Result<(), String> {
         Ok(())
     } else {
         Err(format!("expected true/false/1/0, got {raw:?}"))
+    }
+}
+/// Mirrors [`Layers::flag_truthy`]: `VB_ALLOW_CROSS_USER_DAEMON` shipped
+/// accepting `yes` / `on`, so those spellings are valid here even though
+/// [`v_bool`] stays strict for every other flag. An unrecognised value is
+/// reported as invalid (the runtime silently treats it as "off"), so a typo
+/// surfaces here instead of hiding.
+fn v_truthy(raw: &str) -> std::result::Result<(), String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" | "0" | "false" | "no" | "off" => Ok(()),
+        other => Err(format!(
+            "expected true/false/1/0/yes/no/on/off, got {other:?}"
+        )),
     }
 }
 fn v_shlex(raw: &str) -> std::result::Result<(), String> {
@@ -521,6 +538,7 @@ const KEY_SPECS: &[KeySpec] = &[
     KeySpec { key: "VB_REMOTE_SCRATCH_ROOT", default: "",          display: report_remote_scratch_root,    validate: v_text },
     KeySpec { key: "VB_TRANSPORT_DAEMON_SOCKET", default: "",      display: report_transport_daemon_socket, validate: v_text },
     KeySpec { key: "VB_TRANSPORT_DAEMON_TOKEN", default: "",       display: report_transport_daemon_token, validate: v_text },
+    KeySpec { key: "VB_ALLOW_CROSS_USER_DAEMON", default: "false", display: report_allow_cross_user_daemon, validate: v_truthy },
 ];
 
 /// Build the report from a `TargetConfig`.
@@ -604,6 +622,7 @@ fn target_provides(key: &str, t: &crate::target::TargetConfig) -> bool {
         "VB_SPECTRE_BIN" => t.spectre_bin.is_some(),
         "VB_TRANSPORT_DAEMON_SOCKET" => t.transport_daemon_socket.is_some(),
         "VB_TRANSPORT_DAEMON_TOKEN" => t.transport_daemon_token.is_some(),
+        "VB_ALLOW_CROSS_USER_DAEMON" => t.allow_cross_user_daemon.is_some(),
         // TargetConfig has no equivalent for these — `from_target` always
         // returns hard-coded constants here, so they cannot be attributed to
         // the target.
@@ -629,7 +648,6 @@ fn matches_default(key: &str, value: &str) -> bool {
         .map(|s| s.default == value)
         .unwrap_or(false)
 }
-
 
 impl Layers<'_> {
     /// Profile-specific env, then general env, then the file.
