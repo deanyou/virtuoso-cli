@@ -2723,8 +2723,8 @@ fn main() {
         Commands::Symbol(cmd) => dispatch_symbol(cmd),
         Commands::Library(LibraryCmd::List) => commands::library::list(),
         Commands::Session(cmd) => match cmd {
-            SessionCmd::List => commands::session::list(format),
-            SessionCmd::Show { id } => commands::session::show(&id, format),
+            SessionCmd::List => commands::session::list(ctx.as_ref().unwrap(), format),
+            SessionCmd::Show { id } => commands::session::show(ctx.as_ref().unwrap(), &id, format),
             SessionCmd::Current => commands::session::current(),
             SessionCmd::Cleanup => commands::session::cleanup(),
             SessionCmd::History {

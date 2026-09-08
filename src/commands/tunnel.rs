@@ -1120,6 +1120,7 @@ mod backend_diagnostics_tests {
             roles: crate::config::RemoteRoles::default(),
             transport_daemon_socket: None,
             transport_daemon_token: None,
+            allow_cross_user_daemon: false,
         }
     }
 

@@ -1,69 +1,432 @@
 use crate::client::bridge::VirtuosoClient;
 use crate::config::Config;
+use crate::context::CommandContext;
 use crate::error::{Result, VirtuosoError};
-use crate::models::SessionInfo;
+use crate::models::{SessionInfo, TunnelState};
 use crate::output::OutputFormat;
-use crate::transport::tunnel::SSHClient;
+use crate::transport::identity::{IdentityError, ProcessIdentity};
+use crate::transport::tunnel::{classify_ssh_pid, PidVerdict, SSHClient};
 use serde_json::{json, Value};
 
-pub fn list(format: OutputFormat) -> Result<Value> {
-    // In remote mode, sync session files from remote host first.
-    // Best effort: failures are silent so local cache still works.
-    if let Ok(cfg) = Config::from_env() {
-        if cfg.is_remote() {
-            if let Ok(client) = SSHClient::from_env(cfg.keep_remote_files) {
-                let _ = SessionInfo::sync_from_remote(client.transport().as_ref());
-            }
+// ---------------------------------------------------------------------------
+// Shared probe resolution (used by both `list` and `show`)
+//
+// A single function decides whether a session may be probed online, and if
+// so, which local port to connect to. Two paths:
+//   - Local direct: config is local AND the session belongs to this machine.
+//   - Remote tunnel: a 6-step verification chain confirms the TunnelState
+//     points at this session, matches the current context, and the forward
+//     process is still alive and verifiable.
+//
+// Any failure returns `ProbeSkip` — never an error — so the caller can
+// always fall back to showing cached metadata (phase 1 of `show`).
+// ---------------------------------------------------------------------------
+
+/// An endpoint that may be probed (TCP connect + SKILL queries).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ProbeEndpoint {
+    /// Local direct connection: the session runs on this machine, use its
+    /// own `port`.
+    Local { port: u16 },
+    /// Remote tunnel: the session runs on a remote host, use the verified
+    /// local forward port from `TunnelState`.
+    RemoteTunnel { port: u16 },
+}
+
+/// Why probing was skipped. The `reason` string is surfaced in JSON output
+/// as `probe_skip_reason` so users can diagnose why no live data was shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProbeSkip {
+    pub reason: &'static str,
+}
+
+/// Shared entry point: resolve a probe endpoint for a session under the
+/// given context. Returns `Ok(endpoint)` if probing is allowed,
+/// `Err(skip)` otherwise (caller shows cached data).
+pub(crate) fn resolve_probe_endpoint(
+    ctx: &CommandContext,
+    session: &SessionInfo,
+) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
+    if ctx.config().is_remote() {
+        resolve_remote_tunnel(ctx, session)
+    } else {
+        resolve_local_direct(ctx, session)
+    }
+}
+
+/// Local direct path: config has no remote_host, AND the session belongs to
+/// this machine. We cannot rely solely on `!cfg.is_remote()` — a public
+/// session cache may contain remote records, and legacy mode skips ownership
+/// validation, so we must independently confirm the session is local.
+fn resolve_local_direct(
+    ctx: &CommandContext,
+    session: &SessionInfo,
+) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
+    let cfg = ctx.config();
+
+    // Step L1: confirm the session belongs to this machine.
+    if !is_local_session(cfg, session) {
+        return Err(ProbeSkip {
+            reason: "local_ownership_unverified",
+        });
+    }
+
+    // Step L2: ownership validation when a target is selected.
+    if ctx.target_id().is_some() && ctx.validate_session_ownership(session).is_err() {
+        return Err(ProbeSkip {
+            reason: "ownership_mismatch",
+        });
+    }
+
+    // Step L3: local port must be reachable.
+    if !tcp_reachable(session.port) {
+        return Err(ProbeSkip {
+            reason: "local_port_unreachable",
+        });
+    }
+
+    Ok(ProbeEndpoint::Local { port: session.port })
+}
+
+/// Remote tunnel path: 6-step verification chain. Every step must pass; any
+/// failure skips probing (cached view only).
+///
+/// 1. Session ownership matches the selected target.
+/// 2. TunnelState exists, is "attached", and its attached_session_id matches.
+/// 3. TunnelState's remote host and remote port directly match the session.
+/// 4. TunnelState matches the current context (validate_tunnel_ownership).
+/// 5. The recorded forward process is alive, verifiable as ssh, and its
+///    start identity matches (no PID reuse).
+/// 6. The local forward port is reachable.
+fn resolve_remote_tunnel(
+    ctx: &CommandContext,
+    session: &SessionInfo,
+) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
+    let cfg = ctx.config();
+
+    // Step 1: session ownership.
+    if ctx.target_id().is_some() && ctx.validate_session_ownership(session).is_err() {
+        return Err(ProbeSkip {
+            reason: "ownership_mismatch",
+        });
+    }
+
+    // Step 2: TunnelState load + basic checks.
+    let state = match TunnelState::load_with_profile(cfg.profile.as_deref()) {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return Err(ProbeSkip {
+                reason: "no_tunnel",
+            })
+        }
+        Err(_) => {
+            return Err(ProbeSkip {
+                reason: "tunnel_state_error",
+            })
+        }
+    };
+
+    if state.mode.as_deref() != Some("attached") {
+        return Err(ProbeSkip {
+            reason: "tunnel_not_attached",
+        });
+    }
+
+    if state.attached_session_id.as_deref() != Some(&session.id) {
+        return Err(ProbeSkip {
+            reason: "session_id_mismatch",
+        });
+    }
+
+    // Step 3: state ↔ session direct correspondence (same remote host + port).
+    if state.remote_host != session.host {
+        return Err(ProbeSkip {
+            reason: "tunnel_host_mismatch",
+        });
+    }
+
+    let state_remote_port = state.remote_bridge_port.or(state.attached_remote_port);
+    if state_remote_port != Some(session.port) {
+        return Err(ProbeSkip {
+            reason: "tunnel_remote_port_mismatch",
+        });
+    }
+
+    // Step 4: state matches current context.
+    if ctx.validate_tunnel_ownership(&state).is_err() {
+        return Err(ProbeSkip {
+            reason: "tunnel_context_mismatch",
+        });
+    }
+
+    // Step 5: forward process identity.
+    if state.pid == 0 {
+        return Err(ProbeSkip {
+            reason: "tunnel_no_pid",
+        });
+    }
+
+    let expected_identity = match state.start_identity {
+        Some(id) if id > 0 => id,
+        _ => {
+            return Err(ProbeSkip {
+                reason: "tunnel_identity_unverified",
+            })
+        }
+    };
+
+    let actual_identity = match ProcessIdentity::of_pid(state.pid) {
+        Ok(id) => id,
+        Err(IdentityError::NoSuchProcess(_)) => {
+            return Err(ProbeSkip {
+                reason: "tunnel_process_dead",
+            })
+        }
+        Err(_) => {
+            return Err(ProbeSkip {
+                reason: "tunnel_identity_unreadable",
+            })
+        }
+    };
+
+    // Verify the process is actually an ssh executable (reuse existing logic).
+    match classify_ssh_pid(state.pid) {
+        PidVerdict::VerifiedSsh => {}
+        PidVerdict::Gone => {
+            return Err(ProbeSkip {
+                reason: "tunnel_process_dead",
+            })
+        }
+        PidVerdict::NotVerifiable { .. } => {
+            return Err(ProbeSkip {
+                reason: "tunnel_process_not_ssh",
+            })
         }
     }
 
-    let mut sessions = SessionInfo::list()
+    if actual_identity.start_identity != expected_identity {
+        return Err(ProbeSkip {
+            reason: "tunnel_process_reused",
+        });
+    }
+
+    // Step 6: local forward port reachable.
+    if !tcp_reachable(state.port) {
+        return Err(ProbeSkip {
+            reason: "forward_port_unreachable",
+        });
+    }
+
+    Ok(ProbeEndpoint::RemoteTunnel { port: state.port })
+}
+
+/// Check whether a session belongs to this machine, given the config.
+///
+/// - If `cfg.remote_host` is set, the session is local only if its host
+///   matches exactly.
+/// - If `cfg.remote_host` is unset, we check known local hostnames
+///   (`localhost`, `127.0.0.1`, `::1`) and the `HOSTNAME` env var.
+/// - Anything that cannot be confirmed is treated as NOT local (skip probe).
+fn is_local_session(cfg: &Config, session: &SessionInfo) -> bool {
+    const LOCAL_HOSTNAMES: &[&str] = &["localhost", "127.0.0.1", "::1"];
+
+    if let Some(host) = &cfg.remote_host {
+        return session.host == *host;
+    }
+
+    if LOCAL_HOSTNAMES.contains(&session.host.as_str()) {
+        return true;
+    }
+
+    // Fall back to HOSTNAME env var (commonly set on Linux/macOS).
+    if let Ok(sys_hostname) = std::env::var("HOSTNAME") {
+        if !sys_hostname.is_empty() && session.host == sys_hostname {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// TCP reachability check with an explicit 200ms timeout. Used by both
+/// local and remote probe paths.
+fn tcp_reachable(port: u16) -> bool {
+    use std::net::TcpStream;
+    use std::time::Duration;
+    TcpStream::connect_timeout(
+        &format!("127.0.0.1:{port}").parse().unwrap(),
+        Duration::from_millis(200),
+    )
+    .is_ok()
+}
+
+/// List active Virtuoso sessions.
+///
+/// Behaviour differs by mode:
+///
+/// **Legacy (no target selected):** filter to locally-alive sessions (TCP
+/// reachable on `127.0.0.1:port`). Files are **never deleted** here —
+/// deletion is `session cleanup`'s job.
+///
+/// **Target mode:** show **all** cached sessions (including unattached /
+/// remote-only) with three independent status fields:
+/// - `endpoint_match`: `"match"` / `"mismatch"` / `"unchecked"` — does the
+///   session's host+port match the selected target?
+/// - `tunnel_verified`: `true` / `false` — is there an attached tunnel whose
+///   `attached_session_id` points at this session?
+/// - `probe_status`: `"reachable"` / `"unreachable"` / `"not_probed"` — only
+///   probed when `tunnel_verified` is true; otherwise `"not_probed"` (we do
+///   NOT equate "local port unreachable" with "remote daemon dead").
+///
+/// Remote sync uses the resolved `ctx.config()` — never re-reads env.
+/// Sync failures are surfaced as `sync_status: "failed"` but the cached
+/// list is still returned.
+pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
+    let cfg = ctx.config();
+
+    // Remote sync: use the SAME immutable config as the rest of the invocation.
+    let sync_status: &str = if cfg.is_remote() {
+        match SSHClient::from_config(cfg, cfg.keep_remote_files) {
+            Ok(client) => {
+                if SessionInfo::sync_from_remote(client.transport().as_ref()).is_ok() {
+                    "ok"
+                } else {
+                    "failed"
+                }
+            }
+            Err(_) => "failed",
+        }
+    } else {
+        "ok"
+    };
+
+    let sessions = SessionInfo::list()
         .map_err(|e| VirtuosoError::Execution(format!("failed to read sessions: {e}")))?;
 
-    let sessions_dir = SessionInfo::sessions_dir();
-    sessions.retain(|s| {
-        if s.is_alive() {
-            true
-        } else {
-            let _ = std::fs::remove_file(sessions_dir.join(format!("{}.json", s.id)));
-            false
-        }
-    });
+    let has_target = ctx.target_id().is_some();
 
+    // Legacy: filter to locally-alive, but NEVER delete files.
+    // Target: show all cached sessions (no filtering).
+    let displayed: Vec<&SessionInfo> = if has_target {
+        sessions.iter().collect()
+    } else {
+        sessions.iter().filter(|s| s.is_alive()).collect()
+    };
+
+    // Load TunnelState once for target mode (performance: don't reload per
+    // session).
+    let tunnel_state = if has_target {
+        TunnelState::load_with_profile(cfg.profile.as_deref())
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
+    // Build per-session JSON entries.
+    let session_entries: Vec<Value> = displayed
+        .iter()
+        .map(|s| {
+            if has_target {
+                let endpoint_match = compute_endpoint_match(ctx, s);
+                let (tunnel_verified, probe_status) = match &tunnel_state {
+                    Some(state)
+                        if state.mode.as_deref() == Some("attached")
+                            && state.attached_session_id.as_deref() == Some(&s.id) =>
+                    {
+                        if tcp_reachable(state.port) {
+                            (true, "reachable")
+                        } else {
+                            (true, "unreachable")
+                        }
+                    }
+                    _ => (false, "not_probed"),
+                };
+                json!({
+                    "id": s.id,
+                    "port": s.port,
+                    "pid": s.pid,
+                    "host": s.host,
+                    "user": s.user,
+                    "created": s.created,
+                    "endpoint_match": endpoint_match,
+                    "tunnel_verified": tunnel_verified,
+                    "probe_status": probe_status,
+                })
+            } else {
+                json!({
+                    "id": s.id,
+                    "port": s.port,
+                    "pid": s.pid,
+                    "host": s.host,
+                    "user": s.user,
+                    "created": s.created,
+                })
+            }
+        })
+        .collect();
+
+    // JSON output.
     if format == OutputFormat::Json {
+        let mut result = json!({
+            "status": "success",
+            "count": displayed.len(),
+            "sync_status": sync_status,
+            "sessions": session_entries,
+        });
+        if sync_status == "failed" {
+            result["note"] = json!("remote sync failed; showing cached sessions only");
+        }
+        return Ok(result);
+    }
+
+    // Table output.
+    if displayed.is_empty() {
+        println!("No active Virtuoso sessions found.");
+        println!("Start Virtuoso and run RBStart() in CIW to register a session.");
         return Ok(json!({
             "status": "success",
-            "count": sessions.len(),
-            "sessions": sessions.iter().map(|s| json!({
-                "id": s.id,
-                "port": s.port,
-                "pid": s.pid,
-                "host": s.host,
-                "user": s.user,
-                "created": s.created,
-            })).collect::<Vec<_>>(),
+            "count": 0,
+            "sync_status": sync_status
         }));
     }
 
-    if sessions.is_empty() {
-        println!("No active Virtuoso sessions found.");
-        println!("Start Virtuoso and run RBStart() in CIW to register a session.");
-        return Ok(json!({"status": "success", "count": 0}));
-    }
-
-    println!(
-        "{:<20} {:>6}  {:>7}  {:<12}  CREATED",
-        "SESSION ID", "PORT", "PID", "HOST"
-    );
-    println!("{}", "-".repeat(72));
-    for s in &sessions {
+    if has_target {
         println!(
-            "{:<20} {:>6}  {:>7}  {:<12}  {}",
-            s.id, s.port, s.pid, s.host, s.created
+            "{:<20} {:>6}  {:<14}  {:<10}  {:<12}  CREATED",
+            "SESSION ID", "PORT", "HOST", "ENDPOINT", "PROBE"
         );
+        println!("{}", "-".repeat(90));
+        for entry in &session_entries {
+            println!(
+                "{:<20} {:>6}  {:<14}  {:<10}  {:<12}  {}",
+                entry["id"].as_str().unwrap_or(""),
+                entry["port"].as_u64().unwrap_or(0),
+                entry["host"].as_str().unwrap_or(""),
+                entry["endpoint_match"].as_str().unwrap_or(""),
+                entry["probe_status"].as_str().unwrap_or(""),
+                entry["created"].as_str().unwrap_or(""),
+            );
+        }
+    } else {
+        println!(
+            "{:<20} {:>6}  {:>7}  {:<12}  CREATED",
+            "SESSION ID", "PORT", "PID", "HOST"
+        );
+        println!("{}", "-".repeat(72));
+        for s in &displayed {
+            println!(
+                "{:<20} {:>6}  {:>7}  {:<12}  {}",
+                s.id, s.port, s.pid, s.host, s.created
+            );
+        }
     }
 
-    Ok(json!({"status": "success", "count": sessions.len()}))
+    Ok(json!({
+        "status": "success",
+        "count": displayed.len(),
+        "sync_status": sync_status
+    }))
 }
 
 pub fn current() -> Result<Value> {
@@ -142,60 +505,94 @@ pub fn history(id: &str, only_skill: bool, only_cmd: bool, limit: usize) -> Resu
     }))
 }
 
-pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
+/// Show details for a specific session.
+///
+/// Two-phase behaviour:
+///
+/// **Phase 1 (always):** load the session file and present cached metadata.
+/// Errors here are real (file missing / corrupt → `NotFound`).
+///
+/// **Phase 2 (only when `resolve_probe_endpoint` succeeds):** connect to the
+/// verified local port, query the daemon for `$USER` / version / liveness,
+/// and write fresh values back to the session file. Any verification failure
+/// (ownership mismatch, no tunnel, dead process, corrupt state, …) sets
+/// `probe_skipped: true` with a `probe_skip_reason` — the cached view is
+/// still returned, never an error.
+pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Value> {
+    // Phase 1: load session. File missing / corrupt is a real error.
     let s = SessionInfo::load(id)
         .map_err(|e| VirtuosoError::NotFound(format!("session '{id}' not found: {e}")))?;
 
-    // Best-effort liveness + identity probes.
-    //   - `is_alive()` is just a TCP-connect probe; cheap and tells us
-    //     whether the daemon port is bound.
-    //   - `daemon_alive()` is a SKILL-level probe (no-op `plus(1 1)`);
-    //     catches "port bound but daemon is wedged" cases. Replaces a
-    //     broken `ipcIsProcessRunning()` probe (which needs a process
-    //     handle argument and returns nil when called without one).
-    //   - `get_daemon_user()` queries the daemon's Unix $USER so we can
-    //     warn about SSH-tunnel-to-wrong-user misconfigurations.
-    let port_open = s.is_alive();
+    let endpoint_match = compute_endpoint_match(ctx, &s);
+
+    // Phase 2: resolve a probe endpoint, then probe if allowed.
     let (
         daemon_user,
         daemon_user_warning,
         daemon_responsive,
         daemon_version,
         daemon_version_warning,
-    ) = if port_open {
-        let client = VirtuosoClient::new("127.0.0.1", s.port, 3);
-        let user_result = client.get_daemon_user();
-        let version_result = client.get_daemon_version();
-        let alive = client.daemon_alive();
-        let ver = version_result.as_ref().unwrap_or(&None).clone();
-        let ver_warn = match &version_result {
-            Ok(Some(v)) => check_version_skew(v),
-            Ok(None) => None, // daemon did not report a version — don't warn
-            Err(e) => Some(format!("daemon version query failed: {e}")),
-        };
-        match user_result {
-            Ok(user_opt) => (user_opt, None, alive, ver, ver_warn),
-            Err(e) => (
-                None,
-                Some(format!("daemon user query failed: {e}")),
+        probe_skipped,
+        probe_skip_reason,
+        probe_source,
+        probe_port,
+    ) = match resolve_probe_endpoint(ctx, &s) {
+        Ok(endpoint) => {
+            let port = match &endpoint {
+                ProbeEndpoint::Local { port } => *port,
+                ProbeEndpoint::RemoteTunnel { port } => *port,
+            };
+            let source = match &endpoint {
+                ProbeEndpoint::Local { .. } => "local",
+                ProbeEndpoint::RemoteTunnel { .. } => "remote_tunnel",
+            };
+
+            let client = VirtuosoClient::new("127.0.0.1", port, 3);
+            let user_result = client.get_daemon_user();
+            let version_result = client.get_daemon_version();
+            let alive = client.daemon_alive();
+            let ver = version_result.as_ref().unwrap_or(&None).clone();
+            let ver_warn = match &version_result {
+                Ok(Some(v)) => check_version_skew(v),
+                Ok(None) => None,
+                Err(e) => Some(format!("daemon version query failed: {e}")),
+            };
+            let (user, user_warn) = match user_result {
+                Ok(user_opt) => (user_opt, None),
+                Err(e) => (None, Some(format!("daemon user query failed: {e}"))),
+            };
+
+            (
+                user,
+                user_warn,
                 alive,
                 ver,
                 ver_warn,
-            ),
+                false,
+                None,
+                Some(source),
+                Some(port),
+            )
         }
-    } else {
-        (None, None, false, None, None)
+        Err(skip) => (
+            None,
+            None,
+            false,
+            None,
+            None,
+            true,
+            Some(skip.reason),
+            None,
+            None,
+        ),
     };
 
-    // Cross-user check: if user has configured VB_REMOTE_USER_<profile>
-    // (or plain VB_REMOTE_USER) and the daemon reports a different Unix
-    // user, refuse to call this a healthy session.
-    let cross_user_warning = check_cross_user(&s, daemon_user.as_deref());
+    // Cross-user check uses the resolved config (never re-reads env).
+    let cross_user_warning = check_cross_user(ctx.config(), &s, daemon_user.as_deref());
 
-    // Stale-daemon recovery hint: when the port is open but the daemon is
-    // not responding to SKILL, the user is looking at a port held by
-    // another instance. Tell them how to clear it.
-    let stale_daemon_hint = if port_open && !daemon_responsive {
+    // Stale-daemon hint only when the probe actually ran and the daemon
+    // didn't respond.
+    let stale_daemon_hint = if !probe_skipped && !daemon_responsive {
         Some(
             "CIW daemon port is bound but the daemon is not responding to SKILL.\n\
              In the Virtuoso CIW, run:\n\
@@ -208,11 +605,9 @@ pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
         None
     };
 
-    // Cache daemon_user + daemon_version back into the session file so
-    // subsequent `session show` invocations and `session list` rows can
-    // surface them without re-querying. The write is best-effort; failure
-    // is silently ignored (we already have fresh data in the JSON response).
-    if daemon_user.is_some() || daemon_version.is_some() {
+    // Write back only when the probe succeeded and produced fresh data.
+    // Skipped probes never mutate the cache.
+    if !probe_skipped && (daemon_user.is_some() || daemon_version.is_some()) {
         let mut s_mut = s.clone();
         if let Some(u) = daemon_user.as_ref() {
             s_mut.daemon_user = Some(u.clone());
@@ -237,11 +632,17 @@ pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
             "host": s.host,
             "user": s.user,
             "created": s.created,
-            "alive": port_open,
+            "endpoint_match": endpoint_match,
             "daemon_responsive": daemon_responsive,
             "daemon_user": daemon_user,
             "daemon_version": daemon_version,
             "cli_version": env!("CARGO_PKG_VERSION"),
+        },
+        "probe": {
+            "skipped": probe_skipped,
+            "skip_reason": probe_skip_reason,
+            "source": probe_source,
+            "port": probe_port,
         },
         "warnings": {
             "daemon_user": daemon_user_warning,
@@ -250,6 +651,21 @@ pub fn show(id: &str, _format: OutputFormat) -> Result<Value> {
             "stale_daemon": stale_daemon_hint,
         }
     }))
+}
+
+/// Compute the endpoint match status for a session under the current context.
+///
+/// - `"unchecked"` — no target selected (legacy mode); ownership is not verified.
+/// - `"match"` — target selected and session host (+ port when explicit) matches.
+/// - `"mismatch"` — target selected but session does not match.
+fn compute_endpoint_match(ctx: &CommandContext, session: &SessionInfo) -> &'static str {
+    if ctx.target_id().is_none() {
+        return "unchecked";
+    }
+    match ctx.validate_session_ownership(session) {
+        Ok(_) => "match",
+        Err(_) => "mismatch",
+    }
 }
 
 /// Compare the daemon's reported version (from `RBDVersion` global) with the
@@ -268,47 +684,41 @@ fn check_version_skew(daemon_version: &str) -> Option<String> {
     ))
 }
 
-/// Compare the daemon's Unix user with the configured `VB_REMOTE_USER[<profile>]`.
+/// Compare the daemon's Unix user with the configured `remote_user`.
+///
 /// Returns `Some(warning)` if a mismatch is detected, `None` otherwise.
-/// Set `VB_ALLOW_CROSS_USER_DAEMON=1` to suppress the warning.
+/// Set `allow_cross_user_daemon: true` in config (env: `VB_ALLOW_CROSS_USER_DAEMON=1`,
+/// or target config field) to suppress the warning.
+///
+/// Uses the resolved `Config` — never re-reads environment variables.
+/// `Config::from_env()` already handles the `VB_REMOTE_USER_<profile>` →
+/// `VB_REMOTE_USER` fallback, so this function simply uses `cfg.remote_user`.
 fn check_cross_user(
-    session: &crate::models::SessionInfo,
+    cfg: &Config,
+    session: &SessionInfo,
     daemon_user: Option<&str>,
 ) -> Option<String> {
-    let profile = std::env::var("VB_PROFILE").ok();
-    let expected = std::env::var(format!(
-        "VB_REMOTE_USER{}",
-        profile
-            .as_deref()
-            .filter(|p| !p.is_empty())
-            .map(|p| format!("_{p}"))
-            .unwrap_or_default()
-    ))
-    .ok()
-    .or_else(|| std::env::var("VB_REMOTE_USER").ok())
-    .map(|s| s.trim().to_string())
-    .filter(|s| !s.is_empty())?;
+    let expected = cfg
+        .remote_user
+        .as_deref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())?;
 
     let daemon_user = daemon_user?;
     if daemon_user == expected {
         return None;
     }
-    if std::env::var("VB_ALLOW_CROSS_USER_DAEMON")
-        .ok()
-        .filter(|v| !v.is_empty())
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
-    {
+
+    // allow_cross_user_daemon only suppresses the warning — it does NOT
+    // bypass target/session ownership validation (that happens in
+    // resolve_probe_endpoint, independently).
+    if cfg.allow_cross_user_daemon {
         return None;
     }
+
     Some(format!(
-        "daemon Unix user {daemon_user:?} does not match configured VB_REMOTE_USER {expected:?} \
-         for session {sid}. Set VB_ALLOW_CROSS_USER_DAEMON=1 to override intentionally.",
+        "daemon Unix user {daemon_user:?} does not match configured remote_user {expected:?} \
+         for session {sid}. Set allow_cross_user_daemon: true (or VB_ALLOW_CROSS_USER_DAEMON=1) to override intentionally.",
         sid = session.id
     ))
 }
@@ -332,31 +742,56 @@ mod tests {
         }
     }
 
-    /// Helper: clear all relevant env vars before each test that mutates them.
-    fn clear_remote_user_env() {
-        std::env::remove_var("VB_REMOTE_USER");
-        std::env::remove_var("VB_REMOTE_USER_default");
-        std::env::remove_var("VB_REMOTE_USER_testprofile");
-        std::env::remove_var("VB_PROFILE");
-        std::env::remove_var("VB_ALLOW_CROSS_USER_DAEMON");
+    /// Test helper: construct a Config with only the fields check_cross_user
+    /// cares about. All other fields are set to safe defaults. This avoids
+    /// mutating process environment (no #[serial] needed).
+    fn test_config(remote_user: Option<&str>, allow_cross: bool) -> Config {
+        Config {
+            profile: None,
+            remote_host: Some("test-host".into()),
+            remote_user: remote_user.map(|s| s.to_string()),
+            port: 40000,
+            port_explicit: true,
+            jump_host: None,
+            jump_user: None,
+            ssh_port: None,
+            ssh_key: None,
+            ssh_config: None,
+            ssh_backend: None,
+            disable_control_master: false,
+            timeout: 30,
+            read_timeout: 30,
+            keep_remote_files: false,
+            spectre_cmd: "spectre".into(),
+            spectre_args: vec![],
+            spectre_max_workers: 4,
+            ssh_max_sessions: 10,
+            ssh_max_bulk_sessions: 2,
+            ssh_reconnect_max_attempts: 3,
+            ssh_reconnect_max_delay: 30,
+            ssh_keepalive_interval: 0,
+            ssh_keepalive_failures: 3,
+            transport_shutdown_grace: 5,
+            cadence_cshrc: None,
+            spectre_bin: None,
+            roles: crate::config::RemoteRoles::default(),
+            transport_daemon_socket: None,
+            transport_daemon_token: None,
+            allow_cross_user_daemon: allow_cross,
+        }
     }
 
     #[test]
-    #[serial]
     fn cross_user_match_returns_none() {
-        clear_remote_user_env();
-        std::env::set_var("VB_REMOTE_USER", "meow");
-        let r = check_cross_user(&session(), Some("meow"));
+        let cfg = test_config(Some("meow"), false);
+        let r = check_cross_user(&cfg, &session(), Some("meow"));
         assert!(r.is_none());
-        clear_remote_user_env();
     }
 
     #[test]
-    #[serial]
     fn cross_user_mismatch_returns_warning() {
-        clear_remote_user_env();
-        std::env::set_var("VB_REMOTE_USER", "alice");
-        let r = check_cross_user(&session(), Some("bob"));
+        let cfg = test_config(Some("alice"), false);
+        let r = check_cross_user(&cfg, &session(), Some("bob"));
         let w = r.expect("expected warning for user mismatch");
         assert!(
             w.contains("\"bob\""),
@@ -367,86 +802,61 @@ mod tests {
             "warning should name configured user: {w}"
         );
         assert!(
-            w.contains("VB_ALLOW_CROSS_USER_DAEMON=1"),
+            w.contains("allow_cross_user_daemon"),
             "warning should mention override: {w}"
         );
         assert!(
             w.contains("meowu-meow-40567"),
             "warning should name session: {w}"
         );
-        clear_remote_user_env();
     }
 
     #[test]
-    #[serial]
     fn cross_user_mismatch_suppressed_by_override() {
-        clear_remote_user_env();
-        std::env::set_var("VB_REMOTE_USER", "alice");
-        std::env::set_var("VB_ALLOW_CROSS_USER_DAEMON", "1");
-        let r = check_cross_user(&session(), Some("bob"));
-        assert!(r.is_none(), "VB_ALLOW_CROSS_USER_DAEMON=1 should suppress");
-        clear_remote_user_env();
+        let cfg = test_config(Some("alice"), true);
+        let r = check_cross_user(&cfg, &session(), Some("bob"));
+        assert!(r.is_none(), "allow_cross_user_daemon=true should suppress");
     }
 
     #[test]
-    #[serial]
-    fn cross_user_mismatch_override_truthy_values() {
-        for v in ["true", "yes", "on", "TRUE", "Yes", "  on  "] {
-            clear_remote_user_env();
-            std::env::set_var("VB_REMOTE_USER", "alice");
-            std::env::set_var("VB_ALLOW_CROSS_USER_DAEMON", v);
-            let r = check_cross_user(&session(), Some("bob"));
-            assert!(r.is_none(), "override {v:?} should suppress warning");
-        }
-        clear_remote_user_env();
-    }
-
-    #[test]
-    #[serial]
-    fn cross_user_no_env_var_returns_none() {
-        clear_remote_user_env();
-        // No VB_REMOTE_USER set
-        let r = check_cross_user(&session(), Some("anyone"));
+    fn cross_user_no_remote_user_returns_none() {
+        // Config has no remote_user — nothing to compare against.
+        let cfg = test_config(None, false);
+        let r = check_cross_user(&cfg, &session(), Some("anyone"));
         assert!(r.is_none());
     }
 
     #[test]
-    #[serial]
     fn cross_user_no_daemon_user_returns_none() {
-        clear_remote_user_env();
-        std::env::set_var("VB_REMOTE_USER", "meow");
+        let cfg = test_config(Some("meow"), false);
         // daemon_user is None — we don't know, so don't warn
-        let r = check_cross_user(&session(), None);
+        let r = check_cross_user(&cfg, &session(), None);
         assert!(r.is_none());
     }
 
     #[test]
-    #[serial]
-    fn cross_user_profile_scoped_env_var() {
-        clear_remote_user_env();
-        std::env::set_var("VB_PROFILE", "testprofile");
-        std::env::set_var("VB_REMOTE_USER_testprofile", "alice");
-        // Profile-scoped env should trigger check
-        let r = check_cross_user(&session(), Some("bob"));
-        assert!(r.is_some(), "profile-scoped env var should trigger check");
-
-        // When profile-scoped is set but matches, no warning
-        let r = check_cross_user(&session(), Some("alice"));
-        assert!(r.is_none());
-        clear_remote_user_env();
-    }
-
-    #[test]
-    #[serial]
-    fn cross_user_empty_env_var_is_treated_as_unset() {
-        clear_remote_user_env();
-        std::env::set_var("VB_REMOTE_USER", "   ");
-        let r = check_cross_user(&session(), Some("bob"));
+    fn cross_user_whitespace_remote_user_treated_as_unset() {
+        let cfg = test_config(Some("   "), false);
+        let r = check_cross_user(&cfg, &session(), Some("bob"));
         assert!(
             r.is_none(),
-            "whitespace-only env var should be treated as unset"
+            "whitespace-only remote_user should be treated as unset"
         );
-        clear_remote_user_env();
+    }
+
+    #[test]
+    fn cross_user_override_does_not_bypass_ownership() {
+        // allow_cross_user_daemon only suppresses the cross-user WARNING.
+        // It does NOT affect ownership validation (which happens in
+        // resolve_probe_endpoint, independently). This test verifies the
+        // function still returns None (suppressed) when override is on,
+        // confirming the override is scoped to warning suppression only.
+        let cfg = test_config(Some("alice"), true);
+        let r = check_cross_user(&cfg, &session(), Some("bob"));
+        assert!(r.is_none(), "override suppresses warning");
+        // The config still records the mismatch — ownership is a separate concern.
+        assert_eq!(cfg.remote_user.as_deref(), Some("alice"));
+        assert!(cfg.allow_cross_user_daemon);
     }
 
     // ------------------------------------------------------------------
@@ -499,6 +909,447 @@ mod tests {
         assert!(
             check_version_skew("?").is_some(),
             "'?' placeholder should produce a skew warning"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // resolve_probe_endpoint — behaviour acceptance tests
+    // ------------------------------------------------------------------
+
+    /// RAII guard: set VB_STATE_DIR to a temp dir for the duration of a
+    /// test, restore the original value afterwards. This lets tests save
+    /// and load TunnelState without polluting the user's real state dir.
+    struct StateDirGuard {
+        original: Option<String>,
+        _tempdir: tempfile::TempDir,
+    }
+
+    impl StateDirGuard {
+        fn new() -> Self {
+            let original = std::env::var("VB_STATE_DIR").ok();
+            let tempdir = tempfile::tempdir().expect("failed to create temp dir");
+            std::env::set_var("VB_STATE_DIR", tempdir.path());
+            Self {
+                original,
+                _tempdir: tempdir,
+            }
+        }
+    }
+
+    impl Drop for StateDirGuard {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(v) => std::env::set_var("VB_STATE_DIR", v),
+                None => std::env::remove_var("VB_STATE_DIR"),
+            }
+        }
+    }
+
+    /// Helper: construct a TunnelState with the given fields. All other
+    /// fields are set to safe defaults.
+    fn make_tunnel_state(
+        remote_host: &str,
+        remote_port: u16,
+        local_port: u16,
+        pid: u32,
+        start_identity: Option<u64>,
+        attached_session_id: Option<&str>,
+        mode: Option<&str>,
+    ) -> crate::models::TunnelState {
+        crate::models::TunnelState {
+            version: crate::models::CURRENT_STATE_VERSION,
+            port: local_port,
+            pid,
+            remote_host: remote_host.into(),
+            setup_path: None,
+            profile: None,
+            backend: None,
+            daemon_nonce: None,
+            executable_path: None,
+            start_identity,
+            ipc_endpoint: None,
+            token_path: None,
+            local_forward: None,
+            start_time_unix_ms: None,
+            health: None,
+            config_digest: None,
+            mode: mode.map(|s| s.into()),
+            attached_remote_port: Some(remote_port),
+            remote_bridge_port: Some(remote_port),
+            attached_session_id: attached_session_id.map(|s| s.into()),
+        }
+    }
+
+    /// Helper: construct a remote Config + CommandContext for testing.
+    fn remote_ctx(remote_host: &str, port: u16) -> CommandContext {
+        let mut cfg = test_config(None, false);
+        cfg.remote_host = Some(remote_host.into());
+        cfg.port = port;
+        cfg.port_explicit = true;
+        CommandContext::new(cfg, Some("test-target".into())).expect("ctx")
+    }
+
+    #[test]
+    fn probe_local_direct_skipped_when_session_is_remote() {
+        // Local config (no remote_host) + a session whose host is a remote
+        // machine → must NOT probe (could connect to a wrong local service).
+        let mut cfg = test_config(None, false);
+        cfg.remote_host = None; // truly local config
+        let ctx = CommandContext::new(cfg, None).expect("ctx");
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "local_ownership_unverified"
+                })
+            ),
+            "remote session in local config should be skipped, got {r:?}"
+        );
+    }
+
+    #[test]
+    fn probe_local_direct_skipped_when_port_unreachable() {
+        // Local config + local session + port not bound → skip.
+        let mut cfg = test_config(None, false);
+        cfg.remote_host = None; // truly local config
+        let ctx = CommandContext::new(cfg, None).expect("ctx");
+        let mut s = session();
+        s.host = "localhost".into();
+        s.port = 1; // effectively never bound
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "local_port_unreachable"
+                })
+            ),
+            "unreachable local port should be skipped, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_no_tunnel_returns_no_tunnel() {
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "no_tunnel"
+                })
+            ),
+            "no tunnel state should return no_tunnel, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_tunnel_deployed_not_attached() {
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        let state = make_tunnel_state(
+            "remote-eda-01",
+            40000,
+            14000,
+            12345,
+            Some(999),
+            Some(&s.id),
+            Some("deployed"),
+        );
+        state.save_with_profile(None).expect("save state");
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_not_attached"
+                })
+            ),
+            "deployed tunnel should return tunnel_not_attached, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_session_id_mismatch() {
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        let state = make_tunnel_state(
+            "remote-eda-01",
+            40000,
+            14000,
+            12345,
+            Some(999),
+            Some("different-session-id"),
+            Some("attached"),
+        );
+        state.save_with_profile(None).expect("save state");
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "session_id_mismatch"
+                })
+            ),
+            "different attached_session_id should return session_id_mismatch, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_host_mismatch() {
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        // State points at a DIFFERENT remote host than the session.
+        let state = make_tunnel_state(
+            "remote-eda-02",
+            40000,
+            14000,
+            12345,
+            Some(999),
+            Some(&s.id),
+            Some("attached"),
+        );
+        state.save_with_profile(None).expect("save state");
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_host_mismatch"
+                })
+            ),
+            "state host mismatch should return tunnel_host_mismatch, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_remote_port_mismatch() {
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        // State's remote_bridge_port differs from session.port.
+        let state = make_tunnel_state(
+            "remote-eda-01",
+            40099, // wrong port
+            14000,
+            12345,
+            Some(999),
+            Some(&s.id),
+            Some("attached"),
+        );
+        state.save_with_profile(None).expect("save state");
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_remote_port_mismatch"
+                })
+            ),
+            "state remote port mismatch should return tunnel_remote_port_mismatch, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_no_pid() {
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        let state = make_tunnel_state(
+            "remote-eda-01",
+            40000,
+            14000,
+            0, // no PID
+            Some(999),
+            Some(&s.id),
+            Some("attached"),
+        );
+        state.save_with_profile(None).expect("save state");
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_no_pid"
+                })
+            ),
+            "pid=0 should return tunnel_no_pid, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_identity_unverified_when_start_identity_missing() {
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        let state = make_tunnel_state(
+            "remote-eda-01",
+            40000,
+            14000,
+            std::process::id(),
+            None, // no start_identity
+            Some(&s.id),
+            Some("attached"),
+        );
+        state.save_with_profile(None).expect("save state");
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_identity_unverified"
+                })
+            ),
+            "missing start_identity should return tunnel_identity_unverified, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_process_dead_for_nonexistent_pid() {
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        let state = make_tunnel_state(
+            "remote-eda-01",
+            40000,
+            14000,
+            99999, // PID that (almost certainly) doesn't exist
+            Some(1),
+            Some(&s.id),
+            Some("attached"),
+        );
+        state.save_with_profile(None).expect("save state");
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_process_dead"
+                })
+            ),
+            "nonexistent PID should return tunnel_process_dead, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_current_process_is_not_ssh() {
+        // The current test process is not ssh — classify_ssh_pid should
+        // return NotVerifiable, causing tunnel_process_not_ssh.
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-01".into();
+        s.port = 40000;
+
+        let my_pid = std::process::id();
+        let my_identity = crate::transport::identity::ProcessIdentity::of_pid(my_pid)
+            .map(|id| id.start_identity)
+            .unwrap_or(1);
+
+        let state = make_tunnel_state(
+            "remote-eda-01",
+            40000,
+            14000,
+            my_pid,
+            Some(my_identity),
+            Some(&s.id),
+            Some("attached"),
+        );
+        state.save_with_profile(None).expect("save state");
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "tunnel_process_not_ssh"
+                })
+            ),
+            "current process (not ssh) should return tunnel_process_not_ssh, got {r:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn probe_remote_ownership_mismatch_skipped_before_tunnel_check() {
+        // Session host doesn't match target → ownership_mismatch, even if a
+        // tunnel state exists.
+        let _guard = StateDirGuard::new();
+        let ctx = remote_ctx("remote-eda-01", 40000);
+        let mut s = session();
+        s.host = "remote-eda-99".into(); // wrong host
+        s.port = 40000;
+
+        let state = make_tunnel_state(
+            "remote-eda-99",
+            40000,
+            14000,
+            12345,
+            Some(999),
+            Some(&s.id),
+            Some("attached"),
+        );
+        state.save_with_profile(None).expect("save state");
+
+        let r = resolve_probe_endpoint(&ctx, &s);
+        assert!(
+            matches!(
+                r,
+                Err(ProbeSkip {
+                    reason: "ownership_mismatch"
+                })
+            ),
+            "session host mismatch should return ownership_mismatch, got {r:?}"
         );
     }
 }
