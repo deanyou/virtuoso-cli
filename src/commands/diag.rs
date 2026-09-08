@@ -60,7 +60,8 @@ pub fn cdslck(lib: &str, view_filter: Option<&str>) -> Result<Value> {
         params: json!({ "lib": lib }),
         api_key: std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty()),
     };
-    let resp = crate::rpc::dispatcher::RpcDispatcher::dispatch(&client, req)?;
+    let ctx = crate::context::CommandContext::new(crate::config::Config::from_env()?, None)?;
+    let resp = crate::rpc::dispatcher::RpcDispatcher::new(ctx).dispatch(&client, req)?;
     let lib_path = resp
         .get("read_path")
         .and_then(|v| v.as_str())
