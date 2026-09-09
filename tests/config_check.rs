@@ -81,7 +81,7 @@ fn check_json_shape_lists_every_known_key_with_a_source() {
     let (_tmp, prev) = isolate_config_dir();
     let _restore = ConfigDirRestore(prev);
 
-    let report = virtuoso_cli::config::Config::build_report(None).expect("build_report");
+    let report = virtuoso_cli::config::Config::build_report(None, Ok(())).expect("build_report");
 
     // Every entry must have a non-empty key, a string value, a layer
     // discriminator, and a label. JSON-shape contract for downstream tools.
@@ -124,7 +124,7 @@ fn check_env_layer_wins_over_file_layer() {
     // env var beats file even when file is set:
     std::env::set_var("VB_REMOTE_HOST", "eda-from-env");
 
-    let report = virtuoso_cli::config::Config::build_report(None).expect("build_report");
+    let report = virtuoso_cli::config::Config::build_report(None, Ok(())).expect("build_report");
     let e = report
         .entries
         .iter()
@@ -148,7 +148,7 @@ fn check_file_layer_wins_over_default() {
     std::fs::create_dir_all(tmp.path().join("vcli")).expect("mkdir vcli");
     std::fs::write(tmp.path().join("vcli/config.toml"), r#"timeout = "45""#).expect("write");
 
-    let report = virtuoso_cli::config::Config::build_report(None).expect("build_report");
+    let report = virtuoso_cli::config::Config::build_report(None, Ok(())).expect("build_report");
     let e = report
         .entries
         .iter()
@@ -173,7 +173,7 @@ fn check_malformed_value_becomes_warning_not_error() {
     let _restore = ConfigDirRestore(prev);
     std::env::set_var("VB_PORT", "not-a-number");
 
-    let report = virtuoso_cli::config::Config::build_report(None).expect("build_report");
+    let report = virtuoso_cli::config::Config::build_report(None, Ok(())).expect("build_report");
     let e = report
         .entries
         .iter()
@@ -217,7 +217,7 @@ timeout = "60"
     )
     .expect("write");
 
-    let report = virtuoso_cli::config::Config::build_report(Some("prod")).expect("build_report");
+    let report = virtuoso_cli::config::Config::build_report(Some("prod"), Ok(())).expect("build_report");
     let e = report
         .entries
         .iter()
@@ -238,7 +238,7 @@ fn check_default_source_is_attributed_when_no_other_layer_fires() {
     let (_tmp, prev) = isolate_config_dir();
     let _restore = ConfigDirRestore(prev);
     // No env, no file — VB_TIMEOUT must trace back to the constant default.
-    let report = virtuoso_cli::config::Config::build_report(None).expect("build_report");
+    let report = virtuoso_cli::config::Config::build_report(None, Ok(())).expect("build_report");
     let e = report
         .entries
         .iter()
