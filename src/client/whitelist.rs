@@ -16,6 +16,11 @@ pub enum WhitelistEntry {
     /// Case-insensitive word-boundary match on a function name (e.g. `\bsystem\(`).
     /// Prevents `hiSystem` matching as `system(`.
     FunctionName(&'static str),
+    /// Case-insensitive match anchored at a word boundary (e.g. `\bdd `).
+    /// For shell-command names that are also substrings of ordinary identifiers:
+    /// plain `Substring("dd ")` blocks `error("terminal VDD has no pin")`, and
+    /// `VDD` is the most common net name in analog design.
+    WordBoundary(&'static str),
 }
 
 impl WhitelistEntry {
@@ -42,6 +47,12 @@ impl WhitelistEntry {
             }
             Self::FunctionName(name) => {
                 let pattern = format!(r"(?i)\b{name}\(");
+                regex::Regex::new(&pattern)
+                    .map(|r| r.is_match(code))
+                    .unwrap_or(false)
+            }
+            Self::WordBoundary(needle) => {
+                let pattern = format!(r"(?i)\b{}", regex::escape(needle));
                 regex::Regex::new(&pattern)
                     .map(|r| r.is_match(code))
                     .unwrap_or(false)
@@ -78,8 +89,9 @@ fn default_dangerous() -> Vec<WhitelistEntry> {
         WhitelistEntry::Substring("|sh"),
         WhitelistEntry::Substring("; sh"),
         WhitelistEntry::Substring(";sh"),
-        // Raw disk I/O
-        WhitelistEntry::Substring("dd "),
+        // Raw disk I/O. `dd` needs a word boundary: it is a substring of `VDD`,
+        // and the raw-disk form `dd if=/dev/...` is caught by `/dev/` anyway.
+        WhitelistEntry::WordBoundary("dd "),
         WhitelistEntry::Substring("/dev/"),
         WhitelistEntry::Substring("/proc/"),
         // Process / IPC injection
@@ -137,6 +149,7 @@ impl EvalstringWhitelist {
                         WhitelistEntry::Substring(s) => *s,
                         WhitelistEntry::SubstringWithAllowlist { pattern, .. } => *pattern,
                         WhitelistEntry::FunctionName(n) => *n,
+                        WhitelistEntry::WordBoundary(s) => *s,
                     }
                 ));
             }
@@ -240,5 +253,19 @@ mod tests {
     fn block_dev_proc() {
         assert!(wl().check("dd if=/dev/zero of=/tmp/x").is_some());
         assert!(wl().check("/proc/self/cmdline").is_some());
+    }
+
+    #[test]
+    fn dd_needs_a_word_boundary() {
+        // `dd` as a bare command is still blocked...
+        assert!(wl().check("system(\"dd if=/x of=/y\")").is_some());
+        // ...but `VDD` is the most common net name in analog design, and it
+        // used to trip the raw-disk pattern from inside a quoted message.
+        assert!(wl()
+            .check("error(\"label_term: terminal VDD has no pin\")")
+            .is_none());
+        assert!(wl()
+            .check("sprintf(nil \"%s stub net=%s\" \"M1\" \"VDD \")")
+            .is_none());
     }
 }
