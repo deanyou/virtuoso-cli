@@ -1,5 +1,5 @@
 use crate::config::{Config, ConfigReport, ConfigSource};
-use crate::error::Result;
+use crate::error::{Result, VirtuosoError};
 use crate::output::OutputFormat;
 use serde_json::{json, Value};
 
@@ -19,9 +19,13 @@ use serde_json::{json, Value};
 /// Implementation note: the report is built by [`Config::build_report`], which
 /// re-probes the same layered lookup the runtime uses. There is no separate
 /// "check" resolution path to drift out of sync with production behavior.
-pub fn check(format: OutputFormat, require_explicit: bool) -> Result<Value> {
+pub fn check(
+    format: OutputFormat,
+    require_explicit: bool,
+    pre_check: std::result::Result<(), &VirtuosoError>,
+) -> Result<Value> {
     let profile = Config::resolve_profile();
-    let report = Config::build_report(profile.as_deref())?;
+    let report = Config::build_report(profile.as_deref(), pre_check)?;
     let status = status_for(&report, require_explicit);
 
     let value = match format {
