@@ -382,8 +382,7 @@ sleep 0.3
 xdotool mousemove --window <ciw_wid> 400 870
 xdotool click 1
 sleep 0.1
-xdotool key ctrl+a
-xdotool key Delete
+xdotool key Escape          # NOT ctrl+a — Virtuoso CIW does not select-all
 xdotool type --clearmodifiers --delay 10 'load("/path/to/file.il")'
 xdotool key Return
 sleep 1
@@ -392,6 +391,7 @@ sleep 1
 **CIW input line coordinates** (must be re-verified if the CIW window moves):
 - The input line is at the **bottom** of the CIW window; compute `y = height - 20` (approximate), then verify with a screenshot crop.
 - Always `xwininfo -id <ciw_wid>` before typing — the CIW can be moved/resized by the user.
+- **Geometry pitfall**: `vcli window list-windows-x11` reports window geometry including WM decorations (e.g. 730x743 for a 720x709 CIW). Using this for click-y coordinates lands outside the content area. The `CIW_INPUT` DSL operation reads the precise geometry from vcli's `/tmp/vcli_geom_<display>_<wid>.json` cache (written by `activate --direct`). For manual operations, use `xwininfo` not `list-windows`.
 
 ### Recommended Debug Loop
 
@@ -602,6 +602,8 @@ Reading a field value via CIW (`form->field->value`) costs ~425ms and is determi
 ### CIW Input Reliability
 
 - `ctrl+a` does NOT select-all in Virtuoso form fields. Use `Escape` to clear the CIW input line.
+- **`ciw_eval` verifier format**: `expected` must be a dict, not a string. Use `{"expression": "varName", "equals": "42"}` or `{"expression": "func()", "contains": "substring"}`. A bare string `"42"` fails with `ciw_eval predicate requires expected.expression`.
+- **CIW_INPUT geometry fix** (v1.3.4+): The operation now reads precise window geometry from vcli's `/tmp/vcli_geom_*.json` cache after `activate`, instead of using `list-windows` geometry which includes WM decorations. Click-y is computed as `height - 20` (the CIW input line).
 - `vcli skill load` times out on large files (>~50 lines). Use CIW `load("/path/file.il")` instead.
 - Semicolon-separated multi-expression CIW input: the second assignment may not execute. Run expressions one at a time.
 - `lambda((x) body)` fails — must be `lambda( (x) body)` with a space after `lambda(`.
