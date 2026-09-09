@@ -103,7 +103,10 @@ impl CommandContext {
             return Ok(());
         }
         let target_host = self.config.remote_host.as_deref().unwrap_or("");
-        if !target_host.is_empty() && host != target_host {
+        // Loopback targets run on the same machine; session.host is the
+        // machine HOSTNAME (e.g. "dean") which never equals a loopback IP.
+        let is_loopback = matches!(target_host, "127.0.0.1" | "localhost" | "::1");
+        if !is_loopback && !target_host.is_empty() && host != target_host {
             return Err(VirtuosoError::Config(format!(
                 "{kind} '{id}' belongs to host '{host}' but target '{}' resolves to '{target_host}'; \
                  refusing to reuse the wrong {kind} (run `vcli session list`)",
@@ -195,6 +198,17 @@ mod tests {
         assert!(err
             .to_string()
             .contains("refusing to reuse the wrong session"));
+    }
+
+    #[serial]
+    #[test]
+    fn ownership_check_skips_host_for_loopback_target() {
+        // Loopback target: session.host is the machine HOSTNAME (e.g. "dean")
+        // which never equals "127.0.0.1". Host check must be skipped.
+        let ctx = CommandContext::new(cfg_with("127.0.0.1", 30001), Some("local".into())).unwrap();
+        assert!(ctx
+            .validate_session_ownership(&session_with("dean", 30001))
+            .is_ok());
     }
 
     #[serial]
