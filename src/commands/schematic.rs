@@ -179,13 +179,16 @@ pub fn net_stub(
     let skill = client
         .schematic
         .create_net_stub(net, x, y, direction, length, cosmetic);
-    let r = client.execute_skill(&skill, None)?;
+    // Unchecked — SKILL is generated from typed args, and the capability check
+    // already ran at RPC dispatch (see commands/window.rs for the same fix).
+    let r = client.execute_skill_unchecked(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
         "net": net,
         "direction": direction,
         "origin": [x, y],
         "output": r.output,
+        "errors": r.errors,
     }))
 }
 
@@ -208,13 +211,15 @@ pub fn label_term(
     let skill = client
         .schematic
         .label_instance_term(inst, term, net, cosmetic, auto_rotate);
-    let r = client.execute_skill(&skill, None)?;
+    // Unchecked — see `net_stub` above.
+    let r = client.execute_skill_unchecked(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
         "instance": inst,
         "terminal": term,
         "net": net,
         "output": r.output,
+        "errors": r.errors,
     }))
 }
 
@@ -558,7 +563,8 @@ pub fn polish_label(
     let skill = client
         .schematic
         .polish_labels(net, preset, auto_rotate, offset);
-    let r = client.execute_skill(&skill, None)?;
+    // Unchecked — see `net_stub` above.
+    let r = client.execute_skill_unchecked(&skill, None)?;
     let labels_updated = r.output_unquoted().parse::<usize>().unwrap_or(0);
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
