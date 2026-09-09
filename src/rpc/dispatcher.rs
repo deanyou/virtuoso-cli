@@ -220,8 +220,11 @@ impl RpcDispatcher {
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str_or(params.get("view"), "schematic")?;
                 let skill = ops.open_cellview(&lib, &cell, &view);
-                execute_required_skill(client, &skill, "open cell view")?;
-                Ok(serde_json::json!({ "status": "ok" }))
+                let r = execute_required_skill(client, &skill, "open cell view")?;
+                // Hand back the bound target and whether a window shows it.
+                // `status: ok` alone told the caller nothing about where the
+                // following `schematic.*` calls would actually land.
+                Ok(merge_status_ok(r.output.trim()))
             }
             "place" => {
                 let master = json_str(params.get("master"), "master")?;
@@ -243,6 +246,20 @@ impl RpcDispatcher {
                 let skill = ops.create_instance(lib, cell, "symbol", &name, (x, y), &orient);
                 execute_required_skill(client, &skill, "place instance")?;
                 Ok(serde_json::json!({ "status": "ok" }))
+            }
+            "move_instance" => {
+                let name = json_str(params.get("name"), "name")?;
+                // Absolute target; the SKILL converts to the relative
+                // displacement dbMoveFig actually applies.
+                let x = json_f64(params.get("x"), "x")?;
+                let y = json_f64(params.get("y"), "y")?;
+                // Absolute orientation; omit to leave the placement as-is.
+                let orient = params.get("orient").and_then(|v| v.as_str());
+                let skill = ops.move_instance(&name, (x, y), orient);
+                execute_required_skill(client, &skill, "move instance")?;
+                Ok(serde_json::json!({
+                    "status": "ok", "name": name, "x": x, "y": y, "orient": orient
+                }))
             }
             "wire" => {
                 let net = json_str(params.get("net"), "net")?;
@@ -277,11 +294,21 @@ impl RpcDispatcher {
             "pin" => {
                 let net = json_str(params.get("net"), "net")?;
                 let dir = json_str(params.get("direction"), "direction")?;
+                // Reject unknown directions instead of quietly falling back to
+                // a default: the direction decides the pin master and the
+                // terminal direction that `symbol.generate` later reads, so a
+                // silent substitution produces a wrong symbol with no error.
+                if crate::client::schematic_ops::pin_master_for(&dir).is_none() {
+                    return Err(VirtuosoError::Execution(format!(
+                        "unknown pin direction '{dir}': expected one of \
+                         input, output, inputOutput, switch, jumper"
+                    )));
+                }
                 let x = json_i64_or(params.get("x"), 0);
                 let y = json_i64_or(params.get("y"), 0);
                 let skill = ops.create_pin(&net, &dir, (x, y));
                 execute_required_skill(client, &skill, "create pin")?;
-                Ok(serde_json::json!({ "status": "ok" }))
+                Ok(serde_json::json!({ "status": "ok", "net": net, "direction": dir }))
             }
             "save" => {
                 let skill = ops.save();
@@ -306,6 +333,12 @@ impl RpcDispatcher {
             "list_pins" => {
                 let skill = ops.list_pins();
                 let r = execute_query_skill(client, &skill, "list schematic pins")?;
+                parse_skill_json(&r.output)
+            }
+            "list_cdf_params" => {
+                let inst = json_str(params.get("inst"), "inst")?;
+                let skill = ops.list_cdf_params(&inst);
+                let r = execute_query_skill(client, &skill, "list CDF parameters")?;
                 parse_skill_json(&r.output)
             }
             "get_params" => {
@@ -392,9 +425,31 @@ impl RpcDispatcher {
                 let lib = json_str(params.get("lib"), "lib")?;
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str_or(params.get("view"), "maestro")?;
-                let skill = ops.open_session(&lib, &cell, &view);
+                // Read-only by default: append mode takes an edit lock on a
+                // session that has no window, which locks a human out of the
+                // cell with nothing to click (EXPLORER-1642).
+                let mode = json_str_or(params.get("mode"), "r")?;
+                crate::commands::maestro::check_session_mode(&mode)?;
+                let skill = ops.open_session(&lib, &cell, &view, &mode);
                 let r = execute_required_skill(client, &skill, "open Maestro session")?;
-                Ok(serde_json::json!({ "status": "ok", "session": r.output.trim() }))
+                // `output_unquoted`, not `output.trim()`: the bridge hands back
+                // the SKILL string literal `"fnxSession12"` with its quotes, and
+                // a caller who passes that straight into `close_session` or
+                // `set_session_mode` gets `nil` back, because the quotes end up
+                // inside the session name. Measured 2026-09-09.
+                Ok(serde_json::json!({
+                    "status": "ok",
+                    "session": r.output_unquoted(),
+                    "mode": mode,
+                }))
+            }
+            "set_session_mode" => {
+                let session = json_str(params.get("session"), "session")?;
+                let mode = json_str(params.get("mode"), "mode")?;
+                crate::commands::maestro::check_session_mode(&mode)?;
+                let skill = ops.set_session_mode(&session, mode == "a");
+                execute_required_skill(client, &skill, "set Maestro session mode")?;
+                Ok(serde_json::json!({ "status": "ok", "session": session, "mode": mode }))
             }
             "close_session" => {
                 let session = json_str(params.get("session"), "session")?;
@@ -405,6 +460,13 @@ impl RpcDispatcher {
             "list_sessions" => {
                 let skill = ops.list_sessions();
                 let r = execute_query_skill(client, &skill, "list Maestro sessions")?;
+                let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
+                Ok(parsed)
+            }
+            "list_tests" => {
+                let session = json_str(params.get("session"), "session")?;
+                let skill = ops.list_tests(&session);
+                let r = execute_query_skill(client, &skill, "list Maestro tests")?;
                 let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
                 Ok(parsed)
             }
@@ -424,8 +486,38 @@ impl RpcDispatcher {
             "list_vars" => {
                 let skill = ops.list_vars();
                 let r = execute_query_skill(client, &skill, "list Maestro variables")?;
-                let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
-                Ok(parsed)
+                // `parse_skill_json`, not a bare `from_str`: the bridge hands
+                // back the SKILL string still quoted, which `from_str` would
+                // happily parse as a JSON *string* rather than the array.
+                parse_skill_json(&r.output)
+            }
+            "delete_var" => {
+                let name = json_str(params.get("name"), "name")?;
+                let skill = ops.delete_var(&name);
+                execute_required_skill(client, &skill, "delete Maestro variable")?;
+                Ok(serde_json::json!({ "status": "ok" }))
+            }
+            "delete_output" => {
+                let name = json_str(params.get("name"), "name")?;
+                let test = json_str(params.get("test"), "test")?;
+                let skill = ops.delete_output(&name, &test);
+                execute_required_skill(client, &skill, "delete Maestro output")?;
+                Ok(serde_json::json!({ "status": "ok" }))
+            }
+            "delete_analysis" => {
+                let analysis = json_str(params.get("analysis"), "analysis")?;
+                let skill = ops.delete_analysis(&analysis);
+                // Verified delete: `asiDeleteAnalysis` throws even when it
+                // succeeds, so the SKILL re-reads the enabled list and reports
+                // `"t"` only if the analysis is actually gone.
+                let r = execute_query_skill(client, &skill, "delete Maestro analysis")?;
+                if r.output.trim().trim_matches('"') == "t" {
+                    Ok(serde_json::json!({ "status": "ok" }))
+                } else {
+                    Err(VirtuosoError::Execution(format!(
+                        "analysis '{analysis}' is still enabled after delete"
+                    )))
+                }
             }
             "run" => {
                 let session = json_str(params.get("session"), "session")?;
@@ -484,8 +576,13 @@ impl RpcDispatcher {
                 parse_skill_json(&r.output)
             }
             "get_analyses" => {
-                let skill = r#"maeGetEnabledAnalysis(car(maeGetSetup()))"#;
-                let r = execute_query_skill(client, skill, "get Maestro analyses")?;
+                let session = json_str(params.get("session"), "session")?;
+                let test = params.get("test").and_then(|v| v.as_str());
+                let version = client
+                    .version()
+                    .unwrap_or(crate::version::VirtuosoVersion::IC23);
+                let skill = ops.get_analyses(&session, test, version);
+                let r = execute_query_skill(client, &skill, "get Maestro analyses")?;
                 Ok(serde_json::json!({ "analyses": r.output.trim() }))
             }
             "get_outputs" => {
@@ -516,10 +613,11 @@ impl RpcDispatcher {
                 let session = json_str(params.get("session"), "session")?;
                 let analysis_type = json_str(params.get("type"), "type")?;
                 let options = params.get("options").and_then(|v| v.as_str());
+                let test = params.get("test").and_then(|v| v.as_str());
                 let version = client
                     .version()
                     .unwrap_or(crate::version::VirtuosoVersion::IC23);
-                let skill = ops.set_analysis(&session, &analysis_type, options, version);
+                let skill = ops.set_analysis(&session, &analysis_type, options, test, version);
                 let r = execute_required_skill(client, &skill, "set Maestro analysis")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
             }
@@ -536,9 +634,32 @@ impl RpcDispatcher {
                 let lib = json_str(params.get("lib"), "lib")?;
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str(params.get("view"), "view")?;
-                let skill = ops.set_design(&session, &lib, &cell, &view);
+                // Optional: without it every test in the session is retargeted.
+                let test = params
+                    .get("test")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let skill = ops.set_design(&session, &lib, &cell, &view, test.as_deref());
                 let r = execute_required_skill(client, &skill, "set Maestro design")?;
                 Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
+            }
+            "create_test" => {
+                let session = json_str(params.get("session"), "session")?;
+                let test = json_str(params.get("test"), "test")?;
+                let lib = json_str(params.get("lib"), "lib")?;
+                let cell = json_str(params.get("cell"), "cell")?;
+                let view = json_str_or(params.get("view"), "schematic")?;
+                let simulator = json_str_or(params.get("simulator"), "spectre")?;
+                let skill = ops.create_test(&session, &test, &lib, &cell, &view, &simulator);
+                execute_required_skill(client, &skill, "create Maestro test")?;
+                Ok(serde_json::json!({
+                    "status": "ok",
+                    "test": test,
+                    "lib": lib,
+                    "cell": cell,
+                    "view": view,
+                    "simulator": simulator,
+                }))
             }
             "save_setup" => {
                 let session = json_str(params.get("session"), "session")?;
@@ -698,8 +819,15 @@ impl RpcDispatcher {
                 Ok(serde_json::json!({ "status": "ok", "output": r.output }))
             }
             "close" => {
-                let r = require_cell_write_result(client.close_current_cellview()?, "close cell")?;
-                Ok(serde_json::json!({ "status": "ok", "output": r.output }))
+                // Default to saving: an unsaved close is the path that can pop
+                // a "save changes?" modal, and a modal freezes the bridge.
+                let save = params
+                    .get("save")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(true);
+                let r =
+                    require_cell_write_result(client.close_current_cellview(save)?, "close cell")?;
+                Ok(serde_json::json!({ "status": "ok", "saved": save, "output": r.output }))
             }
             "info" => {
                 let (lib, cell, view) = client.get_current_design()?;
@@ -708,6 +836,14 @@ impl RpcDispatcher {
                     "cell": cell,
                     "view": view,
                 }))
+            }
+            "list_open" => {
+                let r = execute_query_skill(
+                    client,
+                    crate::client::bridge::OPEN_CELLVIEWS,
+                    "list open cellviews",
+                )?;
+                parse_skill_json(&r.output)
             }
             "create" => {
                 let lib = json_str(params.get("lib"), "lib")?;
@@ -971,6 +1107,37 @@ fn json_i64_or(value: Option<&Value>, default: i64) -> i64 {
     value.and_then(|v| v.as_i64()).unwrap_or(default)
 }
 
+/// Fold a SKILL-produced JSON object into a `{"status":"ok", ...}` reply.
+///
+/// The payload arrives wrapped in whatever quoting the bridge used to ship a
+/// SKILL string back, so `sprintf`'s `{"lib":...}` reaches us as the literal
+/// `"{\"lib\":...}"` — a JSON *string* whose contents are themselves JSON.
+/// One unwrap pass turns that back into an object; anything else falls back to
+/// `{"status":"ok","output":<raw>}`, so a SKILL change can never turn a
+/// successful call into a dispatch error.
+fn merge_status_ok(payload: &str) -> Value {
+    let parsed = match serde_json::from_str::<Value>(payload) {
+        Ok(Value::String(inner)) => serde_json::from_str::<Value>(&inner).ok(),
+        Ok(other) => Some(other),
+        Err(_) => None,
+    };
+    match parsed {
+        Some(Value::Object(mut map)) => {
+            map.insert("status".into(), Value::String("ok".into()));
+            Value::Object(map)
+        }
+        _ => serde_json::json!({ "status": "ok", "output": payload }),
+    }
+}
+
+/// Required numeric field. Accepts integers as well as reals — JSON has no
+/// distinct integer type, so `{"x": 2}` and `{"x": 2.0}` must both work.
+fn json_f64(value: Option<&Value>, field: &str) -> Result<f64> {
+    value
+        .and_then(|v| v.as_f64())
+        .ok_or_else(|| VirtuosoError::Execution(format!("missing required field: {}", field)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -980,6 +1147,33 @@ mod tests {
     #[test]
     fn required_skill_result_rejects_skill_nil() {
         assert!(require_skill_result(VirtuosoResult::success("nil"), "save").is_err());
+    }
+
+    /// The bridge hands back a SKILL `sprintf` result still wrapped in quotes,
+    /// so the payload is a JSON string containing JSON. Measured 2026-09-09:
+    /// before the unwrap pass, `schematic.open_cell_view` replied with a
+    /// `"output"` blob of backslashes instead of the `lib`/`cell`/`view` fields
+    /// it exists to surface.
+    #[test]
+    fn merge_status_ok_unwraps_a_quoted_json_payload() {
+        let v = merge_status_ok(r#""{\"lib\":\"SIM_LIB\",\"windowed\":false}""#);
+        assert_eq!(v["status"], "ok");
+        assert_eq!(v["lib"], "SIM_LIB");
+        assert_eq!(v["windowed"], false);
+    }
+
+    #[test]
+    fn merge_status_ok_accepts_a_bare_json_object() {
+        let v = merge_status_ok(r#"{"cell":"amp"}"#);
+        assert_eq!(v["status"], "ok");
+        assert_eq!(v["cell"], "amp");
+    }
+
+    #[test]
+    fn merge_status_ok_keeps_unparsable_payloads_as_output() {
+        let v = merge_status_ok("t");
+        assert_eq!(v["status"], "ok");
+        assert_eq!(v["output"], "t");
     }
 
     #[test]
@@ -1386,10 +1580,104 @@ mod tests {
     }
 
     #[test]
+    fn schema_contains_maestro_create_test() {
+        let schema = standard_schema();
+        let m = schema
+            .methods
+            .iter()
+            .find(|m| m.name == "maestro.create_test")
+            .expect("maestro.create_test should exist");
+        // lib/cell/view come from maeCreateTest's own keywords, so a fresh test
+        // needs no follow-up set_design call.
+        let names: Vec<&str> = m.params.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["session", "test", "lib", "cell", "view", "simulator"]
+        );
+        let required = |n: &str| m.params.iter().find(|p| p.name == n).unwrap().required;
+        assert!(!required("view"), "view defaults to schematic");
+        assert!(!required("simulator"), "simulator defaults to spectre");
+    }
+
+    #[test]
+    fn schema_set_design_test_param_is_optional() {
+        let schema = standard_schema();
+        let m = schema
+            .methods
+            .iter()
+            .find(|m| m.name == "maestro.set_design")
+            .unwrap();
+        let p = m
+            .params
+            .iter()
+            .find(|p| p.name == "test")
+            .expect("set_design should accept an optional test");
+        assert!(
+            !p.required,
+            "omitting it must keep the set-all-tests behaviour"
+        );
+    }
+
+    #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // Should have 78 methods (76 base + schematic.set_param + schematic.assign_net)
-        assert_eq!(schema.methods.len(), 78, "should have exactly 78 methods");
+        // 76 upstream base
+        //  + 2 set_param packet   (schematic.set_param, schematic.assign_net)
+        //  + 4 maestro packet     (list_tests, delete_var, delete_output, delete_analysis)
+        //  + 4 this packet        (schematic.list_cdf_params, cell.list_open,
+        //                          maestro.set_session_mode, maestro.create_test)
+        assert_eq!(schema.methods.len(), 87, "should have exactly 87 methods");
+    }
+
+    #[test]
+    fn schema_contains_cell_list_open() {
+        // The diagnostic for orphaned edit locks: a cellview open in mode "a"
+        // with no window is invisible to both `cell.info` (current cellview
+        // only) and `window.list` (windows only), so without this method the
+        // only way to find one is to list OA lock files over SSH.
+        let schema = standard_schema();
+        let names: Vec<&str> = schema.methods.iter().map(|m| m.name.as_str()).collect();
+        assert!(
+            names.contains(&"cell.list_open"),
+            "should have cell.list_open"
+        );
+    }
+
+    #[test]
+    fn schema_maestro_open_session_defaults_to_read_only() {
+        // The default is the whole point: append mode takes an OA edit lock on
+        // a session that has no window, and a human then cannot open the cell
+        // in the GUI with nothing anywhere to click. Whoever changes this
+        // default should have to change this test too.
+        let schema = standard_schema();
+        let m = schema
+            .methods
+            .iter()
+            .find(|m| m.name == "maestro.open_session")
+            .expect("should have maestro.open_session");
+        let mode = m
+            .params
+            .iter()
+            .find(|p| p.name == "mode")
+            .expect("open_session should take a mode param");
+        assert!(!mode.required, "mode must be optional");
+        assert!(
+            mode.description.contains("\"r\""),
+            "mode description should document the read-only default: {}",
+            mode.description
+        );
+    }
+
+    #[test]
+    fn schema_contains_maestro_set_session_mode() {
+        // This is what makes the read-only default affordable: the lock is
+        // taken for the duration of the writes instead of the session.
+        let schema = standard_schema();
+        let names: Vec<&str> = schema.methods.iter().map(|m| m.name.as_str()).collect();
+        assert!(
+            names.contains(&"maestro.set_session_mode"),
+            "should have maestro.set_session_mode"
+        );
     }
 
     #[test]

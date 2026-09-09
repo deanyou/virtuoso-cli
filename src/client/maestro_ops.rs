@@ -21,23 +21,112 @@ pub struct ExportWaveformRequest<'a> {
 
 pub struct MaestroOps;
 
+/// SKILL that binds `tn` to the test an Assembler call must act on.
+///
+/// Expects `tests` and `tn` to be declared in the enclosing `let`.
+///
+/// `maeGetSetup(?session s)` returns the session's **test names** — that is its
+/// documented default (`?typeName "tests"`, IC23.1 ADE SKILL Reference), and
+/// `maeSetAnalysis`/`maeGetEnabledAnalysis` take a test name as their first
+/// positional argument. Taking `car()` of that list is a guess that happens to
+/// be right while a session holds one test. So:
+///
+/// - `test` given → use it, but check membership first, because
+///   `maeSetAnalysis` on an unknown test just returns `nil` with no hint of
+///   which name it did not recognise.
+/// - `test` omitted and the session holds exactly one → use that one.
+/// - `test` omitted and the session holds several → **error naming them**,
+///   rather than silently configuring whichever test happens to be first.
+fn test_binding(session: &str, test: Option<&str>, caller: &str) -> String {
+    let session = escape_skill_string(session);
+    let caller = escape_skill_string(caller);
+    let resolve = match test {
+        Some(t) => {
+            let t = escape_skill_string(t);
+            format!(
+                r#"tn = "{t}" unless(member(tn tests) error("{caller}: session \"{session}\" has no test named \"{t}\" — it has %L" tests))"#
+            )
+        }
+        None => format!(
+            r#"tn = cond((null(tests) error("{caller}: session \"{session}\" has no tests")) (cdr(tests) error("{caller}: session \"{session}\" has %d tests %L — pass \"test\" to say which one" length(tests) tests)) (t car(tests)))"#
+        ),
+    };
+    format!(r#"tests = maeGetSetup(?session "{session}") {resolve}"#)
+}
+
 impl MaestroOps {
-    /// Returns session handle like `"fnxSession4"`.
-    pub fn open_session(&self, lib: &str, cell: &str, view: &str) -> String {
+    /// Opens a maestro setup, returning a session handle like `"fnxSession4"`.
+    ///
+    /// `mode` is the difference between a session a human can work around and
+    /// one that locks them out, so it is passed explicitly rather than left to
+    /// `maeOpenSetup`'s own default:
+    ///
+    /// - `"r"` — read mode. **Takes no edit lock**: no `maestro.sdb.cdslck`
+    ///   appears next to the setup, so the cellview stays openable for edit in
+    ///   the GUI. The setup is still fully readable — `maeGetSetup` and the
+    ///   rest of the query API work normally.
+    /// - `"a"` — append mode, and `maeOpenSetup`'s default. Editable, and
+    ///   **takes the edit lock**. A SKILL-opened session has no window (Cadence
+    ///   documents this as the "non-GUI mode" and ships no API to attach one),
+    ///   so a human then finds the cell unopenable with nothing anywhere to
+    ///   click — EXPLORER-1642. `maeCloseSession` is the only way out.
+    ///
+    /// So callers open `"r"` and use [`Self::set_session_mode`] to hold `"a"`
+    /// across the writes alone. Measured on IC23.1 2026-09-09 by watching the
+    /// lock file appear and disappear.
+    ///
+    /// One asymmetry to pass on to the user: `maeOpenSetup` *creates* the
+    /// cellview when it does not exist, and per Cadence "you cannot create a
+    /// new view in read mode". Opening a setup that does not exist yet
+    /// therefore needs `"a"`, and returns nil in `"r"`.
+    pub fn open_session(&self, lib: &str, cell: &str, view: &str, mode: &str) -> String {
         let lib = escape_skill_string(lib);
         let cell = escape_skill_string(cell);
         let view = escape_skill_string(view);
-        format!(r#"maeOpenSetup("{lib}" "{cell}" "{view}")"#)
+        let mode = escape_skill_string(mode);
+        format!(r#"maeOpenSetup("{lib}" "{cell}" "{view}" ?mode "{mode}")"#)
+    }
+
+    /// Switches an already-open session between editable and read-only.
+    ///
+    /// This is what makes a read-only default cost nothing: `maeMakeEditable`
+    /// takes the edit lock and `maeMakeReadonly` hands it back, both in place
+    /// with no reopen, so the window during which a human is locked out shrinks
+    /// to the writes themselves. Verified in both directions against the lock
+    /// file on IC23.1 2026-09-09.
+    pub fn set_session_mode(&self, session: &str, editable: bool) -> String {
+        let session = escape_skill_string(session);
+        if editable {
+            format!(r#"maeMakeEditable(?session "{session}")"#)
+        } else {
+            format!(r#"maeMakeReadonly(?session "{session}")"#)
+        }
     }
 
     /// Force-closes the session, cancels any in-flight simulation.
+    ///
+    /// `maeCloseSession` takes the session as the `?session` keyword, not
+    /// positionally — IC23.1 rejects the positional form with
+    /// "extra arguments or keyword missing".
     pub fn close_session(&self, session: &str) -> String {
         let session = escape_skill_string(session);
-        format!(r#"maeCloseSession("{session}" ?forceClose t)"#)
+        format!(r#"maeCloseSession(?session "{session}" ?forceClose t)"#)
     }
 
     pub fn list_sessions(&self) -> String {
         skill_strings_to_json("maeGetSessions()")
+    }
+
+    /// List the test names in a Maestro session.
+    ///
+    /// `maeGetSetup(?session s)` called *without* `?typeName` returns the
+    /// test-name list, e.g. `("tb_cmp_SA")`. Every output-related API
+    /// (`get_outputs`, `add_output`, `get_spec_status`, `export`,
+    /// `create_corner_netlist`) is keyed by that name, so without this the
+    /// caller has to guess it.
+    pub fn list_tests(&self, session: &str) -> String {
+        let session = escape_skill_string(session);
+        skill_strings_to_json(&format!(r#"maeGetSetup(?session "{session}")"#))
     }
 
     /// Set a design variable value.
@@ -53,26 +142,91 @@ impl MaestroOps {
         format!(r#"maeGetVar("{name}")"#)
     }
 
-    /// List all design variables. Returns JSON via sprintf.
+    /// List all Assembler-global design variables. Returns JSON via sprintf.
+    ///
+    /// Scope note: `set_var`/`get_var` write and read the *Assembler-global*
+    /// scope (`maeSetVar`/`maeGetVar`), which is the scope that reaches the
+    /// netlist. This method used to read `asiGetDesignVarList`, the *per-test /
+    /// Explorer* scope — a different table that does not mirror the global one,
+    /// so variables written over RPC always read back as absent.
+    ///
+    /// IC23.1 has no `mae*` enumerator (`maeGetVarList` / `maeGetVars` /
+    /// `maeGetAllVars` / `maeGetVarNames` / `maeListVars` /
+    /// `maeGetDesignVarList` / `maeGetVarValue` are all unbound). The names come
+    /// from `maeGetSetup(?session s ?typeName "variables")` — note the spelling:
+    /// `"vars"` and `"var"` both return nil. Values then come from
+    /// `maeGetVar(name)` one at a time.
     pub fn list_vars(&self) -> String {
-        r#"let((vars out sep) vars = asiGetDesignVarList(asiGetCurrentSession()) out = "[" sep = "" foreach(v vars out = strcat(out sep sprintf(nil "{\"name\":\"%s\",\"value\":\"%s\"}" car(v) cadr(v))) sep = ",") strcat(out "]"))"#.into()
+        r#"let((s names out sep raw val) s = car(maeGetSessions()) names = maeGetSetup(?session s ?typeName "variables") out = "[" sep = "" foreach(n names raw = maeGetVar(n) val = if(stringp(raw) then raw else if(raw then sprintf(nil "%L" raw) else "")) val = buildString(parseString(val "\"") "\\\"") out = strcat(out sep sprintf(nil "{\"name\":\"%s\",\"value\":\"%s\"}" n val)) sep = ",") strcat(out "]"))"#.into()
     }
 
-    /// Get enabled analyses — IC23/IC25 均用 positional (setupName)。
+    /// Delete an Assembler-global design variable.
+    /// Mirrors `maeSetVar(name value)` — positional, no session argument.
+    pub fn delete_var(&self, name: &str) -> String {
+        let name = escape_skill_string(name);
+        format!(r#"maeDeleteVar("{name}")"#)
+    }
+
+    /// Delete an output from a test's setup.
+    /// Mirrors `maeAddOutput(name test ?expr ...)` — positional name + test.
+    pub fn delete_output(&self, output_name: &str, test_name: &str) -> String {
+        let output_name = escape_skill_string(output_name);
+        let test_name = escape_skill_string(test_name);
+        format!(r#"maeDeleteOutput("{output_name}" "{test_name}")"#)
+    }
+
+    /// Disable/remove an analysis from the current test.
+    ///
+    /// There is no `maeDeleteAnalysis` on IC23.1 (probed unbound, as is
+    /// `maeRemoveAnalysis`); only the ADE-level `asiDeleteAnalysis` exists, so
+    /// this one call is session-scoped rather than Assembler-scoped.
+    ///
+    /// Two IC23.1 quirks force the shape of this call:
+    /// 1. The analysis name must be a **symbol**, not a string — passing `"ac"`
+    ///    fails in `asiiDeleteObject` with "argument #1 should be a symbol".
+    /// 2. Even on success, `asiDeleteAnalysis` throws a trailing
+    ///    `*Error* eraseObject: no applicable method for the class list()`.
+    ///    The analysis really is gone, so a plain error check would report a
+    ///    successful delete as a failure. Hence: swallow the throw with
+    ///    `errset`, then decide the outcome by *re-reading the enabled list*.
+    ///
+    /// Returns the string `"t"` when the analysis is absent afterwards.
+    pub fn delete_analysis(&self, analysis: &str) -> String {
+        let analysis = escape_skill_string(analysis);
+        format!(
+            r#"let((r lst) errset(asiDeleteAnalysis(asiGetCurrentSession() stringToSymbol("{analysis}"))) r = errset(maeGetEnabledAnalysis(car(maeGetSetup()))) lst = if(r car(r) nil) if(exists(a lst equal(a "{analysis}")) "nil" "t"))"#
+        )
+    }
+
+    /// Get enabled analyses — IC23/IC25 均用 positional (testName)。
     ///
     /// 实测（IC25.1 ISR7）：`maeGetEnabledAnalysis(?session ...)` 报错，
-    /// 必须先 `car(maeGetSetup(?session ...))` 取 setup 名，再 positional 传入。
-    pub fn get_analyses(&self, session: &str, _version: VirtuosoVersion) -> String {
-        let session = escape_skill_string(session);
-        format!(
-            r#"let((setup) setup = car(maeGetSetup(?session "{session}")) maeGetEnabledAnalysis(setup))"#
-        )
+    /// 必须 positional 传入测试名。
+    pub fn get_analyses(
+        &self,
+        session: &str,
+        test: Option<&str>,
+        _version: VirtuosoVersion,
+    ) -> String {
+        let bind = test_binding(session, test, "maestro.get_analyses");
+        format!(r#"let((tests tn) {bind} maeGetEnabledAnalysis(tn))"#)
     }
 
     /// Enable an analysis type — version-aware.
     ///
-    /// IC23: `maeSetAnalysis(setupName analysisType)` — positional.
-    /// IC25: `maeSetAnalysis(setupName analysisType ?session s ?enable t ?options (list ...))`.
+    /// `maeSetAnalysis`'s first positional argument is **`t_testName`**
+    /// (IC23.1 ADE SKILL Reference), and `maeGetSetup(?session s)` returns the
+    /// session's **test names**. The previous version passed
+    /// `car(maeGetSetup(...))` and called it a "setup name": correct only while
+    /// a session holds exactly one test, and silently configuring the *first*
+    /// test the moment it holds two. Measured 2026-09-09 — `fnxSession14` grew
+    /// a second test (`amp_buf_tb`) and every subsequent `set_analysis`
+    /// would still have landed on `amp_tb`, returning `ok` each time. So the
+    /// test is now either named explicitly or resolved from a session that has
+    /// exactly one; ambiguity is an error, not a guess. See [`test_binding`].
+    ///
+    /// IC23: `maeSetAnalysis(testName analysisType ?enable t ?options ...)`.
+    /// IC25: same, plus `?session`.
     ///
     /// 实测 IC25（2026-08-06, IC25.1 ISR7）：
     /// - `?options (list (list "stop" "1e10"))` 成功写入 netlist
@@ -82,36 +236,37 @@ impl MaestroOps {
         session: &str,
         analysis_type: &str,
         options_skill_alist: Option<&str>,
+        test: Option<&str>,
         version: VirtuosoVersion,
     ) -> String {
+        let bind = test_binding(session, test, "maestro.set_analysis");
         let session = escape_skill_string(session);
         let analysis_type = escape_skill_string(analysis_type);
-        if version.is_ic25() {
-            // IC25: let((setup opts) setup=car(maeGetSetup(...)) opts=(list ...) maeSetAnalysis(setup ...))
-            let (opts_binding, opts_arg) = match options_skill_alist {
-                Some(alist) => {
-                    let pairs: Vec<String> = parse_skill_pairs(alist);
-                    let quoted: String = pairs
-                        .iter()
-                        .map(|p| skill_pair_to_quoted(p))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    (
-                        format!("opts = (list {})", quoted),
-                        " ?options opts".to_string(),
-                    )
-                }
-                None => (String::new(), String::new()),
-            };
-            format!(
-                r#"let((setup opts) setup=car(maeGetSetup(?session "{session}")) {opts_binding} maeSetAnalysis(setup "{analysis_type}" ?session "{session}" ?enable t{opts_arg}))"#
-            )
+        let (opts_binding, opts_arg) = match options_skill_alist {
+            Some(alist) => {
+                let quoted: String = parse_skill_pairs(alist)
+                    .iter()
+                    .map(|p| skill_pair_to_quoted(p))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                (
+                    format!("opts = (list {quoted})"),
+                    " ?options opts".to_string(),
+                )
+            }
+            None => (String::new(), String::new()),
+        };
+        // `?session` is only accepted on IC25; on IC23 the call is scoped by
+        // the current session, which `test_binding` has already validated
+        // against.
+        let session_arg = if version.is_ic25() {
+            format!(r#" ?session "{session}""#)
         } else {
-            // IC23: positional — maeGetSetup resolves setup name first
-            format!(
-                r#"let((setup) setup=car(maeGetSetup(?session "{session}")) maeSetAnalysis(setup "{analysis_type}"))"#
-            )
-        }
+            String::new()
+        };
+        format!(
+            r#"let((tests tn opts) {bind} {opts_binding} maeSetAnalysis(tn "{analysis_type}"{session_arg} ?enable t{opts_arg}))"#
+        )
     }
 
     /// Run simulation asynchronously. Returns immediately.
@@ -210,10 +365,36 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
     /// IC23/IC25: maeGetTestOutputs(testName) — both use positional.
     /// IC25 additionally supports ?session keyword.
     #[allow(dead_code)]
+    /// List a test's outputs as JSON.
+    ///
+    /// Three things the naive `sprintf(... o~>name o~>outputType ...)` got
+    /// wrong on IC23.1:
+    /// - outputs created by `maeAddOutput(... ?expr)` have a nil `outputType`,
+    ///   and one nil aborts the whole `sprintf`
+    ///   ("format spec. incompatible with data, argument #2 is nil");
+    /// - the expression lives on `~>expression`, not `~>expr`, and it is a
+    ///   SKILL form rather than a string, so `%s` cannot print it;
+    /// - expressions contain `"` (`VDC("/vout")`), which has to be escaped or
+    ///   the emitted JSON does not parse.
     pub fn get_outputs(&self, test_name: &str) -> String {
         let test_name = escape_skill_string(test_name);
+        // buildString(parseString(x "\"") "\\\"") — stateless `"` → `\"`.
+        let esc = |var: &str| format!(r#"buildString(parseString({var} "\"") "\\\"")"#);
+        let str_field = |field: &str| {
+            format!(r#"if(stringp(o~>{field}) then o~>{field} else "")"#)
+        };
+        let (name, otype, signal) = (
+            str_field("name"),
+            str_field("outputType"),
+            str_field("signalName"),
+        );
+        // `expr` first (IC25 string form), then `expression` (IC23 SKILL form,
+        // printed with %L since it is a list, not a string).
+        let expr = r#"if(stringp(o~>expr) then o~>expr else if(o~>expression then sprintf(nil "%L" o~>expression) else ""))"#;
+        let (e_name, e_type, e_signal, e_expr) =
+            (esc("nm"), esc("ty"), esc("sg"), esc("ex"));
         format!(
-            r#"let((outs out sep) outs = maeGetTestOutputs("{test_name}") out = "[" sep = "" foreach(o outs out = strcat(out sep sprintf(nil "{{\"name\":\"%s\",\"type\":\"%s\",\"signalName\":\"%s\",\"expr\":\"%s\"}}" o~>name o~>outputType o~>signalName o~>expr)) sep = ",") strcat(out "]"))"#
+            r#"let((outs out sep nm ty sg ex) outs = maeGetTestOutputs("{test_name}") out = "[" sep = "" foreach(o outs nm = {name} ty = {otype} sg = {signal} ex = {expr} out = strcat(out sep sprintf(nil "{{\"name\":\"%s\",\"type\":\"%s\",\"signalName\":\"%s\",\"expr\":\"%s\"}}" {e_name} {e_type} {e_signal} {e_expr})) sep = ",") strcat(out "]"))"#
         )
     }
 
@@ -224,20 +405,95 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
         format!(r#"maeAddOutput("{output_name}" "{test_name}" ?expr "{expr}")"#)
     }
 
-    #[allow(dead_code)]
-    pub fn set_design(&self, session: &str, lib: &str, cell: &str, view: &str) -> String {
+    /// Points a test (or every test in the session) at a design cellview.
+    ///
+    /// Uses `maeSetDesignForTest`, whose IC23.1 signature is
+    /// `(t_lib t_cell t_view [?test t] [?session s])` — the library/cell/view
+    /// are **positional**, and omitting `?test` sets the design for all tests.
+    ///
+    /// The previous form called `maeSetDesign` with `?libName`/`?cellName`/
+    /// `?viewName` keywords and no test name at all. IC23.1 has no such
+    /// keywords, and the real `maeSetDesign` takes the test name as its first
+    /// positional argument, so that call could only ever return nil — which is
+    /// why it sat behind `#[allow(dead_code)]` instead of being wired up.
+    /// Signature read from
+    /// `doc/maeSKILLref/maestroSKILL_re_maeSetDesignForTest.html` 2026-09-09.
+    pub fn set_design(
+        &self,
+        session: &str,
+        lib: &str,
+        cell: &str,
+        view: &str,
+        test: Option<&str>,
+    ) -> String {
         let session = escape_skill_string(session);
         let lib = escape_skill_string(lib);
         let cell = escape_skill_string(cell);
         let view = escape_skill_string(view);
+        let test_arg = match test {
+            Some(t) => format!(" ?test \"{}\"", escape_skill_string(t)),
+            None => String::new(),
+        };
         format!(
-            r#"maeSetDesign(?session "{session}" ?libName "{lib}" ?cellName "{cell}" ?viewName "{view}")"#
+            r#"maeSetDesignForTest("{lib}" "{cell}" "{view}"{test_arg} ?session "{session}")"#
         )
     }
 
+    /// Creates a test in an open Maestro session.
+    ///
+    /// `maeCreateTest(t_testName [?sourceTest t] [?lib t] [?cell t] [?view t]
+    /// [?simulator t] [?session t]) => t / nil`. Giving lib/cell/view sets the
+    /// test's design in the same call, so no separate `set_design` is needed
+    /// for a fresh test.
+    ///
+    /// The session must be editable — a session opened in the default
+    /// `?mode "r"` accepts the in-memory change but `maeSaveSetup` will refuse
+    /// to persist it (see `save_setup`).
+    pub fn create_test(
+        &self,
+        session: &str,
+        test: &str,
+        lib: &str,
+        cell: &str,
+        view: &str,
+        simulator: &str,
+    ) -> String {
+        let session = escape_skill_string(session);
+        let test = escape_skill_string(test);
+        let lib = escape_skill_string(lib);
+        let cell = escape_skill_string(cell);
+        let view = escape_skill_string(view);
+        let simulator = escape_skill_string(simulator);
+        format!(
+            r#"maeCreateTest("{test}" ?lib "{lib}" ?cell "{cell}" ?view "{view}" ?simulator "{simulator}" ?session "{session}")"#
+        )
+    }
+
+    /// Saves the setup to disk — refusing up front if the session cannot write.
+    ///
+    /// `maeSaveSetup` on a read-only session returns non-nil and writes
+    /// **nothing**. Measured on IC23.1 2026-09-09: with `fnxSession12` open in
+    /// `?mode "r"`, `maeSetVar` accepted `RO_PROBE=1` (in-memory writes are not
+    /// blocked either), `maeSaveSetup` returned success, and `maestro.sdb` kept
+    /// its three-hour-old mtime with `<vars></vars>` still empty. So the return
+    /// value proves nothing and the caller walks away believing the edit
+    /// persisted — the same failure shape as `dbClose` reporting success while
+    /// keeping its lock.
+    ///
+    /// `axlIsSessionReadOnly` is the oracle the return value isn't, so it is
+    /// checked first and the save is refused with an error that names the fix.
+    /// It is probed rather than assumed: on a Virtuoso that lacks it the save
+    /// proceeds unguarded, which is no worse than before.
     pub fn save_setup(&self, session: &str) -> String {
         let session = escape_skill_string(session);
-        format!(r#"maeSaveSetup(?session "{session}")"#)
+        format!(
+            "let((s) s = \"{session}\" \
+             when(getd('axlIsSessionReadOnly) && axlIsSessionReadOnly(s) \
+               error(\"maestro.save: session %s is read-only. maeSaveSetup would report \
+             success and write nothing. Switch it with maestro.set_session_mode mode=a, \
+             save, then switch back to mode=r.\" s)) \
+             maeSaveSetup(?session s))"
+        )
     }
 
     /// Create a netlist for a specific corner.
@@ -375,7 +631,10 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
 
     /// List all test names that have results in the current history.
     pub fn get_result_tests(&self) -> String {
-        r#"let((tests out sep) tests = maeGetResultTests() out = "[" sep = "" foreach(t tests out = strcat(out sep sprintf(nil "\"%s\"" t)) sep = ",") strcat(out "]"))"#.into()
+        // The loop variable must not be `t`: `t` is SKILL's protected true
+        // constant, so `foreach(t ...)` aborts with
+        // "*Error* setq/set: Variable is protected and cannot be assigned to".
+        r#"let((tests out sep) tests = maeGetResultTests() out = "[" sep = "" foreach(tst tests out = strcat(out sep sprintf(nil "\"%s\"" tst)) sep = ",") strcat(out "]"))"#.into()
     }
 
     /// List all output names available for a given test in the current history.
@@ -450,7 +709,42 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
     /// List available history runs for the current Maestro session.
     /// Returns JSON array of history names.
     pub fn get_history_list(&self) -> String {
-        r#"let((base histories out sep) base = getDirFiles(strcat(asiGetResultsDir(asiGetCurrentSession()) "/..")) histories = remove("maestro" remove("exprOutputs.log" base)) out = "[" sep = "" foreach(h histories when(h && !index(h ".") out = strcat(out sep sprintf(nil "\"%s\"" h)) sep = ",")) strcat(out "]"))"#.into()
+        // History names are neither fixed nor guessable: they increment with
+        // every run and the user can rename them in the GUI, so callers must
+        // be able to enumerate them.
+        //
+        // The old directory heuristic got two things wrong on IC23.1:
+        // - `asiGetResultsDir(...)/..` lands on `<history>/psf`, two levels
+        //   below where histories live, so it listed *test* names;
+        // - the `!index(h ".")` filter drops every name containing a dot,
+        //   which excludes Cadence's own default names (`Interactive.0`,
+        //   `Interactive.1`, ...). Together these made a correct answer
+        //   impossible.
+        //
+        // Try the Maestro API first (wrapped in `errset` so an unbound symbol
+        // on a given IC release degrades instead of erroring), then fall back
+        // to scanning the histories root — the directory named `maestro` that
+        // `asiGetResultsDir` sits under, found by climbing rather than by a
+        // hard-coded level count.
+        // Probed on IC23.1: every `mae*` history accessor is unbound
+        // (maeGetHistoryNames / maeGetHistoryList / maeGetHistories /
+        // maeGetResultHistories / maeGetResultsDir / maeGetHistory), and
+        // `axlGetHistoryNames` is unbound too — only `axlGetMainSetupDB`
+        // exists. So the history list is derived from the filesystem, where
+        // each history is a directory directly under `<...>/results/maestro`.
+        //
+        // `asiGetResultsDir` returns a path *inside* one history
+        // (`<root>/<history>/psf/<test>`), so walk its components forward and
+        // stop at the first prefix ending in `/results/maestro` — that is the
+        // root, without hard-coding how many levels deep the results dir sits.
+        //
+        // Two bugs this replaces: the old code used `<resultsDir>/..`, which
+        // lands on `<history>/psf` and therefore listed *test* names; and it
+        // filtered with `!index(h ".")`, which rejects Cadence's own default
+        // history names (`Interactive.0`, `Interactive.1`, ...). History names
+        // change with every run and can be renamed in the GUI, so this has to
+        // enumerate rather than assume.
+        r#"let((rd root found hs out sep) rd = car(errset(asiGetResultsDir(asiGetCurrentSession()))) root = nil found = nil when(stringp(rd) root = "" foreach(p parseString(rd "/") unless(found root = strcat(root "/" p) when(rexMatchp("/results/maestro$" root) found = t)))) hs = nil when(found && isDir(root) hs = setof(h getDirFiles(root) h != "." && h != ".." && !rexMatchp("^[.]" h) && isDir(strcat(root "/" h)))) out = "[" sep = "" foreach(h hs out = strcat(out sep sprintf(nil "\"%s\"" h)) sep = ",") strcat(out "]"))"#.into()
     }
 
     /// Get the Maestro session ID for the current session.
@@ -646,20 +940,77 @@ mod tests {
 
     #[test]
     fn open_session_quoting() {
-        let s = ops().open_session("myLib", "myCell", "adexl");
-        assert_eq!(s, r#"maeOpenSetup("myLib" "myCell" "adexl")"#);
+        let s = ops().open_session("myLib", "myCell", "adexl", "r");
+        assert_eq!(s, r#"maeOpenSetup("myLib" "myCell" "adexl" ?mode "r")"#);
     }
 
     #[test]
     fn open_session_escapes_quotes() {
-        let s = ops().open_session(r#"lib"x"#, "cell", "adexl");
+        let s = ops().open_session(r#"lib"x"#, "cell", "adexl", "r");
         assert!(s.contains(r#"lib\"x"#), "{s}");
+    }
+
+    #[test]
+    fn open_session_passes_append_mode_through() {
+        // "a" is the mode that takes the edit lock; it must reach maeOpenSetup
+        // verbatim, because a caller asking for it is asking to write.
+        let s = ops().open_session("myLib", "myCell", "maestro", "a");
+        assert_eq!(s, r#"maeOpenSetup("myLib" "myCell" "maestro" ?mode "a")"#);
+    }
+
+    #[test]
+    fn set_session_mode_picks_the_matching_function() {
+        // The lock follows these two exactly (measured against the .cdslck
+        // file on IC23.1): editable takes it, read-only gives it back.
+        assert_eq!(
+            ops().set_session_mode("fnxSession7", true),
+            r#"maeMakeEditable(?session "fnxSession7")"#
+        );
+        assert_eq!(
+            ops().set_session_mode("fnxSession7", false),
+            r#"maeMakeReadonly(?session "fnxSession7")"#
+        );
     }
 
     #[test]
     fn set_var_format() {
         let s = ops().set_var("Vdd", "1.8");
         assert_eq!(s, r#"maeSetVar("Vdd" "1.8")"#);
+    }
+
+    #[test]
+    fn list_vars_reads_assembler_global_scope() {
+        let s = ops().list_vars();
+        // Must read the same scope `set_var` writes (`maeSetVar`/`maeGetVar`),
+        // not the per-test/Explorer scope — the two do not mirror.
+        assert!(s.contains("maeGetVar("), "{s}");
+        assert!(!s.contains("asiGetDesignVarList"), "{s}");
+        // IC23.1 has no `mae*` var enumerator; names come from maeGetSetup,
+        // and only the spelling "variables" works ("vars"/"var" return nil).
+        assert!(s.contains(r#"?typeName "variables""#), "{s}");
+    }
+
+    #[test]
+    fn delete_var_format() {
+        let s = ops().delete_var("Vdd");
+        assert_eq!(s, r#"maeDeleteVar("Vdd")"#);
+    }
+
+    #[test]
+    fn delete_output_format() {
+        let s = ops().delete_output("Gain", "test1");
+        assert_eq!(s, r#"maeDeleteOutput("Gain" "test1")"#);
+    }
+
+    #[test]
+    fn delete_analysis_uses_symbol_and_verifies() {
+        let s = ops().delete_analysis("ac");
+        // The name must reach asiDeleteAnalysis as a symbol, not a string.
+        assert!(s.contains(r#"stringToSymbol("ac")"#), "{s}");
+        // asiDeleteAnalysis throws even on success, so the throw is swallowed
+        // and the outcome decided by re-reading the enabled list.
+        assert!(s.contains("errset(asiDeleteAnalysis"), "{s}");
+        assert!(s.contains("maeGetEnabledAnalysis"), "{s}");
     }
 
     #[test]
@@ -670,22 +1021,29 @@ mod tests {
     }
 
     #[test]
-    fn get_analyses_ic23_resolves_setup() {
-        let s = ops().get_analyses("sess1", VirtuosoVersion::IC23);
-        assert!(s.contains("maeGetSetup"), "IC23 must resolve setup: {s}");
-        assert!(s.contains("maeGetEnabledAnalysis"), "{s}");
+    fn get_analyses_ic23_resolves_test() {
+        let s = ops().get_analyses("sess1", None, VirtuosoVersion::IC23);
+        assert!(s.contains("maeGetSetup"), "IC23 must resolve the test: {s}");
+        assert!(s.contains("maeGetEnabledAnalysis(tn)"), "{s}");
     }
 
     #[test]
-    fn get_analyses_ic25_uses_setup_name() {
+    fn get_analyses_ic25_uses_test_name() {
         // 实测 IC25.1 ISR7：maeGetEnabledAnalysis(?session ...) 报错
-        // IC23/IC25 均需 car(maeGetSetup()) 取 setup 名，positional 传入
-        let s = ops().get_analyses("sess1", VirtuosoVersion::IC25);
+        // IC23/IC25 均需 positional 传测试名
+        let s = ops().get_analyses("sess1", None, VirtuosoVersion::IC25);
         assert!(
             s.contains("maeGetSetup"),
             "Both IC23 and IC25 need maeGetSetup: {s}"
         );
-        assert!(s.contains("maeGetEnabledAnalysis"), "{s}");
+        assert!(s.contains("maeGetEnabledAnalysis(tn)"), "{s}");
+    }
+
+    #[test]
+    fn get_analyses_uses_the_named_test_verbatim() {
+        let s = ops().get_analyses("sess1", Some("TRAN"), VirtuosoVersion::IC23);
+        assert!(s.contains(r#"tn = "TRAN""#), "{s}");
+        assert!(s.contains("member(tn tests)"), "must validate the name: {s}");
     }
 
     #[test]
@@ -701,6 +1059,8 @@ mod tests {
         let s = ops().get_result_tests();
         assert!(s.contains("maeGetResultTests()"), "{s}");
         assert!(s.contains("foreach"), "{s}");
+        // `t` is SKILL's protected true constant — binding it aborts the loop.
+        assert!(!s.contains("foreach(t "), "{s}");
     }
 
     #[test]
@@ -708,6 +1068,9 @@ mod tests {
         let s = ops().get_history_list();
         assert!(s.contains("asiGetResultsDir"), "{s}");
         assert!(s.contains("foreach"), "{s}");
+        // Default history names contain a dot (`Interactive.0`), so a
+        // dot-rejecting filter can never return them.
+        assert!(!s.contains(r#"!index(h ".")"#), "{s}");
     }
 
     // === export_waveform tests (RED phase) ===
@@ -841,31 +1204,54 @@ mod tests {
 
     #[test]
     fn set_analysis_ic23_positional() {
-        let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC23);
-        assert!(s.contains("maeGetSetup"), "IC23 must resolve setup: {s}");
-        assert!(s.contains("maeSetAnalysis"), "{s}");
-        assert!(s.contains("\"ac\""), "{s}");
+        let s = ops().set_analysis("sess1", "ac", None, None, VirtuosoVersion::IC23);
+        assert!(s.contains("maeGetSetup"), "IC23 must resolve the test: {s}");
+        assert!(s.contains(r#"maeSetAnalysis(tn "ac""#), "{s}");
     }
 
     #[test]
     fn set_analysis_ic23_no_options() {
-        let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC23);
+        let s = ops().set_analysis("sess1", "ac", None, None, VirtuosoVersion::IC23);
         assert!(
             !s.contains("?options"),
             "IC23 path must not inject options: {s}"
         );
     }
 
+    /// The whole point of the test argument: with two tests in a session,
+    /// `maeSetAnalysis` must be told which one rather than taking the first.
+    #[test]
+    fn set_analysis_targets_the_named_test() {
+        let s = ops().set_analysis("sess1", "tran", None, Some("buf_tb"), VirtuosoVersion::IC23);
+        assert!(s.contains(r#"tn = "buf_tb""#), "{s}");
+        assert!(
+            !s.contains("car(tests)"),
+            "an explicit test must not fall back to the first one: {s}"
+        );
+    }
+
+    /// Omitting the test on a multi-test session is an error, not a guess.
+    #[test]
+    fn set_analysis_without_a_test_refuses_an_ambiguous_session() {
+        let s = ops().set_analysis("sess1", "tran", None, None, VirtuosoVersion::IC23);
+        assert!(s.contains("cdr(tests)"), "must detect a second test: {s}");
+        assert!(
+            s.contains("pass \\\"test\\\" to say which one"),
+            "the error must name the way out: {s}"
+        );
+        assert!(s.contains("car(tests)"), "one test is still resolved: {s}");
+    }
+
     #[test]
     fn set_analysis_ic25_includes_keywords() {
         // IC25 uses ?session and ?enable t keywords (unlike IC23 positional-only)
-        let s = ops().set_analysis("sess1", "ac", None, VirtuosoVersion::IC25);
+        let s = ops().set_analysis("sess1", "ac", None, None, VirtuosoVersion::IC25);
         assert!(
             s.contains("?session"),
             "IC25 must include ?session keyword: {s}"
         );
         assert!(s.contains("?enable t"), "IC25 must include ?enable t: {s}");
-        assert!(s.contains("maeGetSetup"), "IC25 needs setup name: {s}");
+        assert!(s.contains("maeGetSetup"), "IC25 needs the test name: {s}");
         assert!(
             !s.contains("?options"),
             "IC25 without options must not inject ?options: {s}"
@@ -882,6 +1268,7 @@ mod tests {
             "sess1",
             "ac",
             Some(r#"(("stop" "1e10") ("start" "1"))"#),
+            None,
             VirtuosoVersion::IC25,
         );
         assert!(
@@ -893,16 +1280,16 @@ mod tests {
             "Must pass options via ?options keyword: {s}"
         );
         assert!(
-            s.contains("let((setup opts)"),
-            "Must use flat let with two bindings: {s}"
+            s.contains("let((tests tn opts)"),
+            "Must use a flat let holding the resolved test and the options: {s}"
         );
         assert!(
             s.contains("opts = (list"),
             "opts must be bound via = form: {s}"
         );
         assert!(
-            s.contains("maeSetAnalysis(setup"),
-            "Must call maeSetAnalysis directly: {s}"
+            s.contains("maeSetAnalysis(tn"),
+            "maeSetAnalysis takes the test name first: {s}"
         );
         assert!(
             !s.contains("apply("),
@@ -1052,12 +1439,40 @@ mod tests {
 
     #[test]
     fn set_design() {
-        let s = ops().set_design("sess1", "myLib", "myCell", "schematic");
-        assert!(s.contains("maeSetDesign"), "{s}");
-        assert!(s.contains("?session"), "{s}");
-        assert!(s.contains("?libName"), "{s}");
-        assert!(s.contains("?cellName"), "{s}");
-        assert!(s.contains("?viewName"), "{s}");
+        // maeSetDesignForTest takes lib/cell/view positionally. The old form
+        // used ?libName/?cellName/?viewName, which IC23.1 does not accept.
+        let s = ops().set_design("sess1", "myLib", "myCell", "schematic", None);
+        assert_eq!(
+            s,
+            r#"maeSetDesignForTest("myLib" "myCell" "schematic" ?session "sess1")"#
+        );
+        assert!(!s.contains("?libName"), "keyword form is wrong on IC23.1: {s}");
+    }
+
+    #[test]
+    fn set_design_scopes_to_one_test_when_asked() {
+        // Without ?test the design is set for every test in the session, which
+        // is the right default but the wrong thing when a session has several.
+        let s = ops().set_design("sess1", "myLib", "myCell", "schematic", Some("AC"));
+        assert_eq!(
+            s,
+            r#"maeSetDesignForTest("myLib" "myCell" "schematic" ?test "AC" ?session "sess1")"#
+        );
+    }
+
+    #[test]
+    fn create_test_passes_the_design_in_the_same_call() {
+        let s = ops().create_test("sess1", "tb1", "myLib", "myCell", "schematic", "spectre");
+        assert_eq!(
+            s,
+            r#"maeCreateTest("tb1" ?lib "myLib" ?cell "myCell" ?view "schematic" ?simulator "spectre" ?session "sess1")"#
+        );
+    }
+
+    #[test]
+    fn create_test_escapes_names() {
+        let s = ops().create_test("s", r#"t"x"#, "l", "c", "schematic", "spectre");
+        assert!(s.contains(r#"t\"x"#), "{s}");
     }
 
     #[test]
@@ -1065,6 +1480,21 @@ mod tests {
         let s = ops().save_setup("sess1");
         assert!(s.contains("maeSaveSetup"), "{s}");
         assert!(s.contains("?session"), "{s}");
+    }
+
+    #[test]
+    fn save_setup_refuses_a_read_only_session() {
+        // maeSaveSetup returns success on a read-only session and writes
+        // nothing, so the guard has to come before the call, not after it.
+        let s = ops().save_setup("sess1");
+        assert!(s.contains("axlIsSessionReadOnly"), "{s}");
+        assert!(s.contains("error("), "{s}");
+        assert!(
+            s.find("axlIsSessionReadOnly") < s.find("maeSaveSetup(?session"),
+            "the read-only check must run before the save: {s}"
+        );
+        // Probed, not assumed — a Virtuoso without the predicate still saves.
+        assert!(s.contains("getd('axlIsSessionReadOnly)"), "{s}");
     }
 
     #[test]

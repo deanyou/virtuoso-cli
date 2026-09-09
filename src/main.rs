@@ -738,8 +738,20 @@ enum CellCmd {
     /// Save the current cellview
     Save,
 
-    /// Close the current cellview without saving
-    Close,
+    /// Close the current cellview (saves first by default)
+    #[command(long_about = "Close the cellview shown in the current window.\n\n\
+            Saves before closing by default. Pass --discard to throw the edits away \
+            instead; the discard is silent (dbReopen to read mode), it does not ask \
+            for confirmation.\n\n\
+            One of the two always happens on purpose: closing a modified cellview \
+            otherwise pops a 'save changes?' modal, and a modal blocks Virtuoso's \
+            main event loop, which freezes the SKILL bridge until someone dismisses \
+            it by hand.")]
+    Close {
+        /// Discard unsaved edits instead of saving them
+        #[arg(long)]
+        discard: bool,
+    },
 
     /// Get info about the currently open cellview
     Info,
@@ -1090,6 +1102,25 @@ enum MaestroCmd {
         cell: String,
         #[arg(long, default_value = "maestro")]
         view: String,
+        /// "r" (default) opens read-only and takes no OA edit lock, so a human
+        /// keeps edit access to the cellview; the setup is still fully
+        /// readable. "a" opens editable and takes the lock — and a session
+        /// opened this way has no window, so it locks a human out of the cell
+        /// with nothing to click. Use `maestro set-mode` to hold "a" across
+        /// the writes alone. "a" is also required to create a maestro view
+        /// that does not exist yet.
+        #[arg(long, default_value = "r")]
+        mode: String,
+    },
+
+    /// Switch an open Maestro session between read-only and editable
+    SetMode {
+        /// Session ID (e.g. fnxSession4)
+        #[arg(long)]
+        session: String,
+        /// "a" takes the edit lock, "r" hands it back. Both act in place.
+        #[arg(long)]
+        mode: String,
     },
 
     /// Close a Maestro session
@@ -1123,6 +1154,9 @@ enum MaestroCmd {
     GetAnalyses {
         #[arg(long)]
         session: String,
+        /// Test name. Only optional when the session holds exactly one test.
+        #[arg(long)]
+        test: Option<String>,
     },
 
     /// Enable an analysis type (e.g. ac, dc, tran, noise)
@@ -1135,6 +1169,10 @@ enum MaestroCmd {
         /// Analysis options as JSON string, e.g. '{"start":"1","stop":"10G","dec":"20"}'
         #[arg(long)]
         options: Option<String>,
+        /// Test the analysis belongs to. Only optional when the session holds
+        /// exactly one test — analyses are per-test.
+        #[arg(long)]
+        test: Option<String>,
     },
 
     /// Add an output expression to a test
@@ -2175,7 +2213,7 @@ fn dispatch_cell(
             dry_run,
         } => commands::cell::open(ctx, &lib, &cell, &view, &mode, dry_run),
         CellCmd::Save => commands::cell::save(ctx),
-        CellCmd::Close => commands::cell::close(ctx),
+        CellCmd::Close { discard } => commands::cell::close(ctx, !discard),
         CellCmd::Info => commands::cell::info(ctx),
     }
 }
@@ -2363,18 +2401,27 @@ fn dispatch_design(cmd: DesignCmd, format: OutputFormat) -> error::Result<serde_
 
 fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
     match cmd {
-        MaestroCmd::Open { lib, cell, view } => commands::maestro::open(&lib, &cell, &view),
+        MaestroCmd::Open {
+            lib,
+            cell,
+            view,
+            mode,
+        } => commands::maestro::open(&lib, &cell, &view, &mode),
+        MaestroCmd::SetMode { session, mode } => commands::maestro::set_mode(&session, &mode),
         MaestroCmd::Close { session } => commands::maestro::close(&session),
         MaestroCmd::ListSessions => commands::maestro::list_sessions(),
         MaestroCmd::SetVar { name, value } => commands::maestro::set_var(&name, &value),
         MaestroCmd::GetVar { name } => commands::maestro::get_var(&name),
         MaestroCmd::ListVars => commands::maestro::list_vars(),
-        MaestroCmd::GetAnalyses { session } => commands::maestro::get_analyses(&session),
+        MaestroCmd::GetAnalyses { session, test } => {
+            commands::maestro::get_analyses(&session, test.as_deref())
+        }
         MaestroCmd::SetAnalysis {
             session,
             analysis,
             options,
-        } => commands::maestro::set_analysis(&session, &analysis, options.as_deref()),
+            test,
+        } => commands::maestro::set_analysis(&session, &analysis, options.as_deref(), test.as_deref()),
         MaestroCmd::AddOutput {
             output_name,
             test_name,
