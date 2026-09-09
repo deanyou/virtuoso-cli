@@ -1195,7 +1195,17 @@ impl Config {
     /// [`ConfigDiagnostic`] entries with `level = "error"` and `valid = false`
     /// so `vcli config check --format json` always produces a valid document
     /// (with a non-zero exit code driven by the caller).
-    pub fn build_report(profile: Option<&str>) -> Result<ConfigReport> {
+    ///
+    /// `pre_check` carries an earlier selection error (e.g. active_target not
+    /// found, corrupt targets.yaml) WITHOUT aborting the report. When
+    /// `Err`, the report is marked `valid = false` and carries an
+    /// `ILLEGAL_CONFIG` diagnostic describing the selection failure. The rest
+    /// of the report is still generated so the user sees BOTH the selection
+    /// problem and whatever config could be read.
+    pub fn build_report(
+        profile: Option<&str>,
+        pre_check: std::result::Result<(), &VirtuosoError>,
+    ) -> Result<ConfigReport> {
         let mut report = ConfigReport {
             profile: profile.map(|s| s.to_string()),
             active_target: None,
@@ -1213,6 +1223,22 @@ impl Config {
             valid: true,
             digest: None,
         };
+
+        // Pre-check: selection/resolve failures detected before we got here.
+        // Mark invalid, emit a diagnostic, but KEEP going — seeing the
+        // selection error alongside whatever config we *can* read is more
+        // useful than bailing out.
+        if let Err(e) = pre_check {
+            report.valid = false;
+            let msg = format!("config selection failed: {e}");
+            report.warnings.push(msg.clone());
+            report.diagnostics.push(ConfigDiagnostic {
+                code: "ILLEGAL_CONFIG",
+                level: "error",
+                field: "selection".into(),
+                message: msg,
+            });
+        }
 
         // Active target detection — mirrors from_env_resolve's honor_vb_target
         // branch. We never *consume* it here; we only report whether one is
@@ -1581,7 +1607,7 @@ mod report_tests {
         let _env = EnvGuard::new(&["VB_REMOTE_HOST", "VB_TIMEOUT"]);
         let (_tmp, prev) = isolate_config_dir();
         let _restore = ConfigDirGuard(prev);
-        let report = Config::build_report(None).expect("build_report");
+        let report = Config::build_report(None, Ok(())).expect("build_report");
         let remote_host = report
             .entries
             .iter()
@@ -1606,7 +1632,7 @@ mod report_tests {
         let (_tmp, prev) = isolate_config_dir();
         let _restore = ConfigDirGuard(prev);
         std::env::set_var("VB_REMOTE_HOST", "eda-from-env");
-        let report = Config::build_report(None).expect("build_report");
+        let report = Config::build_report(None, Ok(())).expect("build_report");
         let e = report
             .entries
             .iter()
@@ -1627,7 +1653,7 @@ mod report_tests {
         let _restore = ConfigDirGuard(prev);
         std::env::set_var("VB_REMOTE_HOST", "global-host");
         std::env::set_var("VB_REMOTE_HOST_prod", "profile-host");
-        let report = Config::build_report(Some("prod")).expect("build_report");
+        let report = Config::build_report(Some("prod"), Ok(())).expect("build_report");
         let e = report
             .entries
             .iter()
@@ -1655,7 +1681,7 @@ mod report_tests {
             r#"remote_host = "eda-from-file""#,
         )
         .expect("write config");
-        let report = Config::build_report(None).expect("build_report");
+        let report = Config::build_report(None, Ok(())).expect("build_report");
         let e = report
             .entries
             .iter()
@@ -1682,7 +1708,7 @@ remote_host = "eda-prod"
 "#,
         )
         .expect("write config");
-        let report = Config::build_report(Some("prod")).expect("build_report");
+        let report = Config::build_report(Some("prod"), Ok(())).expect("build_report");
         let e = report
             .entries
             .iter()
@@ -1699,7 +1725,7 @@ remote_host = "eda-prod"
         let (_tmp, prev) = isolate_config_dir();
         let _restore = ConfigDirGuard(prev);
         std::env::set_var("VB_TIMEOUT", "not-a-number");
-        let report = Config::build_report(None).expect("build_report");
+        let report = Config::build_report(None, Ok(())).expect("build_report");
         let e = report
             .entries
             .iter()
@@ -1739,7 +1765,7 @@ targets:
         // Manually invoking build_report here is tricky because the active
         // target is detected via VB_TARGET but the target loader uses
         // VB_TARGETS_FILE — we still need to guard that variable too.
-        let report = Config::build_report(None).expect("build_report");
+        let report = Config::build_report(None, Ok(())).expect("build_report");
         assert_eq!(report.active_target.as_deref(), Some("prod"));
         let e = report
             .entries
@@ -1772,7 +1798,7 @@ targets:
         // Force a fresh config dir so the file lookup is consistent.
         let (_cfg, prev_cfg) = isolate_config_dir();
         let _restore = ConfigDirGuard(prev_cfg);
-        let report = Config::build_report(None).expect("build_report");
+        let report = Config::build_report(None, Ok(())).expect("build_report");
         match prev_home {
             Some(v) => std::env::set_var("HOME", v),
             None => std::env::remove_var("HOME"),
@@ -1798,7 +1824,28 @@ targets:
         for k in KEY_SPECS.iter().map(|s| s.key) {
             std::env::set_var(k, "x");
         }
-        let report = Config::build_report(None).expect("build_report");
+        let report = Config::build_report(None, Ok(())).expect("build_report");
         assert!(report.all_explicit(), "every entry must be non-default");
+    }
+
+    #[test]
+    fn report_pre_check_error_marks_invalid_with_diagnostic() {
+        let err = VirtuosoError::Config("active_target 'nope' not found".into());
+        let report = Config::build_report(None, Err(&err)).expect("build_report");
+        assert!(!report.valid, "pre_check error must flip valid to false");
+        assert!(
+            report
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "ILLEGAL_CONFIG"),
+            "must emit an ILLEGAL_CONFIG diagnostic"
+        );
+        assert!(
+            report
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("nope")),
+            "diagnostic message must surface the underlying failure"
+        );
     }
 }

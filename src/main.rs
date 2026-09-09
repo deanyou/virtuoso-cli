@@ -1783,9 +1783,16 @@ fn dispatch_tunnel(
     }
 }
 
-fn dispatch_config(cmd: ConfigCmd, format: OutputFormat) -> error::Result<serde_json::Value> {
+fn dispatch_config(
+    cmd: ConfigCmd,
+    format: OutputFormat,
+    pre_check: Option<error::VirtuosoError>,
+) -> error::Result<serde_json::Value> {
     match cmd {
-        ConfigCmd::Check { require_explicit } => commands::config::check(format, require_explicit),
+        ConfigCmd::Check { require_explicit } => {
+            let pre_check = pre_check.as_ref().map(|e| Err(e)).unwrap_or(Ok(()));
+            commands::config::check(format, require_explicit, pre_check)
+        }
     }
 }
 
@@ -2634,15 +2641,21 @@ fn main() {
         &cli.command,
         Commands::Target(_) | Commands::Profile(_) | Commands::Init { .. }
     );
+    // Pre-check error captured during selection/resolve so Config commands
+    // can surface it in the structured report (valid=false + ILLEGAL_CONFIG
+    // diagnostic) without aborting. Non-Config commands already exited above.
+    let mut pre_check: Option<error::VirtuosoError> = None;
     let ctx: Option<crate::context::CommandContext> = if needs_config {
         // Resolve the selection FIRST so the env-var bridge can be set.
         // For Config commands, a selection failure must NOT exit — otherwise
         // a broken active_target or corrupt targets.yaml would block
-        // diagnostics. We let build_report() surface the error as JSON.
+        // diagnostics. We capture the error and let build_report() surface
+        // it as JSON.
         let selection = match resolve_selection(cli.target.as_deref(), cli.profile.as_deref()) {
             Ok(s) => Some(s),
             Err(e) => {
                 if matches!(cli.command, Commands::Config(_)) {
+                    pre_check = Some(e);
                     None
                 } else {
                     eprintln!("Error: {e}");
@@ -2679,6 +2692,9 @@ fn main() {
                 Ok(r) => Some(r),
                 Err(e) => {
                     if matches!(cli.command, Commands::Config(_)) {
+                        if pre_check.is_none() {
+                            pre_check = Some(e);
+                        }
                         None
                     } else {
                         eprintln!("Error: {e}");
@@ -2694,6 +2710,9 @@ fn main() {
                     Ok(c) => Some(c),
                     Err(e) => {
                         if matches!(cli.command, Commands::Config(_)) {
+                            if pre_check.is_none() {
+                                pre_check = Some(e);
+                            }
                             None
                         } else {
                             eprintln!("Error: {e}");
@@ -2759,7 +2778,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
-        Commands::Config(cmd) => dispatch_config(cmd, format),
+        Commands::Config(cmd) => dispatch_config(cmd, format, pre_check),
         Commands::Target(cmd) => dispatch_target(cmd, format),
         // Compiled only with `native-ssh`; other builds have no such subcommand
         // at all, so there is nothing to dispatch. `run_with` blocks forever
