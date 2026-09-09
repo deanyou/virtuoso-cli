@@ -9,9 +9,26 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub fn open(lib: &str, cell: &str, view: &str) -> Result<Value> {
+/// Rejects anything but `"r"` / `"a"` before it reaches SKILL.
+///
+/// `maeOpenSetup` ignores an unrecognised `?mode` and falls back to its own
+/// default, which is `"a"` — the locking one. So a typo like `"ro"` would
+/// silently do the opposite of what was asked and leave a human locked out of
+/// the cell; that is worth an error rather than a guess.
+pub(crate) fn check_session_mode(mode: &str) -> Result<()> {
+    if mode != "r" && mode != "a" {
+        return Err(VirtuosoError::Execution(format!(
+            "mode must be \"r\" (read, no edit lock) or \"a\" (append, takes the edit lock), \
+             got {mode:?}"
+        )));
+    }
+    Ok(())
+}
+
+pub fn open(lib: &str, cell: &str, view: &str, mode: &str) -> Result<Value> {
+    check_session_mode(mode)?;
     let client = VirtuosoClient::from_env()?;
-    let skill = client.maestro.open_session(lib, cell, view);
+    let skill = client.maestro.open_session(lib, cell, view, mode);
     let r = client
         .execute_skill(&skill, None)?
         .ok_or_exec("open session")?;
@@ -21,6 +38,26 @@ pub fn open(lib: &str, cell: &str, view: &str) -> Result<Value> {
         "lib": lib,
         "cell": cell,
         "view": view,
+        "mode": mode,
+    }))
+}
+
+/// Takes or hands back the edit lock on an already-open session.
+///
+/// This is the escape hatch that makes the read-only default usable: open
+/// `"r"`, switch to `"a"` for the writes, switch back. The lock file follows
+/// each call exactly.
+pub fn set_mode(session: &str, mode: &str) -> Result<Value> {
+    check_session_mode(mode)?;
+    let client = VirtuosoClient::from_env()?;
+    let skill = client.maestro.set_session_mode(session, mode == "a");
+    client
+        .execute_skill(&skill, None)?
+        .ok_or_exec("set session mode")?;
+    Ok(json!({
+        "status": "success",
+        "session": session,
+        "mode": mode,
     }))
 }
 
@@ -75,10 +112,10 @@ pub fn list_vars() -> Result<Value> {
     parse_skill_json(&r.output)
 }
 
-pub fn get_analyses(session: &str) -> Result<Value> {
+pub fn get_analyses(session: &str, test: Option<&str>) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let version = client.version()?;
-    let skill = client.maestro.get_analyses(session, version);
+    let skill = client.maestro.get_analyses(session, test, version);
     let r = client
         .execute_skill(&skill, None)?
         .ok_or_exec("get analyses")?;
@@ -99,7 +136,12 @@ pub fn get_analyses(session: &str) -> Result<Value> {
     }))
 }
 
-pub fn set_analysis(session: &str, analysis_type: &str, options: Option<&str>) -> Result<Value> {
+pub fn set_analysis(
+    session: &str,
+    analysis_type: &str,
+    options: Option<&str>,
+    test: Option<&str>,
+) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
     let (options_alist, version) = match options {
@@ -117,10 +159,13 @@ pub fn set_analysis(session: &str, analysis_type: &str, options: Option<&str>) -
         }
     };
 
-    let skill =
-        client
-            .maestro
-            .set_analysis(session, analysis_type, options_alist.as_deref(), version);
+    let skill = client.maestro.set_analysis(
+        session,
+        analysis_type,
+        options_alist.as_deref(),
+        test,
+        version,
+    );
     client
         .execute_skill(&skill, None)?
         .ok_or_exec("set analysis")?;
@@ -181,7 +226,7 @@ pub fn run_with_analysis(
             };
             let skill = client
                 .maestro
-                .set_analysis(session, at, alist.as_deref(), version);
+                .set_analysis(session, at, alist.as_deref(), None, version);
             client
                 .execute_skill(&skill, None)?
                 .ok_or_exec("set analysis")?;
@@ -621,7 +666,11 @@ pub fn snapshot(
         Some(h) => h.to_string(),
         None => {
             let skill = client.maestro.get_history_list();
-            let r = client.execute_skill(&skill, None)?;
+            // Unchecked — SKILL is generated internally, and the capability
+            // check already ran at RPC dispatch. `maestro.snapshot` is the
+            // forensics tool: gating it makes it unavailable to non-Admin
+            // callers exactly when something has gone wrong and they need it.
+            let r = client.execute_skill_unchecked(&skill, None)?;
             let histories: Vec<String> = parse_skill_json(&r.output)
                 .and_then(|v| {
                     v.as_array()
@@ -856,7 +905,8 @@ pub fn snapshot(
 /// Resolve session name and run_dir from optional session arg.
 fn snapshot_resolve_session(client: &VirtuosoClient, session: Option<&str>) -> Result<Value> {
     let skill = client.maestro.focused_window_skill();
-    let r = client.execute_skill(&skill, None)?;
+    // Unchecked — called from `snapshot`; see the note there.
+    let r = client.execute_skill_unchecked(&skill, None)?;
 
     let tokens = parse_skill_list_top_level(&r.output);
     let dav_session = tokens.get(1).and_then(|t| extract_skill_string_token(t));
@@ -866,7 +916,8 @@ fn snapshot_resolve_session(client: &VirtuosoClient, session: Option<&str>) -> R
     let run_dir = if let Some(ref s) = effective {
         if Some(s.as_str()) != dav_session.as_deref() {
             let skill2 = client.maestro.run_dir_skill(s);
-            let r2 = client.execute_skill(&skill2, None)?;
+            // Unchecked — called from `snapshot`; see the note there.
+            let r2 = client.execute_skill_unchecked(&skill2, None)?;
             r2.output_unquoted().to_string()
         } else {
             tokens
@@ -1542,7 +1593,7 @@ pub fn create_corner_netlist(
         .maestro
         .create_netlist_for_corner(test, corner, &remote_dir, session);
     let exec_result = client
-        .execute_skill(&skill, None)
+        .execute_skill_unchecked(&skill, None)
         .map_err(|e| with_remote_dir_context(e, &remote_dir))?;
     if let Err(e) = exec_result.ok_or_exec("create netlist for corner") {
         return Err(with_remote_dir_context(e, &remote_dir));
