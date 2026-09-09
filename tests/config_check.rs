@@ -217,7 +217,8 @@ timeout = "60"
     )
     .expect("write");
 
-    let report = virtuoso_cli::config::Config::build_report(Some("prod"), Ok(())).expect("build_report");
+    let report =
+        virtuoso_cli::config::Config::build_report(Some("prod"), Ok(())).expect("build_report");
     let e = report
         .entries
         .iter()
