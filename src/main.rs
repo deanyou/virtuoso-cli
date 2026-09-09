@@ -1790,7 +1790,10 @@ fn dispatch_config(
 ) -> error::Result<serde_json::Value> {
     match cmd {
         ConfigCmd::Check { require_explicit } => {
-            let pre_check = pre_check.as_ref().map(|e| Err(e)).unwrap_or(Ok(()));
+            let pre_check = match pre_check.as_ref() {
+                Some(e) => Err(e),
+                None => Ok(()),
+            };
             commands::config::check(format, require_explicit, pre_check)
         }
     }
