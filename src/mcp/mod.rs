@@ -82,16 +82,19 @@ pub struct McpServer {
     #[allow(dead_code)]
     config: McpConfig,
     tools: Vec<tools::McpTool>,
+    /// Config + target identity. Held here so call_tool can pass it through to
+    /// the RPC dispatcher instead of re-reading env with no target context.
+    ctx: crate::context::CommandContext,
 }
 
 impl McpServer {
-    pub fn new(config: McpConfig) -> Self {
+    pub fn new(config: McpConfig, ctx: crate::context::CommandContext) -> Self {
         let mut tools = tools::all_tools(&config.capabilities);
         // Merge in plugin tools if any
         if let Ok(registry) = super::plugins::PluginRegistry::get_global() {
             tools.extend(registry.mcp_tools());
         }
-        Self { config, tools }
+        Self { config, tools, ctx }
     }
 
     /// Run the MCP stdio loop.
@@ -188,15 +191,13 @@ impl McpServer {
         tool: &tools::McpTool,
         arguments: serde_json::Value,
     ) -> Result<serde_json::Value> {
-        let client = VirtuosoClient::from_env()?;
+        let client = VirtuosoClient::from_context(&self.ctx)?;
         let api_key = std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty());
         let request = crate::rpc::dispatcher::RpcRequest {
             method: tool.rpc_method.to_string(),
             params: arguments,
             api_key,
         };
-        let ctx =
-            crate::context::CommandContext::new(crate::config::Config::from_env()?, None)?;
-        crate::rpc::dispatcher::RpcDispatcher::new(ctx).dispatch(&client, request)
+        crate::rpc::dispatcher::RpcDispatcher::new(self.ctx.clone()).dispatch(&client, request)
     }
 }

@@ -9,6 +9,7 @@ use crate::error::Result;
 pub fn run() -> Result<()> {
     crate::auth::Auth::init();
     let config = crate::mcp::McpConfig::from_env();
-    let server = crate::mcp::McpServer::new(config);
+    let ctx = crate::context::CommandContext::new(crate::config::Config::from_env()?, None)?;
+    let server = crate::mcp::McpServer::new(config, ctx);
     server.run()
 }
