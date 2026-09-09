@@ -134,7 +134,12 @@ impl RpcDispatcher {
         result
     }
 
-    fn dispatch_inner(&self, client: &VirtuosoClient, method: &str, params: Value) -> Result<Value> {
+    fn dispatch_inner(
+        &self,
+        client: &VirtuosoClient,
+        method: &str,
+        params: Value,
+    ) -> Result<Value> {
         let parts: Vec<&str> = method.splitn(2, '.').collect();
         if parts.len() != 2 {
             return Err(VirtuosoError::Execution(format!(
@@ -202,7 +207,12 @@ impl RpcDispatcher {
         }
     }
 
-    fn dispatch_schematic(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
+    fn dispatch_schematic(
+        &self,
+        client: &VirtuosoClient,
+        op: &str,
+        params: Value,
+    ) -> Result<Value> {
         let ops = crate::client::schematic_ops::SchematicOps::new();
         match op {
             "open_cell_view" => {

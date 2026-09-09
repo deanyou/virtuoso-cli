@@ -52,16 +52,15 @@ pub struct CdsLockInfo {
 ///   the SKILL channel is what we may be trying to debug.
 /// - We never delete locks; if a lock needs breaking, the user should
 ///   `ps -p <pid> @ <host>` first and then `rm` manually.
-pub fn cdslck(lib: &str, view_filter: Option<&str>) -> Result<Value> {
-    let client = VirtuosoClient::from_env()?;
+pub fn cdslck(ctx: &crate::context::CommandContext, lib: &str, view_filter: Option<&str>) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
     // Step 1: resolve library readPath via the cell.read_path RPC.
     let req = crate::rpc::dispatcher::RpcRequest {
         method: "cell.read_path".into(),
         params: json!({ "lib": lib }),
         api_key: std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty()),
     };
-    let ctx = crate::context::CommandContext::new(crate::config::Config::from_env()?, None)?;
-    let resp = crate::rpc::dispatcher::RpcDispatcher::new(ctx).dispatch(&client, req)?;
+    let resp = crate::rpc::dispatcher::RpcDispatcher::new(ctx.clone()).dispatch(&client, req)?;
     let lib_path = resp
         .get("read_path")
         .and_then(|v| v.as_str())

@@ -2601,9 +2601,12 @@ fn dispatch_window(
     }
 }
 
-fn dispatch_diag(cmd: DiagCmd) -> error::Result<serde_json::Value> {
+fn dispatch_diag(
+    cmd: DiagCmd,
+    ctx: &crate::context::CommandContext,
+) -> error::Result<serde_json::Value> {
     match cmd {
-        DiagCmd::Cdslck { lib, view } => commands::diag::cdslck(&lib, view.as_deref()),
+        DiagCmd::Cdslck { lib, view } => commands::diag::cdslck(ctx, &lib, view.as_deref()),
     }
 }
 
@@ -2625,12 +2628,19 @@ fn dispatch_tx(
     }
 }
 
-fn dispatch_rpc(cmd: RpcCmd) -> error::Result<serde_json::Value> {
+/// Execute an RPC call.
+///
+/// `ctx` carries the already-resolved config (and target_id if any) from the
+/// selection layer — the dispatcher and client reuse it instead of re‑reading
+/// env, so `--target prod rpc call …` exercises the prod target.
+fn dispatch_rpc(cmd: RpcCmd, ctx: &crate::context::CommandContext) -> error::Result<serde_json::Value> {
     match cmd {
         RpcCmd::Call { method, params } => {
             let params: serde_json::Value =
                 serde_json::from_str(&params).map_err(crate::error::VirtuosoError::Json)?;
-            let client = crate::client::bridge::VirtuosoClient::from_env()?;
+            // Build the session‑bound client from the SAME resolved context so
+            // target identity (client_id, session‑binding) is preserved.
+            let client = crate::client::bridge::VirtuosoClient::from_context(ctx)?;
             // Read API key from environment if set (VCLI_API_KEY)
             let api_key = std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty());
             let request = crate::rpc::dispatcher::RpcRequest {
@@ -2638,8 +2648,7 @@ fn dispatch_rpc(cmd: RpcCmd) -> error::Result<serde_json::Value> {
                 params,
                 api_key,
             };
-            let ctx = crate::context::CommandContext::new(crate::config::Config::from_env()?, None)?;
-            crate::rpc::dispatcher::RpcDispatcher::new(ctx).dispatch(&client, request)
+            crate::rpc::dispatcher::RpcDispatcher::new(ctx.clone()).dispatch(&client, request)
         }
         RpcCmd::Schema => {
             let schema = standard_schema();
@@ -2871,9 +2880,9 @@ fn main() {
             }
         },
         Commands::Tx(cmd) => dispatch_tx(cmd, ctx.as_ref().unwrap()),
-        Commands::Rpc(cmd) => dispatch_rpc(cmd),
+        Commands::Rpc(cmd) => dispatch_rpc(cmd, ctx.as_ref().unwrap()),
         Commands::Window(cmd) => dispatch_window(cmd, ctx.as_ref().unwrap()),
-        Commands::Diag(cmd) => dispatch_diag(cmd),
+        Commands::Diag(cmd) => dispatch_diag(cmd, ctx.as_ref().unwrap()),
         Commands::Schema { all, noun, verb } => {
             let schema = if all || noun.is_none() {
                 commands::schema::show(None, None)
