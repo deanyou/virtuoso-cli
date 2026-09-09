@@ -2635,72 +2635,76 @@ fn main() {
         Commands::Target(_) | Commands::Profile(_) | Commands::Init { .. }
     );
     let ctx: Option<crate::context::CommandContext> = if needs_config {
+        // Resolve the selection FIRST so the env-var bridge can be set.
+        // For Config commands, a selection failure must NOT exit — otherwise
+        // a broken active_target or corrupt targets.yaml would block
+        // diagnostics. We let build_report() surface the error as JSON.
         let selection = match resolve_selection(cli.target.as_deref(), cli.profile.as_deref()) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Error: {e}");
-                std::process::exit(exit_codes::USAGE_ERROR);
-            }
-        };
-        match &selection {
-            Selection::CliTarget(name) => {
-                // Existence is validated below by resolve_from_selection.
-                std::env::set_var("VB_TARGET", name);
-            }
-            Selection::ActiveTarget(name) => {
-                // resolve_selection already verified the target exists.
-                std::env::set_var("VB_TARGET", name);
-            }
-            Selection::EnvTarget(_) => {
-                // Already in the environment; Config::from_env() picks it up.
-            }
-            Selection::CliProfile(profile) => {
-                // An explicit profile beats a stale ambient VB_TARGET: clear the
-                // bridge variable so legacy Config::from_env() stays in sync.
-                std::env::remove_var("VB_TARGET");
-                std::env::set_var("VB_PROFILE", profile);
-            }
-            Selection::LegacyEnv => {
-                // No target selected; clear any stale bridge variable so a
-                // leftover VB_TARGET cannot hijack legacy env resolution.
-                std::env::remove_var("VB_TARGET");
-            }
-        }
-        // P0-A: single immutable Config for this invocation. Migrated commands
-        // receive it through CommandContext and must not re-read env.
-        //
-        // For `Commands::Config` (i.e. `vcli config check`), resolve errors are
-        // DEFERRED — `build_report()` reports them as JSON diagnostics with
-        // valid=false. Otherwise `--target nonexistent config check` (or any
-        // invalid-but-diagnosable config) would exit with a stderr message
-        // BEFORE the report could be emitted, hiding the structured payload.
-        let resolved = match resolve_from_selection(selection) {
-            Ok(r) => Some(r),
+            Ok(s) => Some(s),
             Err(e) => {
                 if matches!(cli.command, Commands::Config(_)) {
                     None
                 } else {
                     eprintln!("Error: {e}");
-                    std::process::exit(match e {
-                        crate::error::VirtuosoError::NotFound(_) => exit_codes::NOT_FOUND,
-                        _ => exit_codes::USAGE_ERROR,
-                    });
+                    std::process::exit(exit_codes::USAGE_ERROR);
                 }
             }
         };
-        match resolved {
-            Some(resolved) => match crate::context::CommandContext::from_resolved(&resolved) {
-                Ok(c) => Some(c),
+
+        if let Some(selection) = selection {
+            match &selection {
+                Selection::CliTarget(name) => {
+                    // Existence validated below by resolve_from_selection.
+                    std::env::set_var("VB_TARGET", name);
+                }
+                Selection::ActiveTarget(name) => {
+                    std::env::set_var("VB_TARGET", name);
+                }
+                Selection::EnvTarget(_) => {}
+                Selection::CliProfile(profile) => {
+                    std::env::remove_var("VB_TARGET");
+                    std::env::set_var("VB_PROFILE", profile);
+                }
+                Selection::LegacyEnv => {
+                    std::env::remove_var("VB_TARGET");
+                }
+            }
+
+            // P0-A: single immutable Config for this invocation. Migrated
+            // commands receive it via CommandContext and must not re-read env.
+            //
+            // Config commands defer resolve errors to build_report so the
+            // structured JSON payload is always emitted — never a stderr exit.
+            let resolved = match resolve_from_selection(selection) {
+                Ok(r) => Some(r),
                 Err(e) => {
                     if matches!(cli.command, Commands::Config(_)) {
                         None
                     } else {
                         eprintln!("Error: {e}");
-                        std::process::exit(exit_codes::USAGE_ERROR);
+                        std::process::exit(match e {
+                            crate::error::VirtuosoError::NotFound(_) => exit_codes::NOT_FOUND,
+                            _ => exit_codes::USAGE_ERROR,
+                        });
                     }
                 }
-            },
-            None => None,
+            };
+            match resolved {
+                Some(resolved) => match crate::context::CommandContext::from_resolved(&resolved) {
+                    Ok(c) => Some(c),
+                    Err(e) => {
+                        if matches!(cli.command, Commands::Config(_)) {
+                            None
+                        } else {
+                            eprintln!("Error: {e}");
+                            std::process::exit(exit_codes::USAGE_ERROR);
+                        }
+                    }
+                },
+                None => None,
+            }
+        } else {
+            None
         }
     } else {
         None
