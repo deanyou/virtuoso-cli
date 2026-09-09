@@ -2633,7 +2633,10 @@ fn dispatch_tx(
 /// `ctx` carries the already-resolved config (and target_id if any) from the
 /// selection layer — the dispatcher and client reuse it instead of re‑reading
 /// env, so `--target prod rpc call …` exercises the prod target.
-fn dispatch_rpc(cmd: RpcCmd, ctx: &crate::context::CommandContext) -> error::Result<serde_json::Value> {
+fn dispatch_rpc(
+    cmd: RpcCmd,
+    ctx: &crate::context::CommandContext,
+) -> error::Result<serde_json::Value> {
     match cmd {
         RpcCmd::Call { method, params } => {
             let params: serde_json::Value =

@@ -159,7 +159,7 @@ impl RpcDispatcher {
                         let cell = json_str(params.get("cell"), "cell")?;
                         let view = json_str_or(params.get("view"), "symbol")?;
                         let view_type = json_str_or(params.get("view_type"), "schematicSymbol")?;
-                        crate::commands::symbol::inspect(&ctx, &lib, &cell, &view, &view_type)
+                        crate::commands::symbol::inspect(ctx, &lib, &cell, &view, &view_type)
                     }
                     "generate" => {
                         let lib = json_str(params.get("lib"), "lib")?;
@@ -167,7 +167,7 @@ impl RpcDispatcher {
                         let src = json_str_or(params.get("schematic_view"), "schematic")?;
                         let dst = json_str_or(params.get("symbol_view"), "symbol")?;
                         let sort = params.get("sort_pins").and_then(Value::as_str);
-                        crate::commands::symbol::generate(&ctx, &lib, &cell, &src, &dst, sort)
+                        crate::commands::symbol::generate(ctx, &lib, &cell, &src, &dst, sort)
                     }
                     _ => Err(VirtuosoError::NotFound(format!(
                         "unknown symbol method '{op}'"
@@ -180,7 +180,7 @@ impl RpcDispatcher {
                         || params.as_object().map(|m| m.is_empty()).unwrap_or(false) =>
                 {
                     let ctx = &self.ctx;
-                    crate::commands::library::list(&ctx)
+                    crate::commands::library::list(ctx)
                 }
                 _ => Err(VirtuosoError::NotFound(format!(
                     "unknown library method '{op}'"
