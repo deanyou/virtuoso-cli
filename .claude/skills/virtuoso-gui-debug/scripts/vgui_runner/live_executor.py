@@ -775,36 +775,58 @@ class LiveExecutor(Executor):
         Uses vcli action-x11 --direct for each sub-step (activate, key, type).
         The CIW input line is at the bottom of the window; we click at
         (width/2, height-20) which reliably lands in the input area.
+
+        Geometry note: list-windows-x11 reports window geometry including WM
+        decorations (e.g. 730x743 for a 720x709 CIW), which causes click-y to
+        land outside the content area. After activate, vcli writes a precise
+        geometry cache to /tmp/vcli_geom_<display>_<wid>.json; we read that
+        for accurate click coordinates.
         """
+        import json as _json
+        import os as _os
+        import time as _time
+
         wid = self.window_id
         if not wid:
             raise RuntimeError("CIW_INPUT requires a bound window")
-        # Calculate click position based on window geometry
-        # CIW input line is typically at bottom 10-20% of the window
         if self._window_width is None or self._window_height is None:
             raise RuntimeError(
                 "CIW_INPUT requires window geometry from precheck; "
                 "run precheck() before execute()"
             )
-        w = self._window_width
-        h = self._window_height
-        click_x = w // 2  # Center X
-        # CIW input line is typically at the bottom ~10% of the window.
-        # Use 90% of height, but ensure we're at least 100px from the top
-        # and at most 5px from the bottom (stay inside the window).
-        click_y = max(int(h * 0.9), h - 100)
-        click_y = min(click_y, h - 5)
-        # 1. Activate the CIW window
+        # 1. Activate the CIW window (also refreshes vcli geometry cache)
         self._run_action("activate")
-        # 2. Click the input line (bottom center of window)
+        # 2. Read precise geometry from vcli cache (written by activate).
+        #    Cache path: /tmp/vcli_geom_<display_with_underscores>_<wid>.json
+        display_safe = (self._scenario_display or ":0").replace(":", "_").replace(".", "_")
+        cache_path = f"/tmp/vcli_geom_{display_safe}_{wid}.json"
+        w, h = self._window_width, self._window_height
+        try:
+            # Wait briefly for cache to be written/refreshed by activate
+            for _ in range(10):
+                if _os.path.exists(cache_path):
+                    with open(cache_path, "r") as _f:
+                        _cache = _json.load(_f)
+                    _geom = _cache.get("geom", {})
+                    if _geom.get("w") and _geom.get("h"):
+                        w, h = _geom["w"], _geom["h"]
+                        break
+                _time.sleep(0.05)
+        except Exception:  # noqa: BLE001 — fall back to precheck geometry
+            pass
+        click_x = w // 2  # Center X
+        # CIW input line is at the very bottom of the window (~height-20).
+        click_y = h - 20
+        click_y = max(click_y, 10)  # stay inside the window
+        # 3. Click the input line (bottom center of window)
         self._run_action("click-rel", x=click_x, y=click_y)
-        # 3. Clear existing input if requested
+        # 4. Clear existing input if requested.
+        # Virtuoso CIW: ctrl+a does NOT select-all; Escape clears the line.
         if clear_first:
-            self._run_action("key", text="ctrl+a")
-            self._run_action("key", text="Delete")
-        # 4. Type the expression with reduced delay for speed
+            self._run_action("key", text="Escape")
+        # 5. Type the expression with reduced delay for speed
         self._run_action("type", text=expression)
-        # 5. Press Return to execute
+        # 6. Press Return to execute
         self._run_action("key", text="Return")
 
     def _wait_for_window(self, step: Step) -> Optional[Dict[str, Any]]:
