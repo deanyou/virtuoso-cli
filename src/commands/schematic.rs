@@ -53,8 +53,8 @@ pub fn open(lib: &str, cell: &str, view: &str) -> Result<Value> {
 pub fn place(
     master: &str,
     name: &str,
-    x: i64,
-    y: i64,
+    x: f64,
+    y: f64,
     orient: Orient,
     params: &[(String, String)],
 ) -> Result<Value> {
@@ -76,7 +76,7 @@ pub fn place(
 }
 
 pub fn wire_from_strings(net: &str, points: &[String]) -> Result<Value> {
-    let pts: Vec<(i64, i64)> = points
+    let pts: Vec<(f64, f64)> = points
         .iter()
         .map(|s| {
             let (x, y) = s
@@ -93,7 +93,7 @@ pub fn wire_from_strings(net: &str, points: &[String]) -> Result<Value> {
     wire(net, &pts)
 }
 
-pub fn wire(net: &str, points: &[(i64, i64)]) -> Result<Value> {
+pub fn wire(net: &str, points: &[(f64, f64)]) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.create_wire(points, "wire", net);
     let r = client.execute_skill(&skill, None)?;
@@ -122,7 +122,7 @@ pub fn conn(net: &str, from: &str, to: &str) -> Result<Value> {
     }))
 }
 
-pub fn label(net: &str, x: i64, y: i64) -> Result<Value> {
+pub fn label(net: &str, x: f64, y: f64) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.create_wire_label(net, (x, y));
     let r = client.execute_skill(&skill, None)?;
@@ -132,7 +132,7 @@ pub fn label(net: &str, x: i64, y: i64) -> Result<Value> {
     }))
 }
 
-pub fn pin(net: &str, pin_type: &str, x: i64, y: i64) -> Result<Value> {
+pub fn pin(net: &str, pin_type: &str, x: f64, y: f64) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.create_pin(net, pin_type, (x, y));
     let r = client.execute_skill(&skill, None)?;
@@ -169,8 +169,8 @@ pub fn save() -> Result<Value> {
 /// cosmetic: "default" (0.0625, centerCenter) or "clean" (0.125, lowerCenter)
 pub fn net_stub(
     net: &str,
-    x: i64,
-    y: i64,
+    x: f64,
+    y: f64,
     direction: &str,
     length: f64,
     cosmetic: &str,
@@ -255,9 +255,9 @@ pub struct SpecInstance {
     pub name: String,
     pub master: String, // "lib/cell"
     #[serde(default)]
-    pub x: i64,
+    pub x: f64,
     #[serde(default)]
-    pub y: i64,
+    pub y: f64,
     #[serde(default = "default_orient")]
     pub orient: Orient,
     #[serde(default)]
@@ -290,9 +290,9 @@ pub struct SpecPin {
     #[allow(dead_code)]
     pub connect: Option<String>, // "M2:G"
     #[serde(default)]
-    pub x: i64,
+    pub x: f64,
     #[serde(default)]
-    pub y: i64,
+    pub y: f64,
 }
 
 pub fn build(spec_path: &str) -> Result<Value> {
