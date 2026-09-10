@@ -150,44 +150,86 @@ impl SchematicOps {
         )
     }
 
-    pub fn create_wire(&self, points: &[(f64, f64)], layer: &str, net_name: &str) -> String {
-        let layer = escape_skill_string(layer);
+    /// Draw a wire through `points` and name the net it forms.
+    ///
+    /// The previous implementation called `dbCreateWire` with a layer from
+    /// `dbFindLayerByName`. **Neither function exists in IC23.1** — no entry in
+    /// any of the 41 `.fnd` databases, and live on `DESIGN_LIB/_rbscratch`
+    /// (2026-09-10) every call died with `*Error* eval: undefined function
+    /// dbCreateWire`. `schematic.wire` was a dead method that had never drawn a
+    /// wire.
+    ///
+    /// Signature from `doc/skcompref/chap2_re_schCreateWire.html`:
+    ///
+    /// ```text
+    /// schCreateWire(d_cvId t_entryMethod t_routeMethod l_points
+    ///               n_xSpacing n_ySpacing n_width [t_color] [t_lineStyle])
+    ///   => l_wireId
+    /// ```
+    ///
+    /// There is no layer argument — a schematic wire is on the wire layer by
+    /// construction — so the old `layer` parameter is **removed**, not ignored.
+    /// Entry method `"draw"` uses the point list verbatim; the route method is
+    /// then irrelevant but still required positionally.
+    ///
+    /// The net is named the way the schematic editor names one: by gluing a
+    /// wire label to the drawn wire. Handing a `dbMakeNet` object to the
+    /// constructor, as the old code did, produces derived connectivity that the
+    /// next `schCheck` throws away — the rule [`Self::label_instance_term`]
+    /// documents at length. Without the label the `net` argument would be
+    /// silently dropped, which is the failure mode this whole file is about.
+    ///
+    /// The label goes at the midpoint of the first segment, turned to R90 when
+    /// that segment is vertical, matching [`Self::create_net_stub`].
+    pub fn create_wire(&self, points: &[(f64, f64)], net_name: &str) -> String {
         let net_name = escape_skill_string(net_name);
+        // A single point is not a wire. Say so in the same place every other
+        // failure here is reported rather than letting `schCreateWire` return
+        // nil and blaming the cellview.
+        let (Some(&(x0, y0)), Some(&(x1, y1))) = (points.first(), points.get(1)) else {
+            return format!(
+                r#"error("create_wire: net {net_name} needs at least two points, got {}")"#,
+                points.len()
+            );
+        };
         let pts: String = points
             .iter()
-            .map(|(x, y)| format!("list({x} {y})"))
+            .map(|(x, y)| format!("list({x:?} {y:?})"))
             .collect::<Vec<_>>()
             .join(" ");
+        let (mid_x, mid_y) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+        let rot = if x0 == x1 { "R90" } else { "R0" };
         let guard = cv_guard();
         format!(
-            r#"let((cv) cv = {EDIT_CV} {guard} dbCreateWire(cv dbMakeNet(cv "{net_name}") dbFindLayerByName(cv "{layer}") list({pts}))"#
+            r#"let((cv wires lbl) cv = {EDIT_CV} {guard} wires = schCreateWire(cv "draw" "full" list({pts}) 0.0625 0.0625 0.0) when(!wires error("create_wire: schCreateWire failed for net {net_name}")) lbl = schCreateWireLabel(cv car(wires) list({mid_x:?} {mid_y:?}) "{net_name}" "centerCenter" "{rot}" "stick" 0.0625 nil) when(!lbl error("create_wire: schCreateWireLabel failed for net {net_name}")) sprintf(nil "{net_name}: %d segment(s)" length(wires)))"#
         )
     }
 
-    #[allow(dead_code)]
-    pub fn create_wire_between_terms(
-        &self,
-        inst1: &str,
-        _term1: &str,
-        inst2: &str,
-        _term2: &str,
-        net_name: &str,
-    ) -> String {
-        let inst1 = escape_skill_string(inst1);
-        let inst2 = escape_skill_string(inst2);
-        let net_name = escape_skill_string(net_name);
-        let guard = cv_guard();
-        format!(
-            r#"let((cv net) cv = {EDIT_CV} {guard} net = dbMakeNet(cv "{net_name}") dbCreateWire(net dbFindTermByName(cv "{inst1}") dbFindTermByName(cv "{inst2}")))"#
-        )
-    }
-
+    /// Attach a net label to the wire already drawn at `origin`.
+    ///
+    /// The old implementation was `dbCreateLabel(cv net "{name}" ...)`, which is
+    /// wrong twice over. `dbCreateLabel`'s second argument is a
+    /// `txl_layerPurpose` pair, not a net (`doc/skdfref`), and the whole call
+    /// sat behind `when(net ...)` on a `dbFindNetByName` lookup — so for a net
+    /// that did not exist yet, the common case, the expression evaluated to
+    /// `nil` and the RPC reported `create label failed: nil` with a suggestion
+    /// to check whether a cellview was open. Reproduced live 2026-09-10.
+    ///
+    /// A schematic label is not free-floating text: `schCreateWireLabel` takes
+    /// the wire or pin it names as `d_glue`, and gluing it is what makes the
+    /// label *mean* anything to connectivity extraction. So the wire has to be
+    /// found first. `dbGetOverlaps` with a degenerate box at `origin` does that
+    /// — probed on a live cellview: it returns the `"line"` at a point on the
+    /// wire and `nil` two grid units away.
+    ///
+    /// Not finding a wire is a real error, not an empty result: a label with
+    /// nothing under it names nothing.
     pub fn create_wire_label(&self, net_name: &str, origin: (f64, f64)) -> String {
         let net_name = escape_skill_string(net_name);
         let (x, y) = origin;
         let guard = cv_guard();
         format!(
-            r#"let((cv net) cv = {EDIT_CV} {guard} net = dbFindNetByName(cv "{net_name}") when(net dbCreateLabel(cv net "{net_name}" list({x} {y}) "centerCenter" "R0" "stick" 0.0625))"#
+            r#"let((cv figs wire lbl) cv = {EDIT_CV} {guard} figs = dbGetOverlaps(cv list(list({x:?} {y:?}) list({x:?} {y:?}))) wire = car(setof(f figs f~>objType == "line")) when(!wire error("label: no wire at ({x:?} {y:?}) to name {net_name} — draw the wire first")) lbl = schCreateWireLabel(cv wire list({x:?} {y:?}) "{net_name}" "centerCenter" "R0" "stick" 0.0625 nil) when(!lbl error("label: schCreateWireLabel failed for net {net_name}")) sprintf(nil "{net_name} @ ({x:?} {y:?})"))"#
         )
     }
 
@@ -398,11 +440,19 @@ impl SchematicOps {
     /// Create a short labeled net stub in a given direction.
     ///
     /// Draws a wire segment of `length` grid units from (x,y) in the specified
-    /// direction and places a net label at its midpoint. Useful for power/ground
+    /// direction and glues a net label to its midpoint. Useful for power/ground
     /// connections and test points without manually computing endpoint coords.
     ///
+    /// Rewritten 2026-09-10 onto the schematic-editor APIs. It used to call
+    /// `dbCreateWire` + `dbFindLayerByName` + `dbCreateLabel`; the first two do
+    /// not exist in IC23.1, so every call returned `*Error* eval: undefined
+    /// function dbCreateWire` — verified live, the same dead path as
+    /// [`Self::create_wire`]. The label is now glued to the wire it names
+    /// (`schCreateWireLabel`) instead of being dropped on a `dbFindNetByName`
+    /// result, which is what makes the stub survive `schCheck`.
+    ///
     /// direction: "right" (default) | "left" | "up" | "down"
-    /// length: stub length in DBU (default 0.5 grid units = 0.5 for typical libs)
+    /// length: stub length in user units
     /// cosmetic: "default" (fontSize 0.0625, centerCenter) or "clean" (0.125, lowerCenter)
     pub fn create_net_stub(
         &self,
@@ -425,20 +475,14 @@ impl SchematicOps {
         let label_x = (x + end_x) / 2.0;
         let label_y = (y + end_y) / 2.0;
         let (font_size, just) = if cosmetic == "clean" {
-            ("0.125", "\"lowerCenter\"")
+            ("0.125", "lowerCenter")
         } else {
-            ("0.0625", "\"centerCenter\"")
+            ("0.0625", "centerCenter")
         };
-
-        // Format floats as clean SKILL numbers (avoid precision artifacts)
-        let end_x_s = end_x.to_string();
-        let end_y_s = end_y.to_string();
-        let label_x_s = label_x.to_string();
-        let label_y_s = label_y.to_string();
 
         let guard = cv_guard();
         format!(
-            r#"let((cv) cv = {EDIT_CV} {guard} dbCreateWire(cv dbMakeNet(cv "{net_name}") dbFindLayerByName(cv "wire") list(list({x} {y}) list({end_x_s} {end_y_s}))) dbCreateLabel(cv dbFindNetByName(cv "{net_name}") "{net_name}" list({label_x_s} {label_y_s}) {just} "{rot}" "stick" {font_size}))"#
+            r#"let((cv wires lbl) cv = {EDIT_CV} {guard} wires = schCreateWire(cv "draw" "full" list(list({x:?} {y:?}) list({end_x:?} {end_y:?})) 0.0625 0.0625 0.0) when(!wires error("net_stub: schCreateWire failed for net {net_name}")) lbl = schCreateWireLabel(cv car(wires) list({label_x:?} {label_y:?}) "{net_name}" "{just}" "{rot}" "stick" {font_size} nil) when(!lbl error("net_stub: schCreateWireLabel failed for net {net_name}")) sprintf(nil "{net_name} stub ({x:?} {y:?})->({end_x:?} {end_y:?})"))"#
         )
     }
 
@@ -741,12 +785,66 @@ mod tests {
 
     #[test]
     fn cv_guard_is_injected_in_write_ops() {
-        let s = ops().create_wire(&[(0.0, 0.0), (10.0, 10.0)], "wire", "VDD");
+        let s = ops().create_wire(&[(0.0, 0.0), (10.0, 10.0)], "VDD");
         assert!(
             s.contains("geGetEditCellView"),
             "guard must be present: {s}"
         );
-        assert!(s.contains("dbCreateWire"), "{s}");
+        assert!(s.contains("schCreateWire("), "{s}");
+    }
+
+    /// `dbCreateWire` and `dbFindLayerByName` are not IC23.1 functions — they
+    /// appear in none of the 41 `.fnd` databases, and live they raise
+    /// `*Error* eval: undefined function dbCreateWire`. Both wire-drawing ops
+    /// carried them, so both were dead on arrival.
+    #[test]
+    fn wire_ops_use_the_schematic_editor_api_not_the_undefined_db_calls() {
+        for s in [
+            ops().create_wire(&[(0.0, 0.0), (2.0, 0.0)], "VDD"),
+            ops().create_net_stub("VDD", 1.0, 2.0, "right", 0.5, "default"),
+        ] {
+            assert!(s.contains("schCreateWire("), "must draw the wire: {s}");
+            assert!(
+                s.contains("schCreateWireLabel("),
+                "the label is what names the net: {s}"
+            );
+            assert!(
+                !s.contains("dbCreateWire")
+                    && !s.contains("dbFindLayerByName")
+                    && !s.contains("dbCreateLabel"),
+                "no undefined or layer-based db calls: {s}"
+            );
+            // The net must be named, not accepted and dropped.
+            assert!(s.contains("\"VDD\""), "net name must appear quoted: {s}");
+        }
+    }
+
+    /// A one-point "wire" is caller error, and the message has to say which
+    /// argument was wrong — `schCreateWire` would just return nil, which the
+    /// RPC layer reports as a cellview problem.
+    #[test]
+    fn create_wire_rejects_fewer_than_two_points() {
+        for pts in [&[][..], &[(1.0, 1.0)][..]] {
+            let s = ops().create_wire(pts, "VDD");
+            assert!(
+                s.starts_with("error(") && s.contains("at least two points"),
+                "{s}"
+            );
+            assert!(!s.contains("schCreateWire("), "must not draw anything: {s}");
+        }
+    }
+
+    /// The label goes along the wire it names: upright on a horizontal segment,
+    /// turned on a vertical one.
+    #[test]
+    fn create_wire_turns_the_label_to_follow_a_vertical_segment() {
+        let h = ops().create_wire(&[(0.0, 0.0), (2.0, 0.0)], "VDD");
+        assert!(h.contains(r#""VDD" "centerCenter" "R0""#), "{h}");
+        // Midpoint of the first segment.
+        assert!(h.contains("list(1.0 0.0)"), "{h}");
+        let v = ops().create_wire(&[(0.0, 0.0), (0.0, 3.0)], "VDD");
+        assert!(v.contains(r#""VDD" "centerCenter" "R90""#), "{v}");
+        assert!(v.contains("list(0.0 1.5)"), "{v}");
     }
 
     #[test]
@@ -779,6 +877,30 @@ mod tests {
         assert!(s.contains("geGetEditCellView"), "{s}");
     }
 
+    /// A schematic label is glued to a wire — `schCreateWireLabel`'s `d_glue`
+    /// argument is the wire or pin it names, and a label with nothing under it
+    /// names nothing. The old code dropped a `dbCreateLabel` on whatever
+    /// `dbFindNetByName` returned, behind a `when(net ...)` that made a missing
+    /// net evaluate to nil rather than say so.
+    #[test]
+    fn create_wire_label_glues_to_the_wire_it_finds_and_errors_when_there_is_none() {
+        let s = ops().create_wire_label("GND", (50.0, 50.0));
+        assert!(s.contains("dbGetOverlaps("), "must locate the wire: {s}");
+        assert!(
+            s.contains(r#"f~>objType == "line""#),
+            "a schematic wire is a line shape: {s}"
+        );
+        assert!(s.contains("schCreateWireLabel("), "{s}");
+        assert!(
+            !s.contains("dbCreateLabel") && !s.contains("dbFindNetByName"),
+            "must not go back to the raw db label: {s}"
+        );
+        assert!(
+            s.contains(r#"error("label: no wire at"#),
+            "no wire under the label is an error, not a silent nil: {s}"
+        );
+    }
+
     #[test]
     fn save_contains_guard() {
         let s = ops().save();
@@ -790,9 +912,12 @@ mod tests {
     fn create_net_stub_right() {
         let s = ops().create_net_stub("VDD", 100.0, 200.0, "right", 0.5, "default");
         assert!(s.contains("VDD"), "net name must appear: {s}");
-        assert!(s.contains("dbCreateWire"), "must use dbCreateWire: {s}");
-        assert!(s.contains("dbCreateLabel"), "must use dbCreateLabel: {s}");
+        assert!(s.contains("schCreateWire("), "must draw a real wire: {s}");
+        assert!(s.contains("schCreateWireLabel("), "must glue a label: {s}");
         assert!(s.contains("geGetEditCellView"), "must have guard: {s}");
+        // The stub runs right from (100 200) for 0.5, label at the midpoint.
+        assert!(s.contains("list(100.5 200.0)"), "endpoint: {s}");
+        assert!(s.contains("list(100.25 200.0)"), "label midpoint: {s}");
     }
 
     #[test]

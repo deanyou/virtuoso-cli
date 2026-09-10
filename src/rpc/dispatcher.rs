@@ -98,6 +98,66 @@ pub struct RpcDispatcher {
     ctx: CommandContext,
 }
 
+/// `method` → (summary, declared parameter names), built once from the schema.
+///
+/// Only the built-in schema is indexed. Plugin domains are absent on purpose —
+/// see [`reject_undeclared_params`].
+static DECLARED_PARAMS: Lazy<std::collections::HashMap<String, (String, Vec<String>)>> =
+    Lazy::new(|| {
+        crate::rpc::schema::standard_schema()
+            .methods
+            .into_iter()
+            .map(|m| {
+                let names = m.params.into_iter().map(|p| p.name).collect();
+                (m.name, (m.summary, names))
+            })
+            .collect()
+    });
+
+/// Refuse a request carrying a parameter the method does not declare.
+///
+/// Before this, extra keys were dropped without a trace, so "the argument was
+/// wrong" and "the argument was honoured" produced identical output:
+/// `schematic.list_instances {"lib":"DESIGN_LIB","cell":"no_such_cell"}`
+/// answered with the twelve instances of whatever cellview happened to be
+/// open. The schema declares every method's parameters already, so the check
+/// is mechanical — and any dispatch arm that reads an undeclared key is caught
+/// by `every_param_a_dispatch_arm_reads_is_declared_in_the_schema` below.
+///
+/// Methods the built-in schema does not know about are plugin-provided and
+/// carry their own contract; leave them alone.
+fn reject_undeclared_params(method: &str, params: &Value) -> Result<()> {
+    let (Some((summary, declared)), Some(obj)) =
+        (DECLARED_PARAMS.get(method), params.as_object())
+    else {
+        return Ok(());
+    };
+    let unknown: Vec<&str> = obj
+        .keys()
+        .map(String::as_str)
+        .filter(|k| !declared.iter().any(|d| d == k))
+        .collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    let accepted = if declared.is_empty() {
+        "it takes no parameters".to_string()
+    } else {
+        format!("it accepts: {}", declared.join(", "))
+    };
+    Err(VirtuosoError::Config(format!(
+        "method '{}' does not accept {} — {} ({})",
+        method,
+        unknown
+            .iter()
+            .map(|k| format!("'{k}'"))
+            .collect::<Vec<_>>()
+            .join(", "),
+        accepted,
+        summary
+    )))
+}
+
 impl RpcDispatcher {
     pub fn new(ctx: CommandContext) -> Self {
         Self { ctx }
@@ -122,7 +182,8 @@ impl RpcDispatcher {
             )));
         }
 
-        let result = Self::dispatch_inner(self, client, &method, params.clone());
+        let result = reject_undeclared_params(&method, &params)
+            .and_then(|()| Self::dispatch_inner(self, client, &method, params.clone()));
 
         // Audit log — always log, regardless of success/failure
         let result_str = match &result {
@@ -269,9 +330,11 @@ impl RpcDispatcher {
                 // shortened the wire and still reported ok, so the missing
                 // segment only showed up as a disconnected net much later.
                 let pts = parse_wire_points(params.get("points"))?;
-                let skill = ops.create_wire(&pts, "wire", &net);
+                let skill = ops.create_wire(&pts, &net);
                 execute_required_skill(client, &skill, "create wire")?;
-                Ok(serde_json::json!({ "status": "ok" }))
+                Ok(serde_json::json!({
+                    "status": "ok", "net": net, "segments": pts.len() - 1
+                }))
             }
             "label" => {
                 let net = json_str(params.get("net"), "net")?;
@@ -279,7 +342,7 @@ impl RpcDispatcher {
                 let y = json_coord_or(params.get("y"), "y", 0.0)?;
                 let skill = ops.create_wire_label(&net, (x, y));
                 execute_required_skill(client, &skill, "create label")?;
-                Ok(serde_json::json!({ "status": "ok" }))
+                Ok(serde_json::json!({ "status": "ok", "net": net, "x": x, "y": y }))
             }
             "pin" => {
                 let net = json_str(params.get("net"), "net")?;
@@ -731,7 +794,10 @@ impl RpcDispatcher {
                 let action = json_str_or(params.get("action"), "cancel")?;
                 let skill = ops.dismiss_dialog(&action);
                 let r = execute_required_skill(client, &skill, "dismiss dialog")?;
-                let out = r.output.trim();
+                // The bridge hands back the SKILL string with its quotes, so the
+                // sentinel only matches after trimming them — same as
+                // `commands::window`.
+                let out = r.output.trim().trim_matches('"');
                 if out == "no-dialog" {
                     Ok(serde_json::json!({ "status": "no-dialog" }))
                 } else {
@@ -741,7 +807,7 @@ impl RpcDispatcher {
             "get_dialog_info" => {
                 let skill = ops.get_dialog_info();
                 let r = execute_query_skill(client, &skill, "get dialog information")?;
-                let out = r.output.trim();
+                let out = r.output.trim().trim_matches('"');
                 if out == "no-dialog" {
                     Ok(serde_json::json!({ "dialog": null }))
                 } else {
@@ -839,14 +905,39 @@ impl RpcDispatcher {
                 let lib = json_str(params.get("lib"), "lib")?;
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str_or(params.get("view"), "schematic")?;
+                // `dbOpenCellViewByType` refuses to *create* without a view
+                // type ("You need to specify a cellViewType to create a new
+                // cellview", skdfref), and the type is not the view name.
+                let view_type = match params.get("view_type").and_then(|v| v.as_str()) {
+                    Some(t) => t.to_string(),
+                    None => cell_view_type_for(&view).ok_or_else(|| {
+                        VirtuosoError::Config(format!(
+                            "cell.create: don't know the cellViewType for view '{view}' — \
+                             pass 'view_type' explicitly (e.g. schematic, schematicSymbol, \
+                             maskLayout, netlist)"
+                        ))
+                    })?,
+                };
                 let skill = format!(
-                    r#"dbCreateCell("{lib}" "{cell}" "{view}")"#,
+                    // Mode "w" *wipes* an existing cellview, so refuse when one
+                    // is already there rather than silently emptying it — the
+                    // old `dbCreateCell` never got far enough to have this
+                    // hazard, because it does not exist in IC23.1 at all
+                    // (`undefined function dbCreateCell`, verified live).
+                    // `dbOpenCellViewByType` only builds the cellview in
+                    // memory; `dbSave` is what puts it on disk, and `dbClose`
+                    // keeps the call from leaking an edit lock.
+                    r#"let((existing cv) existing = nil errset(existing = ddGetObj("{lib}" "{cell}" "{view}")) when(existing error("cell.create: {lib}/{cell}/{view} already exists — delete it first, this would overwrite it")) cv = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "{view_type}" "w") when(!cv error("cell.create: dbOpenCellViewByType failed for {lib}/{cell}/{view} (type {view_type})")) when(!dbSave(cv) dbClose(cv) error("cell.create: dbSave failed for {lib}/{cell}/{view}")) dbClose(cv) sprintf(nil "{lib}/{cell}/{view} ({view_type})"))"#,
                     lib = escape_skill_string(&lib),
                     cell = escape_skill_string(&cell),
-                    view = escape_skill_string(&view)
+                    view = escape_skill_string(&view),
+                    view_type = escape_skill_string(&view_type)
                 );
                 let r = execute_required_skill(client, &skill, "create cell")?;
-                Ok(serde_json::json!({ "status": "ok", "output": r.output.trim() }))
+                Ok(serde_json::json!({
+                    "status": "ok", "lib": lib, "cell": cell, "view": view,
+                    "view_type": view_type, "output": r.output.trim()
+                }))
             }
             "read_path" => {
                 // Return the on-disk readPath of a registered library. Used by
@@ -1171,6 +1262,28 @@ fn json_coord_or(value: Option<&Value>, field: &str, default: f64) -> Result<f64
 /// A wire with fewer points than the caller listed is not a wire the caller
 /// asked for, so every failure is reported with the offending element rather
 /// than skipped.
+/// Map a view *name* onto the DFII cellViewType `dbOpenCellViewByType` needs
+/// to create it.
+///
+/// These are not the same string, and getting it wrong is not a soft failure:
+/// the manual says "An error occurs if you try to create a cellview with an
+/// unsupported type". `symbol` → `schematicSymbol` and `layout` → `maskLayout`
+/// are the two that catch people out.
+///
+/// Only the view names whose type is unambiguous are mapped. Anything else —
+/// `maestro`, `config`, a site-specific view — returns `None` so the caller is
+/// told to name the type instead of having one guessed for it.
+fn cell_view_type_for(view: &str) -> Option<String> {
+    let t = match view {
+        "schematic" => "schematic",
+        "symbol" => "schematicSymbol",
+        "layout" => "maskLayout",
+        "netlist" => "netlist",
+        _ => return None,
+    };
+    Some(t.to_string())
+}
+
 fn parse_wire_points(value: Option<&Value>) -> Result<Vec<(f64, f64)>> {
     let arr = value.and_then(|v| v.as_array()).ok_or_else(|| {
         VirtuosoError::Execution("field 'points' must be an array of \"x,y\" strings".into())
@@ -1194,7 +1307,19 @@ fn parse_wire_points(value: Option<&Value>) -> Result<Vec<(f64, f64)>> {
             };
             Ok((num(x)?, num(y)?))
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()
+        .and_then(|pts| {
+            // One point is not a wire. Rejecting it here names the parameter;
+            // letting it through makes `schCreateWire` return nil, which the
+            // caller sees as a cellview problem.
+            if pts.len() < 2 {
+                return Err(VirtuosoError::Execution(format!(
+                    "field 'points' needs at least two points to make a wire, got {}",
+                    pts.len()
+                )));
+            }
+            Ok(pts)
+        })
 }
 
 /// Fold a SKILL-produced JSON object into a `{"status":"ok", ...}` reply.
@@ -1233,6 +1358,164 @@ mod tests {
     use super::*;
     use crate::models::VirtuosoResult;
     use crate::rpc::schema::{standard_schema, RpcSchema};
+
+    /// Defect N: an argument the method never reads used to vanish, and the
+    /// answer looked exactly like a real one — `list_instances` reported the
+    /// open cellview's instances for a cell that does not exist.
+    #[test]
+    fn an_undeclared_param_is_refused_not_silently_dropped() {
+        use serde_json::json;
+
+        let err = reject_undeclared_params(
+            "schematic.list_instances",
+            &json!({"lib": "DESIGN_LIB", "cell": "no_such_cell_xyz"}),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("'cell'") && err.contains("'lib'"), "{err}");
+        // Say what it does instead, or the caller just guesses again.
+        assert!(err.contains("takes no parameters"), "{err}");
+        assert!(err.contains("open cellview"), "{err}");
+
+        let err = reject_undeclared_params("schematic.place", &json!({"master": "analogLib/res", "name": "R1", "z": 3}))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("'z'"), "{err}");
+        assert!(err.contains("orient"), "expected the accepted list: {err}");
+        assert!(!err.contains("'master'"), "declared params must not be listed: {err}");
+    }
+
+    /// The check must stay out of the way of every legitimate call: declared
+    /// params (required or optional), empty params, and plugin domains the
+    /// built-in schema knows nothing about.
+    #[test]
+    fn declared_params_and_plugin_domains_pass_through() {
+        use serde_json::json;
+
+        for params in [
+            json!({"lib": "DESIGN_LIB", "cell": "amp"}),
+            json!({"lib": "L", "cell": "C", "view": "schematic"}),
+        ] {
+            assert!(reject_undeclared_params("schematic.open_cell_view", &params).is_ok());
+        }
+        for params in [json!({}), json!(null), json!("nonsense")] {
+            assert!(reject_undeclared_params("schematic.list_instances", &params).is_ok());
+        }
+        // Not in the built-in schema => plugin contract, not ours to police.
+        assert!(reject_undeclared_params("myplugin.do_thing", &json!({"anything": 1})).is_ok());
+    }
+
+    /// The mechanical half of defect N's fix: the schema can only be trusted to
+    /// gate parameters if it declares every parameter the code actually reads.
+    /// Scan each `dispatch_*` arm for `params.get("…")` and require the schema
+    /// to know that name. Two were missing when this was written
+    /// (`dismiss_dialog_x11`'s `window_id`, `dismiss_window_x11`'s `pid`) —
+    /// enforcing without this test would have broken both.
+    #[test]
+    fn every_param_a_dispatch_arm_reads_is_declared_in_the_schema() {
+        let src = include_str!("dispatcher.rs");
+        let declared: std::collections::HashMap<String, Vec<String>> = standard_schema()
+            .methods
+            .into_iter()
+            .map(|m| (m.name, m.params.into_iter().map(|p| p.name).collect()))
+            .collect();
+
+        let mut domain = String::new();
+        let mut method = String::new();
+        let mut arm_indent = usize::MAX;
+        let mut checked = 0usize;
+
+        for line in src.lines() {
+            // Stop before this very module: it quotes `params.get("…")` in a
+            // doc comment, and self-inclusion would scan that as real code.
+            if line.starts_with("#[cfg(test)]") {
+                break;
+            }
+            let trimmed = line.trim_start();
+            if let Some(rest) = trimmed.strip_prefix("fn ") {
+                // Any other function ends the arm-scanning window.
+                domain = rest
+                    .strip_prefix("dispatch_")
+                    .and_then(|r| r.split('(').next())
+                    .filter(|name| *name != "inner") // routes domains, owns no arms
+                    .unwrap_or("")
+                    .to_string();
+                method.clear();
+                arm_indent = usize::MAX;
+            }
+            if domain.is_empty() {
+                continue;
+            }
+            let indent = line.len() - trimmed.len();
+            // A match arm on `op`: `"name" => ...`, possibly with `| "alias"`
+            // or an `if` guard between. Nested matches sit deeper and are
+            // skipped by the indent rule.
+            if trimmed.starts_with('"') && line.contains("=>") && indent <= arm_indent {
+                if let Some(head) = line.split("=>").next() {
+                    if let Some(op) = head.split('"').nth(1) {
+                        arm_indent = indent;
+                        method = format!("{domain}.{op}");
+                    }
+                }
+            }
+            if method.is_empty() {
+                continue;
+            }
+            let mut rest = line;
+            while let Some(i) = rest.find("params.get(\"") {
+                rest = &rest[i + "params.get(\"".len()..];
+                let Some(end) = rest.find('"') else { break };
+                let name = &rest[..end];
+                if let Some(names) = declared.get(&method) {
+                    checked += 1;
+                    assert!(
+                        names.iter().any(|d| d == name),
+                        "{method} reads params[{name:?}] but schema.rs does not declare it \
+                         (declared: {names:?}). Add it to standard_schema(), or the \
+                         dispatcher will now reject every call that passes it."
+                    );
+                }
+            }
+        }
+        // A parse that silently matched nothing would pass vacuously.
+        assert!(checked > 100, "only {checked} param reads found — parser is broken");
+    }
+
+    /// The MCP surface advertises its own JSON Schema per tool. Anything it
+    /// tells a client to send has to be a parameter the RPC schema declares,
+    /// or the dispatcher will refuse the very call MCP invited.
+    #[test]
+    fn every_mcp_tool_input_is_declared_in_the_rpc_schema() {
+        let declared: std::collections::HashMap<String, Vec<String>> = standard_schema()
+            .methods
+            .into_iter()
+            .map(|m| (m.name, m.params.into_iter().map(|p| p.name).collect()))
+            .collect();
+
+        // Unfiltered: a tool hidden from the default capability set would still
+        // be advertised to an Admin client, so it has to satisfy the contract.
+        for tool in crate::mcp::tools::all_tools_unfiltered() {
+            let Some(names) = declared.get(&tool.rpc_method) else {
+                continue; // plugin tool
+            };
+            let Some(props) = tool
+                .input_schema
+                .get("properties")
+                .and_then(|p| p.as_object())
+            else {
+                continue;
+            };
+            for key in props.keys() {
+                assert!(
+                    names.iter().any(|d| d == key),
+                    "MCP tool '{}' advertises input {key:?} but {} does not declare it \
+                     (declared: {names:?})",
+                    tool.name,
+                    tool.rpc_method
+                );
+            }
+        }
+    }
 
     /// Omitted is 0; present-but-junk is an error.
     ///
