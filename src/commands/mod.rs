@@ -1,3 +1,4 @@
+pub mod analoglib;
 pub mod cell;
 pub mod config;
 pub mod design;

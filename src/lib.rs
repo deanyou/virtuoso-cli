@@ -1,3 +1,4 @@
+pub mod analoglib_finder;
 pub mod async_runtime;
 pub mod auth;
 pub mod capability;

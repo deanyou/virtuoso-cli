@@ -564,6 +564,31 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
 
     /// Export a waveform (or expression) to a text file via `ocnPrint`.
     ///
+    /// # ⚠️ DEAD BUILDER — the SKILL it emits cannot run on IC23.1
+    ///
+    /// `axlGetWaveform` and `axlWaveformToList` **do not exist** on IC23.1:
+    /// absent from all 41 SKILL Finder databases, and `getd` returns nil for
+    /// both. Only the innermost `ocnPrint` is real. Executing this string dies
+    /// on its first form.
+    ///
+    /// It is harmless today only because **no RPC method reaches it** —
+    /// `maestro.export` routes to [`MaestroOps::export_results`]
+    /// (`maeExportOutputView`, documented and bound). The sole callers are this
+    /// module's own tests.
+    ///
+    /// Note what those tests assert: `contains("ocnPrint")`,
+    /// `contains("scientific")`, `contains("/tmp/wave.txt")` — every one of
+    /// them checks the one function in the string that actually exists, and
+    /// none checks the two that don't. Six green tests over an unrunnable
+    /// expression. A string builder's unit tests can only prove what the string
+    /// looks like, never that it runs.
+    ///
+    /// **Do not wire this to an RPC method as-is.** The documented route
+    /// (`IC231__maeSKILLref`) is `drIsWaveform` / `drGetWaveformXVec` /
+    /// `drGetWaveformYVec`, or `maeOpenResults` + `ocnPrint`. Confirm with
+    /// `skill.info` and `getd` before rewriting — see
+    /// `docs/skill-fn-audit-2026-09-10.md` §2.7.
+    ///
     /// `expression` is a Cadence expression like `vout` or
     /// `VT("/net015")` — passed verbatim to `ocnPrint` (no escape
     /// because it's not a SKILL string literal; it's a syntax tree).

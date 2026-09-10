@@ -1269,14 +1269,18 @@ pub fn standard_schema() -> RpcSchema {
         },
         Method {
             name: "skill.info".into(),
-            summary: "Get detailed More Info documentation for a SKILL function".into(),
+            summary: "Look up a SKILL function's signature and description in the \
+                      local .fnd databases (no Virtuoso, no Admin)"
+            .into(),
             params: vec![Param {
                 name: "func".into(),
                 ptype: "string".into(),
                 description: "Function name".into(),
                 required: true,
             }],
-            returns: "{func, html, plain_text}".into(),
+            returns: "{func_name, found, name, syntax, description, source} | \
+                      {func_name, found:false, reason, entries_loaded, suggestions[], hint}"
+            .into(),
         },
         Method {
             name: "skill.sync".into(),
@@ -1307,6 +1311,97 @@ pub fn standard_schema() -> RpcSchema {
                 },
             ],
             returns: "{cache_dir, file_count, modified}".into(),
+        },
+        // analogLib device reference. Local documentation reads — no SKILL is
+        // executed and Virtuoso is never contacted, hence no capability gate.
+        Method {
+            name: "analoglib.list".into(),
+            summary: "List documented analogLib symbols (vsin, idc, cap, nmos4, ...)".into(),
+            params: vec![
+                Param {
+                    name: "category".into(),
+                    ptype: "string".into(),
+                    description: "Filter by category substring, e.g. 'Passive', 'Sources'".into(),
+                    required: false,
+                },
+                Param {
+                    name: "refresh".into(),
+                    ptype: "boolean".into(),
+                    description: "Force re-sync of the cached documentation".into(),
+                    required: false,
+                },
+            ],
+            returns: "{count, symbols[{name, category, title, param_count, primitives[]}], \
+                       symbols_loaded, symbols_indexed, source}"
+            .into(),
+        },
+        Method {
+            name: "analoglib.info".into(),
+            summary: "Full CDF parameter table for one analogLib symbol — the lookup to \
+                      run BEFORE schematic.set_param, so parameter names are read, not guessed"
+            .into(),
+            params: vec![
+                Param {
+                    name: "symbol".into(),
+                    ptype: "string".into(),
+                    description: "analogLib cell name, e.g. vsin, idc, cap, res".into(),
+                    required: true,
+                },
+                Param {
+                    name: "refresh".into(),
+                    ptype: "boolean".into(),
+                    description: "Force re-sync of the cached documentation".into(),
+                    required: false,
+                },
+            ],
+            returns: "{symbol, found, category, title, primitives[], param_count, \
+                       params[{name, label, spectre, description, default}], verify_with} | \
+                       {symbol, found:false, reason, suggestions[], hint, symbols_loaded}"
+            .into(),
+        },
+        Method {
+            name: "analoglib.find".into(),
+            summary: "Search CDF parameters or symbols — 'amplitude' finds va (Amplitude 1 \
+                      (Vpk)), vaDBm, ia, each with the symbol it belongs to"
+            .into(),
+            params: vec![
+                Param {
+                    name: "query".into(),
+                    ptype: "string".into(),
+                    description: "Search string: a CDF name, a GUI label, or a plain word".into(),
+                    required: true,
+                },
+                Param {
+                    name: "scope".into(),
+                    ptype: "string".into(),
+                    description: "params (default), symbols, or both".into(),
+                    required: false,
+                },
+                Param {
+                    name: "mode".into(),
+                    ptype: "string".into(),
+                    description: "Search mode: fuzzy (default), prefix, suffix, exact, regex"
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "limit".into(),
+                    ptype: "integer".into(),
+                    description: "Max results (default: 50)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "refresh".into(),
+                    ptype: "boolean".into(),
+                    description: "Force re-sync of the cached documentation".into(),
+                    required: false,
+                },
+            ],
+            returns: "{query, mode, scope, param_count (total matches, not the \
+                       truncated page), params_shown, params_truncated?, \
+                       params[{symbol, name, label, spectre, description, default}], \
+                       symbol_count, symbols_shown, symbols_truncated?, symbols[]}"
+            .into(),
         },
         Method {
             name: "sim.check_license".into(),

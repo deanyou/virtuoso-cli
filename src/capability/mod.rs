@@ -103,7 +103,9 @@ impl CapabilitySet {
     /// Check if a specific RPC method name is permitted.
     /// Method names are "domain.operation" (e.g. "schematic.place").
     pub fn permits_method(&self, method: &str) -> bool {
-        let domain = method.split('.').next().unwrap_or("");
+        let mut parts = method.splitn(2, '.');
+        let domain = parts.next().unwrap_or("");
+        let op = parts.next().unwrap_or("");
         match domain {
             "schematic" => self.permits(Capability::Schematic),
             // Symbol generation/inspection is a schematic-editing operation:
@@ -122,9 +124,25 @@ impl CapabilitySet {
             "cell" => self.permits(Capability::Cell),
             "tx" => self.permits(Capability::Transaction),
             "library" => self.permits(Capability::Library),
-            "file" => true,                     // File operations require full access
-            "util" => true,                     // Utility methods are always allowed
-            "skill" => self.allows_raw_skill(), // Only Admin can execute raw SKILL
+            "file" => true, // File operations require full access
+            "util" => true, // Utility methods are always allowed
+            // The `skill` domain mixes two very different risk levels, and
+            // gating the whole domain on Admin gated the harmless half too:
+            // `find`/`info`/`sync`/`cache` only read `.fnd` documentation
+            // files — they execute no SKILL and never touch Virtuoso. Denying
+            // them to non-Admin callers meant a design-capability token could
+            // not look up an API signature, which is exactly backwards: the
+            // house rule is "read the manual, don't guess".
+            // `analoglib.*` only reads Cadence HTML documentation from a
+            // local cache. Like `util`, it executes nothing and contacts
+            // no Virtuoso, so gating it would only stop a designer from
+            // checking a CDF parameter name before setting it.
+            "analoglib" => true,
+            "skill" => match op {
+                "find" | "info" | "sync" | "cache" => true,
+                // `eval`/`exec`/`load`/`broadcast` run arbitrary SKILL.
+                _ => self.allows_raw_skill(),
+            },
             _ => false,
         }
     }
@@ -359,6 +377,37 @@ mod tests {
         assert!(caps.permits_method("skill.eval"));
         assert!(caps.permits_method("maestro.snapshot"));
         assert!(caps.permits_method("schematic.polish_label"));
+    }
+
+    #[test]
+    fn doc_lookup_needs_no_admin() {
+        // `skill.find|info|sync|cache` only read local `.fnd` documentation.
+        // Gating them on Admin (as the whole-domain arm used to) locked a
+        // design token out of the manual — the opposite of "read the manual".
+        let sch = CapabilitySet(HashSet::from([Capability::Schematic]));
+        for m in ["skill.find", "skill.info", "skill.sync", "skill.cache"] {
+            assert!(sch.permits_method(m), "{m} must not require Admin");
+        }
+        // Even an empty capability set can read docs.
+        let none = CapabilitySet(HashSet::new());
+        assert!(none.permits_method("skill.info"));
+    }
+
+    #[test]
+    fn raw_skill_still_needs_admin() {
+        let sch = CapabilitySet(HashSet::from([Capability::Schematic]));
+        for m in [
+            "skill.exec",
+            "skill.eval",
+            "skill.load",
+            "skill.broadcast",
+            "skill",           // bare domain, no op
+            "skill.some_new_op", // unknown ops stay closed by default
+        ] {
+            assert!(!sch.permits_method(m), "{m} must stay Admin-only");
+        }
+        let admin = CapabilitySet(HashSet::from([Capability::Admin]));
+        assert!(admin.permits_method("skill.exec"));
     }
 
     #[test]
