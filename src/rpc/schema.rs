@@ -242,6 +242,15 @@ pub fn standard_schema() -> RpcSchema {
         Method { name: "symbol.generate".into(), summary: "Generate a symbol from a schematic".into(), params: vec![Param{name:"lib".into(),ptype:"string".into(),description:"Library".into(),required:true}, Param{name:"cell".into(),ptype:"string".into(),description:"Cell".into(),required:true}, Param{name:"schematic_view".into(),ptype:"string".into(),description:"Source schematic view".into(),required:false}, Param{name:"symbol_view".into(),ptype:"string".into(),description:"Target symbol view".into(),required:false}, Param{name:"sort_pins".into(),ptype:"string".into(),description:"alphanumeric or geometric".into(),required:false}], returns:"Symbol generation result".into() },
         Method { name: "library.list".into(), summary: "List registered OA libraries (read-only)".into(), params: vec![], returns: "JSON array of library names".into() },
         Method {
+            name: "library.list_cells".into(),
+            summary: "List the cells in a library with their views (read-only)".into(),
+            params: vec![
+                Param { name: "lib".into(), ptype: "string".into(), required: true, description: "Library name, as reported by library.list".into() },
+                Param { name: "pattern".into(), ptype: "string".into(), required: false, description: "SKILL regular expression matched against the cell name; a plain word acts as a substring filter".into() },
+            ],
+            returns: "{lib, count, cells:[{name, views:[…]}]}; errors if the library does not exist, empty list if it has no cells".into(),
+        },
+        Method {
             name: "schematic.save".into(),
             summary: "Save the current schematic".into(),
             params: vec![],
