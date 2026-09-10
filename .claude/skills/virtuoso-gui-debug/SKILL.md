@@ -609,6 +609,34 @@ Reading a field value via CIW (`form->field->value`) costs ~425ms and is determi
 - `lambda((x) body)` fails — must be `lambda( (x) body)` with a space after `lambda(`.
 - `return` only works inside `prog()` blocks, not `let()` blocks. In `let`, the last expression is the implicit return.
 
+### CIW Input Stability Under Load (verified 50 cycles, 2026-09-11)
+
+**Critical finding**: High-frequency CIW input (< 1s per full cycle) can cause the CIW's X11 event queue to overflow, resulting in **complete keyboard input failure** while the TCP channel (`vcli skill exec`) remains fully functional. The CIW window stays active and mapped, but all `xdotool type`/`key` and `vcli action-x11 type`/`key` operations silently produce no input. This state is **not recoverable via X11 operations** — requires restarting the Virtuoso process.
+
+**Verified stable cycle** (50/50 success, 0 failures, ~4 min total):
+
+| Step | Operation | Minimum delay |
+|------|-----------|---------------|
+| 1 | `click-rel` on input line (y = height - 20) | 0.5s |
+| 2 | `key Escape` to clear | 0.5s |
+| 3 | `type` the command | 1.0s |
+| 4 | `key Return` to execute | 1.5s |
+| 5 | `skill exec` verify | — |
+
+**Total: ~3.5s per cycle**. Do not reduce below this for automated loops.
+
+**What triggers the failure**:
+- 20 rapid cycles with delays 0.1s/0.1s/0.3s/0.5s (~1s/cycle) → CIW keyboard input dies at some point during the loop
+- The failure is **not** caused by `MINIMIZE`/restore — verified: minimize → activate → type still works perfectly in a fresh session
+- The failure is **not** caused by input line pollution — verified: fresh session with clean input line still fails under rapid cycling
+
+**Recovery**: If CIW keyboard input stops responding but `vcli skill exec` still works, the CIW X11 event queue has overflowed. Kill and restart the Virtuoso process (the daemon will reconnect). Do not waste time trying X11-based recovery.
+
+**Screensaver caveat**: On Xfce/Xvnc, `xfce4-screensaver` may cover the full screen (1853x1011), causing `xdotool search --onlyvisible` to return empty while the CIW window is still mapped underneath. Disable with `xset s off && xset -dpms && killall xfce4-screensaver` before automated GUI testing.
+
+**New session CIW default size**: A freshly started Virtuoso CIW is typically 600x200. Resize with `xdotool windowsize <wid> 1200 800` before testing.
+
+**xdotool search caveat on Xvnc**: In some Xvnc configurations, `xdotool search --name ".*"` returns empty even when windows exist, while `xdotool getactivewindow` works. Use Python Xlib window-tree traversal as a fallback to discover the CIW window ID.
 ## Testing
 
 ```bash
