@@ -1689,7 +1689,10 @@ pub fn standard_schema() -> RpcSchema {
                     required: false,
                 },
             ],
-            returns: "{status, instance, terminal, net, output}".into(),
+            returns: "{status, instance, terminal, net, already, output} — already=true means \
+                      the stub and its label were already there (idempotent re-run, still \
+                      success); a stub carrying a different net name is an error"
+                .into(),
         },
     ])
 }
