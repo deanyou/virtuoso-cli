@@ -40,6 +40,25 @@ Live mode additionally requires: `--session` (must equal the scenario's `session
 
 Local mode requires: `xdotool` on PATH, `DISPLAY` reachable, and `--output DIR`. `--window-id WID` optionally overrides PID-based window discovery. ImageMagick `import` is required for screenshots.
 
+### Input Method (ibus) — Critical for Text Input
+
+On systems with `ibus` + `ibus-engine-libpinyin` (common on Chinese-localized RHEL/CentOS), `xdotool type` and `vcli window action-x11 --operation type` **produce Chinese garbled text** because ibus intercepts keycodes and converts letter sequences to Chinese characters. This affects ALL text input paths, not just CIW.
+
+**Before any `TYPE` / `CIW_INPUT` / text-bearing operation, verify and set the English engine:**
+
+```bash
+# Check current engine
+ibus engine 2>/dev/null   # expect "xkb:us::eng", NOT "libpinyin" or "xkb:cn"
+
+# Switch to English (must run on the same DISPLAY as Virtuoso)
+DISPLAY=:5.0 ibus engine xkb:us::eng
+
+# If ibus-daemon was killed, restart first:
+DISPLAY=:5.0 ibus-daemon -drx && sleep 2 && DISPLAY=:5.0 ibus engine xkb:us::eng
+```
+
+Symptoms of ibus interference: `xdotoolTestA` appears as `现代哦他哦哦`, `retryTestB` as `热土日夜斯特`. Numbers and symbols usually pass through; only letters are corrupted. The live executor should check `ibus engine` in precheck and fail with a clear error if not English, rather than silently sending garbled text.
+
 ## Auto-Discovery (SSH Remote)
 
 自动发现 Virtuoso 的 DISPLAY 和 PID：
@@ -214,7 +233,10 @@ Before any GUI input is sent, precheck verifies in order:
 2. the session PID is positive — a zero PID (old bridge metadata) falls back to the scenario PID via window discovery, and is rejected if no unique window binds to it;
 3. the DISPLAY reported by the X server matches the scenario exactly;
 4. exactly one window is bound to the PID on that DISPLAY — zero or multiple matches abort;
+   On a real Virtuoso session, a single Virtuoso process owns 80+ windows (CIW, Layout Suite, dialogs, toolbars). The PID-only precheck will therefore abort with "N windows bound to PID". **Always pass `--window-id <hex>` to the live executor** to bind a specific window. The scenario's `pid` is still required for server-side re-validation, but `--window-id` disambiguates the X11 target.
 5. an exclusive lock on the DISPLAY (lock file under `~/.cache/virtuoso_bridge/x11-locks/`) is acquired and held for the whole run.
+
+The DISPLAY lock is not just for safety - it is required for correctness. `xdotool type` sends key events one character at a time; two concurrent runs interleave their keystrokes, producing garbled input (observed: `dualTestA=100` + `dualTestB=200` merged into `dualTestBA=1200`). Additionally, concurrent `windowactivate` calls fight for X focus. Multi-session / multi-window GUI operations MUST be serialized either through this lock or by running scenarios sequentially. The lock also prevents ibus engine state from being toggled mid-input by another run.
 
 Every GUI action (`KEY`, `TYPE`, `CLICK_REL`, `CLICK_ABS`, `DOUBLE_CLICK`, `DRAG_REL`, `WINDOW_ACTIVATE`, `MINIMIZE`, `MAXIMIZE`, `CLOSE`, `SCROLL`) maps to a fixed `vcli window action-x11` argv carrying the resolved window id, PID, and DISPLAY. **`--direct` is enabled by default** (~5x faster, skips helper upload/env resolution/list-windows); use `--no-direct` for full server-side re-validation. `--pid` is optional since v1.3.1 (windows without `_NET_WM_PID` are reachable). `verify` prefers database-first predicates via vcli; the `ciw_eval` predicate executes SKILL via `vcli skill exec` and compares output. `recover` executes only rollback operations that pass scenario validation.
 
@@ -229,6 +251,7 @@ Before any GUI input is sent, precheck verifies:
 1. `xdotool` is on PATH;
 2. the scenario's `DISPLAY` is reachable (`xdotool getdisplaygeometry`);
 3. a visible window is bound to the scenario PID — or the explicit `--window-id` is used.
+   The local executor's `window_exists` predicate searches by window title via `xdotool search --onlyvisible --name`. Virtuoso window titles (e.g. "CIW" may not appear in the title) can cause false negatives. Prefer `--window-id` and `state_matches` / `geometry_matches` predicates for local-mode verification.
 
 Actions are sent directly via `xdotool` with the bound window activated first. `SCROLL` maps to xdotool mouse buttons 4 (up), 5 (down), 6 (left), 7 (right). Screenshots use ImageMagick `import -window <id>`.
 
@@ -265,9 +288,12 @@ Only these operations are permitted:
 - `MINIMIZE` — minimize/iconify the window
 - `MAXIMIZE` — maximize the window (requires xdotool ≥ 3.20210804.1; clear error on older versions)
 - `CIW_INPUT` — type a SKILL expression into the CIW input line and press Return (encapsulates activate→click input line→clear→type→Return)
+   **Verification must use `ciw_eval`, not `window_exists`.** The live executor maps `TYPE` to `vcli window action-x11 --operation type`, which is unreliable on IC25.1 (injects garbled or truncated text). A `window_exists` verifier only confirms the window is still open — it passes even when the input was silently corrupted. Use `ciw_eval` with the expected value to catch input failures. Example: `{"predicate": "ciw_eval", "expected": "42"}` after `CIW_INPUT` with text `myVar = 42`.
 - `SCREENSHOT` — capture screenshot
 - `VERIFY` — verify state (predicates: window_exists, state_matches, title_matches, geometry_matches, ciw_eval)
 - `RECOVER` — recovery action (auto-dismiss for KEY/TYPE/CLICK_REL when no rollback)
+
+> **Known limitation (verified 2026-09-09):** The `rollback` field on steps and the `RECOVER` operation are defined in the scenario schema and accepted by the validator, but `gui_runner.py` does **not** execute them. When a step fails (EXECUTE_ERROR or VERIFY_ERROR), the run transitions directly to `FAILED` — no `recover` phase is logged and no rollback action is performed. The `recover` phase exists only as a valid value in `ActionLog` phase validation. Do not rely on rollback for state cleanup; design scenarios to be idempotent or include explicit cleanup steps before the failing operation. Tracked as a future enhancement.
 
 ## Constraints
 
@@ -336,6 +362,8 @@ Use these directly with `xdotool mousemove --window <wid>` (method 3B) — no xw
 | **B (coordinate-free)** | `xdotool key Tab` (repeat to reach target field), then `xdotool type` | ✅ High — 4 Tabs reached Target Layer in the test form |
 | **C (most reliable, bypasses GUI)** | In CIW: `form->field->value = "text"` | ✅ Highest — direct object assignment; no focus needed |
 | ❌ `vcli window action-x11 --operation type --text` | — | ❌ **Unreliable** — injected garbled/clipboard content instead of specified text on IC25.1. Do not use. |
+
+**Prerequisite for all text input:** ibus must be on the English engine (`xkb:us::eng`). See "Input Method (ibus)" in Prerequisites above. With libpinyin active, even `xdotool type` produces Chinese garbled text (`xdotoolTestA` appears as 现代哦他哦哦). `setxkbmap us` alone is NOT sufficient - it changes XKB layout but ibus still intercepts at the input-method layer.
 
 ### 5. Button Submit / Confirm (3 methods)
 
