@@ -306,13 +306,36 @@ impl SchematicOps {
     /// and fail loudly if it is absent. When the instance has no CDF at all
     /// there is nothing to validate against, so the write proceeds and the
     /// response says `validated: false` rather than pretending otherwise.
+    ///
+    /// The rejection message lists the **ten nearest names, not the first
+    /// thirty**. Thirty names in CDF declaration order is close to useless on a
+    /// 135-parameter device: `analogLib/vsin`'s `va` sits well past the cut, so
+    /// the very bug this validation exists to catch — `ampl` where `va` was
+    /// meant — got an error that did not contain the answer. Candidates are
+    /// bucketed, best first:
+    ///
+    ///  1. name equal to the query, ignoring case;
+    ///  2. name and query containing one another (`w` suggested for `width`);
+    ///  3. **the CDF `prompt` — the label shown in the GUI form — containing
+    ///     the query.** This is the bucket that earns its keep: `va`'s prompt is
+    ///     *"Amplitude"*, so `ampl` finds it, which no name-only match can do;
+    ///  4. everything else, in declaration order.
+    ///
+    /// Bucket-3 entries print as `va (Amplitude)` — the name alone would not
+    /// explain why it was offered. The total count and the pointer to
+    /// `schematic.list_cdf_params` stay, since ten is a shortlist, not a search.
+    ///
+    /// `error`'s first argument is a *format* string (`sklangref.fnd`:
+    /// `error( t_formatString [ g_arg1 ... ] )`), so the assembled message goes
+    /// through `error("%s" msg)`. Passing it directly, as this used to, would
+    /// let a `%` in a parameter name or GUI label garble the message.
     pub fn set_instance_param(&self, inst_name: &str, param: &str, value: &str) -> String {
         let inst_name = escape_skill_string(inst_name);
         let param = escape_skill_string(param);
         let value = escape_skill_string(value);
         let guard = cv_guard();
         format!(
-            r#"let((cv inst cdf names out sep n) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances i~>name == "{inst_name}")) when(!inst error("instance {inst_name} not found in this cellview")) cdf = cdfGetInstCDF(inst) names = if(cdf cdf~>parameters~>name nil) if(!names || member("{param}" names) then dbReplaceProp(inst "{param}" "string" "{value}") sprintf(nil "{{\"status\":\"ok\",\"param\":\"{param}\",\"validated\":%s}}" if(names "true" "false")) else out = "" sep = "" n = 0 foreach(nm names when(n < 30 out = strcat(out sep nm) sep = " ") n = n + 1) when(n > 30 out = strcat(out sprintf(nil " ... (%d total; call schematic.list_cdf_params for the full list)" n))) error(strcat("unknown CDF parameter '{param}' for instance {inst_name} — valid names include: " out))))"#
+            r#"let((cv inst cdf names q n k out sep b4 b3 b2 b1 all nm pr lnm lpr msg) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances i~>name == "{inst_name}")) when(!inst error("instance %s not found in this cellview" "{inst_name}")) cdf = cdfGetInstCDF(inst) names = if(cdf cdf~>parameters~>name nil) if(!names || member("{param}" names) then dbReplaceProp(inst "{param}" "string" "{value}") sprintf(nil "{{\"status\":\"ok\",\"param\":\"{param}\",\"validated\":%s}}" if(names "true" "false")) else q = lowerCase("{param}") n = 0 foreach(p cdf~>parameters n = n + 1 nm = p~>name nm = if(stringp(nm) nm sprintf(nil "%s" nm)) pr = p~>prompt pr = if(pr && stringp(pr) pr "") lnm = lowerCase(nm) lpr = lowerCase(pr) cond((strcmp(lnm q) == 0 b4 = cons(nm b4)) ((index(lnm q) || index(q lnm)) b3 = cons(nm b3)) ((nequal(lpr "") && index(lpr q)) b2 = cons(sprintf(nil "%s (%s)" nm pr) b2)) (t b1 = cons(nm b1)))) all = append(reverse(b4) append(reverse(b3) append(reverse(b2) reverse(b1)))) out = "" sep = "" k = 0 foreach(nm all when(k < 10 out = strcat(out sep nm) sep = ", ") k = k + 1) msg = sprintf(nil "unknown CDF parameter '%s' for instance %s — %d defined, closest first: %s. A name in parentheses is that parameter's GUI label; call schematic.list_cdf_params for the full table." "{param}" "{inst_name}" n out) error("%s" msg)))"#
         )
     }
 
@@ -893,6 +916,65 @@ mod tests {
         assert!(s.contains(r#"M\"0"#), "inst name must be escaped: {s}");
         assert!(s.contains(r#"w\"x"#), "param name must be escaped: {s}");
         assert!(s.contains(r#"4u\"y"#), "value must be escaped: {s}");
+    }
+
+    /// Thirty names in declaration order did not contain `va` on a 135-parameter
+    /// `vsin`, so the error for the `ampl` bug did not carry its own answer.
+    /// Rank the candidates instead, and cap the list at ten.
+    #[test]
+    fn set_instance_param_suggests_the_nearest_names_not_the_first_thirty() {
+        let s = ops().set_instance_param("VIN", "ampl", "5m");
+        assert!(
+            !s.contains("n < 30"),
+            "must not print the first thirty in declaration order: {s}"
+        );
+        assert!(s.contains("k < 10"), "shortlist must be capped at ten: {s}");
+        // Ranking is case-insensitive, so the query is folded once up front.
+        assert!(
+            s.contains(r#"q = lowerCase("ampl")"#),
+            "query must be case-folded: {s}"
+        );
+        assert!(s.contains("lowerCase(nm)"), "name must be case-folded: {s}");
+        // Total count survives — ten is a shortlist, not a search.
+        assert!(
+            s.contains("list_cdf_params"),
+            "must still point at the full table: {s}"
+        );
+    }
+
+    /// The bucket that earns its keep: `va`'s CDF `prompt` is "Amplitude", so a
+    /// query of `ampl` can only reach it through the GUI label, never through
+    /// the name.
+    #[test]
+    fn set_instance_param_matches_against_the_cdf_prompt_too() {
+        let s = ops().set_instance_param("VIN", "ampl", "5m");
+        assert!(s.contains("p~>prompt"), "must read the GUI label: {s}");
+        assert!(
+            s.contains("lowerCase(pr)") && s.contains("index(lpr q)"),
+            "must match the query against the folded prompt: {s}"
+        );
+        // A prompt match prints as `va (Amplitude)` — the name alone would not
+        // explain why it was offered.
+        assert!(
+            s.contains(r#"sprintf(nil "%s (%s)" nm pr)"#),
+            "prompt matches must show the label: {s}"
+        );
+    }
+
+    /// `error`'s first argument is a format string, so an assembled message must
+    /// not be passed as one: a `%` in a parameter name or GUI label would garble
+    /// it. The old code did exactly that via `error(strcat(...))`.
+    #[test]
+    fn set_instance_param_does_not_pass_the_message_as_a_format_string() {
+        let s = ops().set_instance_param("VIN", "ampl", "5m");
+        assert!(
+            s.contains(r#"error("%s" msg)"#),
+            "message must go through a %s placeholder: {s}"
+        );
+        assert!(
+            !s.contains("error(strcat("),
+            "no computed format string: {s}"
+        );
     }
 
     #[test]
