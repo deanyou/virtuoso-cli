@@ -860,14 +860,23 @@ class LiveExecutor(Executor):
         click_y = max(click_y, 10)  # stay inside the window
         # 3. Click the input line (bottom center of window)
         self._run_action("click-rel", x=click_x, y=click_y)
+        _time.sleep(0.3)  # wait for focus to settle on input line
         # 4. Clear existing input if requested.
         # Virtuoso CIW: ctrl+a does NOT select-all; Escape clears the line.
         if clear_first:
             self._run_action("key", text="Escape")
+            _time.sleep(0.3)
         # 5. Type the expression with reduced delay for speed
         self._run_action("type", text=expression)
+        # Wait for typing to complete (proportional to text length, min 0.5s)
+        type_wait = max(0.5, len(expression) * 0.02)
+        _time.sleep(type_wait)
         # 6. Press Return to execute
         self._run_action("key", text="Return")
+        # Critical: wait for Virtuoso to parse and execute the SKILL expression
+        # before the verifier reads the result. CIW eval needs ~1s for simple
+        # assignments; complex expressions may need longer (use step timeout).
+        _time.sleep(1.5)
 
     def _wait_for_window(self, step: Step) -> Optional[Dict[str, Any]]:
         # Condition polling, not a fixed sleep: poll window visibility until
