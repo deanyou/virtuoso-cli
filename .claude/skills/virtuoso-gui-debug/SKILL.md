@@ -609,6 +609,34 @@ Reading a field value via CIW (`form->field->value`) costs ~425ms and is determi
 - `lambda((x) body)` fails — must be `lambda( (x) body)` with a space after `lambda(`.
 - `return` only works inside `prog()` blocks, not `let()` blocks. In `let`, the last expression is the implicit return.
 
+### CIW Input Boundary Conditions (verified 2026-09-11)
+
+**Long text input**: No practical length limit. Tested up to 511 characters (500-char payload) — `xdotool type` succeeds and the command executes correctly. Type performance is ~6.7ms/char (209ms for 28 chars, 3.4s for 511 chars). The CIW input line wraps visually but accepts the full string.
+
+**SKILL string quoting (critical)**: Unquoted alphabetic text is parsed as a variable reference, not a string literal. `myVar = abcdef` fails with `*Error* eval: unbound variable - abcdef`. Always quote strings: `myVar = "abcdef"`. This is correct SKILL behavior, not a bug. Numeric literals (`myVar = 42`) do not need quotes.
+
+**Input validation boundaries** (all return clear errors, no crashes):
+
+| Condition | Behavior |
+|-----------|----------|
+| Empty `--text` for type | `config_error: operation 'type' requires non-empty --text` |
+| `--pid 0` | `config_error: PID must be positive when supplied` |
+| Invalid window ID (`not-a-window`) | `status: failure` |
+| Wrong DISPLAY (`:99.0`) | `status: failure` |
+| Negative coordinates | `config_error: coordinates (-10,-10) out of bounds for window size WxH` |
+| Zero coordinates `(0,0)` | Success (inside window) |
+| Boundary coordinates `(W-1,H-1)` | Success (inside window) |
+| Empty batch file | `config_error: batch file contains no actions` |
+| Invalid JSON in batch | `config_error: invalid JSON on line N` |
+
+**Minimized window**: `minimize` succeeds; subsequent `click-rel` on the minimized window also returns success (events are delivered to the unmapped window). `activate` restores the window and input resumes normally.
+
+**gui_runner.py scenario validation** rejects invalid input at parse time:
+- Missing required fields (`session_id`, `pid`, `display`, `cellview`, `steps`)
+- Version not exactly `"1.0"`
+- Unknown operations (lists all allowed operations in the error)
+- Empty `steps` array
+
 ### CIW Input Stability Under Load (verified 50 cycles, 2026-09-11)
 
 **Critical finding**: High-frequency CIW input (< 1s per full cycle) can cause the CIW's X11 event queue to overflow, resulting in **complete keyboard input failure** while the TCP channel (`vcli skill exec`) remains fully functional. The CIW window stays active and mapped, but all `xdotool type`/`key` and `vcli action-x11 type`/`key` operations silently produce no input. This state is **not recoverable via X11 operations** — requires restarting the Virtuoso process.
