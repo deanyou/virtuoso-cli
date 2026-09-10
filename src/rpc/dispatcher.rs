@@ -243,6 +243,11 @@ impl RpcDispatcher {
                     let ctx = &self.ctx;
                     crate::commands::library::list(ctx)
                 }
+                "list_cells" => {
+                    let lib = json_str(params.get("lib"), "lib")?;
+                    let pattern = params.get("pattern").and_then(|v| v.as_str());
+                    crate::commands::library::list_cells(&self.ctx, &lib, pattern)
+                }
                 _ => Err(VirtuosoError::NotFound(format!(
                     "unknown library method '{op}'"
                 ))),
@@ -2033,7 +2038,8 @@ mod tests {
         //  + 4 this packet        (schematic.list_cdf_params, cell.list_open,
         //                          maestro.set_session_mode, maestro.create_test)
         //  + 3 libref             (list, info, find) — the library references
-        assert_eq!(schema.methods.len(), 90, "should have exactly 90 methods");
+        //  + 1 library.list_cells — the read side of the delete manifest
+        assert_eq!(schema.methods.len(), 91, "should have exactly 91 methods");
     }
 
     #[test]

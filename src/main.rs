@@ -262,6 +262,14 @@ enum SymbolCmd {
 #[derive(Subcommand)]
 enum LibraryCmd {
     List,
+    /// List the cells in a library with their views
+    ListCells {
+        /// Library name
+        lib: String,
+        /// SKILL regular expression matched against the cell name
+        #[arg(long)]
+        pattern: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2923,6 +2931,9 @@ fn main() {
         Commands::Schematic(cmd) => dispatch_schematic(cmd),
         Commands::Symbol(cmd) => dispatch_symbol(cmd, ctx.as_ref().unwrap()),
         Commands::Library(LibraryCmd::List) => commands::library::list(ctx.as_ref().unwrap()),
+        Commands::Library(LibraryCmd::ListCells { lib, pattern }) => {
+            commands::library::list_cells(ctx.as_ref().unwrap(), &lib, pattern.as_deref())
+        }
         Commands::Session(cmd) => match cmd {
             SessionCmd::List => commands::session::list(ctx.as_ref().unwrap(), format),
             SessionCmd::Show { id } => commands::session::show(ctx.as_ref().unwrap(), &id, format),
