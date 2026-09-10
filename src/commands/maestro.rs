@@ -77,6 +77,20 @@ pub fn list_sessions() -> Result<Value> {
     decode_json(&r, "list Maestro sessions")
 }
 
+/// The corner names a `create_corner_netlist` call will accept.
+///
+/// `ok_or_exec` rather than `decode_json` alone: the SKILL raises `error()` for
+/// an unknown session, and that text arrives in `errors` with `output` empty —
+/// decoding first would report a real diagnostic as a JSON parse failure.
+pub fn list_corners(session: &str) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+    let skill = client.maestro.list_corners(session);
+    let r = client
+        .execute_skill(&skill, None)?
+        .ok_or_exec("list Maestro corners")?;
+    decode_json(&r, "list Maestro corners")
+}
+
 pub fn set_var(name: &str, value: &str) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.set_var(name, value);
@@ -993,6 +1007,118 @@ pub(crate) fn corner_netlist_cleanup_command(remote_dir: &str) -> String {
     format!("rm -rf {}", shell_quote(remote_dir))
 }
 
+/// How many trailing lines of each netlister log to bring back on failure.
+/// Enough for the SFE/error block at the end, short enough not to bury it.
+pub(crate) const CORNER_NETLIST_LOG_TAIL_LINES: usize = 40;
+
+/// How many log files to read back. `si.foregnd.log` is the one that matters;
+/// the cap is there so a corner sweep that dropped fifty logs cannot flood the
+/// error message.
+pub(crate) const CORNER_NETLIST_LOG_MAX_FILES: usize = 3;
+
+/// Build the shell command that reads back whatever the netlister logged.
+///
+/// `maeCreateNetlistForCorner` collapses *every* failure into a bare `nil` —
+/// a missing model file, an unknown corner name and a bad design variable all
+/// look identical from SKILL. The actual reason is written to `si.foregnd.log`
+/// under the export dir, which the failure path already preserves. Reading it
+/// back is the difference between "failed: nil" and a diagnosis.
+///
+/// Best-effort by construction: `2>/dev/null` and `-r` mean a missing dir or
+/// zero logs produce empty output rather than a second error on top of the
+/// first.
+pub(crate) fn corner_netlist_log_command(remote_dir: &str) -> String {
+    format!(
+        "find {} -maxdepth 3 -type f -name '*.log' -print 2>/dev/null | sort | head -{} | xargs -r tail -v -n {}",
+        shell_quote(remote_dir),
+        CORNER_NETLIST_LOG_MAX_FILES,
+        CORNER_NETLIST_LOG_TAIL_LINES,
+    )
+}
+
+/// Append a diagnostic line to a failure while keeping its variant.
+///
+/// Two reasons not to just `format!("{err}\n{extra}")`: the variant decides the
+/// exit code and classification (`with_remote_dir_context` above guards the same
+/// property), and `Display` already prints the `"execution failed: "` prefix, so
+/// re-wrapping would print it twice.
+///
+/// Variants that carry no message pass through — the diagnostics below only ever
+/// see `Execution`, since they run on the `ok_or_exec` path.
+fn append_diagnostic(err: VirtuosoError, extra: &str) -> VirtuosoError {
+    match err {
+        VirtuosoError::Connection(m) => VirtuosoError::Connection(format!("{m}\n{extra}")),
+        VirtuosoError::Ssh(m) => VirtuosoError::Ssh(format!("{m}\n{extra}")),
+        VirtuosoError::Execution(m) => VirtuosoError::Execution(format!("{m}\n{extra}")),
+        other => other,
+    }
+}
+
+/// Append the netlister's own log tail to a failure message.
+///
+/// Best-effort: if the SSH call fails or there is nothing to read, the original
+/// error is returned untouched. A diagnostic that can itself fail must never
+/// replace the failure it is diagnosing.
+fn with_netlister_log(
+    err: VirtuosoError,
+    ssh: &dyn RemoteTransport,
+    remote_dir: &str,
+) -> VirtuosoError {
+    let cmd = corner_netlist_log_command(remote_dir);
+    let Ok(r) = ssh.run_command(&CommandRequest::untimed(&cmd)) else {
+        return err;
+    };
+    let log = r.stdout.trim();
+    if log.is_empty() {
+        return err;
+    }
+    append_diagnostic(err, &format!("--- netlister log ({remote_dir}) ---\n{log}"))
+}
+
+/// The hint appended when the netlister rejects the corner name.
+///
+/// `corners_json` is the raw `maestro.list_corners` payload. Split out from the
+/// RTT so the wording is testable without a bridge.
+///
+/// Worth spelling out because the wrong answer is the intuitive one: an ADE
+/// corner is a *setup label* (`C0`, `Nominal`), while `tt`/`ss`/`ff` are PDK
+/// model sections. They read alike, and `maeCreateNetlistForCorner` reports the
+/// difference as a bare `nil`.
+pub(crate) fn corner_hint(corner: &str, corners_json: &str) -> String {
+    let listed = corners_json.trim();
+    if listed.is_empty() || listed == "[]" {
+        format!(
+            "corner {corner:?}: this Maestro setup defines no corners at all, \
+             so no corner name can succeed"
+        )
+    } else {
+        format!(
+            "corner {corner:?}: this Maestro setup defines {listed} — corner names are \
+             ADE setup labels, not PDK model sections like tt/ss/ff (maestro.list_corners)"
+        )
+    }
+}
+
+/// Name the corners the setup actually has, on the failure path only.
+///
+/// Best-effort, same contract as [`with_netlister_log`]: a diagnostic that can
+/// itself fail must never replace the failure it is diagnosing.
+fn with_available_corners(
+    err: VirtuosoError,
+    client: &VirtuosoClient,
+    session: &str,
+    corner: &str,
+) -> VirtuosoError {
+    let skill = client.maestro.list_corners(session);
+    let Ok(r) = client.execute_skill_unchecked(&skill, None) else {
+        return err;
+    };
+    let Ok(r) = r.ok_or_exec("list corners") else {
+        return err;
+    };
+    append_diagnostic(err, &corner_hint(corner, r.output_unquoted()))
+}
+
 /// Return true iff the `find -mindepth 1 -print` output reports at least
 /// one entry (i.e. the dir is non-empty).
 pub(crate) fn remote_dir_has_entries(find_output: &str) -> bool {
@@ -1596,6 +1722,13 @@ pub fn create_corner_netlist(
         .execute_skill_unchecked(&skill, None)
         .map_err(|e| with_remote_dir_context(e, &remote_dir))?;
     if let Err(e) = exec_result.ok_or_exec("create netlist for corner") {
+        // The SKILL side said `nil` and nothing else. Whatever the netlister
+        // actually complained about is in the log it just wrote — read it back
+        // before reporting, otherwise the operator gets a path and a shrug.
+        // And when the netlister wrote no log at all (the usual case for a name
+        // it rejected outright), name the corners that would have worked.
+        let e = with_netlister_log(e, ssh.as_ref(), &remote_dir);
+        let e = with_available_corners(e, &client, session, corner);
         return Err(with_remote_dir_context(e, &remote_dir));
     }
 
@@ -1619,11 +1752,17 @@ pub fn create_corner_netlist(
     }
     if !remote_dir_has_entries(&verify_r.stdout) {
         // No non-empty regular files → preserve the remote dir so the
-        // user can decide what to do.
-        return Err(VirtuosoError::Execution(format!(
-            "remote netlist dir {remote_dir} contains no non-empty regular files \
-             (no files produced for corner '{corner}'); preserved for forensics"
-        )));
+        // user can decide what to do. Same reasoning as step 7: SKILL
+        // returned non-nil yet produced nothing, so the "why" is only in
+        // the netlister's log.
+        return Err(with_netlister_log(
+            VirtuosoError::Execution(format!(
+                "remote netlist dir {remote_dir} contains no non-empty regular files \
+                 (no files produced for corner '{corner}'); preserved for forensics"
+            )),
+            ssh.as_ref(),
+            &remote_dir,
+        ));
     }
 
     // 9. Allocate a unique local staging directory owned by THIS
@@ -2213,6 +2352,88 @@ mod tests {
             res.is_ok(),
             "pure validation must not require remote config"
         );
+    }
+
+    // ── failure-path diagnostics for create_corner_netlist ───────────
+    //
+    // `maeCreateNetlistForCorner` collapses every failure into a bare `nil`.
+    // Both helpers below add context on that path, and both must degrade to a
+    // no-op rather than eat the original error when they cannot.
+
+    #[test]
+    fn netlister_log_is_appended_to_the_failure() {
+        use crate::transport::contract::test_support::FakeTransport;
+        let mut t = FakeTransport::ok();
+        t.command_result.stdout =
+            "==> /tmp/d/si.foregnd.log <==\nERROR (SFE-30): cannot find model file\n".into();
+        let e = with_netlister_log(VirtuosoError::Execution("nil".into()), &t, "/tmp/d");
+        let msg = e.to_string();
+        assert!(msg.contains("nil"), "original failure survives: {msg}");
+        assert!(msg.contains("SFE-30"), "log tail is carried back: {msg}");
+        assert!(msg.contains("/tmp/d"), "says where it read from: {msg}");
+        // And it must have asked for logs, not listed the whole dir.
+        let cmds = t.commands.lock().unwrap();
+        assert!(cmds[0].contains("*.log"), "{cmds:?}");
+    }
+
+    #[test]
+    fn no_log_leaves_the_original_failure_untouched() {
+        use crate::transport::contract::test_support::FakeTransport;
+        let mut t = FakeTransport::ok();
+        t.command_result.stdout = "   \n".into();
+        let e = with_netlister_log(VirtuosoError::Execution("nil".into()), &t, "/tmp/d");
+        assert_eq!(e.to_string(), VirtuosoError::Execution("nil".into()).to_string());
+    }
+
+    /// The diagnostic runs against a machine that just failed something. If the
+    /// readback itself fails, the caller must still see the real error.
+    #[test]
+    fn a_failing_readback_does_not_replace_the_failure_it_diagnoses() {
+        use crate::transport::contract::test_support::FakeTransport;
+        let mut t = FakeTransport::ok();
+        t.deadline_expired = true;
+        let e = with_netlister_log(VirtuosoError::Execution("nil".into()), &t, "/tmp/d");
+        assert_eq!(e.to_string(), VirtuosoError::Execution("nil".into()).to_string());
+    }
+
+    #[test]
+    fn corner_hint_names_the_corners_that_would_have_worked() {        let h = corner_hint("tt", r#"["C0","Nominal"]"#);
+        assert!(h.contains("\"tt\""), "names the rejected corner: {h}");
+        assert!(h.contains("C0") && h.contains("Nominal"), "lists the real ones: {h}");
+        assert!(
+            h.contains("not PDK model sections"),
+            "must explain why tt looked right: {h}"
+        );
+    }
+
+    /// An empty list is a different diagnosis: no name would have worked, so
+    /// telling the user to pick a better one would send them in a circle.
+    #[test]
+    fn corner_hint_says_so_when_the_setup_has_no_corners() {
+        for empty in ["[]", "  ", ""] {
+            let h = corner_hint("tt", empty);
+            assert!(h.contains("no corners at all"), "{empty:?} -> {h}");
+        }
+    }
+
+    /// `Display` already prints "execution failed: ", so a diagnostic that
+    /// re-wraps with `{err}` prints it twice and flattens the variant with it.
+    /// Live output caught exactly that before this helper existed.
+    #[test]
+    fn a_diagnostic_keeps_the_variant_and_does_not_double_the_prefix() {
+        let e = append_diagnostic(VirtuosoError::Execution("nil".into()), "hint");
+        assert!(matches!(e, VirtuosoError::Execution(_)), "variant preserved");
+        let msg = e.to_string();
+        assert_eq!(
+            msg.matches("execution failed").count(),
+            1,
+            "prefix must appear once: {msg}"
+        );
+        assert!(msg.ends_with("nil\nhint"), "{msg}");
+
+        // Ssh keeps its own variant — the exit code depends on it.
+        let e = append_diagnostic(VirtuosoError::Ssh("denied".into()), "hint");
+        assert!(matches!(e, VirtuosoError::Ssh(_)), "{e}");
     }
 
     // ── with_remote_dir_context ──────────────────────────────────────

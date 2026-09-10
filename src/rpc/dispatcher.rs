@@ -518,15 +518,27 @@ impl RpcDispatcher {
             "list_sessions" => {
                 let skill = ops.list_sessions();
                 let r = execute_query_skill(client, &skill, "list Maestro sessions")?;
-                let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
-                Ok(parsed)
+                // `parse_skill_json`, not a bare `from_str`: the bridge hands
+                // back the SKILL string still quoted, so `from_str` parsed it
+                // as the JSON *string* `"[]"` and the caller got a string
+                // where every other list method returns an array.
+                parse_skill_json(&r.output)
             }
             "list_tests" => {
                 let session = json_str(params.get("session"), "session")?;
                 let skill = ops.list_tests(&session);
                 let r = execute_query_skill(client, &skill, "list Maestro tests")?;
-                let parsed: Value = serde_json::from_str(&r.output).map_err(VirtuosoError::Json)?;
-                Ok(parsed)
+                parse_skill_json(&r.output)
+            }
+            "list_corners" => {
+                let session = json_str(params.get("session"), "session")?;
+                let skill = ops.list_corners(&session);
+                // `ok_or_exec`, not the bare transport check: the SKILL raises
+                // `error()` for an unknown session, and that text lands in
+                // `errors` — a plain parse would report it as malformed JSON.
+                let r = execute_query_skill(client, &skill, "list Maestro corners")?
+                    .ok_or_exec("list Maestro corners")?;
+                parse_skill_json(&r.output)
             }
             "set_var" => {
                 let name = json_str(params.get("name"), "name")?;
@@ -2039,7 +2051,8 @@ mod tests {
         //                          maestro.set_session_mode, maestro.create_test)
         //  + 3 libref             (list, info, find) — the library references
         //  + 1 library.list_cells — the read side of the delete manifest
-        assert_eq!(schema.methods.len(), 91, "should have exactly 91 methods");
+        //  + 1 maestro.list_corners — what create_corner_netlist's `corner` accepts
+        assert_eq!(schema.methods.len(), 92, "should have exactly 92 methods");
     }
 
     #[test]

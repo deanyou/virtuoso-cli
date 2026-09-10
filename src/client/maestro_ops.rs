@@ -816,9 +816,36 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
         r#"let((sess dir) sess = asiGetCurrentSession() dir = if(sess then asiGetResultsDir(sess) else nil) if(dir dir "nil"))"#.into()
     }
 
-    /// Get all available corner/corner-set names from the Maestro setup.
-    pub fn get_corners(&self) -> String {
-        r#"let((corners out sep) corners = maeGetCorners() out = "[" sep = "" foreach(c corners out = strcat(out sep sprintf(nil "\"%s\"" c)) sep = ",") strcat(out "]"))"#.into()
+    /// The corner and corner-group names in a Maestro session's setup database.
+    ///
+    /// The previous body called `maeGetCorners()`, which does not exist in
+    /// IC23.1 — `getd` reports it UNDEFINED and it appears nowhere in
+    /// `finder/SKILL/Virtuoso_ADE/maeSKILLref.fnd`. It had no callers either,
+    /// so the whole wheel was dead.
+    ///
+    /// The documented route (`maeSKILLref/cornersRelated_re_axlGetCorners.html`,
+    /// whose own example is reproduced below) goes through the setup database:
+    ///
+    /// ```text
+    /// session = axlGetWindowSession()   => "session0"
+    /// x_mainSDB = axlGetMainSetupDB(session) => 1001
+    /// axlGetCorners(x_mainSDB) => (1003 ("C0" "C1" "C2_0_0" …))
+    /// ```
+    ///
+    /// Note the return shape: a *two*-element list of `(handle names)`, so the
+    /// names are `cadr`, not the list itself.
+    ///
+    /// `axlGetCorners` answers nil both for "no such session" and for "session
+    /// has no corners", so the session is validated up front with
+    /// `axlIsValidAXLSession` — otherwise a typo in the session name comes back
+    /// as an empty corner list, which is the failure mode this method exists to
+    /// prevent.
+    pub fn list_corners(&self, session: &str) -> String {
+        let session = escape_skill_string(session);
+        let names = skill_strings_to_json("cadr(axlGetCorners(sdb))");
+        format!(
+            r#"let((sdb) unless(axlIsValidAXLSession("{session}") error("maestro.list_corners: no such Maestro session '%s' — check 'maestro.list_sessions'" "{session}")) sdb = axlGetMainSetupDB("{session}") unless(sdb error("maestro.list_corners: session '%s' has no setup database" "{session}")) {names})"#
+        )
     }
 
     /// Detect PVT corner from simulation results directory or cell name.
@@ -1330,19 +1357,66 @@ mod tests {
         assert!(s.contains("\"AC\""), "{s}");
     }
 
+    /// `maeGetCorners` — what this method used to call — does not exist in
+    /// IC23.1. Guard the documented replacement so the dead call cannot come
+    /// back.
+    #[test]
+    fn list_corners_uses_the_documented_setup_database_route() {
+        let s = ops().list_corners("fnxSession4");
+        assert!(
+            !s.contains("maeGetCorners"),
+            "maeGetCorners is undefined in IC23.1: {s}"
+        );
+        assert!(
+            s.contains(r#"axlGetMainSetupDB("fnxSession4")"#),
+            "corners live in the setup database, reached by session name: {s}"
+        );
+        assert!(
+            s.contains("axlGetCorners(sdb)"),
+            "must query the setup database handle: {s}"
+        );
+    }
+
+    /// `axlGetCorners` returns `(handle (names…))` — taking the list itself
+    /// would hand the caller the integer handle as if it were a corner.
+    #[test]
+    fn list_corners_takes_the_names_not_the_handle() {
+        let s = ops().list_corners("fnxSession4");
+        assert!(s.contains("cadr(axlGetCorners(sdb))"), "{s}");
+    }
+
+    /// nil means both "no such session" and "no corners"; without the validity
+    /// check a typo reads back as a legitimately empty list.
+    #[test]
+    fn list_corners_rejects_an_unknown_session_instead_of_returning_empty() {
+        let s = ops().list_corners("fnxSession4");
+        assert!(s.contains(r#"axlIsValidAXLSession("fnxSession4")"#), "{s}");
+        assert!(s.contains("maestro.list_sessions"), "must say where to look: {s}");
+    }
+
+    #[test]
+    fn list_corners_escapes_its_session() {
+        let s = ops().list_corners(r#"fnx"4"#);
+        assert!(s.contains(r#""fnx\"4""#), "{s}");
+        assert!(!s.contains(r#""fnx"4""#), "raw quote must not survive: {s}");
+    }
+
     #[test]
     fn create_netlist_for_corner_format() {
-        let s = ops().create_netlist_for_corner("AC", "tt", "/tmp/out", "fnxSession4");
+        // "Nominal", not "tt": the corner argument is an *ADE* corner label from
+        // the setup database (`maestro.list_corners`), not a PDK model section.
+        // Passing "tt" here is what made the live call fail with a bare nil.
+        let s = ops().create_netlist_for_corner("AC", "Nominal", "/tmp/out", "fnxSession4");
         assert_eq!(
             s,
-            r#"maeCreateNetlistForCorner("AC" "tt" "/tmp/out" ?session "fnxSession4")"#
+            r#"maeCreateNetlistForCorner("AC" "Nominal" "/tmp/out" ?session "fnxSession4")"#
         );
     }
 
     #[test]
     fn create_netlist_for_corner_escapes_quote_in_test() {
         // Quotes inside the test name must be SKILL-escaped (`"` → `\"`).
-        let s = ops().create_netlist_for_corner(r#"te"st"#, "tt", "/tmp/out", "fnxSession4");
+        let s = ops().create_netlist_for_corner(r#"te"st"#, "Nominal", "/tmp/out", "fnxSession4");
         assert!(s.contains(r#""te\"st""#), "{s}");
         // Confirm command is still single-line and well-formed.
         assert!(s.starts_with("maeCreateNetlistForCorner("), "{s}");
@@ -1359,13 +1433,13 @@ mod tests {
     #[test]
     fn create_netlist_for_corner_escapes_quote_in_output_dir() {
         // Quote and space inside the output dir must be SKILL-escaped.
-        let s = ops().create_netlist_for_corner("AC", "tt", r#"/tmp/out "x""#, "fnxSession4");
+        let s = ops().create_netlist_for_corner("AC", "Nominal", r#"/tmp/out "x""#, "fnxSession4");
         assert!(s.contains(r#""/tmp/out \"x\"""#), "{s}");
     }
 
     #[test]
     fn create_netlist_for_corner_escapes_quote_in_session() {
-        let s = ops().create_netlist_for_corner("AC", "tt", "/tmp/out", r#"fnx"4"#);
+        let s = ops().create_netlist_for_corner("AC", "Nominal", "/tmp/out", r#"fnx"4"#);
         assert!(s.contains(r#"?session "fnx\"4""#), "{s}");
     }
 
@@ -1391,7 +1465,7 @@ mod tests {
 
     #[test]
     fn create_netlist_for_corner_includes_session_keyword() {
-        let s = ops().create_netlist_for_corner("AC", "tt", "/tmp/out", "fnxSession0");
+        let s = ops().create_netlist_for_corner("AC", "Nominal", "/tmp/out", "fnxSession0");
         // Position of the ?session keyword must come last in the builder.
         let session_pos = s.find("?session").expect("?session keyword");
         let paren_end = s.rfind(')').expect("closing paren");
@@ -1433,10 +1507,10 @@ mod tests {
 
     #[test]
     fn get_output_value_with_corner() {
-        let s = ops().get_output_value("gain", "AC", Some("tt"));
+        let s = ops().get_output_value("gain", "AC", Some("Nominal"));
         assert!(s.contains("maeGetOutputValue"), "{s}");
         assert!(s.contains("?cornerName"), "should have cornerName: {s}");
-        assert!(s.contains("\"tt\""), "{s}");
+        assert!(s.contains("\"Nominal\""), "{s}");
     }
 
     #[test]
