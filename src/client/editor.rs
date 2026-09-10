@@ -90,10 +90,11 @@ impl<'a> SchematicEditor<'a> {
             .push(ops.create_instance(lib, cell, view, name, origin, orient));
     }
 
-    pub fn add_wire(&mut self, points: Vec<(f64, f64)>, layer: &str, net_name: &str) {
+    /// `schCreateWire` has no layer argument, so neither does this: a schematic
+    /// wire is on the wire layer by construction.
+    pub fn add_wire(&mut self, points: Vec<(f64, f64)>, net_name: &str) {
         let ops = SchematicOps;
-        self.commands
-            .push(ops.create_wire(&points, layer, net_name));
+        self.commands.push(ops.create_wire(&points, net_name));
     }
 
     pub fn add_label(&mut self, net_name: &str, origin: (f64, f64)) {

@@ -95,7 +95,7 @@ pub fn wire_from_strings(net: &str, points: &[String]) -> Result<Value> {
 
 pub fn wire(net: &str, points: &[(f64, f64)]) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let skill = client.schematic.create_wire(points, "wire", net);
+    let skill = client.schematic.create_wire(points, net);
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },

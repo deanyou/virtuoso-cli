@@ -403,6 +403,14 @@ pub fn standard_schema() -> RpcSchema {
                     description: "Override the detected DISPLAY".into(),
                     required: false,
                 },
+                Param {
+                    name: "window_id".into(),
+                    ptype: "string".into(),
+                    description:
+                        "Dismiss only this X11 window id instead of every dialog-sized window"
+                            .into(),
+                    required: false,
+                },
             ],
             returns: "{status, found, dismissed, errors, display, raw_log}".into(),
         },
@@ -427,9 +435,18 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "window_id".into(),
                     ptype: "string".into(),
-                    description: "X11 window id (e.g. 0x2e01f16) from list_windows_x11"
-                        .into(),
-                    required: true,
+                    description:
+                        "X11 window id (e.g. 0x2e01f16) from list_windows_x11. Required unless pid is given; wins if both are."
+                            .into(),
+                    required: false,
+                },
+                Param {
+                    name: "pid".into(),
+                    ptype: "integer".into(),
+                    description:
+                        "Resolve the window by owning PID instead. Errors if it matches zero or several windows."
+                            .into(),
+                    required: false,
                 },
                 Param {
                     name: "action".into(),
@@ -534,11 +551,21 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "view".into(),
                     ptype: "string".into(),
-                    description: "View name".into(),
+                    description: "View name (default schematic)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "view_type".into(),
+                    ptype: "string".into(),
+                    description:
+                        "DFII cellViewType, needed to create the view. Inferred for schematic, \
+                         symbol (schematicSymbol), layout (maskLayout) and netlist; required \
+                         for any other view name."
+                            .into(),
                     required: false,
                 },
             ],
-            returns: "null on success".into(),
+            returns: "{lib, cell, view, view_type}; errors if the view already exists".into(),
         },
         Method {
             name: "cell.read_path".into(),
