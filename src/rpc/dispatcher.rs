@@ -193,7 +193,7 @@ impl RpcDispatcher {
             "file" => self.dispatch_file(client, op, params),
             "util" => self.dispatch_util(client, op, params),
             "skill" => self.dispatch_skill(client, op, params),
-            "analoglib" => Self::dispatch_analoglib(op, params),
+            "libref" => Self::dispatch_libref(op, params),
             "sim" => self.dispatch_sim(client, op, params),
             _ => {
                 // Try plugin registry for unknown domains
@@ -1065,26 +1065,34 @@ impl RpcDispatcher {
         }
     }
 
-    /// `analoglib.*` — the analogLib device reference.
+    /// `libref.*` — the Virtuoso library references (analogLib, basic, …).
     ///
     /// Takes no `client`: every operation is a local documentation read. That
     /// is the point — looking up a CDF parameter name must not require a live
     /// Virtuoso, an Admin token, or a guess.
-    fn dispatch_analoglib(op: &str, params: Value) -> Result<Value> {
+    fn dispatch_libref(op: &str, params: Value) -> Result<Value> {
         let refresh = params
             .get("refresh")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
         let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+        let lib = params.get("lib").and_then(|v| v.as_str()).unwrap_or("");
 
         match op {
             "list" => {
                 let category = params.get("category").and_then(|v| v.as_str());
-                commands::analoglib::list(category, refresh)
+                commands::libref::list(lib, category, refresh)
             }
+            // `symbol` is optional only when `lib` is given: `libref.info
+            // {lib: "rfLib"}` asks about the library itself, and the answer is
+            // why it has no symbols here.
             "info" => {
-                let symbol = json_str(params.get("symbol"), "symbol")?;
-                commands::analoglib::info(&symbol, refresh)
+                let symbol = match params.get("symbol").and_then(|v| v.as_str()) {
+                    Some(s) => s.to_string(),
+                    None if !lib.is_empty() => String::new(),
+                    None => json_str(params.get("symbol"), "symbol")?,
+                };
+                commands::libref::info(&symbol, lib, refresh)
             }
             "find" => {
                 let query = json_str(params.get("query"), "query")?;
@@ -1096,10 +1104,10 @@ impl RpcDispatcher {
                     .get("scope")
                     .and_then(|v| v.as_str())
                     .unwrap_or("params");
-                commands::analoglib::find(&query, mode, scope, limit, refresh)
+                commands::libref::find(&query, mode, scope, lib, limit, refresh)
             }
             _ => Err(VirtuosoError::NotFound(format!(
-                "unknown analoglib method '{op}'"
+                "unknown libref method '{op}'"
             ))),
         }
     }
@@ -1741,7 +1749,7 @@ mod tests {
         //  + 4 maestro packet     (list_tests, delete_var, delete_output, delete_analysis)
         //  + 4 this packet        (schematic.list_cdf_params, cell.list_open,
         //                          maestro.set_session_mode, maestro.create_test)
-        //  + 3 analoglib          (list, info, find) — the device reference
+        //  + 3 libref             (list, info, find) — the library references
         assert_eq!(schema.methods.len(), 90, "should have exactly 90 methods");
     }
 

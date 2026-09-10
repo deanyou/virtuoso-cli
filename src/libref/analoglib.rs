@@ -38,9 +38,10 @@
 //! A section that cannot be located is dropped from the count, never silently
 //! merged into its neighbour.
 
+use super::html::{cells, find_anchor, parse_jstree, plain, read_lossy, RE_ROW, RE_TABLE};
+use super::types::{CdfParam, LibSymbol, ParseReport};
 use once_cell::sync::Lazy;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
@@ -49,84 +50,13 @@ pub const INDEX_BASENAME: &str = "analoglibref.json";
 /// Basename of the "List of All CDF Parameters" appendix.
 pub const APPENDIX_BASENAME: &str = "appA.html";
 
-static RE_TABLE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?is)<table[^>]*>.*?</table>").unwrap());
-static RE_ROW: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?is)<tr[^>]*>(.*?)</tr>").unwrap());
-static RE_CELL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?is)<t[dh][^>]*>(.*?)</t[dh]>").unwrap());
+/// Virtuoso library name these symbols belong to.
+const LIB: &str = "analogLib";
+
 static RE_STRONG: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?is)<strong>(.*?)</strong>").unwrap());
 static RE_PRIMITIVE: Lazy<Regex> = Lazy::new(|| Regex::new(r"spectre -h (\w+)").unwrap());
-static RE_TAG: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?s)<[^>]+>").unwrap());
-static RE_WS: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
 static RE_RANGE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^([A-Za-z_]+)(\d+)\s*-\s*([A-Za-z_]+)(\d+)$").unwrap());
-
-/// One CDF parameter of one analogLib symbol.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CdfParam {
-    /// The label shown in the ADE / schematic property form, e.g. `Amplitude 1 (Vpk)`.
-    pub label: String,
-    /// The CDF parameter name — what `schematic.set_param` takes, e.g. `va`.
-    pub name: String,
-    /// The corresponding Spectre netlist parameter, when the table gives one.
-    pub spectre: String,
-    /// Description, from `appA.html`. Empty when the appendix has no prose for it.
-    pub description: String,
-    /// Default value, from `appA.html`. `-` means "no default" in Cadence's tables.
-    pub default: String,
-    /// Concrete names, when `name` is a range like `F1 - F50`. Empty otherwise.
-    ///
-    /// The manual compresses fifty rows into one; the live instance does not.
-    /// Cross-checking `vsin` against `schematic.list_cdf_params` showed exactly
-    /// this: 37 documented rows vs 135 live names, the whole gap being two
-    /// ranges. Without the expansion, `name` is a string no caller can pass to
-    /// `set_param` — the tool's own notation presented as the parameter's name.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub expands_to: Vec<String>,
-}
-
-/// One analogLib symbol, as documented.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AnalogLibSymbol {
-    /// Symbol name as it appears in the library, e.g. `vsin`.
-    pub name: String,
-    /// Chapter/category the symbol is filed under, e.g. `Sources - Independent`.
-    pub category: String,
-    /// Human title, e.g. `Independent Sinusoidal Voltage Source`.
-    pub title: String,
-    /// Spectre primitives named by the section's `spectre -h <x>` hints.
-    /// `nmos4` lists three (`mos0`, `mos1`, `ekv`) and has no CDF table at all.
-    pub primitives: Vec<String>,
-    /// The symbol's CDF parameters.
-    pub params: Vec<CdfParam>,
-    /// Cadence release the entry came from, e.g. `IC231`. Empty if unprefixed.
-    pub release: String,
-    /// Chapter file the entry was parsed from, e.g. `independent.html`.
-    pub source_file: String,
-    /// Other chapters that document this same symbol. `ports.html` carries
-    /// cross-reference stubs — *"This component is the same as psin described
-    /// in Chapter 8"* — for the seven port sources, with no parameter table of
-    /// their own. Those stubs are folded into the real entry rather than left
-    /// to shadow it, and recorded here so the merge is visible.
-    pub also_documented_in: Vec<String>,
-}
-
-impl AnalogLibSymbol {
-    /// One-line summary for list output.
-    pub fn summary(&self) -> String {
-        format!(
-            "{:<14} {:<26} {} param(s)",
-            self.name,
-            self.category,
-            self.params.len()
-        )
-    }
-
-    /// Look up a single CDF parameter by name (case-insensitive).
-    pub fn param(&self, name: &str) -> Option<&CdfParam> {
-        self.params
-            .iter()
-            .find(|p| p.name.eq_ignore_ascii_case(name))
-    }
-}
 
 /// An entry of the jstree index.
 #[derive(Debug, Clone)]
@@ -137,100 +67,29 @@ struct IndexEntry {
     category: String,
 }
 
-/// Strip HTML tags, unescape the handful of entities Cadence emits, and
-/// collapse whitespace runs. Cell text spans multiple source lines.
-fn plain(s: &str) -> String {
-    let no_tags = RE_TAG.replace_all(s, "");
-    let unescaped = no_tags
-        .replace("&nbsp;", " ")
-        .replace("&#160;", " ")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&#8217;", "'")
-        .replace("&#8220;", "\"")
-        .replace("&#8221;", "\"")
-        // `&amp;` last: doing it first would re-expand `&amp;lt;` into `<`.
-        .replace("&amp;", "&");
-    RE_WS.replace_all(&unescaped, " ").trim().to_string()
-}
-
-/// Read a file as text, tolerating the Latin-1 bytes in Cadence's HTML.
-fn read_lossy(path: &Path) -> String {
-    match std::fs::read(path) {
-        Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
-        Err(_) => String::new(),
-    }
-}
-
-/// Extract the cells of one `<tr>`.
-fn cells(row: &str) -> Vec<String> {
-    RE_CELL
-        .captures_iter(row)
-        .map(|c| plain(&c[1]))
-        .collect::<Vec<_>>()
-}
-
 /// Parse `analoglibref.json` (a jstree dump) into index entries.
 ///
-/// Shape: `{"core": {"data": [{"id":…, "parent":…, "text":…, "href":…}, …]}}`.
-/// Symbol nodes have `text = "Symbol: <name>"`; the parent node's text is the
-/// category.
+/// Symbol nodes are the ones labelled `"Symbol: <name>"`; the parent node's
+/// text is the category. Depth is not usable as the discriminator the way it is
+/// in `basicLib` — this index nests chapters unevenly — but the `Symbol: `
+/// prefix is unambiguous here, and it is what keeps navigation nodes like
+/// *"Passive Components"* out of the symbol list.
 fn parse_index(json: &str) -> Vec<IndexEntry> {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else {
-        return Vec::new();
-    };
-    let Some(data) = value
-        .get("core")
-        .and_then(|c| c.get("data"))
-        .and_then(|d| d.as_array())
-    else {
-        return Vec::new();
-    };
-
-    let mut text_by_id: HashMap<&str, &str> = HashMap::new();
-    for node in data {
-        if let (Some(id), Some(text)) = (
-            node.get("id").and_then(|v| v.as_str()),
-            node.get("text").and_then(|v| v.as_str()),
-        ) {
-            text_by_id.insert(id, text);
-        }
-    }
-
-    let mut out = Vec::new();
-    for node in data {
-        let Some(text) = node.get("text").and_then(|v| v.as_str()) else {
-            continue;
-        };
-        let Some(name) = text.strip_prefix("Symbol: ") else {
-            continue;
-        };
-        let Some(href) = node.get("href").and_then(|v| v.as_str()) else {
-            continue;
-        };
-        let (file, anchor) = match href.split_once('#') {
-            Some((f, a)) => (f, a),
-            None => (href, ""),
-        };
-        if file.is_empty() || anchor.is_empty() {
-            continue;
-        }
-        let category = node
-            .get("parent")
-            .and_then(|v| v.as_str())
-            .and_then(|p| text_by_id.get(p))
-            .map(|t| plain(t))
-            .unwrap_or_default();
-        out.push(IndexEntry {
-            name: name.trim().to_string(),
-            file: file.to_string(),
-            anchor: anchor.to_string(),
-            category,
-        });
-    }
-    out
+    parse_jstree(json)
+        .into_iter()
+        .filter_map(|n| {
+            let name = n.text.strip_prefix("Symbol: ")?.trim().to_string();
+            if name.is_empty() || n.file.is_empty() || n.anchor.is_empty() {
+                return None;
+            }
+            Some(IndexEntry {
+                name,
+                file: n.file,
+                anchor: n.anchor,
+                category: n.parent,
+            })
+        })
+        .collect()
 }
 
 /// A row of `appA.html`.
@@ -262,12 +121,6 @@ fn parse_appendix(html: &str) -> HashMap<String, Vec<AppendixRecord>> {
     out
 }
 
-/// Byte offset of an anchor's definition, trying both spellings Cadence uses.
-fn find_anchor(html: &str, anchor: &str) -> Option<usize> {
-    html.find(&format!("name=\"{anchor}\""))
-        .or_else(|| html.find(&format!("id=\"{anchor}\"")))
-}
-
 /// Expand a compact range name (`F1 - F50`) into the names it stands for.
 ///
 /// Returns empty for anything that is not a range, so an ordinary name is
@@ -277,7 +130,7 @@ fn expand_range(name: &str) -> Vec<String> {
     let Some(c) = RE_RANGE.captures(name) else {
         return Vec::new();
     };
-    if &c[1] != &c[3] {
+    if c[1] != c[3] {
         return Vec::new(); // `F1 - N50` is not a range, it is a typo
     }
     let (Ok(from), Ok(to)) = (c[2].parse::<u32>(), c[4].parse::<u32>()) else {
@@ -347,23 +200,8 @@ fn parse_params(
     (params, skipped_rows)
 }
 
-/// Outcome of parsing one directory, including what could not be parsed.
-#[derive(Debug, Clone, Default)]
-pub struct ParseReport {
-    /// Symbols named by the index.
-    pub indexed: usize,
-    /// Symbols whose section anchor was found and parsed.
-    pub parsed: usize,
-    /// Index entries whose anchor was missing — `"<name> (<file>#<anchor>)"`.
-    /// Must stay empty; a non-empty list means the docs changed shape and the
-    /// lookup is quietly incomplete.
-    pub unresolved: Vec<String>,
-    /// Rows dropped because they belonged to a non-parameter table.
-    pub skipped_rows: usize,
-}
-
 /// Parse every release found in `dir` into symbols, plus a parse report.
-pub fn parse_analoglib_directory_reported(dir: &Path) -> (Vec<AnalogLibSymbol>, ParseReport) {
+pub fn parse_analoglib_directory_reported(dir: &Path) -> (Vec<LibSymbol>, ParseReport) {
     let mut symbols = Vec::new();
     let mut report = ParseReport::default();
 
@@ -397,11 +235,11 @@ pub fn parse_analoglib_directory_reported(dir: &Path) -> (Vec<AnalogLibSymbol>, 
 }
 
 /// Convenience wrapper that drops the report.
-pub fn parse_analoglib_directory(dir: &Path) -> Vec<AnalogLibSymbol> {
+pub fn parse_analoglib_directory(dir: &Path) -> Vec<LibSymbol> {
     parse_analoglib_directory_reported(dir).0
 }
 
-fn parse_release(dir: &Path, prefix: &str) -> (Vec<AnalogLibSymbol>, ParseReport) {
+fn parse_release(dir: &Path, prefix: &str) -> (Vec<LibSymbol>, ParseReport) {
     let mut report = ParseReport::default();
     let release = prefix.trim_end_matches('_').to_string();
 
@@ -463,10 +301,12 @@ fn parse_release(dir: &Path, prefix: &str) -> (Vec<AnalogLibSymbol>, ParseReport
             report.skipped_rows += skipped;
             report.parsed += 1;
 
-            out.push(AnalogLibSymbol {
+            out.push(LibSymbol {
+                lib: LIB.to_string(),
                 name: entry.name.clone(),
                 category: entry.category.clone(),
                 title,
+                description: String::new(),
                 primitives,
                 params,
                 release: release.clone(),
@@ -488,8 +328,8 @@ fn parse_release(dir: &Path, prefix: &str) -> (Vec<AnalogLibSymbol>, ParseReport
 /// could return whichever came first and report zero parameters — the tool
 /// stating its own parse gap as a fact about the device. Keep the richest
 /// entry per `(release, name)` and record the other chapters on it.
-fn merge_cross_reference_stubs(symbols: Vec<AnalogLibSymbol>) -> Vec<AnalogLibSymbol> {
-    let mut best: BTreeMap<(String, String), AnalogLibSymbol> = BTreeMap::new();
+fn merge_cross_reference_stubs(symbols: Vec<LibSymbol>) -> Vec<LibSymbol> {
+    let mut best: BTreeMap<(String, String), LibSymbol> = BTreeMap::new();
     let mut order: Vec<(String, String)> = Vec::new();
 
     for symbol in symbols {
@@ -679,8 +519,8 @@ mod tests {
         assert_eq!(params[0].description, "Capacitance");
     }
 
-    fn sym(name: &str, file: &str, nparams: usize) -> AnalogLibSymbol {
-        AnalogLibSymbol {
+    fn sym(name: &str, file: &str, nparams: usize) -> LibSymbol {
+        LibSymbol {
             name: name.into(),
             release: "IC231".into(),
             source_file: file.into(),
@@ -706,11 +546,11 @@ mod tests {
 
     #[test]
     fn same_name_in_two_releases_stays_separate() {
-        let a = AnalogLibSymbol {
+        let a = LibSymbol {
             release: "IC231".into(),
             ..sym("cap", "passives.html", 15)
         };
-        let b = AnalogLibSymbol {
+        let b = LibSymbol {
             release: "IC618".into(),
             ..sym("cap", "passives.html", 12)
         };

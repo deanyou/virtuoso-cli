@@ -296,7 +296,7 @@ pub fn standard_schema() -> RpcSchema {
                       value, choices? (cyclic values), description?} — the authoritative \
                       parameter list for this instance's master, and the only source that \
                       covers PDK devices, which no Cadence manual documents. `description` \
-                      is empty on analogLib, so read prose from analoglib.info and treat \
+                      is empty on analogLib, so read prose from libref.info and treat \
                       this as the final word on names and values."
                 .into(),
         },
@@ -1317,16 +1317,32 @@ pub fn standard_schema() -> RpcSchema {
             ],
             returns: "{cache_dir, file_count, modified}".into(),
         },
-        // analogLib device reference. Local documentation reads — no SKILL is
+        // Virtuoso library references. Local documentation reads — no SKILL is
         // executed and Virtuoso is never contacted, hence no capability gate.
+        // analogLib and basic are parsed; the other registered libraries report
+        // why they yield nothing rather than coming back empty.
         Method {
-            name: "analoglib.list".into(),
-            summary: "List documented analogLib symbols (vsin, idc, cap, nmos4, ...)".into(),
+            name: "libref.list".into(),
+            summary: "List documented library cells — analogLib (vsin, idc, cap, nmos4, ...) \
+                      and basic (ipin, opin, gnd, vdd, ...)"
+                .into(),
             params: vec![
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: "Virtuoso library to restrict to: analogLib (sources, \
+                                  passives, actives), basic (pins, supplies). rfLib, \
+                                  fBlockLib, pcLib and ahdlLib are registered but not \
+                                  parsed — they answer with the reason and what to use \
+                                  instead, never with an empty list. Omit to search all."
+                        .into(),
+                    required: false,
+                },
                 Param {
                     name: "category".into(),
                     ptype: "string".into(),
-                    description: "Filter by category substring, e.g. 'Passive', 'Sources'".into(),
+                    description: "Filter by category substring, e.g. 'Passive', 'Sources', 'Pins'"
+                        .into(),
                     required: false,
                 },
                 Param {
@@ -1336,21 +1352,37 @@ pub fn standard_schema() -> RpcSchema {
                     required: false,
                 },
             ],
-            returns: "{count, symbols[{name, category, title, param_count, primitives[]}], \
-                       symbols_loaded, symbols_indexed, source}"
+            returns: "{lib, count, symbols[{lib, name, cell ('analogLib/vsin' — what \
+                       schematic.place takes), category, title, param_count, primitives[], \
+                       description?}], symbols_loaded, symbols_indexed, source, \
+                       libraries[{lib, state, symbols}], libraries_without_symbols?}"
             .into(),
         },
         Method {
-            name: "analoglib.info".into(),
-            summary: "Full CDF parameter table for one analogLib symbol — the lookup to \
-                      run BEFORE schematic.set_param, so parameter names are read, not guessed"
+            name: "libref.info".into(),
+            summary: "Full CDF parameter table for one library cell — the lookup to run \
+                      BEFORE schematic.set_param, so parameter names are read, not guessed"
             .into(),
             params: vec![
                 Param {
                     name: "symbol".into(),
                     ptype: "string".into(),
-                    description: "analogLib cell name, e.g. vsin, idc, cap, res".into(),
-                    required: true,
+                    description: "Cell name, e.g. vsin, idc, cap, res, ipin, gnd. Optional \
+                                  when `lib` is given: that form asks about the library \
+                                  itself and returns its documentation status."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: "Virtuoso library to restrict to: analogLib (sources, \
+                                  passives, actives), basic (pins, supplies). rfLib, \
+                                  fBlockLib, pcLib and ahdlLib are registered but not \
+                                  parsed — they answer with the reason and what to use \
+                                  instead, never with an empty list. Omit to search all."
+                        .into(),
+                    required: false,
                 },
                 Param {
                     name: "refresh".into(),
@@ -1359,15 +1391,18 @@ pub fn standard_schema() -> RpcSchema {
                     required: false,
                 },
             ],
-            returns: "{symbol, found, category, title, primitives[], param_count, \
-                       params[{name, label, spectre, description, default}], verify_with} | \
-                       {symbol, found:false, reason, suggestions[], hint, symbols_loaded}"
+            returns: "{lib, symbol, cell, found, category, title, description, primitives[], \
+                       param_count, params[{name, label, spectre, description, default, \
+                       expands_to?}], note?, verify_with} | {symbol, found:true, \
+                       ambiguous:true, libraries[], matches[]} when the name is in more \
+                       than one library | {symbol, found:false, reason, suggestions[], hint} | \
+                       {lib, found:false, state:'no_parser'|'no_manual'|'docs_missing', reason}"
             .into(),
         },
         Method {
-            name: "analoglib.find".into(),
-            summary: "Search CDF parameters or symbols — 'amplitude' finds va (Amplitude 1 \
-                      (Vpk)), vaDBm, ia, each with the symbol it belongs to"
+            name: "libref.find".into(),
+            summary: "Search CDF parameters or cells — 'amplitude' finds va (Amplitude 1 \
+                      (Vpk)), vaDBm, ia, each with the cell it belongs to"
             .into(),
             params: vec![
                 Param {
@@ -1375,6 +1410,17 @@ pub fn standard_schema() -> RpcSchema {
                     ptype: "string".into(),
                     description: "Search string: a CDF name, a GUI label, or a plain word".into(),
                     required: true,
+                },
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: "Virtuoso library to restrict to: analogLib (sources, \
+                                  passives, actives), basic (pins, supplies). rfLib, \
+                                  fBlockLib, pcLib and ahdlLib are registered but not \
+                                  parsed — they answer with the reason and what to use \
+                                  instead, never with an empty list. Omit to search all."
+                        .into(),
+                    required: false,
                 },
                 Param {
                     name: "scope".into(),
@@ -1402,10 +1448,10 @@ pub fn standard_schema() -> RpcSchema {
                     required: false,
                 },
             ],
-            returns: "{query, mode, scope, param_count (total matches, not the \
+            returns: "{query, mode, scope, lib, param_count (total matches, not the \
                        truncated page), params_shown, params_truncated?, \
-                       params[{symbol, name, label, spectre, description, default}], \
-                       symbol_count, symbols_shown, symbols_truncated?, symbols[]}"
+                       params[{lib, symbol, cell, name, label, spectre, description, \
+                       default}], symbol_count, symbols_shown, symbols_truncated?, symbols[]}"
             .into(),
         },
         Method {

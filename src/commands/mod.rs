@@ -1,4 +1,4 @@
-pub mod analoglib;
+pub mod libref;
 pub mod cell;
 pub mod config;
 pub mod design;

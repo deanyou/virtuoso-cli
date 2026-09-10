@@ -133,11 +133,11 @@ impl CapabilitySet {
             // them to non-Admin callers meant a design-capability token could
             // not look up an API signature, which is exactly backwards: the
             // house rule is "read the manual, don't guess".
-            // `analoglib.*` only reads Cadence HTML documentation from a
+            // `libref.*` only reads Cadence HTML documentation from a
             // local cache. Like `util`, it executes nothing and contacts
             // no Virtuoso, so gating it would only stop a designer from
             // checking a CDF parameter name before setting it.
-            "analoglib" => true,
+            "libref" => true,
             "skill" => match op {
                 "find" | "info" | "sync" | "cache" => true,
                 // `eval`/`exec`/`load`/`broadcast` run arbitrary SKILL.
