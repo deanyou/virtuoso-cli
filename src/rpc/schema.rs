@@ -678,6 +678,21 @@ pub fn standard_schema() -> RpcSchema {
             returns: "JSON array of test-name strings".into(),
         },
         Method {
+            name: "maestro.list_corners".into(),
+            summary: "List the corner and corner-group names in a Maestro session's setup".into(),
+            params: vec![Param {
+                name: "session".into(),
+                ptype: "string".into(),
+                description: "Session ID (e.g. fnxSession4)".into(),
+                required: true,
+            }],
+            returns: "JSON array of corner names as they appear in ADE Assembler (e.g. C0, \
+                      Nominal) — these are setup labels, not PDK model sections; \
+                      maestro.create_corner_netlist takes one of these. Empty array if the \
+                      setup defines no corners; errors if the session does not exist"
+                .into(),
+        },
+        Method {
             name: "maestro.set_var".into(),
             summary: "Set a design variable".into(),
             params: vec![
@@ -1548,7 +1563,10 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "corner".into(),
                     ptype: "string".into(),
-                    description: "Corner name (e.g. tt, ss, ff)".into(),
+                    description: "Corner name as it appears in the Assembler setup (e.g. C0, \
+                                  Nominal) — list them with maestro.list_corners. NOT a PDK \
+                                  model section: passing tt/ss/ff fails with a bare nil"
+                        .into(),
                     required: true,
                 },
                 Param {

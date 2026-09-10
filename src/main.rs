@@ -1142,6 +1142,13 @@ enum MaestroCmd {
     /// List all active Maestro sessions
     ListSessions,
 
+    /// List the corner names in a session's setup (what `create-corner-netlist` accepts)
+    ListCorners {
+        /// Session ID (e.g. fnxSession4)
+        #[arg(long)]
+        session: String,
+    },
+
     /// Set a design variable value
     SetVar {
         #[arg(long)]
@@ -2419,6 +2426,7 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
         MaestroCmd::SetMode { session, mode } => commands::maestro::set_mode(&session, &mode),
         MaestroCmd::Close { session } => commands::maestro::close(&session),
         MaestroCmd::ListSessions => commands::maestro::list_sessions(),
+        MaestroCmd::ListCorners { session } => commands::maestro::list_corners(&session),
         MaestroCmd::SetVar { name, value } => commands::maestro::set_var(&name, &value),
         MaestroCmd::GetVar { name } => commands::maestro::get_var(&name),
         MaestroCmd::ListVars => commands::maestro::list_vars(),
