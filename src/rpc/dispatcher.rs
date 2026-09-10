@@ -193,6 +193,7 @@ impl RpcDispatcher {
             "file" => self.dispatch_file(client, op, params),
             "util" => self.dispatch_util(client, op, params),
             "skill" => self.dispatch_skill(client, op, params),
+            "analoglib" => Self::dispatch_analoglib(op, params),
             "sim" => self.dispatch_sim(client, op, params),
             _ => {
                 // Try plugin registry for unknown domains
@@ -968,10 +969,12 @@ impl RpcDispatcher {
                 // meant to detect.
                 // The probe expression is `plus(1 1)`: a no-op SKILL form
                 // that returns a non-nil integer on any responsive daemon.
-                // `ipcIsProcessRunning()` (previously used here) requires a
-                // specific process-handle argument and returns nil when
-                // called without one, making the ping spuriously fail on
-                // live daemons.
+                // `ipcIsProcessRunning()` (previously used here) does not
+                // exist on IC23.1 — it is in none of the 41 SKILL Finder
+                // databases and `getd` returns nil — so the call errored and
+                // the ping failed spuriously on live daemons. The old note
+                // here blamed a missing process-handle argument; that was
+                // the wrong diagnosis for the right fix.
                 let r = client.execute_skill_idempotent_probe("plus(1 1)", Some(5000))?;
                 if r.skill_ok() {
                     Ok(serde_json::json!({ "status": "ok" }))
@@ -1069,6 +1072,45 @@ impl RpcDispatcher {
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown skill method '{}'",
                 op
+            ))),
+        }
+    }
+
+    /// `analoglib.*` — the analogLib device reference.
+    ///
+    /// Takes no `client`: every operation is a local documentation read. That
+    /// is the point — looking up a CDF parameter name must not require a live
+    /// Virtuoso, an Admin token, or a guess.
+    fn dispatch_analoglib(op: &str, params: Value) -> Result<Value> {
+        let refresh = params
+            .get("refresh")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+
+        match op {
+            "list" => {
+                let category = params.get("category").and_then(|v| v.as_str());
+                commands::analoglib::list(category, refresh)
+            }
+            "info" => {
+                let symbol = json_str(params.get("symbol"), "symbol")?;
+                commands::analoglib::info(&symbol, refresh)
+            }
+            "find" => {
+                let query = json_str(params.get("query"), "query")?;
+                let mode = params
+                    .get("mode")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("fuzzy");
+                let scope = params
+                    .get("scope")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("params");
+                commands::analoglib::find(&query, mode, scope, limit, refresh)
+            }
+            _ => Err(VirtuosoError::NotFound(format!(
+                "unknown analoglib method '{op}'"
             ))),
         }
     }
@@ -1626,7 +1668,8 @@ mod tests {
         //  + 4 maestro packet     (list_tests, delete_var, delete_output, delete_analysis)
         //  + 4 this packet        (schematic.list_cdf_params, cell.list_open,
         //                          maestro.set_session_mode, maestro.create_test)
-        assert_eq!(schema.methods.len(), 87, "should have exactly 87 methods");
+        //  + 3 analoglib          (list, info, find) — the device reference
+        assert_eq!(schema.methods.len(), 90, "should have exactly 90 methods");
     }
 
     #[test]

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+mod analoglib_finder;
 mod async_runtime;
 mod auth;
 mod capability;

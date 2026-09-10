@@ -749,8 +749,10 @@ impl VirtuosoClient {
     /// misses.
     ///
     /// Uses a no-op `(+ 1 1)` instead of `ipcIsProcessRunning()` because the
-    /// latter requires a specific process-handle argument and returns nil
-    /// (falsy) when called without one.
+    /// latter **does not exist on IC23.1** — absent from all 41 SKILL Finder
+    /// databases, and `getd` returns nil for it. The nil that motivated this
+    /// switch was the bridge swallowing an "undefined function" error, not a
+    /// missing argument. Do not "fix" it by passing a process handle.
     pub fn daemon_alive(&self) -> bool {
         const SKILL: &str = r#"plus(1 1)"#;
         // Explicitly idempotent probe: it must survive a stale queued ticket,
@@ -931,9 +933,10 @@ impl VirtuosoClient {
     /// Used by heartbeat to detect stale sessions.
     ///
     /// Uses `plus(1 1)` as a no-op probe because `ipcIsProcessRunning()` (the
-    /// previously-used probe) requires a specific process-handle argument and
-    /// returns nil/empty when called without one — causing every ping to
-    /// fail on a live daemon. See `daemon_alive()` for the same pattern.
+    /// previously-used probe) **does not exist on IC23.1** — it is in none of
+    /// the 41 SKILL Finder databases and `getd` returns nil. Every ping failed
+    /// on a live daemon because the call errored, not because an argument was
+    /// missing. See `daemon_alive()` for the same pattern.
     pub fn ping(&self) -> Result<()> {
         let skill = "plus(1 1)";
         let result = self.execute_skill_unchecked(skill, Some(5000))?;
