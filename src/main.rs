@@ -1,6 +1,5 @@
 use tracing_subscriber::EnvFilter;
 
-mod analoglib_finder;
 mod async_runtime;
 mod auth;
 mod capability;
@@ -13,6 +12,7 @@ mod context;
 mod error;
 mod exit_codes;
 mod history;
+mod libref;
 mod mcp;
 mod models;
 mod ocean;

@@ -1,4 +1,3 @@
-pub mod analoglib_finder;
 pub mod async_runtime;
 pub mod auth;
 pub mod capability;
@@ -11,6 +10,7 @@ pub mod context;
 pub mod error;
 pub mod exit_codes;
 pub mod history;
+pub mod libref;
 pub mod mcp;
 pub mod models;
 pub mod ocean;

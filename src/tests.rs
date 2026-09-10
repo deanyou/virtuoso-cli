@@ -380,6 +380,7 @@ mod ssh_runner_tests {
 #[cfg(test)]
 mod session_info_tests {
     use crate::models::SessionInfo;
+    use serial_test::serial;
     use std::fs;
     use tempfile::TempDir;
 
@@ -610,7 +611,14 @@ mod session_info_tests {
         assert!(found2, "second Virtuoso's session must appear in list");
     }
 
+    // Serialised against `live_session_not_removed_by_cleanup`: both write to
+    // the one real sessions directory and both call the global
+    // `session::cleanup()`. Run concurrently, the other test's cleanup() sweeps
+    // this one's stale file and reports it in *its* result, leaving this
+    // assertion looking at an empty list. `session_sorted_by_id` dodges the
+    // same race by binding real ports; a stale session has none to bind.
     #[test]
+    #[serial(session_cleanup)]
     fn stale_session_filtered_in_cleanup() {
         // Dead session files (port not bound) must be removed by session::cleanup()
         // Bind then drop to get a port we know is currently free.
@@ -645,6 +653,7 @@ mod session_info_tests {
     }
 
     #[test]
+    #[serial(session_cleanup)]
     fn live_session_not_removed_by_cleanup() {
         // A session whose port is actually bound must survive cleanup()
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
