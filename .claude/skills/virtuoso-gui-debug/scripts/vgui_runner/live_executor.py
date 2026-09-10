@@ -279,10 +279,13 @@ class LiveExecutor(Executor):
                     )
                 }
 
-            # Fast path: when --window-id is provided, skip the expensive
-            # list-windows-x11 scan (can time out on displays with hundreds
-            # of windows) and validate the explicit window via xdotool.
+            # Fast path: when --window-id is provided, try to skip the
+            # expensive list-windows-x11 scan (can time out on displays with
+            # hundreds of windows, and requires xwininfo). Validate the
+            # explicit window via xdotool. On any failure, fall back to the
+            # slow path below rather than aborting.
             effective_pid = session_pid or scenario.pid
+            _fast_ok = False
             if self._explicit_window_id:
                 import subprocess
                 import os
@@ -290,32 +293,31 @@ class LiveExecutor(Executor):
                 try:
                     result = subprocess.run(
                         ["xdotool", "getwindowgeometry", self._explicit_window_id],
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=10,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        universal_newlines=True, timeout=10,
                         env={**os.environ, "DISPLAY": scenario.display},
                     )
-                    if result.returncode != 0:
-                        return {"error": f"window {self._explicit_window_id} not found on DISPLAY {scenario.display}"}
-                    geom_out = result.stdout
-                    pos_match = _re.search(r"Position:\s*(-?\d+),(-?\d+)", geom_out)
-                    geo_match = _re.search(r"Geometry:\s*(\d+)x(\d+)", geom_out)
-                    if not pos_match or not geo_match:
-                        return {"error": f"cannot parse geometry for window {self._explicit_window_id}"}
-                    self._window_width = int(geo_match.group(1))
-                    self._window_height = int(geo_match.group(2))
-                    self.window_id = self._explicit_window_id
-                    self._scenario_display = scenario.display
-                    self._scenario_pid = int(effective_pid)
-                    lock = _DisplayLock(scenario.display)
-                    try:
-                        lock.acquire()
-                    except LockHeldError as exc:
-                        return {"error": f"lock conflict: {exc}"}
-                    self._lock = lock
-                    return None
-                except FileNotFoundError:
-                    return {"error": "xdotool not found; required for --window-id fast path"}
-                except subprocess.TimeoutExpired:
-                    return {"error": f"xdotool getwindowgeometry timed out for {self._explicit_window_id}"}
+                    if result.returncode == 0:
+                        geom_out = result.stdout
+                        pos_match = _re.search(r"Position:\s*(-?\d+),(-?\d+)", geom_out)
+                        geo_match = _re.search(r"Geometry:\s*(\d+)x(\d+)", geom_out)
+                        if pos_match and geo_match:
+                            self._window_width = int(geo_match.group(1))
+                            self._window_height = int(geo_match.group(2))
+                            self.window_id = self._explicit_window_id
+                            self._scenario_display = scenario.display
+                            self._scenario_pid = int(effective_pid)
+                            _fast_ok = True
+                except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                    pass  # fall back to slow path
+            if _fast_ok:
+                lock = _DisplayLock(scenario.display)
+                try:
+                    lock.acquire()
+                except LockHeldError as exc:
+                    return {"error": f"lock conflict: {exc}"}
+                self._lock = lock
+                return None
 
             # 2. window list: DISPLAY must match exactly, PID binding unique.
             #    effective_pid is session_pid when positive, else scenario.pid
