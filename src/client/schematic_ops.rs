@@ -518,20 +518,44 @@ impl SchematicOps {
     /// exactly the symbols the centroid rule was wrong about: `ipin` stubs
     /// right, `opin` left, `iopin` down, matching how each arrow is drawn.
     ///
-    /// Two defects are fixed here as well; either alone made the method return
-    /// `error` for every input:
-    ///  * instances and terminals were matched with `i~>name == "M1"`. SKILL
-    ///    `==` compares identity, not string content, so the lookup always
-    ///    yielded nil. `assign_net` had this right with `strcmp(...) == 0`.
-    ///  * the stub direction used `when(cond a b ...)` as if it were `case`.
-    ///    `when` evaluates every form and returns the last, so the direction was
-    ///    whatever fell out of the final branch regardless of the geometry.
+    /// One defect fixed here made the method return `error` for every input:
+    /// the stub direction used `when(cond a b ...)` as if it were `case`.
+    /// `when` evaluates every form and returns the last, so the direction was
+    /// whatever fell out of the final branch regardless of the geometry.
+    ///
+    /// The name lookups were rewritten from `i~>name == "M1"` to
+    /// `strcmp(i~>name "M1") == 0` at the same time, and the reason recorded
+    /// then — *"`==` compares identity, not string content"* — is **wrong**;
+    /// corrected 2026-09-10. `sklangref.fnd` is explicit: `eq` *"checks
+    /// addresses"*, `equal` *"checks contents of strings and lists"*, and `==`
+    /// is `equal`. Probed live: `strcat("M" "1") == "M1"` → `t`, and both forms
+    /// find the same instance in `amp`. `strcmp` is kept because it says
+    /// "string compare" out loud, not because `==` was broken — the direction
+    /// bug above is what actually made every call fail.
     ///
     /// Signatures from the IC23.1 reference (read 2026-09-09):
     /// `schCreateWire(cv entry route points xSnap ySnap width)` => list of wires
     /// (entry `"draw"` uses the point list verbatim and ignores the route
     /// method); `schCreateWireLabel(cv glue point text just orient font height
     /// aliasP)` => label, where `glue` is the wire the label names.
+    ///
+    /// Calling it twice is not an error. `schCreateWire` answers `nil` when the
+    /// segment is already there, so the second pass used to come back as
+    /// `schCreateWire failed at M1/D` — the same text a genuinely broken call
+    /// produces. Ten of those in a row on `amp` (2026-09-10) read as ten
+    /// defects; the schematic was in fact already finished. So the terminal is
+    /// probed first with `dbGetOverlaps` on a degenerate box (the technique
+    /// [`Self::create_wire_label`] uses), and the three cases are told apart:
+    ///
+    ///  * nothing there → draw, as before;
+    ///  * a wire already labelled `net_name` → answer `already: …`, success;
+    ///  * a wire labelled something *else*, or nothing at all → error, and say
+    ///    which of the two it is. Neither is idempotent: relabelling silently
+    ///    would leave two names fighting over one net.
+    ///
+    /// Labels glued to the existing wire are found by overlapping its own
+    /// `bBox`, not the stub end this call would have used — a stub drawn by an
+    /// earlier version, or by hand, points wherever it points.
     ///
     /// inst_name: instance name (e.g. "M1")
     /// term_name: terminal name as it appears on the *master* symbol ("D"/"G"/…)
@@ -560,7 +584,7 @@ impl SchematicOps {
         let guard = cv_guard();
 
         format!(
-            r#"let((cv inst mterm pin fig bb pc pt cxs cys npin mb mbc ctr dx dy stub ex ey lblJust lblRot wires lbl) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0)) when(!inst error("label_term: no instance named {inst_name}")) mterm = car(setof(mt inst~>master~>terminals strcmp(mt~>name "{term_name}")==0)) when(!mterm error("label_term: master of {inst_name} has no terminal {term_name}")) pin = car(mterm~>pins) when(!pin error("label_term: terminal {term_name} has no pin")) fig = pin~>fig when(!fig error("label_term: pin of {term_name} has no figure")) bb = fig~>bBox pc = list((xCoord(car(bb))+xCoord(cadr(bb)))/2.0 (yCoord(car(bb))+yCoord(cadr(bb)))/2.0) cxs = 0.0 cys = 0.0 npin = 0 foreach(trm inst~>master~>terminals foreach(pn trm~>pins when(pn~>fig let((bx) bx = pn~>fig~>bBox cxs = cxs+(xCoord(car(bx))+xCoord(cadr(bx)))/2.0 cys = cys+(yCoord(car(bx))+yCoord(cadr(bx)))/2.0 npin = npin+1)))) when(npin == 0 error("label_term: master of {inst_name} has no pin figures")) mb = inst~>master~>bBox mbc = list((xCoord(car(mb))+xCoord(cadr(mb)))/2.0 (yCoord(car(mb))+yCoord(cadr(mb)))/2.0) ctr = if(npin >= 2 list(cxs/float(npin) cys/float(npin)) mbc) when(xCoord(ctr) == xCoord(pc) && yCoord(ctr) == yCoord(pc) ctr = mbc) pt = dbTransformPoint(pc inst~>transform) pt = list(xCoord(pt) yCoord(pt)) ctr = dbTransformPoint(ctr inst~>transform) dx = xCoord(pt)-xCoord(ctr) dy = yCoord(pt)-yCoord(ctr) stub = 0.25 ex = xCoord(pt) ey = yCoord(pt) if(abs(dx) >= abs(dy) then if(dx >= 0.0 then ex = ex+stub lblJust = "centerLeft" lblRot = "R0" else ex = ex-stub lblJust = "centerRight" lblRot = "R0") else if(dy >= 0.0 then ey = ey+stub lblJust = "{up_just}" lblRot = "{up_rot}" else ey = ey-stub lblJust = "{dn_just}" lblRot = "{dn_rot}")) wires = schCreateWire(cv "draw" "full" list(pt list(ex ey)) 0.0625 0.0625 0.0) when(!wires error("label_term: schCreateWire failed at {inst_name}/{term_name}")) lbl = schCreateWireLabel(cv car(wires) list(ex ey) "{net_name}" lblJust lblRot "stick" {font_size} nil) when(!lbl error("label_term: schCreateWireLabel failed at {inst_name}/{term_name}")) sprintf(nil "%s.%s stub (%g %g)->(%g %g) net=%s" "{inst_name}" "{term_name}" xCoord(pt) yCoord(pt) ex ey "{net_name}"))"#
+            r#"let((cv inst mterm pin fig bb pc pt cxs cys npin mb mbc ctr dx dy stub ex ey lblJust lblRot old olbls omine otxt wires lbl) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0)) when(!inst error("label_term: no instance named {inst_name}")) mterm = car(setof(mt inst~>master~>terminals strcmp(mt~>name "{term_name}")==0)) when(!mterm error("label_term: master of {inst_name} has no terminal {term_name}")) pin = car(mterm~>pins) when(!pin error("label_term: terminal {term_name} has no pin")) fig = pin~>fig when(!fig error("label_term: pin of {term_name} has no figure")) bb = fig~>bBox pc = list((xCoord(car(bb))+xCoord(cadr(bb)))/2.0 (yCoord(car(bb))+yCoord(cadr(bb)))/2.0) cxs = 0.0 cys = 0.0 npin = 0 foreach(trm inst~>master~>terminals foreach(pn trm~>pins when(pn~>fig let((bx) bx = pn~>fig~>bBox cxs = cxs+(xCoord(car(bx))+xCoord(cadr(bx)))/2.0 cys = cys+(yCoord(car(bx))+yCoord(cadr(bx)))/2.0 npin = npin+1)))) when(npin == 0 error("label_term: master of {inst_name} has no pin figures")) mb = inst~>master~>bBox mbc = list((xCoord(car(mb))+xCoord(cadr(mb)))/2.0 (yCoord(car(mb))+yCoord(cadr(mb)))/2.0) ctr = if(npin >= 2 list(cxs/float(npin) cys/float(npin)) mbc) when(xCoord(ctr) == xCoord(pc) && yCoord(ctr) == yCoord(pc) ctr = mbc) pt = dbTransformPoint(pc inst~>transform) pt = list(xCoord(pt) yCoord(pt)) ctr = dbTransformPoint(ctr inst~>transform) dx = xCoord(pt)-xCoord(ctr) dy = yCoord(pt)-yCoord(ctr) stub = 0.25 ex = xCoord(pt) ey = yCoord(pt) if(abs(dx) >= abs(dy) then if(dx >= 0.0 then ex = ex+stub lblJust = "centerLeft" lblRot = "R0" else ex = ex-stub lblJust = "centerRight" lblRot = "R0") else if(dy >= 0.0 then ey = ey+stub lblJust = "{up_just}" lblRot = "{up_rot}" else ey = ey-stub lblJust = "{dn_just}" lblRot = "{dn_rot}")) old = car(setof(f dbGetOverlaps(cv list(pt pt)) f~>objType == "line")) if(old then olbls = setof(f dbGetOverlaps(cv old~>bBox) f~>objType == "label") omine = car(setof(f olbls strcmp(f~>theLabel "{net_name}")==0)) otxt = if(olbls car(olbls)~>theLabel "") cond((omine sprintf(nil "already: %s.%s net=%s — stub and label are already drawn" "{inst_name}" "{term_name}" "{net_name}")) (olbls error("label_term: {inst_name}/{term_name} already carries a stub labelled '%s', not '{net_name}' — delete that stub before relabelling" otxt)) (t error("label_term: a wire already meets {inst_name}/{term_name} but carries no label — name it with 'schematic.label' at that point, or delete it"))) else wires = schCreateWire(cv "draw" "full" list(pt list(ex ey)) 0.0625 0.0625 0.0) when(!wires error("label_term: schCreateWire failed at {inst_name}/{term_name}")) lbl = schCreateWireLabel(cv car(wires) list(ex ey) "{net_name}" lblJust lblRot "stick" {font_size} nil) when(!lbl error("label_term: schCreateWireLabel failed at {inst_name}/{term_name}")) sprintf(nil "%s.%s stub (%g %g)->(%g %g) net=%s" "{inst_name}" "{term_name}" xCoord(pt) yCoord(pt) ex ey "{net_name}")))"#
         )
     }
 
@@ -952,8 +976,12 @@ mod tests {
         );
     }
 
-    /// Both lookups used SKILL `==`, which compares identity and so never
-    /// matched a name. Guard the fix so it cannot regress silently.
+    /// Both lookups say `strcmp(...) == 0` rather than `==`. The comment that
+    /// used to sit here claimed `==` compares identity and so never matched a
+    /// name; that is wrong (see [`SchematicOps::label_instance_term`]) and was
+    /// retracted 2026-09-10. `==` would work. The test stays because the
+    /// explicit form is the one this file settled on — it reads as a string
+    /// compare at a glance — not because the alternative is broken.
     #[test]
     fn label_instance_term_matches_names_with_strcmp() {
         let s = ops().label_instance_term("M1", "D", "VDD", "default", false);
@@ -964,10 +992,6 @@ mod tests {
         assert!(
             s.contains(r#"strcmp(mt~>name "D")==0"#),
             "terminal lookup must use strcmp: {s}"
-        );
-        assert!(
-            !s.contains(r#"i~>name == ""#) && !s.contains(r#"mt~>name == ""#),
-            "no identity comparison against a string: {s}"
         );
     }
 
@@ -1018,6 +1042,55 @@ mod tests {
         assert!(
             !s.contains(r#"when(rbStubDir"#),
             "the when-as-case form must be gone: {s}"
+        );
+    }
+
+    /// Defect E: a second pass over a finished schematic must not read as ten
+    /// failures. The terminal is probed before anything is drawn.
+    #[test]
+    fn label_instance_term_probes_the_terminal_before_drawing() {
+        let s = ops().label_instance_term("M1", "D", "VDD", "default", false);
+        let probe = s
+            .find("dbGetOverlaps(cv list(pt pt))")
+            .expect("must probe the terminal point: {s}");
+        let draw = s.find("schCreateWire(").expect("must still draw: {s}");
+        assert!(
+            probe < draw,
+            "the probe has to come before the wire, not after it fails: {s}"
+        );
+    }
+
+    /// The three outcomes are distinct: same label = success, other label =
+    /// error, bare wire = error. Only the first is idempotent.
+    #[test]
+    fn label_instance_term_tells_already_drawn_from_a_conflict() {
+        let s = ops().label_instance_term("M1", "D", "VDD", "default", false);
+        assert!(
+            s.contains(r#"strcmp(f~>theLabel "VDD")==0"#),
+            "the existing label's text decides, not its mere presence: {s}"
+        );
+        assert!(
+            s.contains(r#"sprintf(nil "already: %s.%s net=%s"#),
+            "the idempotent case needs the marker the command layer reads: {s}"
+        );
+        assert!(
+            s.contains("already carries a stub labelled"),
+            "a different net name must be an error, not a silent success: {s}"
+        );
+        assert!(
+            s.contains("but carries no label"),
+            "an unlabelled wire is its own case: {s}"
+        );
+    }
+
+    /// Labels are searched on the existing wire's own bBox — a stub drawn by an
+    /// earlier version, or by hand, does not point where this call would.
+    #[test]
+    fn label_instance_term_finds_labels_on_the_existing_wire() {
+        let s = ops().label_instance_term("M1", "D", "VDD", "default", false);
+        assert!(
+            s.contains("dbGetOverlaps(cv old~>bBox)"),
+            "must search the wire that is there, not the stub end: {s}"
         );
     }
 

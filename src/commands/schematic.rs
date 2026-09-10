@@ -195,6 +195,13 @@ pub fn net_stub(
 /// Label an instance terminal (D/G/S/B) with a net name at the terminal's
 /// precise pin center.
 ///
+/// `already` distinguishes "the stub was drawn just now" from "the stub was
+/// already there, labelled with this same net". Both are `success` — running a
+/// build recipe twice must not look like a failure — but the caller counting
+/// how much it changed needs to tell them apart. The SKILL marks the second
+/// case with a leading `already:`; a stub carrying a *different* net name is an
+/// error, not an `already`.
+///
 /// inst: "instance_name" (e.g. "M1")
 /// term: terminal name (e.g. "D", "G", "S", "B")
 /// net: net name to assign
@@ -213,11 +220,14 @@ pub fn label_term(
         .label_instance_term(inst, term, net, cosmetic, auto_rotate);
     // Unchecked — see `net_stub` above.
     let r = client.execute_skill_unchecked(&skill, None)?;
+    let ok = r.skill_ok();
     Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
+        "status": if ok { "success" } else { "error" },
         "instance": inst,
         "terminal": term,
         "net": net,
+        // `output_unquoted`: the bridge hands SKILL strings back still quoted.
+        "already": ok && r.output_unquoted().starts_with("already:"),
         "output": r.output,
         "errors": r.errors,
     }))
