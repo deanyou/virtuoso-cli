@@ -1355,12 +1355,12 @@ enum SchematicCmd {
         /// Instance name
         #[arg(long)]
         name: String,
-        /// X coordinate
+        /// X coordinate in user units (the schematic grid is 0.0625)
         #[arg(long, default_value = "0")]
-        x: i64,
-        /// Y coordinate
+        x: f64,
+        /// Y coordinate in user units
         #[arg(long, default_value = "0")]
-        y: i64,
+        y: f64,
         /// Orientation
         #[arg(long, value_enum, default_value_t = commands::schematic::Orient::R0)]
         orient: commands::schematic::Orient,
@@ -1395,9 +1395,9 @@ enum SchematicCmd {
         #[arg(long)]
         net: String,
         #[arg(long, default_value = "0")]
-        x: i64,
+        x: f64,
         #[arg(long, default_value = "0")]
-        y: i64,
+        y: f64,
     },
 
     /// Add a pin
@@ -1408,9 +1408,9 @@ enum SchematicCmd {
         #[arg(long)]
         dir: String,
         #[arg(long, default_value = "0")]
-        x: i64,
+        x: f64,
         #[arg(long, default_value = "0")]
-        y: i64,
+        y: f64,
     },
 
     /// Run schematic check (schCheck)
@@ -1483,12 +1483,12 @@ enum SchematicCmd {
         /// Net name
         #[arg(long)]
         net: String,
-        /// X origin in DBU
+        /// X origin in user units
         #[arg(long)]
-        x: i64,
-        /// Y origin in DBU
+        x: f64,
+        /// Y origin in user units
         #[arg(long)]
-        y: i64,
+        y: f64,
         /// Direction: right (default), left, up, down
         #[arg(long, default_value = "right")]
         direction: String,

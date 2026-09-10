@@ -241,8 +241,8 @@ impl RpcDispatcher {
                     ))
                 })?;
                 let name = json_str(params.get("name"), "name")?;
-                let x = json_i64_or(params.get("x"), 0);
-                let y = json_i64_or(params.get("y"), 0);
+                let x = json_coord_or(params.get("x"), "x", 0.0)?;
+                let y = json_coord_or(params.get("y"), "y", 0.0)?;
                 let orient = json_str_or(params.get("orient"), "R0")?;
                 let skill = ops.create_instance(lib, cell, "symbol", &name, (x, y), &orient);
                 execute_required_skill(client, &skill, "place instance")?;
@@ -264,30 +264,19 @@ impl RpcDispatcher {
             }
             "wire" => {
                 let net = json_str(params.get("net"), "net")?;
-                let points: Vec<String> = params
-                    .get("points")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(str::to_string))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                let pts: Vec<(i64, i64)> = points
-                    .iter()
-                    .filter_map(|s| {
-                        let (x, y) = s.split_once(',')?;
-                        Some((x.parse().ok()?, y.parse().ok()?))
-                    })
-                    .collect();
+                // Every point must parse. The two `filter_map`s that used to be
+                // here dropped whatever did not — a typo in one coordinate
+                // shortened the wire and still reported ok, so the missing
+                // segment only showed up as a disconnected net much later.
+                let pts = parse_wire_points(params.get("points"))?;
                 let skill = ops.create_wire(&pts, "wire", &net);
                 execute_required_skill(client, &skill, "create wire")?;
                 Ok(serde_json::json!({ "status": "ok" }))
             }
             "label" => {
                 let net = json_str(params.get("net"), "net")?;
-                let x = json_i64_or(params.get("x"), 0);
-                let y = json_i64_or(params.get("y"), 0);
+                let x = json_coord_or(params.get("x"), "x", 0.0)?;
+                let y = json_coord_or(params.get("y"), "y", 0.0)?;
                 let skill = ops.create_wire_label(&net, (x, y));
                 execute_required_skill(client, &skill, "create label")?;
                 Ok(serde_json::json!({ "status": "ok" }))
@@ -305,8 +294,8 @@ impl RpcDispatcher {
                          input, output, inputOutput, switch, jumper"
                     )));
                 }
-                let x = json_i64_or(params.get("x"), 0);
-                let y = json_i64_or(params.get("y"), 0);
+                let x = json_coord_or(params.get("x"), "x", 0.0)?;
+                let y = json_coord_or(params.get("y"), "y", 0.0)?;
                 let skill = ops.create_pin(&net, &dir, (x, y));
                 execute_required_skill(client, &skill, "create pin")?;
                 Ok(serde_json::json!({ "status": "ok", "net": net, "direction": dir }))
@@ -378,8 +367,8 @@ impl RpcDispatcher {
             }
             "net_stub" => {
                 let net = json_str(params.get("net"), "net")?;
-                let x = json_i64_or(params.get("x"), 0);
-                let y = json_i64_or(params.get("y"), 0);
+                let x = json_coord_or(params.get("x"), "x", 0.0)?;
+                let y = json_coord_or(params.get("y"), "y", 0.0)?;
                 let direction = json_str_or(params.get("direction"), "right")?;
                 let length = params.get("length").and_then(|v| v.as_f64()).unwrap_or(0.5);
                 let cosmetic = json_str_or(params.get("cosmetic"), "default")?;
@@ -1145,8 +1134,59 @@ fn json_str_or(value: Option<&Value>, default: &str) -> Result<String> {
         .unwrap_or_else(|| default.to_string()))
 }
 
-fn json_i64_or(value: Option<&Value>, default: i64) -> i64 {
-    value.and_then(|v| v.as_i64()).unwrap_or(default)
+/// Optional schematic coordinate, in user units.
+///
+/// Absent means `default`; **present-but-not-a-number is an error**, not the
+/// default. The previous `json_i64_or` did `as_i64().unwrap_or(0)`, so both
+/// `{"x": -1.5}` and `{"x": "7"}` placed the instance at the origin and
+/// returned `status: ok` — a schematic that is quietly wrong, which costs more
+/// than one that refuses to build.
+///
+/// Floats are accepted because `dbCreateInst`'s `l_point` is in user units
+/// (IC23.1 `skdfref.fnd`: *"an origin and orientation specified by l_point"*),
+/// and the schematic grid is 0.0625 — half the placements in `amp` are not
+/// integers.
+fn json_coord_or(value: Option<&Value>, field: &str, default: f64) -> Result<f64> {
+    match value {
+        None | Some(Value::Null) => Ok(default),
+        Some(v) => v
+            .as_f64()
+            .filter(|f| f.is_finite())
+            .ok_or_else(|| VirtuosoError::Execution(format!(
+                "field '{field}' must be a finite number in user units, got {v}"
+            ))),
+    }
+}
+
+/// Parse `points: ["x1,y1", "x2,y2", …]` into user-unit coordinate pairs.
+///
+/// A wire with fewer points than the caller listed is not a wire the caller
+/// asked for, so every failure is reported with the offending element rather
+/// than skipped.
+fn parse_wire_points(value: Option<&Value>) -> Result<Vec<(f64, f64)>> {
+    let arr = value.and_then(|v| v.as_array()).ok_or_else(|| {
+        VirtuosoError::Execution("field 'points' must be an array of \"x,y\" strings".into())
+    })?;
+    let bad = |i: usize, what: &str| {
+        VirtuosoError::Execution(format!("points[{i}]: {what}"))
+    };
+    arr.iter()
+        .enumerate()
+        .map(|(i, v)| {
+            let s = v.as_str().ok_or_else(|| bad(i, "expected a \"x,y\" string"))?;
+            let (x, y) = s
+                .split_once(',')
+                .ok_or_else(|| bad(i, &format!("'{s}' is not in x,y form")))?;
+            let num = |t: &str| -> Result<f64> {
+                t.trim()
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|f| f.is_finite())
+                    .ok_or_else(|| bad(i, &format!("'{t}' is not a finite number")))
+            };
+            Ok((num(x)?, num(y)?))
+        })
+        .collect()
 }
 
 /// Fold a SKILL-produced JSON object into a `{"status":"ok", ...}` reply.
@@ -1185,6 +1225,39 @@ mod tests {
     use super::*;
     use crate::models::VirtuosoResult;
     use crate::rpc::schema::{standard_schema, RpcSchema};
+
+    /// Omitted is 0; present-but-junk is an error.
+    ///
+    /// This is the whole of defect B: `{"x": "7"}` used to place at the origin
+    /// and answer `status: ok`.
+    #[test]
+    fn a_coordinate_is_either_absent_or_a_number() {
+        use serde_json::json;
+        assert_eq!(json_coord_or(None, "x", 0.0).unwrap(), 0.0);
+        assert_eq!(json_coord_or(Some(&json!(null)), "x", 0.0).unwrap(), 0.0);
+        assert_eq!(json_coord_or(Some(&json!(-1.5)), "x", 0.0).unwrap(), -1.5);
+        assert_eq!(json_coord_or(Some(&json!(4)), "x", 0.0).unwrap(), 4.0);
+
+        for junk in [json!("7"), json!(true), json!([1]), json!({})] {
+            let err = json_coord_or(Some(&junk), "x", 0.0).unwrap_err();
+            assert!(err.to_string().contains("must be a finite number"), "{junk}: {err}");
+        }
+    }
+
+    /// A wire is the points the caller listed, or it is an error.
+    #[test]
+    fn every_wire_point_must_parse_or_the_call_fails() {
+        use serde_json::json;
+        let pts = parse_wire_points(Some(&json!(["0,0", "10,10", "-1.5, 4.0625"]))).unwrap();
+        assert_eq!(pts, vec![(0.0, 0.0), (10.0, 10.0), (-1.5, 4.0625)]);
+
+        // The old filter_map answered ok with a two-point wire here.
+        let err = parse_wire_points(Some(&json!(["0,0", "10,ten", "20,20"]))).unwrap_err();
+        assert!(err.to_string().contains("points[1]"), "{err}");
+        assert!(parse_wire_points(Some(&json!(["0,0", 5]))).is_err());
+        assert!(parse_wire_points(Some(&json!(["00"]))).is_err());
+        assert!(parse_wire_points(None).is_err());
+    }
 
     #[test]
     fn required_skill_result_rejects_skill_nil() {

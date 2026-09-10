@@ -284,15 +284,20 @@ pub fn standard_schema() -> RpcSchema {
         },
         Method {
             name: "schematic.list_cdf_params".into(),
-            summary: "List the CDF parameter names an instance actually accepts".into(),
+            summary: "List an instance's CDF parameters with their GUI labels, units and defaults"
+                .into(),
             params: vec![Param {
                 name: "inst".into(),
                 ptype: "string".into(),
                 description: "Instance name (e.g. M1)".into(),
                 required: true,
             }],
-            returns: "JSON array of {name, type, value} — the authoritative parameter \
-                      names for this instance's master; use these with schematic.set_param"
+            returns: "JSON array of {name, prompt (the GUI label), type, units, default, \
+                      value, choices? (cyclic values), description?} — the authoritative \
+                      parameter list for this instance's master, and the only source that \
+                      covers PDK devices, which no Cadence manual documents. `description` \
+                      is empty on analogLib, so read prose from analoglib.info and treat \
+                      this as the final word on names and values."
                 .into(),
         },
         Method {

@@ -101,7 +101,7 @@ impl SchematicOps {
         cell: &str,
         view: &str,
         name: &str,
-        origin: (i64, i64),
+        origin: (f64, f64),
         orient: &str,
     ) -> String {
         let lib = escape_skill_string(lib);
@@ -150,7 +150,7 @@ impl SchematicOps {
         )
     }
 
-    pub fn create_wire(&self, points: &[(i64, i64)], layer: &str, net_name: &str) -> String {
+    pub fn create_wire(&self, points: &[(f64, f64)], layer: &str, net_name: &str) -> String {
         let layer = escape_skill_string(layer);
         let net_name = escape_skill_string(net_name);
         let pts: String = points
@@ -182,7 +182,7 @@ impl SchematicOps {
         )
     }
 
-    pub fn create_wire_label(&self, net_name: &str, origin: (i64, i64)) -> String {
+    pub fn create_wire_label(&self, net_name: &str, origin: (f64, f64)) -> String {
         let net_name = escape_skill_string(net_name);
         let (x, y) = origin;
         let guard = cv_guard();
@@ -209,7 +209,7 @@ impl SchematicOps {
     ///
     /// `direction` must already have been validated by the caller (see
     /// `pin_master_for`); an unknown value is caller error, not a default.
-    pub fn create_pin(&self, net_name: &str, pin_type: &str, origin: (i64, i64)) -> String {
+    pub fn create_pin(&self, net_name: &str, pin_type: &str, origin: (f64, f64)) -> String {
         let (master, direction) = pin_master_for(pin_type).unwrap_or(("iopin", "inputOutput"));
         let net_name = escape_skill_string(net_name);
         let (x, y) = origin;
@@ -274,10 +274,33 @@ impl SchematicOps {
         )
     }
 
-    /// List the CDF parameter names an instance actually accepts.
+    /// List an instance's CDF parameters — names **and what they mean**.
     ///
     /// Exposed so a caller can discover the right name instead of guessing —
-    /// the guess is what produced the `ampl`/`va` bug above.
+    /// the guess is what produced the `ampl`/`va` bug above. But a bare list of
+    /// 135 names does not tell anyone which of `va / vaDBm / acm / pacm` is the
+    /// amplitude, so every field the CDF actually carries comes back with it.
+    ///
+    /// What is in there, measured on IC23.1 (2026-09-10) rather than assumed:
+    ///
+    /// | field | `analogLib/vsin` | `pdkLib/p50_ckt` |
+    /// |---|---|---|
+    /// | `prompt` (the GUI label) | 135/135 | present — `w` → *"Total Width"* |
+    /// | `units` | e.g. `voltage`, `frequency` | `lengthMetric` |
+    /// | `defValue` | present | `300n` for `w` |
+    /// | `choices` | 1/135 (`filenums`) | — |
+    /// | `description` | **0/135** | nil |
+    ///
+    /// Two consequences worth stating. `description` is empty everywhere, so
+    /// the prose still has to come from the manual (`analoglib.info`) — the two
+    /// sources are complements, not alternatives. And this works on the PDK,
+    /// which no Cadence manual documents, making it the only route to
+    /// *"what does `pdkLib/p50_ckt`'s `w` mean"*.
+    ///
+    /// `choices` is emitted as a JSON array so a cyclic parameter's legal
+    /// values are machine-readable; `description` and `choices` are omitted
+    /// entirely when the CDF has none, rather than reported as empty — a
+    /// present-but-empty field reads like a fact about the device.
     pub fn list_cdf_params(&self, inst_name: &str) -> String {
         let inst_name = escape_skill_string(inst_name);
         let guard = cv_guard();
@@ -293,7 +316,7 @@ impl SchematicOps {
         // Non-strings are stringified first, so `%L` always sees a string and
         // never emits a bare symbol or number where JSON needs a quoted value.
         format!(
-            r#"let((cv inst cdf out sep n ty v) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances i~>name == "{inst_name}")) when(!inst error("instance {inst_name} not found in this cellview")) cdf = cdfGetInstCDF(inst) out = "[" sep = "" when(cdf foreach(p cdf~>parameters n = p~>name n = if(stringp(n) n sprintf(nil "%s" n)) ty = p~>paramType ty = if(ty if(stringp(ty) ty sprintf(nil "%s" ty)) "?") v = p~>value v = if(v if(stringp(v) v sprintf(nil "%L" v)) "") out = strcat(out sep sprintf(nil "{{\"name\":%L,\"type\":%L,\"value\":%L}}" n ty v)) sep = ",")) strcat(out "]"))"#
+            r#"let((cv inst cdf out sep sep2 n ty v pr un df ch ds extra) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances i~>name == "{inst_name}")) when(!inst error("instance {inst_name} not found in this cellview")) cdf = cdfGetInstCDF(inst) out = "[" sep = "" when(cdf foreach(p cdf~>parameters n = p~>name n = if(stringp(n) n sprintf(nil "%s" n)) ty = p~>paramType ty = if(ty if(stringp(ty) ty sprintf(nil "%s" ty)) "?") v = p~>value v = if(v if(stringp(v) v sprintf(nil "%L" v)) "") pr = p~>prompt pr = if(pr if(stringp(pr) pr sprintf(nil "%s" pr)) "") un = p~>units un = if(un if(stringp(un) un sprintf(nil "%s" un)) "") df = p~>defValue df = if(df if(stringp(df) df sprintf(nil "%L" df)) "") extra = "" ch = p~>choices when(ch extra = strcat(extra ",\"choices\":[") sep2 = "" foreach(c ch extra = strcat(extra sep2 sprintf(nil "%L" if(stringp(c) c sprintf(nil "%s" c)))) sep2 = ",") extra = strcat(extra "]")) ds = p~>description when(ds && stringp(ds) && strcmp(ds "") != 0 extra = strcat(extra sprintf(nil ",\"description\":%L" ds))) out = strcat(out sep sprintf(nil "{{\"name\":%L,\"prompt\":%L,\"type\":%L,\"units\":%L,\"default\":%L,\"value\":%L%s}}" n pr ty un df v extra)) sep = ",")) strcat(out "]"))"#
         )
     }
 
@@ -384,8 +407,8 @@ impl SchematicOps {
     pub fn create_net_stub(
         &self,
         net_name: &str,
-        x: i64,
-        y: i64,
+        x: f64,
+        y: f64,
         direction: &str,
         length: f64,
         cosmetic: &str,
@@ -397,10 +420,10 @@ impl SchematicOps {
             "left" => (-1.0, 0.0, "R0"),
             _ => (1.0, 0.0, "R0"),
         };
-        let end_x = x as f64 + dx * length;
-        let end_y = y as f64 + dy * length;
-        let label_x = (x as f64 + end_x) / 2.0;
-        let label_y = (y as f64 + end_y) / 2.0;
+        let end_x = x + dx * length;
+        let end_y = y + dy * length;
+        let label_x = (x + end_x) / 2.0;
+        let label_y = (y + end_y) / 2.0;
         let (font_size, just) = if cosmetic == "clean" {
             ("0.125", "\"lowerCenter\"")
         } else {
@@ -568,8 +591,8 @@ mod tests {
         // itself. Assert the field values are `%L` and not `\"%s\"`.
         let s = ops().list_cdf_params("M1");
         assert!(
-            s.contains(r#"{\"name\":%L,\"type\":%L,\"value\":%L}"#),
-            "all three fields must be emitted with %L: {s}"
+            s.contains(r#"{\"name\":%L,\"prompt\":%L,\"type\":%L,\"units\":%L,\"default\":%L,\"value\":%L%s}"#),
+            "every field must be emitted with %L: {s}"
         );
         assert!(
             !s.contains(r#"\"value\":\"%s\""#),
@@ -577,9 +600,35 @@ mod tests {
         );
     }
 
+    /// The label is the point of the method, not a decoration.
+    ///
+    /// A caller shown 135 bare names cannot tell `va` from `vaDBm` from `acm`;
+    /// shown *"Amplitude"* / *"Amplitude in dBm"* / *"AC magnitude"* they can.
+    /// Live on IC23.1 every one of `vsin`'s 135 parameters carries a prompt,
+    /// and so does the SMIC PDK (`w` → *"Total Width"*), which no manual covers.
+    #[test]
+    fn list_cdf_params_reports_the_gui_label_and_units() {
+        let s = ops().list_cdf_params("M1");
+        for field in ["prompt", "units", "default"] {
+            assert!(s.contains(&format!(r#"p~>{}"#, if field == "default" { "defValue" } else { field })),
+                "must read {field} off the CDF: {s}");
+        }
+    }
+
+    /// A cyclic parameter's legal values must arrive as an array, and an
+    /// absent one must not arrive at all — an empty `choices: []` reads as
+    /// "this parameter accepts nothing", which is a different claim.
+    #[test]
+    fn choices_are_a_json_array_and_only_when_the_cdf_has_them() {
+        let s = ops().list_cdf_params("M1");
+        assert!(s.contains(r#"when(ch extra = strcat(extra ",\"choices\":[")"#), "{s}");
+        assert!(s.contains(r#"strcmp(ds "") != 0"#),
+            "an empty description must be omitted, not emitted: {s}");
+    }
+
     #[test]
     fn create_instance_uses_orient() {
-        let s = ops().create_instance("analogLib", "nmos4", "symbol", "M1", (100, 200), "MY");
+        let s = ops().create_instance("analogLib", "nmos4", "symbol", "M1", (100.0, 200.0), "MY");
         assert!(s.contains("\"MY\""), "orient must be in SKILL: {s}");
         assert!(
             s.contains("100") && s.contains("200"),
@@ -588,9 +637,20 @@ mod tests {
         assert!(s.contains("\"M1\""), "instance name must be quoted: {s}");
     }
 
+    /// A grid-fraction placement must reach SKILL as itself.
+    ///
+    /// The schematic grid is 0.0625, so most real placements are not integers.
+    /// While these origins were `i64`, `x: -1.5` arrived at `dbCreateInst` as
+    /// `0` and the call still reported `status: ok`.
+    #[test]
+    fn a_fractional_origin_survives_into_the_skill() {
+        let s = ops().create_instance("analogLib", "cap", "symbol", "CB", (-1.5, 4.0625), "R0");
+        assert!(s.contains("list(-1.5 4.0625)"), "origin must not be rounded: {s}");
+    }
+
     #[test]
     fn create_instance_default_orient() {
-        let s = ops().create_instance("lib", "cell", "symbol", "X0", (0, 0), "R0");
+        let s = ops().create_instance("lib", "cell", "symbol", "X0", (0.0, 0.0), "R0");
         assert!(s.contains("\"R0\""), "{s}");
     }
 
@@ -634,7 +694,7 @@ mod tests {
     /// `assign_net`, whose connectivity no extraction preserves.
     #[test]
     fn geometric_connectivity_ops_honour_the_explicit_target() {
-        let stub = ops().create_net_stub("VDD", 0, 0, "right", 0.5, "clean");
+        let stub = ops().create_net_stub("VDD", 0.0, 0.0, "right", 0.5, "clean");
         assert!(
             stub.contains("RB_SCH_CV"),
             "net_stub must prefer the explicit target: {stub}"
@@ -681,7 +741,7 @@ mod tests {
 
     #[test]
     fn cv_guard_is_injected_in_write_ops() {
-        let s = ops().create_wire(&[(0, 0), (10, 10)], "wire", "VDD");
+        let s = ops().create_wire(&[(0.0, 0.0), (10.0, 10.0)], "wire", "VDD");
         assert!(
             s.contains("geGetEditCellView"),
             "guard must be present: {s}"
@@ -715,7 +775,7 @@ mod tests {
 
     #[test]
     fn create_wire_label_contains_guard() {
-        let s = ops().create_wire_label("GND", (50, 50));
+        let s = ops().create_wire_label("GND", (50.0, 50.0));
         assert!(s.contains("geGetEditCellView"), "{s}");
     }
 
@@ -728,7 +788,7 @@ mod tests {
 
     #[test]
     fn create_net_stub_right() {
-        let s = ops().create_net_stub("VDD", 100, 200, "right", 0.5, "default");
+        let s = ops().create_net_stub("VDD", 100.0, 200.0, "right", 0.5, "default");
         assert!(s.contains("VDD"), "net name must appear: {s}");
         assert!(s.contains("dbCreateWire"), "must use dbCreateWire: {s}");
         assert!(s.contains("dbCreateLabel"), "must use dbCreateLabel: {s}");
@@ -737,14 +797,14 @@ mod tests {
 
     #[test]
     fn create_net_stub_up() {
-        let s = ops().create_net_stub("VSS", 0, 0, "up", 1.0, "clean");
+        let s = ops().create_net_stub("VSS", 0.0, 0.0, "up", 1.0, "clean");
         assert!(s.contains("VSS"), "net name must appear: {s}");
         assert!(s.contains("R90"), "up direction should use R90: {s}");
     }
 
     #[test]
     fn create_net_stub_cosmetic_clean() {
-        let s = ops().create_net_stub("NET", 50, 50, "left", 0.5, "clean");
+        let s = ops().create_net_stub("NET", 50.0, 50.0, "left", 0.5, "clean");
         assert!(s.contains("0.125"), "clean should use fontSize 0.125: {s}");
         assert!(
             s.contains("lowerCenter"),
