@@ -33,7 +33,7 @@ fn fix_skill_octal_escapes(s: &str) -> String {
 
 /// Parse SKILL JSON output: bridge returns `"\"[...]\""`  — strip outer quotes, unescape inner.
 /// Returns `Err` if the output cannot be parsed as JSON after unescaping.
-fn parse_skill_json(output: &str) -> Result<Value> {
+pub(crate) fn parse_skill_json(output: &str) -> Result<Value> {
     // output is like: "\"[{\\\"name\\\":\\\"M1\\\"}]\""
     // Step 1: strip outer quotes from SKILL string
     let s = output.trim_matches('"');
@@ -421,6 +421,19 @@ impl RpcDispatcher {
                     "value": value,
                     "status": "ok"
                 }))
+            }
+            "delete_instance" => {
+                // Two-phase: the command layer answers `confirm_required` with
+                // a manifest when `confirm` is absent, and deletes when the
+                // token it issued comes back. It opens its own client, so the
+                // `client` this dispatch holds is unused here.
+                let inst = json_str(params.get("inst"), "inst")?;
+                crate::commands::delete::instance(&inst, confirm_of(&params))
+            }
+            "delete_prop" => {
+                let inst = json_str(params.get("inst"), "inst")?;
+                let prop = json_str(params.get("prop"), "prop")?;
+                crate::commands::delete::prop(&inst, &prop, confirm_of(&params))
             }
             "polish_label" => {
                 let net = json_str(params.get("net"), "net")?;
@@ -956,6 +969,21 @@ impl RpcDispatcher {
                     "view_type": view_type, "output": r.output.trim()
                 }))
             }
+            "delete_view" => {
+                // Two-phase. See `commands::delete`: without `confirm` this
+                // answers with a manifest and a token, with it the view goes.
+                let lib = json_str(params.get("lib"), "lib")?;
+                let cell = json_str(params.get("cell"), "cell")?;
+                let view = json_str(params.get("view"), "view")?;
+                crate::commands::delete::cell_view(&lib, &cell, &view, confirm_of(&params))
+            }
+            "delete" => {
+                let lib = json_str(params.get("lib"), "lib")?;
+                // Required, not defaulted: an absent cell name is what would
+                // turn the underlying `ddGetObj` into a library lookup.
+                let cell = json_str(params.get("cell"), "cell")?;
+                crate::commands::delete::cell(&lib, &cell, confirm_of(&params))
+            }
             "read_path" => {
                 // Return the on-disk readPath of a registered library. Used by
                 // `vcli diag cdslck` to know where to look for lock files.
@@ -1243,8 +1271,21 @@ fn json_str(value: Option<&Value>, field: &str) -> Result<String> {
         .ok_or_else(|| VirtuosoError::Execution(format!("missing required field: {}", field)))
 }
 
-fn json_str_or(value: Option<&Value>, default: &str) -> Result<String> {
-    Ok(value
+/// The confirmation token of a two-phase delete, if the caller sent one.
+///
+/// An empty or whitespace-only string counts as absent: `{"confirm": ""}` is
+/// how a template or a shell variable that did not get filled in arrives, and
+/// treating that as a token would turn a phase-1 request into a failed phase-2
+/// one with a confusing error.
+fn confirm_of(params: &Value) -> Option<&str> {
+    params
+        .get("confirm")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
+fn json_str_or(value: Option<&Value>, default: &str) -> Result<String> {    Ok(value
         .and_then(|v| v.as_str())
         .map(str::to_string)
         .unwrap_or_else(|| default.to_string()))
@@ -2052,7 +2093,78 @@ mod tests {
         //  + 3 libref             (list, info, find) — the library references
         //  + 1 library.list_cells — the read side of the delete manifest
         //  + 1 maestro.list_corners — what create_corner_netlist's `corner` accepts
-        assert_eq!(schema.methods.len(), 92, "should have exactly 92 methods");
+        //  + 4 deletes            (schematic.delete_instance, schematic.delete_prop,
+        //                          cell.delete_view, cell.delete) — all two-phase
+        assert_eq!(schema.methods.len(), 96, "should have exactly 96 methods");
+    }
+
+    /// The four destructive methods, and the two properties that make them
+    /// safe to expose at all: `confirm` is optional (so phase 1 is reachable)
+    /// and the summary says what is at stake.
+    #[test]
+    fn schema_destructive_methods_are_two_phase() {
+        let schema = standard_schema();
+        for name in [
+            "schematic.delete_instance",
+            "schematic.delete_prop",
+            "cell.delete_view",
+            "cell.delete",
+        ] {
+            let m = schema
+                .methods
+                .iter()
+                .find(|m| m.name == name)
+                .unwrap_or_else(|| panic!("should have {name}"));
+            let confirm = m
+                .params
+                .iter()
+                .find(|p| p.name == "confirm")
+                .unwrap_or_else(|| panic!("{name} must take a confirm token"));
+            assert!(
+                !confirm.required,
+                "{name}: confirm must be optional — phase 1 is how the manifest is obtained"
+            );
+            assert!(
+                confirm.description.contains("manifest"),
+                "{name}: the confirm param must say what the first call returns"
+            );
+            assert!(
+                m.summary.contains("two-phase"),
+                "{name}: the summary must say this is two-phase: {}",
+                m.summary
+            );
+        }
+    }
+
+    /// `cell.delete` without a cell name would delete the *library*. The schema
+    /// is where a caller finds out it is required, so it is asserted here too.
+    #[test]
+    fn schema_cell_delete_requires_a_cell_name() {
+        let schema = standard_schema();
+        let m = schema
+            .methods
+            .iter()
+            .find(|m| m.name == "cell.delete")
+            .expect("should have cell.delete");
+        for field in ["lib", "cell"] {
+            assert!(
+                m.params.iter().find(|p| p.name == field).unwrap().required,
+                "cell.delete: {field} must be required"
+            );
+        }
+    }
+
+    /// An unfilled template (`{"confirm": ""}`) is phase 1, not a bad token.
+    #[test]
+    fn an_empty_confirm_string_counts_as_absent() {
+        assert_eq!(confirm_of(&serde_json::json!({})), None);
+        assert_eq!(confirm_of(&serde_json::json!({"confirm": ""})), None);
+        assert_eq!(confirm_of(&serde_json::json!({"confirm": "   "})), None);
+        assert_eq!(confirm_of(&serde_json::json!({"confirm": 7})), None);
+        assert_eq!(
+            confirm_of(&serde_json::json!({"confirm": " del-abc "})),
+            Some("del-abc")
+        );
     }
 
     #[test]

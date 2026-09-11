@@ -41,6 +41,25 @@ impl RpcSchema {
     }
 }
 
+/// Shared wording for the `confirm` parameter of the destructive methods.
+///
+/// Spelled out in the schema rather than left to a convention, because the
+/// caller reading it is often an agent deciding whether it may fill the field
+/// in itself. It may not.
+const CONFIRM_PARAM: &str =
+    "Omit on the first call: the reply is a manifest of exactly what would be destroyed, \
+     plus a one-shot token (TTL 300s). Send that token back to carry the delete out. The \
+     token is bound to the manifest — if the design changed in between, it is refused. A \
+     human must read the manifest before the token is used; an agent must not mint, guess, \
+     or re-use one on its own.";
+
+/// Shared wording for the `lib` parameter of the on-disk deletes.
+const LIB_PARAM: &str =
+    "Library name. Restricted to the delete allow-set, which is empty until \
+     VB_DELETE_ALLOW_LIBS names libraries — so these methods refuse everything \
+     on a stock install. Any library left out of that list, including the PDK, \
+     analogLib and basic, is refused before a manifest is even built.";
+
 /// Built-in schema with all available RPC methods.
 pub fn standard_schema() -> RpcSchema {
     RpcSchema::new(vec![
@@ -334,6 +353,63 @@ pub fn standard_schema() -> RpcSchema {
             ],
             returns: "JSON object {instance, param, value, status}".into(),
         },
+        // ── Destructive (two-phase) ──────────────────────────────────
+        // Every method below answers `confirm_required` with a manifest the
+        // first time it is called, and only deletes when called again with the
+        // token it handed out. The token is bound to the manifest: if the
+        // design moved on, the approval is void.
+        Method {
+            name: "schematic.delete_instance".into(),
+            summary: "Remove one instance from the open schematic (two-phase; in memory until cell.save)"
+                .into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Instance name (e.g. M1)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Without 'confirm': {status: confirm_required, manifest, confirm_token, \
+                      expires_in_s}. With it: {status: ok, instance, master, saved: false} — the \
+                      edit is in memory, 'cell.save' is what writes it."
+                .into(),
+        },
+        Method {
+            name: "schematic.delete_prop".into(),
+            summary: "Remove one property from an instance in the open schematic (two-phase; in memory until cell.save)"
+                .into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Instance name (e.g. VIN)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "prop".into(),
+                    ptype: "string".into(),
+                    description: "Property name to remove, as reported by schematic.get_params".into(),
+                    required: true,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Without 'confirm': {status: confirm_required, manifest, confirm_token, \
+                      expires_in_s} — the manifest carries the current value. With it: \
+                      {status: ok, prop, was, saved: false}."
+                .into(),
+        },
         // ── Window ────────────────────────────────────────────────────
         Method {
             name: "window.list".into(),
@@ -586,6 +662,72 @@ pub fn standard_schema() -> RpcSchema {
                 required: true,
             }],
             returns: "{lib, read_path: string|null}".into(),
+        },
+        Method {
+            name: "cell.delete_view".into(),
+            summary: "Delete one view of a cell from disk (two-phase, irreversible)".into(),
+            params: vec![
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: LIB_PARAM.into(),
+                    required: true,
+                },
+                Param {
+                    name: "cell".into(),
+                    ptype: "string".into(),
+                    description: "Cell name".into(),
+                    required: true,
+                },
+                Param {
+                    name: "view".into(),
+                    ptype: "string".into(),
+                    description: "View to delete (e.g. schematic, symbol)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Without 'confirm': {status: confirm_required, manifest: [{lib, cell, view, \
+                      path, instances, writable}], confirm_token, expires_in_s}. With it: \
+                      {status: ok, deleted, path}. Refuses while the view is open in Virtuoso."
+                .into(),
+        },
+        Method {
+            name: "cell.delete".into(),
+            summary: "Delete a cell and every view of it from disk (two-phase, irreversible)".into(),
+            params: vec![
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: LIB_PARAM.into(),
+                    required: true,
+                },
+                Param {
+                    name: "cell".into(),
+                    ptype: "string".into(),
+                    description: "Cell name. Required and non-empty — without it the underlying \
+                                  ddGetObj would return the *library*, and ddDeleteObj on a \
+                                  library deletes the directory and its cds.lib entry."
+                        .into(),
+                    required: true,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Without 'confirm': {status: confirm_required, manifest: [{lib, cell, views, \
+                      path, instances, writable}], confirm_token, expires_in_s} — 'views' is \
+                      everything that would go. With it: {status: ok, deleted, path}. Refuses \
+                      while any view of the cell is open in Virtuoso."
+                .into(),
         },
         // ── Maestro ───────────────────────────────────────────────────
         Method {

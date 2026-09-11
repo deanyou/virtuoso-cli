@@ -1213,6 +1213,24 @@ mod virtuoso_result_tests {
         assert!(e.to_string().contains("*Error*"), "{e}");
     }
 
+    // An empty list is a legitimate nil (a library with no cells): the caller
+    // gets it back to parse, rather than a "failed: nil" error.
+    #[test]
+    fn ok_or_exec_nil_ok_passes_nil_through_on_transport_success() {
+        let r = make_success("nil").ok_or_exec_nil_ok("list_cells").unwrap();
+        assert_eq!(r.output_unquoted(), "nil");
+        assert!(make_success("42").ok_or_exec_nil_ok("op").is_ok());
+    }
+
+    // ...but a SKILL raise arrives as NAK, and that is still a failure.
+    #[test]
+    fn ok_or_exec_nil_ok_still_errors_on_nak() {
+        let r = make_error(vec!["*Error* library.list_cells: no such library".into()]);
+        let e = r.ok_or_exec_nil_ok("list_cells").unwrap_err();
+        assert!(e.to_string().contains("list_cells failed"), "{e}");
+        assert!(e.to_string().contains("no such library"), "{e}");
+    }
+
     #[test]
     fn output_unquoted_strips_surrounding_quotes() {
         let r = make_success("\"hello\"");
