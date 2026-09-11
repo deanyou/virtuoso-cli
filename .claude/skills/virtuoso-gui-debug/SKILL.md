@@ -690,6 +690,37 @@ Reading a field value via CIW (`form->field->value`) costs ~425ms and is determi
 **New session CIW default size**: A freshly started Virtuoso CIW is typically 600x200. Resize with `xdotool windowsize <wid> 1200 800` before testing.
 
 **xdotool search caveat on Xvnc**: In some Xvnc configurations, `xdotool search --name ".*"` returns empty even when windows exist, while `xdotool getactivewindow` works. Use Python Xlib window-tree traversal as a fallback to discover the CIW window ID.
+### Remote GUI Program Debugging (verified 2026-09-11)
+
+When debugging external SKILL GUI programs (e.g. from a skill library repo) on a remote Virtuoso session:
+
+**Loading and launching**:
+- Upload the `.il` file to the remote machine (e.g. `/tmp/program.il`)
+- Load via CIW input: `load("/tmp/program.il")` — do NOT use `vcli skill load` (times out on files >50 lines)
+- Launch the form via CIW: `procedureName()` — the form appears as a new top-level window
+- `hiDisplayForm` forms do NOT block CIW input in IC25.1 — you can continue typing while the form is open
+
+**Window discovery on Xvnc** (`xdotool search` returns empty):
+Use Python Xlib window-tree traversal filtering by `WM_CLASS` containing "virtuoso", width>50, height>20.
+
+**Verified GUI programs** (from skill library examples):
+
+| Program | Form | Widgets tested | Result |
+|---------|------|----------------|--------|
+| `ui_color_picker.il` | Pick Color (600x72) | 12 radio buttons, OK/Cancel/Apply | Radio selection changes form field value; Apply triggers callback |
+| `ui_dynamic_form.il` | Layer Replace Utility (600x176) | 4 radio ops, dynamic fields, Browse | Copy/Replace show Source+Target Layer; Remove shows Source only; none hides both |
+
+**Verifying form state via CIW**: After clicking a radio button, read the form field directly: `formName->fieldName->value`. Example: `udfLayerReplaceForm->layerOp->value` returns the selected operation.
+
+**Coordinate precision for small forms**:
+- Color picker (600x72): radio buttons ~60px apart, row 1 at y≈25, row 2 at y≈45, buttons at y≈60
+- Dynamic form (600x176): radio at y≈50, Browse at y≈120, OK/Cancel at y≈155
+- Estimated coordinates may be off by 1-2 widgets — verify with screenshots and adjust
+
+**CIW input line pollution**: Previous test residue can concatenate with new input, causing syntax errors. Clear aggressively before each command: click input line → Escape x3 → ctrl+u → wait 0.3s.
+
+**Modal form behavior**: `hiDisplayForm` in IC25.1 does NOT block `vcli skill exec` or CIW input. The form stays open while you continue interacting with CIW.
+
 ## Testing
 
 ```bash
