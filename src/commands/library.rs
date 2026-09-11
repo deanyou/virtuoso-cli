@@ -34,10 +34,14 @@ pub fn list_cells(
 ) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
     let skill = LibraryOps.list_cells(lib, pattern);
-    // Use unchecked — capability check already passed at RPC dispatch level
+    // Use unchecked — capability check already passed at RPC dispatch level.
+    // `ok_or_exec_nil_ok`, not `ok_or_exec`: `lib~>cells` is nil for a library
+    // with no cells, and an empty library is an empty answer, not a failure —
+    // `parse_cell_rows` says so too. A library that does not exist raises in
+    // SKILL, which arrives as a NAK and still errors here.
     let r = client
         .execute_skill_unchecked(&skill, Some(client.read_timeout()))?
-        .ok_or_exec("library list_cells")?;
+        .ok_or_exec_nil_ok("library list_cells")?;
     let parsed = parse_sexp(r.output_unquoted())
         .map_err(|e| VirtuosoError::Execution(format!("library list_cells parse failed: {e}")))?;
     let cells = parse_cell_rows(&parsed)?;
