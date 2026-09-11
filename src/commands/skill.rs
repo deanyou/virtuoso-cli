@@ -205,6 +205,7 @@ fn load_finder(cfg: &Config, refresh: bool) -> Result<SKILLFinder> {
         crate::transport::backend::require_openssh(cfg)?;
         let host = cfg.remote_host.clone().unwrap_or_default();
         let target = cfg.ssh_target();
+        let ssh_key = cfg.ssh_key.as_deref();
         let cshrc = cfg.cadence_cshrc.as_deref();
 
         if refresh {
@@ -212,7 +213,7 @@ fn load_finder(cfg: &Config, refresh: bool) -> Result<SKILLFinder> {
             let _ = crate::skill_finder::clear_cache(&host);
         }
 
-        let _ = crate::skill_finder::load_or_sync(&mut finder, &host, &target, cshrc)?;
+        let _ = crate::skill_finder::load_or_sync(&mut finder, &host, &target, ssh_key, cshrc)?;
     } else {
         // Local mode: find from local Cadence installation
         if let Some(dir) = find_skill_finder_dir(cfg)? {
@@ -384,7 +385,7 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
     if cfg.is_remote() {
         // Try to find via SSH using the cadence cshrc
         if let Some(ref cshrc) = cfg.cadence_cshrc {
-            if let Ok(Some(path)) = discover_skill_finder_remote(&cfg.ssh_target(), cshrc) {
+            if let Ok(Some(path)) = discover_skill_finder_remote(&cfg.ssh_target(), cfg.ssh_key.as_deref(), cshrc) {
                 tracing::debug!("Discovered SKILL Finder on remote: {}", path.display());
                 return Ok(Some(path));
             }
@@ -401,15 +402,12 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
 /// that ships 2 `.fnd` files instead of the 39 in the Virtuoso tree.
 fn discover_skill_finder_remote(
     target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: &str,
 ) -> std::result::Result<Option<std::path::PathBuf>, String> {
-    use std::process::Command;
-
     let script = crate::skill_finder::remote_finder_probe_script(Some(cadence_cshrc));
 
-    let output = Command::new("ssh")
-        .args(["-o", "BatchMode=yes"])
-        .args(["-o", "ConnectTimeout=10"])
+    let output = crate::transport::ssh::doc_transfer_command("ssh", ssh_key)
         .arg(target)
         .arg(&script)
         .output()
@@ -435,6 +433,8 @@ pub fn sync_cache(
         .ok_or_else(|| VirtuosoError::Config("Remote host required for sync".into()))?;
 
     let target = cfg.ssh_target();
+    let ssh_key = cfg.ssh_key.clone();
+    let ssh_key_ref = ssh_key.as_deref();
     let target_cshrc = cshrc.map(String::from).or(cfg.cadence_cshrc.clone());
     let target_cshrc_ref = target_cshrc.as_deref();
 
@@ -448,13 +448,20 @@ pub fn sync_cache(
         crate::skill_finder::sync_from_remote(
             &target_host,
             &target,
+            ssh_key_ref,
             target_cshrc_ref,
             Some(print_progress),
         )
         .map_err(|e| VirtuosoError::Config(e.to_string()))?
     } else {
         fn noop(_: &str) {}
-        crate::skill_finder::sync_from_remote(&target_host, &target, target_cshrc_ref, Some(noop))
+        crate::skill_finder::sync_from_remote(
+            &target_host,
+            &target,
+            ssh_key_ref,
+            target_cshrc_ref,
+            Some(noop),
+        )
             .map_err(|e| VirtuosoError::Config(e.to_string()))?
     };
 

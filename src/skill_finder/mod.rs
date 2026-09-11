@@ -328,14 +328,13 @@ pub fn cache_file_count(host: &str) -> usize {
 pub fn sync_from_remote<F>(
     host: &str,
     ssh_target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: Option<&str>,
     progress: Option<F>,
 ) -> std::io::Result<usize>
 where
     F: Fn(&str) + Copy,
 {
-    use std::process::Command;
-
     let cache = cache_dir(host).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -349,7 +348,7 @@ where
     // Find every remote SKILL Finder directory (DFII tree first, Spectre tree
     // after). A site has several Cadence installs and they ship different
     // databases, so we union them rather than stopping at the first hit.
-    let remote_dirs = find_remote_skill_finder_dirs(ssh_target, cadence_cshrc)?;
+    let remote_dirs = find_remote_skill_finder_dirs(ssh_target, ssh_key, cadence_cshrc)?;
 
     if let Some(p) = progress {
         p(&format!(
@@ -371,9 +370,7 @@ where
             remote_dir
         );
 
-        let output = Command::new("ssh")
-            .args(["-o", "BatchMode=yes"])
-            .args(["-o", "ConnectTimeout=30"])
+        let output = crate::transport::ssh::doc_transfer_command("ssh", ssh_key)
             .arg(ssh_target)
             .arg(&list_script)
             .output()
@@ -411,9 +408,7 @@ where
             let local_path = cache.join(&file_name);
 
             // Build SCP command
-            let scp_result = Command::new("scp")
-                .args(["-o", "BatchMode=yes"])
-                .args(["-o", "ConnectTimeout=30"])
+            let scp_result = crate::transport::ssh::doc_transfer_command("scp", ssh_key)
                 .arg(format!("{}:{}", ssh_target, remote_file))
                 .arg(&local_path)
                 .output();
@@ -585,13 +580,10 @@ pub fn cache_file_name(finder_dir: &str, base: &str) -> String {
 /// tree). Returns an error only when no Cadence install is reachable at all.
 fn find_remote_skill_finder_dirs(
     ssh_target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: Option<&str>,
 ) -> std::io::Result<Vec<String>> {
-    use std::process::Command;
-
-    let output = Command::new("ssh")
-        .args(["-o", "BatchMode=yes"])
-        .args(["-o", "ConnectTimeout=30"])
+    let output = crate::transport::ssh::doc_transfer_command("ssh", ssh_key)
         .arg(ssh_target)
         .arg(remote_finder_probe_script(cadence_cshrc))
         .output()
@@ -617,6 +609,7 @@ pub fn load_or_sync(
     finder: &mut SKILLFinder,
     host: &str,
     ssh_target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: Option<&str>,
 ) -> std::io::Result<PathBuf> {
     // Try cache first
@@ -631,7 +624,7 @@ pub fn load_or_sync(
     }
 
     // Sync from remote with empty progress function
-    let _ = sync_from_remote(host, ssh_target, cadence_cshrc, Some(|_: &str| ()))?;
+    let _ = sync_from_remote(host, ssh_target, ssh_key, cadence_cshrc, Some(|_: &str| ()))?;
 
     // Load from cache
     let cache = cache_dir(host).ok_or_else(|| {

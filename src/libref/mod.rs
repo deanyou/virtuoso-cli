@@ -596,11 +596,10 @@ pub fn parse_doc_dirs(stdout: &str) -> Vec<(&'static str, String)> {
 
 fn find_remote_doc_dirs(
     ssh_target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: Option<&str>,
 ) -> std::io::Result<Vec<(&'static str, String)>> {
-    let output = std::process::Command::new("ssh")
-        .args(["-o", "BatchMode=yes"])
-        .args(["-o", "ConnectTimeout=30"])
+    let output = crate::transport::ssh::doc_transfer_command("ssh", ssh_key)
         .arg(ssh_target)
         .arg(remote_doc_probe_script(cadence_cshrc))
         .output()
@@ -608,12 +607,20 @@ fn find_remote_doc_dirs(
 
     let dirs = parse_doc_dirs(&String::from_utf8_lossy(&output.stdout));
     if dirs.is_empty() {
+        // An ssh that never reached a shell also prints nothing on stdout;
+        // keep its stderr so a refused key is not reported as a missing manual.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let ssh_said = match stderr.trim() {
+            "" => String::new(),
+            s => format!(" ssh said: {s}"),
+        };
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "No Cadence library reference directory (doc/analoglibref, doc/basicLib, …) \
-             found near virtuoso/spectre on the remote server. \
-             Ensure Cadence is in PATH or set VB_CADENCE_CSHRC."
-                .to_string(),
+            format!(
+                "No Cadence library reference directory (doc/analoglibref, doc/basicLib, …) \
+                 found near virtuoso/spectre on the remote server. \
+                 Ensure Cadence is in PATH or set VB_CADENCE_CSHRC.{ssh_said}"
+            ),
         ));
     }
     Ok(dirs)
@@ -628,14 +635,13 @@ fn find_remote_doc_dirs(
 pub fn sync_from_remote<F>(
     host: &str,
     ssh_target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: Option<&str>,
     progress: Option<F>,
 ) -> std::io::Result<usize>
 where
     F: Fn(&str) + Copy,
 {
-    use std::process::Command;
-
     let cache = cache_dir(host).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -644,7 +650,7 @@ where
     })?;
     std::fs::create_dir_all(&cache)?;
 
-    let remote_dirs = find_remote_doc_dirs(ssh_target, cadence_cshrc)?;
+    let remote_dirs = find_remote_doc_dirs(ssh_target, ssh_key, cadence_cshrc)?;
     if let Some(p) = progress {
         p(&format!(
             "Found {} remote reference dir(s): {}",
@@ -680,9 +686,7 @@ where
         let list_script = format!(
             r#"find {remote_dir} -maxdepth 1 -type f \( -name '*.html' -o -name '{index}' \) 2>/dev/null | head -100"#
         );
-        let output = Command::new("ssh")
-            .args(["-o", "BatchMode=yes"])
-            .args(["-o", "ConnectTimeout=30"])
+        let output = crate::transport::ssh::doc_transfer_command("ssh", ssh_key)
             .arg(ssh_target)
             .arg(&list_script)
             .output()
@@ -716,9 +720,7 @@ where
             let file_name = cache_file_name(remote_dir, base);
             let local_path = lib_cache.join(&file_name);
 
-            let scp_result = Command::new("scp")
-                .args(["-o", "BatchMode=yes"])
-                .args(["-o", "ConnectTimeout=30"])
+            let scp_result = crate::transport::ssh::doc_transfer_command("scp", ssh_key)
                 .arg(format!("{ssh_target}:{remote_file}"))
                 .arg(&local_path)
                 .output();
@@ -798,6 +800,7 @@ pub fn load_or_sync(
     finder: &mut LibRefFinder,
     host: &str,
     ssh_target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: Option<&str>,
 ) -> std::io::Result<PathBuf> {
     if let Some(cache) = cache_dir(host) {
@@ -807,7 +810,7 @@ pub fn load_or_sync(
         }
     }
 
-    let _ = sync_from_remote(host, ssh_target, cadence_cshrc, Some(|_: &str| ()))?;
+    let _ = sync_from_remote(host, ssh_target, ssh_key, cadence_cshrc, Some(|_: &str| ()))?;
 
     let cache = cache_dir(host).ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::NotFound, "Cache directory not found")
