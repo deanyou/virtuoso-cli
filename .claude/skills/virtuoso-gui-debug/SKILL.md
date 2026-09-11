@@ -658,7 +658,32 @@ Reading a field value via CIW (`form->field->value`) costs ~425ms and is determi
 - The failure is **not** caused by `MINIMIZE`/restore — verified: minimize → activate → type still works perfectly in a fresh session
 - The failure is **not** caused by input line pollution — verified: fresh session with clean input line still fails under rapid cycling
 
-**Recovery**: If CIW keyboard input stops responding but `vcli skill exec` still works, the CIW X11 event queue has overflowed. Kill and restart the Virtuoso process (the daemon will reconnect). Do not waste time trying X11-based recovery.
+**Recovery**: If CIW keyboard input stops responding but `vcli skill exec` still works, the CIW X11 event queue has overflowed. **Pause for 3-5 seconds** with no X11 operations — the queue drains and input recovers automatically (verified: 3s pause → full recovery). Only if recovery fails after 10s should you restart the Virtuoso process. Do not waste time trying X11-based recovery during the overflow window.
+
+### Stress Test Findings (verified 2026-09-11)
+
+**Concurrency**: Multiple `vcli` processes can run concurrently against the same session without conflicts:
+- 5 parallel `skill exec` calls: all succeed, daemon processes each in ~10ms
+- 3 parallel X11 operations + 3 parallel TCP operations: all 6 succeed
+- Variable assignments persist correctly across concurrent calls (the earlier "concurrent failure" was a test-script sed parsing bug — output values are quoted strings, not bare numbers)
+
+**High-frequency operations** (no delay between calls):
+- 100 rapid `click-rel`: 100/100 success, ~136ms/click
+- 100 rapid `key Escape`: 100/100 success, ~24ms/key
+- Clicks and keys alone do NOT trigger X11 event queue overflow — only the full type+Return cycle does
+- Special keys all work: `ctrl+a`, `ctrl+c`, `ctrl+v`, `alt+Tab`, `shift+a`, `F1`, `F5`, `Escape`, `Return`, `BackSpace`
+
+**Batch efficiency**: `action-x11-batch` with 50 mixed operations completes in ~5ms (10000 ops/s). Use batch for non-interactive operation sequences.
+
+**Resource stability** after stress (100 clicks + 100 keys + 20 rapid type cycles + concurrent calls):
+- Virtuoso RSS: +1MB (747→748MB)
+- No vcli process leaks (0 lingering)
+- sshd count stable (5)
+- CIW fully responsive after 3s recovery pause
+
+**What NOT to do**:
+- Do not run type+Return cycles faster than ~3.5s/cycle in automated loops
+- Do not parse `vcli skill exec` output with `sed 's/.*"output": \([0-9]*\).*/\1/'` — values are JSON strings (`"123"`), not bare numbers. Use `jq -r .output` or a proper JSON parser.
 
 **Screensaver caveat**: On Xfce/Xvnc, `xfce4-screensaver` may cover the full screen (1853x1011), causing `xdotool search --onlyvisible` to return empty while the CIW window is still mapped underneath. Disable with `xset s off && xset -dpms && killall xfce4-screensaver` before automated GUI testing.
 
