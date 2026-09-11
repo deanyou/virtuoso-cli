@@ -705,19 +705,40 @@ Use Python Xlib window-tree traversal filtering by `WM_CLASS` containing "virtuo
 
 **Verified GUI programs** (from skill library examples):
 
-| Program | Form | Widgets tested | Result |
-|---------|------|----------------|--------|
-| `ui_color_picker.il` | Pick Color (600x72) | 12 radio buttons, OK/Cancel/Apply | Radio selection changes form field value; Apply triggers callback |
-| `ui_dynamic_form.il` | Layer Replace Utility (600x176) | 4 radio ops, dynamic fields, Browse | Copy/Replace show Source+Target Layer; Remove shows Source only; none hides both |
+| Program | Launch function | Form | Widgets tested | Result |
+|---------|----------------|------|----------------|--------|
+| `ui_color_picker.il` | `ucpCreateColorPicker("title" "red" nil)` | Pick Color (600x72) | 12 radio buttons, OK/Cancel/Apply | Radio selection changes form field value; Apply triggers callback |
+| `ui_dynamic_form.il` | `udfShowLayerReplaceForm()` | Layer Replace Utility (600x176) | 4 radio ops, dynamic fields, Browse | Copy/Replace show Source+Target Layer; Remove shows Source only; none hides both |
+| `ui_table_form.il` | `utfCreateTableForm("title" list(cols) list(rows))` | Test Table (600x87) | Table cells, row selection | Click/double-click selects rows; `hiGetCurrentForm()` returns table form |
+| `ui_multipage_form.il` | `umpCreateTabbedForm("title" list("Tab1" "Tab2"))` | Multi Page (600x63) | Tab headers | Tab clicks switch active page; `umpGetActiveTab(formPair)` returns active tab |
+| `ui_listbox_form.il` | `ulbCreateSingleSelect("title" list(items) nil)` | Select Item (600x87) | List items, scrollbar | Click selects item; `ulbGetSelection(form)` returns selected item (verified "Cherry") |
 
-**Verifying form state via CIW**: After clicking a radio button, read the form field directly: `formName->fieldName->value`. Example: `udfLayerReplaceForm->layerOp->value` returns the selected operation.
+**Fixed form name collision**: `ucpCreateColorPicker` uses a hardcoded form name `ucpColorForm`. Calling it twice while the first form is mapped produces `*WARNING* hiDeleteForm: Cannot delete a form that is mapped` and `*WARNING* hiCreateAppForm: Could not delete already created form`. The second call may reuse or fail to create the window. Use unique form names or close (unmap) before recreating.
+
+**Form deletion caveat**: `hiDeleteForm()` fails on mapped (visible) forms with error. Use `hiUnmapForm()` first to hide, then delete. Or close via the Cancel button click.
+
+**Verifying form state via CIW**: After clicking a radio button, read the form field directly: `formName->fieldName->value`. Example: `udfLayerReplaceForm->layerOp->value` returns the selected operation. For listbox: `ulbGetSelection(form)`. For multipage: `umpGetActiveTab(formPair)` — note `hiGetCurrentForm()` may return a different form if another window is active; pass the form variable explicitly.
 
 **Coordinate precision for small forms**:
 - Color picker (600x72): radio buttons ~60px apart, row 1 at y≈25, row 2 at y≈45, buttons at y≈60
 - Dynamic form (600x176): radio at y≈50, Browse at y≈120, OK/Cancel at y≈155
+- Listbox (600x87): items ~15px apart starting at y≈20, OK/Cancel at y≈70
+- Table (600x87): header at y≈15, rows ~15px apart, OK/Cancel at y≈70
 - Estimated coordinates may be off by 1-2 widgets — verify with screenshots and adjust
 
-**CIW input line pollution**: Previous test residue can concatenate with new input, causing syntax errors. Clear aggressively before each command: click input line → Escape x3 → ctrl+u → wait 0.3s.
+**CIW input line pollution — CRITICAL FIX (verified 2026-09-11)**:
+Previous method (Escape x3 + wait 0.3s) had **30% failure rate** in 10-cycle loops: residue concatenated with new input (e.g. `cycleVar = 1cycleVar = 6`), causing syntax errors.
+
+**Reliable method (10/10 success)**:
+1. Click input line (y = height - 20), wait 0.5s
+2. Press `Escape`, wait 0.2s
+3. Press `Escape` again, wait 0.2s
+4. Press `ctrl+u` (kill line), wait **0.5s** (critical — shorter wait causes failure)
+5. Type command, wait 1.0s
+6. Press `Return`, wait 1.5s
+7. Verify via `vcli skill exec`
+
+The `ctrl+u` + 0.5s wait is the key difference. Without it, Escape alone does not reliably clear the input line under load.
 
 **Modal form behavior**: `hiDisplayForm` in IC25.1 does NOT block `vcli skill exec` or CIW input. The form stays open while you continue interacting with CIW.
 
