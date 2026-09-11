@@ -46,12 +46,13 @@ fn load_finder(refresh: bool) -> Result<LibRefFinder> {
         crate::transport::backend::require_openssh(&cfg)?;
         let host = cfg.remote_host.clone().unwrap_or_default();
         let target = cfg.ssh_target();
+        let ssh_key = cfg.ssh_key.as_deref();
         let cshrc = cfg.cadence_cshrc.as_deref();
 
         if refresh {
             let _ = crate::libref::clear_cache(&host);
         }
-        crate::libref::load_or_sync(&mut finder, &host, &target, cshrc).map_err(|e| {
+        crate::libref::load_or_sync(&mut finder, &host, &target, ssh_key, cshrc).map_err(|e| {
             VirtuosoError::Config(format!("failed to load the library reference: {e}"))
         })?;
     } else if let Some(dir) = find_local_doc_root()? {
