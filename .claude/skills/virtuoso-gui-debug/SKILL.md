@@ -742,6 +742,46 @@ The `ctrl+u` + 0.5s wait is the key difference. Without it, Escape alone does no
 
 **Modal form behavior**: `hiDisplayForm` in IC25.1 does NOT block `vcli skill exec` or CIW input. The form stays open while you continue interacting with CIW.
 
+### Long-Run Stability Verification (verified 2026-09-11)
+
+| Test | Result | Duration | Rate |
+|------|--------|----------|------|
+| 10 cycles (old clear method) | 7/10 (70%) | — | — |
+| 10 cycles (fixed clear method) | **10/10 (100%)** | ~43s | 4.3s/cycle |
+| 20 cycles (fixed method) | **20/20 (100%)** | 86s | 4.3s/cycle |
+| **50 cycles (fixed method)** | **50/50 (100%)** | **215s** | **4.3s/cycle** |
+
+**Cumulative: 80 CIW input cycles with 0 failures** using the fixed clear method.
+
+**Resource stability after 50 cycles**:
+- Virtuoso RSS: 748 → 756 MB (+8 MB, stable)
+- vcli processes: 0 (no leaks)
+- sshd connections: 5 (stable)
+- CIW fully responsive, no X11 event queue overflow
+
+### Boundary Condition Tests (verified 2026-09-11)
+
+| Test | Result | Notes |
+|------|--------|-------|
+| Drag operation | ✅ Pass | `drag-rel` on form controls, no crash |
+| Scroll operation | ✅ Pass | `scroll down:3` / `up:2` on listbox |
+| Special chars input | ✅ Pass | `"hello (world) [1+2=3] {a:b}"` returned correctly |
+| Invalid coords (9999,9999) | ✅ Pass | Silently handled, no crash |
+| Negative coords (-100,-100) | ✅ Pass | Silently handled, no crash |
+| Window minimize/restore | ✅ Pass | `skill exec` works while minimized (TCP channel independent of X11) |
+| Rapid key stress (10×Escape, 0.05s) | ✅ Pass | No crash, CIW remains responsive |
+| Empty text type | ✅ Pass | Clear error: `"operation 'type' requires non-empty --text"` |
+| 200-char text input | ✅ Pass | `length()` returns 200 |
+| 500-char command | ⚠️ Partial | type/Return succeed, but `length(x)` returns error — possible CIW input line limit or variable name collision; investigate with shorter variable names |
+
+**Key boundary findings**:
+- **Minimize does NOT affect TCP bridge**: `vcli skill exec` works while CIW window is minimized. X11 operations and TCP bridge are fully independent.
+- **Empty input has explicit error**: vcli rejects empty `--text` with config_error, does not silently no-op.
+- **Out-of-bounds clicks are safe**: Coordinates far outside window bounds do not crash vcli or Virtuoso.
+- **Long text boundary**: 200 chars verified working; 500 chars may hit CIW input line limits. Use `vcli skill exec` for long commands instead of CIW typing.
+- **Process recovery**: If Virtuoso restarts, daemon auto-reconnects; form window state may persist on X server. Verify CIW responsiveness with `println("test")` after recovery.
+- **Rapid key safety**: 10 Escape keys at 0.05s interval (20 Hz) does not cause X11 event queue overflow. The previously documented overflow requires `type+Return` cycles at <1s, not raw key presses.
+
 ## Testing
 
 ```bash
