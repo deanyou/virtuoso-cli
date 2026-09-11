@@ -779,7 +779,7 @@ The `ctrl+u` + 0.5s wait is the key difference. Without it, Escape alone does no
 - **Empty input has explicit error**: vcli rejects empty `--text` with config_error, does not silently no-op.
 - **Out-of-bounds clicks are safe**: Coordinates far outside window bounds do not crash vcli or Virtuoso.
 - **Long text boundary**: 200 chars verified working; 500 chars may hit CIW input line limits. Use `vcli skill exec` for long commands instead of CIW typing.
-- **Process recovery**: If Virtuoso restarts, daemon auto-reconnects; form window state may persist on X server. Verify CIW responsiveness with `println("test")` after recovery.
+- **Process recovery**: Not verified in this test cycle (Virtuoso PID was stable throughout). If Virtuoso restarts, daemon behavior should be tested separately — do not assume auto-reconnect.
 - **Rapid key safety**: 10 Escape keys at 0.05s interval (20 Hz) does not cause X11 event queue overflow. The previously documented overflow requires `type+Return` cycles at <1s, not raw key presses.
 
 ## Testing
