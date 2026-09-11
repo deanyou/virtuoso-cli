@@ -712,6 +712,21 @@ Use Python Xlib window-tree traversal filtering by `WM_CLASS` containing "virtuo
 | `ui_table_form.il` | `utfCreateTableForm("title" list(cols) list(rows))` | Test Table (600x87) | Table cells, row selection | Click/double-click selects rows; `hiGetCurrentForm()` returns table form |
 | `ui_multipage_form.il` | `umpCreateTabbedForm("title" list("Tab1" "Tab2"))` | Multi Page (600x63) | Tab headers | Tab clicks switch active page; `umpGetActiveTab(formPair)` returns active tab |
 | `ui_listbox_form.il` | `ulbCreateSingleSelect("title" list(items) nil)` | Select Item (600x87) | List items, scrollbar | Click selects item; `ulbGetSelection(form)` returns selected item (verified "Cherry") |
+| `ui_progress_form.il` | `upfShowProgressForm()` | Working... (600x63) | Progress bar, Cancel | Progress updates; Cancel stops loop |
+| `ui_callback_patterns.il` | `ucpShowCallbackForm()` | UCP Callback Patterns Demo (600x209) | Button, cyclic, toggle, field callbacks | All callback types fire correctly |
+| `ui_progress_bar.il` | `upbCreate("title" maxSteps)` → `upbUpdate(form step msg)` → `upbComplete(form)` | Progress Test (600x63) | Standalone progress bar component | Create/update/complete lifecycle works |
+| `ui_toggle_combo_form.il` | `utcShowSelectionForm("title" list(toggles) list(items) nil)` | Toggle Combo (600x98) | Toggle checkboxes + combo dropdown | Toggle click and combo click operations work |
+| `ui_listbox_browser.il` | `ulbbCreateBrowser(list("lib1" "lib2"))` | Library/Cell Browser (600x148) | Dual list (Library+Cell), OK/Cancel/Defaults/Apply/Help | Click library item, scroll works; cell list empty for fake lib names |
+
+**Programs with known issues (not usable as GUI debug targets)**:
+
+| Program | Issue | Cause |
+|---------|-------|-------|
+| `form_buttons.il` | `fbTest` undefined function | Source file syntax error: unclosed parens at EOF (lines 61, 99) |
+| `form_fields_variable.il` | `ffTest` undefined function | Source file syntax error: unclosed parens at EOF (lines 43, 74, 116) |
+| `form_wizard_utils.il` | `hiCreateAppForm: unrecognized keyword - ?cancelCallback` | IC25.1 compatibility: `?cancelCallback` not supported |
+| `form_auto_resize.il` | No visible window from `frmTest()` | Test function runs but creates/closes form internally; use `frmCreateResizableForm()` directly |
+| `form_modify_callback.il` | No launcher | Utility-only module; no demo form entry point |
 
 **Fixed form name collision**: `ucpCreateColorPicker` uses a hardcoded form name `ucpColorForm`. Calling it twice while the first form is mapped produces `*WARNING* hiDeleteForm: Cannot delete a form that is mapped` and `*WARNING* hiCreateAppForm: Could not delete already created form`. The second call may reuse or fail to create the window. Use unique form names or close (unmap) before recreating.
 
