@@ -87,6 +87,54 @@ pub fn pin_master_for(direction: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
+/// SKILL that resolves an instance name plus a terminal name to `pt` — that
+/// terminal's absolute point in the cellview.
+///
+/// Shared on purpose. "The stub on `M1.G`" has to mean the same point to the
+/// call that *draws* it ([`SchematicOps::label_instance_term`]) and to the
+/// calls that later *move* or *delete* it, or a stub becomes unaddressable the
+/// moment the two computations drift apart.
+///
+/// The position comes from the master's pin figure pushed through the instance
+/// transform, never from the instance bBox: on a real PDK symbol the bBox
+/// includes the parameter labels and is wider than the device.
+///
+/// Binds `inst`, `mterm`, `pin`, `fig`, `bb`, `pc` and `pt` — all of which the
+/// caller must declare in its enclosing `let()`. `cv` must already be bound.
+/// `action` prefixes the error messages so the caller is named in them.
+pub(crate) fn term_point(action: &str, inst_name: &str, term_name: &str) -> String {
+    let inst_name = escape_skill_string(inst_name);
+    let term_name = escape_skill_string(term_name);
+    format!(
+        r#"inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0)) when(!inst error("{action}: no instance named {inst_name}")) mterm = car(setof(mt inst~>master~>terminals strcmp(mt~>name "{term_name}")==0)) when(!mterm error("{action}: master of {inst_name} has no terminal {term_name}")) pin = car(mterm~>pins) when(!pin error("{action}: terminal {term_name} has no pin")) fig = pin~>fig when(!fig error("{action}: pin of {term_name} has no figure")) bb = fig~>bBox pc = list((xCoord(car(bb))+xCoord(cadr(bb)))/2.0 (yCoord(car(bb))+yCoord(cadr(bb)))/2.0) pt = dbTransformPoint(pc inst~>transform) pt = list(xCoord(pt) yCoord(pt))"#
+    )
+}
+
+/// SKILL that pushes every terminal point of the instance in `inst_var` onto
+/// the list in `acc_var`, in cellview coordinates.
+///
+/// The per-terminal arithmetic is the same as [`term_point`]'s; this form
+/// sweeps a whole instance instead of naming one terminal, which is what
+/// "which wires touch this device" needs. Both variables must be bound by the
+/// caller, and the locals are kept in their own `let()` so a caller can invoke
+/// this twice in one expression without the two clobbering each other.
+fn term_points_of(inst_var: &str, acc_var: &str) -> String {
+    format!(
+        r#"foreach(mt {inst_var}~>master~>terminals foreach(pn mt~>pins when(pn~>fig let((b c p) b = pn~>fig~>bBox c = list((xCoord(car(b))+xCoord(cadr(b)))/2.0 (yCoord(car(b))+yCoord(cadr(b)))/2.0) p = dbTransformPoint(c {inst_var}~>transform) {acc_var} = cons(list(xCoord(p) yCoord(p)) {acc_var})))))"#
+    )
+}
+
+/// SKILL that collects into `acc_var` every wire figure meeting a point in the
+/// list `pts_var`, without duplicates.
+///
+/// A wire that meets two terminals of the same instance — a gate tied to a
+/// drain, say — turns up once per terminal and must still be moved once.
+fn wires_touching(pts_var: &str, acc_var: &str) -> String {
+    format!(
+        r#"foreach(p {pts_var} foreach(f dbGetOverlaps(cv list(p p)) when(f~>objType == "line" && !exists(w {acc_var} w == f) {acc_var} = cons(f {acc_var}))))"#
+    )
+}
+
 #[derive(Default)]
 pub struct SchematicOps;
 
@@ -133,7 +181,43 @@ impl SchematicOps {
     /// `dbMoveFig`'s transform would compose, so it is applied by assigning
     /// `inst~>orient` directly, which IC23.1 accepts (probed 2026-09-09: R0 →
     /// MY → R0 on a live pin instance).
-    pub fn move_instance(&self, inst_name: &str, target: (f64, f64), orient: Option<&str>) -> String {
+    ///
+    /// # `with_stubs`
+    ///
+    /// `dbMoveFig` moves the instance and **nothing else**. The stubs
+    /// [`Self::label_instance_term`] draws are independent wire figures at
+    /// absolute coordinates, so a bare move leaves every one of them behind and
+    /// the drawing is broken the moment the next `schCheck` re-extracts
+    /// connectivity. That was never a useful outcome, so `with_stubs` defaults
+    /// to true at the RPC layer and this call moves the wires too.
+    ///
+    /// Measured on `SCRATCH_LIB/_figmove_probe`, 2026-09-11:
+    ///
+    /// * a wire label's `~>parent` **is the wire**, and its `~>children` is
+    ///   exactly that label — so moving the wire carries the label
+    ///   (`schMove` by `(2 3)` moved both by `(2 3)`, figure count unchanged),
+    /// * `schMove` on the *instance* leaves the stubs where they were, exactly
+    ///   like `dbMoveFig` — so there is no single call that does the whole job.
+    ///
+    /// The instance keeps `dbMoveFig` (verified path, and the orientation
+    /// handling above is built around it) and the wires use `schMove`, the
+    /// schematic-level move the IC23.1 reference documents for figures. Each
+    /// half is the call that was measured doing that half.
+    ///
+    /// **Shared wires are refused, not half-moved.** A wire that also meets
+    /// another instance's terminal belongs to both; dragging it tears it off
+    /// the other end, and a torn connection is invisible until the netlist is
+    /// exported. Such a move fails with the offending wire named. Reorienting
+    /// an instance that carries stubs is refused for the same reason: `orient`
+    /// puts the terminals somewhere else entirely, and no translation of the
+    /// old stubs lands them back on the new terminal positions.
+    pub fn move_instance(
+        &self,
+        inst_name: &str,
+        target: (f64, f64),
+        orient: Option<&str>,
+        with_stubs: bool,
+    ) -> String {
         let inst_name = escape_skill_string(inst_name);
         let (x, y) = target;
         let guard = cv_guard();
@@ -145,8 +229,34 @@ impl SchematicOps {
             Some(o) => format!(r#" inst~>orient = "{}""#, escape_skill_string(o)),
             None => String::new(),
         };
+
+        if !with_stubs {
+            return format!(
+                r#"let((cv inst dx dy) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0)) when(!inst error("move_instance: no instance named {inst_name}")){set_orient} dx = {x:?}-xCoord(inst~>xy) dy = {y:?}-yCoord(inst~>xy) dbMoveFig(inst cv list(list(dx dy) "R0" 1.0)) sprintf(nil "{{\"status\":\"ok\",\"name\":%L,\"x\":%g,\"y\":%g,\"orient\":%L,\"with_stubs\":false,\"moved_stubs\":0}}" "{inst_name}" xCoord(inst~>xy) yCoord(inst~>xy) inst~>orient))"#
+            );
+        }
+
+        let gather_pts = term_points_of("inst", "pts");
+        let gather_wires = wires_touching("pts", "wires");
+        let gather_other_pts = term_points_of("oi", "opts");
+        // Ownership: a candidate wire that also lands on some *other* instance's
+        // terminal is shared. Checked against the candidate set rather than
+        // against every wire in the cellview, so the sweep is over the handful
+        // of wires this instance touches.
+        let ownership = format!(
+            r#"foreach(oi cv~>instances unless(oi == inst let((opts) opts = nil {gather_other_pts} foreach(p opts foreach(f dbGetOverlaps(cv list(p p)) when(f~>objType == "line" && exists(w wires w == f) && !exists(s shared s == f) shared = cons(f shared)))))))"#
+        );
+        // Refused before anything moves. `orient` relocates the terminals, so
+        // translating the old stubs by the origin's displacement puts them
+        // nowhere near the new terminal positions.
+        let orient_guard = if orient.is_some() {
+            r#" when(wires error("%s" sprintf(nil "move_instance: %s carries %d stub(s) and 'orient' would move its terminals out from under them. Delete the stubs with 'schematic.delete_figure', move with the new orient, then redraw them with 'schematic.label_term' — or pass with_stubs:false to move the symbol alone." inst~>name length(wires))))"#
+        } else {
+            ""
+        };
+
         format!(
-            r#"let((cv inst dx dy) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0)) when(!inst error("move_instance: no instance named {inst_name}")){set_orient} dx = {x:?}-xCoord(inst~>xy) dy = {y:?}-yCoord(inst~>xy) dbMoveFig(inst cv list(list(dx dy) "R0" 1.0)) sprintf(nil "{inst_name} -> (%g %g) %s" xCoord(inst~>xy) yCoord(inst~>xy) inst~>orient))"#
+            r#"let((cv inst dx dy pts wires shared nmoved) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0)) when(!inst error("move_instance: no instance named {inst_name}")) pts = nil {gather_pts} wires = nil {gather_wires} shared = nil {ownership} when(shared error("%s" sprintf(nil "move_instance: %s shares %d wire(s) with another instance — moving it would tear them off the far end, and a torn connection only shows up in the exported netlist. Delete them with 'schematic.delete_figure', or pass with_stubs:false to move the symbol alone. First shared wire: %L" inst~>name length(shared) car(shared)~>bBox))){orient_guard}{set_orient} dx = {x:?}-xCoord(inst~>xy) dy = {y:?}-yCoord(inst~>xy) dbMoveFig(inst cv list(list(dx dy) "R0" 1.0)) nmoved = 0 foreach(w wires when(schMove(w cv list(list(dx dy) "R0")) nmoved = nmoved+1)) unless(nmoved == length(wires) error("%s" sprintf(nil "move_instance: %s moved but schMove refused %d of its %d stub(s) — the drawing is now inconsistent and this cellview must not be saved" inst~>name length(wires)-nmoved length(wires)))) sprintf(nil "{{\"status\":\"ok\",\"name\":%L,\"x\":%g,\"y\":%g,\"orient\":%L,\"with_stubs\":true,\"moved_stubs\":%d}}" "{inst_name}" xCoord(inst~>xy) yCoord(inst~>xy) inst~>orient nmoved))"#
         )
     }
 
@@ -593,6 +703,7 @@ impl SchematicOps {
         cosmetic: &str,
         auto_rotate: bool,
     ) -> String {
+        let (inst_name_raw, term_name_raw) = (inst_name, term_name);
         let inst_name = escape_skill_string(inst_name);
         let term_name = escape_skill_string(term_name);
         let net_name = escape_skill_string(net_name);
@@ -605,9 +716,13 @@ impl SchematicOps {
             ("R0", "lowerCenter", "R0", "upperCenter")
         };
         let guard = cv_guard();
+        // The terminal's position comes from the shared locator, so the point
+        // this call draws a stub at is byte-for-byte the point
+        // `schematic.delete_figure` and `move_instance` later look for.
+        let locate = term_point("label_term", inst_name_raw, term_name_raw);
 
         format!(
-            r#"let((cv inst mterm pin fig bb pc pt cxs cys npin mb mbc ctr dx dy stub ex ey lblJust lblRot old olbls omine otxt wires lbl) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances strcmp(i~>name "{inst_name}")==0)) when(!inst error("label_term: no instance named {inst_name}")) mterm = car(setof(mt inst~>master~>terminals strcmp(mt~>name "{term_name}")==0)) when(!mterm error("label_term: master of {inst_name} has no terminal {term_name}")) pin = car(mterm~>pins) when(!pin error("label_term: terminal {term_name} has no pin")) fig = pin~>fig when(!fig error("label_term: pin of {term_name} has no figure")) bb = fig~>bBox pc = list((xCoord(car(bb))+xCoord(cadr(bb)))/2.0 (yCoord(car(bb))+yCoord(cadr(bb)))/2.0) cxs = 0.0 cys = 0.0 npin = 0 foreach(trm inst~>master~>terminals foreach(pn trm~>pins when(pn~>fig let((bx) bx = pn~>fig~>bBox cxs = cxs+(xCoord(car(bx))+xCoord(cadr(bx)))/2.0 cys = cys+(yCoord(car(bx))+yCoord(cadr(bx)))/2.0 npin = npin+1)))) when(npin == 0 error("label_term: master of {inst_name} has no pin figures")) mb = inst~>master~>bBox mbc = list((xCoord(car(mb))+xCoord(cadr(mb)))/2.0 (yCoord(car(mb))+yCoord(cadr(mb)))/2.0) ctr = if(npin >= 2 list(cxs/float(npin) cys/float(npin)) mbc) when(xCoord(ctr) == xCoord(pc) && yCoord(ctr) == yCoord(pc) ctr = mbc) pt = dbTransformPoint(pc inst~>transform) pt = list(xCoord(pt) yCoord(pt)) ctr = dbTransformPoint(ctr inst~>transform) dx = xCoord(pt)-xCoord(ctr) dy = yCoord(pt)-yCoord(ctr) stub = 0.25 ex = xCoord(pt) ey = yCoord(pt) if(abs(dx) >= abs(dy) then if(dx >= 0.0 then ex = ex+stub lblJust = "centerLeft" lblRot = "R0" else ex = ex-stub lblJust = "centerRight" lblRot = "R0") else if(dy >= 0.0 then ey = ey+stub lblJust = "{up_just}" lblRot = "{up_rot}" else ey = ey-stub lblJust = "{dn_just}" lblRot = "{dn_rot}")) old = car(setof(f dbGetOverlaps(cv list(pt pt)) f~>objType == "line")) if(old then olbls = setof(f dbGetOverlaps(cv old~>bBox) f~>objType == "label") omine = car(setof(f olbls strcmp(f~>theLabel "{net_name}")==0)) otxt = if(olbls car(olbls)~>theLabel "") cond((omine sprintf(nil "already: %s.%s net=%s — stub and label are already drawn" "{inst_name}" "{term_name}" "{net_name}")) (olbls error("label_term: {inst_name}/{term_name} already carries a stub labelled '%s', not '{net_name}' — delete that stub before relabelling" otxt)) (t error("label_term: a wire already meets {inst_name}/{term_name} but carries no label — name it with 'schematic.label' at that point, or delete it"))) else wires = schCreateWire(cv "draw" "full" list(pt list(ex ey)) 0.0625 0.0625 0.0) when(!wires error("label_term: schCreateWire failed at {inst_name}/{term_name}")) lbl = schCreateWireLabel(cv car(wires) list(ex ey) "{net_name}" lblJust lblRot "stick" {font_size} nil) when(!lbl error("label_term: schCreateWireLabel failed at {inst_name}/{term_name}")) sprintf(nil "%s.%s stub (%g %g)->(%g %g) net=%s" "{inst_name}" "{term_name}" xCoord(pt) yCoord(pt) ex ey "{net_name}")))"#
+            r#"let((cv inst mterm pin fig bb pc pt cxs cys npin mb mbc ctr dx dy stub ex ey lblJust lblRot old olbls omine otxt wires lbl) cv = {EDIT_CV} {guard} {locate} cxs = 0.0 cys = 0.0 npin = 0 foreach(trm inst~>master~>terminals foreach(pn trm~>pins when(pn~>fig let((bx) bx = pn~>fig~>bBox cxs = cxs+(xCoord(car(bx))+xCoord(cadr(bx)))/2.0 cys = cys+(yCoord(car(bx))+yCoord(cadr(bx)))/2.0 npin = npin+1)))) when(npin == 0 error("label_term: master of {inst_name} has no pin figures")) mb = inst~>master~>bBox mbc = list((xCoord(car(mb))+xCoord(cadr(mb)))/2.0 (yCoord(car(mb))+yCoord(cadr(mb)))/2.0) ctr = if(npin >= 2 list(cxs/float(npin) cys/float(npin)) mbc) when(xCoord(ctr) == xCoord(pc) && yCoord(ctr) == yCoord(pc) ctr = mbc) ctr = dbTransformPoint(ctr inst~>transform) dx = xCoord(pt)-xCoord(ctr) dy = yCoord(pt)-yCoord(ctr) stub = 0.25 ex = xCoord(pt) ey = yCoord(pt) if(abs(dx) >= abs(dy) then if(dx >= 0.0 then ex = ex+stub lblJust = "centerLeft" lblRot = "R0" else ex = ex-stub lblJust = "centerRight" lblRot = "R0") else if(dy >= 0.0 then ey = ey+stub lblJust = "{up_just}" lblRot = "{up_rot}" else ey = ey-stub lblJust = "{dn_just}" lblRot = "{dn_rot}")) old = car(setof(f dbGetOverlaps(cv list(pt pt)) f~>objType == "line")) if(old then olbls = setof(f dbGetOverlaps(cv old~>bBox) f~>objType == "label") omine = car(setof(f olbls strcmp(f~>theLabel "{net_name}")==0)) otxt = if(olbls car(olbls)~>theLabel "") cond((omine sprintf(nil "already: %s.%s net=%s — stub and label are already drawn" "{inst_name}" "{term_name}" "{net_name}")) (olbls error("label_term: {inst_name}/{term_name} already carries a stub labelled '%s', not '{net_name}' — delete that stub with 'schematic.delete_figure' before relabelling" otxt)) (t error("label_term: a wire already meets {inst_name}/{term_name} but carries no label — name it with 'schematic.label' at that point, or delete it with 'schematic.delete_figure'"))) else wires = schCreateWire(cv "draw" "full" list(pt list(ex ey)) 0.0625 0.0625 0.0) when(!wires error("label_term: schCreateWire failed at {inst_name}/{term_name}")) lbl = schCreateWireLabel(cv car(wires) list(ex ey) "{net_name}" lblJust lblRot "stick" {font_size} nil) when(!lbl error("label_term: schCreateWireLabel failed at {inst_name}/{term_name}")) sprintf(nil "%s.%s stub (%g %g)->(%g %g) net=%s" "{inst_name}" "{term_name}" xCoord(pt) yCoord(pt) ex ey "{net_name}")))"#
         )
     }
 
@@ -1196,5 +1311,112 @@ mod tests {
         let s = ops().label_instance_term("M\"1", "D", "V\"DD", "default", false);
         assert!(s.contains(r#"M\"1"#), "instance name escaped: {s}");
         assert!(s.contains(r#"V\"DD"#), "net name escaped: {s}");
+    }
+
+    // ── move_instance and its stubs ──────────────────────────────────
+
+    /// Measured on `SCRATCH_LIB/_figmove_probe`, 2026-09-11: neither
+    /// `dbMoveFig` nor `schMove` on an instance disturbs the wires sitting on
+    /// its terminals. So the default has to gather them and move them itself,
+    /// or every move silently disconnects the symbol from its own wiring.
+    #[test]
+    fn move_instance_carries_its_stubs_by_default() {
+        let s = ops().move_instance("M1", (5.0, 0.0), None, true);
+        assert!(s.contains("dbGetOverlaps(cv list(p p))"), "{s}");
+        assert!(s.contains(r#"f~>objType == "line""#), "{s}");
+        assert!(s.contains(r#"schMove(w cv list(list(dx dy) "R0"))"#), "{s}");
+        assert!(s.contains(r#"\"with_stubs\":true"#), "{s}");
+    }
+
+    /// The old behaviour, still reachable: move the symbol, leave the wires.
+    #[test]
+    fn move_instance_without_stubs_touches_only_the_instance() {
+        let s = ops().move_instance("M1", (5.0, 0.0), None, false);
+        assert!(s.contains("dbMoveFig(inst cv"), "{s}");
+        assert!(!s.contains("schMove"), "no wire move: {s}");
+        assert!(!s.contains("dbGetOverlaps"), "no wire search: {s}");
+        assert!(s.contains(r#"\"moved_stubs\":0"#), "{s}");
+    }
+
+    /// A wire that also lands on another instance's terminal belongs to both.
+    /// Moving it drags the far end off that other terminal, and a torn
+    /// connection is invisible until the netlist is exported — so the whole
+    /// call is refused rather than half-done.
+    #[test]
+    fn move_instance_refuses_a_wire_shared_with_another_instance() {
+        let s = ops().move_instance("M1", (5.0, 0.0), None, true);
+        assert!(s.contains("unless(oi == inst"), "must scan the others: {s}");
+        assert!(
+            s.contains("when(shared error("),
+            "sharing must abort the move: {s}"
+        );
+        let refusal = s.find("when(shared error(").expect("guard present");
+        let mover = s.find("dbMoveFig(inst cv").expect("move present");
+        assert!(
+            refusal < mover,
+            "the refusal must come before anything moves: {s}"
+        );
+    }
+
+    /// A gate tied to its own drain gives one wire on two terminals. Moving it
+    /// twice would send it double the distance.
+    #[test]
+    fn move_instance_moves_a_doubly_touched_wire_once() {
+        let s = ops().move_instance("M1", (5.0, 0.0), None, true);
+        assert!(s.contains("!exists(w wires w == f)"), "{s}");
+    }
+
+    /// Rotating changes where the terminals are; the stubs were drawn for the
+    /// old ones. There is no correct thing to do with them, so the call says so
+    /// instead of guessing.
+    #[test]
+    fn move_instance_refuses_to_reorient_an_instance_that_has_stubs() {
+        let s = ops().move_instance("M1", (5.0, 0.0), Some("R90"), true);
+        assert!(s.contains("when(wires error("), "{s}");
+        assert!(s.contains("'orient' would move its terminals"), "{s}");
+        assert!(s.contains(r#"inst~>orient = "R90""#), "{s}");
+
+        // …but with_stubs:false has nothing to tear, so it just reorients.
+        let plain = ops().move_instance("M1", (5.0, 0.0), Some("R90"), false);
+        assert!(!plain.contains("when(wires error("), "{plain}");
+        assert!(plain.contains(r#"inst~>orient = "R90""#), "{plain}");
+    }
+
+    /// A `schMove` that returns nil left the drawing inconsistent — the symbol
+    /// has moved and one of its wires has not. Reporting `ok` there would hand
+    /// back a schematic whose disconnection surfaces at netlist time.
+    #[test]
+    fn move_instance_fails_loudly_if_a_stub_refuses_to_follow() {
+        let s = ops().move_instance("M1", (5.0, 0.0), None, true);
+        assert!(s.contains("unless(nmoved == length(wires) error("), "{s}");
+        assert!(s.contains("must not be saved"), "{s}");
+    }
+
+    /// Terminal positions come from the same locator `label_term` draws with,
+    /// so "the stub on M1/G" means one point to every call that touches it.
+    #[test]
+    fn move_instance_finds_terminals_the_way_label_term_does() {
+        let s = ops().move_instance("M1", (5.0, 0.0), None, true);
+        assert!(s.contains("inst~>master~>terminals"), "{s}");
+        assert!(s.contains("dbTransformPoint(c inst~>transform)"), "{s}");
+        assert!(!s.contains("inst~>bBox"), "the bbox must not be used: {s}");
+    }
+
+    #[test]
+    fn move_instance_escapes_its_arguments() {
+        for with_stubs in [true, false] {
+            let s = ops().move_instance("M\"1", (1.0, 2.0), Some("R\"0"), with_stubs);
+            assert!(s.contains(r#"M\"1"#), "{s}");
+            assert!(s.contains(r#"R\"0"#), "{s}");
+        }
+    }
+
+    #[test]
+    fn move_instance_writes_through_the_cellview_guard() {
+        for with_stubs in [true, false] {
+            let s = ops().move_instance("M1", (1.0, 2.0), None, with_stubs);
+            assert!(s.contains("RB_SCH_CV"), "{s}");
+            assert!(s.contains("geGetEditCellView"), "{s}");
+        }
     }
 }

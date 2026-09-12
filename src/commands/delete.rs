@@ -1,4 +1,4 @@
-//! Two-phase confirmation for the four destructive methods.
+//! Two-phase confirmation for the five destructive methods.
 //!
 //! Phase 1 answers `confirm_required` with a manifest read out of the design
 //! database — not out of what the caller claimed — and a token. Phase 2 replays
@@ -28,7 +28,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::client::bridge::{VirtuosoClient, OPEN_CELLVIEWS};
-use crate::client::delete_ops::{DeleteOps, DeleteTarget};
+use crate::client::delete_ops::{DeleteOps, DeleteTarget, FigureTarget};
 use crate::command_log;
 use crate::error::{Result, VirtuosoError};
 use crate::rpc::dispatcher::parse_skill_json;
@@ -40,7 +40,7 @@ pub const TOKEN_TTL_S: u64 = 300;
 
 const TOKEN_PREFIX: &str = "del-";
 
-// ── The four public entry points ─────────────────────────────────────
+// ── The five public entry points ─────────────────────────────────────
 
 /// Delete every view of a cell. Irreversible.
 pub fn cell(lib: &str, cell: &str, confirm: Option<&str>) -> Result<Value> {
@@ -70,6 +70,54 @@ pub fn instance(inst: &str, confirm: Option<&str>) -> Result<Value> {
         },
         confirm,
     )
+}
+
+/// Remove a wire — and the label riding on it — from the open schematic. In
+/// memory until `cell.save`.
+pub fn figure(
+    inst: Option<&str>,
+    term: Option<&str>,
+    x: Option<f64>,
+    y: Option<f64>,
+    confirm: Option<&str>,
+) -> Result<Value> {
+    let target = figure_target(inst, term, x, y)?;
+    let client = VirtuosoClient::from_env()?;
+    let ops = DeleteOps::new();
+    run(
+        &client,
+        &Op {
+            action: "schematic.delete_figure",
+            probe: ops.probe_figure(&target),
+            execute: ops.delete_figure(&target),
+            occupancy: None,
+        },
+        confirm,
+    )
+}
+
+/// Pick the addressing mode, and insist on exactly one complete pair.
+///
+/// A half-given pair (`inst` without `term`) is rejected rather than guessed
+/// at, and so is giving both pairs: they are two ways of naming *one* figure,
+/// so a caller that supplies both has not decided which figure it means, and
+/// silently preferring one would delete something nobody asked for.
+fn figure_target(
+    inst: Option<&str>,
+    term: Option<&str>,
+    x: Option<f64>,
+    y: Option<f64>,
+) -> Result<FigureTarget> {
+    match (inst, term, x, y) {
+        (Some(i), Some(t), None, None) => FigureTarget::term(i, t),
+        (None, None, Some(x), Some(y)) => FigureTarget::point(x, y),
+        _ => Err(VirtuosoError::Config(
+            "schematic.delete_figure: address the figure either by terminal \
+             ('inst' + 'term') or by point ('x' + 'y') — exactly one of the two \
+             pairs, and both halves of it"
+                .into(),
+        )),
+    }
 }
 
 /// Remove a property from an instance in the open schematic. In memory until
@@ -632,5 +680,37 @@ mod tests {
         let mut with_view = manifest();
         with_view[0]["view"] = json!("schematic");
         assert_eq!(describe(&with_view), "DESIGN_LIB/_rbscratch/schematic");
+    }
+
+    #[test]
+    #[serial]
+    fn a_figure_is_addressed_by_terminal_or_by_point() {
+        assert_eq!(
+            figure_target(Some("M1"), Some("G"), None, None).expect("terminal pair"),
+            FigureTarget::term("M1", "G").unwrap()
+        );
+        assert_eq!(
+            figure_target(None, None, Some(2.6), Some(3.0)).expect("point pair"),
+            FigureTarget::point(2.6, 3.0).unwrap()
+        );
+    }
+
+    /// Half a pair is a typo, and both pairs means the caller has not decided
+    /// which figure it meant. Either way, guessing would delete something
+    /// nobody asked for.
+    #[test]
+    #[serial]
+    fn an_incomplete_or_doubled_address_is_refused() {
+        let refused = |inst, term, x, y| {
+            let e = figure_target(inst, term, x, y)
+                .expect_err(&format!("{inst:?} {term:?} {x:?} {y:?} must be refused"));
+            assert!(e.to_string().contains("exactly one of the two"), "{e}");
+        };
+        refused(None, None, None, None);
+        refused(Some("M1"), None, None, None);
+        refused(None, Some("G"), None, None);
+        refused(None, None, Some(2.6), None);
+        refused(None, None, None, Some(3.0));
+        refused(Some("M1"), Some("G"), Some(2.6), Some(3.0));
     }
 }

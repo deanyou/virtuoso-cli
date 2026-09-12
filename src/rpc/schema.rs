@@ -154,8 +154,20 @@ pub fn standard_schema() -> RpcSchema {
                     description: "Absolute orientation (R0, R90, R180, R270, MY, MX, ...); omit to keep the current one".into(),
                     required: false,
                 },
+                Param {
+                    name: "with_stubs".into(),
+                    ptype: "boolean".into(),
+                    description: "Default true: also move the wire stubs sitting on this \
+                                  instance's terminals, so the symbol stays connected to its own \
+                                  wiring. Set false to move the symbol alone and leave the wires \
+                                  where they are. A stub shared with another instance is never \
+                                  moved — the whole call is refused instead, since moving it \
+                                  would tear the far end off."
+                        .into(),
+                    required: false,
+                },
             ],
-            returns: "{status, name, x, y, orient}".into(),
+            returns: "{status, name, x, y, orient, with_stubs, moved_stubs}".into(),
         },
         Method {
             name: "schematic.wire".into(),
@@ -408,6 +420,57 @@ pub fn standard_schema() -> RpcSchema {
             returns: "Without 'confirm': {status: confirm_required, manifest, confirm_token, \
                       expires_in_s} — the manifest carries the current value. With it: \
                       {status: ok, prop, was, saved: false}."
+                .into(),
+        },
+        Method {
+            name: "schematic.delete_figure".into(),
+            summary: "Remove one wire (and the label riding on it) from the open schematic (two-phase; in memory until cell.save)"
+                .into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Terminal addressing, half 1: instance name (e.g. M1). Use with \
+                                  'term' to delete the stub schematic.label_term drew on that \
+                                  terminal."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "term".into(),
+                    ptype: "string".into(),
+                    description: "Terminal addressing, half 2: terminal name on the instance's \
+                                  master (e.g. G, D, PLUS)."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "x".into(),
+                    ptype: "number".into(),
+                    description: "Point addressing, half 1: X of a point the wire passes \
+                                  through. For a wire with no terminal and no label to name it by."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "y".into(),
+                    ptype: "number".into(),
+                    description: "Point addressing, half 2: Y of that point.".into(),
+                    required: false,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Give exactly one addressing pair: 'inst'+'term', or 'x'+'y'. Without \
+                      'confirm': {status: confirm_required, manifest, confirm_token, \
+                      expires_in_s} — the manifest carries the wire's bBox, the labels that go \
+                      with it, and the total figure count. With it: {status: ok, target, labels, \
+                      figures, saved: false}. The label is a child of the wire, so one delete \
+                      takes both."
                 .into(),
         },
         // ── Window ────────────────────────────────────────────────────

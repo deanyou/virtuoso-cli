@@ -322,11 +322,19 @@ impl RpcDispatcher {
                 let y = json_f64(params.get("y"), "y")?;
                 // Absolute orientation; omit to leave the placement as-is.
                 let orient = params.get("orient").and_then(|v| v.as_str());
-                let skill = ops.move_instance(&name, (x, y), orient);
-                execute_required_skill(client, &skill, "move instance")?;
-                Ok(serde_json::json!({
-                    "status": "ok", "name": name, "x": x, "y": y, "orient": orient
-                }))
+                // Default true: an instance whose terminals carry stubs is the
+                // normal case in a schematic built by `label_term`, and leaving
+                // the stubs where they were disconnects the symbol from its own
+                // wiring — a failure that only surfaces in the exported
+                // netlist. `false` is the pre-2026-09-12 behaviour, kept for
+                // callers who are deliberately moving the symbol alone.
+                let with_stubs = params
+                    .get("with_stubs")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                let skill = ops.move_instance(&name, (x, y), orient, with_stubs);
+                let r = execute_required_skill(client, &skill, "move instance")?;
+                parse_skill_json(&r.output)
             }
             "wire" => {
                 let net = json_str(params.get("net"), "net")?;
@@ -429,6 +437,22 @@ impl RpcDispatcher {
                 // `client` this dispatch holds is unused here.
                 let inst = json_str(params.get("inst"), "inst")?;
                 crate::commands::delete::instance(&inst, confirm_of(&params))
+            }
+            "delete_figure" => {
+                // Two-phase, like the other deletes. Addressed by terminal or
+                // by point — `commands::delete::figure` insists on exactly one
+                // of the two pairs rather than guessing.
+                let inst = params.get("inst").and_then(|v| v.as_str());
+                let term = params.get("term").and_then(|v| v.as_str());
+                let x = params
+                    .get("x")
+                    .map(|_| json_f64(params.get("x"), "x"))
+                    .transpose()?;
+                let y = params
+                    .get("y")
+                    .map(|_| json_f64(params.get("y"), "y"))
+                    .transpose()?;
+                crate::commands::delete::figure(inst, term, x, y, confirm_of(&params))
             }
             "delete_prop" => {
                 let inst = json_str(params.get("inst"), "inst")?;
@@ -2093,12 +2117,15 @@ mod tests {
         //  + 3 libref             (list, info, find) — the library references
         //  + 1 library.list_cells — the read side of the delete manifest
         //  + 1 maestro.list_corners — what create_corner_netlist's `corner` accepts
-        //  + 4 deletes            (schematic.delete_instance, schematic.delete_prop,
-        //                          cell.delete_view, cell.delete) — all two-phase
-        assert_eq!(schema.methods.len(), 96, "should have exactly 96 methods");
+        //  + 1 schematic.move_instance — reposition without rebuilding the view
+        //  + 5 deletes            (schematic.delete_instance, schematic.delete_prop,
+        //                          schematic.delete_figure, cell.delete_view,
+        //                          cell.delete) — all two-phase
+        //  = 97
+        assert_eq!(schema.methods.len(), 97, "should have exactly 97 methods");
     }
 
-    /// The four destructive methods, and the two properties that make them
+    /// The five destructive methods, and the two properties that make them
     /// safe to expose at all: `confirm` is optional (so phase 1 is reachable)
     /// and the summary says what is at stake.
     #[test]
@@ -2107,6 +2134,7 @@ mod tests {
         for name in [
             "schematic.delete_instance",
             "schematic.delete_prop",
+            "schematic.delete_figure",
             "cell.delete_view",
             "cell.delete",
         ] {
