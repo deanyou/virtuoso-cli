@@ -106,6 +106,17 @@ impl CapabilitySet {
         let domain = method.split('.').next().unwrap_or("");
         match domain {
             "schematic" => self.permits(Capability::Schematic),
+            // Symbol generation/inspection is a schematic-editing operation:
+            // it reads a schematic and writes the cell's symbol view. Without
+            // this arm `symbol.*` fell through to `_ => false` and was denied
+            // to *every* caller — including Admin, because the fallthrough
+            // never reaches `permits()`, which is where the Admin bypass lives.
+            // That made hierarchical design impossible over typed RPC.
+            "symbol" => self.permits(Capability::Schematic),
+            // Same fallthrough bug for `sim.*`. `Capability::Simulation` was
+            // declared and parseable from a token but no method domain ever
+            // mapped to it, so it granted nothing.
+            "sim" => self.permits(Capability::Simulation),
             "maestro" => self.permits(Capability::Maestro),
             "window" => self.permits(Capability::Window),
             "cell" => self.permits(Capability::Cell),
@@ -250,6 +261,36 @@ mod tests {
         assert!(caps.permits_method("maestro.open_session"));
         assert!(!caps.permits_method("window.list"));
         assert!(!caps.permits_method("cell.open"));
+    }
+
+    #[test]
+    fn permits_symbol_methods_with_schematic_capability() {
+        // Regression: `symbol.*` had no match arm and fell through to
+        // `_ => false`, which denied it to everyone — Admin included, since
+        // the Admin bypass lives in `permits()` and the fallthrough skipped it.
+        let caps = CapabilitySet(HashSet::from([Capability::Schematic]));
+        assert!(caps.permits_method("symbol.generate"));
+        assert!(caps.permits_method("symbol.inspect"));
+
+        let admin = CapabilitySet(HashSet::from([Capability::Admin]));
+        assert!(admin.permits_method("symbol.generate"));
+
+        let no_sch = CapabilitySet(HashSet::from([Capability::Cell]));
+        assert!(!no_sch.permits_method("symbol.generate"));
+    }
+
+    #[test]
+    fn permits_sim_methods_with_simulation_capability() {
+        // Regression: `Capability::Simulation` was declared and parseable but
+        // no method domain mapped to it, so holding it granted nothing.
+        let caps = CapabilitySet(HashSet::from([Capability::Simulation]));
+        assert!(caps.permits_method("sim.check_license"));
+
+        let admin = CapabilitySet(HashSet::from([Capability::Admin]));
+        assert!(admin.permits_method("sim.check_license"));
+
+        let other = CapabilitySet(HashSet::from([Capability::Schematic]));
+        assert!(!other.permits_method("sim.check_license"));
     }
 
     #[test]
