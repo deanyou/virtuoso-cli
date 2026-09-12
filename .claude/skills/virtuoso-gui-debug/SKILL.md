@@ -1,4 +1,4 @@
----
+﻿---
 name: virtuoso-gui-debug
 description: Replayable Virtuoso GUI debugging via strict JSON DSL with fake, live (vcli), and local (xdotool) executors — unified skill covering remote vcli-driven and direct local X11 GUI automation
 allowed-tools: Bash(python3 *) Read
@@ -813,6 +813,57 @@ Double-clicking inside a Layout Suite or Schematic Editor window triggers an int
 ### Concurrent execution note
 
 Virtuoso SKILL interpreter is single-threaded. Concurrent `vcli skill exec` calls arrive in parallel (5 connections within 56ms), but Virtuoso serializes SKILL evaluation. SSH pooling provides transport reuse, not SKILL parallelism.
+
+### Layout Automation via SKILL (verified 2026-09-12)
+
+Layout/schematic windows support a rich set of **safe, programmatic operations via `vcli skill exec`** that avoid the interactive-command trap. These are preferred over X11 clicks for layout debugging.
+
+**Safe SKILL queries (read-only, ~10ms each)**:
+
+```skill
+cv = geGetEditCellView()
+cv~>libName       ; library name
+cv~>cellName      ; cell name
+cv~>viewName      ; view name (layout/schematic)
+length(cv~>shapes) ; shape count
+length(cv~>insts)  ; instance count
+length(cv~>nets)   ; net count
+cv~>bBox           ; bounding box: ((LLx LLy) (URx URy))
+foreach(s cv~>shapes collect s~>layerName)  ; list all layers used
+foreach(i cv~>insts collect i~>instName)     ; list all instances
+length(setof(s cv~>shapes s~>layerName=="NW"))  ; shapes on NW layer
+```
+
+**Safe SKILL actions (programmatic selection)**:
+
+```skill
+hiSetCurrentCellView(cv)
+hiSelectObject(obj)      ; select a specific shape/inst by dbid
+hiClearSelected()        ; clear all selection
+hiSetDrawMode("Select")  ; set draw mode
+```
+
+**Safe X11 keyboard shortcuts on layout window** (verified, no interactive trap):
+
+| Key | Action | Notes |
+|-----|--------|-------|
+| `f` | Zoom fit (fill window) | Safe, immediate |
+| `shift+f` | Zoom all (entire cell) | Safe |
+| `z` | Zoom-in mode | Must press `Escape` immediately after to cancel; do not click |
+| scroll wheel | Pan/zoom | Safe |
+
+**Forbidden on layout/schematic windows**:
+- **Double-click** — triggers modal command, blocks CIW (see CRITICAL note above)
+- **Click-rel** — may trigger select/edit commands; prefer SKILL `hiSelectObject()`
+- Any drag operation without a known command context
+
+**Recommended layout debugging workflow**:
+1. Query structure via SKILL (`geGetEditCellView()~>shapes`, etc.)
+2. Screenshot via `import -window <wid>` for visual evidence
+3. Navigate via `f` / `shift+f` / scroll (keyboard only)
+4. Select objects via SKILL `hiSelectObject()` (not X11 click)
+5. Measure via SKILL bBox / coordinates
+6. Use SKILL for all modifications; use X11 only for screenshot and safe navigation
 
 ## Testing
 
