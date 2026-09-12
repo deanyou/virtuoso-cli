@@ -41,6 +41,25 @@ impl RpcSchema {
     }
 }
 
+/// Shared wording for the `confirm` parameter of the destructive methods.
+///
+/// Spelled out in the schema rather than left to a convention, because the
+/// caller reading it is often an agent deciding whether it may fill the field
+/// in itself. It may not.
+const CONFIRM_PARAM: &str =
+    "Omit on the first call: the reply is a manifest of exactly what would be destroyed, \
+     plus a one-shot token (TTL 300s). Send that token back to carry the delete out. The \
+     token is bound to the manifest — if the design changed in between, it is refused. A \
+     human must read the manifest before the token is used; an agent must not mint, guess, \
+     or re-use one on its own.";
+
+/// Shared wording for the `lib` parameter of the on-disk deletes.
+const LIB_PARAM: &str =
+    "Library name. Restricted to the delete allow-set, which is empty until \
+     VB_DELETE_ALLOW_LIBS names libraries — so these methods refuse everything \
+     on a stock install. Any library left out of that list, including the PDK, \
+     analogLib and basic, is refused before a manifest is even built.";
+
 /// Built-in schema with all available RPC methods.
 pub fn standard_schema() -> RpcSchema {
     RpcSchema::new(vec![
@@ -106,6 +125,49 @@ pub fn standard_schema() -> RpcSchema {
                 },
             ],
             returns: "null on success".into(),
+        },
+        Method {
+            name: "schematic.move_instance".into(),
+            summary: "Move a placed instance to an absolute position".into(),
+            params: vec![
+                Param {
+                    name: "name".into(),
+                    ptype: "string".into(),
+                    description: "Instance name".into(),
+                    required: true,
+                },
+                Param {
+                    name: "x".into(),
+                    ptype: "number".into(),
+                    description: "Target X coordinate (absolute, same frame as place)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "y".into(),
+                    ptype: "number".into(),
+                    description: "Target Y coordinate (absolute, same frame as place)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "orient".into(),
+                    ptype: "string".into(),
+                    description: "Absolute orientation (R0, R90, R180, R270, MY, MX, ...); omit to keep the current one".into(),
+                    required: false,
+                },
+                Param {
+                    name: "with_stubs".into(),
+                    ptype: "boolean".into(),
+                    description: "Default true: also move the wire stubs sitting on this \
+                                  instance's terminals, so the symbol stays connected to its own \
+                                  wiring. Set false to move the symbol alone and leave the wires \
+                                  where they are. A stub shared with another instance is never \
+                                  moved — the whole call is refused instead, since moving it \
+                                  would tear the far end off."
+                        .into(),
+                    required: false,
+                },
+            ],
+            returns: "{status, name, x, y, orient, with_stubs, moved_stubs}".into(),
         },
         Method {
             name: "schematic.wire".into(),
@@ -182,9 +244,43 @@ pub fn standard_schema() -> RpcSchema {
             ],
             returns: "null on success".into(),
         },
+        Method {
+            name: "schematic.assign_net".into(),
+            summary: "Connect an instance terminal to a named net, logically only — ERASED by the next schematic.check or GUI Check&Save (connectivity is derived from geometry); use schematic.label_term to build connectivity that lasts".into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Instance name (e.g. M0)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "term".into(),
+                    ptype: "string".into(),
+                    description: "Instance terminal name (e.g. D, G, S, B, PLUS, MINUS)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "net".into(),
+                    ptype: "string".into(),
+                    description: "Net name to connect the terminal to".into(),
+                    required: true,
+                },
+            ],
+            returns: "JSON object {instance, term, net, status}".into(),
+        },
         Method { name: "symbol.inspect".into(), summary: "Inspect a symbol view".into(), params: vec![Param{name:"lib".into(),ptype:"string".into(),description:"Library".into(),required:true}, Param{name:"cell".into(),ptype:"string".into(),description:"Cell".into(),required:true}, Param{name:"view".into(),ptype:"string".into(),description:"Symbol view".into(),required:false}, Param{name:"view_type".into(),ptype:"string".into(),description:"View type".into(),required:false}], returns:"Symbol inspection result".into() },
         Method { name: "symbol.generate".into(), summary: "Generate a symbol from a schematic".into(), params: vec![Param{name:"lib".into(),ptype:"string".into(),description:"Library".into(),required:true}, Param{name:"cell".into(),ptype:"string".into(),description:"Cell".into(),required:true}, Param{name:"schematic_view".into(),ptype:"string".into(),description:"Source schematic view".into(),required:false}, Param{name:"symbol_view".into(),ptype:"string".into(),description:"Target symbol view".into(),required:false}, Param{name:"sort_pins".into(),ptype:"string".into(),description:"alphanumeric or geometric".into(),required:false}], returns:"Symbol generation result".into() },
         Method { name: "library.list".into(), summary: "List registered OA libraries (read-only)".into(), params: vec![], returns: "JSON array of library names".into() },
+        Method {
+            name: "library.list_cells".into(),
+            summary: "List the cells in a library with their views (read-only)".into(),
+            params: vec![
+                Param { name: "lib".into(), ptype: "string".into(), required: true, description: "Library name, as reported by library.list".into() },
+                Param { name: "pattern".into(), ptype: "string".into(), required: false, description: "SKILL regular expression matched against the cell name; a plain word acts as a substring filter".into() },
+            ],
+            returns: "{lib, count, cells:[{name, views:[…]}]}; errors if the library does not exist, empty list if it has no cells".into(),
+        },
         Method {
             name: "schematic.save".into(),
             summary: "Save the current schematic".into(),
@@ -193,7 +289,7 @@ pub fn standard_schema() -> RpcSchema {
         },
         Method {
             name: "schematic.check".into(),
-            summary: "Run schematic check (schCheck)".into(),
+            summary: "Run schematic check (schCheck) — re-extracts connectivity from geometry, so any connection made only with schematic.assign_net is discarded here".into(),
             params: vec![],
             returns: "schCheck output".into(),
         },
@@ -225,6 +321,157 @@ pub fn standard_schema() -> RpcSchema {
                 required: true,
             }],
             returns: "JSON object of param name→value".into(),
+        },
+        Method {
+            name: "schematic.list_cdf_params".into(),
+            summary: "List an instance's CDF parameters with their GUI labels, units and defaults"
+                .into(),
+            params: vec![Param {
+                name: "inst".into(),
+                ptype: "string".into(),
+                description: "Instance name (e.g. M1)".into(),
+                required: true,
+            }],
+            returns: "JSON array of {name, prompt (the GUI label), type, units, default, \
+                      value, choices? (cyclic values), description?} — the authoritative \
+                      parameter list for this instance's master, and the only source that \
+                      covers PDK devices, which no Cadence manual documents. `description` \
+                      is empty on analogLib, so read prose from libref.info and treat \
+                      this as the final word on names and values."
+                .into(),
+        },
+        Method {
+            name: "schematic.set_param".into(),
+            summary: "Set one CDF parameter of a specific instance".into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Instance name (e.g. M1)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "param".into(),
+                    ptype: "string".into(),
+                    description: "Parameter name (e.g. w, l, nf, fingers)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "value".into(),
+                    ptype: "string".into(),
+                    description: "New value (e.g. 4u)".into(),
+                    required: true,
+                },
+            ],
+            returns: "JSON object {instance, param, value, status}".into(),
+        },
+        // ── Destructive (two-phase) ──────────────────────────────────
+        // Every method below answers `confirm_required` with a manifest the
+        // first time it is called, and only deletes when called again with the
+        // token it handed out. The token is bound to the manifest: if the
+        // design moved on, the approval is void.
+        Method {
+            name: "schematic.delete_instance".into(),
+            summary: "Remove one instance from the open schematic (two-phase; in memory until cell.save)"
+                .into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Instance name (e.g. M1)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Without 'confirm': {status: confirm_required, manifest, confirm_token, \
+                      expires_in_s}. With it: {status: ok, instance, master, saved: false} — the \
+                      edit is in memory, 'cell.save' is what writes it."
+                .into(),
+        },
+        Method {
+            name: "schematic.delete_prop".into(),
+            summary: "Remove one property from an instance in the open schematic (two-phase; in memory until cell.save)"
+                .into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Instance name (e.g. VIN)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "prop".into(),
+                    ptype: "string".into(),
+                    description: "Property name to remove, as reported by schematic.get_params".into(),
+                    required: true,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Without 'confirm': {status: confirm_required, manifest, confirm_token, \
+                      expires_in_s} — the manifest carries the current value. With it: \
+                      {status: ok, prop, was, saved: false}."
+                .into(),
+        },
+        Method {
+            name: "schematic.delete_figure".into(),
+            summary: "Remove one wire (and the label riding on it) from the open schematic (two-phase; in memory until cell.save)"
+                .into(),
+            params: vec![
+                Param {
+                    name: "inst".into(),
+                    ptype: "string".into(),
+                    description: "Terminal addressing, half 1: instance name (e.g. M1). Use with \
+                                  'term' to delete the stub schematic.label_term drew on that \
+                                  terminal."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "term".into(),
+                    ptype: "string".into(),
+                    description: "Terminal addressing, half 2: terminal name on the instance's \
+                                  master (e.g. G, D, PLUS)."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "x".into(),
+                    ptype: "number".into(),
+                    description: "Point addressing, half 1: X of a point the wire passes \
+                                  through. For a wire with no terminal and no label to name it by."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "y".into(),
+                    ptype: "number".into(),
+                    description: "Point addressing, half 2: Y of that point.".into(),
+                    required: false,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Give exactly one addressing pair: 'inst'+'term', or 'x'+'y'. Without \
+                      'confirm': {status: confirm_required, manifest, confirm_token, \
+                      expires_in_s} — the manifest carries the wire's bBox, the labels that go \
+                      with it, and the total figure count. With it: {status: ok, target, labels, \
+                      figures, saved: false}. The label is a child of the wire, so one delete \
+                      takes both."
+                .into(),
         },
         // ── Window ────────────────────────────────────────────────────
         Method {
@@ -304,6 +551,14 @@ pub fn standard_schema() -> RpcSchema {
                     description: "Override the detected DISPLAY".into(),
                     required: false,
                 },
+                Param {
+                    name: "window_id".into(),
+                    ptype: "string".into(),
+                    description:
+                        "Dismiss only this X11 window id instead of every dialog-sized window"
+                            .into(),
+                    required: false,
+                },
             ],
             returns: "{status, found, dismissed, errors, display, raw_log}".into(),
         },
@@ -328,9 +583,18 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "window_id".into(),
                     ptype: "string".into(),
-                    description: "X11 window id (e.g. 0x2e01f16) from list_windows_x11"
-                        .into(),
-                    required: true,
+                    description:
+                        "X11 window id (e.g. 0x2e01f16) from list_windows_x11. Required unless pid is given; wins if both are."
+                            .into(),
+                    required: false,
+                },
+                Param {
+                    name: "pid".into(),
+                    ptype: "integer".into(),
+                    description:
+                        "Resolve the window by owning PID instead. Errors if it matches zero or several windows."
+                            .into(),
+                    required: false,
                 },
                 Param {
                     name: "action".into(),
@@ -388,7 +652,16 @@ pub fn standard_schema() -> RpcSchema {
         Method {
             name: "cell.close".into(),
             summary: "Close the current cellview".into(),
-            params: vec![],
+            params: vec![Param {
+                name: "save".into(),
+                ptype: "boolean".into(),
+                description: "Save before closing (default true). Pass false to discard \
+                              edits (silently, via dbReopen to read mode). One of the two must \
+                              happen: closing a modified cellview otherwise pops a modal that \
+                              freezes the bridge."
+                    .into(),
+                required: false,
+            }],
             returns: "null on success".into(),
         },
         Method {
@@ -396,6 +669,16 @@ pub fn standard_schema() -> RpcSchema {
             summary: "Get current cellview info (lib/cell/view)".into(),
             params: vec![],
             returns: "JSON object with lib, cell, view".into(),
+        },
+        Method {
+            name: "cell.list_open".into(),
+            summary: "List every cellview this Virtuoso holds open, and whether a window shows it"
+                .into(),
+            params: vec![],
+            returns: "JSON array of {lib, cell, view, mode, window}. mode \"a\" holds an edit \
+                      lock, \"r\" does not; a row with mode \"a\" and window false is an orphan \
+                      that no GUI action can close and that locks a human out of that cell."
+                .into(),
         },
         Method {
             name: "cell.create".into(),
@@ -416,11 +699,21 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "view".into(),
                     ptype: "string".into(),
-                    description: "View name".into(),
+                    description: "View name (default schematic)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "view_type".into(),
+                    ptype: "string".into(),
+                    description:
+                        "DFII cellViewType, needed to create the view. Inferred for schematic, \
+                         symbol (schematicSymbol), layout (maskLayout) and netlist; required \
+                         for any other view name."
+                            .into(),
                     required: false,
                 },
             ],
-            returns: "null on success".into(),
+            returns: "{lib, cell, view, view_type}; errors if the view already exists".into(),
         },
         Method {
             name: "cell.read_path".into(),
@@ -432,6 +725,72 @@ pub fn standard_schema() -> RpcSchema {
                 required: true,
             }],
             returns: "{lib, read_path: string|null}".into(),
+        },
+        Method {
+            name: "cell.delete_view".into(),
+            summary: "Delete one view of a cell from disk (two-phase, irreversible)".into(),
+            params: vec![
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: LIB_PARAM.into(),
+                    required: true,
+                },
+                Param {
+                    name: "cell".into(),
+                    ptype: "string".into(),
+                    description: "Cell name".into(),
+                    required: true,
+                },
+                Param {
+                    name: "view".into(),
+                    ptype: "string".into(),
+                    description: "View to delete (e.g. schematic, symbol)".into(),
+                    required: true,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Without 'confirm': {status: confirm_required, manifest: [{lib, cell, view, \
+                      path, instances, writable}], confirm_token, expires_in_s}. With it: \
+                      {status: ok, deleted, path}. Refuses while the view is open in Virtuoso."
+                .into(),
+        },
+        Method {
+            name: "cell.delete".into(),
+            summary: "Delete a cell and every view of it from disk (two-phase, irreversible)".into(),
+            params: vec![
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: LIB_PARAM.into(),
+                    required: true,
+                },
+                Param {
+                    name: "cell".into(),
+                    ptype: "string".into(),
+                    description: "Cell name. Required and non-empty — without it the underlying \
+                                  ddGetObj would return the *library*, and ddDeleteObj on a \
+                                  library deletes the directory and its cds.lib entry."
+                        .into(),
+                    required: true,
+                },
+                Param {
+                    name: "confirm".into(),
+                    ptype: "string".into(),
+                    description: CONFIRM_PARAM.into(),
+                    required: false,
+                },
+            ],
+            returns: "Without 'confirm': {status: confirm_required, manifest: [{lib, cell, views, \
+                      path, instances, writable}], confirm_token, expires_in_s} — 'views' is \
+                      everything that would go. With it: {status: ok, deleted, path}. Refuses \
+                      while any view of the cell is open in Virtuoso."
+                .into(),
         },
         // ── Maestro ───────────────────────────────────────────────────
         Method {
@@ -456,8 +815,44 @@ pub fn standard_schema() -> RpcSchema {
                     description: "View name".into(),
                     required: false,
                 },
+                Param {
+                    name: "mode".into(),
+                    ptype: "string".into(),
+                    description: "\"r\" (default) opens read-only and takes NO edit lock, so a \
+                                  human keeps edit access to the cellview; the setup is still \
+                                  fully readable. \"a\" opens editable and TAKES the edit lock — \
+                                  and a SKILL-opened session has no window, so that locks a human \
+                                  out of the cell with nothing to click. Prefer \"r\" plus \
+                                  maestro.set_session_mode around the writes. Note \"a\" is \
+                                  required to open a maestro view that does not exist yet, since \
+                                  maeOpenSetup creates it and cannot create in read mode."
+                        .into(),
+                    required: false,
+                },
             ],
             returns: "session handle string".into(),
+        },
+        Method {
+            name: "maestro.set_session_mode".into(),
+            summary: "Switch an open Maestro session between read-only and editable".into(),
+            params: vec![
+                Param {
+                    name: "session".into(),
+                    ptype: "string".into(),
+                    description: "Session handle from maestro.open_session".into(),
+                    required: true,
+                },
+                Param {
+                    name: "mode".into(),
+                    ptype: "string".into(),
+                    description: "\"a\" takes the edit lock (maeMakeEditable), \"r\" hands it \
+                                  back (maeMakeReadonly). Both act in place with no reopen, so \
+                                  hold \"a\" only across the writes themselves."
+                        .into(),
+                    required: true,
+                },
+            ],
+            returns: "{status, session, mode} — the mode now in effect".into(),
         },
         Method {
             name: "maestro.close_session".into(),
@@ -475,6 +870,32 @@ pub fn standard_schema() -> RpcSchema {
             summary: "List all active Maestro sessions".into(),
             params: vec![],
             returns: "JSON array of session objects".into(),
+        },
+        Method {
+            name: "maestro.list_tests".into(),
+            summary: "List the test names in a Maestro session".into(),
+            params: vec![Param {
+                name: "session".into(),
+                ptype: "string".into(),
+                description: "Session ID (e.g. fnxSession4)".into(),
+                required: true,
+            }],
+            returns: "JSON array of test-name strings".into(),
+        },
+        Method {
+            name: "maestro.list_corners".into(),
+            summary: "List the corner and corner-group names in a Maestro session's setup".into(),
+            params: vec![Param {
+                name: "session".into(),
+                ptype: "string".into(),
+                description: "Session ID (e.g. fnxSession4)".into(),
+                required: true,
+            }],
+            returns: "JSON array of corner names as they appear in ADE Assembler (e.g. C0, \
+                      Nominal) — these are setup labels, not PDK model sections; \
+                      maestro.create_corner_netlist takes one of these. Empty array if the \
+                      setup defines no corners; errors if the session does not exist"
+                .into(),
         },
         Method {
             name: "maestro.set_var".into(),
@@ -508,9 +929,50 @@ pub fn standard_schema() -> RpcSchema {
         },
         Method {
             name: "maestro.list_vars".into(),
-            summary: "List all design variables".into(),
+            summary: "List all Assembler-global design variables".into(),
             params: vec![],
             returns: "JSON array of {name, value}".into(),
+        },
+        Method {
+            name: "maestro.delete_var".into(),
+            summary: "Delete an Assembler-global design variable".into(),
+            params: vec![Param {
+                name: "name".into(),
+                ptype: "string".into(),
+                description: "Variable name".into(),
+                required: true,
+            }],
+            returns: "{status}".into(),
+        },
+        Method {
+            name: "maestro.delete_output".into(),
+            summary: "Delete an output from a test's setup".into(),
+            params: vec![
+                Param {
+                    name: "name".into(),
+                    ptype: "string".into(),
+                    description: "Output name".into(),
+                    required: true,
+                },
+                Param {
+                    name: "test".into(),
+                    ptype: "string".into(),
+                    description: "Test name".into(),
+                    required: true,
+                },
+            ],
+            returns: "{status}".into(),
+        },
+        Method {
+            name: "maestro.delete_analysis".into(),
+            summary: "Delete an analysis from the current test".into(),
+            params: vec![Param {
+                name: "analysis".into(),
+                ptype: "string".into(),
+                description: "Analysis type (e.g. ac, dc, tran)".into(),
+                required: true,
+            }],
+            returns: "{status}".into(),
         },
         Method {
             name: "maestro.run".into(),
@@ -627,8 +1089,25 @@ pub fn standard_schema() -> RpcSchema {
         },
         Method {
             name: "maestro.get_analyses".into(),
-            summary: "Get enabled analysis types".into(),
-            params: vec![],
+            summary: "Get enabled analysis types for a test".into(),
+            params: vec![
+                Param {
+                    name: "session".into(),
+                    ptype: "string".into(),
+                    description: "Session ID".into(),
+                    required: true,
+                },
+                Param {
+                    name: "test".into(),
+                    ptype: "string".into(),
+                    description: "Test name. Optional only when the session holds exactly \
+                                  one test; with several it is required, because analyses \
+                                  are per-test and picking one silently would report another \
+                                  test's setup."
+                        .into(),
+                    required: false,
+                },
+            ],
             returns: "analysis types string".into(),
         },
         Method {
@@ -673,6 +1152,16 @@ pub fn standard_schema() -> RpcSchema {
                     name: "options".into(),
                     ptype: "string".into(),
                     description: "Options alist (e.g. '((freq \"1k\"))')".into(),
+                    required: false,
+                },
+                Param {
+                    name: "test".into(),
+                    ptype: "string".into(),
+                    description: "Test the analysis belongs to. Optional only when the \
+                                  session holds exactly one test; with several it is \
+                                  required, since maeSetAnalysis is per-test and would \
+                                  otherwise configure whichever test comes first."
+                        .into(),
                     required: false,
                 },
             ],
@@ -731,8 +1220,59 @@ pub fn standard_schema() -> RpcSchema {
                     description: "View name".into(),
                     required: true,
                 },
+                Param {
+                    name: "test".into(),
+                    ptype: "string".into(),
+                    description: "Test to retarget; omit to set the design for every test \
+                                  in the session"
+                        .into(),
+                    required: false,
+                },
             ],
             returns: "null on success".into(),
+        },
+        Method {
+            name: "maestro.create_test".into(),
+            summary: "Create a test in an open Maestro session".into(),
+            params: vec![
+                Param {
+                    name: "session".into(),
+                    ptype: "string".into(),
+                    description: "Session ID".into(),
+                    required: true,
+                },
+                Param {
+                    name: "test".into(),
+                    ptype: "string".into(),
+                    description: "Name for the new test".into(),
+                    required: true,
+                },
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: "Library of the design under test".into(),
+                    required: true,
+                },
+                Param {
+                    name: "cell".into(),
+                    ptype: "string".into(),
+                    description: "Cell of the design under test".into(),
+                    required: true,
+                },
+                Param {
+                    name: "view".into(),
+                    ptype: "string".into(),
+                    description: "View of the design under test (default \"schematic\")".into(),
+                    required: false,
+                },
+                Param {
+                    name: "simulator".into(),
+                    ptype: "string".into(),
+                    description: "Simulator name (default \"spectre\")".into(),
+                    required: false,
+                },
+            ],
+            returns: "{status, test, lib, cell, view, simulator}".into(),
         },
         Method {
             name: "maestro.save_setup".into(),
@@ -990,14 +1530,18 @@ pub fn standard_schema() -> RpcSchema {
         },
         Method {
             name: "skill.info".into(),
-            summary: "Get detailed More Info documentation for a SKILL function".into(),
+            summary: "Look up a SKILL function's signature and description in the \
+                      local .fnd databases (no Virtuoso, no Admin)"
+            .into(),
             params: vec![Param {
                 name: "func".into(),
                 ptype: "string".into(),
                 description: "Function name".into(),
                 required: true,
             }],
-            returns: "{func, html, plain_text}".into(),
+            returns: "{func_name, found, name, syntax, description, source} | \
+                      {func_name, found:false, reason, entries_loaded, suggestions[], hint}"
+            .into(),
         },
         Method {
             name: "skill.sync".into(),
@@ -1028,6 +1572,143 @@ pub fn standard_schema() -> RpcSchema {
                 },
             ],
             returns: "{cache_dir, file_count, modified}".into(),
+        },
+        // Virtuoso library references. Local documentation reads — no SKILL is
+        // executed and Virtuoso is never contacted, hence no capability gate.
+        // analogLib and basic are parsed; the other registered libraries report
+        // why they yield nothing rather than coming back empty.
+        Method {
+            name: "libref.list".into(),
+            summary: "List documented library cells — analogLib (vsin, idc, cap, nmos4, ...) \
+                      and basic (ipin, opin, gnd, vdd, ...)"
+                .into(),
+            params: vec![
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: "Virtuoso library to restrict to: analogLib (sources, \
+                                  passives, actives), basic (pins, supplies). rfLib, \
+                                  fBlockLib, pcLib and ahdlLib are registered but not \
+                                  parsed — they answer with the reason and what to use \
+                                  instead, never with an empty list. Omit to search all."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "category".into(),
+                    ptype: "string".into(),
+                    description: "Filter by category substring, e.g. 'Passive', 'Sources', 'Pins'"
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "refresh".into(),
+                    ptype: "boolean".into(),
+                    description: "Force re-sync of the cached documentation".into(),
+                    required: false,
+                },
+            ],
+            returns: "{lib, count, symbols[{lib, name, cell ('analogLib/vsin' — what \
+                       schematic.place takes), category, title, param_count, primitives[], \
+                       description?}], symbols_loaded, symbols_indexed, source, \
+                       libraries[{lib, state, symbols}], libraries_without_symbols?}"
+            .into(),
+        },
+        Method {
+            name: "libref.info".into(),
+            summary: "Full CDF parameter table for one library cell — the lookup to run \
+                      BEFORE schematic.set_param, so parameter names are read, not guessed"
+            .into(),
+            params: vec![
+                Param {
+                    name: "symbol".into(),
+                    ptype: "string".into(),
+                    description: "Cell name, e.g. vsin, idc, cap, res, ipin, gnd. Optional \
+                                  when `lib` is given: that form asks about the library \
+                                  itself and returns its documentation status."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: "Virtuoso library to restrict to: analogLib (sources, \
+                                  passives, actives), basic (pins, supplies). rfLib, \
+                                  fBlockLib, pcLib and ahdlLib are registered but not \
+                                  parsed — they answer with the reason and what to use \
+                                  instead, never with an empty list. Omit to search all."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "refresh".into(),
+                    ptype: "boolean".into(),
+                    description: "Force re-sync of the cached documentation".into(),
+                    required: false,
+                },
+            ],
+            returns: "{lib, symbol, cell, found, category, title, description, primitives[], \
+                       param_count, params[{name, label, spectre, description, default, \
+                       expands_to?}], note?, verify_with} | {symbol, found:true, \
+                       ambiguous:true, libraries[], matches[]} when the name is in more \
+                       than one library | {symbol, found:false, reason, suggestions[], hint} | \
+                       {lib, found:false, state:'no_parser'|'no_manual'|'docs_missing', reason}"
+            .into(),
+        },
+        Method {
+            name: "libref.find".into(),
+            summary: "Search CDF parameters or cells — 'amplitude' finds va (Amplitude 1 \
+                      (Vpk)), vaDBm, ia, each with the cell it belongs to"
+            .into(),
+            params: vec![
+                Param {
+                    name: "query".into(),
+                    ptype: "string".into(),
+                    description: "Search string: a CDF name, a GUI label, or a plain word".into(),
+                    required: true,
+                },
+                Param {
+                    name: "lib".into(),
+                    ptype: "string".into(),
+                    description: "Virtuoso library to restrict to: analogLib (sources, \
+                                  passives, actives), basic (pins, supplies). rfLib, \
+                                  fBlockLib, pcLib and ahdlLib are registered but not \
+                                  parsed — they answer with the reason and what to use \
+                                  instead, never with an empty list. Omit to search all."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "scope".into(),
+                    ptype: "string".into(),
+                    description: "params (default), symbols, or both".into(),
+                    required: false,
+                },
+                Param {
+                    name: "mode".into(),
+                    ptype: "string".into(),
+                    description: "Search mode: fuzzy (default), prefix, suffix, exact, regex"
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "limit".into(),
+                    ptype: "integer".into(),
+                    description: "Max results (default: 50)".into(),
+                    required: false,
+                },
+                Param {
+                    name: "refresh".into(),
+                    ptype: "boolean".into(),
+                    description: "Force re-sync of the cached documentation".into(),
+                    required: false,
+                },
+            ],
+            returns: "{query, mode, scope, lib, param_count (total matches, not the \
+                       truncated page), params_shown, params_truncated?, \
+                       params[{lib, symbol, cell, name, label, spectre, description, \
+                       default}], symbol_count, symbols_shown, symbols_truncated?, symbols[]}"
+            .into(),
         },
         Method {
             name: "sim.check_license".into(),
@@ -1087,7 +1768,10 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "corner".into(),
                     ptype: "string".into(),
-                    description: "Corner name (e.g. tt, ss, ff)".into(),
+                    description: "Corner name as it appears in the Assembler setup (e.g. C0, \
+                                  Nominal) — list them with maestro.list_corners. NOT a PDK \
+                                  model section: passing tt/ss/ff fails with a bare nil"
+                        .into(),
                     required: true,
                 },
                 Param {
@@ -1177,7 +1861,7 @@ pub fn standard_schema() -> RpcSchema {
         },
         Method {
             name: "schematic.label_term".into(),
-            summary: "Label an instance terminal (D/G/S/B) with a net name at the terminal's pin center".into(),
+            summary: "Draw a wire stub out of an instance terminal and name it; nets merge by label, so this is the coordinate-free way to build connectivity that survives schematic.check".into(),
             params: vec![
                 Param {
                     name: "inst".into(),
@@ -1188,29 +1872,32 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "term".into(),
                     ptype: "string".into(),
-                    description: "Terminal name (e.g. D, G, S, B)".into(),
+                    description: "Terminal name on the master (e.g. D, G, S, B, PLUS, VDD)".into(),
                     required: true,
                 },
                 Param {
                     name: "net".into(),
                     ptype: "string".into(),
-                    description: "Net name to label the terminal with".into(),
+                    description: "Net name to label the stub with".into(),
                     required: true,
                 },
                 Param {
                     name: "cosmetic".into(),
                     ptype: "string".into(),
-                    description: "'default' or 'clean'".into(),
+                    description: "'default' (0.0625 font) or 'clean' (0.125 font)".into(),
                     required: false,
                 },
                 Param {
                     name: "auto_rotate".into(),
                     ptype: "boolean".into(),
-                    description: "Auto-rotate label based on stub direction".into(),
+                    description: "Rotate labels on vertical stubs to R90; default leaves them upright".into(),
                     required: false,
                 },
             ],
-            returns: "{status, instance, terminal, net}".into(),
+            returns: "{status, instance, terminal, net, already, output} — already=true means \
+                      the stub and its label were already there (idempotent re-run, still \
+                      success); a stub carrying a different net name is an error"
+                .into(),
         },
     ])
 }

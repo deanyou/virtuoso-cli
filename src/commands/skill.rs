@@ -192,6 +192,40 @@ pub fn eval(
     }))
 }
 
+/// Load the SKILL Finder databases for the configured host.
+///
+/// Shared by [`find`] and [`info`] so both answer from exactly the same
+/// source — when they disagreed, `info` was the one that lied.
+fn load_finder(cfg: &Config, refresh: bool) -> Result<SKILLFinder> {
+    let mut finder = SKILLFinder::new();
+
+    if cfg.is_remote() {
+        // Remote mode: use cache or sync. Reject an explicit `native` backend
+        // before any ssh/scp sync runs, so the mismatch is never swallowed.
+        crate::transport::backend::require_openssh(cfg)?;
+        let host = cfg.remote_host.clone().unwrap_or_default();
+        let target = cfg.ssh_target();
+        let ssh_key = cfg.ssh_key.as_deref();
+        let cshrc = cfg.cadence_cshrc.as_deref();
+
+        if refresh {
+            // Force refresh: clear cache first, then sync
+            let _ = crate::skill_finder::clear_cache(&host);
+        }
+
+        let _ = crate::skill_finder::load_or_sync(&mut finder, &host, &target, ssh_key, cshrc)?;
+    } else {
+        // Local mode: find from local Cadence installation
+        if let Some(dir) = find_skill_finder_dir(cfg)? {
+            finder
+                .load(&dir)
+                .map_err(|e| VirtuosoError::Config(format!("failed to load SKILL Finder: {}", e)))?;
+        }
+    }
+
+    Ok(finder)
+}
+
 /// Search SKILL function names using the Cadence SKILL Finder database.
 ///
 /// Requires VB_SPECTRE_DIR or VB_CADENCE_CSHRC to locate the Cadence installation,
@@ -214,33 +248,7 @@ pub fn find(
     include_desc: bool,
 ) -> Result<Value> {
     let search_mode: SearchMode = mode.parse().unwrap_or(SearchMode::Fuzzy);
-    let cfg = ctx.config();
-
-    let mut finder = SKILLFinder::new();
-
-    if cfg.is_remote() {
-        // Remote mode: use cache or sync. Reject an explicit `native` backend
-        // before any ssh/scp sync runs, so the mismatch is never swallowed.
-        crate::transport::backend::require_openssh(cfg)?;
-        let host = cfg.remote_host.clone().unwrap_or_default();
-        let target = cfg.ssh_target();
-        let cshrc = cfg.cadence_cshrc.as_deref();
-
-        if refresh {
-            // Force refresh: clear cache first, then sync
-            let _ = crate::skill_finder::clear_cache(&host);
-        }
-
-        let _ = crate::skill_finder::load_or_sync(&mut finder, &host, &target, cshrc)?;
-    } else {
-        // Local mode: find from local Cadence installation
-        let finder_dir = find_skill_finder_dir(cfg)?;
-        if let Some(dir) = finder_dir {
-            finder.load(&dir).map_err(|e| {
-                VirtuosoError::Config(format!("failed to load SKILL Finder: {}", e))
-            })?;
-        }
-    }
+    let finder = load_finder(ctx.config(), refresh)?;
 
     let results: Vec<_> = finder
         .search(query, search_mode, limit, include_desc)
@@ -264,58 +272,74 @@ pub fn find(
     }))
 }
 
-/// Get detailed More Info documentation for a specific SKILL function.
+/// Get the documented signature and description for a specific SKILL function.
 ///
-/// This queries the Cadence More Info system via the Virtuoso bridge.
+/// Answers from the local SKILL Finder `.fnd` databases — no Virtuoso, no
+/// Admin capability, works offline.
+///
+/// It used to call `mfGetMoreInfo` on the live bridge instead, which was wrong
+/// in three compounding ways:
+///
+/// 1. `mfGetMoreInfo` **does not exist on IC23.1** (`getd` → nil), and the call
+///    sat inside `when(boundp('mfGetMoreInfo) …)` — so it quietly evaluated to
+///    nil for *every* input.
+/// 2. That nil was reported as `{"found": false}` — i.e. *"no such function"*.
+///    The tool was reporting its own breakage as a fact about the caller's
+///    query. That is the one lie that sends you back to guessing, which is
+///    precisely what looking things up exists to prevent.
+/// 3. Reaching the bridge at all required raw-SKILL (Admin) access, so the
+///    manual was unreadable to a plain design token.
+///
+/// If a future IC release ships `mfGetMoreInfo`, enrich from it — but keep the
+/// `.fnd` answer as the floor, and never again report a missing documentation
+/// *system* as a missing *function*.
 pub fn info(ctx: &crate::context::CommandContext, func_name: &str) -> Result<Value> {
     if func_name.is_empty() {
         return Err(VirtuosoError::Config("function name is required".into()));
     }
 
-    let client = VirtuosoClient::from_context(ctx)?;
+    let finder = load_finder(ctx.config(), false)?;
 
-    // Use Virtuoso's More Info system via SKILL
-    let skill_code = format!(
-        r#"let((result)
-  when(boundp('mfGetMoreInfo
-    result = mfGetMoreInfo("{}" "{}")
-    if(result then result else nil)
-  )
-)"#,
-        "$象牙/doc/api_more_info/api_more_info.html", func_name
-    );
-
-    let result = client.execute_skill(&skill_code, None)?;
-
-    if !result.skill_ok() {
+    if let Some(e) = finder
+        .search(func_name, SearchMode::Exact, 1, false)
+        .into_iter()
+        .next()
+    {
         return Ok(json!({
             "func_name": func_name,
-            "found": false,
-            "error": "function not found or More Info not available"
+            "found": true,
+            "name": e.name,
+            "syntax": e.syntax,
+            "description": e.description,
+            "source": e.source_file,
         }));
     }
 
-    // Parse the result - typically returns HTML or nil
-    let output = result.output.trim();
-    if output.is_empty() || output == "nil" {
-        return Ok(json!({
-            "func_name": func_name,
-            "found": false
-        }));
-    }
+    // Not documented. Offer near misses so the caller has somewhere to go, and
+    // say plainly what "not found" means here.
+    let suggestions: Vec<_> = finder
+        .search(func_name, SearchMode::Fuzzy, 10, false)
+        .into_iter()
+        .map(|e| e.name.clone())
+        .collect();
 
     Ok(json!({
         "func_name": func_name,
-        "found": true,
-        "raw": output,
+        "found": false,
+        "reason": "no entry in the SKILL Finder databases",
+        "entries_loaded": finder.len(),
+        "suggestions": suggestions,
+        "hint": "On IC23.1 an undocumented function is almost always an undefined \
+                 one. Confirm with getd('<fn>) before calling it.",
     }))
 }
 
 /// Find the SKILL Finder directory from config.
 ///
 /// Priority:
-/// 1. VB_SKILL_FINDER_DIR env var
-/// 2. Discover from Cadence installation (via VB_CADENCE_CSHRC or spectre path)
+/// 1. `VB_SKILL_FINDER_DIR` env var
+/// 2. Discover from the local Cadence installation (`virtuoso`, then `spectre`)
+/// 3. Discover on the remote host over SSH (via `VB_CADENCE_CSHRC`)
 fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
     // 1. Check VB_SKILL_FINDER_DIR
     if let Ok(dir) = std::env::var("VB_SKILL_FINDER_DIR") {
@@ -325,24 +349,34 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
         }
     }
 
-    // 2. For local, try to discover from spectre path
+    // 2. For local, walk up from the Cadence binaries on PATH. `virtuoso`
+    //    first: a Spectre-only install has a `doc/finder/SKILL` too, but it
+    //    holds 2 databases instead of the DFII tree's 39 — stopping there is
+    //    what left every db/dd/ge/sch/hi lookup unanswerable.
     if !cfg.is_remote() {
-        if let Ok(spectre_path) = std::process::Command::new("which").arg("spectre").output() {
-            let path = String::from_utf8_lossy(&spectre_path.stdout)
-                .trim()
-                .to_string();
-            if !path.is_empty() && path != "spectre" {
-                let ic_dir = std::path::Path::new(&path)
-                    .parent()
-                    .and_then(|p| p.parent())
-                    .and_then(|p| p.parent());
-                if let Some(ic) = ic_dir {
-                    let finder_dir = ic.join("doc/finder/SKILL");
-                    if finder_dir.exists() {
-                        tracing::debug!("Found SKILL Finder at: {}", finder_dir.display());
-                        return Ok(Some(finder_dir));
-                    }
+        for bin in ["virtuoso", "spectre"] {
+            let Ok(out) = std::process::Command::new("command")
+                .args(["-v", bin])
+                .output()
+                .or_else(|_| std::process::Command::new("which").arg(bin).output())
+            else {
+                continue;
+            };
+            let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if path.is_empty() || path == bin {
+                continue;
+            }
+            // Walk up until a doc/finder/SKILL turns up, rather than assuming
+            // a fixed depth — `tools/dfII/bin/virtuoso` and
+            // `tools/spectre/bin/spectre` do not sit at the same level.
+            let mut cur = std::path::Path::new(&path).parent();
+            while let Some(dir) = cur {
+                let finder_dir = dir.join("doc/finder/SKILL");
+                if finder_dir.exists() {
+                    tracing::debug!("Found SKILL Finder at: {}", finder_dir.display());
+                    return Ok(Some(finder_dir));
                 }
+                cur = dir.parent();
             }
         }
     }
@@ -351,7 +385,7 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
     if cfg.is_remote() {
         // Try to find via SSH using the cadence cshrc
         if let Some(ref cshrc) = cfg.cadence_cshrc {
-            if let Ok(Some(path)) = discover_skill_finder_remote(&cfg.ssh_target(), cshrc) {
+            if let Ok(Some(path)) = discover_skill_finder_remote(&cfg.ssh_target(), cfg.ssh_key.as_deref(), cshrc) {
                 tracing::debug!("Discovered SKILL Finder on remote: {}", path.display());
                 return Ok(Some(path));
             }
@@ -362,62 +396,26 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
 }
 
 /// Discover SKILL Finder directory on a remote server via SSH.
+///
+/// Probes `virtuoso` **and** `spectre` and returns the most relevant hit (the
+/// DFII tree wins). Probing only `spectre` lands on a Spectre-only install
+/// that ships 2 `.fnd` files instead of the 39 in the Virtuoso tree.
 fn discover_skill_finder_remote(
     target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: &str,
 ) -> std::result::Result<Option<std::path::PathBuf>, String> {
-    use std::process::Command;
+    let script = crate::skill_finder::remote_finder_probe_script(Some(cadence_cshrc));
 
-    let sh_cshrc = cadence_cshrc.replace('\'', "'\"'\"'\"'\"'\"");
-
-    let find_script = format!(
-        r#"eval "$(csh -c 'source {}; env' 2>/dev/null | grep -E '^(PATH|LM_LICENSE_FILE|CDS)=' | sed 's/^/export /')" 2>/dev/null
-which spectre 2>/dev/null || echo NOTFOUND"#,
-        sh_cshrc
-    );
-
-    let output = Command::new("ssh")
-        .args(["-o", "BatchMode=yes"])
-        .args(["-o", "ConnectTimeout=10"])
+    let output = crate::transport::ssh::doc_transfer_command("ssh", ssh_key)
         .arg(target)
-        .arg(&find_script)
+        .arg(&script)
         .output()
         .map_err(|e| format!("SSH failed: {}", e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let dirs = crate::skill_finder::parse_finder_dirs(&String::from_utf8_lossy(&output.stdout));
 
-    if stdout.contains("NOTFOUND") || stdout.is_empty() {
-        return Ok(None);
-    }
-
-    let spectre_path = stdout.trim();
-
-    // Walk up from spectre to find doc/finder/SKILL
-    let walk_script = format!(
-        r#"p="{}"
-while [ -n "$p" ] && [ "$p" != "/" ]; do
-  if [ -d "$p/doc/finder/SKILL" ]; then echo "$p/doc/finder/SKILL"; exit 0; fi
-  p=$(dirname "$p")
-done
-exit 1"#,
-        spectre_path.replace('\'', "'\"'\"'\"'\"'")
-    );
-
-    let output2 = Command::new("ssh")
-        .args(["-o", "BatchMode=yes"])
-        .args(["-o", "ConnectTimeout=10"])
-        .arg(target)
-        .arg(&walk_script)
-        .output()
-        .map_err(|e| format!("SSH failed: {}", e))?;
-
-    let stdout2 = String::from_utf8_lossy(&output2.stdout).trim().to_string();
-
-    if stdout2.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(std::path::PathBuf::from(stdout2)))
-    }
+    Ok(dirs.into_iter().next().map(std::path::PathBuf::from))
 }
 
 /// Sync SKILL Finder cache from remote server.
@@ -435,6 +433,8 @@ pub fn sync_cache(
         .ok_or_else(|| VirtuosoError::Config("Remote host required for sync".into()))?;
 
     let target = cfg.ssh_target();
+    let ssh_key = cfg.ssh_key.clone();
+    let ssh_key_ref = ssh_key.as_deref();
     let target_cshrc = cshrc.map(String::from).or(cfg.cadence_cshrc.clone());
     let target_cshrc_ref = target_cshrc.as_deref();
 
@@ -448,13 +448,20 @@ pub fn sync_cache(
         crate::skill_finder::sync_from_remote(
             &target_host,
             &target,
+            ssh_key_ref,
             target_cshrc_ref,
             Some(print_progress),
         )
         .map_err(|e| VirtuosoError::Config(e.to_string()))?
     } else {
         fn noop(_: &str) {}
-        crate::skill_finder::sync_from_remote(&target_host, &target, target_cshrc_ref, Some(noop))
+        crate::skill_finder::sync_from_remote(
+            &target_host,
+            &target,
+            ssh_key_ref,
+            target_cshrc_ref,
+            Some(noop),
+        )
             .map_err(|e| VirtuosoError::Config(e.to_string()))?
     };
 

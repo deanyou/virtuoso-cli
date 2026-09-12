@@ -1,9 +1,12 @@
 pub mod cell;
 pub mod config;
+/// Two-phase confirmation in front of every destructive operation.
+pub mod delete;
 pub mod design;
 pub mod diag;
 pub mod init;
 pub mod library;
+pub mod libref;
 pub mod maestro;
 pub mod process;
 pub mod schema;

@@ -2857,8 +2857,16 @@ fn resolve_envs(
         None => detect_envs(runner, user)?,
     };
     if envs.is_empty() {
+        // The X11 path has its own transport: with VB_REMOTE_HOST unset it falls
+        // back to LocalTransport and greps the *local* process table. A session
+        // reached over an SSH tunnel (VB_PORT alone) therefore detects nothing —
+        // and the old message blamed Virtuoso for a configuration gap.
         return Err(VirtuosoError::Config(
-            "cannot detect DISPLAY from virtuoso process".into(),
+            "cannot detect DISPLAY from virtuoso process: no `virtuoso` process \
+             visible to the X11 transport. If Virtuoso runs on a remote host, set \
+             VB_REMOTE_HOST/VB_REMOTE_USER — VB_PORT routes only the SKILL bridge, \
+             not this X11 path. Otherwise pass --display explicitly."
+                .into(),
         ));
     }
     Ok(envs)
