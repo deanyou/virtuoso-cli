@@ -797,18 +797,26 @@ The `ctrl+u` + 0.5s wait is the key difference. Without it, Escape alone does no
 - **Process recovery**: Not verified in this test cycle (Virtuoso PID was stable throughout). If Virtuoso restarts, daemon behavior should be tested separately — do not assume auto-reconnect.
 - **Rapid key safety**: 10 Escape keys at 0.05s interval (20 Hz) does not cause X11 event queue overflow. The previously documented overflow requires `type+Return` cycles at <1s, not raw key presses.
 
-### CRITICAL: Do not double-click on layout/schematic editor windows (verified 2026-09-12)
+### Layout/schematic X11 interaction: cautious by default, explorable on user approval (verified 2026-09-12)
 
 Double-clicking inside a Layout Suite or Schematic Editor window triggers an interactive command that enters a **modal wait state**. This blocks:
 - All subsequent X11 operations on any window (xdotool, vcli action-x11 all timeout)
 - `vcli skill exec` (TCP bridge depends on CIW responsiveness)
 - Cannot be recovered by killing child processes — must manually press Escape in the VNC console
 
-**Rules**:
-- **Only perform click/double-click on form/dialog windows** (hiDisplayForm popups, file browsers, color pickers).
-- **Never double-click** inside Layout Suite or Schematic Editor windows.
-- Single clicks on layout are lower risk, but prefer `vcli skill exec` for programmatic operations.
+**Default rules**:
+- **Prefer SKILL over X11 clicks** for all layout/schematic operations.
+- **Clicks/double-clicks on form/dialog windows** (hiDisplayForm popups, file browsers, color pickers) are always safe.
+- Single clicks on layout are lower risk than double-clicks but may still trigger select/edit commands.
 - If CIW hangs, the user must go to VNC console and press Escape to cancel the pending command.
+
+**When the user explicitly authorizes layout/schematic X11 exploration**:
+- It is OK to attempt click, double-click, drag, and scroll on layout/schematic windows to discover automation capabilities.
+- Start with low-risk operations (scroll, keyboard shortcuts, single click on empty area).
+- After each operation, verify CIW responsiveness via a quick `vcli skill exec` before proceeding.
+- If a modal dialog appears, press Escape immediately and note the trigger pattern for future avoidance.
+- Record what worked and what hung in this skill doc for future reference.
+- Always have VNC access available as recovery path.
 
 ### Concurrent execution note
 
@@ -852,11 +860,12 @@ hiSetDrawMode("Select")  ; set draw mode
 | `z` | Zoom-in mode | Must press `Escape` immediately after to cancel; do not click |
 | scroll wheel | Pan/zoom | Safe |
 
-**Forbidden on layout/schematic windows**:
-- **Double-click** — triggers modal command, blocks CIW (see CRITICAL note above)
-- **Click-rel** — may trigger select/edit commands; prefer SKILL `hiSelectObject()`
-- Any drag operation without a known command context
-
+**Default-cautious on layout/schematic windows** (safe to explore with user approval):
+- **Double-click** - may trigger modal command; test one at a time and verify CIW between steps
+- **Click-rel** - may trigger select/edit commands; SKILL `hiSelectObject()` is preferred but X11 click can be explored
+- **Drag** - may trigger move/edit; start with small drags on empty canvas
+- **Scroll/keyboard** - always safe (zoom/pan shortcuts verified)
+- **SKILL remains preferred** for production; X11 exploration is for discovering what is possible
 **Recommended layout debugging workflow**:
 1. Query structure via SKILL (`geGetEditCellView()~>shapes`, etc.)
 2. Screenshot via `import -window <wid>` for visual evidence
