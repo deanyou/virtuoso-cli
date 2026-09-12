@@ -842,14 +842,49 @@ foreach(i cv~>insts collect i~>instName)     ; list all instances
 length(setof(s cv~>shapes s~>layerName=="NW"))  ; shapes on NW layer
 ```
 
-**Safe SKILL actions (programmatic selection)**:
+**Programmatic shape creation (verified 2026-09-12, all ~10ms)**:
 
 ```skill
-hiSetCurrentCellView(cv)
-hiSelectObject(obj)      ; select a specific shape/inst by dbid
-hiClearSelected()        ; clear all selection
-hiSetDrawMode("Select")  ; set draw mode
+; Draw rectangle: dbCreateRect(cv layerPurpose bbox)
+dbCreateRect(geGetEditCellView() list("SN" "drawing") list(list(0 0) list(10 10)))
+
+; Draw polygon
+dbCreatePolygon(geGetEditCellView() list("AA" "drawing")
+  list(list(0 20) list(10 20) list(5 30)))
+
+; Draw wire/path: dbCreatePath(cv layerPurpose pointList width)
+dbCreatePath(geGetEditCellView() list("CL" "drawing")
+  list(list(0 40) list(30 40) list(30 50)) 0.5)
+
+; Place instance: dbCreateInst(editCv srcCv name origin orient)
+let(((srcCv dbOpenCellView(ddGetObj("FT0001A_SH") "P2P" "layout" "r")))
+  dbCreateInst(geGetEditCellView() srcCv "I0" list(30 20) "R0"))
+
+; Delete / Create net / Save / Close
+dbDeleteObject(nth(0 geGetEditCellView()~>shapes))
+dbCreateNet(geGetEditCellView() "test_net")
+dbSave(geGetEditCellView())
+dbClose(geGetEditCellView())
 ```
+
+**SKILL syntax gotchas**:
+
+| Pattern | Wrong | Correct |
+|---------|-------|---------|
+| let bindings | `let((v e) ...)` | `let(((v e)) ...)` double parens |
+| layer+purpose | `dbCreateRect(cv "SN" "drawing" ...)` | `list("SN" "drawing")` one arg |
+| bBox format | `list(xl yl xh yh)` | `list(list(xl yl) list(xh yh))` |
+| shape index | `first(cv~>shapes)` | `nth(0 cv~>shapes)` |
+
+**Available layers**: SN, NSR, PSR, AMO, CO, KV, AA, NW, PC, CL, DNW, PW, NC, CPT, BNP. Purposes: drawing + pin. Unavailable: OM, PP, DRAW, poly, metal1.
+
+**Shape introspection**: `s~>objType` (rect/path/polygon; schematic: line/ellipse/label), `s~>layerName`, `s~>purpose`, `s~>bBox`, `i~>instName`, `n~>name`.
+
+**Schematic vs Layout**: schematic stores all objects in `~>shapes` (192 shapes); `~>insts`/`~>pins` may be empty. Must `xdotool windowactivate <wid>` before `geGetEditCellView()` switches.
+
+**Performance**: 10 dbCreateRect in for loop = 16ms. **Errors**: wrong layer/cell/polygon<3pts error; single-point path silent nil.
+
+**Unavailable functions**: hiSelectObject, hiUpdateView, hiZoomSelect, hiSetEditCellView, hiSetCurrentLayer, dbCreatePin, dbCreateLabel, dbMoveObject, dbCopyObject, dbTransformObject, dbFindCell, dbFindCellView.
 
 **Safe X11 keyboard shortcuts on layout window** (verified, no interactive trap):
 
