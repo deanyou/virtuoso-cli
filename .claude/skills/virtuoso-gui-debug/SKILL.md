@@ -865,6 +865,25 @@ hiSetDrawMode("Select")  ; set draw mode
 5. Measure via SKILL bBox / coordinates
 6. Use SKILL for all modifications; use X11 only for screenshot and safe navigation
 
+
+## Future Directions
+
+### Zero-screenshot perception (aspirational)
+
+Current GUI debugging relies heavily on screenshots to verify window state. This is slow (network round-trip + image analysis) and fragile (resolution/theme changes).
+
+**Goal**: Eliminate screenshots by reading UI state through structured queries:
+- Window state via X11 properties (WM_NAME, WM_CLASS, geometry, visibility)
+- Form state via SKILL (`formName->fieldName->value`) — already works for verified forms
+- Widget introspection via `hiGetCurrentForm()` and field traversal
+- Screenshot as fallback only, not default verification
+
+**Why**: Structured JSON query returns in ~10ms; screenshot requires render + capture + download + visual analysis (100x slower).
+
+**Steps**:
+1. Build `vcli window introspect` returning window tree + form fields as JSON
+2. Use form field values as verification predicates in scenario DSL
+3. Reserve screenshots for visual regression only
 ## Testing
 
 ```bash
