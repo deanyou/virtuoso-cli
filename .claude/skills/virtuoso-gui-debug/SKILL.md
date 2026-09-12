@@ -797,6 +797,23 @@ The `ctrl+u` + 0.5s wait is the key difference. Without it, Escape alone does no
 - **Process recovery**: Not verified in this test cycle (Virtuoso PID was stable throughout). If Virtuoso restarts, daemon behavior should be tested separately — do not assume auto-reconnect.
 - **Rapid key safety**: 10 Escape keys at 0.05s interval (20 Hz) does not cause X11 event queue overflow. The previously documented overflow requires `type+Return` cycles at <1s, not raw key presses.
 
+### CRITICAL: Do not double-click on layout/schematic editor windows (verified 2026-09-12)
+
+Double-clicking inside a Layout Suite or Schematic Editor window triggers an interactive command that enters a **modal wait state**. This blocks:
+- All subsequent X11 operations on any window (xdotool, vcli action-x11 all timeout)
+- `vcli skill exec` (TCP bridge depends on CIW responsiveness)
+- Cannot be recovered by killing child processes — must manually press Escape in the VNC console
+
+**Rules**:
+- **Only perform click/double-click on form/dialog windows** (hiDisplayForm popups, file browsers, color pickers).
+- **Never double-click** inside Layout Suite or Schematic Editor windows.
+- Single clicks on layout are lower risk, but prefer `vcli skill exec` for programmatic operations.
+- If CIW hangs, the user must go to VNC console and press Escape to cancel the pending command.
+
+### Concurrent execution note
+
+Virtuoso SKILL interpreter is single-threaded. Concurrent `vcli skill exec` calls arrive in parallel (5 connections within 56ms), but Virtuoso serializes SKILL evaluation. SSH pooling provides transport reuse, not SKILL parallelism.
+
 ## Testing
 
 ```bash
