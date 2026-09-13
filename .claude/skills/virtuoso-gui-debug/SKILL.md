@@ -988,3 +988,65 @@ python3 -m unittest tests.test_cli tests.test_command_runner \
 
 See `references/scenario-schema.md` for the complete JSON DSL specification.
 See `references/xdotool-cheatsheet.md` for xdotool command reference (local mode).
+
+## RSI (Recursive Self-Improvement) Knowledge Base
+
+### What it is
+
+A SQLite database (/tmp/skill_db.sqlite3 on remote) that persists discovered SKILL function signatures, avoiding re-experimentation.
+
+**Core principle**: Query the DB before trying a function. Record every mistake. Never repeat.
+
+### Database schema
+
+`sql
+CREATE TABLE functions (
+    id INTEGER PRIMARY KEY,
+    name TEXT UNIQUE,
+    category TEXT,
+    func_exists BOOLEAN,
+    signature TEXT
+);
+`
+
+### Usage
+
+`ash
+sqlite3 /tmp/skill_db.sqlite3 "SELECT signature FROM functions WHERE name='dbCreateRect'"
+sqlite3 /tmp/skill_db.sqlite3 "SELECT name FROM functions WHERE name LIKE 'dbCreate%'"
+`
+
+### Enumeration scripts
+
+- scripts/skill_db.py — DB management
+- scripts/enumerate_functions.py — Pattern-based discovery (439 functions)
+- scripts/probe_signatures.py — Call with nil args to extract signatures
+
+### Verified signatures
+
+| Function | Args | Notes |
+|----------|------|-------|
+| dbCreateRect | 3 | cv layer(list) bbox(list of lists) |
+| dbCreatePolygon | 3 | cv layer(list) points(list of lists) |
+| dbCreatePath | >=4 | cv layer(list) points(...) |
+| dbCreateInst | >=5 | cv cellview instName(...) |
+| dbCreateLabel | 8 | cv layer purpose text bbox just4just7 |
+
+### RSI efficiency
+
+- First run: ~300s to enumerate 439 functions
+- Second run: ~0.02s to query known functions
+- **Speedup: ~15,000x**
+
+### Pitfalls (never repeat)
+
+1. **SQLite reserved word** — column exists -> use unc_exists
+2. **Python 3.6** — no capture_output; use stdout=PIPE
+3. **vcli errors** — errors in errors array, not output
+4. **Motif/Xt input** — Finder search ignores XTest events
+5. **F1 != Help** — opens Find/Replace; use startFinder()
+6. **layer/purpose** — must be list("layer" "purpose")
+7. **let double parens** — always let(((v e)) body)
+8. **Zero-area rect** — silently returns nil; always check bbox
+9. **Dead session** — check port alive before skill exec
+10. **"Unavailable" functions** — dbCreateLabel/Pin/Contact/Text ALL exist
