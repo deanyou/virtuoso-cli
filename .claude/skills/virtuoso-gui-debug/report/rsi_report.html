@@ -1,53 +1,61 @@
 <!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>RSI Report</title>
 <style>
-body{font-family:system-ui;background:#0f1117;color:#e4e4e7;padding:24px;max-width:900px;margin:auto}
-h1{color:#8b5cf6} .stat{display:inline-block;margin:8px 16px 8px 0;padding:12px 20px;background:#1a1a2e;border-radius:10px}
+body{font-family:system-ui;background:#0f1117;color:#e4e4e7;padding:24px;max-width:960px;margin:auto}
+h1{color:#8b5cf6} h2{font-size:14px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px}
+.stat{display:inline-block;margin:8px 16px 8px 0;padding:12px 20px;background:#1a1a2e;border-radius:10px}
 .stat .n{font-size:28px;font-weight:700;color:#8b5cf6} .stat .l{font-size:12px;color:#9ca3af}
 .card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:16px;margin:16px 0}
-.card h2{font-size:14px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px}
 .bar{display:flex;align-items:center;gap:8px;margin:4px 0}
-.bar .n{width:70px;font-size:12px} .bar .b{flex:1;height:14px;background:#2a2a4a;border-radius:3px}
-.bar .f{height:100%;background:linear-gradient(90deg,#8b5cf6,#6366f1)} .bar .c{width:24px;font-size:11px}
+.bar .n{width:140px;font-size:12px;text-align:right} .bar .b{flex:1;height:14px;background:#2a2a4a;border-radius:3px}
+.bar .f{height:100%;background:linear-gradient(90deg,#8b5cf6,#6366f1)} .bar .c{width:40px;font-size:11px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{padding:6px 10px;border-bottom:1px solid #2a2a4a;text-align:left}
 th{color:#9ca3af;font-weight:400} code{color:#a5b4fc;font-family:monospace}
 .pit{padding:8px;background:#1a0a0a;border-left:3px solid #ef4444;border-radius:4px;margin:6px 0;font-size:12px}
 .pit b{color:#f87171}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;margin:2px}
+.tag-blue{background:#1e3a5f;color:#7dd3fc} .tag-green{background:#1a3a1a;color:#86efac}
 </style></head><body>
 <h1>Virtuoso SKILL RSI Report</h1>
-<p style="color:#9ca3af">Recursive Self-Improvement Knowledge Base — Generated automatically</p>
+<p style="color:#9ca3af">Recursive Self-Improvement Knowledge Base — Official .fnd docs + live verification</p>
 
 <div class="card">
-<h2>Overview</h2>
-<div class="stat"><div class="n">439</div><div class="l">Total Functions</div></div>
-<div class="stat"><div class="n" style="color:#52c41a">21</div><div class="l">Verified</div></div>
-<div class="stat"><div class="n" style="color:#faad14">418</div><div class="l">Discovered</div></div>
+<h2>API Knowledge Base (by Version)</h2>
+<div class="stat"><div class="n">9,619</div><div class="l">IC251</div></div><div class="stat"><div class="n">9,619</div><div class="l">IC231</div></div><div class="stat"><div class="n">8,807</div><div class="l">IC618</div></div>
+<p style="font-size:12px;color:#6b7280;margin-top:8px">
+  IC251 = IC231 baseline (to be refined by RSI).
+  Common: 9,619 | IC231-only: 942 | IC618-only: 130
+</p>
 </div>
 
 <div class="card">
-<h2>Categories</h2>
-<div class="bar"><span class="n">hiUpdate</span><div class="b"><div class="f" style="width:100.0%"></div></div><span class="c">24</span></div><div class="bar"><span class="n">hiSelect</span><div class="b"><div class="f" style="width:100.0%"></div></div><span class="c">24</span></div><div class="bar"><span class="n">dbTransf</span><div class="b"><div class="f" style="width:100.0%"></div></div><span class="c">24</span></div><div class="bar"><span class="n">dbDelete</span><div class="b"><div class="f" style="width:100.0%"></div></div><span class="c">24</span></div><div class="bar"><span class="n">dbCreate</span><div class="b"><div class="f" style="width:100.0%"></div></div><span class="c">24</span></div><div class="bar"><span class="n">hiClearP</span><div class="b"><div class="f" style="width:16.666666666666664%"></div></div><span class="c">4</span></div><div class="bar"><span class="n">dbCloseP</span><div class="b"><div class="f" style="width:16.666666666666664%"></div></div><span class="c">4</span></div><div class="bar"><span class="n">hiClearR</span><div class="b"><div class="f" style="width:12.5%"></div></div><span class="c">3</span></div><div class="bar"><span class="n">hiClearL</span><div class="b"><div class="f" style="width:12.5%"></div></div><span class="c">3</span></div><div class="bar"><span class="n">hiClearC</span><div class="b"><div class="f" style="width:12.5%"></div></div><span class="c">3</span></div><div class="bar"><span class="n">geFindRe</span><div class="b"><div class="f" style="width:12.5%"></div></div><span class="c">3</span></div><div class="bar"><span class="n">ddOpenRe</span><div class="b"><div class="f" style="width:12.5%"></div></div><span class="c">3</span></div><div class="bar"><span class="n">dbSaveRe</span><div class="b"><div class="f" style="width:12.5%"></div></div><span class="c">3</span></div><div class="bar"><span class="n">dbOpenRe</span><div class="b"><div class="f" style="width:12.5%"></div></div><span class="c">3</span></div><div class="bar"><span class="n">dbMoveRe</span><div class="b"><div class="f" style="width:12.5%"></div></div><span class="c">3</span></div>
+<h2>Categories (IC251 target)</h2>
+<div class="bar"><span class="n">DFII_SKILL</span><div class="b"><div class="f" style="width:100.0%"></div></div><span class="c">2987</span></div><div class="bar"><span class="n">Custom_Layout</span><div class="b"><div class="f" style="width:62.2698359558085%"></div></div><span class="c">1860</span></div><div class="bar"><span class="n">Virtuoso_ADE</span><div class="b"><div class="f" style="width:43.62236357549381%"></div></div><span class="c">1303</span></div><div class="bar"><span class="n">Core_SKILL</span><div class="b"><div class="f" style="width:22.397053900234347%"></div></div><span class="c">669</span></div><div class="bar"><span class="n">Custom_Constraints</span><div class="b"><div class="f" style="width:17.10746568463341%"></div></div><span class="c">511</span></div><div class="bar"><span class="n">ViVA_SKILL</span><div class="b"><div class="f" style="width:12.855708068295948%"></div></div><span class="c">384</span></div><div class="bar"><span class="n">Tech_File</span><div class="b"><div class="f" style="width:11.215266153331102%"></div></div><span class="c">335</span></div><div class="bar"><span class="n">Schematics</span><div class="b"><div class="f" style="width:10.54569802477402%"></div></div><span class="c">315</span></div><div class="bar"><span class="n">Netlisting_and_Simulation</span><div class="b"><div class="f" style="width:7.46568463341145%"></div></div><span class="c">223</span></div><div class="bar"><span class="n">OCEAN</span><div class="b"><div class="f" style="width:6.863073317710076%"></div></div><span class="c">205</span></div><div class="bar"><span class="n">ADE_Verifier</span><div class="b"><div class="f" style="width:6.327418814864412%"></div></div><span class="c">189</span></div><div class="bar"><span class="n">Pcells</span><div class="b"><div class="f" style="width:4.620020087043857%"></div></div><span class="c">138</span></div><div class="bar"><span class="n">OCEAN_XL</span><div class="b"><div class="f" style="width:4.318714429193171%"></div></div><span class="c">129</span></div><div class="bar"><span class="n">Translators</span><div class="b"><div class="f" style="width:2.9460997656511547%"></div></div><span class="c">88</span></div><div class="bar"><span class="n">SKILL</span><div class="b"><div class="f" style="width:2.0087043856712423%"></div></div><span class="c">60</span></div>
 </div>
 
 <div class="card">
-<h2>Verified Functions (production-ready)</h2>
+<h2>Verified Functions (live-tested)</h2>
 <table><tr><th>Function</th><th>Signature</th></tr>
 <tr><td><code>dbClose</code></td><td> ("dbclose" 0 t nil ("*error* dbclose: too few arguments (1 expected, 0 given)" nil))</td></tr><tr><td><code>dbCopyCellView</code></td><td> ("dbcopycellview" 0 t nil ("*error* dbcopycellview: too few arguments (at least 4 expected, 0 given)" nil))</td></tr><tr><td><code>dbCopyShape</code></td><td> ("dbcopyshape" 0 t nil ("*error* dbcopyshape: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateGroup</code></td><td> ("dbcreategroup" 0 t nil ("*error* dbcreategroup: too few arguments (at least 3 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateInst</code></td><td> ("dbcreateinst" 0 t nil ("*error* dbcreateinst: too few arguments (at least 5 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateLabel</code></td><td> ("dbcreatelabel" 0 t nil ("*error* dbcreatelabel: too few arguments (8 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateLib</code></td><td> ("dbcreatelib" 0 t nil ("*error* dbcreatelib: too few arguments (at least 1 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateNet</code></td><td> ("dbcreatenet" 0 t nil ("*error* dbcreatenet: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreatePath</code></td><td> ("dbcreatepath" 0 t nil ("*error* dbcreatepath: too few arguments (at least 4 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreatePin</code></td><td> ("dbcreatepin" 0 t nil ("*error* dbcreatepin: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreatePolygon</code></td><td> ("dbcreatepolygon" 0 t nil ("*error* dbcreatepolygon: too few arguments (3 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateRect</code></td><td> ("dbcreaterect" 0 t nil ("*error* dbcreaterect: too few arguments (3 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateVia</code></td><td> ("dbcreatevia" 0 t nil ("*error* dbcreatevia: too few arguments (at least 4 expected, 0 given)" nil))</td></tr><tr><td><code>dbDeleteGroup</code></td><td> ("dbdeletegroup" 0 t nil ("*error* dbdeletegroup: too few arguments (at least 1 expected, 0 given)" nil))</td></tr><tr><td><code>dbMoveShape</code></td><td> ("dbmoveshape" 0 t nil ("*error* dbmoveshape: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbOpenCellView</code></td><td> ("dbopencellview" 0 t nil ("*error* dbopencellview: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbSave</code></td><td> ("dbsave" 0 t nil ("*error* dbsave: too few arguments (at least 1 expected, 0 given)" nil))</td></tr><tr><td><code>dbTransformCellView</code></td><td> ("dbtransformcellview" 0 t nil ("*error* dbtransformcellview: too few arguments (3 expected, 0 given)" nil))</td></tr><tr><td><code>geGetEditCellView</code></td><td>—</td></tr><tr><td><code>hiGetCurrentWindow</code></td><td>—</td></tr><tr><td><code>startFinder</code></td><td>—</td></tr>
-</table></div>
+</table>
+<p style="font-size:12px;color:#6b7280">Total manually verified: 21 / 439 candidates.
+  28,045 official signatures available for instant lookup.</p>
+</div>
 
 <div class="card">
 <h2>Pitfalls — Never Repeat</h2>
-<div class="pit"><b>SQLite reserved word</b><br>Column 'exists' causes syntax error. Use 'func_exists'.</div><div class="pit"><b>Python 3.6 compat</b><br>No capture_output kwarg. Use stdout=PIPE, stderr=PIPE.</div><div class="pit"><b>Motif/Xt input</b><br>Finder search field ignores XTest events. GUI input limited.</div><div class="pit"><b>F1 != Help</b><br>Opens Find/Replace. Help via startFinder() only.</div><div class="pit"><b>dbCreateRect args</b><br>layer+purpose MUST be list('L' 'P'), not two strings.</div><div class="pit"><b>let double parens</b><br>let(((v e)) body) — always double parens.</div><div class="pit"><b>Instance ~>insts lag</b><br>dbCreateInst returns but cv~>insts may show 0.</div><div class="pit"><b>Zero-area rect</b><br>Silently returns nil. Always check bbox != 0.</div><div class="pit"><b>vcli timeout</b><br>Dead session hangs. Check port alive first.</div><div class="pit"><b>Wrong 'unavailable' list</b><br>dbCreateLabel/Pin/Contact/Text ALL exist.</div>
+<div class="pit"><b>SQLite reserved word</b><br>Column 'exists' causes syntax error. Use 'func_exists'.</div><div class="pit"><b>Python 3.6 compat</b><br>No capture_output kwarg. Use stdout=PIPE, stderr=PIPE.</div><div class="pit"><b>Motif/Xt input</b><br>Finder search field ignores XTest events. GUI input limited.</div><div class="pit"><b>F1 != Help</b><br>Opens Find/Replace. Help via startFinder() only.</div><div class="pit"><b>dbCreateRect args</b><br>layer+purpose MUST be list('L' 'P'), not two strings.</div><div class="pit"><b>let double parens</b><br>let(((v e)) body) — always double parens.</div><div class="pit"><b>Instance ~>insts lag</b><br>dbCreateInst returns but cv~>insts may show 0.</div><div class="pit"><b>Zero-area rect</b><br>Silently returns nil. Always check bbox != 0.</div><div class="pit"><b>vcli timeout</b><br>Dead session hangs. Check port alive first.</div><div class="pit"><b>Wrong 'unavailable' list</b><br>dbCreateLabel/Pin/Contact/Text ALL exist.</div><div class="pit"><b>vcli errors[] not output[]</b><br>Enumeration bug: check data['errors'] not data['output'].</div>
 </div>
 
 <div class="card">
 <h2>RSI Efficiency</h2>
 <table>
 <tr><th>Metric</th><th>Value</th></tr>
-<tr><td>First run (enumeration)</td><td>~300s for 439 functions</td></tr>
-<tr><td>Second run (query)</td><td>~0.02s</td></tr>
-<tr><td>Speedup</td><td>~15,000x</td></tr>
+<tr><td>Official docs lookup</td><td><code>SELECT syntax FROM fnd_functions WHERE name='...' AND version='IC251'</code></td></tr>
+<tr><td>Query time</td><td>~0.02s</td></tr>
+<tr><td>First enumeration (trial-and-error)</td><td>~300s for 439 candidates, only 21 real</td></tr>
+<tr><td>Speedup (docs vs enumeration)</td><td>~15,000x</td></tr>
 <tr><td>Verification</td><td><code>python3 scripts/verify_db.py</code></td></tr>
 </table></div>
 
