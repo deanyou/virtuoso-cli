@@ -133,14 +133,38 @@ def _handle_snippet(c, argv):
     cmd = argv[0]
 
     if cmd == "list":
-        rows = c.execute("SELECT name, category, description, success_count FROM snippets ORDER BY category, name").fetchall()
+        rows = c.execute("SELECT name, category, description, success_count, fail_count FROM snippets ORDER BY category, name").fetchall()
         print(f"=== Snippets ({len(rows)}) ===\n")
         cur_cat = None
         for r in rows:
             if r[1] != cur_cat:
                 print(f"[{r[1]}]")
                 cur_cat = r[1]
-            print(f"  {r[0]:20s} {r[2]}  ({r[3]}x)")
+            total = r[3] + r[4]
+            rate = f" {r[3]}/{total}" if total > 0 else ""
+            print(f"  {r[0]:20s} {r[2]}{rate}")
+        return
+
+    if cmd == "search" and len(argv) > 1:
+        # Search snippets by keyword
+        q = " ".join(argv[1:]).lower()
+        rows = c.execute("SELECT name, category, description, success_count, fail_count FROM snippets").fetchall()
+        matches = []
+        for r in rows:
+            name, cat, desc = r[0].lower(), r[1].lower(), r[2].lower()
+            score = 0
+            for word in q.split():
+                if word in name: score += 10
+                if word in desc: score += 5
+                if word in cat: score += 2
+            if score > 0:
+                matches.append((score, r))
+        matches.sort(key=lambda x: -x[0])
+        print(f"=== Snippet search: '{q}' ({len(matches)} found) ===\n")
+        for score, r in matches:
+            total = r[3] + r[4]
+            rate = f" [used {r[3]}/{total}]" if total > 0 else ""
+            print(f"  {r[0]:20s} {r[2]}{rate}")
         return
 
     if cmd == "info" and len(argv) > 1:
