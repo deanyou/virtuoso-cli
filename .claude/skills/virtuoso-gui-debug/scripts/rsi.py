@@ -214,7 +214,15 @@ def _handle_snippet(c, argv):
             fill[p['name']] = overrides.get(p['name'], p.get('default', ''))
         for k, v in fill.items():
             code = code.replace("{{" + k + "}}", v)
-        print(f"SKILL: {code}")
+
+        # If promoted, show the SKILL function call instead
+        if d.get('promoted_to'):
+            proc = d['promoted_to']
+            arg_str = " ".join(str(fill[p['name']]) for p in params)
+            print(f"FUNCTION: {proc}({arg_str})")
+            print(f"  (promoted from snippet, load vcli_snippets.il first)")
+        else:
+            print(f"SKILL: {code}")
 
         now = datetime.now().isoformat()
         if do_execute:
