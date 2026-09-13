@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 RSI — Virtuoso SKILL Recursive Self-Improvement CLI.
 
@@ -127,7 +127,7 @@ def record_param(c, func, param, value):
 
 def _handle_snippet(c, argv):
     if not argv:
-        print("Usage: rsi snippet list|info NAME|run NAME [--k=v ...]|save NAME DESC CODE")
+        print("Commands: list | search KEYWORD | info NAME | run NAME | pipeline NAMES | save NAME DESC CODE")
         return
 
     cmd = argv[0]
@@ -349,7 +349,13 @@ def _handle_snippet(c, argv):
         print(f"Saved snippet: {name} (params: {', '.join(found) or 'none'})")
         return
 
-    print("Usage: rsi snippet list|info NAME|run NAME [--k=v ...]|save NAME DESC CODE")
+    if cmd == "pipeline" and not argv[1:]:
+        print("Usage: rsi snippet pipeline NAME1 NAME2 ... [--k=v ...]")
+        return
+    if cmd == "run" and len(argv) < 2:
+        print("Usage: rsi snippet run NAME [--k=v ...] [--execute] [--ssh]")
+        return
+    print("Commands: list | search KEYWORD | info NAME | run NAME | pipeline NAMES | save NAME DESC CODE")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -425,6 +431,8 @@ def main():
         # Search functions
         results = search(c, parsed.query, parsed.version, parsed.limit)
         print(f"=== Functions: '{parsed.query}' ===\n")
+        if not results:
+            print("  (no functions found)")
         for r in results:
             print(f"  {r['name']}")
             print(f"    {r['description'][:70]}")
@@ -458,3 +466,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
