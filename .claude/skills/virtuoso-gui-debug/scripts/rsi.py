@@ -71,8 +71,19 @@ def search(c, query, version="IC251", limit=8):
                     (version, pattern)).fetchall()
                 for r in rows:
                     d = dict(r)
-                    pos = d['name'].lower().find(word)
+                    nl = d['name'].lower()
+                    pos = nl.find(word)
                     score = max(1, 20 - pos)
+                    # Exact match: name without prefix == word (e.g. dbSave == save)
+                    bare = nl
+                    for p in PREFIXES:
+                        if bare.startswith(p):
+                            bare = bare[len(p):]
+                            break
+                    if bare == word:
+                        score += 100
+                    # Shorter names preferred
+                    score -= len(nl) * 0.1
                     n = d['name']
                     results[n] = {**d, 'score': results[n]['score'] + score} if n in results else {**d, 'score': score}
             except: pass

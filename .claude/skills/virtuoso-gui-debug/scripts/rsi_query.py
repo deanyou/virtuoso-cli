@@ -88,6 +88,16 @@ def search(conn, query, version="IC251", limit=10):
                     pos = name_lower.find(word)
                     # Higher score = word appears earlier
                     score = max(1, 20 - pos)
+                    # Exact match: function name without prefix == word (e.g. dbSave == save)
+                    bare = name_lower
+                    for p in ['db', 'le', 'ge', 'hi', 'rod', 'dd']:
+                        if bare.startswith(p):
+                            bare = bare[len(p):]
+                            break
+                    if bare == word:
+                        score += 100  # exact match bonus
+                    # Shorter names get slight bonus (dbSave > dbSaveCellViewAs)
+                    score -= len(name_lower) * 0.1
                     if d['name'] in results:
                         results[d['name']]['score'] += score
                     else:
