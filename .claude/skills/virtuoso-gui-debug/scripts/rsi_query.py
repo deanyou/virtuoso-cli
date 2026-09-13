@@ -30,6 +30,7 @@ def search(conn, query, version="IC251", limit=10):
     # Extract likely function prefix from query
     synonyms = {
         'draw': 'create', 'make': 'create', 'build': 'create', 'paint': 'create',
+        'place': 'create', 'insert': 'create', 'add': 'create',
         'delete': 'delete', 'remove': 'delete', 'destroy': 'delete', 'erase': 'delete',
         'get': 'get', 'query': 'get', 'find': 'get', 'list': 'get', 'read': 'get',
         'set': 'set', 'change': 'set', 'modify': 'set', 'update': 'set',
@@ -44,49 +45,66 @@ def search(conn, query, version="IC251", limit=10):
         'open': 'open', 'close': 'close',
         'cellview': 'cellview', 'cv': 'cellview',
         'group': 'group', 'marker': 'marker',
+        'zoom': 'zoom', 'fit': 'zoom', 'view': 'zoom',
+        'window': 'window', 'display': 'display',
+        'form': 'form', 'dialog': 'form',
+        'file': 'file', 'design': 'design',
     }
     expanded = set()
     for t in terms:
-        tl = t.lower().rstrip('s')
+        tl = t.lower()
         expanded.add(tl)
-        if tl in synonyms:
-            expanded.add(synonyms[tl])
-        # Also try prefix variants
-        if tl.startswith('cre'):
-            expanded.add('creat')
+        # Also try stem (remove trailing s)
+        stem = tl.rstrip('s')
+        if stem != tl:
+            expanded.add(stem)
+        # Synonym lookup on both full word and stem
+        for w in (tl, stem):
+            if w in synonyms:
+                expanded.add(synonyms[w])
+            # Try without common suffixes
+            for suffix in ['tion', 'ment', 'ing', 'ed', 'er']:
+                if w.endswith(suffix):
+                    base = w[:-len(suffix)]
+                    if base in synonyms:
+                        expanded.add(synonyms[base])
 
     # Search by name pattern: dbCreate*, leCreate*, hiSelect*, etc.
-    # Score: higher = more keywords matched in name
+    # Score in Python based on word position in name
     for word in expanded:
         for prefix in ['db', 'le', 'ge', 'hi', 'rod', 'dd']:
             pattern = f"{prefix}%{word}%"
             try:
                 rows = conn.execute("""
-                    SELECT name, syntax, description, category, version,
-                           CASE WHEN LOWER(name) LIKE LOWER(?) THEN 3 ELSE 1 END as score
+                    SELECT name, syntax, description, category, version
                     FROM fnd_functions
                     WHERE version=? AND LOWER(name) LIKE LOWER(?)
-                    LIMIT 50
-                """, (f'%{word}%', version, pattern)).fetchall()
+                    LIMIT 200
+                """, (version, pattern)).fetchall()
                 for r in rows:
                     d = dict(r)
+                    name_lower = d['name'].lower()
+                    # Score: word position in name determines rank
+                    pos = name_lower.find(word)
+                    # Higher score = word appears earlier
+                    score = max(1, 20 - pos)
                     if d['name'] in results:
-                        results[d['name']]['score'] += d['score']
+                        results[d['name']]['score'] += score
                     else:
+                        d['score'] = score
                         results[d['name']] = d
             except Exception:
                 pass
 
-    # Strategy 2: FTS5 BM25 on description
+    # Strategy 2: FTS5 BM25 on description (lower score than name match)
     fts_terms = " OR ".join(expanded)
     try:
         rows = conn.execute("""
-            SELECT name, syntax, description, category, version, bm25(fnd_functions_fts) as score
+            SELECT name, syntax, description, category, version, 1 as score
             FROM fnd_functions_fts
             WHERE fnd_functions_fts MATCH ? AND version = ?
-            ORDER BY score
             LIMIT ?
-        """, (fts_terms, version, limit * 2)).fetchall()
+        """, (fts_terms, version, limit * 3)).fetchall()
         for r in rows:
             d = dict(r)
             if d['name'] not in results:
