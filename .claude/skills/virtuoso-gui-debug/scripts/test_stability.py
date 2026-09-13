@@ -73,10 +73,10 @@ def test_round(n):
     print(f"  Round {n}: {passed}/{len(results)} passed")
     return passed, len(results)
 
-# Run 3 rounds
+# Run 5 rounds
 total_passed = 0
 total_tests = 0
-for i in range(1, 4):
+for i in range(1, 6):
     p, t = test_round(i)
     total_passed += p
     total_tests += t
