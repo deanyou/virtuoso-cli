@@ -396,16 +396,56 @@ def _handle_snippet(c, argv):
             rid = row[0]
             c.execute("UPDATE recordings SET active=0 WHERE id=?", (rid,))
             c.commit()
-            # Show what was recorded
             evts = c.execute("""SELECT snippet_name, success, duration_ms, executed_at
                 FROM snippet_executions WHERE executed_at >= ? ORDER BY id""",
                 (row[2],)).fetchall()
             print(f"\nRecording '{row[1]}' (id={rid}): {len(evts)} operations")
+            ok_count = sum(1 for e in evts if e[1])
             for e in evts:
                 print(f"  {'OK' if e[1] else 'FAIL'} {e[0]:20s} {e[2]}ms  {e[3][:19]}")
-            print(f"\n  To save as snippet: rsi snippet save <name> <desc> <code>")
+            print(f"\n  Success: {ok_count}/{len(evts)}")
+            # Auto-generate pipeline preview
+            ok_names = [e[0] for e in evts if e[1]]
+            if ok_names:
+                print(f"  Pipeline: rsi snippet pipeline {' '.join(ok_names)}")
+            print(f"  View:   rsi snippet record show {rid}")
+            print(f"  Replay: rsi snippet record play {rid}")
+        elif sub == "list":
+            rows = c.execute("SELECT id, name, started_at, active FROM recordings ORDER BY id DESC LIMIT 10").fetchall()
+            print(f"=== Recordings ({len(rows)}) ===")
+            for r in rows:
+                status = "REC" if r[3] else "done"
+                print(f"  #{r[0]:<3d} {r[1]:20s} {r[2][:19]}  [{status}]")
+        elif sub == "show" and len(argv) > 2:
+            rid = int(argv[2])
+            row = c.execute("SELECT * FROM recordings WHERE id=?", (rid,)).fetchone()
+            if not row:
+                print(f"Recording #{rid} not found")
+                return
+            evts = c.execute("""SELECT snippet_name, success, duration_ms, params_used
+                FROM snippet_executions WHERE executed_at >= ? ORDER BY id""",
+                (row[2],)).fetchall()
+            print(f"=== Recording #{rid}: {row[1]} ===")
+            print(f"Started: {row[2]}")
+            print(f"Operations: {len(evts)}\n")
+            for i, e in enumerate(evts, 1):
+                mark = "OK" if e[1] else "FAIL"
+                print(f"  {i}. {e[0]:20s} [{mark}] {e[2]}ms")
+                if e[3]:
+                    print(f"     params: {e[3][:80]}")
+        elif sub == "play" and len(argv) > 2:
+            rid = int(argv[2])
+            row = c.execute("SELECT * FROM recordings WHERE id=?", (rid,)).fetchone()
+            if not row:
+                print(f"Recording #{rid} not found")
+                return
+            evts = c.execute("SELECT snippet_name FROM snippet_executions WHERE executed_at >= ? ORDER BY id",
+                (row[2],)).fetchall()
+            names = [e[0] for e in evts]
+            print(f"=== Replay #{rid}: {' → '.join(names)} ===")
+            print("  (replay not yet implemented — run snippets individually)")
         else:
-            print("Usage: rsi snippet record start [NAME] | stop")
+            print("Usage: rsi snippet record start [NAME] | stop | list | show ID | play ID")
         return
 
     print("Commands: list | search KEYWORD | info NAME | run NAME | pipeline NAMES | save NAME DESC CODE | record start|stop")
