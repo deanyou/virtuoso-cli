@@ -417,7 +417,11 @@ def _handle_snippet(c, argv):
                 status = "REC" if r[3] else "done"
                 print(f"  #{r[0]:<3d} {r[1]:20s} {r[2][:19]}  [{status}]")
         elif sub == "show" and len(argv) > 2:
-            rid = int(argv[2])
+            try:
+                rid = int(argv[2])
+            except ValueError:
+                print("Error: recording ID must be a number")
+                return
             row = c.execute("SELECT * FROM recordings WHERE id=?", (rid,)).fetchone()
             if not row:
                 print(f"Recording #{rid} not found")
@@ -434,7 +438,11 @@ def _handle_snippet(c, argv):
                 if e[3]:
                     print(f"     params: {e[3][:80]}")
         elif sub == "play" and len(argv) > 2:
-            rid = int(argv[2])
+            try:
+                rid = int(argv[2])
+            except ValueError:
+                print("Error: recording ID must be a number")
+                return
             row = c.execute("SELECT * FROM recordings WHERE id=?", (rid,)).fetchone()
             if not row:
                 print(f"Recording #{rid} not found")
