@@ -273,6 +273,16 @@ def _handle_snippet(c, argv):
             if ok:
                 c.execute("UPDATE snippets SET success_count=success_count+1, last_used=? WHERE name=?",
                           (now, name))
+                # Auto-learn: record used params to param_examples
+                for k, v in fill.items():
+                    if v:  # only record non-empty values
+                        c.execute("""INSERT OR IGNORE INTO param_examples
+                            (function_name, param_name, example_value, success_count, last_used)
+                            VALUES (?, ?, ?, 1, ?)""",
+                            (name, k, v, now))
+                        c.execute("""UPDATE param_examples SET success_count=success_count+1, last_used=?
+                            WHERE function_name=? AND param_name=? AND example_value=?""",
+                            (now, name, k, v))
             else:
                 c.execute("UPDATE snippets SET fail_count=fail_count+1, last_used=? WHERE name=?",
                           (now, name))
@@ -280,6 +290,50 @@ def _handle_snippet(c, argv):
         else:
             c.execute("UPDATE snippets SET last_used=? WHERE name=?", (now, name))
             c.commit()
+        return
+
+    if cmd == "pipeline" and len(argv) > 1:
+        # Execute multiple snippets in sequence
+        names = argv[1:]
+        overrides = {}
+        do_execute = False
+        use_ssh = False
+        session = None
+        # Separate flags from snippet names
+        clean_names = []
+        for a in names:
+            if a == "--execute":
+                do_execute = True
+            elif a == "--ssh":
+                use_ssh = True
+            elif a.startswith("--session="):
+                session = a.split("=", 1)[1]
+            elif a.startswith("--"):
+                k, _, v = a[2:].partition("=")
+                overrides[k] = v
+            else:
+                clean_names.append(a)
+
+        print(f"=== Pipeline: {' -> '.join(clean_names)} ===\n")
+        all_ok = True
+        for snip_name in clean_names:
+            row = c.execute("SELECT * FROM snippets WHERE name=?", (snip_name,)).fetchone()
+            if not row:
+                print(f"  [SKIP] {snip_name} not found")
+                all_ok = False
+                continue
+            d = dict(row)
+            code = d['code']
+            params = json.loads(d['params'] or '[]')
+            fill = {}
+            for p in params:
+                fill[p['name']] = overrides.get(p['name'], p.get('default', ''))
+            for k, v in fill.items():
+                code = code.replace("{{" + k + "}}", v)
+            print(f"  {snip_name}: {code}")
+        print()
+        if do_execute:
+            print("  (execution of pipeline not yet implemented — run snippets individually)")
         return
 
     if cmd == "save" and len(argv) >= 4:
@@ -368,11 +422,35 @@ def main():
         return
 
     if parsed.query:
+        # Search functions
         results = search(c, parsed.query, parsed.version, parsed.limit)
-        print(f"=== Search: '{parsed.query}' ({parsed.version}) ===\n")
+        print(f"=== Functions: '{parsed.query}' ===\n")
         for r in results:
             print(f"  {r['name']}")
             print(f"    {r['description'][:70]}")
+            print()
+
+        # Search snippets
+        q = parsed.query.lower()
+        snippet_matches = []
+        for r in c.execute("SELECT name, category, description, success_count, fail_count FROM snippets").fetchall():
+            name, cat, desc = r[0].lower(), r[1].lower(), r[2].lower()
+            score = 0
+            for word in q.split():
+                if word in name: score += 10
+                if word in desc: score += 5
+                if word in cat: score += 2
+            if score > 0:
+                snippet_matches.append((score, r))
+        snippet_matches.sort(key=lambda x: -x[0])
+
+        if snippet_matches:
+            print(f"=== Snippets: {len(snippet_matches)} found ===\n")
+            for score, r in snippet_matches[:5]:
+                total = r[3] + r[4]
+                usage = f" [used {r[3]}/{total}]" if total > 0 else ""
+                print(f"  {r[0]:20s} {r[2]}{usage}")
+                print(f"    → rsi snippet run {r[0]}")
             print()
         return
 
