@@ -280,7 +280,7 @@ Session files: `~/.cache/virtuoso_bridge/sessions/<id>.json`
 
 ```
 vcli [--profile P] [--session S] [--format json|table]
-├── init                              Generate .env config template
+├── init                              Generate config template (optional)
 ├── session                           Manage bridge sessions
 │   ├── list                              List all active sessions
 │   ├── show [id]                         Show session details (with daemon_version + version_skew check)
@@ -745,8 +745,8 @@ vcli --session eda-meow-2 skill exec 'getCurrentTime()' # 多 session 时指定�
 
 **远程模式（部署新 daemon）：**
 ```bash
-vcli init           # 生成 .env 配置模板
-# 编辑 .env：设置 VB_REMOTE_HOST、VB_SPECTRE_CMD（绝对路径）
+export VB_REMOTE_HOST=my-server
+export VB_JUMP_HOST=bastion
 vcli tunnel start
 vcli skill exec 'getCurrentTime()'
 vcli tunnel stop
@@ -810,7 +810,7 @@ Session 注册文件保存在 `~/.cache/virtuoso_bridge/sessions/<id>.json`。
 
 ```
 vcli [--profile P] [--session S] [--format json|table]
-├── init                              创建 .env 配置模板
+├── init                              生成配置模板（可选）
 ├── session                           管理 bridge session
 │   ├── list                              列出所有活跃 session
 │   ├── show [id]                         查看 session 详情（含 daemon_version + version_skew 检查）
