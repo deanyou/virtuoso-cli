@@ -123,7 +123,101 @@ def record_param(c, func, param, value):
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+# ── Snippet handlers ─────────────────────────────────────────────────────────
+
+def _handle_snippet(c, argv):
+    if not argv:
+        print("Usage: rsi snippet list|info NAME|run NAME [--k=v ...]|save NAME DESC CODE")
+        return
+
+    cmd = argv[0]
+
+    if cmd == "list":
+        rows = c.execute("SELECT name, category, description, success_count FROM snippets ORDER BY category, name").fetchall()
+        print(f"=== Snippets ({len(rows)}) ===\n")
+        cur_cat = None
+        for r in rows:
+            if r[1] != cur_cat:
+                print(f"[{r[1]}]")
+                cur_cat = r[1]
+            print(f"  {r[0]:20s} {r[2]}  ({r[3]}x)")
+        return
+
+    if cmd == "info" and len(argv) > 1:
+        row = c.execute("SELECT * FROM snippets WHERE name=?", (argv[1],)).fetchone()
+        if not row:
+            print(f"Snippet not found: {argv[1]}")
+            return
+        d = dict(row)
+        print(f"=== {d['name']} ===")
+        print(f"  Category: {d['category']}")
+        print(f"  Desc:     {d['description']}")
+        print(f"  Used:     {d['success_count']}x")
+        params = json.loads(d['params'] or '[]')
+        if params:
+            print(f"\n  Parameters:")
+            for p in params:
+                print(f"    {p['name']} (default: {p.get('default', '?')})")
+        print(f"\n  Code:")
+        print(f"    {d['code']}")
+        return
+
+    if cmd == "run" and len(argv) > 1:
+        name = argv[1]
+        # Parse --key=value args
+        overrides = {}
+        for a in argv[2:]:
+            if a.startswith("--"):
+                k, _, v = a[2:].partition("=")
+                overrides[k] = v
+        row = c.execute("SELECT * FROM snippets WHERE name=?", (name,)).fetchone()
+        if not row:
+            print(f"Snippet not found: {name}")
+            return
+        d = dict(row)
+        code = d['code']
+        params = json.loads(d['params'] or '[]')
+        # Fill defaults then overrides
+        fill = {}
+        for p in params:
+            fill[p['name']] = overrides.get(p['name'], p.get('default', ''))
+        for k, v in fill.items():
+            code = code.replace("{{" + k + "}}", v)
+        print(f"SKILL: {code}")
+        # Increment usage
+        c.execute("UPDATE snippets SET success_count=success_count+1, last_used=? WHERE name=?",
+                  (datetime.now().isoformat(), name))
+        c.commit()
+        return
+
+    if cmd == "save" and len(argv) >= 4:
+        name, desc, code = argv[1], argv[2], argv[3]
+        # Extract param names from {{param}} placeholders
+        import re
+        found = re.findall(r'\{\{(\w+)\}\}', code)
+        params = json.dumps([{"name": p, "default": ""} for p in found])
+        c.execute("""INSERT OR REPLACE INTO snippets (name, description, category, code, params, version, success_count, last_used)
+                      VALUES (?, ?, 'custom', ?, ?, 'IC251', 0, ?)""",
+                  (name, desc, code, params, datetime.now().isoformat()))
+        c.commit()
+        print(f"Saved snippet: {name} (params: {', '.join(found) or 'none'})")
+        return
+
+    print("Usage: rsi snippet list|info NAME|run NAME [--k=v ...]|save NAME DESC CODE")
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
 def main():
+    import sys
+    args = sys.argv[1:]
+
+    # Snippet subcommand: rsi snippet ...
+    if args and args[0] == "snippet":
+        c = conn()
+        _handle_snippet(c, args[1:])
+        return
+
     ap = argparse.ArgumentParser(prog="rsi", description="Virtuoso SKILL RSI")
     ap.add_argument("query", nargs="?", help="Natural language search")
     ap.add_argument("-f", "--function", help="Exact function lookup")
@@ -133,38 +227,37 @@ def main():
     ap.add_argument("--success", action="store_true")
     ap.add_argument("--error", help="Error message to record")
     ap.add_argument("--status", action="store_true")
-    args = ap.parse_args()
+    parsed = ap.parse_args(args)
 
     c = conn()
 
-    if args.status:
-        for t in ['fnd_functions', 'functions', 'error_history', 'param_examples', 'rsi_progress']:
+    if parsed.status:
+        for t in ['fnd_functions', 'functions', 'error_history', 'param_examples', 'rsi_progress', 'snippets']:
             try:
                 n = c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
                 print(f"  {t}: {n}")
             except: pass
         return
 
-    if args.record:
-        func = args.record
-        if args.error:
-            record_failure(c, func, "runtime", args.error)
+    if parsed.record:
+        func = parsed.record
+        if parsed.error:
+            record_failure(c, func, "runtime", parsed.error)
             print(f"Recorded error for {func}")
         else:
             print(f"Recorded success for {func}")
         return
 
-    if args.function:
-        r = lookup(c, args.function, args.version)
+    if parsed.function:
+        r = lookup(c, parsed.function, parsed.version)
         if r:
-            print(f"=== {r['name']} ({args.version}) ===")
+            print(f"=== {r['name']} ({parsed.version}) ===")
             print(f"  Syntax: {r['syntax']}")
             print(f"  Desc:   {r['description']}")
             if r.get('params'):
                 print(f"\n  Known params:")
                 for p in r['params']:
                     print(f"    {p['param_name']}: {p['example_value']} ({p['success_count']}x)")
-                # Build executable SKILL line from best params
                 best = {}
                 for p in r['params']:
                     key = p['param_name']
@@ -179,12 +272,12 @@ def main():
                 for e in r['errors']:
                     print(f"    [{e['error_type']}] {e['error_message'][:80]}")
         else:
-            print(f"Not found: {args.function}")
+            print(f"Not found: {parsed.function}")
         return
 
-    if args.query:
-        results = search(c, args.query, args.version, args.limit)
-        print(f"=== Search: '{args.query}' ({args.version}) ===\n")
+    if parsed.query:
+        results = search(c, parsed.query, parsed.version, parsed.limit)
+        print(f"=== Search: '{parsed.query}' ({parsed.version}) ===\n")
         for r in results:
             print(f"  {r['name']}")
             print(f"    {r['description'][:70]}")
