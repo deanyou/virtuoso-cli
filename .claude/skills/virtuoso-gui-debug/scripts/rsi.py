@@ -164,6 +164,16 @@ def main():
                 print(f"\n  Known params:")
                 for p in r['params']:
                     print(f"    {p['param_name']}: {p['example_value']} ({p['success_count']}x)")
+                # Build executable SKILL line from best params
+                best = {}
+                for p in r['params']:
+                    key = p['param_name']
+                    if key not in best or p['success_count'] > best[key][1]:
+                        best[key] = (p['example_value'], p['success_count'])
+                if 'layer_purpose' in best:
+                    lp = best['layer_purpose'][0]
+                    print(f"\n  Ready to use:")
+                    print(f'    {r["name"]}(geGetEditCellView() {lp} ...)')
             if r.get('errors'):
                 print(f"\n  Known errors:")
                 for e in r['errors']:
