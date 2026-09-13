@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """gui_runner.py - CLI for Virtuoso GUI Runner (offline-only foundation).
 
 Every invocation outcome (including validation, usage, and runtime errors)
@@ -23,8 +23,14 @@ sys.path.insert(0, str(_SCRIPT_DIR))
 from vgui_runner.model import Scenario, ScenarioValidationError  # noqa: E402
 from vgui_runner.engine import FakeExecutor, Runner, StepOutcome  # noqa: E402
 from vgui_runner.command_runner import CommandError, LocalRunner, SshRunner  # noqa: E402
-from vgui_runner.live_executor import LiveExecutor  # noqa: E402
-from vgui_runner.local_executor import LocalExecutor  # noqa: E402
+
+def get_live_executor():
+    from vgui_runner.live_executor import LiveExecutor
+    return LiveExecutor
+
+def get_local_executor():
+    from vgui_runner.local_executor import LocalExecutor
+    return LocalExecutor
 
 
 def emit_json(payload: dict) -> None:
@@ -118,7 +124,7 @@ def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, f
                 runner = SshRunner(vcli_path=vcli_path, ssh_host=ssh_host)
             else:
                 runner = LocalRunner(vcli_path=vcli_path)
-            executor = LiveExecutor(
+            executor = get_live_executor()(
                 command_runner=runner,
                 vcli_path=vcli_path,
                 ssh_host=ssh_host,
@@ -137,7 +143,7 @@ def build_executor(executor_name, session_id, vcli_path, ssh_host, output_dir, f
                 "error": "--executor local requires --output DIR",
             }
         try:
-            executor = LocalExecutor(
+            executor = get_local_executor()(
                 display=":0",  # overridden by scenario.display at precheck
                 output_dir=output_dir,
                 window_id=window_id,
@@ -184,7 +190,7 @@ def cmd_run(scenario_path: Path, output_dir: Path, executor_name: str,
         return 2
 
     # LocalExecutor binds DISPLAY from the scenario at precheck time.
-    if isinstance(executor, LocalExecutor):
+    if executor.__class__.__name__ == "LocalExecutor":
         executor._display = scenario.display
         executor._env["DISPLAY"] = scenario.display
 
@@ -196,7 +202,7 @@ def cmd_run(scenario_path: Path, output_dir: Path, executor_name: str,
         emit_json({"status": "error", "error": f"runtime error: {type(e).__name__}: {e}"})
         return 2
     finally:
-        if isinstance(executor, LiveExecutor):
+        if executor.__class__.__name__ == "LiveExecutor":
             executor.close()
 
     emit_json({
