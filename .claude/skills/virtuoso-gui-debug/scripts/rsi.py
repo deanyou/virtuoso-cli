@@ -164,10 +164,16 @@ def _handle_snippet(c, argv):
 
     if cmd == "run" and len(argv) > 1:
         name = argv[1]
-        # Parse --key=value args
+        # Parse --key=value and --execute flags
         overrides = {}
+        do_execute = False
+        session = "dean-user1-37749"
         for a in argv[2:]:
-            if a.startswith("--"):
+            if a == "--execute":
+                do_execute = True
+            elif a.startswith("--session="):
+                session = a.split("=", 1)[1]
+            elif a.startswith("--"):
                 k, _, v = a[2:].partition("=")
                 overrides[k] = v
         row = c.execute("SELECT * FROM snippets WHERE name=?", (name,)).fetchone()
@@ -184,10 +190,62 @@ def _handle_snippet(c, argv):
         for k, v in fill.items():
             code = code.replace("{{" + k + "}}", v)
         print(f"SKILL: {code}")
-        # Increment usage
-        c.execute("UPDATE snippets SET success_count=success_count+1, last_used=? WHERE name=?",
-                  (datetime.now().isoformat(), name))
-        c.commit()
+
+        now = datetime.now().isoformat()
+        if do_execute:
+            import subprocess, time
+            escaped = code.replace('"', '\\"')
+            ssh_cmd = [
+                "ssh", "-i", str(Path.home() / ".ssh" / "id_rsa"),
+                "user1@192.168.1.111",
+                f'export HOME=/home/user1; export PATH=/usr/bin:/bin:/home/user1/.local/bin:$PATH; '
+                f'vcli --session {session} skill exec "{escaped}" 2>/dev/null'
+            ]
+            t0 = time.time()
+            try:
+                r = subprocess.run(ssh_cmd, capture_output=True, timeout=15)
+                elapsed = int((time.time() - t0) * 1000)
+                out = r.stdout.decode('utf-8', errors='replace')
+                idx = out.find('{')
+                if idx >= 0:
+                    data = json.loads(out[idx:])
+                    status = data.get("status", "")
+                    errs = data.get("errors", [])
+                    ok = (status == "success" and not errs)
+                    result = data.get("output", "")[:80]
+                else:
+                    ok = False
+                    elapsed = int((time.time() - t0) * 1000)
+                    result = out[:80]
+            except Exception as e:
+                elapsed = int((time.time() - t0) * 1000)
+                ok = False
+                result = str(e)[:80]
+
+            print(f"Result: {'OK' if ok else 'FAIL'} ({elapsed}ms) — {result}")
+
+            # Record execution
+            c.execute("""CREATE TABLE IF NOT EXISTS snippet_executions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, snippet_name TEXT,
+                success INTEGER, duration_ms INTEGER, error_message TEXT,
+                params_used TEXT, executed_at TEXT)""")
+            c.execute("""INSERT INTO snippet_executions
+                (snippet_name, success, duration_ms, error_message, params_used, executed_at)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (name, int(ok), elapsed, None if ok else result,
+                 json.dumps(fill), now))
+            # Update counts
+            if ok:
+                c.execute("UPDATE snippets SET success_count=success_count+1, last_used=? WHERE name=?",
+                          (now, name))
+            else:
+                c.execute("UPDATE snippets SET fail_count=fail_count+1, last_used=? WHERE name=?",
+                          (now, name))
+            c.commit()
+        else:
+            # Just output code, count as preview not execution
+            c.execute("UPDATE snippets SET last_used=? WHERE name=?", (now, name))
+            c.commit()
         return
 
     if cmd == "save" and len(argv) >= 4:
