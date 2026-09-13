@@ -62,6 +62,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
   <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
   <button class="tab-btn" onclick="showTab('progress')">Progress</button>
   <button class="tab-btn" onclick="showTab('snippets')">Snippets</button>
+  <button class="tab-btn" onclick="showTab('recordings')">Recordings</button>
   <button class="tab-btn" onclick="showTab('categories')">Categories</button>
   <button class="tab-btn" onclick="showTab('params')">Param Templates</button>
   <button class="tab-btn" onclick="showTab('pitfalls')">Pitfalls</button>
@@ -72,7 +73,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
   <div class="stats">
     <div class="stat"><div class="n">28,045</div><div class="l">FND Functions</div></div>
     <div class="stat"><div class="n green">70</div><div class="l">Manually Verified</div></div>
-    <div class="stat"><div class="n yellow">10</div><div class="l">Param Templates</div></div>
+    <div class="stat"><div class="n yellow">16</div><div class="l">Param Templates</div></div>
     <div class="stat"><div class="n" style="color:#8b5cf6">21</div><div class="l">Snippets</div></div>
     <div class="stat"><div class="n red">0</div><div class="l">Open Errors</div></div>
   </div>
@@ -110,12 +111,13 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
   <div class="card">
     <h2>SKILL Code Snippets — Execution Tracking</h2>
     <table>
-      <tr><th>Snippet</th><th>Category</th><th>Desc</th><th>Used</th><th>Success</th><th>Fail</th><th>Rate</th></tr>
+      <tr><th>Snippet</th><th>Category</th><th>Desc</th><th>Promoted</th><th>Used</th><th>Success</th><th>Fail</th><th>Rate</th></tr>
       
       <tr>
         <td><code>copy_selected</code></td>
         <td>custom</td>
         <td style="font-size:11px;color:#9ca3af">Copy selected objects by offset</td>
+        <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -125,6 +127,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>delete_selected</code></td>
         <td>edit</td>
         <td style="font-size:11px;color:#9ca3af">Delete currently selected objects</td>
+        <td style="color:#8b5cf6">→ vcliDeleteSelected</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -134,6 +137,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>move_selected</code></td>
         <td>edit</td>
         <td style="font-size:11px;color:#9ca3af">Move selected objects by dx dy</td>
+        <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -143,6 +147,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>draw_contact</code></td>
         <td>layout</td>
         <td style="font-size:11px;color:#9ca3af">Draw a contact: square rect on M1 + cut on C0</td>
+        <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -152,6 +157,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>draw_line</code></td>
         <td>layout</td>
         <td style="font-size:11px;color:#9ca3af">Draw a line segment</td>
+        <td style="color:#8b5cf6">→ vcliDrawLine</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -161,6 +167,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>draw_path</code></td>
         <td>layout</td>
         <td style="font-size:11px;color:#9ca3af">Draw a path with given width</td>
+        <td style="color:#8b5cf6">→ vcliDrawPath</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -170,6 +177,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>draw_polygon</code></td>
         <td>layout</td>
         <td style="font-size:11px;color:#9ca3af">Draw a polygon from point list</td>
+        <td style="color:#8b5cf6">→ vcliDrawPolygon</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -179,8 +187,9 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>draw_rect</code></td>
         <td>layout</td>
         <td style="font-size:11px;color:#9ca3af">Draw a rectangle on current cellview</td>
-        <td>1</td>
-        <td style="color:#52c41a">1</td>
+        <td style="color:#8b5cf6">→ vcliDrawRect</td>
+        <td>2</td>
+        <td style="color:#52c41a">2</td>
         <td style="color:#ef4444">0</td>
         <td>100%</td>
       </tr>
@@ -188,6 +197,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>place_inst</code></td>
         <td>layout</td>
         <td style="font-size:11px;color:#9ca3af">Place an instance by master name and point</td>
+        <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -197,6 +207,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>deselect_all</code></td>
         <td>navigation</td>
         <td style="font-size:11px;color:#9ca3af">Deselect all objects</td>
+        <td style="color:#8b5cf6">→ vcliDeselectAll</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -206,6 +217,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>grid_toggle</code></td>
         <td>navigation</td>
         <td style="font-size:11px;color:#9ca3af">Toggle grid display on/off</td>
+        <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -215,6 +227,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>select_all</code></td>
         <td>navigation</td>
         <td style="font-size:11px;color:#9ca3af">Select all objects in current window</td>
+        <td style="color:#8b5cf6">→ vcliSelectAll</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -224,33 +237,37 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>zoom_fit</code></td>
         <td>navigation</td>
         <td style="font-size:11px;color:#9ca3af">Zoom to fit in current window</td>
-        <td>1</td>
-        <td style="color:#52c41a">0</td>
-        <td style="color:#ef4444">1</td>
-        <td>0%</td>
+        <td style="color:#8b5cf6">→ vcliZoomFit</td>
+        <td>5</td>
+        <td style="color:#52c41a">2</td>
+        <td style="color:#ef4444">3</td>
+        <td>40%</td>
       </tr>
       <tr>
         <td><code>count_shapes</code></td>
         <td>query</td>
         <td style="font-size:11px;color:#9ca3af">Count shapes by layer</td>
-        <td>0</td>
-        <td style="color:#52c41a">0</td>
+        <td style="color:#8b5cf6">—</td>
+        <td>2</td>
+        <td style="color:#52c41a">2</td>
         <td style="color:#ef4444">0</td>
-        <td>—</td>
+        <td>100%</td>
       </tr>
       <tr>
         <td><code>get_bbox</code></td>
         <td>query</td>
         <td style="font-size:11px;color:#9ca3af">Get bounding box of current cellview</td>
-        <td>0</td>
-        <td style="color:#52c41a">0</td>
+        <td style="color:#8b5cf6">—</td>
+        <td>2</td>
+        <td style="color:#52c41a">2</td>
         <td style="color:#ef4444">0</td>
-        <td>—</td>
+        <td>100%</td>
       </tr>
       <tr>
         <td><code>layer_list</code></td>
         <td>query</td>
         <td style="font-size:11px;color:#9ca3af">List all layers in current cellview</td>
+        <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -260,6 +277,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>list_shapes</code></td>
         <td>query</td>
         <td style="font-size:11px;color:#9ca3af">List all shapes in current cellview</td>
+        <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -269,6 +287,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>measure_distance</code></td>
         <td>query</td>
         <td style="font-size:11px;color:#9ca3af">Measure distance between two points</td>
+        <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -278,6 +297,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>export_image</code></td>
         <td>utility</td>
         <td style="font-size:11px;color:#9ca3af">Export current window screenshot to PNG</td>
+        <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -287,6 +307,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>save_cv</code></td>
         <td>utility</td>
         <td style="font-size:11px;color:#9ca3af">Save current cellview</td>
+        <td style="color:#8b5cf6">→ vcliSaveCv</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
         <td style="color:#ef4444">0</td>
@@ -296,9 +317,10 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>version</code></td>
         <td>utility</td>
         <td style="font-size:11px;color:#9ca3af">Get Virtuoso version</td>
-        <td>3</td>
+        <td style="color:#8b5cf6">—</td>
+        <td>5</td>
         <td style="color:#52c41a">0</td>
-        <td style="color:#ef4444">3</td>
+        <td style="color:#ef4444">5</td>
         <td>0%</td>
       </tr>
     </table>
@@ -308,7 +330,17 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
     <h2>Recent Executions</h2>
     <table>
       <tr><th>Snippet</th><th>Result</th><th>Duration</th><th>Error</th><th>Time</th></tr>
-      <tr><td><code>version</code></td><td style="color:#ef4444">FAIL</td><td>392ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T18:21:19</td></tr><tr><td><code>version</code></td><td style="color:#ef4444">FAIL</td><td>11ms</td><td style="font-size:11px">[WinError 2] 系统找不到指定的文件。</td><td style="font-size:11px">2026-09-13T18:21:19</td></tr><tr><td><code>version</code></td><td style="color:#ef4444">FAIL</td><td>406ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T18:18:46</td></tr><tr><td><code>zoom_fit</code></td><td style="color:#ef4444">FAIL</td><td>413ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T18:18:36</td></tr>
+      <tr><td><code>zoom_fit</code></td><td style="color:#52c41a">OK</td><td>425ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:05:03</td></tr><tr><td><code>count_shapes</code></td><td style="color:#52c41a">OK</td><td>402ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:05:03</td></tr><tr><td><code>get_bbox</code></td><td style="color:#52c41a">OK</td><td>426ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:05:02</td></tr><tr><td><code>version</code></td><td style="color:#ef4444">FAIL</td><td>9ms</td><td style="font-size:11px">[WinError 2] 系统找不到指定的文件。</td><td style="font-size:11px">2026-09-13T21:53:26</td></tr><tr><td><code>version</code></td><td style="color:#ef4444">FAIL</td><td>390ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T21:53:25</td></tr><tr><td><code>zoom_fit</code></td><td style="color:#52c41a">OK</td><td>423ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:48:25</td></tr><tr><td><code>count_shapes</code></td><td style="color:#52c41a">OK</td><td>399ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:47:13</td></tr><tr><td><code>get_bbox</code></td><td style="color:#52c41a">OK</td><td>403ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:47:12</td></tr><tr><td><code>zoom_fit</code></td><td style="color:#ef4444">FAIL</td><td>444ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:47:12</td></tr><tr><td><code>zoom_fit</code></td><td style="color:#ef4444">FAIL</td><td>413ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T19:24:01</td></tr>
+    </table>
+  </div>
+</div>
+
+<div id="tab-recordings" class="tab-panel">
+  <div class="card">
+    <h2>Recording Sessions</h2>
+    <table>
+      <tr><th>ID</th><th>Name</th><th>Started</th><th>Status</th></tr>
+      <tr><td>2</td><td>test_batch</td><td>2026-09-13T22:05:02</td><td>done</td></tr><tr><td>1</td><td>draw_session</td><td>2026-09-13T19:24:00</td><td>done</td></tr>
     </table>
   </div>
 </div>
@@ -323,7 +355,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
 <div id="tab-params" class="tab-panel">
   <div class="card">
     <h2>Known Working Parameter Templates</h2>
-    <div class="param"><b>dbCreatePath</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (2x)<br>&nbsp;&nbsp;width: 2.0 (2x)<br>&nbsp;&nbsp;points: list(60:0 80:20 100:0) (1x)</div><div class="param"><b>dbCreatePolygon</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (1x)<br>&nbsp;&nbsp;points: list(0:60 10:50 20:60 10:70) (1x)</div><div class="param"><b>dbCreateRect</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (3x)<br>&nbsp;&nbsp;bbox: list(0:0 20:20) (1x)<br>&nbsp;&nbsp;bbox: list(30:30 50:50) (1x)<br>&nbsp;&nbsp;layer_purpose: list("M1" "pin") (1x)</div><div class="param"><b>geGetEditCellView</b><br>&nbsp;&nbsp;windowId: nil (use current) (5x)</div>
+    <div class="param"><b>dbCreatePath</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (2x)<br>&nbsp;&nbsp;width: 2.0 (2x)<br>&nbsp;&nbsp;points: list(60:0 80:20 100:0) (1x)</div><div class="param"><b>dbCreatePolygon</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (1x)<br>&nbsp;&nbsp;points: list(0:60 10:50 20:60 10:70) (1x)</div><div class="param"><b>dbCreateRect</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (3x)<br>&nbsp;&nbsp;bbox: list(0:0 20:20) (1x)<br>&nbsp;&nbsp;bbox: list(30:30 50:50) (1x)<br>&nbsp;&nbsp;layer_purpose: list("M1" "pin") (1x)</div><div class="param"><b>draw_rect</b><br>&nbsp;&nbsp;layer: M1 (2x)<br>&nbsp;&nbsp;purpose: drawing (2x)<br>&nbsp;&nbsp;x1: 0 (2x)<br>&nbsp;&nbsp;x2: 20 (2x)<br>&nbsp;&nbsp;y1: 0 (2x)<br>&nbsp;&nbsp;y2: 20 (2x)</div><div class="param"><b>geGetEditCellView</b><br>&nbsp;&nbsp;windowId: nil (use current) (5x)</div>
   </div>
 </div>
 

@@ -53,7 +53,7 @@ progress = [dict(r) for r in conn.execute(
 # Snippets with execution stats
 snippets = []
 for r in conn.execute("""
-    SELECT name, category, description, success_count, fail_count, last_used
+    SELECT name, category, description, success_count, fail_count, last_used, promoted_to
     FROM snippets ORDER BY category, name
 """):
     d = dict(r)
@@ -61,6 +61,11 @@ for r in conn.execute("""
     d['total'] = total
     d['rate'] = round(d['success_count'] / total * 100) if total > 0 else None
     snippets.append(d)
+
+# Recordings
+recordings = [dict(r) for r in conn.execute("""
+    SELECT id, name, started_at, active FROM recordings ORDER BY id DESC LIMIT 10
+""")]
 
 # Recent snippet executions
 snippet_runs = [dict(r) for r in conn.execute("""
@@ -151,6 +156,7 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
   <button class="tab-btn" onclick="showTab('progress')">Progress</button>
   <button class="tab-btn" onclick="showTab('snippets')">Snippets</button>
+  <button class="tab-btn" onclick="showTab('recordings')">Recordings</button>
   <button class="tab-btn" onclick="showTab('categories')">Categories</button>
   <button class="tab-btn" onclick="showTab('params')">Param Templates</button>
   <button class="tab-btn" onclick="showTab('pitfalls')">Pitfalls</button>
@@ -199,12 +205,13 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   <div class="card">
     <h2>SKILL Code Snippets — Execution Tracking</h2>
     <table>
-      <tr><th>Snippet</th><th>Category</th><th>Desc</th><th>Used</th><th>Success</th><th>Fail</th><th>Rate</th></tr>
+      <tr><th>Snippet</th><th>Category</th><th>Desc</th><th>Promoted</th><th>Used</th><th>Success</th><th>Fail</th><th>Rate</th></tr>
       {"".join(f'''
       <tr>
         <td><code>{s["name"]}</code></td>
         <td>{s["category"]}</td>
         <td style="font-size:11px;color:#9ca3af">{s["description"][:50]}</td>
+        <td style="color:#8b5cf6">{"→ " + s["promoted_to"] if s.get("promoted_to") else "—"}</td>
         <td>{s["total"]}</td>
         <td style="color:#52c41a">{s["success_count"]}</td>
         <td style="color:#ef4444">{s["fail_count"]}</td>
@@ -220,6 +227,16 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
       {"".join(f'<tr><td><code>{r["snippet_name"]}</code></td><td style="color:{"#52c41a" if r["success"] else "#ef4444"}">{"OK" if r["success"] else "FAIL"}</td><td>{r["duration_ms"] or "—"}ms</td><td style="font-size:11px">{(r["error_message"] or "")[:60]}</td><td style="font-size:11px">{r["executed_at"][:19]}</td></tr>' for r in snippet_runs)}
     </table>
   </div>''' if snippet_runs else '')}
+</div>
+
+<div id="tab-recordings" class="tab-panel">
+  <div class="card">
+    <h2>Recording Sessions</h2>
+    <table>
+      <tr><th>ID</th><th>Name</th><th>Started</th><th>Status</th></tr>
+      {"".join(f'<tr><td>{r["id"]}</td><td>{r["name"]}</td><td>{r["started_at"][:19]}</td><td>{"REC" if r["active"] else "done"}</td></tr>' for r in recordings)}
+    </table>
+  </div>
 </div>
 
 <div id="tab-categories" class="tab-panel">
