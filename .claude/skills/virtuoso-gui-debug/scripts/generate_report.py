@@ -50,6 +50,24 @@ progress = [dict(r) for r in conn.execute(
     "SELECT date, phase, milestone, detail, functions_added FROM rsi_progress ORDER BY id"
 )]
 
+# Snippets with execution stats
+snippets = []
+for r in conn.execute("""
+    SELECT name, category, description, success_count, fail_count, last_used
+    FROM snippets ORDER BY category, name
+"""):
+    d = dict(r)
+    total = d['success_count'] + d['fail_count']
+    d['total'] = total
+    d['rate'] = round(d['success_count'] / total * 100) if total > 0 else None
+    snippets.append(d)
+
+# Recent snippet executions
+snippet_runs = [dict(r) for r in conn.execute("""
+    SELECT snippet_name, success, duration_ms, error_message, executed_at
+    FROM snippet_executions ORDER BY executed_at DESC LIMIT 10
+""")]
+
 # Common pitfalls (hardcoded from experience)
 pitfalls = [
     ("SQLite reserved word", "Column 'exists' causes syntax error. Use 'func_exists'."),
@@ -132,6 +150,7 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
 <div class="tab-nav">
   <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
   <button class="tab-btn" onclick="showTab('progress')">Progress</button>
+  <button class="tab-btn" onclick="showTab('snippets')">Snippets</button>
   <button class="tab-btn" onclick="showTab('categories')">Categories</button>
   <button class="tab-btn" onclick="showTab('params')">Param Templates</button>
   <button class="tab-btn" onclick="showTab('pitfalls')">Pitfalls</button>
@@ -143,6 +162,7 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
     <div class="stat"><div class="n">{total_fnd:,}</div><div class="l">FND Functions</div></div>
     <div class="stat"><div class="n green">{manual_verified}</div><div class="l">Manually Verified</div></div>
     <div class="stat"><div class="n yellow">{param_count}</div><div class="l">Param Templates</div></div>
+    <div class="stat"><div class="n" style="color:#8b5cf6">{len(snippets)}</div><div class="l">Snippets</div></div>
     <div class="stat"><div class="n red">{errors_open}</div><div class="l">Open Errors</div></div>
   </div>
   <div class="card">
@@ -173,6 +193,33 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
       {"".join(f'<tr><td style="white-space:nowrap">{p["date"]}</td><td><span style="color:{"#8b5cf6" if p["phase"]=="P0" else "#faad14"}">{p["phase"]}</span></td><td><b>{p["milestone"]}</b></td><td style="font-size:11px;color:#9ca3af">{p["detail"]}</td><td>{p["functions_added"]:,}</td></tr>' for p in progress)}
     </table>
   </div>
+</div>
+
+<div id="tab-snippets" class="tab-panel">
+  <div class="card">
+    <h2>SKILL Code Snippets — Execution Tracking</h2>
+    <table>
+      <tr><th>Snippet</th><th>Category</th><th>Desc</th><th>Used</th><th>Success</th><th>Fail</th><th>Rate</th></tr>
+      {"".join(f'''
+      <tr>
+        <td><code>{s["name"]}</code></td>
+        <td>{s["category"]}</td>
+        <td style="font-size:11px;color:#9ca3af">{s["description"][:50]}</td>
+        <td>{s["total"]}</td>
+        <td style="color:#52c41a">{s["success_count"]}</td>
+        <td style="color:#ef4444">{s["fail_count"]}</td>
+        <td>{f"{s['rate']}%" if s['rate'] is not None else "—"}</td>
+      </tr>''' for s in snippets)}
+    </table>
+  </div>
+  {"".join(f'''
+  <div class="card">
+    <h2>Recent Executions</h2>
+    <table>
+      <tr><th>Snippet</th><th>Result</th><th>Duration</th><th>Error</th><th>Time</th></tr>
+      {"".join(f'<tr><td><code>{r["snippet_name"]}</code></td><td style="color:{"#52c41a" if r["success"] else "#ef4444"}">{"OK" if r["success"] else "FAIL"}</td><td>{r["duration_ms"] or "—"}ms</td><td style="font-size:11px">{(r["error_message"] or "")[:60]}</td><td style="font-size:11px">{r["executed_at"][:19]}</td></tr>' for r in snippet_runs)}
+    </table>
+  </div>''' if snippet_runs else '')}
 </div>
 
 <div id="tab-categories" class="tab-panel">

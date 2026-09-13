@@ -61,6 +61,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
 <div class="tab-nav">
   <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
   <button class="tab-btn" onclick="showTab('progress')">Progress</button>
+  <button class="tab-btn" onclick="showTab('snippets')">Snippets</button>
   <button class="tab-btn" onclick="showTab('categories')">Categories</button>
   <button class="tab-btn" onclick="showTab('params')">Param Templates</button>
   <button class="tab-btn" onclick="showTab('pitfalls')">Pitfalls</button>
@@ -72,6 +73,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
     <div class="stat"><div class="n">28,045</div><div class="l">FND Functions</div></div>
     <div class="stat"><div class="n green">70</div><div class="l">Manually Verified</div></div>
     <div class="stat"><div class="n yellow">10</div><div class="l">Param Templates</div></div>
+    <div class="stat"><div class="n" style="color:#8b5cf6">15</div><div class="l">Snippets</div></div>
     <div class="stat"><div class="n red">0</div><div class="l">Open Errors</div></div>
   </div>
   <div class="card">
@@ -102,6 +104,152 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
       <tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Manual function enumeration</b></td><td style="font-size:11px;color:#9ca3af">488 candidate functions tested via vcli; 70 confirmed exist</td><td>488</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Official .fnd docs imported</b></td><td style="font-size:11px;color:#9ca3af">IC231: 9,619 + IC618: 8,807 functions from Cadence .fnd files</td><td>18,426</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>IC251 baseline from IC231</b></td><td style="font-size:11px;color:#9ca3af">Copied 9,619 functions as IC251 baseline; 50 sampled validation = 100%</td><td>9,619</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>FTS5 full-text search</b></td><td style="font-size:11px;color:#9ca3af">fnd_functions_fts virtual table; semantic search via rsi_query.py</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Case-insensitive name matching</b></td><td style="font-size:11px;color:#9ca3af">Fixed SQLite LIKE case sensitivity (dbCreatePolygon was missed)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Multi-keyword scoring</b></td><td style="font-size:11px;color:#9ca3af">Functions matching multiple keywords rank higher; draw polygon -> dbCreatePolygon #1</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Parameter templates</b></td><td style="font-size:11px;color:#9ca3af">param_examples table records successful layer/purpose/coords (10 examples)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Error auto-learning</b></td><td style="font-size:11px;color:#9ca3af">record_failure() + has_known_failure(); known errors shown in -f lookup</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>E2E workflow verified</b></td><td style="font-size:11px;color:#9ca3af">query -> call -> record loop: draw path -> dbCreatePath -> success</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-13</td><td><span style="color:#faad14">P2</span></td><td><b>Position-based scoring</b></td><td style="font-size:11px;color:#9ca3af">Score by word position in function name; larger fetch (200); better stem handling. Result: place instance -> dbCreateInst #1</td><td>0</td></tr>
     </table>
   </div>
+</div>
+
+<div id="tab-snippets" class="tab-panel">
+  <div class="card">
+    <h2>SKILL Code Snippets — Execution Tracking</h2>
+    <table>
+      <tr><th>Snippet</th><th>Category</th><th>Desc</th><th>Used</th><th>Success</th><th>Fail</th><th>Rate</th></tr>
+      
+      <tr>
+        <td><code>delete_selected</code></td>
+        <td>edit</td>
+        <td style="font-size:11px;color:#9ca3af">Delete currently selected objects</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>move_selected</code></td>
+        <td>edit</td>
+        <td style="font-size:11px;color:#9ca3af">Move selected objects by dx dy</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>draw_contact</code></td>
+        <td>layout</td>
+        <td style="font-size:11px;color:#9ca3af">Draw a contact: square rect on M1 + cut on C0</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>draw_line</code></td>
+        <td>layout</td>
+        <td style="font-size:11px;color:#9ca3af">Draw a line segment</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>draw_path</code></td>
+        <td>layout</td>
+        <td style="font-size:11px;color:#9ca3af">Draw a path with given width</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>draw_polygon</code></td>
+        <td>layout</td>
+        <td style="font-size:11px;color:#9ca3af">Draw a polygon from point list</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>draw_rect</code></td>
+        <td>layout</td>
+        <td style="font-size:11px;color:#9ca3af">Draw a rectangle on current cellview</td>
+        <td>1</td>
+        <td style="color:#52c41a">1</td>
+        <td style="color:#ef4444">0</td>
+        <td>100%</td>
+      </tr>
+      <tr>
+        <td><code>deselect_all</code></td>
+        <td>navigation</td>
+        <td style="font-size:11px;color:#9ca3af">Deselect all objects</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>select_all</code></td>
+        <td>navigation</td>
+        <td style="font-size:11px;color:#9ca3af">Select all objects in current window</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>zoom_fit</code></td>
+        <td>navigation</td>
+        <td style="font-size:11px;color:#9ca3af">Zoom to fit in current window</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>count_shapes</code></td>
+        <td>query</td>
+        <td style="font-size:11px;color:#9ca3af">Count shapes by layer</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>get_bbox</code></td>
+        <td>query</td>
+        <td style="font-size:11px;color:#9ca3af">Get bounding box of current cellview</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>list_shapes</code></td>
+        <td>query</td>
+        <td style="font-size:11px;color:#9ca3af">List all shapes in current cellview</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>save_cv</code></td>
+        <td>utility</td>
+        <td style="font-size:11px;color:#9ca3af">Save current cellview</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>version</code></td>
+        <td>utility</td>
+        <td style="font-size:11px;color:#9ca3af">Get Virtuoso version</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+    </table>
+  </div>
+  
 </div>
 
 <div id="tab-categories" class="tab-panel">
