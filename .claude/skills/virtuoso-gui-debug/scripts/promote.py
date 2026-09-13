@@ -54,11 +54,12 @@ def generate_il(snippets, conn):
         # Fix: "layer" "purpose" should be layer purpose (variables)
         proc_body = proc_body.replace('"layer" "purpose"', 'layer purpose')
 
-        # Build procedure signature
+        # Build procedure signature (SKILL uses space-separated args, no commas)
+        # With endprocedure, don't close the procedure paren on the header line
         if param_names:
-            sig = f"procedure({proc_name}({', '.join(param_names)}))"
+            sig = f"procedure({proc_name}({' '.join(param_names)})"
         else:
-            sig = f"procedure({proc_name}())"
+            sig = f"procedure({proc_name}()"
 
         lines.append(f"; {db_name} → {proc_name}()")
         lines.append(sig)
@@ -74,10 +75,14 @@ def main():
     conn.row_factory = sqlite3.Row
 
     promoted = []
+    # Skip list_shapes — its code has parentheses issues, needs manual fix
+    SKIP = {"list_shapes"}
     for db_name, proc_name in PROMOTE.items():
+        if db_name in SKIP:
+            print(f"  SKIP {db_name}: needs manual fix")
+            continue
         row = conn.execute("SELECT * FROM snippets WHERE name=?", (db_name,)).fetchone()
         if row:
-            # Mark as promoted
             conn.execute("UPDATE snippets SET promoted_to=? WHERE name=?", (proc_name, db_name))
             promoted.append((db_name, proc_name))
             print(f"  {db_name:20s} → {proc_name}")
