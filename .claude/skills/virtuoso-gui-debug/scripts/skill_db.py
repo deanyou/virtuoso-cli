@@ -13,7 +13,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "skill_db.sqlite3"
+DB_PATH = Path(__file__).parent.parent / "data" / "skill_db.sqlite3"
 
 
 def get_db():
@@ -51,6 +51,17 @@ def get_db():
             PRIMARY KEY (obj_type, property_name)
         )
     """)
+    # Ensure error_history exists (may have been created earlier)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS error_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            function_name TEXT,
+            error_type TEXT,
+            error_message TEXT,
+            fixed BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.commit()
     return conn
 
@@ -72,6 +83,25 @@ def record_function(conn, name, exists, signature=None, description=None, notes=
     """, (name, category, int(exists), signature, description,
           datetime.now().isoformat(), notes))
     conn.commit()
+
+
+def record_failure(conn, function_name, error_type, error_message):
+    """Record a function failure for RSI learning. Never repeat the same mistake."""
+    conn.execute("""
+        INSERT INTO error_history (function_name, error_type, error_message, fixed, created_at)
+        VALUES (?, ?, ?, 0, ?)
+    """, (function_name, error_type, error_message[:500], datetime.now().isoformat()))
+    conn.commit()
+
+
+def has_known_failure(conn, function_name):
+    """Check if a function has unresolved known failures. Returns dict or None."""
+    row = conn.execute("""
+        SELECT error_type, error_message, created_at
+        FROM error_history WHERE function_name = ? AND fixed = 0
+        ORDER BY created_at DESC LIMIT 1
+    """, (function_name,)).fetchone()
+    return dict(row) if row else None
 
 
 def get_known_functions(conn, category=None):
@@ -122,11 +152,15 @@ def stats(conn):
     existing = conn.execute("SELECT COUNT(*) FROM functions WHERE func_exists=1").fetchone()[0]
     layers_count = conn.execute("SELECT COUNT(*) FROM layers WHERE drawable=1").fetchone()[0]
     props_count = conn.execute("SELECT COUNT(*) FROM shapes WHERE works=1").fetchone()[0]
+    fnd_total = conn.execute("SELECT COUNT(*) FROM fnd_functions").fetchone()[0]
+    errors_open = conn.execute("SELECT COUNT(*) FROM error_history WHERE fixed=0").fetchone()[0]
     return {
         "total_functions_tested": total,
         "functions_exist": existing,
         "drawable_layers": layers_count,
         "verified_properties": props_count,
+        "fnd_functions": fnd_total,
+        "open_errors": errors_open,
         "db_path": str(DB_PATH),
     }
 

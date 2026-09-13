@@ -958,6 +958,51 @@ Menu click via: `xdotool mousemove --window $CIW <x> 15 && xdotool click 1`, the
 6. Use SKILL for all modifications; use X11 only for screenshot and safe navigation
 
 
+
+## RSI — Recursive Self-Improvement Knowledge Base
+
+Before trying any SKILL function, **query the RSI database first**. It contains 28,000+ official
+function signatures from Cadence .fnd docs (IC231/IC251/IC618 versions).
+
+### Quick query commands
+
+```bash
+cd .claude/skills/virtuoso-gui-debug/scripts
+
+# Search by natural language (FTS5 full-text)
+python3 rsi_query.py "draw rectangle"
+python3 rsi_query.py "create path"
+python3 rsi_query.py "select object"
+
+# Exact function lookup (includes known errors)
+python3 rsi_query.py -f dbCreateRect
+
+# List by category
+python3 rsi_query.py -c Custom_Layout
+
+# Prefix search
+python3 rsi_query.py -p dbCreate
+
+# Specify version (default: IC251)
+python3 rsi_query.py -v IC618 -f dbCreateRect
+```
+
+### RSI workflow
+
+1. **Before calling a function**: query RSI to get the exact signature.
+2. **After a failure**: the error is recorded in `error_history`.
+   Next time you query the same function, RSI shows the known error.
+3. **Version awareness**: IC251 uses IC231 as baseline. Discrepancies are recorded.
+
+### Key tables
+
+| Table | Content |
+|-------|---------|
+| `fnd_functions` | 28,045 official signatures (IC231/IC251/IC618) |
+| `functions` | Live-verified functions |
+| `error_history` | Recorded failures (never repeat) |
+| `fnd_functions_fts` | FTS5 full-text index |
+
 ## Future Directions
 
 ### Zero-screenshot perception (aspirational)
@@ -1050,3 +1095,4 @@ sqlite3 /tmp/skill_db.sqlite3 "SELECT name FROM functions WHERE name LIKE 'dbCre
 8. **Zero-area rect** — silently returns nil; always check bbox
 9. **Dead session** — check port alive before skill exec
 10. **"Unavailable" functions** — dbCreateLabel/Pin/Contact/Text ALL exist
+
