@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate RSI status report HTML — includes fnd_functions (official docs)."""
+"""Generate RSI status report HTML with tabs."""
 import sqlite3, json
 from pathlib import Path
 
@@ -9,32 +9,48 @@ OUT = Path(__file__).parent.parent / "report" / "rsi_report.html"
 conn = sqlite3.connect(str(DB))
 conn.row_factory = sqlite3.Row
 
-# Manual enumeration stats
+# Stats
+total_fnd = conn.execute("SELECT COUNT(*) FROM fnd_functions").fetchone()[0]
+by_version = {}
+for r in conn.execute("SELECT version, COUNT(*) as c FROM fnd_functions GROUP BY version"):
+    by_version[r["version"]] = r["c"]
+
 manual_total = conn.execute("SELECT COUNT(*) FROM functions").fetchone()[0]
 manual_verified = conn.execute("SELECT COUNT(*) FROM functions WHERE confidence='verified'").fetchone()[0]
 
-# Official fnd_functions stats
-fnd_total = conn.execute("SELECT COUNT(*) FROM fnd_functions").fetchone()[0]
-fnd_by_version = {}
-for r in conn.execute("SELECT version, COUNT(*) as cnt FROM fnd_functions GROUP BY version ORDER BY cnt DESC"):
-    fnd_by_version[r["version"]] = r["cnt"]
+param_count = conn.execute("SELECT COUNT(*) FROM param_examples").fetchone()[0]
+errors_open = conn.execute("SELECT COUNT(*) FROM error_history WHERE fixed=0").fetchone()[0]
+errors_fixed = conn.execute("SELECT COUNT(*) FROM error_history WHERE fixed=1").fetchone()[0]
 
-# Category breakdown for current target (IC251)
-cats = {}
-for r in conn.execute("SELECT category, COUNT(*) as cnt FROM fnd_functions WHERE version='IC251' GROUP BY category ORDER BY cnt DESC LIMIT 15"):
-    cats[r["category"]] = r["cnt"]
+# Categories
+cats = []
+for r in conn.execute("SELECT category, COUNT(*) as cnt FROM fnd_functions GROUP BY category ORDER BY cnt DESC LIMIT 20"):
+    cats.append((r["category"], r["cnt"]))
 
-# Version comparison
-only_231 = conn.execute("SELECT COUNT(*) FROM fnd_functions WHERE version='IC231' AND name NOT IN (SELECT name FROM fnd_functions WHERE version='IC618')").fetchone()[0]
-only_618 = conn.execute("SELECT COUNT(*) FROM fnd_functions WHERE version='IC618' AND name NOT IN (SELECT name FROM fnd_functions WHERE version='IC231')").fetchone()[0]
-common = conn.execute("SELECT COUNT(DISTINCT a.name) FROM fnd_functions a JOIN fnd_functions b ON a.name=b.name AND a.version!=b.version").fetchone()[0]
-
-# Verified functions (from manual enumeration)
+# Verified functions
 verified_list = [dict(r) for r in conn.execute(
     "SELECT name, signature FROM functions WHERE confidence='verified' ORDER BY name"
 )]
 
-# Recent pitfalls
+# Parameter examples by function
+param_by_func = {}
+for r in conn.execute("SELECT function_name, param_name, example_value, success_count FROM param_examples ORDER BY function_name, success_count DESC"):
+    f = r["function_name"]
+    if f not in param_by_func:
+        param_by_func[f] = []
+    param_by_func[f].dict() if False else param_by_func[f].append(dict(r))
+
+# Recent errors
+errors = [dict(r) for r in conn.execute(
+    "SELECT function_name, error_type, error_message, created_at FROM error_history ORDER BY created_at DESC LIMIT 15"
+)]
+
+# RSI progress history
+progress = [dict(r) for r in conn.execute(
+    "SELECT date, phase, milestone, detail, functions_added FROM rsi_progress ORDER BY id"
+)]
+
+# Common pitfalls (hardcoded from experience)
 pitfalls = [
     ("SQLite reserved word", "Column 'exists' causes syntax error. Use 'func_exists'."),
     ("Python 3.6 compat", "No capture_output kwarg. Use stdout=PIPE, stderr=PIPE."),
@@ -45,95 +61,181 @@ pitfalls = [
     ("Instance ~>insts lag", "dbCreateInst returns but cv~>insts may show 0."),
     ("Zero-area rect", "Silently returns nil. Always check bbox != 0."),
     ("vcli timeout", "Dead session hangs. Check port alive first."),
-    ("Wrong 'unavailable' list", "dbCreateLabel/Pin/Contact/Text ALL exist."),
-    ("vcli errors[] not output[]", "Enumeration bug: check data['errors'] not data['output']."),
+    ("SSH quoting", "Double quotes in SKILL need \\\" escape over SSH."),
+    ("LIKE case-sensitive", "SQLite LIKE is case-sensitive. Use LOWER()."),
+    ("errors[] not output[]", "vcli errors are in errors[] array, not output."),
 ]
 
 conn.close()
 
-max_cat = max(cats.values()) if cats else 1
-cat_bars = "".join(
-    f'<div class="bar"><span class="n">{k}</span><div class="b"><div class="f" style="width:{v/max_cat*100}%"></div></div><span class="c">{v}</span></div>'
-    for k, v in cats.items()
-)
-
-version_cards = "".join(
-    f'<div class="stat"><div class="n">{cnt:,}</div><div class="l">{ver}</div></div>'
-    for ver, cnt in fnd_by_version.items()
-)
-
-verified_rows = "".join(
-    f'<tr><td><code>{f["name"]}</code></td><td>{f["signature"] or "—"}</td></tr>'
-    for f in verified_list
-)
-
-pitfall_html = "".join(
-    f'<div class="pit"><b>{t}</b><br>{d}</div>' for t, d in pitfalls
-)
-
+# Build HTML with tabs
 html = f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>RSI Report</title>
+<html><head><meta charset="UTF-8"><title>RSI Report — Virtuoso SKILL Knowledge Base</title>
 <style>
-body{{font-family:system-ui;background:#0f1117;color:#e4e4e7;padding:24px;max-width:960px;margin:auto}}
-h1{{color:#8b5cf6}} h2{{font-size:14px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px}}
-.stat{{display:inline-block;margin:8px 16px 8px 0;padding:12px 20px;background:#1a1a2e;border-radius:10px}}
-.stat .n{{font-size:28px;font-weight:700;color:#8b5cf6}} .stat .l{{font-size:12px;color:#9ca3af}}
-.card{{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:16px;margin:16px 0}}
-.bar{{display:flex;align-items:center;gap:8px;margin:4px 0}}
-.bar .n{{width:140px;font-size:12px;text-align:right}} .bar .b{{flex:1;height:14px;background:#2a2a4a;border-radius:3px}}
-.bar .f{{height:100%;background:linear-gradient(90deg,#8b5cf6,#6366f1)}} .bar .c{{width:40px;font-size:11px}}
-table{{width:100%;border-collapse:collapse;font-size:13px}}
-td,th{{padding:6px 10px;border-bottom:1px solid #2a2a4a;text-align:left}}
-th{{color:#9ca3af;font-weight:400}} code{{color:#a5b4fc;font-family:monospace}}
-.pit{{padding:8px;background:#1a0a0a;border-left:3px solid #ef4444;border-radius:4px;margin:6px 0;font-size:12px}}
-.pit b{{color:#f87171}}
-.tag{{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;margin:2px}}
-.tag-blue{{background:#1e3a5f;color:#7dd3fc}} .tag-green{{background:#1a3a1a;color:#86efac}}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: system-ui, -apple-system, sans-serif; background: #0f1117; color: #e4e4e7; padding: 20px; }}
+.container {{ max-width: 1100px; margin: 0 auto; }}
+h1 {{ color: #8b5cf6; font-size: 22px; margin-bottom: 4px; }}
+.subtitle {{ color: #6b7280; font-size: 13px; margin-bottom: 20px; }}
+
+/* Tabs */
+.tab-nav {{ display: flex; gap: 4px; border-bottom: 1px solid #2a2a4a; margin-bottom: 20px; flex-wrap: wrap; }}
+.tab-btn {{ padding: 10px 18px; background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; transition: all 0.2s; }}
+.tab-btn:hover {{ color: #e4e4e7; }}
+.tab-btn.active {{ color: #8b5cf6; border-bottom-color: #8b5cf6; }}
+.tab-panel {{ display: none; }}
+.tab-panel.active {{ display: block; }}
+
+/* Cards */
+.card {{ background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; margin-bottom: 16px; }}
+.card h2 {{ font-size: 13px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }}
+
+/* Stats */
+.stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }}
+.stat {{ background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 14px; text-align: center; }}
+.stat .n {{ font-size: 24px; font-weight: 700; color: #8b5cf6; }}
+.stat .n.green {{ color: #52c41a; }}
+.stat .n.yellow {{ color: #faad14; }}
+.stat .n.red {{ color: #ef4444; }}
+.stat .l {{ font-size: 11px; color: #9ca3af; margin-top: 2px; }}
+
+/* Bars */
+.bar {{ display: flex; align-items: center; gap: 8px; margin: 4px 0; }}
+.bar .n {{ width: 120px; font-size: 11px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.bar .b {{ flex: 1; height: 14px; background: #2a2a4a; border-radius: 3px; overflow: hidden; }}
+.bar .f {{ height: 100%; background: linear-gradient(90deg, #8b5cf6, #6366f1); border-radius: 3px; }}
+.bar .c {{ width: 40px; font-size: 11px; text-align: right; }}
+
+/* Tables */
+table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
+td, th {{ padding: 6px 10px; border-bottom: 1px solid #2a2a4a; text-align: left; }}
+th {{ color: #9ca3af; font-weight: 400; font-size: 11px; text-transform: uppercase; }}
+code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
+
+/* Pitfalls */
+.pit {{ padding: 8px 10px; background: #1a0a0a; border-left: 3px solid #ef4444; border-radius: 4px; margin: 6px 0; font-size: 12px; }}
+.pit b {{ color: #f87171; }}
+
+/* Param examples */
+.param {{ padding: 6px 10px; background: #0a1a0a; border-left: 3px solid #52c41a; border-radius: 4px; margin: 4px 0; font-size: 12px; }}
+.param b {{ color: #52c41a; }}
+
+/* Search */
+.search-box {{ margin-bottom: 16px; }}
+.search-box input {{ width: 100%; padding: 10px 14px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px; color: #e4e4e7; font-size: 13px; }}
+.search-box input:focus {{ outline: none; border-color: #8b5cf6; }}
 </style></head><body>
-<h1>Virtuoso SKILL RSI Report</h1>
-<p style="color:#9ca3af">Recursive Self-Improvement Knowledge Base — Official .fnd docs + live verification</p>
+<div class="container">
+<h1>Virtuoso SKILL RSI</h1>
+<p class="subtitle">Recursive Self-Improvement Knowledge Base — Auto-generated</p>
 
-<div class="card">
-<h2>API Knowledge Base (by Version)</h2>
-{version_cards}
-<p style="font-size:12px;color:#6b7280;margin-top:8px">
-  IC251 = IC231 baseline (to be refined by RSI).
-  Common: {common:,} | IC231-only: {only_231:,} | IC618-only: {only_618:,}
-</p>
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
+  <button class="tab-btn" onclick="showTab('progress')">Progress</button>
+  <button class="tab-btn" onclick="showTab('categories')">Categories</button>
+  <button class="tab-btn" onclick="showTab('params')">Param Templates</button>
+  <button class="tab-btn" onclick="showTab('pitfalls')">Pitfalls</button>
+  <button class="tab-btn" onclick="showTab('verified')">Verified</button>
 </div>
 
-<div class="card">
-<h2>Categories (IC251 target)</h2>
-{cat_bars}
+<div id="tab-overview" class="tab-panel active">
+  <div class="stats">
+    <div class="stat"><div class="n">{total_fnd:,}</div><div class="l">FND Functions</div></div>
+    <div class="stat"><div class="n green">{manual_verified}</div><div class="l">Manually Verified</div></div>
+    <div class="stat"><div class="n yellow">{param_count}</div><div class="l">Param Templates</div></div>
+    <div class="stat"><div class="n red">{errors_open}</div><div class="l">Open Errors</div></div>
+  </div>
+  <div class="card">
+    <h2>By Version</h2>
+    <table>
+      <tr><th>Version</th><th>Functions</th><th>Status</th></tr>
+      {"".join(f'<tr><td><code>{v}</code></td><td>{c:,}</td><td>{"Active" if v=="IC251" else "Baseline"}</td></tr>' for v, c in sorted(by_version.items()))}
+    </table>
+  </div>
+  <div class="card">
+    <h2>RSI Efficiency</h2>
+    <table>
+      <tr><th>Metric</th><th>Value</th></tr>
+      <tr><td>First run (enumeration)</td><td>~300s</td></tr>
+      <tr><td>Second run (query)</td><td>~0.02s</td></tr>
+      <tr><td>Speedup</td><td>~15,000x</td></tr>
+      <tr><td>Search</td><td><code>python3 rsi_query.py "draw polygon"</code></td></tr>
+      <tr><td>Exact lookup</td><td><code>python3 rsi_query.py -f dbCreateRect</code></td></tr>
+    </table>
+  </div>
 </div>
 
-<div class="card">
-<h2>Verified Functions (live-tested)</h2>
-<table><tr><th>Function</th><th>Signature</th></tr>
-{verified_rows}
-</table>
-<p style="font-size:12px;color:#6b7280">Total manually verified: {manual_verified} / {manual_total} candidates.
-  {fnd_total:,} official signatures available for instant lookup.</p>
+<div id="tab-progress" class="tab-panel">
+  <div class="card">
+    <h2>RSI Improvement Timeline</h2>
+    <table>
+      <tr><th>Date</th><th>Phase</th><th>Milestone</th><th>Detail</th><th>+Funcs</th></tr>
+      {"".join(f'<tr><td style="white-space:nowrap">{p["date"]}</td><td><span style="color:{"#8b5cf6" if p["phase"]=="P0" else "#faad14"}">{p["phase"]}</span></td><td><b>{p["milestone"]}</b></td><td style="font-size:11px;color:#9ca3af">{p["detail"]}</td><td>{p["functions_added"]:,}</td></tr>' for p in progress)}
+    </table>
+  </div>
 </div>
 
-<div class="card">
-<h2>Pitfalls — Never Repeat</h2>
-{pitfall_html}
+<div id="tab-categories" class="tab-panel">
+  <div class="card">
+    <h2>Function Categories (top 20)</h2>
+    {"".join(f'<div class="bar"><span class="n">{k}</span><div class="b"><div class="f" style="width:{v/max(c[1] for c in cats)*100}%"></div></div><span class="c">{v:,}</span></div>' for k, v in cats)}
+  </div>
 </div>
 
-<div class="card">
-<h2>RSI Efficiency</h2>
-<table>
-<tr><th>Metric</th><th>Value</th></tr>
-<tr><td>Official docs lookup</td><td><code>SELECT syntax FROM fnd_functions WHERE name='...' AND version='IC251'</code></td></tr>
-<tr><td>Query time</td><td>~0.02s</td></tr>
-<tr><td>First enumeration (trial-and-error)</td><td>~300s for 439 candidates, only 21 real</td></tr>
-<tr><td>Speedup (docs vs enumeration)</td><td>~15,000x</td></tr>
-<tr><td>Verification</td><td><code>python3 scripts/verify_db.py</code></td></tr>
-</table></div>
+<div id="tab-params" class="tab-panel">
+  <div class="card">
+    <h2>Known Working Parameter Templates</h2>
+    {"".join(
+        f'<div class="param"><b>{func}</b><br>' +
+        "<br>".join(
+            f"&nbsp;&nbsp;{p['param_name']}: {p['example_value']} ({p['success_count']}x)"
+            for p in plist
+        ) +
+        "</div>"
+        for func, plist in param_by_func.items()
+    )}
+  </div>
+</div>
 
+<div id="tab-pitfalls" class="tab-panel">
+  <div class="card">
+    <h2>Never Repeat These Mistakes</h2>
+    {"".join(f'<div class="pit"><b>{t}</b><br>{d}</div>' for t, d in pitfalls)}
+  </div>
+  <div class="card">
+    <h2>Recent Errors</h2>
+    {"".join(f'<div class="pit"><b>{e["function_name"]}</b> [{e["error_type"]}]<br>{e["error_message"][:120]}<br><span style="color:#6b7280;font-size:10px">{e["created_at"][:10]}</span></div>' for e in errors) if errors else '<p style="color:#6b7280">No errors recorded.</p>'}
+  </div>
+</div>
+
+<div id="tab-verified" class="tab-panel">
+  <div class="card">
+    <h2>Manually Verified Functions ({len(verified_list)})</h2>
+    <div class="search-box"><input type="text" id="searchVerified" placeholder="Filter..." onkeyup="filterTable()"></div>
+    <table id="verifiedTable">
+      <tr><th>Function</th><th>Signature</th></tr>
+      {"".join(f'<tr><td><code>{f["name"]}</code></td><td style="font-size:11px">{f["signature"] or "—"}</td></tr>' for f in verified_list)}
+    </table>
+  </div>
+</div>
+
+</div>
+<script>
+function showTab(name) {{
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}}
+function filterTable() {{
+  var q = document.getElementById('searchVerified').value.toLowerCase();
+  document.querySelectorAll('#verifiedTable tr').forEach(function(tr, i) {{
+    if (i === 0) return;
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  }});
+}}
+</script>
 </body></html>"""
 
-OUT.parent.mkdir(parents=True, exist_ok=True)
 OUT.write_text(html, encoding="utf-8")
 print(f"Report: {OUT} ({OUT.stat().st_size} bytes)")

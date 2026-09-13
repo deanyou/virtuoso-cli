@@ -1,62 +1,159 @@
 <!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>RSI Report</title>
+<html><head><meta charset="UTF-8"><title>RSI Report — Virtuoso SKILL Knowledge Base</title>
 <style>
-body{font-family:system-ui;background:#0f1117;color:#e4e4e7;padding:24px;max-width:960px;margin:auto}
-h1{color:#8b5cf6} h2{font-size:14px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px}
-.stat{display:inline-block;margin:8px 16px 8px 0;padding:12px 20px;background:#1a1a2e;border-radius:10px}
-.stat .n{font-size:28px;font-weight:700;color:#8b5cf6} .stat .l{font-size:12px;color:#9ca3af}
-.card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:12px;padding:16px;margin:16px 0}
-.bar{display:flex;align-items:center;gap:8px;margin:4px 0}
-.bar .n{width:140px;font-size:12px;text-align:right} .bar .b{flex:1;height:14px;background:#2a2a4a;border-radius:3px}
-.bar .f{height:100%;background:linear-gradient(90deg,#8b5cf6,#6366f1)} .bar .c{width:40px;font-size:11px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{padding:6px 10px;border-bottom:1px solid #2a2a4a;text-align:left}
-th{color:#9ca3af;font-weight:400} code{color:#a5b4fc;font-family:monospace}
-.pit{padding:8px;background:#1a0a0a;border-left:3px solid #ef4444;border-radius:4px;margin:6px 0;font-size:12px}
-.pit b{color:#f87171}
-.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;margin:2px}
-.tag-blue{background:#1e3a5f;color:#7dd3fc} .tag-green{background:#1a3a1a;color:#86efac}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #0f1117; color: #e4e4e7; padding: 20px; }
+.container { max-width: 1100px; margin: 0 auto; }
+h1 { color: #8b5cf6; font-size: 22px; margin-bottom: 4px; }
+.subtitle { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
+
+/* Tabs */
+.tab-nav { display: flex; gap: 4px; border-bottom: 1px solid #2a2a4a; margin-bottom: 20px; flex-wrap: wrap; }
+.tab-btn { padding: 10px 18px; background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.tab-btn:hover { color: #e4e4e7; }
+.tab-btn.active { color: #8b5cf6; border-bottom-color: #8b5cf6; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Cards */
+.card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.card h2 { font-size: 13px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+/* Stats */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 14px; text-align: center; }
+.stat .n { font-size: 24px; font-weight: 700; color: #8b5cf6; }
+.stat .n.green { color: #52c41a; }
+.stat .n.yellow { color: #faad14; }
+.stat .n.red { color: #ef4444; }
+.stat .l { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+
+/* Bars */
+.bar { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.bar .n { width: 120px; font-size: 11px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .b { flex: 1; height: 14px; background: #2a2a4a; border-radius: 3px; overflow: hidden; }
+.bar .f { height: 100%; background: linear-gradient(90deg, #8b5cf6, #6366f1); border-radius: 3px; }
+.bar .c { width: 40px; font-size: 11px; text-align: right; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+td, th { padding: 6px 10px; border-bottom: 1px solid #2a2a4a; text-align: left; }
+th { color: #9ca3af; font-weight: 400; font-size: 11px; text-transform: uppercase; }
+code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
+
+/* Pitfalls */
+.pit { padding: 8px 10px; background: #1a0a0a; border-left: 3px solid #ef4444; border-radius: 4px; margin: 6px 0; font-size: 12px; }
+.pit b { color: #f87171; }
+
+/* Param examples */
+.param { padding: 6px 10px; background: #0a1a0a; border-left: 3px solid #52c41a; border-radius: 4px; margin: 4px 0; font-size: 12px; }
+.param b { color: #52c41a; }
+
+/* Search */
+.search-box { margin-bottom: 16px; }
+.search-box input { width: 100%; padding: 10px 14px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px; color: #e4e4e7; font-size: 13px; }
+.search-box input:focus { outline: none; border-color: #8b5cf6; }
 </style></head><body>
-<h1>Virtuoso SKILL RSI Report</h1>
-<p style="color:#9ca3af">Recursive Self-Improvement Knowledge Base — Official .fnd docs + live verification</p>
+<div class="container">
+<h1>Virtuoso SKILL RSI</h1>
+<p class="subtitle">Recursive Self-Improvement Knowledge Base — Auto-generated</p>
 
-<div class="card">
-<h2>API Knowledge Base (by Version)</h2>
-<div class="stat"><div class="n">9,619</div><div class="l">IC251</div></div><div class="stat"><div class="n">9,619</div><div class="l">IC231</div></div><div class="stat"><div class="n">8,807</div><div class="l">IC618</div></div>
-<p style="font-size:12px;color:#6b7280;margin-top:8px">
-  IC251 = IC231 baseline (to be refined by RSI).
-  Common: 9,619 | IC231-only: 942 | IC618-only: 130
-</p>
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
+  <button class="tab-btn" onclick="showTab('progress')">Progress</button>
+  <button class="tab-btn" onclick="showTab('categories')">Categories</button>
+  <button class="tab-btn" onclick="showTab('params')">Param Templates</button>
+  <button class="tab-btn" onclick="showTab('pitfalls')">Pitfalls</button>
+  <button class="tab-btn" onclick="showTab('verified')">Verified</button>
 </div>
 
-<div class="card">
-<h2>Categories (IC251 target)</h2>
-<div class="bar"><span class="n">DFII_SKILL</span><div class="b"><div class="f" style="width:100.0%"></div></div><span class="c">2987</span></div><div class="bar"><span class="n">Custom_Layout</span><div class="b"><div class="f" style="width:62.2698359558085%"></div></div><span class="c">1860</span></div><div class="bar"><span class="n">Virtuoso_ADE</span><div class="b"><div class="f" style="width:43.62236357549381%"></div></div><span class="c">1303</span></div><div class="bar"><span class="n">Core_SKILL</span><div class="b"><div class="f" style="width:22.397053900234347%"></div></div><span class="c">669</span></div><div class="bar"><span class="n">Custom_Constraints</span><div class="b"><div class="f" style="width:17.10746568463341%"></div></div><span class="c">511</span></div><div class="bar"><span class="n">ViVA_SKILL</span><div class="b"><div class="f" style="width:12.855708068295948%"></div></div><span class="c">384</span></div><div class="bar"><span class="n">Tech_File</span><div class="b"><div class="f" style="width:11.215266153331102%"></div></div><span class="c">335</span></div><div class="bar"><span class="n">Schematics</span><div class="b"><div class="f" style="width:10.54569802477402%"></div></div><span class="c">315</span></div><div class="bar"><span class="n">Netlisting_and_Simulation</span><div class="b"><div class="f" style="width:7.46568463341145%"></div></div><span class="c">223</span></div><div class="bar"><span class="n">OCEAN</span><div class="b"><div class="f" style="width:6.863073317710076%"></div></div><span class="c">205</span></div><div class="bar"><span class="n">ADE_Verifier</span><div class="b"><div class="f" style="width:6.327418814864412%"></div></div><span class="c">189</span></div><div class="bar"><span class="n">Pcells</span><div class="b"><div class="f" style="width:4.620020087043857%"></div></div><span class="c">138</span></div><div class="bar"><span class="n">OCEAN_XL</span><div class="b"><div class="f" style="width:4.318714429193171%"></div></div><span class="c">129</span></div><div class="bar"><span class="n">Translators</span><div class="b"><div class="f" style="width:2.9460997656511547%"></div></div><span class="c">88</span></div><div class="bar"><span class="n">SKILL</span><div class="b"><div class="f" style="width:2.0087043856712423%"></div></div><span class="c">60</span></div>
+<div id="tab-overview" class="tab-panel active">
+  <div class="stats">
+    <div class="stat"><div class="n">28,045</div><div class="l">FND Functions</div></div>
+    <div class="stat"><div class="n green">70</div><div class="l">Manually Verified</div></div>
+    <div class="stat"><div class="n yellow">10</div><div class="l">Param Templates</div></div>
+    <div class="stat"><div class="n red">0</div><div class="l">Open Errors</div></div>
+  </div>
+  <div class="card">
+    <h2>By Version</h2>
+    <table>
+      <tr><th>Version</th><th>Functions</th><th>Status</th></tr>
+      <tr><td><code>IC231</code></td><td>9,619</td><td>Baseline</td></tr><tr><td><code>IC251</code></td><td>9,619</td><td>Active</td></tr><tr><td><code>IC618</code></td><td>8,807</td><td>Baseline</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2>RSI Efficiency</h2>
+    <table>
+      <tr><th>Metric</th><th>Value</th></tr>
+      <tr><td>First run (enumeration)</td><td>~300s</td></tr>
+      <tr><td>Second run (query)</td><td>~0.02s</td></tr>
+      <tr><td>Speedup</td><td>~15,000x</td></tr>
+      <tr><td>Search</td><td><code>python3 rsi_query.py "draw polygon"</code></td></tr>
+      <tr><td>Exact lookup</td><td><code>python3 rsi_query.py -f dbCreateRect</code></td></tr>
+    </table>
+  </div>
 </div>
 
-<div class="card">
-<h2>Verified Functions (live-tested)</h2>
-<table><tr><th>Function</th><th>Signature</th></tr>
-<tr><td><code>dbAbutIsInteractive</code></td><td>—</td></tr><tr><td><code>dbAbutIsReAbutGroup</code></td><td>—</td></tr><tr><td><code>dbAddAreaToPinGroupGuide</code></td><td>—</td></tr><tr><td><code>dbAddFigToFigGroup</code></td><td>—</td></tr><tr><td><code>dbAddFigToNet</code></td><td>—</td></tr><tr><td><code>dbAddFigToPin</code></td><td>—</td></tr><tr><td><code>dbAddFigToPinGroupGuide</code></td><td>—</td></tr><tr><td><code>dbAddFigsToPin</code></td><td>—</td></tr><tr><td><code>dbAddObjectToGroup</code></td><td>—</td></tr><tr><td><code>dbAddObjectsToMarker</code></td><td>—</td></tr><tr><td><code>dbAddPinToPinGroup</code></td><td>—</td></tr><tr><td><code>dbAddPinToPinGroupGuide</code></td><td>—</td></tr><tr><td><code>dbAddPlaceAreaBackgroundDef</code></td><td>—</td></tr><tr><td><code>dbAddPlaceAreaCompTypeSetDef</code></td><td>—</td></tr><tr><td><code>dbAddPlaceAreaRailDef</code></td><td>—</td></tr><tr><td><code>dbAddRowBackgroundDef</code></td><td>—</td></tr><tr><td><code>dbAddRowCompTypeSetDef</code></td><td>—</td></tr><tr><td><code>dbAddRowRailDef</code></td><td>—</td></tr><tr><td><code>dbAddStrapObject</code></td><td>—</td></tr><tr><td><code>dbAllCellViews</code></td><td>—</td></tr><tr><td><code>dbAreaBoundaryHasLayerPriorityOrder</code></td><td>—</td></tr><tr><td><code>dbAreaBoundaryHasValidRoutingLayers</code></td><td>—</td></tr><tr><td><code>dbAttachRowRegionToPRBoundary</code></td><td>—</td></tr><tr><td><code>dbBoundaryQuery</code></td><td>—</td></tr><tr><td><code>dbCVHasInheritedSig</code></td><td>—</td></tr><tr><td><code>dbCVHasInheritedTerm</code></td><td>—</td></tr><tr><td><code>dbCVHasNetSetProp</code></td><td>—</td></tr><tr><td><code>dbCanonicalizeAnyAngleTransform</code></td><td>—</td></tr><tr><td><code>dbCellViewAreLayerShiftsValid</code></td><td>—</td></tr><tr><td><code>dbCellViewClearLayerShifts</code></td><td>—</td></tr><tr><td><code>dbCellViewHasEquivalentConnectivityTime</code></td><td>—</td></tr><tr><td><code>dbCellViewHasLayerShifts</code></td><td>—</td></tr><tr><td><code>dbCellViewHasOpticalData</code></td><td>—</td></tr><tr><td><code>dbCellViewHasPhotonicPinFig</code></td><td>—</td></tr><tr><td><code>dbCellViewHasUnknownColorLockChanges</code></td><td>—</td></tr><tr><td><code>dbCellViewHasVirtHier</code></td><td>—</td></tr><tr><td><code>dbCellViewInitForLayerShifting</code></td><td>—</td></tr><tr><td><code>dbCellViewResetAllColorLockTypes</code></td><td>—</td></tr><tr><td><code>dbCellViewUpdateLayerShifts</code></td><td>—</td></tr><tr><td><code>dbChangeGroupType</code></td><td>—</td></tr><tr><td><code>dbCheckParamCell</code></td><td>—</td></tr><tr><td><code>dbCheckRecursion</code></td><td>—</td></tr><tr><td><code>dbClearAllActiveWireTypes</code></td><td>—</td></tr><tr><td><code>dbClearUnusedOccShapeColorData</code></td><td>—</td></tr><tr><td><code>dbClose</code></td><td>—</td></tr><tr><td><code>dbCloseBag</code></td><td>—</td></tr><tr><td><code>dbColorShapeQuery</code></td><td>—</td></tr><tr><td><code>dbColorShapeQuery2</code></td><td>—</td></tr><tr><td><code>dbCompressPointArray</code></td><td>—</td></tr><tr><td><code>dbComputeBBox</code></td><td>—</td></tr><tr><td><code>dbCopyCellView</code></td><td> ("dbcopycellview" 0 t nil ("*error* dbcopycellview: too few arguments (at least 4 expected, 0 given)" nil))</td></tr><tr><td><code>dbCopyShape</code></td><td> ("dbcopyshape" 0 t nil ("*error* dbcopyshape: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateGroup</code></td><td> ("dbcreategroup" 0 t nil ("*error* dbcreategroup: too few arguments (at least 3 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateInst</code></td><td> ("dbcreateinst" 0 t nil ("*error* dbcreateinst: too few arguments (at least 5 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateLabel</code></td><td> ("dbcreatelabel" 0 t nil ("*error* dbcreatelabel: too few arguments (8 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateLib</code></td><td> ("dbcreatelib" 0 t nil ("*error* dbcreatelib: too few arguments (at least 1 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateNet</code></td><td> ("dbcreatenet" 0 t nil ("*error* dbcreatenet: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreatePath</code></td><td> ("dbcreatepath" 0 t nil ("*error* dbcreatepath: too few arguments (at least 4 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreatePin</code></td><td> ("dbcreatepin" 0 t nil ("*error* dbcreatepin: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreatePolygon</code></td><td> ("dbcreatepolygon" 0 t nil ("*error* dbcreatepolygon: too few arguments (3 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateRect</code></td><td> ("dbcreaterect" 0 t nil ("*error* dbcreaterect: too few arguments (3 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateVia</code></td><td> ("dbcreatevia" 0 t nil ("*error* dbcreatevia: too few arguments (at least 4 expected, 0 given)" nil))</td></tr><tr><td><code>dbDeleteGroup</code></td><td> ("dbdeletegroup" 0 t nil ("*error* dbdeletegroup: too few arguments (at least 1 expected, 0 given)" nil))</td></tr><tr><td><code>dbMoveShape</code></td><td> ("dbmoveshape" 0 t nil ("*error* dbmoveshape: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbOpenCellView</code></td><td> ("dbopencellview" 0 t nil ("*error* dbopencellview: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbSave</code></td><td> ("dbsave" 0 t nil ("*error* dbsave: too few arguments (at least 1 expected, 0 given)" nil))</td></tr><tr><td><code>dbTransformCellView</code></td><td> ("dbtransformcellview" 0 t nil ("*error* dbtransformcellview: too few arguments (3 expected, 0 given)" nil))</td></tr><tr><td><code>geGetEditCellView</code></td><td>—</td></tr><tr><td><code>hiGetCurrentWindow</code></td><td>—</td></tr><tr><td><code>startFinder</code></td><td>—</td></tr>
-</table>
-<p style="font-size:12px;color:#6b7280">Total manually verified: 70 / 488 candidates.
-  28,045 official signatures available for instant lookup.</p>
+<div id="tab-progress" class="tab-panel">
+  <div class="card">
+    <h2>RSI Improvement Timeline</h2>
+    <table>
+      <tr><th>Date</th><th>Phase</th><th>Milestone</th><th>Detail</th><th>+Funcs</th></tr>
+      <tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Manual function enumeration</b></td><td style="font-size:11px;color:#9ca3af">488 candidate functions tested via vcli; 70 confirmed exist</td><td>488</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Official .fnd docs imported</b></td><td style="font-size:11px;color:#9ca3af">IC231: 9,619 + IC618: 8,807 functions from Cadence .fnd files</td><td>18,426</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>IC251 baseline from IC231</b></td><td style="font-size:11px;color:#9ca3af">Copied 9,619 functions as IC251 baseline; 50 sampled validation = 100%</td><td>9,619</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>FTS5 full-text search</b></td><td style="font-size:11px;color:#9ca3af">fnd_functions_fts virtual table; semantic search via rsi_query.py</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Case-insensitive name matching</b></td><td style="font-size:11px;color:#9ca3af">Fixed SQLite LIKE case sensitivity (dbCreatePolygon was missed)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Multi-keyword scoring</b></td><td style="font-size:11px;color:#9ca3af">Functions matching multiple keywords rank higher; draw polygon -> dbCreatePolygon #1</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Parameter templates</b></td><td style="font-size:11px;color:#9ca3af">param_examples table records successful layer/purpose/coords (10 examples)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Error auto-learning</b></td><td style="font-size:11px;color:#9ca3af">record_failure() + has_known_failure(); known errors shown in -f lookup</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>E2E workflow verified</b></td><td style="font-size:11px;color:#9ca3af">query -> call -> record loop: draw path -> dbCreatePath -> success</td><td>0</td></tr>
+    </table>
+  </div>
 </div>
 
-<div class="card">
-<h2>Pitfalls — Never Repeat</h2>
-<div class="pit"><b>SQLite reserved word</b><br>Column 'exists' causes syntax error. Use 'func_exists'.</div><div class="pit"><b>Python 3.6 compat</b><br>No capture_output kwarg. Use stdout=PIPE, stderr=PIPE.</div><div class="pit"><b>Motif/Xt input</b><br>Finder search field ignores XTest events. GUI input limited.</div><div class="pit"><b>F1 != Help</b><br>Opens Find/Replace. Help via startFinder() only.</div><div class="pit"><b>dbCreateRect args</b><br>layer+purpose MUST be list('L' 'P'), not two strings.</div><div class="pit"><b>let double parens</b><br>let(((v e)) body) — always double parens.</div><div class="pit"><b>Instance ~>insts lag</b><br>dbCreateInst returns but cv~>insts may show 0.</div><div class="pit"><b>Zero-area rect</b><br>Silently returns nil. Always check bbox != 0.</div><div class="pit"><b>vcli timeout</b><br>Dead session hangs. Check port alive first.</div><div class="pit"><b>Wrong 'unavailable' list</b><br>dbCreateLabel/Pin/Contact/Text ALL exist.</div><div class="pit"><b>vcli errors[] not output[]</b><br>Enumeration bug: check data['errors'] not data['output'].</div>
+<div id="tab-categories" class="tab-panel">
+  <div class="card">
+    <h2>Function Categories (top 20)</h2>
+    <div class="bar"><span class="n">DFII_SKILL</span><div class="b"><div class="f" style="width:100.0%"></div></div><span class="c">8,812</span></div><div class="bar"><span class="n">Custom_Layout</span><div class="b"><div class="f" style="width:61.09850204266909%"></div></div><span class="c">5,384</span></div><div class="bar"><span class="n">Virtuoso_ADE</span><div class="b"><div class="f" style="width:29.573309123921927%"></div></div><span class="c">2,606</span></div><div class="bar"><span class="n">Core_SKILL</span><div class="b"><div class="f" style="width:22.764412165229235%"></div></div><span class="c">2,006</span></div><div class="bar"><span class="n">Custom_Constraints</span><div class="b"><div class="f" style="width:16.976849750340445%"></div></div><span class="c">1,496</span></div><div class="bar"><span class="n">ViVA_SKILL</span><div class="b"><div class="f" style="width:12.857467090331367%"></div></div><span class="c">1,133</span></div><div class="bar"><span class="n">Tech_File</span><div class="b"><div class="f" style="width:11.359509759418975%"></div></div><span class="c">1,001</span></div><div class="bar"><span class="n">Schematics</span><div class="b"><div class="f" style="width:10.383567862006354%"></div></div><span class="c">915</span></div><div class="bar"><span class="n">ADE-L</span><div class="b"><div class="f" style="width:8.46572855197458%"></div></div><span class="c">746</span></div><div class="bar"><span class="n">Netlisting_and_Simulation</span><div class="b"><div class="f" style="width:7.557875624148888%"></div></div><span class="c">666</span></div><div class="bar"><span class="n">OCEAN</span><div class="b"><div class="f" style="width:6.990467544257831%"></div></div><span class="c">616</span></div><div class="bar"><span class="n">ADE_Verifier</span><div class="b"><div class="f" style="width:5.344984112573763%"></div></div><span class="c">471</span></div><div class="bar"><span class="n">Pcells</span><div class="b"><div class="f" style="width:4.698138901497957%"></div></div><span class="c">414</span></div><div class="bar"><span class="n">OCEAN_XL</span><div class="b"><div class="f" style="width:4.369042215161143%"></div></div><span class="c">385</span></div><div class="bar"><span class="n">ADE_XL</span><div class="b"><div class="f" style="width:3.234226055379029%"></div></div><span class="c">285</span></div><div class="bar"><span class="n">Translators</span><div class="b"><div class="f" style="width:2.825692237857467%"></div></div><span class="c">249</span></div><div class="bar"><span class="n">Relative_Object_Design</span><div class="b"><div class="f" style="width:1.6227871084884251%"></div></div><span class="c">143</span></div><div class="bar"><span class="n">SKILL</span><div class="b"><div class="f" style="width:1.3617793917385383%"></div></div><span class="c">120</span></div><div class="bar"><span class="n">Parasitic_Aware_Design</span><div class="b"><div class="f" style="width:1.1461643213799364%"></div></div><span class="c">101</span></div><div class="bar"><span class="n">Analog_Expression</span><div class="b"><div class="f" style="width:0.9532455742169769%"></div></div><span class="c">84</span></div>
+  </div>
 </div>
 
-<div class="card">
-<h2>RSI Efficiency</h2>
-<table>
-<tr><th>Metric</th><th>Value</th></tr>
-<tr><td>Official docs lookup</td><td><code>SELECT syntax FROM fnd_functions WHERE name='...' AND version='IC251'</code></td></tr>
-<tr><td>Query time</td><td>~0.02s</td></tr>
-<tr><td>First enumeration (trial-and-error)</td><td>~300s for 439 candidates, only 21 real</td></tr>
-<tr><td>Speedup (docs vs enumeration)</td><td>~15,000x</td></tr>
-<tr><td>Verification</td><td><code>python3 scripts/verify_db.py</code></td></tr>
-</table></div>
+<div id="tab-params" class="tab-panel">
+  <div class="card">
+    <h2>Known Working Parameter Templates</h2>
+    <div class="param"><b>dbCreatePath</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (2x)<br>&nbsp;&nbsp;width: 2.0 (2x)<br>&nbsp;&nbsp;points: list(60:0 80:20 100:0) (1x)</div><div class="param"><b>dbCreatePolygon</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (1x)<br>&nbsp;&nbsp;points: list(0:60 10:50 20:60 10:70) (1x)</div><div class="param"><b>dbCreateRect</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (3x)<br>&nbsp;&nbsp;bbox: list(0:0 20:20) (1x)<br>&nbsp;&nbsp;bbox: list(30:30 50:50) (1x)<br>&nbsp;&nbsp;layer_purpose: list("M1" "pin") (1x)</div><div class="param"><b>geGetEditCellView</b><br>&nbsp;&nbsp;windowId: nil (use current) (5x)</div>
+  </div>
+</div>
 
+<div id="tab-pitfalls" class="tab-panel">
+  <div class="card">
+    <h2>Never Repeat These Mistakes</h2>
+    <div class="pit"><b>SQLite reserved word</b><br>Column 'exists' causes syntax error. Use 'func_exists'.</div><div class="pit"><b>Python 3.6 compat</b><br>No capture_output kwarg. Use stdout=PIPE, stderr=PIPE.</div><div class="pit"><b>Motif/Xt input</b><br>Finder search field ignores XTest events. GUI input limited.</div><div class="pit"><b>F1 != Help</b><br>Opens Find/Replace. Help via startFinder() only.</div><div class="pit"><b>dbCreateRect args</b><br>layer+purpose MUST be list('L' 'P'), not two strings.</div><div class="pit"><b>let double parens</b><br>let(((v e)) body) — always double parens.</div><div class="pit"><b>Instance ~>insts lag</b><br>dbCreateInst returns but cv~>insts may show 0.</div><div class="pit"><b>Zero-area rect</b><br>Silently returns nil. Always check bbox != 0.</div><div class="pit"><b>vcli timeout</b><br>Dead session hangs. Check port alive first.</div><div class="pit"><b>SSH quoting</b><br>Double quotes in SKILL need \" escape over SSH.</div><div class="pit"><b>LIKE case-sensitive</b><br>SQLite LIKE is case-sensitive. Use LOWER().</div><div class="pit"><b>errors[] not output[]</b><br>vcli errors are in errors[] array, not output.</div>
+  </div>
+  <div class="card">
+    <h2>Recent Errors</h2>
+    <div class="pit"><b>enumeration_script</b> [false_positive]<br>Checked output field for undefined, but errors are in errors[]. 418 undefined functions misclassified as existing.<br><span style="color:#6b7280;font-size:10px">2026-09-13</span></div><div class="pit"><b>enumeration_script</b> [false_positive]<br>Checked output field for undefined, but errors are in errors[]. 418 undefined functions misclassified as existing.<br><span style="color:#6b7280;font-size:10px">2026-09-13</span></div>
+  </div>
+</div>
+
+<div id="tab-verified" class="tab-panel">
+  <div class="card">
+    <h2>Manually Verified Functions (70)</h2>
+    <div class="search-box"><input type="text" id="searchVerified" placeholder="Filter..." onkeyup="filterTable()"></div>
+    <table id="verifiedTable">
+      <tr><th>Function</th><th>Signature</th></tr>
+      <tr><td><code>dbAbutIsInteractive</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAbutIsReAbutGroup</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddAreaToPinGroupGuide</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddFigToFigGroup</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddFigToNet</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddFigToPin</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddFigToPinGroupGuide</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddFigsToPin</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddObjectToGroup</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddObjectsToMarker</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddPinToPinGroup</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddPinToPinGroupGuide</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddPlaceAreaBackgroundDef</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddPlaceAreaCompTypeSetDef</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddPlaceAreaRailDef</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddRowBackgroundDef</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddRowCompTypeSetDef</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddRowRailDef</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAddStrapObject</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAllCellViews</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAreaBoundaryHasLayerPriorityOrder</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAreaBoundaryHasValidRoutingLayers</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbAttachRowRegionToPRBoundary</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbBoundaryQuery</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCVHasInheritedSig</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCVHasInheritedTerm</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCVHasNetSetProp</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCanonicalizeAnyAngleTransform</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewAreLayerShiftsValid</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewClearLayerShifts</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewHasEquivalentConnectivityTime</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewHasLayerShifts</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewHasOpticalData</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewHasPhotonicPinFig</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewHasUnknownColorLockChanges</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewHasVirtHier</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewInitForLayerShifting</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewResetAllColorLockTypes</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCellViewUpdateLayerShifts</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbChangeGroupType</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCheckParamCell</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCheckRecursion</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbClearAllActiveWireTypes</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbClearUnusedOccShapeColorData</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbClose</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCloseBag</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbColorShapeQuery</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbColorShapeQuery2</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCompressPointArray</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbComputeBBox</code></td><td style="font-size:11px">—</td></tr><tr><td><code>dbCopyCellView</code></td><td style="font-size:11px"> ("dbcopycellview" 0 t nil ("*error* dbcopycellview: too few arguments (at least 4 expected, 0 given)" nil))</td></tr><tr><td><code>dbCopyShape</code></td><td style="font-size:11px"> ("dbcopyshape" 0 t nil ("*error* dbcopyshape: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateGroup</code></td><td style="font-size:11px"> ("dbcreategroup" 0 t nil ("*error* dbcreategroup: too few arguments (at least 3 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateInst</code></td><td style="font-size:11px"> ("dbcreateinst" 0 t nil ("*error* dbcreateinst: too few arguments (at least 5 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateLabel</code></td><td style="font-size:11px"> ("dbcreatelabel" 0 t nil ("*error* dbcreatelabel: too few arguments (8 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateLib</code></td><td style="font-size:11px"> ("dbcreatelib" 0 t nil ("*error* dbcreatelib: too few arguments (at least 1 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateNet</code></td><td style="font-size:11px"> ("dbcreatenet" 0 t nil ("*error* dbcreatenet: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreatePath</code></td><td style="font-size:11px"> ("dbcreatepath" 0 t nil ("*error* dbcreatepath: too few arguments (at least 4 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreatePin</code></td><td style="font-size:11px"> ("dbcreatepin" 0 t nil ("*error* dbcreatepin: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreatePolygon</code></td><td style="font-size:11px"> ("dbcreatepolygon" 0 t nil ("*error* dbcreatepolygon: too few arguments (3 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateRect</code></td><td style="font-size:11px"> ("dbcreaterect" 0 t nil ("*error* dbcreaterect: too few arguments (3 expected, 0 given)" nil))</td></tr><tr><td><code>dbCreateVia</code></td><td style="font-size:11px"> ("dbcreatevia" 0 t nil ("*error* dbcreatevia: too few arguments (at least 4 expected, 0 given)" nil))</td></tr><tr><td><code>dbDeleteGroup</code></td><td style="font-size:11px"> ("dbdeletegroup" 0 t nil ("*error* dbdeletegroup: too few arguments (at least 1 expected, 0 given)" nil))</td></tr><tr><td><code>dbMoveShape</code></td><td style="font-size:11px"> ("dbmoveshape" 0 t nil ("*error* dbmoveshape: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbOpenCellView</code></td><td style="font-size:11px"> ("dbopencellview" 0 t nil ("*error* dbopencellview: too few arguments (at least 2 expected, 0 given)" nil))</td></tr><tr><td><code>dbSave</code></td><td style="font-size:11px"> ("dbsave" 0 t nil ("*error* dbsave: too few arguments (at least 1 expected, 0 given)" nil))</td></tr><tr><td><code>dbTransformCellView</code></td><td style="font-size:11px"> ("dbtransformcellview" 0 t nil ("*error* dbtransformcellview: too few arguments (3 expected, 0 given)" nil))</td></tr><tr><td><code>geGetEditCellView</code></td><td style="font-size:11px">—</td></tr><tr><td><code>hiGetCurrentWindow</code></td><td style="font-size:11px">—</td></tr><tr><td><code>startFinder</code></td><td style="font-size:11px">—</td></tr>
+    </table>
+  </div>
+</div>
+
+</div>
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+function filterTable() {
+  var q = document.getElementById('searchVerified').value.toLowerCase();
+  document.querySelectorAll('#verifiedTable tr').forEach(function(tr, i) {
+    if (i === 0) return;
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+</script>
 </body></html>
