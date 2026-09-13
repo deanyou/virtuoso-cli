@@ -371,10 +371,44 @@ def _handle_snippet(c, argv):
     if cmd == "pipeline" and not argv[1:]:
         print("Usage: rsi snippet pipeline NAME1 NAME2 ... [--k=v ...]")
         return
+
     if cmd == "run" and len(argv) < 2:
         print("Usage: rsi snippet run NAME [--k=v ...] [--execute] [--ssh]")
         return
-    print("Commands: list | search KEYWORD | info NAME | run NAME | pipeline NAMES | save NAME DESC CODE")
+
+    if cmd == "record" and len(argv) > 1:
+        sub = argv[1]
+        if sub == "start":
+            c.execute("""CREATE TABLE IF NOT EXISTS recordings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT,
+                started_at TEXT, active INTEGER DEFAULT 1)""")
+            c.execute("INSERT INTO recordings (name, started_at, active) VALUES (?, ?, 1)",
+                      (argv[2] if len(argv) > 2 else "session", datetime.now().isoformat()))
+            rid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+            c.commit()
+            print(f"Recording started (id={rid})")
+            print("  Execute snippets with --execute, then: rsi snippet record stop")
+        elif sub == "stop":
+            row = c.execute("SELECT * FROM recordings WHERE active=1 ORDER BY id DESC LIMIT 1").fetchone()
+            if not row:
+                print("No active recording. Start with: rsi snippet record start")
+                return
+            rid = row[0]
+            c.execute("UPDATE recordings SET active=0 WHERE id=?", (rid,))
+            c.commit()
+            # Show what was recorded
+            evts = c.execute("""SELECT snippet_name, success, duration_ms, executed_at
+                FROM snippet_executions WHERE executed_at >= ? ORDER BY id""",
+                (row[2],)).fetchall()
+            print(f"\nRecording '{row[1]}' (id={rid}): {len(evts)} operations")
+            for e in evts:
+                print(f"  {'OK' if e[1] else 'FAIL'} {e[0]:20s} {e[2]}ms  {e[3][:19]}")
+            print(f"\n  To save as snippet: rsi snippet save <name> <desc> <code>")
+        else:
+            print("Usage: rsi snippet record start [NAME] | stop")
+        return
+
+    print("Commands: list | search KEYWORD | info NAME | run NAME | pipeline NAMES | save NAME DESC CODE | record start|stop")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
