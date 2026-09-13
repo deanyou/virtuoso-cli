@@ -29,16 +29,21 @@ def search(conn, query, version="IC251", limit=10):
     # Strategy 1: function name prefix matching
     # Extract likely function prefix from query
     synonyms = {
-        'draw': 'create', 'make': 'create', 'build': 'create',
-        'delete': 'delete', 'remove': 'delete', 'destroy': 'delete',
-        'get': 'get', 'query': 'get', 'find': 'get', 'list': 'get',
-        'set': 'set', 'change': 'set', 'modify': 'set',
-        'move': 'transform', 'copy': 'copy',
-        'rect': 'rect', 'rectangle': 'rect',
-        'polygon': 'polygon', 'path': 'path', 'instance': 'inst',
-        'bbox': 'bbox', 'bounding': 'bbox', 'measure': 'bbox',
+        'draw': 'create', 'make': 'create', 'build': 'create', 'paint': 'create',
+        'delete': 'delete', 'remove': 'delete', 'destroy': 'delete', 'erase': 'delete',
+        'get': 'get', 'query': 'get', 'find': 'get', 'list': 'get', 'read': 'get',
+        'set': 'set', 'change': 'set', 'modify': 'set', 'update': 'set',
+        'move': 'transform', 'copy': 'copy', 'shift': 'transform',
+        'rect': 'rect', 'rectangle': 'rect', 'box': 'rect',
+        'polygon': 'polygon', 'path': 'path', 'line': 'line',
+        'instance': 'inst', 'cell': 'cell', 'component': 'inst',
+        'bbox': 'bbox', 'bounding': 'bbox', 'measure': 'bbox', 'area': 'area',
         'select': 'select', 'highlight': 'select',
-        'layer': 'layer', 'pin': 'pin', 'net': 'net',
+        'layer': 'layer', 'pin': 'pin', 'net': 'net', 'terminal': 'term',
+        'save': 'save', 'write': 'save', 'store': 'save',
+        'open': 'open', 'close': 'close',
+        'cellview': 'cellview', 'cv': 'cellview',
+        'group': 'group', 'marker': 'marker',
     }
     expanded = set()
     for t in terms:
@@ -170,6 +175,13 @@ def main():
                 print(f"\n  ⚠ Known errors ({len(errors)}):")
                 for e in errors:
                     print(f"    [{e['error_type']}] {e['error_message'][:100]}")
+            # Show parameter examples
+            from skill_db import get_param_examples
+            examples = get_param_examples(conn, args.function)
+            if examples:
+                print(f"\n  ✓ Known parameter examples:")
+                for ex in examples[:10]:
+                    print(f"    {ex['param_name']}: {ex['example_value']} (used {ex['success_count']}x)")
         else:
             print(f"Function '{args.function}' not found in {args.version}")
             # Try other versions

@@ -146,6 +146,48 @@ def record_shape_property(conn, obj_type, prop, works, example=None):
     conn.commit()
 
 
+def record_param_example(conn, function_name, param_name, example_value):
+    """Record a successful parameter value for a function."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS param_examples (
+            function_name TEXT,
+            param_name TEXT,
+            example_value TEXT,
+            success_count INTEGER DEFAULT 1,
+            last_used TEXT,
+            PRIMARY KEY (function_name, param_name, example_value)
+        )
+    """)
+    conn.execute("""
+        INSERT INTO param_examples (function_name, param_name, example_value, success_count, last_used)
+        VALUES (?, ?, ?, 1, ?)
+        ON CONFLICT(function_name, param_name, example_value) DO UPDATE SET
+            success_count = success_count + 1,
+            last_used = excluded.last_used
+    """, (function_name, param_name, example_value, datetime.now().isoformat()))
+    conn.commit()
+
+
+def get_param_examples(conn, function_name):
+    """Get known successful parameter examples for a function."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS param_examples (
+            function_name TEXT,
+            param_name TEXT,
+            example_value TEXT,
+            success_count INTEGER DEFAULT 1,
+            last_used TEXT,
+            PRIMARY KEY (function_name, param_name, example_value)
+        )
+    """)
+    rows = conn.execute("""
+        SELECT param_name, example_value, success_count
+        FROM param_examples WHERE function_name = ?
+        ORDER BY success_count DESC
+    """, (function_name,)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def stats(conn):
     """Database statistics."""
     total = conn.execute("SELECT COUNT(*) FROM functions").fetchone()[0]
