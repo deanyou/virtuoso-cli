@@ -22,27 +22,93 @@ def get_conn():
     return conn
 
 def search(conn, query, version="IC251", limit=10):
-    """Semantic search via FTS5."""
-    # Use OR between terms for better recall
+    """Smart search: name prefix + FTS5 BM25 + synonym expansion."""
     terms = query.strip().split()
-    fts_query = " OR ".join(terms)
+    results = {}
+
+    # Strategy 1: function name prefix matching
+    # Extract likely function prefix from query
+    synonyms = {
+        'draw': 'create', 'make': 'create', 'build': 'create',
+        'delete': 'delete', 'remove': 'delete', 'destroy': 'delete',
+        'get': 'get', 'query': 'get', 'find': 'get', 'list': 'get',
+        'set': 'set', 'change': 'set', 'modify': 'set',
+        'move': 'transform', 'copy': 'copy',
+        'rect': 'rect', 'rectangle': 'rect',
+        'polygon': 'polygon', 'path': 'path', 'instance': 'inst',
+        'bbox': 'bbox', 'bounding': 'bbox', 'measure': 'bbox',
+        'select': 'select', 'highlight': 'select',
+        'layer': 'layer', 'pin': 'pin', 'net': 'net',
+    }
+    expanded = set()
+    for t in terms:
+        tl = t.lower().rstrip('s')
+        expanded.add(tl)
+        if tl in synonyms:
+            expanded.add(synonyms[tl])
+        # Also try prefix variants
+        if tl.startswith('cre'):
+            expanded.add('creat')
+
+    # Search by name pattern: dbCreate*, leCreate*, hiSelect*, etc.
+    # Score: higher = more keywords matched in name
+    for word in expanded:
+        for prefix in ['db', 'le', 'ge', 'hi', 'rod', 'dd']:
+            pattern = f"{prefix}%{word}%"
+            try:
+                rows = conn.execute("""
+                    SELECT name, syntax, description, category, version,
+                           CASE WHEN LOWER(name) LIKE LOWER(?) THEN 3 ELSE 1 END as score
+                    FROM fnd_functions
+                    WHERE version=? AND LOWER(name) LIKE LOWER(?)
+                    LIMIT 50
+                """, (f'%{word}%', version, pattern)).fetchall()
+                for r in rows:
+                    d = dict(r)
+                    if d['name'] in results:
+                        results[d['name']]['score'] += d['score']
+                    else:
+                        results[d['name']] = d
+            except Exception:
+                pass
+
+    # Strategy 2: FTS5 BM25 on description
+    fts_terms = " OR ".join(expanded)
     try:
         rows = conn.execute("""
-            SELECT name, syntax, description, category, version
+            SELECT name, syntax, description, category, version, bm25(fnd_functions_fts) as score
             FROM fnd_functions_fts
             WHERE fnd_functions_fts MATCH ? AND version = ?
+            ORDER BY score
             LIMIT ?
-        """, (fts_query, version, limit)).fetchall()
+        """, (fts_terms, version, limit * 2)).fetchall()
+        for r in rows:
+            d = dict(r)
+            if d['name'] not in results:
+                results[d['name']] = d
     except Exception:
-        # Fallback: LIKE search
-        like = f"%{query}%"
-        rows = conn.execute("""
-            SELECT name, syntax, description, category, version
-            FROM fnd_functions
-            WHERE version = ? AND (name LIKE ? OR description LIKE ?)
-            LIMIT ?
-        """, (version, like, like, limit)).fetchall()
-    return [dict(r) for r in rows]
+        pass
+
+    # Strategy 3: LIKE fallback on description (case-insensitive)
+    if len(results) < limit:
+        for word in list(expanded)[:3]:
+            try:
+                rows = conn.execute("""
+                    SELECT name, syntax, description, category, version
+                    FROM fnd_functions
+                    WHERE version=? AND LOWER(description) LIKE LOWER(?)
+                    LIMIT ?
+                """, (version, f'%{word}%', limit)).fetchall()
+                for r in rows:
+                    d = dict(r)
+                    if d['name'] not in results:
+                        results[d['name']] = d
+            except Exception:
+                pass
+
+    # Sort by score (higher = better match), then by name
+    sorted_results = sorted(results.values(), key=lambda x: (-x.get('score', 1), x['name']))
+    return sorted_results[:limit]
 
 def get_function(conn, name, version="IC251"):
     """Exact function lookup."""
