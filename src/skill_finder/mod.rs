@@ -328,14 +328,13 @@ pub fn cache_file_count(host: &str) -> usize {
 pub fn sync_from_remote<F>(
     host: &str,
     ssh_target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: Option<&str>,
     progress: Option<F>,
 ) -> std::io::Result<usize>
 where
     F: Fn(&str) + Copy,
 {
-    use std::process::Command;
-
     let cache = cache_dir(host).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -346,80 +345,103 @@ where
     // Create cache directory
     std::fs::create_dir_all(&cache)?;
 
-    // Find remote SKILL Finder directory
-    let remote_dir = find_remote_skill_finder_dir(ssh_target, cadence_cshrc)?;
+    // Find every remote SKILL Finder directory (DFII tree first, Spectre tree
+    // after). A site has several Cadence installs and they ship different
+    // databases, so we union them rather than stopping at the first hit.
+    let remote_dirs = find_remote_skill_finder_dirs(ssh_target, ssh_key, cadence_cshrc)?;
 
     if let Some(p) = progress {
-        p(&format!("Found remote SKILL Finder at: {}", remote_dir));
+        p(&format!(
+            "Found {} remote SKILL Finder dir(s): {}",
+            remote_dirs.len(),
+            remote_dirs.join(", ")
+        ));
     }
 
-    // List remote .fnd files
-    let list_script = format!(
-        r#"find {} -name "*.fnd" -type f 2>/dev/null | head -200"#,
-        remote_dir
-    );
-
-    let output = Command::new("ssh")
-        .args(["-o", "BatchMode=yes"])
-        .args(["-o", "ConnectTimeout=30"])
-        .arg(ssh_target)
-        .arg(&list_script)
-        .output()
-        .map_err(|e| std::io::Error::other(format!("SSH failed: {}", e)))?;
-
-    if !output.status.success() {
-        return Err(std::io::Error::other(format!(
-            "Failed to list remote files: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )));
-    }
-
-    let files: Vec<String> = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-
-    if let Some(p) = progress {
-        p(&format!("Found {} .fnd files on remote", files.len()));
-    }
-
-    // Download each file
     let mut synced = 0;
-    for remote_file in &files {
-        let file_name = std::path::Path::new(remote_file)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unknown.fnd");
+    let mut failed = 0;
+    let mut written: Vec<std::ffi::OsString> = Vec::new();
 
-        let local_path = cache.join(file_name);
+    for remote_dir in &remote_dirs {
+        // List remote .fnd files (recursive: IC231 groups them into
+        // Core_SKILL/, DFII_SKILL/, Schematics/, Virtuoso_ADE/, … subdirs)
+        let list_script = format!(
+            r#"find {} -name "*.fnd" -type f 2>/dev/null | head -200"#,
+            remote_dir
+        );
 
-        // Build SCP command
-        let scp_result = Command::new("scp")
-            .args(["-o", "BatchMode=yes"])
-            .args(["-o", "ConnectTimeout=30"])
-            .arg(format!("{}:{}", ssh_target, remote_file))
-            .arg(&local_path)
-            .output();
+        let output = crate::transport::ssh::doc_transfer_command("ssh", ssh_key)
+            .arg(ssh_target)
+            .arg(&list_script)
+            .output()
+            .map_err(|e| std::io::Error::other(format!("SSH failed: {}", e)))?;
 
-        match scp_result {
-            Ok(out) if out.status.success() => {
-                synced += 1;
-                if let Some(p) = progress {
-                    p(&format!("Downloaded: {}", file_name));
+        if !output.status.success() {
+            return Err(std::io::Error::other(format!(
+                "Failed to list remote files: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+
+        let files: Vec<String> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        if let Some(p) = progress {
+            p(&format!(
+                "Found {} .fnd files under {}",
+                files.len(),
+                remote_dir
+            ));
+        }
+
+        // Download each file
+        for remote_file in &files {
+            let base = std::path::Path::new(remote_file)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown.fnd");
+
+            let file_name = cache_file_name(remote_dir, base);
+            let local_path = cache.join(&file_name);
+
+            // Build SCP command
+            let scp_result = crate::transport::ssh::doc_transfer_command("scp", ssh_key)
+                .arg(format!("{}:{}", ssh_target, remote_file))
+                .arg(&local_path)
+                .output();
+
+            match scp_result {
+                Ok(out) if out.status.success() => {
+                    synced += 1;
+                    written.push(std::ffi::OsString::from(&file_name));
+                    if let Some(p) = progress {
+                        p(&format!("Downloaded: {}", file_name));
+                    }
+                }
+                Ok(out) => {
+                    failed += 1;
+                    tracing::warn!(
+                        "Failed to download {}: {}",
+                        file_name,
+                        String::from_utf8_lossy(&out.stderr)
+                    );
+                }
+                Err(e) => {
+                    failed += 1;
+                    tracing::warn!("SCP error for {}: {}", file_name, e);
                 }
             }
-            Ok(out) => {
-                tracing::warn!(
-                    "Failed to download {}: {}",
-                    file_name,
-                    String::from_utf8_lossy(&out.stderr)
-                );
-            }
-            Err(e) => {
-                tracing::warn!("SCP error for {}: {}", file_name, e);
-            }
         }
+    }
+
+    // Drop cached databases the remote no longer offers, so a sync leaves the
+    // cache matching the server. Skipped when anything failed to download —
+    // a half-finished sync must not delete the copies we still have.
+    if failed == 0 && synced > 0 {
+        prune_stale_cache(&cache, &written, progress);
     }
 
     if let Some(p) = progress {
@@ -429,80 +451,155 @@ where
     Ok(synced)
 }
 
-/// Find the SKILL Finder directory on a remote server via SSH.
-fn find_remote_skill_finder_dir(
-    ssh_target: &str,
-    cadence_cshrc: Option<&str>,
-) -> std::io::Result<String> {
-    use std::process::Command;
-
-    // Build environment setup script
-    let env_setup = if let Some(cshrc) = cadence_cshrc {
-        let escaped = cshrc.replace('\'', "'\"'\"'\"'\"'");
-        format!(
-            r#"eval "$(csh -c 'source {}; env' 2>/dev/null | grep -E '^(PATH|LM_LICENSE_FILE|CDS)=' | sed 's/^/export /')" 2>/dev/null"#,
-            escaped
-        )
-    } else {
-        String::new()
+/// Remove `.fnd` files in `cache` that were not written by this sync.
+fn prune_stale_cache<F>(cache: &std::path::Path, written: &[std::ffi::OsString], progress: Option<F>)
+where
+    F: Fn(&str) + Copy,
+{
+    let Ok(entries) = std::fs::read_dir(cache) else {
+        return;
     };
-
-    // Find virtuoso binary
-    let find_virtuoso = format!(
-        r#"{}
-which spectre 2>/dev/null || which virtuoso 2>/dev/null || echo NOTFOUND"#,
-        env_setup
-    );
-
-    let output = Command::new("ssh")
-        .args(["-o", "BatchMode=yes"])
-        .args(["-o", "ConnectTimeout=30"])
-        .arg(ssh_target)
-        .arg(&find_virtuoso)
-        .output()
-        .map_err(|e| std::io::Error::other(format!("SSH failed: {}", e)))?;
-
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    if path.is_empty() || path == "NOTFOUND" {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Could not find virtuoso/spectre on remote server. Ensure Cadence is in PATH or set VB_CADENCE_CSHRC.",
-        ));
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.extension().is_some_and(|ext| ext == "fnd") {
+            continue;
+        }
+        let Some(name) = path.file_name() else {
+            continue;
+        };
+        if written.iter().any(|w| w == name) {
+            continue;
+        }
+        match std::fs::remove_file(&path) {
+            Ok(()) => {
+                if let Some(p) = progress {
+                    p(&format!("Removed stale: {}", name.to_string_lossy()));
+                }
+            }
+            Err(e) => tracing::warn!("Failed to remove stale {}: {}", path.display(), e),
+        }
     }
+}
 
-    // Walk up from virtuoso to find doc/finder/SKILL
-    let walk_script = format!(
-        r#"p="{}"
-while [ -n "$p" ] && [ "$p" != "/" ]; do
-  if [ -d "$p/doc/finder/SKILL" ]; then echo "$p/doc/finder/SKILL"; exit 0; fi
-  p=$(dirname "$p")
-done
-exit 1"#,
-        path.replace('\'', "'\"'\"'\"'\"'")
-    );
-
-    let output2 = Command::new("ssh")
-        .args(["-o", "BatchMode=yes"])
-        .args(["-o", "ConnectTimeout=30"])
-        .arg(ssh_target)
-        .arg(&walk_script)
-        .output()
-        .map_err(|e| std::io::Error::other(format!("SSH failed: {}", e)))?;
-
-    let finder_path = String::from_utf8_lossy(&output2.stdout).trim().to_string();
-
-    if finder_path.is_empty() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
+/// Build the shell snippet that exports the Cadence environment from a cshrc.
+///
+/// Returns an empty string when no cshrc is configured.
+pub fn cadence_env_setup(cadence_cshrc: Option<&str>) -> String {
+    match cadence_cshrc {
+        Some(cshrc) => {
+            let escaped = cshrc.replace('\'', "'\"'\"'\"'\"'");
             format!(
-                "SKILL Finder not found near {}. Is Cadence installed correctly?",
-                path
-            ),
+                r#"eval "$(csh -c 'source {}; env' 2>/dev/null | grep -E '^(PATH|LM_LICENSE_FILE|CDS)=' | sed 's/^/export /')" 2>/dev/null"#,
+                escaped
+            )
+        }
+        None => String::new(),
+    }
+}
+
+/// Shell script that prints **every** `doc/finder/SKILL` directory reachable
+/// from the Cadence binaries on `PATH`, one per line, most relevant first.
+///
+/// A site typically has several Cadence installs side by side, and they do
+/// **not** ship the same documentation. On the reference box:
+///
+/// ```text
+/// virtuoso -> /opt/Cadence/IC231/tools/dfII/bin/virtuoso
+///              -> /opt/Cadence/IC231/doc/finder/SKILL        39 .fnd
+/// spectre  -> /opt/Cadence/SPECTRE231/tools/spectre/bin/spectre
+///              -> /opt/Cadence/SPECTRE231/doc/finder/SKILL    2 .fnd
+/// ```
+///
+/// The previous implementation probed `which spectre || which virtuoso`, so
+/// the `||` short-circuited on the Spectre-only tree and the DFII databases
+/// (`skdfref`, `skcompref`, `skuiref`, `maeSKILLref`, …) were never synced —
+/// i.e. lookups for the schematic/UI/Maestro APIs we actually drive silently
+/// returned "not found". Probe both, prefer `virtuoso`, and union the results.
+pub fn remote_finder_probe_script(cadence_cshrc: Option<&str>) -> String {
+    format!(
+        r#"{}
+walk_up() {{
+  p="$1"
+  while [ -n "$p" ] && [ "$p" != "/" ]; do
+    if [ -d "$p/doc/finder/SKILL" ]; then echo "$p/doc/finder/SKILL"; return 0; fi
+    p=$(dirname "$p")
+  done
+  return 1
+}}
+for b in virtuoso spectre; do
+  x=$(command -v "$b" 2>/dev/null) || continue
+  [ -n "$x" ] && walk_up "$x"
+done"#,
+        cadence_env_setup(cadence_cshrc)
+    )
+}
+
+/// Parse the output of [`remote_finder_probe_script`]: trim, drop blanks and
+/// `NOTFOUND` markers, and de-duplicate while preserving discovery order.
+pub fn parse_finder_dirs(stdout: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() || line == "NOTFOUND" || !line.starts_with('/') {
+            continue;
+        }
+        if !out.iter().any(|d| d == line) {
+            out.push(line.to_string());
+        }
+    }
+    out
+}
+
+/// Extract the Cadence release directory name from a finder path.
+///
+/// `/opt/Cadence/IC231/doc/finder/SKILL` → `IC231`
+pub fn release_tag(finder_dir: &str) -> Option<&str> {
+    finder_dir
+        .trim_end_matches('/')
+        .strip_suffix("/doc/finder/SKILL")?
+        .rsplit('/')
+        .find(|s| !s.is_empty())
+}
+
+/// Local cache file name for a remote `.fnd`, namespaced by Cadence release.
+///
+/// Releases share basenames — `caiskill.fnd` exists in both `IC231` and
+/// `SPECTRE231` — so a flat cache would let one silently clobber the other.
+/// Prefixing also makes the `source` shown in search results say which release
+/// (and which database) an entry came from.
+pub fn cache_file_name(finder_dir: &str, base: &str) -> String {
+    match release_tag(finder_dir) {
+        Some(tag) => format!("{}__{}", tag, base),
+        None => base.to_string(),
+    }
+}
+
+/// Find every SKILL Finder directory on a remote server via SSH.
+///
+/// Ordered most-relevant-first (the `virtuoso`/DFII tree before the Spectre
+/// tree). Returns an error only when no Cadence install is reachable at all.
+fn find_remote_skill_finder_dirs(
+    ssh_target: &str,
+    ssh_key: Option<&str>,
+    cadence_cshrc: Option<&str>,
+) -> std::io::Result<Vec<String>> {
+    let output = crate::transport::ssh::doc_transfer_command("ssh", ssh_key)
+        .arg(ssh_target)
+        .arg(remote_finder_probe_script(cadence_cshrc))
+        .output()
+        .map_err(|e| std::io::Error::other(format!("SSH failed: {}", e)))?;
+
+    let dirs = parse_finder_dirs(&String::from_utf8_lossy(&output.stdout));
+
+    if dirs.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No doc/finder/SKILL directory found near virtuoso/spectre on the remote server. \
+             Ensure Cadence is in PATH or set VB_CADENCE_CSHRC.",
         ));
     }
 
-    Ok(finder_path)
+    Ok(dirs)
 }
 
 /// Load from cache, or sync if cache doesn't exist.
@@ -512,6 +609,7 @@ pub fn load_or_sync(
     finder: &mut SKILLFinder,
     host: &str,
     ssh_target: &str,
+    ssh_key: Option<&str>,
     cadence_cshrc: Option<&str>,
 ) -> std::io::Result<PathBuf> {
     // Try cache first
@@ -526,7 +624,7 @@ pub fn load_or_sync(
     }
 
     // Sync from remote with empty progress function
-    let _ = sync_from_remote(host, ssh_target, cadence_cshrc, Some(|_: &str| ()))?;
+    let _ = sync_from_remote(host, ssh_target, ssh_key, cadence_cshrc, Some(|_: &str| ()))?;
 
     // Load from cache
     let cache = cache_dir(host).ok_or_else(|| {
@@ -594,6 +692,99 @@ pub struct SearchOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -- remote finder discovery (defect K) ---------------------------------
+
+    #[test]
+    fn probe_script_checks_virtuoso_before_spectre() {
+        let script = remote_finder_probe_script(None);
+        let v = script.find("virtuoso").expect("probes virtuoso");
+        let s = script.find("spectre").expect("probes spectre");
+        assert!(v < s, "virtuoso (DFII tree) must be probed first:\n{script}");
+        // The old `which a || which b` short-circuit is what hid 37 of 39
+        // databases; make sure it does not come back — both must be walked.
+        assert!(
+            script.contains("for b in virtuoso spectre"),
+            "must probe every binary, not short-circuit on the first:\n{script}"
+        );
+        assert!(!script.contains("which "), "use `command -v` in a loop:\n{script}");
+    }
+
+    #[test]
+    fn probe_script_embeds_cshrc_setup() {
+        assert!(remote_finder_probe_script(None).starts_with('\n'));
+        let with = remote_finder_probe_script(Some("/opt/cadence/cshrc"));
+        assert!(with.contains("source /opt/cadence/cshrc"));
+    }
+
+    #[test]
+    fn parse_finder_dirs_dedupes_and_keeps_order() {
+        let out = "/opt/Cadence/IC231/doc/finder/SKILL\n\
+                   /opt/Cadence/SPECTRE231/doc/finder/SKILL\n\
+                   /opt/Cadence/IC231/doc/finder/SKILL\n";
+        assert_eq!(
+            parse_finder_dirs(out),
+            vec![
+                "/opt/Cadence/IC231/doc/finder/SKILL",
+                "/opt/Cadence/SPECTRE231/doc/finder/SKILL",
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_finder_dirs_rejects_noise() {
+        // Blank lines, NOTFOUND markers and shell chatter are not paths.
+        let out = "\nNOTFOUND\nbash: command not found\n  /opt/Cadence/IC231/doc/finder/SKILL  \n";
+        assert_eq!(
+            parse_finder_dirs(out),
+            vec!["/opt/Cadence/IC231/doc/finder/SKILL"]
+        );
+        assert!(parse_finder_dirs("").is_empty());
+    }
+
+    #[test]
+    fn release_tag_names_the_cadence_install() {
+        assert_eq!(
+            release_tag("/opt/Cadence/IC231/doc/finder/SKILL"),
+            Some("IC231")
+        );
+        assert_eq!(
+            release_tag("/opt/Cadence/SPECTRE231/doc/finder/SKILL/"),
+            Some("SPECTRE231")
+        );
+        assert_eq!(release_tag("/somewhere/else"), None);
+    }
+
+    #[test]
+    fn cache_file_name_keeps_colliding_basenames_apart() {
+        // caiskill.fnd ships in BOTH IC231 and SPECTRE231 — a flat cache let
+        // one silently overwrite the other.
+        let a = cache_file_name("/opt/Cadence/IC231/doc/finder/SKILL", "caiskill.fnd");
+        let b = cache_file_name("/opt/Cadence/SPECTRE231/doc/finder/SKILL", "caiskill.fnd");
+        assert_eq!(a, "IC231__caiskill.fnd");
+        assert_eq!(b, "SPECTRE231__caiskill.fnd");
+        assert_ne!(a, b);
+        // Unrecognisable roots fall back to the plain basename.
+        assert_eq!(cache_file_name("/weird/path", "x.fnd"), "x.fnd");
+    }
+
+    #[test]
+    fn prune_stale_cache_removes_only_unwritten_fnd_files() {
+        let dir = std::env::temp_dir().join(format!("vcli_prune_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("IC231__skdfref.fnd"), "x").unwrap();
+        std::fs::write(dir.join("skdfref.fnd"), "stale flat name").unwrap();
+        std::fs::write(dir.join("notes.txt"), "keep me").unwrap();
+
+        let written = vec![std::ffi::OsString::from("IC231__skdfref.fnd")];
+        prune_stale_cache(&dir, &written, None::<fn(&str)>);
+
+        assert!(dir.join("IC231__skdfref.fnd").exists());
+        assert!(!dir.join("skdfref.fnd").exists(), "stale .fnd must go");
+        assert!(dir.join("notes.txt").exists(), "non-.fnd must be left alone");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn test_search_mode_display() {

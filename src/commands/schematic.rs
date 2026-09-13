@@ -53,8 +53,8 @@ pub fn open(lib: &str, cell: &str, view: &str) -> Result<Value> {
 pub fn place(
     master: &str,
     name: &str,
-    x: i64,
-    y: i64,
+    x: f64,
+    y: f64,
     orient: Orient,
     params: &[(String, String)],
 ) -> Result<Value> {
@@ -76,7 +76,7 @@ pub fn place(
 }
 
 pub fn wire_from_strings(net: &str, points: &[String]) -> Result<Value> {
-    let pts: Vec<(i64, i64)> = points
+    let pts: Vec<(f64, f64)> = points
         .iter()
         .map(|s| {
             let (x, y) = s
@@ -93,9 +93,9 @@ pub fn wire_from_strings(net: &str, points: &[String]) -> Result<Value> {
     wire(net, &pts)
 }
 
-pub fn wire(net: &str, points: &[(i64, i64)]) -> Result<Value> {
+pub fn wire(net: &str, points: &[(f64, f64)]) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let skill = client.schematic.create_wire(points, "wire", net);
+    let skill = client.schematic.create_wire(points, net);
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
@@ -122,7 +122,7 @@ pub fn conn(net: &str, from: &str, to: &str) -> Result<Value> {
     }))
 }
 
-pub fn label(net: &str, x: i64, y: i64) -> Result<Value> {
+pub fn label(net: &str, x: f64, y: f64) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.create_wire_label(net, (x, y));
     let r = client.execute_skill(&skill, None)?;
@@ -132,7 +132,7 @@ pub fn label(net: &str, x: i64, y: i64) -> Result<Value> {
     }))
 }
 
-pub fn pin(net: &str, pin_type: &str, x: i64, y: i64) -> Result<Value> {
+pub fn pin(net: &str, pin_type: &str, x: f64, y: f64) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
     let skill = client.schematic.create_pin(net, pin_type, (x, y));
     let r = client.execute_skill(&skill, None)?;
@@ -169,8 +169,8 @@ pub fn save() -> Result<Value> {
 /// cosmetic: "default" (0.0625, centerCenter) or "clean" (0.125, lowerCenter)
 pub fn net_stub(
     net: &str,
-    x: i64,
-    y: i64,
+    x: f64,
+    y: f64,
     direction: &str,
     length: f64,
     cosmetic: &str,
@@ -179,18 +179,28 @@ pub fn net_stub(
     let skill = client
         .schematic
         .create_net_stub(net, x, y, direction, length, cosmetic);
-    let r = client.execute_skill(&skill, None)?;
+    // Unchecked — SKILL is generated from typed args, and the capability check
+    // already ran at RPC dispatch (see commands/window.rs for the same fix).
+    let r = client.execute_skill_unchecked(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
         "net": net,
         "direction": direction,
         "origin": [x, y],
         "output": r.output,
+        "errors": r.errors,
     }))
 }
 
 /// Label an instance terminal (D/G/S/B) with a net name at the terminal's
 /// precise pin center.
+///
+/// `already` distinguishes "the stub was drawn just now" from "the stub was
+/// already there, labelled with this same net". Both are `success` — running a
+/// build recipe twice must not look like a failure — but the caller counting
+/// how much it changed needs to tell them apart. The SKILL marks the second
+/// case with a leading `already:`; a stub carrying a *different* net name is an
+/// error, not an `already`.
 ///
 /// inst: "instance_name" (e.g. "M1")
 /// term: terminal name (e.g. "D", "G", "S", "B")
@@ -208,13 +218,18 @@ pub fn label_term(
     let skill = client
         .schematic
         .label_instance_term(inst, term, net, cosmetic, auto_rotate);
-    let r = client.execute_skill(&skill, None)?;
+    // Unchecked — see `net_stub` above.
+    let r = client.execute_skill_unchecked(&skill, None)?;
+    let ok = r.skill_ok();
     Ok(json!({
-        "status": if r.skill_ok() { "success" } else { "error" },
+        "status": if ok { "success" } else { "error" },
         "instance": inst,
         "terminal": term,
         "net": net,
+        // `output_unquoted`: the bridge hands SKILL strings back still quoted.
+        "already": ok && r.output_unquoted().starts_with("already:"),
         "output": r.output,
+        "errors": r.errors,
     }))
 }
 
@@ -250,9 +265,9 @@ pub struct SpecInstance {
     pub name: String,
     pub master: String, // "lib/cell"
     #[serde(default)]
-    pub x: i64,
+    pub x: f64,
     #[serde(default)]
-    pub y: i64,
+    pub y: f64,
     #[serde(default = "default_orient")]
     pub orient: Orient,
     #[serde(default)]
@@ -285,9 +300,9 @@ pub struct SpecPin {
     #[allow(dead_code)]
     pub connect: Option<String>, // "M2:G"
     #[serde(default)]
-    pub x: i64,
+    pub x: f64,
     #[serde(default)]
-    pub y: i64,
+    pub y: f64,
 }
 
 pub fn build(spec_path: &str) -> Result<Value> {
@@ -520,6 +535,29 @@ pub fn get_params(inst: &str) -> Result<Value> {
     Ok(json!({"instance": inst, "params": parse_skill_json(&r.output)?}))
 }
 
+/// Set one CDF parameter of a schematic instance.
+///
+/// Routes through the typed RPC dispatcher (`schematic.set_param`) rather than
+/// the raw-SKILL `execute_skill` path its read twin `get_params` uses. This
+/// keeps the CLI and the RPC method on **one route**: both go through the
+/// per-domain `permits_method` capability gate (Schematic, not Admin) and the
+/// audit log, so `vcli schematic set-param` works under the default,
+/// non-Admin capability set — the whole point of the typed surface.
+pub fn set_param(inst: &str, param: &str, value: &str) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+    let request = crate::rpc::dispatcher::RpcRequest {
+        method: "schematic.set_param".into(),
+        params: json!({ "inst": inst, "param": param, "value": value }),
+        api_key: std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty()),
+    };
+    // `schematic::*` has not been migrated to `CommandContext` yet (P0-A), so
+    // there is no ctx to thread down from `dispatch_schematic`. Resolve one
+    // here from the same environment `VirtuosoClient::from_env` just used, so
+    // the dispatcher sees the identical configuration.
+    let ctx = crate::context::CommandContext::new(crate::config::Config::from_env()?, None)?;
+    crate::rpc::dispatcher::RpcDispatcher::new(ctx).dispatch(&client, request)
+}
+
 /// Polish net labels with cosmetic presets, auto-rotation, or offset repositioning.
 ///
 /// preset: "readable" (fontSize 0.125, centerCenter) or "compact" (fontSize 0.0625, centerLeft)
@@ -535,7 +573,8 @@ pub fn polish_label(
     let skill = client
         .schematic
         .polish_labels(net, preset, auto_rotate, offset);
-    let r = client.execute_skill(&skill, None)?;
+    // Unchecked — see `net_stub` above.
+    let r = client.execute_skill_unchecked(&skill, None)?;
     let labels_updated = r.output_unquoted().parse::<usize>().unwrap_or(0);
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },

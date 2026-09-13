@@ -1,7 +1,7 @@
 use crate::capability::CapabilitySet;
 use crate::client::layout_ops::LayoutOps;
 use crate::client::maestro_ops::MaestroOps;
-use crate::client::schematic_ops::SchematicOps;
+use crate::client::schematic_ops::{cv_guard, SchematicOps, EDIT_CV};
 use crate::client::whitelist::EvalstringWhitelist;
 use crate::client::window_ops::WindowOps;
 use crate::config::Config;
@@ -21,6 +21,24 @@ use std::time::Instant;
 const STX: u8 = 0x02;
 const NAK: u8 = 0x15;
 const MAX_RESPONSE_SIZE: usize = 100 * 1024 * 1024; // 100MB
+
+/// SKILL listing every cellview this Virtuoso holds open, and whether a window
+/// shows it. Emits a JSON array of `{lib, cell, view, mode, window}`.
+///
+/// This exists because of a leak that took disk forensics to find. On
+/// 2026-09-09 `DESIGN_LIB/amp/schematic` sat open in mode `"a"` for the
+/// better part of an hour holding `sch.oa.cdslck`, with no window showing it
+/// and no RPC method able to reveal it: `cell.info` only ever describes the
+/// *current* cellview, and `window.list` cannot see a cellview that has no
+/// window. It was found by listing lock files over SSH — not a capability this
+/// tool offers its callers.
+///
+/// `mode` is the field that matters. `"a"` holds an edit lock, `"r"` does not.
+/// A row with `mode: "a"` and `window: false` is an orphan: nothing in the GUI
+/// can close it, and a human stays locked out of that cell until someone calls
+/// `cell.close`. Masters pulled in by the netlister show up as `"r"` and are
+/// harmless.
+pub(crate) const OPEN_CELLVIEWS: &str = r#"let((out sep) out = "[" sep = "" foreach(c dbGetOpenCellViews() out = strcat(out sep sprintf(nil "{\"lib\":\"%s\",\"cell\":\"%s\",\"view\":\"%s\",\"mode\":\"%s\",\"window\":%s}" c~>libName c~>cellName c~>viewName c~>mode if(exists(w hiGetWindowList() w->cellView == c) "true" "false"))) sep = ",") strcat(out "]"))"#;
 
 pub struct VirtuosoClient {
     host: String,
@@ -505,30 +523,141 @@ impl VirtuosoClient {
         view: &str,
         mode: &str,
     ) -> Result<VirtuosoResult> {
-        let lib = escape_skill_string(lib);
-        let cell = escape_skill_string(cell);
-        let view = escape_skill_string(view);
-        let mode = escape_skill_string(mode);
-        let skill = format!(
-            r#"geOpenCellView(?libName "{lib}" ?cellName "{cell}" ?viewName "{view}" ?mode "{mode}")"#
-        );
+        let skill = build_open_cell_view_skill(lib, cell, view, mode);
         // Use unchecked — capability check done at RPC dispatch level
         self.execute_skill_unchecked(&skill, None)
     }
 
     pub fn save_current_cellview(&self) -> Result<VirtuosoResult> {
+        // Uses the same resolution as `schematic.*` (see `cv_guard`): without
+        // it `cell.save` cannot save a cellview opened by
+        // `schematic.open_cell_view`, which opens no window.
+        //
+        // The save itself is `dbSave(cv)` — cellview-scoped — and not
+        // `geSaveEdit()`, which is window-scoped and saves whatever the
+        // *current window* shows. Those are the same cellview only by luck:
+        // resolving `cv` and then saving through the current window reintroduces
+        // exactly the mis-targeting `cv_guard` exists to prevent, and here it
+        // would write one cell's edits while reporting success for another.
+        let guard = cv_guard();
+        let skill = format!("let((cv) cv = {EDIT_CV} {guard} dbSave(cv))");
         // Use unchecked — capability check done at RPC dispatch level
-        self.execute_skill_unchecked("geSaveEdit()", None)
+        self.execute_skill_unchecked(&skill, None)
     }
 
-    pub fn close_current_cellview(&self) -> Result<VirtuosoResult> {
+    /// Close the target cellview — the one `cv_guard` resolves — whether a
+    /// window shows it or not.
+    ///
+    /// Six things this has to get right, each of which has bitten us:
+    ///
+    /// 1. **`geCloseEdit` does not exist on IC23.1.** It is absent from the
+    ///    finder database *and* unbound at run time — the same fate as
+    ///    `geOpenCellView`. The documented replacement is `hiCloseWindow`.
+    ///    But the finder DB is only a reliable *positive* oracle: `geSaveEdit`
+    ///    is undocumented and still works. So the choice is made at run time
+    ///    with `getd`, documented function first, rather than by hardcoding a
+    ///    name that a future IC release may move again.
+    ///
+    /// 2. **Closing a modified cellview pops a "save changes?" modal**, and a
+    ///    modal freezes the SKILL bridge (`RBIpcDataHandler` calls
+    ///    `evalstring` synchronously on the main event loop). So the modified
+    ///    state is resolved *deterministically first* — `dbSave` or a silent
+    ///    discard — and only then is the window closed.
+    ///
+    /// 3. **The window that shows the target is not necessarily the current
+    ///    one.** The old version read `hiGetCurrentWindow()` and refused to
+    ///    proceed unless it happened to show `cv`, which made closing a
+    ///    non-focused cellview impossible — and there is no
+    ///    `window.set_current` to fix the focus with. It now scans
+    ///    `hiGetWindowList()` for the window whose `->cellView` *is* `cv`
+    ///    (documented: IC23.1 UI SKILL Reference, `hiGetWindowList`). The CIW
+    ///    has no `cellView`, so it can never match and can never be closed by
+    ///    accident — the same protection the old `w->cellView != cv` guard gave,
+    ///    without the false refusals.
+    ///
+    /// 4. **The `ge*` cleanup calls are window-scoped, `cv` is not.** Once the
+    ///    window is found by scanning rather than by focus, a bare
+    ///    `geDiscardEdits()` would throw away the edits of whatever window is
+    ///    *current* instead. The save side uses cellview-scoped `dbSave(cv)`
+    ///    for the same reason.
+    ///
+    ///    Worse, `geDiscardEdits` is **interactive**: measured 2026-09-09, it
+    ///    puts up a "Really discard edits?" confirmation box, and a modal
+    ///    freezes the bridge (hazard 2) until a human clicks it — so the
+    ///    function meant to unblock an automated close was itself a blocker.
+    ///    The discard now goes through `dbReopen(cv "r")`, which the IC23.1
+    ///    SKILL Reference documents as silent: *"When you use the function to
+    ///    change from edit to read-only mode, your changes are discarded
+    ///    immediately."* `geDiscardEdits(w)` stays as the fallback, with the
+    ///    found window passed explicitly (it takes an optional window ID).
+    ///
+    /// 5. **A headless cellview must be closeable too.**
+    ///    `schematic.open_cell_view` opens with `dbOpenCellViewByType(... "a")`
+    ///    and no window. That takes a real edit lock, so without a headless
+    ///    close path the cell becomes one a human can neither open nor close
+    ///    from the GUI and has no window to click — the same trap as
+    ///    `maeOpenSetup` (EXPLORER-1642). Here that path is `dbSave`/`dbClose`
+    ///    plus clearing `RB_SCH_CV` so no dead handle is handed out later.
+    ///
+    /// 6. **`dbClose` returns `t` without releasing the cellview.** Measured
+    ///    2026-09-09 on a leaked `DESIGN_LIB/amp/schematic`: twelve
+    ///    consecutive `dbClose` calls each returned `t` while the cellview
+    ///    stayed in `dbGetOpenCellViews()` and kept its `sch.oa.cdslck` on
+    ///    disk. Only `dbPurge` released it. So `dbClose`'s return value is not
+    ///    evidence of anything — the close is verified against
+    ///    `dbGetOpenCellViews()`, `dbPurge` is the fallback, and still being
+    ///    open after both is an error rather than a `t`. The previous version
+    ///    ended in a literal `t` and so reported success while leaving the
+    ///    lock held, which is the worst possible failure for a lock-releasing
+    ///    operation: the caller stops looking.
+    pub fn close_current_cellview(&self, save: bool) -> Result<VirtuosoResult> {
+        let gui_resolve = if save {
+            "when(!dbSave(cv) error(\"cell.close: dbSave failed — refusing to close and lose the edits\"))"
+        } else {
+            "cond((getd('dbReopen) dbReopen(cv \"r\")) \
+                  (getd('geDiscardEdits) geDiscardEdits(w)) \
+                  (t error(\"cell.close: no way to discard edits on this Virtuoso\")))"
+        };
+        // Headless: discard explicitly rather than leaning on `dbClose` to do
+        // it, so the write lock is dropped even if the close needs `dbPurge`.
+        let headless_resolve = if save {
+            "when(!dbSave(hcv) error(\"cell.close: dbSave failed — refusing to close and lose the edits\"))"
+        } else {
+            "when(getd('dbReopen) dbReopen(hcv \"r\"))"
+        };
+        // `dbGetOpenCellViews` is the only trustworthy witness that the close
+        // actually happened; probe for it rather than assume it, in keeping
+        // with hazard 1.
+        let still_open = "getd('dbGetOpenCellViews) && memq(hcv dbGetOpenCellViews())";
+        let guard = cv_guard();
+        let skill = format!(
+            "let((cv w hcv) cv = {EDIT_CV} {guard} \
+             w = car(setof(x hiGetWindowList() x->cellView == cv)) \
+             if(w \
+               then when(dbIsCellViewModified(cv) {gui_resolve}) \
+                    cond((getd('hiCloseWindow) hiCloseWindow(w)) \
+                         (getd('geCloseEdit) geCloseEdit()) \
+                         (t error(\"cell.close: no cellview-close function is available on this Virtuoso\"))) \
+               else hcv = cv \
+                    {headless_resolve} \
+                    dbClose(hcv) \
+                    when({still_open} when(getd('dbPurge) dbPurge(hcv))) \
+                    when({still_open} error(\"cell.close: the cellview is still open after dbClose and dbPurge — its edit lock is still held\"))) \
+             RB_SCH_CV = nil \
+             t)"
+        );
         // Use unchecked — capability check done at RPC dispatch level
-        self.execute_skill_unchecked("geCloseEdit()", None)
+        self.execute_skill_unchecked(&skill, None)
     }
 
     pub fn get_current_design(&self) -> Result<(String, String, String)> {
+        // GUI-then-headless, same as `schematic.*` — otherwise `cell.info`
+        // cannot name a cellview opened without a window.
+        let guard = cv_guard();
         let result = self.execute_skill_unchecked(
-            r#"let((cv) cv = geGetEditCellView() list(cv~>libName cv~>cellName cv~>viewName))"#,
+            &format!(
+                r#"let((cv) cv = {EDIT_CV} {guard} list(cv~>libName cv~>cellName cv~>viewName))"#
+            ),
             None,
         )?;
         use crate::client::skill_sexp::{parse_sexp, SexpVal};
@@ -620,8 +749,10 @@ impl VirtuosoClient {
     /// misses.
     ///
     /// Uses a no-op `(+ 1 1)` instead of `ipcIsProcessRunning()` because the
-    /// latter requires a specific process-handle argument and returns nil
-    /// (falsy) when called without one.
+    /// latter **does not exist on IC23.1** — absent from all 41 SKILL Finder
+    /// databases, and `getd` returns nil for it. The nil that motivated this
+    /// switch was the bridge swallowing an "undefined function" error, not a
+    /// missing argument. Do not "fix" it by passing a process handle.
     pub fn daemon_alive(&self) -> bool {
         const SKILL: &str = r#"plus(1 1)"#;
         // Explicitly idempotent probe: it must survive a stale queued ticket,
@@ -802,9 +933,10 @@ impl VirtuosoClient {
     /// Used by heartbeat to detect stale sessions.
     ///
     /// Uses `plus(1 1)` as a no-op probe because `ipcIsProcessRunning()` (the
-    /// previously-used probe) requires a specific process-handle argument and
-    /// returns nil/empty when called without one — causing every ping to
-    /// fail on a live daemon. See `daemon_alive()` for the same pattern.
+    /// previously-used probe) **does not exist on IC23.1** — it is in none of
+    /// the 41 SKILL Finder databases and `getd` returns nil. Every ping failed
+    /// on a live daemon because the call errored, not because an argument was
+    /// missing. See `daemon_alive()` for the same pattern.
     pub fn ping(&self) -> Result<()> {
         let skill = "plus(1 1)";
         let result = self.execute_skill_unchecked(skill, Some(5000))?;
@@ -987,6 +1119,47 @@ fn build_fetch_skill(list_expr: &str, fields: &[&str]) -> String {
     format!("mapcar(lambda((o) list({fields_str})) {list_expr})")
 }
 
+/// Build the SKILL for `cell.open`.
+///
+/// IC23 opens a GUI editor window via `deOpenCellView`; `geOpenCellView` is
+/// undefined in IC23 (eval: undefined function). `deOpenCellView` takes viewType
+/// as a positional arg, so map the common view names to their DFII viewType
+/// (these names are Cadence-standard, version/PDK-independent). Unknown views
+/// fall back to the view name itself, matching the maestro convention
+/// (view "maestro" -> viewType "maestro").
+///
+/// Existence guard (CRITICAL): calling `deOpenCellView` on a cell that does NOT
+/// exist pops a modal "New File" dialog on Virtuoso's main thread, which blocks
+/// the SKILL bridge indefinitely — every subsequent call times out until a human
+/// dismisses the dialog, and the process that would dismiss it is the blocked
+/// one. So never let `deOpenCellView` hit a missing cell:
+///
+///   * probe existence with `ddGetObj` (pure metadata query, raises no GUI);
+///   * if missing and the mode is writable (anything but `"r"`), create the
+///     cellview headlessly with `dbOpenCellViewByType` + `dbSave` + `dbClose`
+///     (create-if-absent, matching mode `"a"` semantics) — no dialog;
+///   * if missing and read-only, error out cleanly instead of freezing.
+///
+/// By the time `deOpenCellView` runs the cell is guaranteed to exist, so the
+/// modal path is unreachable by construction rather than merely unlikely.
+fn build_open_cell_view_skill(lib: &str, cell: &str, view: &str, mode: &str) -> String {
+    let view_type = match view {
+        "layout" => "maskLayout",
+        "symbol" => "schematicSymbol",
+        other => other,
+    };
+    let lib = escape_skill_string(lib);
+    let cell = escape_skill_string(cell);
+    let view_type = escape_skill_string(view_type);
+    let view = escape_skill_string(view);
+    let mode = escape_skill_string(mode);
+    // deOpenCellView(libName cellName viewName viewType winSpec mode);
+    // winSpec = nil -> open in a new window.
+    format!(
+        r#"let((exists writable) writable = !(strcmp("{mode}" "r")==0) exists = ddGetObj("{lib}" "{cell}" "{view}") when(!exists if(writable then let((ncv) ncv = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "{view_type}" "a") when(ncv dbSave(ncv) dbClose(ncv))) else error("cell.open: {lib}/{cell}/{view} not found and mode is read-only — create it first"))) deOpenCellView("{lib}" "{cell}" "{view}" "{view_type}" nil "{mode}"))"#
+    )
+}
+
 /// Read a file from the remote filesystem via SKILL's infile/gets channel.
 ///
 /// This is the CORRECT way to read file contents in Virtuoso SKILL — NOT via
@@ -1130,6 +1303,51 @@ mod tests {
     #[test]
     fn escape_backslash() {
         assert_eq!(escape_skill_string("a\\b"), "a\\\\b");
+    }
+
+    #[test]
+    fn open_cell_view_probes_before_opening() {
+        // The whole point of the guard: ddGetObj (metadata, no GUI) must be
+        // evaluated before deOpenCellView, which pops a modal dialog — and
+        // hangs the bridge — if the cell is missing.
+        let s = build_open_cell_view_skill("LIB", "CELL", "schematic", "a");
+        let probe = s.find("ddGetObj(").expect("guard must probe with ddGetObj");
+        let open = s.find("deOpenCellView(").expect("must open via deOpenCellView");
+        assert!(probe < open, "ddGetObj must precede deOpenCellView: {s}");
+        // geOpenCellView is undefined on IC23 — it must not reappear.
+        assert!(!s.contains("geOpenCellView"), "{s}");
+    }
+
+    #[test]
+    fn open_cell_view_read_only_errors_instead_of_creating() {
+        // Missing + read-only must take the error branch, never the create
+        // branch: creating a cell the caller asked to only read is a silent
+        // write to someone else's library.
+        let s = build_open_cell_view_skill("LIB", "CELL", "schematic", "r");
+        assert!(s.contains(r#"strcmp("r" "r")"#), "{s}");
+        assert!(s.contains("read-only"), "{s}");
+        assert!(s.contains("dbOpenCellViewByType"), "{s}");
+    }
+
+    #[test]
+    fn open_cell_view_maps_view_to_dfii_view_type() {
+        // deOpenCellView takes viewType positionally; these are the
+        // Cadence-standard names.
+        let layout = build_open_cell_view_skill("L", "C", "layout", "a");
+        assert!(layout.contains(r#""layout" "maskLayout""#), "{layout}");
+
+        let symbol = build_open_cell_view_skill("L", "C", "symbol", "a");
+        assert!(symbol.contains(r#""symbol" "schematicSymbol""#), "{symbol}");
+
+        // Unknown views fall back to the view name, per the maestro convention.
+        let maestro = build_open_cell_view_skill("L", "C", "maestro", "a");
+        assert!(maestro.contains(r#""maestro" "maestro""#), "{maestro}");
+    }
+
+    #[test]
+    fn open_cell_view_escapes_its_arguments() {
+        let s = build_open_cell_view_skill(r#"L"IB"#, "CELL", "schematic", "a");
+        assert!(s.contains(r#"L\"IB"#), "{s}");
     }
 
     #[test]

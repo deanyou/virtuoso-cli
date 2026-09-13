@@ -1,3 +1,4 @@
+pub mod libref;
 pub mod async_runtime;
 pub mod auth;
 pub mod capability;

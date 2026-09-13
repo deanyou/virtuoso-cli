@@ -1,5 +1,6 @@
 use tracing_subscriber::EnvFilter;
 
+mod libref;
 mod async_runtime;
 mod auth;
 mod capability;
@@ -261,6 +262,14 @@ enum SymbolCmd {
 #[derive(Subcommand)]
 enum LibraryCmd {
     List,
+    /// List the cells in a library with their views
+    ListCells {
+        /// Library name
+        lib: String,
+        /// SKILL regular expression matched against the cell name
+        #[arg(long)]
+        pattern: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -738,8 +747,20 @@ enum CellCmd {
     /// Save the current cellview
     Save,
 
-    /// Close the current cellview without saving
-    Close,
+    /// Close the current cellview (saves first by default)
+    #[command(long_about = "Close the cellview shown in the current window.\n\n\
+            Saves before closing by default. Pass --discard to throw the edits away \
+            instead; the discard is silent (dbReopen to read mode), it does not ask \
+            for confirmation.\n\n\
+            One of the two always happens on purpose: closing a modified cellview \
+            otherwise pops a 'save changes?' modal, and a modal blocks Virtuoso's \
+            main event loop, which freezes the SKILL bridge until someone dismisses \
+            it by hand.")]
+    Close {
+        /// Discard unsaved edits instead of saving them
+        #[arg(long)]
+        discard: bool,
+    },
 
     /// Get info about the currently open cellview
     Info,
@@ -1090,6 +1111,25 @@ enum MaestroCmd {
         cell: String,
         #[arg(long, default_value = "maestro")]
         view: String,
+        /// "r" (default) opens read-only and takes no OA edit lock, so a human
+        /// keeps edit access to the cellview; the setup is still fully
+        /// readable. "a" opens editable and takes the lock — and a session
+        /// opened this way has no window, so it locks a human out of the cell
+        /// with nothing to click. Use `maestro set-mode` to hold "a" across
+        /// the writes alone. "a" is also required to create a maestro view
+        /// that does not exist yet.
+        #[arg(long, default_value = "r")]
+        mode: String,
+    },
+
+    /// Switch an open Maestro session between read-only and editable
+    SetMode {
+        /// Session ID (e.g. fnxSession4)
+        #[arg(long)]
+        session: String,
+        /// "a" takes the edit lock, "r" hands it back. Both act in place.
+        #[arg(long)]
+        mode: String,
     },
 
     /// Close a Maestro session
@@ -1101,6 +1141,13 @@ enum MaestroCmd {
 
     /// List all active Maestro sessions
     ListSessions,
+
+    /// List the corner names in a session's setup (what `create-corner-netlist` accepts)
+    ListCorners {
+        /// Session ID (e.g. fnxSession4)
+        #[arg(long)]
+        session: String,
+    },
 
     /// Set a design variable value
     SetVar {
@@ -1123,6 +1170,9 @@ enum MaestroCmd {
     GetAnalyses {
         #[arg(long)]
         session: String,
+        /// Test name. Only optional when the session holds exactly one test.
+        #[arg(long)]
+        test: Option<String>,
     },
 
     /// Enable an analysis type (e.g. ac, dc, tran, noise)
@@ -1135,6 +1185,10 @@ enum MaestroCmd {
         /// Analysis options as JSON string, e.g. '{"start":"1","stop":"10G","dec":"20"}'
         #[arg(long)]
         options: Option<String>,
+        /// Test the analysis belongs to. Only optional when the session holds
+        /// exactly one test — analyses are per-test.
+        #[arg(long)]
+        test: Option<String>,
     },
 
     /// Add an output expression to a test
@@ -1316,12 +1370,12 @@ enum SchematicCmd {
         /// Instance name
         #[arg(long)]
         name: String,
-        /// X coordinate
+        /// X coordinate in user units (the schematic grid is 0.0625)
         #[arg(long, default_value = "0")]
-        x: i64,
-        /// Y coordinate
+        x: f64,
+        /// Y coordinate in user units
         #[arg(long, default_value = "0")]
-        y: i64,
+        y: f64,
         /// Orientation
         #[arg(long, value_enum, default_value_t = commands::schematic::Orient::R0)]
         orient: commands::schematic::Orient,
@@ -1356,9 +1410,9 @@ enum SchematicCmd {
         #[arg(long)]
         net: String,
         #[arg(long, default_value = "0")]
-        x: i64,
+        x: f64,
         #[arg(long, default_value = "0")]
-        y: i64,
+        y: f64,
     },
 
     /// Add a pin
@@ -1369,9 +1423,9 @@ enum SchematicCmd {
         #[arg(long)]
         dir: String,
         #[arg(long, default_value = "0")]
-        x: i64,
+        x: f64,
         #[arg(long, default_value = "0")]
-        y: i64,
+        y: f64,
     },
 
     /// Run schematic check (schCheck)
@@ -1403,6 +1457,19 @@ enum SchematicCmd {
         inst: String,
     },
 
+    /// Set one CDF parameter of a specific instance (e.g. size a device)
+    SetParam {
+        /// Instance name (e.g. M1)
+        #[arg(long)]
+        inst: String,
+        /// Parameter name (e.g. w, l, nf, fingers)
+        #[arg(long)]
+        param: String,
+        /// New value (e.g. 4u)
+        #[arg(long)]
+        value: String,
+    },
+
     /// Polish net labels — cosmetic preset, auto-rotation, or repositioning
     PolishLabel {
         /// Net name whose labels to polish
@@ -1431,12 +1498,12 @@ enum SchematicCmd {
         /// Net name
         #[arg(long)]
         net: String,
-        /// X origin in DBU
+        /// X origin in user units
         #[arg(long)]
-        x: i64,
-        /// Y origin in DBU
+        x: f64,
+        /// Y origin in user units
         #[arg(long)]
-        y: i64,
+        y: f64,
         /// Direction: right (default), left, up, down
         #[arg(long, default_value = "right")]
         direction: String,
@@ -2162,7 +2229,7 @@ fn dispatch_cell(
             dry_run,
         } => commands::cell::open(ctx, &lib, &cell, &view, &mode, dry_run),
         CellCmd::Save => commands::cell::save(ctx),
-        CellCmd::Close => commands::cell::close(ctx),
+        CellCmd::Close { discard } => commands::cell::close(ctx, !discard),
         CellCmd::Info => commands::cell::info(ctx),
     }
 }
@@ -2350,18 +2417,28 @@ fn dispatch_design(cmd: DesignCmd, format: OutputFormat) -> error::Result<serde_
 
 fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
     match cmd {
-        MaestroCmd::Open { lib, cell, view } => commands::maestro::open(&lib, &cell, &view),
+        MaestroCmd::Open {
+            lib,
+            cell,
+            view,
+            mode,
+        } => commands::maestro::open(&lib, &cell, &view, &mode),
+        MaestroCmd::SetMode { session, mode } => commands::maestro::set_mode(&session, &mode),
         MaestroCmd::Close { session } => commands::maestro::close(&session),
         MaestroCmd::ListSessions => commands::maestro::list_sessions(),
+        MaestroCmd::ListCorners { session } => commands::maestro::list_corners(&session),
         MaestroCmd::SetVar { name, value } => commands::maestro::set_var(&name, &value),
         MaestroCmd::GetVar { name } => commands::maestro::get_var(&name),
         MaestroCmd::ListVars => commands::maestro::list_vars(),
-        MaestroCmd::GetAnalyses { session } => commands::maestro::get_analyses(&session),
+        MaestroCmd::GetAnalyses { session, test } => {
+            commands::maestro::get_analyses(&session, test.as_deref())
+        }
         MaestroCmd::SetAnalysis {
             session,
             analysis,
             options,
-        } => commands::maestro::set_analysis(&session, &analysis, options.as_deref()),
+            test,
+        } => commands::maestro::set_analysis(&session, &analysis, options.as_deref(), test.as_deref()),
         MaestroCmd::AddOutput {
             output_name,
             test_name,
@@ -2455,6 +2532,9 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
         SchematicCmd::ListNets => commands::schematic::list_nets(),
         SchematicCmd::ListPins => commands::schematic::list_pins(),
         SchematicCmd::GetParams { inst } => commands::schematic::get_params(&inst),
+        SchematicCmd::SetParam { inst, param, value } => {
+            commands::schematic::set_param(&inst, &param, &value)
+        }
         SchematicCmd::PolishLabel {
             net,
             preset,
@@ -2859,6 +2939,9 @@ fn main() {
         Commands::Schematic(cmd) => dispatch_schematic(cmd),
         Commands::Symbol(cmd) => dispatch_symbol(cmd, ctx.as_ref().unwrap()),
         Commands::Library(LibraryCmd::List) => commands::library::list(ctx.as_ref().unwrap()),
+        Commands::Library(LibraryCmd::ListCells { lib, pattern }) => {
+            commands::library::list_cells(ctx.as_ref().unwrap(), &lib, pattern.as_deref())
+        }
         Commands::Session(cmd) => match cmd {
             SessionCmd::List => commands::session::list(ctx.as_ref().unwrap(), format),
             SessionCmd::Show { id } => commands::session::show(ctx.as_ref().unwrap(), &id, format),

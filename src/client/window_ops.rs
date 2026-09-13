@@ -38,6 +38,36 @@ pub enum BootstrapAction {
 }
 
 impl WindowOps {
+    /// SKILL expression yielding the list of forms that are **actually on
+    /// screen**, current one first.
+    ///
+    /// `hiGetCurrentForm()` alone is not enough. Its own definition is "the
+    /// form that the cursor was last located" — it keeps returning a form long
+    /// after that form is gone. Measured on a live IC23.1 with no dialog open
+    /// at all (2026-09-10): it returned the schematic **Descend** form, and
+    /// `hiIsFormDisplayed` on that form returned `nil`. Trusting it would make
+    /// `dismiss_dialog` cancel an invisible stale form and report success —
+    /// the same "no error, wrong answer" shape as the rest of this round.
+    ///
+    /// So the current form is used only when `hiIsFormDisplayed` confirms it,
+    /// and otherwise every form symbol in `hiFormList()` is resolved with
+    /// `symeval` and filtered the same way. On the live session that walk
+    /// resolved all 277 symbols to `formStruct`s and reported 0 displayed,
+    /// which is the correct answer.
+    const DISPLAYED_FORMS: &'static str = "let((cur out) out = nil \
+         cur = hiGetCurrentForm() when(cur && hiIsFormDisplayed(cur) out = list(cur)) \
+         when(!out foreach(s hiFormList() let((f) f = nil errset(f = symeval(s)) \
+         when(f && type(f) == 'formStruct && hiIsFormDisplayed(f) out = cons(f out))))) out)";
+
+    /// SKILL expression for a form's human-readable name.
+    ///
+    /// A `formStruct` has no `formTitle`/`name` field once built — probed live,
+    /// both read `nil`. The populated ones are `_WMTitle` (the window-manager
+    /// title) and `_formName`.
+    fn form_name(form: &str) -> String {
+        format!(r#"if({form}->_WMTitle {form}->_WMTitle if({form}->_formName {form}->_formName "unnamed-form"))"#)
+    }
+
     /// List all open Virtuoso windows.
     ///
     /// Returns a JSON array string: `[{"id":<fixnum>,"name":"..."}]` when the
@@ -73,19 +103,44 @@ impl WindowOps {
     }
 
     /// Dismiss the current blocking dialog.
-    /// action: "cancel" closes via Cancel; "ok" attempts OK/Yes button.
+    /// action: "cancel" clicks Cancel; "ok" clicks OK.
+    ///
+    /// Was `hiGetCurrentDialog` + `hiCancelDialog` / `hiSendOK` — **none of the
+    /// three exists in IC23.1** (no entry in any of the 41 `.fnd` databases;
+    /// live the call dies with `undefined function hiGetCurrentDialog`). Both
+    /// dialog methods were dead. The documented equivalents are
+    /// `hiGetCurrentForm() => r_form`, `hiFormCancel(r_form) => t` and
+    /// `hiFormDone(r_form) => t` ("Equivalent to clicking the Cancel/OK button
+    /// on a form"), all from `skuiref`.
+    ///
+    /// Every displayed form is dismissed, and the reply names them, because a
+    /// caller reaching for this is trying to unblock a stalled bridge and needs
+    /// to know what was clicked away. Note this is the SKILL path: a modal that
+    /// has actually deadlocked the CIW cannot be cleared from inside SKILL at
+    /// all — that is what `window.dismiss_dialog_x11` is for.
     pub fn dismiss_dialog(&self, action: &str) -> String {
-        if action == "ok" {
-            r#"let((d) d = hiGetCurrentDialog() if(d hiSendOK(d) "no-dialog"))"#.into()
+        let click = if action == "ok" {
+            "hiFormDone"
         } else {
-            r#"let((d) d = hiGetCurrentDialog() if(d hiCancelDialog(d) "no-dialog"))"#.into()
-        }
+            "hiFormCancel"
+        };
+        let locator = Self::DISPLAYED_FORMS;
+        let name = Self::form_name("f");
+        format!(
+            r#"let((forms n names) forms = {locator} if(forms then n = 0 names = "" foreach(f forms when({click}(f) n = n+1 names = strcat(names sprintf(nil "%s " {name})))) if(n > 0 sprintf(nil "{action}:%d %s" n names) "no-dialog") else "no-dialog"))"#
+        )
     }
 
     /// Get the name of the current dialog without dismissing it.
-    /// Returns "no-dialog" if no dialog is active.
+    /// Returns "no-dialog" if no form is displayed.
+    ///
+    /// See [`Self::dismiss_dialog`] for why `hiGetCurrentDialog` is gone.
     pub fn get_dialog_info(&self) -> String {
-        r#"let((d) d = hiGetCurrentDialog() if(d hiGetWindowName(d) "no-dialog"))"#.into()
+        let locator = Self::DISPLAYED_FORMS;
+        let name = Self::form_name("car(forms)");
+        format!(
+            r#"let((forms extra) forms = {locator} if(forms then extra = length(forms)-1 sprintf(nil "%s%s" {name} if(extra > 0 sprintf(nil " (+%d more)" extra) "")) else "no-dialog"))"#
+        )
     }
 
     /// Capture a screenshot of the current Virtuoso window to a PNG file.
@@ -236,8 +291,8 @@ mod tests {
     fn dismiss_dialog_cancel() {
         let ops = WindowOps;
         let skill = ops.dismiss_dialog("cancel");
-        assert!(skill.contains("hiGetCurrentDialog"), "should check dialog");
-        assert!(skill.contains("hiCancelDialog"), "should cancel dialog");
+        assert!(skill.contains("hiGetCurrentForm"), "should check dialog");
+        assert!(skill.contains("hiFormCancel"), "should cancel dialog");
         assert!(skill.contains("no-dialog"), "should handle no dialog");
     }
 
@@ -245,15 +300,51 @@ mod tests {
     fn dismiss_dialog_ok() {
         let ops = WindowOps;
         let skill = ops.dismiss_dialog("ok");
-        assert!(skill.contains("hiSendOK"), "should send OK");
+        assert!(skill.contains("hiFormDone"), "should click OK");
+        assert!(!skill.contains("hiFormCancel"), "ok must not cancel");
     }
 
     #[test]
     fn get_dialog_info() {
         let ops = WindowOps;
         let skill = ops.get_dialog_info();
-        assert!(skill.contains("hiGetCurrentDialog"), "should check dialog");
-        assert!(skill.contains("hiGetWindowName"), "should get window name");
+        assert!(skill.contains("hiGetCurrentForm"), "should check dialog");
+        assert!(skill.contains("_WMTitle"), "should get the form title");
+        assert!(
+            !skill.contains("hiFormCancel") && !skill.contains("hiFormDone"),
+            "reading must not click anything: {skill}"
+        );
+    }
+
+    /// `hiGetCurrentDialog` / `hiCancelDialog` / `hiSendOK` do not exist in
+    /// IC23.1 — both dialog methods were dead. And the documented replacement
+    /// is not a drop-in: `hiGetCurrentForm` returns the last form the cursor
+    /// visited, displayed or not (live it returned a long-gone *Descend* form),
+    /// so it must be filtered through `hiIsFormDisplayed` or the caller is told
+    /// a stale form was dismissed.
+    #[test]
+    fn dialog_ops_use_documented_form_calls_and_check_the_form_is_on_screen() {
+        let ops = WindowOps;
+        for skill in [
+            ops.dismiss_dialog("cancel"),
+            ops.dismiss_dialog("ok"),
+            ops.get_dialog_info(),
+        ] {
+            assert!(
+                !skill.contains("hiGetCurrentDialog")
+                    && !skill.contains("hiCancelDialog")
+                    && !skill.contains("hiSendOK"),
+                "no undefined IC23.1 dialog calls: {skill}"
+            );
+            assert!(
+                skill.contains("hiIsFormDisplayed"),
+                "a form that is not displayed is not a dialog: {skill}"
+            );
+            assert!(
+                skill.contains("hiFormList") && skill.contains("symeval"),
+                "must fall back to the full form list, not trust the cursor: {skill}"
+            );
+        }
     }
 
     #[test]
