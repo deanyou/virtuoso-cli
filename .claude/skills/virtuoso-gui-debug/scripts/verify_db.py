@@ -29,7 +29,7 @@ def verify():
     else:
         with open(JSON_PATH, encoding="utf-8") as f:
             backup = json.load(f)
-        backup_names = {fn["name"] for fn in backup["functions"]}
+        backup_names = {fn["name"] for fn in backup.get("manual_functions", backup.get("functions", []))}
     
     # 3. Check all functions have confidence
     no_conf = conn.execute("SELECT COUNT(*) FROM functions WHERE confidence IS NULL").fetchone()[0]
