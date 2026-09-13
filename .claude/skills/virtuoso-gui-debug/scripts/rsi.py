@@ -164,13 +164,15 @@ def _handle_snippet(c, argv):
 
     if cmd == "run" and len(argv) > 1:
         name = argv[1]
-        # Parse --key=value and --execute flags
         overrides = {}
         do_execute = False
-        session = "dean-user1-37749"
+        use_ssh = False
+        session = None
         for a in argv[2:]:
             if a == "--execute":
                 do_execute = True
+            elif a == "--ssh":
+                use_ssh = True
             elif a.startswith("--session="):
                 session = a.split("=", 1)[1]
             elif a.startswith("--"):
@@ -183,7 +185,6 @@ def _handle_snippet(c, argv):
         d = dict(row)
         code = d['code']
         params = json.loads(d['params'] or '[]')
-        # Fill defaults then overrides
         fill = {}
         for p in params:
             fill[p['name']] = overrides.get(p['name'], p.get('default', ''))
@@ -194,18 +195,30 @@ def _handle_snippet(c, argv):
         now = datetime.now().isoformat()
         if do_execute:
             import subprocess, time
-            escaped = code.replace('"', '\\"')
-            ssh_cmd = [
-                "ssh", "-i", str(Path.home() / ".ssh" / "id_rsa"),
-                "user1@192.168.1.111",
-                f'export HOME=/home/user1; export PATH=/usr/bin:/bin:/home/user1/.local/bin:$PATH; '
-                f'vcli --session {session} skill exec "{escaped}" 2>/dev/null'
-            ]
             t0 = time.time()
             try:
-                r = subprocess.run(ssh_cmd, capture_output=True, timeout=15)
+                if use_ssh:
+                    # Remote: SSH to compute host
+                    sess = session or "dean-user1-37749"
+                    escaped = code.replace('"', '\\"')
+                    run_cmd = [
+                        "ssh", "-i", str(Path.home() / ".ssh" / "id_rsa"),
+                        "user1@192.168.1.111",
+                        f'export HOME=/home/user1; export PATH=/usr/bin:/bin:/home/user1/.local/bin:$PATH; '
+                        f'vcli --session {sess} skill exec "{escaped}" 2>/dev/null'
+                    ]
+                else:
+                    # Local: direct vcli on this machine
+                    sess = session or ""
+                    run_cmd = ["vcli"]
+                    if sess:
+                        run_cmd += ["--session", sess]
+                    run_cmd += ["skill", "exec", code]
+
+                r = subprocess.run(run_cmd, capture_output=True, timeout=15)
                 elapsed = int((time.time() - t0) * 1000)
                 out = r.stdout.decode('utf-8', errors='replace')
+                err = r.stderr.decode('utf-8', errors='replace')
                 idx = out.find('{')
                 if idx >= 0:
                     data = json.loads(out[idx:])
@@ -215,14 +228,13 @@ def _handle_snippet(c, argv):
                     result = data.get("output", "")[:80]
                 else:
                     ok = False
-                    elapsed = int((time.time() - t0) * 1000)
-                    result = out[:80]
+                    result = (out or err)[:80]
             except Exception as e:
                 elapsed = int((time.time() - t0) * 1000)
                 ok = False
                 result = str(e)[:80]
 
-            print(f"Result: {'OK' if ok else 'FAIL'} ({elapsed}ms) — {result}")
+            print(f"Result: {'OK' if ok else 'FAIL'} ({elapsed}ms, {'ssh' if use_ssh else 'local'}) — {result}")
 
             # Record execution
             c.execute("""CREATE TABLE IF NOT EXISTS snippet_executions (
@@ -234,7 +246,6 @@ def _handle_snippet(c, argv):
                 VALUES (?, ?, ?, ?, ?, ?)""",
                 (name, int(ok), elapsed, None if ok else result,
                  json.dumps(fill), now))
-            # Update counts
             if ok:
                 c.execute("UPDATE snippets SET success_count=success_count+1, last_used=? WHERE name=?",
                           (now, name))
@@ -243,7 +254,6 @@ def _handle_snippet(c, argv):
                           (now, name))
             c.commit()
         else:
-            # Just output code, count as preview not execution
             c.execute("UPDATE snippets SET last_used=? WHERE name=?", (now, name))
             c.commit()
         return
