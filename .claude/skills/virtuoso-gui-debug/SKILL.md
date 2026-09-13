@@ -884,7 +884,55 @@ dbClose(geGetEditCellView())
 
 **Performance**: 10 dbCreateRect in for loop = 16ms. **Errors**: wrong layer/cell/polygon<3pts error; single-point path silent nil.
 
-**Unavailable functions**: hiSelectObject, hiUpdateView, hiZoomSelect, hiSetEditCellView, hiSetCurrentLayer, dbCreatePin, dbCreateLabel, dbMoveObject, dbCopyObject, dbTransformObject, dbFindCell, dbFindCellView.
+**Unavailable functions**: hiSelectObject, hiUpdateView, hiZoomSelect, hiSetEditCellView, hiSetCurrentLayer, dbCreatePin, dbCreateLabel, dbMoveObject, dbCopyObject, dbTransformObject, dbFindCell, dbFindCellView, dbCreateText, dbCreateContact, _ilgRunSkillIde (needs skillDev license).
+
+**Path-specific properties**: `s~>points` returns list of (x y) coordinate pairs; `s~>width` returns path line width. `s~>bBox` includes width margin (e.g. width=1 → bBox expanded by 0.5).
+
+**Region query**: `dbGetOverlaps(cv bbox)` returns all shapes overlapping a bounding box. bbox format: `list(list(xl yl) list(xh yh))`. Useful for DRC-style queries.
+
+**Boundary conditions verified**:
+- Zero-area rect → silently returns nil (no error)
+- path width=0 → error; width must be > 0
+- polygon with 2 points → error; minimum 3 points
+- Thin shapes (0.1 width) → OK
+- Large coordinates (5000+) → OK
+- layer/purpose MUST be passed as `list("layer" "purpose")` single arg; two separate string args → error
+- `setof(s list s~>layerName=="XX")` filters shapes by layer
+
+**Instance creation note**: `dbCreateInst` returns a db object immediately, but `cv~>insts` may still show 0 — the list updates after a refresh/save. Screenshot confirms instance exists visually.
+
+**Performance**: 10/20/50 dbCreateRect in for loop all ≈15ms (linear, no degradation).
+
+### SKILL API Finder
+
+```skill
+startFinder()  ; opens "Cadence SKILL API Finder" window, returns 0
+```
+
+- GUI searchable function reference with natural language query
+- **Limitation**: Finder is a Motif/Xt application — remote X11 input (xdotool/vcli action-x11) cannot type into its search field. Use manually or query via SKILL experimentation instead.
+- Alternative: `_ilgRunSkillIde()` opens SKILL IDE but requires `skillDev` license (not enabled in this environment).
+
+### CIW Menu Bar (window 0x1600013)
+
+| Menu | Relative X | Key items |
+|------|-----------|-----------|
+| File | 30 | New, Open, Import/Export, recent files, Save/Close/Exit |
+| Tools | 75 | Library Manager, ADE suite, SKILL IDE (license-gated), CDF, Technology File Manager |
+| Options | 115 | CIW preferences |
+| RAMIC | 165 | RAMIC tools |
+| Toolkits | 215 | Toolbox plugins |
+| Help | 270 | User Guide, Documentation Library, Search |
+
+Menu click via: `xdotool mousemove --window $CIW <x> 15 && xdotool click 1`, then navigate dropdown.
+
+### F-key mapping on layout window
+
+| Key | Action |
+|-----|--------|
+| F1 | Opens Find/Replace dialog (NOT help) |
+| f | Zoom fit |
+| shift+f | Zoom all |
 
 **Safe X11 keyboard shortcuts on layout window** (verified, no interactive trap):
 
