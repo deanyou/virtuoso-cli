@@ -85,9 +85,13 @@ def test_function(vcli, session, name):
 
         status = data.get("status", "")
         out = data.get("output", "")
+        errors = data.get("errors", [])
+        all_text = (out + " " + " ".join(errors)).lower()
 
-        if "undefined" in out.lower() or "undefined" in status.lower():
-            return False, None, out[:200]
+        # vcli puts errors in the errors ARRAY, not output
+        # Must check both fields for "undefined function"
+        if "undefined function" in all_text:
+            return False, None, all_text[:200]
 
         if status == "success":
             # Function exists and returned something
@@ -95,7 +99,7 @@ def test_function(vcli, session, name):
 
         if status == "error":
             # Function exists but wrong args — extract signature from error
-            return True, out[:300], out[:300]
+            return True, all_text[:300], all_text[:300]
 
         return True, None, out[:200]
 
