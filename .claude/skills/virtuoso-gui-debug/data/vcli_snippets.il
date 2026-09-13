@@ -34,7 +34,7 @@ endprocedure
 ; zoom_fit → vcliZoomFit()
 procedure(vcliZoomFit()
   ; Zoom to fit in current window
-  hiZoomToFit()
+  hiWorldViewFit()
 endprocedure
 
 ; select_all → vcliSelectAll()
