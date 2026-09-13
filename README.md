@@ -349,14 +349,38 @@ vcli [--profile P] [--session S] [--format json|table]
 ### SSH Remote Connection Setup
 
 `vcli tunnel start` needs a working SSH path to the compute host first.
+Configuration splits into **two sides**: the **remote server** (where Virtuoso runs)
+and your **local host** (where vcli is invoked).
 
-**1. Generate an SSH key (optional):**
+#### A. Remote-side configuration (on the compute server)
+
+These must be done once on the server that runs Virtuoso:
+
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_vcli
-ssh-copy-id -i ~/.ssh/id_ed25519_vcli user@remote-host
+# 1. Authorize your public key (on the remote server):
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+echo "ssh-ed25519 AAAA...your-key user@local" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+
+# 2. Verify the user has a real shell (not sftp-only):
+grep -E "ForceCommand|Match" /etc/ssh/sshd_config
+# If port 22 has "ForceCommand internal-sftp", vcli cannot start a daemon
+# on that port. Use a different SSH port or ask admin to add a Match block.
+
+# 3. Verify MaxStartups won't rate-limit parallel connections:
+sudo sshd -T | grep maxstartups
+# Default 10:30:100 means 10 concurrent unauth connections max.
+# vcli v1.3.5+ reuses connections, but avoid spawning many parallel clients.
 ```
 
-**2. Configure `~/.ssh/config`:**
+#### B. Local-host configuration (on your workstation)
+
+```bash
+# 1. Generate an SSH key (optional):
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_vcli
+ssh-copy-id -i ~/.ssh/id_ed25519_vcli user@remote-host
+
+# 2. Configure ~/.ssh/config:
 
 ```ssh-config
 Host my-server
@@ -365,29 +389,23 @@ Host my-server
     IdentityFile ~/.ssh/id_ed25519_vcli
     StrictHostKeyChecking accept-new
     ConnectTimeout 10
-    # Important: bypass a local HTTP proxy (Clash / Surge) for SSH
-    ProxyCommand none
+    ProxyCommand none    # bypass local HTTP proxy (Clash/Surge)
 ```
 
-> **Host key checking**: `accept-new` trusts a host on first contact but still
-> refuses to connect if its key later changes, so MITM protection is preserved.
-> Only downgrade to `StrictHostKeyChecking no` on a trusted internal network —
-> never in production.
+> **Host key checking**: `accept-new` trusts on first contact but rejects
+> later key changes (MITM protection). Only use `no` on a trusted LAN.
 
-> **Proxy**: if a system proxy (macOS Network Preferences) intercepts SSH,
-> `ProxyCommand none` is required to bypass it.
-
-**3. Test the SSH connection:**
-```bash
+# 3. Test the SSH connection:
 ssh my-server "uname -m"   # expect x86_64 or aarch64
 ```
 
-**4. Connect with vcli:**
+#### C. Connect with vcli
+
 ```bash
 # Option 1 — use the Host alias from ~/.ssh/config
 VB_REMOTE_HOST=my-server vcli tunnel start
 
-# Option 2 — address the host directly (set the user separately, NOT as user@host)
+# Option 2 — address the host directly (user separately, NOT user@host)
 VB_REMOTE_HOST=192.168.1.100 VB_REMOTE_USER=username vcli tunnel start
 
 # Option 3 — point at a specific key or SSH config file
@@ -396,20 +414,15 @@ VB_SSH_CONFIG=~/.ssh/config_vcli VB_REMOTE_HOST=my-server vcli tunnel start
 ```
 
 > `VB_REMOTE_HOST` and `VB_REMOTE_USER` are combined into `user@host`, so do
-> **not** put `user@` in `VB_REMOTE_HOST` while also setting `VB_REMOTE_USER` —
-> that yields `user@user@host`. Use one form or the other.
+> **not** put `user@` in `VB_REMOTE_HOST` while also setting `VB_REMOTE_USER`.
 
-> `VB_REMOTE_HOST` must name the host **running Virtuoso** (the compute host),
-> not the bastion — the bastion goes in `VB_JUMP_HOST`. `vcli tunnel status`
-> reports a mismatch between the configured and actual hostname.
+> `VB_REMOTE_HOST` must name the host **running Virtuoso** (compute), not the
+> bastion — the bastion goes in `VB_JUMP_HOST`. Verify with:
+> `vcli tunnel status --format json | jq '.daemon.hostname_check'`
 
-**5. Fallback — run vcli directly on the remote host:**
+**Fallback — run vcli directly on the remote host:**
 ```bash
-# If the tunnel hits a permission problem, invoke the remote vcli over SSH
 ssh my-server 'vcli skill exec "version()"'
-ssh my-server 'vcli session list'
-
-# Handy alias
 alias rvcli='ssh my-server vcli'
 rvcli session list
 ```
