@@ -166,12 +166,20 @@ vcli --session eda-meow-2 skill exec 'getCurrentTime()' # specify session explic
 
 **Remote mode (deploy new daemon):**
 ```bash
-vcli init           # generate .env template
-# edit .env: set VB_REMOTE_HOST, VB_SPECTRE_CMD (absolute path)
-vcli tunnel start
+# Set env vars (or put them in your shell profile):
+export VB_REMOTE_HOST=my-server
+export VB_JUMP_HOST=bastion          # optional, if behind a jump host
+export VB_SSH_KEY=~/.ssh/id_ed25519_vcli
+
+vcli tunnel start                    # deploys daemon + opens tunnel
 vcli skill exec 'getCurrentTime()'
 vcli tunnel stop
 ```
+
+> **No .env file needed.** vcli reads all config from environment variables
+> directly. `vcli init` can generate a `.env` template if you prefer that
+> workflow, but it is optional. See [Configuration](#configuration) for
+> the full list of variables.
 
 **Remote mode (connect to existing Virtuoso daemon — non-destructive):**
 ```bash
