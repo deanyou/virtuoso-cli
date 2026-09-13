@@ -418,6 +418,34 @@ ssh -o "ProxyCommand=none" my-server "echo ok"
 vcli tunnel start -v
 ```
 
+**Common Pitfalls (real-world):**
+
+```bash
+# 1. authorized_keys empty -> all publickey auth fails
+#    Verify:
+ssh my-server "cat ~/.ssh/authorized_keys"
+#    Fix: add your public key
+ssh-copy-id -i ~/.ssh/id_ed25519_vcli user@my-server
+
+# 2. Port 22 restricted to sftp-only (ForceCommand internal-sftp)
+#    vcli needs a shell to run virtuoso-daemon. If `ssh my-server echo ok`
+#    drops you into an SFTP prompt, find an unrestricted port:
+ssh -p 66 my-server "echo ok"
+#    Or ask admin to add a Match block for your user with a real shell.
+
+# 3. MaxStartups rate-limiting ("Connection closed by remote host")
+#    OpenSSH rejects concurrent unauthenticated connections above MaxStartups
+#    (default 10:30:100). vcli v1.3.5+ reuses SSH connections across requests,
+#    but avoid spawning many parallel vcli processes -- batch them instead.
+
+# 4. Jump host vs compute host mixup
+#    VB_REMOTE_HOST = machine running Virtuoso (compute)
+#    VB_JUMP_HOST   = bastion used to reach the compute host
+#    Verify with:
+vcli tunnel status --format json | jq '.daemon.hostname_check'
+#    If mismatch=true, VB_REMOTE_HOST points at the bastion, not compute.
+```
+
 ### SSH Backend Selection
 
 `vcli` ships two SSH transports behind the same `RemoteTransport` contract:
