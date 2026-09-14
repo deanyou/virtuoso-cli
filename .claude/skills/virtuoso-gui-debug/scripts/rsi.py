@@ -46,20 +46,29 @@ SYNONYMS = {
 
 PREFIXES = ['db', 'le', 'ge', 'hi', 'rod', 'dd']
 
-def expand(query):
+def expand(c, query):
     words = set()
     for t in query.lower().split():
         words.add(t)
         stem = t.rstrip('s')
         if stem != t:
             words.add(stem)
+        # Hardcoded synonyms
         for w in (t, stem):
             if w in SYNONYMS:
                 words.add(SYNONYMS[w])
+        # DB synonyms (canonical -> variant)
+        try:
+            for w in (t, stem):
+                rows = c.execute("SELECT canonical, variant FROM synonyms WHERE variant=? OR canonical=?", (w, w)).fetchall()
+                for canon, variant in rows:
+                    words.add(canon)
+                    words.add(variant)
+        except: pass
     return words
 
 def search(c, query, version="IC251", limit=8):
-    words = expand(query)
+    words = expand(c, query)
     results = {}
     for word in words:
         for pfx in PREFIXES:
@@ -516,6 +525,18 @@ def main():
             print(f"=== {r['name']} ({parsed.version}) ===")
             print(f"  Syntax: {r['syntax']}")
             print(f"  Desc:   {r['description']}")
+            # Show version differences
+            vers = c.execute(
+                "SELECT version, syntax FROM fnd_functions WHERE name=? ORDER BY version",
+                (parsed.function,)).fetchall()
+            if len(vers) > 1:
+                syns = {v: s for v, s in vers}
+                cur = syns.get(parsed.version, "")
+                others = [(v, s) for v, s in vers if v != parsed.version and s != cur]
+                if others:
+                    print(f"\n  Version diff:")
+                    for v, s in others:
+                        print(f"    {v}: {s[:80]}")
             if r.get('params'):
                 print(f"\n  Known params:")
                 for p in r['params']:
