@@ -46,25 +46,34 @@ SYNONYMS = {
 
 PREFIXES = ['db', 'le', 'ge', 'hi', 'rod', 'dd']
 
+_SYN_CACHE = None
+
+def _load_synonyms(c):
+    global _SYN_CACHE
+    if _SYN_CACHE is not None:
+        return _SYN_CACHE
+    cache = {}
+    try:
+        for canon, variant in c.execute("SELECT canonical, variant FROM synonyms"):
+            cache.setdefault(variant, set()).add(canon)
+            cache.setdefault(canon, set()).add(variant)
+    except: pass
+    _SYN_CACHE = cache
+    return cache
+
 def expand(c, query):
     words = set()
+    syn = _load_synonyms(c)
     for t in query.lower().split():
         words.add(t)
         stem = t.rstrip('s')
         if stem != t:
             words.add(stem)
-        # Hardcoded synonyms
         for w in (t, stem):
             if w in SYNONYMS:
                 words.add(SYNONYMS[w])
-        # DB synonyms (canonical -> variant)
-        try:
-            for w in (t, stem):
-                rows = c.execute("SELECT canonical, variant FROM synonyms WHERE variant=? OR canonical=?", (w, w)).fetchall()
-                for canon, variant in rows:
-                    words.add(canon)
-                    words.add(variant)
-        except: pass
+            if w in syn:
+                words.update(syn[w])
     return words
 
 def search(c, query, version="IC251", limit=8):
@@ -499,6 +508,22 @@ def _handle_snippet(c, argv):
                 d = dict(r)
                 print(f"  {d['name']:20s} used={d['total']:2d}  success={d['success_count']:2d}  rate={d['rate']:.0f}%")
             print("\nConsider promoting: rsi snippet info NAME  →  promote.py")
+
+            # Co-occurrence: which snippets tend to run together?
+            pairs = c.execute("""
+                SELECT a.snippet_name, b.snippet_name, COUNT(*) as cnt
+                FROM snippet_executions a
+                JOIN snippet_executions b ON a.id = b.id + 1
+                WHERE a.success = 1 AND b.success = 1
+                GROUP BY a.snippet_name, b.snippet_name
+                HAVING cnt >= 1
+                ORDER BY cnt DESC LIMIT 5
+            """).fetchall()
+            if pairs:
+                print("\n=== Common sequences (auto-pipeline candidates) ===\n")
+                for a, b, cnt in pairs:
+                    print(f"  {a:20s} → {b:20s}  ({cnt}x)")
+                print("\nTry: rsi snippet pipeline " + " ".join([dict(r)["snippet_name"] for r in pairs[:2]]))
         return
 
     print("Commands: list | search KEYWORD | info NAME | run NAME | pipeline NAMES | save NAME DESC CODE | record start|stop | suggest")

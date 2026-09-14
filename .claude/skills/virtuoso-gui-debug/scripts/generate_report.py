@@ -18,6 +18,15 @@ for r in conn.execute("SELECT version, COUNT(*) as c FROM fnd_functions GROUP BY
 manual_total = conn.execute("SELECT COUNT(*) FROM functions").fetchone()[0]
 manual_verified = conn.execute("SELECT COUNT(*) FROM functions WHERE confidence='verified'").fetchone()[0]
 
+# IC251 confidence breakdown
+ic251_conf = {}
+try:
+    for r in conn.execute("SELECT confidence, COUNT(*) as c FROM fnd_functions WHERE version='IC251' GROUP BY confidence"):
+        ic251_conf[r["confidence"]] = r["c"]
+except: pass
+
+syn_count = conn.execute("SELECT COUNT(*) FROM synonyms").fetchone()[0]
+
 param_count = conn.execute("SELECT COUNT(*) FROM param_examples").fetchone()[0]
 errors_open = conn.execute("SELECT COUNT(*) FROM error_history WHERE fixed=0").fetchone()[0]
 errors_fixed = conn.execute("SELECT COUNT(*) FROM error_history WHERE fixed=1").fetchone()[0]
@@ -176,6 +185,14 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
     <table>
       <tr><th>Version</th><th>Functions</th><th>Status</th></tr>
       {"".join(f'<tr><td><code>{v}</code></td><td>{c:,}</td><td>{"Active" if v=="IC251" else "Baseline"}</td></tr>' for v, c in sorted(by_version.items()))}
+    </table>
+  </div>
+  <div class="card">
+    <h2>IC251 Verification Progress</h2>
+    <table>
+      <tr><th>Confidence</th><th>Count</th></tr>
+      {''.join(f'<tr><td>{k}</td><td>{v:,}</td></tr>' for k, v in sorted(ic251_conf.items()))}
+      <tr><td><b>Synonyms</b></td><td>{syn_count}</td></tr>
     </table>
   </div>
   <div class="card">

@@ -73,15 +73,23 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
   <div class="stats">
     <div class="stat"><div class="n">28,045</div><div class="l">FND Functions</div></div>
     <div class="stat"><div class="n green">70</div><div class="l">Manually Verified</div></div>
-    <div class="stat"><div class="n yellow">16</div><div class="l">Param Templates</div></div>
-    <div class="stat"><div class="n" style="color:#8b5cf6">21</div><div class="l">Snippets</div></div>
-    <div class="stat"><div class="n red">0</div><div class="l">Open Errors</div></div>
+    <div class="stat"><div class="n yellow">17</div><div class="l">Param Templates</div></div>
+    <div class="stat"><div class="n" style="color:#8b5cf6">22</div><div class="l">Snippets</div></div>
+    <div class="stat"><div class="n red">1</div><div class="l">Open Errors</div></div>
   </div>
   <div class="card">
     <h2>By Version</h2>
     <table>
       <tr><th>Version</th><th>Functions</th><th>Status</th></tr>
       <tr><td><code>IC231</code></td><td>9,619</td><td>Baseline</td></tr><tr><td><code>IC251</code></td><td>9,619</td><td>Active</td></tr><tr><td><code>IC618</code></td><td>8,807</td><td>Baseline</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2>IC251 Verification Progress</h2>
+    <table>
+      <tr><th>Confidence</th><th>Count</th></tr>
+      <tr><td>exists</td><td>13</td></tr><tr><td>not_exist</td><td>4</td></tr><tr><td>ported</td><td>9,599</td></tr><tr><td>verified</td><td>3</td></tr>
+      <tr><td><b>Synonyms</b></td><td>60</td></tr>
     </table>
   </div>
   <div class="card">
@@ -102,7 +110,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
     <h2>RSI Improvement Timeline</h2>
     <table>
       <tr><th>Date</th><th>Phase</th><th>Milestone</th><th>Detail</th><th>+Funcs</th></tr>
-      <tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Manual function enumeration</b></td><td style="font-size:11px;color:#9ca3af">488 candidate functions tested via vcli; 70 confirmed exist</td><td>488</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Official .fnd docs imported</b></td><td style="font-size:11px;color:#9ca3af">IC231: 9,619 + IC618: 8,807 functions from Cadence .fnd files</td><td>18,426</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>IC251 baseline from IC231</b></td><td style="font-size:11px;color:#9ca3af">Copied 9,619 functions as IC251 baseline; 50 sampled validation = 100%</td><td>9,619</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>FTS5 full-text search</b></td><td style="font-size:11px;color:#9ca3af">fnd_functions_fts virtual table; semantic search via rsi_query.py</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Case-insensitive name matching</b></td><td style="font-size:11px;color:#9ca3af">Fixed SQLite LIKE case sensitivity (dbCreatePolygon was missed)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Multi-keyword scoring</b></td><td style="font-size:11px;color:#9ca3af">Functions matching multiple keywords rank higher; draw polygon -> dbCreatePolygon #1</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Parameter templates</b></td><td style="font-size:11px;color:#9ca3af">param_examples table records successful layer/purpose/coords (10 examples)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Error auto-learning</b></td><td style="font-size:11px;color:#9ca3af">record_failure() + has_known_failure(); known errors shown in -f lookup</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>E2E workflow verified</b></td><td style="font-size:11px;color:#9ca3af">query -> call -> record loop: draw path -> dbCreatePath -> success</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-13</td><td><span style="color:#faad14">P2</span></td><td><b>Position-based scoring</b></td><td style="font-size:11px;color:#9ca3af">Score by word position in function name; larger fetch (200); better stem handling. Result: place instance -> dbCreateInst #1</td><td>0</td></tr>
+      <tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Manual function enumeration</b></td><td style="font-size:11px;color:#9ca3af">488 candidate functions tested via vcli; 70 confirmed exist</td><td>488</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Official .fnd docs imported</b></td><td style="font-size:11px;color:#9ca3af">IC231: 9,619 + IC618: 8,807 functions from Cadence .fnd files</td><td>18,426</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>IC251 baseline from IC231</b></td><td style="font-size:11px;color:#9ca3af">Copied 9,619 functions as IC251 baseline; 50 sampled validation = 100%</td><td>9,619</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>FTS5 full-text search</b></td><td style="font-size:11px;color:#9ca3af">fnd_functions_fts virtual table; semantic search via rsi_query.py</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Case-insensitive name matching</b></td><td style="font-size:11px;color:#9ca3af">Fixed SQLite LIKE case sensitivity (dbCreatePolygon was missed)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Multi-keyword scoring</b></td><td style="font-size:11px;color:#9ca3af">Functions matching multiple keywords rank higher; draw polygon -> dbCreatePolygon #1</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Parameter templates</b></td><td style="font-size:11px;color:#9ca3af">param_examples table records successful layer/purpose/coords (10 examples)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Error auto-learning</b></td><td style="font-size:11px;color:#9ca3af">record_failure() + has_known_failure(); known errors shown in -f lookup</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>E2E workflow verified</b></td><td style="font-size:11px;color:#9ca3af">query -> call -> record loop: draw path -> dbCreatePath -> success</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-13</td><td><span style="color:#faad14">P2</span></td><td><b>Position-based scoring</b></td><td style="font-size:11px;color:#9ca3af">Score by word position in function name; larger fetch (200); better stem handling. Result: place instance -> dbCreateInst #1</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Manual function enumeration</b></td><td style="font-size:11px;color:#9ca3af">488 candidate functions tested via vcli; 70 confirmed exist</td><td>488</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>Official .fnd docs imported</b></td><td style="font-size:11px;color:#9ca3af">IC231: 9,619 + IC618: 8,807 functions from Cadence .fnd files</td><td>18,426</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#8b5cf6">P0</span></td><td><b>IC251 baseline from IC231</b></td><td style="font-size:11px;color:#9ca3af">Copied 9,619 functions as IC251 baseline; 50 sampled validation = 100%</td><td>9,619</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>FTS5 full-text search</b></td><td style="font-size:11px;color:#9ca3af">fnd_functions_fts virtual table; semantic search via rsi_query.py</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Case-insensitive name matching</b></td><td style="font-size:11px;color:#9ca3af">Fixed SQLite LIKE case sensitivity (dbCreatePolygon was missed)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Multi-keyword scoring</b></td><td style="font-size:11px;color:#9ca3af">Functions matching multiple keywords rank higher; draw polygon -> dbCreatePolygon #1</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Parameter templates</b></td><td style="font-size:11px;color:#9ca3af">param_examples table records successful layer/purpose/coords (10 examples)</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>Error auto-learning</b></td><td style="font-size:11px;color:#9ca3af">record_failure() + has_known_failure(); known errors shown in -f lookup</td><td>0</td></tr><tr><td style="white-space:nowrap">2026-09-12</td><td><span style="color:#faad14">P1</span></td><td><b>E2E workflow verified</b></td><td style="font-size:11px;color:#9ca3af">query -> call -> record loop: draw path -> dbCreatePath -> success</td><td>0</td></tr>
     </table>
   </div>
 </div>
@@ -117,6 +125,16 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td><code>copy_selected</code></td>
         <td>custom</td>
         <td style="font-size:11px;color:#9ca3af">Copy selected objects by offset</td>
+        <td style="color:#8b5cf6">—</td>
+        <td>0</td>
+        <td style="color:#52c41a">0</td>
+        <td style="color:#ef4444">0</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><code>param_test</code></td>
+        <td>custom</td>
+        <td style="font-size:11px;color:#9ca3af">Test {{layer}} on M1</td>
         <td style="color:#8b5cf6">—</td>
         <td>0</td>
         <td style="color:#52c41a">0</td>
@@ -178,18 +196,18 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
         <td>layout</td>
         <td style="font-size:11px;color:#9ca3af">Draw a polygon from point list</td>
         <td style="color:#8b5cf6">→ vcliDrawPolygon</td>
-        <td>0</td>
+        <td>1</td>
         <td style="color:#52c41a">0</td>
-        <td style="color:#ef4444">0</td>
-        <td>—</td>
+        <td style="color:#ef4444">1</td>
+        <td>0%</td>
       </tr>
       <tr>
         <td><code>draw_rect</code></td>
         <td>layout</td>
         <td style="font-size:11px;color:#9ca3af">Draw a rectangle on current cellview</td>
         <td style="color:#8b5cf6">→ vcliDrawRect</td>
-        <td>2</td>
-        <td style="color:#52c41a">2</td>
+        <td>3</td>
+        <td style="color:#52c41a">3</td>
         <td style="color:#ef4444">0</td>
         <td>100%</td>
       </tr>
@@ -330,7 +348,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
     <h2>Recent Executions</h2>
     <table>
       <tr><th>Snippet</th><th>Result</th><th>Duration</th><th>Error</th><th>Time</th></tr>
-      <tr><td><code>zoom_fit</code></td><td style="color:#52c41a">OK</td><td>425ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:05:03</td></tr><tr><td><code>count_shapes</code></td><td style="color:#52c41a">OK</td><td>402ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:05:03</td></tr><tr><td><code>get_bbox</code></td><td style="color:#52c41a">OK</td><td>426ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:05:02</td></tr><tr><td><code>version</code></td><td style="color:#ef4444">FAIL</td><td>9ms</td><td style="font-size:11px">[WinError 2] 系统找不到指定的文件。</td><td style="font-size:11px">2026-09-13T21:53:26</td></tr><tr><td><code>version</code></td><td style="color:#ef4444">FAIL</td><td>390ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T21:53:25</td></tr><tr><td><code>zoom_fit</code></td><td style="color:#52c41a">OK</td><td>423ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:48:25</td></tr><tr><td><code>count_shapes</code></td><td style="color:#52c41a">OK</td><td>399ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:47:13</td></tr><tr><td><code>get_bbox</code></td><td style="color:#52c41a">OK</td><td>403ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:47:12</td></tr><tr><td><code>zoom_fit</code></td><td style="color:#ef4444">FAIL</td><td>444ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:47:12</td></tr><tr><td><code>zoom_fit</code></td><td style="color:#ef4444">FAIL</td><td>413ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T19:24:01</td></tr>
+      <tr><td><code>draw_polygon</code></td><td style="color:#ef4444">FAIL</td><td>471ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-14T12:46:43</td></tr><tr><td><code>draw_rect</code></td><td style="color:#52c41a">OK</td><td>404ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:14:16</td></tr><tr><td><code>zoom_fit</code></td><td style="color:#52c41a">OK</td><td>425ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:05:03</td></tr><tr><td><code>count_shapes</code></td><td style="color:#52c41a">OK</td><td>402ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:05:03</td></tr><tr><td><code>get_bbox</code></td><td style="color:#52c41a">OK</td><td>426ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T22:05:02</td></tr><tr><td><code>version</code></td><td style="color:#ef4444">FAIL</td><td>9ms</td><td style="font-size:11px">[WinError 2] 系统找不到指定的文件。</td><td style="font-size:11px">2026-09-13T21:53:26</td></tr><tr><td><code>version</code></td><td style="color:#ef4444">FAIL</td><td>390ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T21:53:25</td></tr><tr><td><code>zoom_fit</code></td><td style="color:#52c41a">OK</td><td>423ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:48:25</td></tr><tr><td><code>count_shapes</code></td><td style="color:#52c41a">OK</td><td>399ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:47:13</td></tr><tr><td><code>get_bbox</code></td><td style="color:#52c41a">OK</td><td>403ms</td><td style="font-size:11px"></td><td style="font-size:11px">2026-09-13T20:47:12</td></tr>
     </table>
   </div>
 </div>
@@ -340,7 +358,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
     <h2>Recording Sessions</h2>
     <table>
       <tr><th>ID</th><th>Name</th><th>Started</th><th>Status</th></tr>
-      <tr><td>2</td><td>test_batch</td><td>2026-09-13T22:05:02</td><td>done</td></tr><tr><td>1</td><td>draw_session</td><td>2026-09-13T19:24:00</td><td>done</td></tr>
+      <tr><td>3</td><td>session</td><td>2026-09-13T22:08:18</td><td>done</td></tr><tr><td>2</td><td>test_batch</td><td>2026-09-13T22:05:02</td><td>done</td></tr><tr><td>1</td><td>draw_session</td><td>2026-09-13T19:24:00</td><td>done</td></tr>
     </table>
   </div>
 </div>
@@ -355,7 +373,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
 <div id="tab-params" class="tab-panel">
   <div class="card">
     <h2>Known Working Parameter Templates</h2>
-    <div class="param"><b>dbCreatePath</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (2x)<br>&nbsp;&nbsp;width: 2.0 (2x)<br>&nbsp;&nbsp;points: list(60:0 80:20 100:0) (1x)</div><div class="param"><b>dbCreatePolygon</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (1x)<br>&nbsp;&nbsp;points: list(0:60 10:50 20:60 10:70) (1x)</div><div class="param"><b>dbCreateRect</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (3x)<br>&nbsp;&nbsp;bbox: list(0:0 20:20) (1x)<br>&nbsp;&nbsp;bbox: list(30:30 50:50) (1x)<br>&nbsp;&nbsp;layer_purpose: list("M1" "pin") (1x)</div><div class="param"><b>draw_rect</b><br>&nbsp;&nbsp;layer: M1 (2x)<br>&nbsp;&nbsp;purpose: drawing (2x)<br>&nbsp;&nbsp;x1: 0 (2x)<br>&nbsp;&nbsp;x2: 20 (2x)<br>&nbsp;&nbsp;y1: 0 (2x)<br>&nbsp;&nbsp;y2: 20 (2x)</div><div class="param"><b>geGetEditCellView</b><br>&nbsp;&nbsp;windowId: nil (use current) (5x)</div>
+    <div class="param"><b>dbCreatePath</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (2x)<br>&nbsp;&nbsp;width: 2.0 (2x)<br>&nbsp;&nbsp;points: list(60:0 80:20 100:0) (1x)</div><div class="param"><b>dbCreatePolygon</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (1x)<br>&nbsp;&nbsp;points: list(0:60 10:50 20:60 10:70) (1x)</div><div class="param"><b>dbCreateRect</b><br>&nbsp;&nbsp;layer_purpose: list("M1" "drawing") (3x)<br>&nbsp;&nbsp;bbox: list(0:0 20:20) (1x)<br>&nbsp;&nbsp;bbox: list(30:30 50:50) (1x)<br>&nbsp;&nbsp;layer_purpose: list("M1" "pin") (1x)</div><div class="param"><b>draw_rect</b><br>&nbsp;&nbsp;layer: M1 (3x)<br>&nbsp;&nbsp;purpose: drawing (3x)<br>&nbsp;&nbsp;x1: 0 (3x)<br>&nbsp;&nbsp;y1: 0 (3x)<br>&nbsp;&nbsp;y2: 20 (3x)<br>&nbsp;&nbsp;x2: 20 (2x)<br>&nbsp;&nbsp;x2: 75 (2x)</div><div class="param"><b>geGetEditCellView</b><br>&nbsp;&nbsp;windowId: nil (use current) (5x)</div>
   </div>
 </div>
 
@@ -366,7 +384,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
   </div>
   <div class="card">
     <h2>Recent Errors</h2>
-    <div class="pit"><b>enumeration_script</b> [false_positive]<br>Checked output field for undefined, but errors are in errors[]. 418 undefined functions misclassified as existing.<br><span style="color:#6b7280;font-size:10px">2026-09-13</span></div><div class="pit"><b>enumeration_script</b> [false_positive]<br>Checked output field for undefined, but errors are in errors[]. 418 undefined functions misclassified as existing.<br><span style="color:#6b7280;font-size:10px">2026-09-13</span></div>
+    <div class="pit"><b>draw_polygon</b> [snippet_failure]<br><br><span style="color:#6b7280;font-size:10px">2026-09-14</span></div><div class="pit"><b>enumeration_script</b> [false_positive]<br>Checked output field for undefined, but errors are in errors[]. 418 undefined functions misclassified as existing.<br><span style="color:#6b7280;font-size:10px">2026-09-13</span></div><div class="pit"><b>enumeration_script</b> [false_positive]<br>Checked output field for undefined, but errors are in errors[]. 418 undefined functions misclassified as existing.<br><span style="color:#6b7280;font-size:10px">2026-09-13</span></div>
   </div>
 </div>
 
