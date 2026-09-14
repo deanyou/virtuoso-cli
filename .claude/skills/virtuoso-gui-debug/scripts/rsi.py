@@ -103,7 +103,7 @@ def search(c, query, version="IC251", limit=8):
 
 def lookup(c, name, version="IC251"):
     row = c.execute(
-        "SELECT name, syntax, description, category FROM fnd_functions WHERE name=? AND version=?",
+        "SELECT name, syntax, description, category, confidence, last_verified_at FROM fnd_functions WHERE name=? AND version=?",
         (name, version)).fetchone()
     if not row: return None
     d = dict(row)
@@ -550,6 +550,17 @@ def main():
         r = lookup(c, parsed.function, parsed.version)
         if r:
             print(f"=== {r['name']} ({parsed.version}) ===")
+            # Staleness warning
+            from datetime import datetime, timedelta
+            lv = r.get('last_verified_at')
+            if lv:
+                try:
+                    dt = datetime.fromisoformat(lv)
+                    if datetime.now() - dt > timedelta(days=90):
+                        print("  ⚠ STALE: last verified > 90 days ago, re-verify after Virtuoso upgrade")
+                except: pass
+            elif r.get('confidence') == 'ported':
+                print("  ⚠ PORTED: not verified in this version (copied from IC231)")
             print(f"  Syntax: {r['syntax']}")
             print(f"  Desc:   {r['description']}")
             # Show version differences
