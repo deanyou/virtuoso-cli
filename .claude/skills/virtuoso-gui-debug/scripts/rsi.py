@@ -323,6 +323,13 @@ def _handle_snippet(c, argv):
                     (function_name, error_type, error_message, created_at)
                     VALUES (?, 'snippet_failure', ?, ?)""",
                     (name, result[:200], now))
+                # Negative sample: record failed params
+                for k, v in fill.items():
+                    if v:
+                        c.execute("""INSERT OR IGNORE INTO param_examples
+                            (function_name, param_name, example_value, success_count, last_used)
+                            VALUES (?, ?, ?, 0, ?)""",
+                            (name, k, v, now))
             c.commit()
         else:
             c.execute("UPDATE snippets SET last_used=? WHERE name=?", (now, name))
@@ -474,7 +481,27 @@ def _handle_snippet(c, argv):
             print("Usage: rsi snippet record start [NAME] | stop | list | show ID | play ID")
         return
 
-    print("Commands: list | search KEYWORD | info NAME | run NAME | pipeline NAMES | save NAME DESC CODE | record start|stop")
+    if cmd == "suggest":
+        # Recommend snippets based on execution frequency
+        rows = c.execute("""
+            SELECT name, success_count, fail_count,
+                   (success_count + fail_count) as total,
+                   ROUND(100.0 * success_count / (success_count + fail_count), 0) as rate
+            FROM snippets
+            WHERE success_count + fail_count >= 2
+            ORDER BY success_count DESC, rate DESC LIMIT 10
+        """).fetchall()
+        if not rows:
+            print("No snippet usage data yet. Run some snippets with --execute first.")
+        else:
+            print("=== Snippet suggestions (high usage / high success) ===\n")
+            for r in rows:
+                d = dict(r)
+                print(f"  {d['name']:20s} used={d['total']:2d}  success={d['success_count']:2d}  rate={d['rate']:.0f}%")
+            print("\nConsider promoting: rsi snippet info NAME  →  promote.py")
+        return
+
+    print("Commands: list | search KEYWORD | info NAME | run NAME | pipeline NAMES | save NAME DESC CODE | record start|stop | suggest")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
