@@ -305,6 +305,15 @@ def _handle_snippet(c, argv):
             else:
                 c.execute("UPDATE snippets SET fail_count=fail_count+1, last_used=? WHERE name=?",
                           (now, name))
+                # Auto-learn: record failure in error_history
+                c.execute("""CREATE TABLE IF NOT EXISTS error_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, function_name TEXT,
+                    error_type TEXT, error_message TEXT, fixed INTEGER DEFAULT 0,
+                    created_at TEXT)""")
+                c.execute("""INSERT OR IGNORE INTO error_history
+                    (function_name, error_type, error_message, created_at)
+                    VALUES (?, 'snippet_failure', ?, ?)""",
+                    (name, result[:200], now))
             c.commit()
         else:
             c.execute("UPDATE snippets SET last_used=? WHERE name=?", (now, name))
