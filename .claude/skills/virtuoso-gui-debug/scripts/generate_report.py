@@ -82,6 +82,17 @@ snippet_runs = [dict(r) for r in conn.execute("""
     FROM snippet_executions ORDER BY executed_at DESC LIMIT 10
 """)]
 
+# All functions for search (IC251 only, top 2000 by name)
+search_funcs = [dict(r) for r in conn.execute("""
+    SELECT name, syntax, description, category, confidence
+    FROM fnd_functions WHERE version='IC251' ORDER BY name LIMIT 2000
+""")]
+# All snippets for search
+search_snippets = [dict(r) for r in conn.execute("""
+    SELECT name, description, category, code, promoted_to
+    FROM snippets ORDER BY name
+""")]
+
 # Common pitfalls (hardcoded from experience)
 pitfalls = [
     ("SQLite reserved word", "Column 'exists' causes syntax error. Use 'func_exists'."),
@@ -165,6 +176,7 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
   <button class="tab-btn" onclick="showTab('progress')">Progress</button>
   <button class="tab-btn" onclick="showTab('snippets')">Snippets</button>
+  <button class="tab-btn" onclick="showTab('search')">Search</button>
   <button class="tab-btn" onclick="showTab('recordings')">Recordings</button>
   <button class="tab-btn" onclick="showTab('categories')">Categories</button>
   <button class="tab-btn" onclick="showTab('params')">Param Templates</button>
@@ -246,6 +258,55 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   </div>''' if snippet_runs else '')}
 </div>
 
+<div id="tab-search" class="tab-panel">
+  <div class="card">
+    <h2>Search Functions & Snippets</h2>
+    <input type="text" id="searchBox" placeholder="Type to search..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #3a3a5a;background:#1a1a2e;color:#e4e4e7;font-size:14px;box-sizing:border-box;">
+    <div id="searchResults" style="margin-top:12px;max-height:500px;overflow-y:auto;"></div>
+  </div>
+  <script>
+  (function() {{
+    var funcs = __FUNCS_JSON__;
+    var snips = __SNIPS_JSON__;
+    var box = document.getElementById('searchBox');
+    var out = document.getElementById('searchResults');
+    if (!box || !out) return;
+    function render(q) {{
+      q = q.toLowerCase();
+      if (!q) {{ out.innerHTML = '<div style="color:#6b7280;font-size:13px;">Type to search {len(search_funcs)} functions + {len(search_snippets)} snippets...</div>'; return; }}
+      var html = '';
+      var fc = 0, sc = 0;
+      funcs.forEach(function(f) {{
+        if (fc >= 20) return;
+        if (f.name.toLowerCase().indexOf(q) >= 0 || (f.description||'').toLowerCase().indexOf(q) >= 0) {{
+          html += '<div style="padding:6px 0;border-bottom:1px solid #2a2a4a;">';
+          html += '<code style="color:#8b5cf6;">' + f.name + '</code> ';
+          html += '<span style="font-size:11px;color:#6b7280;">[' + (f.confidence||'?') + ']</span><br>';
+          html += '<span style="font-size:11px;color:#9ca3af;">' + (f.syntax||'') + '</span>';
+          html += '</div>';
+          fc++;
+        }}
+      }});
+      snips.forEach(function(s) {{
+        if (sc >= 10) return;
+        if (s.name.toLowerCase().indexOf(q) >= 0 || (s.description||'').toLowerCase().indexOf(q) >= 0) {{
+          html += '<div style="padding:6px 0;border-bottom:1px solid #2a2a4a;">';
+          html += '<code style="color:#52c41a;">snippet:' + s.name + '</code> ';
+          if (s.promoted_to) html += '<span style="font-size:11px;color:#8b5cf6;">→ ' + s.promoted_to + '</span>';
+          html += '<br><span style="font-size:11px;color:#9ca3af;">' + (s.description||'') + '</span>';
+          html += '</div>';
+          sc++;
+        }}
+      }});
+      if (!html) html = '<div style="color:#6b7280;font-size:13px;">No results for "' + q + '"</div>';
+      out.innerHTML = html;
+    }}
+    box.addEventListener('input', function() {{ render(box.value); }});
+    render('');
+  }})();
+  </script>
+</div>
+
 <div id="tab-recordings" class="tab-panel">
   <div class="card">
     <h2>Recording Sessions</h2>
@@ -318,5 +379,7 @@ function filterTable() {{
 </script>
 </body></html>"""
 
+html = html.replace("__FUNCS_JSON__", json.dumps(search_funcs, ensure_ascii=False))
+html = html.replace("__SNIPS_JSON__", json.dumps(search_snippets, ensure_ascii=False))
 OUT.write_text(html, encoding="utf-8")
 print(f"Report: {OUT} ({OUT.stat().st_size} bytes)")
