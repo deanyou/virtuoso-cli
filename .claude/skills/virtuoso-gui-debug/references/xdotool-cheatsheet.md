@@ -39,7 +39,7 @@
 | 冒烟 | `python3 scripts/gui.py smoke` |
 
 也可 `import gui` 复用 `window_geometry()` / `load_wid()` / `lock_wid()` 等函数。
-bash 备用实现位于 `scripts/bash/`（`gui_*.sh` + `smoke.sh`）。
+bash 备用实现位于 `scripts/`（`gui_*.sh` + `smoke.sh`）。
 
 ## 动作日志
 - 所有原语脚本自动追加动作到 `$GUI_LOG`（默认 `/tmp/gui_actions.log`）：时间、动作、

@@ -1,6 +1,13 @@
-﻿---
+---
 name: virtuoso-gui-debug
-description: Replayable Virtuoso GUI debugging via strict JSON DSL with fake, live (vcli), and local (xdotool) executors — unified skill covering remote vcli-driven and direct local X11 GUI automation
+display_name: Virtuoso GUI Debug
+display_name_en: Virtuoso GUI Debug
+description: Replayable Cadence Virtuoso GUI debugging via a strict JSON DSL with fake / live (vcli) / local (xdotool) executors. Trigger when replaying or verifying Virtuoso GUI automation, driving vcli window action-x11, or scripting local X11 GUI flows.
+description_zh: 基于严格 JSON DSL 的可回放 Cadence Virtuoso GUI 调试技能，支持 fake / live (vcli) / local (xdotool) 三种执行器，用于 GUI 自动化回放、vcli 窗口操作与本地 X11 自动化。
+description_en: Replayable Cadence Virtuoso GUI debugging via a strict JSON DSL with fake / live (vcli) / local (xdotool) executors for GUI automation replay and verification.
+category: coding
+version: 1.0.0
+author: deanyou
 allowed-tools: Bash(python3 *) Read
 ---
 

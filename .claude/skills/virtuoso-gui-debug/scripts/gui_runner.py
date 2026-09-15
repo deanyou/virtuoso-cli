@@ -19,6 +19,9 @@ from pathlib import Path
 # Resolve imports relative to script directory
 _SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(_SCRIPT_DIR))
+# vgui_runner package lives at the skill root (one level up from scripts/),
+# moved out of scripts/ to satisfy the 2-level Skill packaging directory limit.
+sys.path.insert(0, str(_SCRIPT_DIR.parent))
 
 from vgui_runner.model import Scenario, ScenarioValidationError  # noqa: E402
 from vgui_runner.engine import FakeExecutor, Runner, StepOutcome  # noqa: E402
