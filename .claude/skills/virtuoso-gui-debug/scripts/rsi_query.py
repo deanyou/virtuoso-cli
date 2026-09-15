@@ -21,13 +21,27 @@ def get_conn():
     conn.row_factory = sqlite3.Row
     return conn
 
+def _load_all(conn, version):
+    """Load all functions for a version into memory once. 9619 rows is tiny."""
+    rows = conn.execute(
+        "SELECT name, syntax, description, category, version FROM fnd_functions WHERE version=?",
+        (version,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+# In-memory cache: version -> list of dicts
+_cache = {}
+
 def search(conn, query, version="IC251", limit=10):
-    """Smart search: name prefix + FTS5 BM25 + synonym expansion."""
+    """Smart search: load once, match in Python (avoids 30 SQL LIKE queries)."""
+    if version not in _cache:
+        _cache[version] = _load_all(conn, version)
+    all_funcs = _cache[version]
+
     terms = query.strip().split()
     results = {}
 
-    # Strategy 1: function name prefix matching
-    # Extract likely function prefix from query
+    # Synonym expansion (same as before)
     synonyms = {
         'draw': 'create', 'make': 'create', 'build': 'create', 'paint': 'create',
         'place': 'create', 'insert': 'create', 'add': 'create',
@@ -54,92 +68,44 @@ def search(conn, query, version="IC251", limit=10):
     for t in terms:
         tl = t.lower()
         expanded.add(tl)
-        # Also try stem (remove trailing s)
         stem = tl.rstrip('s')
         if stem != tl:
             expanded.add(stem)
-        # Synonym lookup on both full word and stem
         for w in (tl, stem):
             if w in synonyms:
                 expanded.add(synonyms[w])
-            # Try without common suffixes
             for suffix in ['tion', 'ment', 'ing', 'ed', 'er']:
                 if w.endswith(suffix):
                     base = w[:-len(suffix)]
                     if base in synonyms:
                         expanded.add(synonyms[base])
 
-    # Search by name pattern: dbCreate*, leCreate*, hiSelect*, etc.
-    # Score in Python based on word position in name
-    for word in expanded:
-        for prefix in ['db', 'le', 'ge', 'hi', 'rod', 'dd']:
-            pattern = f"{prefix}%{word}%"
-            try:
-                rows = conn.execute("""
-                    SELECT name, syntax, description, category, version
-                    FROM fnd_functions
-                    WHERE version=? AND LOWER(name) LIKE LOWER(?)
-                    LIMIT 200
-                """, (version, pattern)).fetchall()
-                for r in rows:
-                    d = dict(r)
-                    name_lower = d['name'].lower()
-                    # Score: word position in name determines rank
-                    pos = name_lower.find(word)
-                    # Higher score = word appears earlier
-                    score = max(1, 20 - pos)
-                    # Exact match: function name without prefix == word (e.g. dbSave == save)
-                    bare = name_lower
-                    for p in ['db', 'le', 'ge', 'hi', 'rod', 'dd']:
-                        if bare.startswith(p):
-                            bare = bare[len(p):]
-                            break
-                    if bare == word:
-                        score += 100  # exact match bonus
-                    # Shorter names get slight bonus (dbSave > dbSaveCellViewAs)
-                    score -= len(name_lower) * 0.1
-                    if d['name'] in results:
-                        results[d['name']]['score'] += score
-                    else:
-                        d['score'] = score
-                        results[d['name']] = d
-            except Exception:
-                pass
+    # Match in Python over the in-memory list
+    for d in all_funcs:
+        name_lower = d['name'].lower()
+        desc_lower = (d.get('description') or '').lower()
+        score = 0
+        for word in expanded:
+            # Name match
+            pos = name_lower.find(word)
+            if pos >= 0:
+                score += max(1, 20 - pos)
+                # Exact bare-name match
+                bare = name_lower
+                for p in ['db', 'le', 'ge', 'hi', 'rod', 'dd']:
+                    if bare.startswith(p):
+                        bare = bare[len(p):]
+                        break
+                if bare == word:
+                    score += 100
+            # Description match (lower weight)
+            if word in desc_lower:
+                score += 2
+        if score > 0:
+            score -= len(name_lower) * 0.1
+            d['score'] = score
+            results[d['name']] = d
 
-    # Strategy 2: FTS5 BM25 on description (lower score than name match)
-    fts_terms = " OR ".join(expanded)
-    try:
-        rows = conn.execute("""
-            SELECT name, syntax, description, category, version, 1 as score
-            FROM fnd_functions_fts
-            WHERE fnd_functions_fts MATCH ? AND version = ?
-            LIMIT ?
-        """, (fts_terms, version, limit * 3)).fetchall()
-        for r in rows:
-            d = dict(r)
-            if d['name'] not in results:
-                results[d['name']] = d
-    except Exception:
-        pass
-
-    # Strategy 3: LIKE fallback on description (case-insensitive)
-    if len(results) < limit:
-        for word in list(expanded)[:3]:
-            try:
-                rows = conn.execute("""
-                    SELECT name, syntax, description, category, version
-                    FROM fnd_functions
-                    WHERE version=? AND LOWER(description) LIKE LOWER(?)
-                    LIMIT ?
-                """, (version, f'%{word}%', limit)).fetchall()
-                for r in rows:
-                    d = dict(r)
-                    if d['name'] not in results:
-                        results[d['name']] = d
-            except Exception:
-                pass
-
-    # Sort by score (higher = better match), then by name
     sorted_results = sorted(results.values(), key=lambda x: (-x.get('score', 1), x['name']))
     return sorted_results[:limit]
 
