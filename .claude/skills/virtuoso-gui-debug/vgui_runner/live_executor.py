@@ -711,6 +711,43 @@ class LiveExecutor(Executor):
         window_id=None,
         timeout_seconds=_TIMEOUT_ACTION,
     ) -> Dict[str, Any]:
+        if operation == "screenshot":
+            # Virtuoso-native screenshot (hiGetWindowScreenDump, IC23.1+) avoids
+            # the daemon X11 helper's xwininfo geometry probe. That probe fails
+            # when the daemon was launched with an empty PATH, because the
+            # helper subprocess cannot locate xwininfo. Routing screenshots
+            # through `window screenshot` keeps live baselines/screenshots
+            # working on such daemons (and is generally more robust).
+            import os as _os
+            out_dir = output_dir or str(self._output_dir)
+            png_path = _os.path.join(out_dir, "baseline.png")
+            argv = self._vcli_argv_with_session(
+                "window", "screenshot", "--path", png_path
+            )
+            result = self._run_json(argv, timeout_seconds)
+            # Local runner writes directly; SSH runner writes on the remote
+            # host, so scp the PNG down and rewrite the path.
+            if self._is_ssh():
+                remote_path = result.get("path")
+                if remote_path:
+                    fname = _os.path.basename(remote_path)
+                    local_path = self._output_dir / fname
+                    from .command_runner import SshRunner
+                    if isinstance(self._runner, SshRunner):
+                        scp_result = self._runner.scp_download(
+                            remote_path, str(local_path)
+                        )
+                        if scp_result.exit_code != 0:
+                            raise RuntimeError(
+                                f"screenshot download failed: "
+                                f"{scp_result.stderr.strip()}"
+                            )
+                        result["path"] = str(local_path)
+            # window screenshot reports status "saved"; normalize so the
+            # downstream status check (which expects None/"success") passes.
+            if result.get("status") == "saved":
+                result["status"] = "success"
+            return result
         argv = self._vcli_argv(
             "window",
             "action-x11",
@@ -738,27 +775,8 @@ class LiveExecutor(Executor):
         if text is not None:
             argv += ["--text", text]
         if output_dir is not None:
-            # In SSH mode the local output_dir does not exist on the remote
-            # host.  Write screenshots to a remote temp dir (created first),
-            # then scp them down after the call (see _download_screenshot).
-            if operation == "screenshot" and self._is_ssh():
-                remote_dir = self._remote_screenshot_dir()
-                from .command_runner import SshRunner
-                if isinstance(self._runner, SshRunner):
-                    mk = self._runner.ensure_remote_dir(remote_dir)
-                    if mk.exit_code != 0:
-                        raise RuntimeError(
-                            f"failed to create remote screenshot dir: {mk.stderr.strip()}"
-                        )
-                argv += ["--output-dir", remote_dir]
-            else:
-                argv += ["--output-dir", output_dir]
+            argv += ["--output-dir", output_dir]
         result = self._run_json(argv, timeout_seconds)
-        # Fetch remote screenshots into the local output directory.
-        if operation == "screenshot":
-            dl_err = self._download_screenshot(result)
-            if dl_err:
-                raise RuntimeError(dl_err["error"])
         return result
 
     def _execute_action_step(self, step: Step) -> None:
