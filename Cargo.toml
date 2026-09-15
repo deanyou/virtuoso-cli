@@ -62,7 +62,7 @@ regex = "1"
 toml = "1.1"
 num_cpus = "1"
 russh = { version = "0.63.1", optional = true }
-russh-sftp = { version = "2", optional = true }
+russh-sftp = { version = "3", optional = true }
 
 [dev-dependencies]
 # `#[serial]` marks a test as needing exclusive access to the process-global
