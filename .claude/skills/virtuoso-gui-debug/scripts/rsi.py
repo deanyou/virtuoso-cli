@@ -11,11 +11,35 @@ One command to search, call, and learn:
   rsi status                   # knowledge base stats
   rsi report                   # regenerate HTML report
 """
-import argparse, json, sqlite3, subprocess, sys
+import argparse, json, sqlite3, subprocess, sys, socket
 from datetime import datetime
 from pathlib import Path
 
 DB = Path(__file__).parent.parent / "data" / "skill_db.sqlite3"
+PORT_FILE = Path(__file__).parent.parent / "data" / "rsid.port"
+
+# ── Daemon client (optional, ~20ms vs ~500ms) ──
+
+def _daemon_req(cmd, **kw):
+    """Try daemon first; return None if not running."""
+    try:
+        if not PORT_FILE.exists():
+            return None
+        port = int(PORT_FILE.read_text().strip())
+        s = socket.socket()
+        s.settimeout(2)
+        s.connect(('127.0.0.1', port))
+        s.sendall(json.dumps({'cmd': cmd, **kw}).encode() + b'\n')
+        data = b''
+        while True:
+            chunk = s.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        s.close()
+        return json.loads(data.decode())
+    except Exception:
+        return None
 
 # ── DB helpers ──────────────────────────────────────────────────────────────
 
@@ -572,6 +596,15 @@ def main():
         return
 
     if parsed.function:
+        # Fast path: daemon
+        dr = _daemon_req('lookup', version=parsed.version, name=parsed.function)
+        if dr and dr.get('result'):
+            r = dr['result']
+            print(f"=== {r['name']} ({parsed.version}) ===")
+            print(f"  Syntax: {r.get('syntax','')}")
+            print(f"  Desc:   {r.get('description','')}")
+            return
+        # Slow path: direct DB
         r = lookup(c, parsed.function, parsed.version)
         if r:
             print(f"=== {r['name']} ({parsed.version}) ===")
@@ -622,7 +655,16 @@ def main():
         return
 
     if parsed.query:
-        # Search functions
+        # Fast path: daemon
+        dr = _daemon_req('search', query=parsed.query, version=parsed.version, limit=parsed.limit)
+        if dr and dr.get('results'):
+            print(f"=== Functions: '{parsed.query}' ===\n")
+            for r in dr['results']:
+                print(f"  {r['name']}")
+                print(f"    {r.get('description','')[:70]}")
+                print()
+            return
+        # Slow path: direct DB
         results = search(c, parsed.query, parsed.version, parsed.limit)
         print(f"=== Functions: '{parsed.query}' ===\n")
         if not results:
