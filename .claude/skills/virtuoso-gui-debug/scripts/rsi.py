@@ -574,6 +574,9 @@ def main():
     ap.add_argument("--success", action="store_true")
     ap.add_argument("--error", help="Error message to record")
     ap.add_argument("--status", action="store_true")
+    ap.add_argument("--view", default="any",
+                    choices=["any", "ciw", "schematic", "layout"],
+                    help="Current view context for context-aware filtering")
     parsed = ap.parse_args(args)
 
     c = conn()
@@ -619,6 +622,11 @@ def main():
                 except: pass
             elif r.get('confidence') == 'ported':
                 print("  ⚠ PORTED: not verified in this version (copied from IC231)")
+            elif r.get('confidence', '').startswith('undefined_in_'):
+                vc = r.get('view_context', 'unknown')
+                print(f"  ⚠ UNDEFINED in {vc} — may exist in other views")
+            if parsed.view != 'any' and r.get('view_context') not in ('any', parsed.view):
+                print(f"  ⚠ This function was tested in '{r.get('view_context')}', not '{parsed.view}'")
             print(f"  Syntax: {r['syntax']}")
             print(f"  Desc:   {r['description']}")
             # Show version differences
