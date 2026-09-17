@@ -1102,4 +1102,7 @@ sqlite3 /tmp/skill_db.sqlite3 "SELECT name FROM functions WHERE name LIKE 'dbCre
 8. **Zero-area rect** — silently returns nil; always check bbox
 9. **Dead session** — check port alive before skill exec
 10. **"Unavailable" functions** — dbCreateLabel/Pin/Contact/Text ALL exist
+11. **Dialog blockers** — *Hi* prefix, cph*, mae*, sev*, lx* pop modal dialogs that block IPC permanently. Cannot be dismissed via xdotool/ESC. Must skip via RSI blacklist.
+12. **View context matters** — dbGet* safe in layout, hangs in schematic. schGet* safe in schematic. Always record view_context when testing.
+13. **RSI is context-aware** — use `rsi.py --view schematic|layout|ciw` for context-filtered results. `undefined_in_ciw` ≠ doesn't exist.
 
