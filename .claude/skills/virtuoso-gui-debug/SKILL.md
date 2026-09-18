@@ -1106,3 +1106,65 @@ sqlite3 /tmp/skill_db.sqlite3 "SELECT name FROM functions WHERE name LIKE 'dbCre
 12. **View context matters** — dbGet* safe in layout, hangs in schematic. schGet* safe in schematic. Always record view_context when testing.
 13. **RSI is context-aware** — use `rsi.py --view schematic|layout|ciw` for context-filtered results. `undefined_in_ciw` ≠ doesn't exist.
 
+
+
+---
+
+## Architecture Maturity Assessment (2026-09-18)
+
+Correct assessment — do NOT use a single "85%" number:
+
+| Layer | Maturity | Notes |
+|-------|----------|-------|
+| Execution base | 80-90% | engine.py state machine complete: PRECHECK -> BASELINE -> EXECUTE -> VERIFY -> RECOVER |
+| Verify & Recover | 60% | Has predicates (window_exists, state_matches, ciw_eval) but not unified postcondition framework |
+| Auto-routing & planning | 20-30% | Executor is CLI-selected (--executor fake/live/local), not auto-routed |
+| Full closed-loop | 60-70% | Missing cross-channel decision, resource lifecycle, verifiable contracts |
+
+### What already exists (do not re-invent)
+
+- **State machine**: `vgui_runner/engine.py` - PRECHECK -> BASELINE -> EXECUTE -> VERIFY -> RECOVER/FAILED
+- **Verifiers**: window_exists, state_matches, title_matches, geometry_matches, ciw_eval
+- **Recovery**: explicit rollback steps in scenario DSL
+- **Evidence**: task.json, summary.json, JSONL trace, baseline/step screenshots
+- **Executors**: fake (offline replay), live (vcli/SSH/X11), local (xdotool)
+- **RSI knowledge**: SQLite with function verified/undefined status, param examples, error history
+
+### What is genuinely missing (prioritized)
+
+1. **Action Router** - pure function: ActionRequest + CapabilitySnapshot -> RouteDecision
+   - channel: skill | vcli_x11 | local_x11 | vision | rejected
+   - reason, confidence, required_capabilities, fallbacks, risk_class
+   - vision must stay behind explicit opt-in
+
+2. **Unified Verifier result model** - {predicate, expected, observed, status, evidence}
+   - Distinguish: action failed vs postcondition failed vs unverifiable vs channel unavailable
+   - Do not treat "command returned success" as "Virtuoso state changed"
+
+3. **Recovery safety policy** - risk classes: read_only / idempotent_write / non_idempotent_write / destructive
+   - Only read_only + idempotent ops get auto-retry
+   - Channel fallback only for explicitly safe error classes
+   - Recovery budget + total deadline
+
+4. **Evidence Bundle manifest** - stable contract:
+   - manifest.json (run id, session, executor, route, start/end, final status, sha256 per artifact)
+   - One-shot output directory; failure still produces manifest; atomic writes; redact secrets
+
+5. **Template Planner** (deferred) - task type -> fixed action graph -> param fill -> static validation
+   - RSI recommends verified action graphs, not arbitrary GUI operations
+
+### Non-priorities
+
+- **Rust rewrite**: not needed for architecture completeness. Python orchestration is fine. Rust should only take over SSH/daemon connection pooling, X11 boundary, auth - directly tied to SSH rate-limit issues.
+- **Automatic Planner**: defer until routing/verify/evidence/recovery contracts stabilize.
+
+### Acceptance criteria (measurable, not "has module")
+
+- Same action + same capability snapshot -> stable route decision
+- Unavailable channels never selected
+- Verify failure never misreported as execute failure
+- Non-idempotent ops never auto-replayed
+- Every run produces complete manifest
+- Every failure path links to trace + evidence
+- Concurrency does not cause SSH connection storm
+- Route fallback has explicit reason + bounded count
