@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 from .model import Scenario, Step
 from .trace import Trace
 from .verifier_result import VerifierResult, VerifyStatus, from_legacy_error
+from .recovery import RecoveryPolicy, RecoveryRequest, RecoveryAction, ErrorCategory
 
 
 class RunState(str, Enum):
@@ -148,8 +149,9 @@ class FakeExecutor(Executor):
 class Runner:
     """State machine runner that executes scenarios step-by-step."""
 
-    def __init__(self, executor: Executor):
+    def __init__(self, executor: Executor, recovery_policy: Optional[RecoveryPolicy] = None):
         self._executor = executor
+        self._recovery_policy = recovery_policy or RecoveryPolicy()
 
     def run(self, scenario: Scenario, output_dir: Path) -> RunSummary:
         output_dir.mkdir(parents=True, exist_ok=False)
