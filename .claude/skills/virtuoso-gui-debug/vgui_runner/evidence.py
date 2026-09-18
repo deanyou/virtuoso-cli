@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import time
+from typing import Any
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 SCHEMA_VERSION = 1
+
+
+def normalized_scenario_hash(scenario_data: dict) -> str:
+    """Compute sha256 of canonically-encoded JSON (sorted keys, no whitespace).
+
+    Equivalent scenarios with different formatting produce the same hash.
+    """
+    canonical = json.dumps(scenario_data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _sha256_stream(path: Path, chunk_size: int = 65536) -> Tuple[str, int]:
@@ -116,6 +126,7 @@ class EvidenceManifest:
         self._artifacts: List[Artifact] = []
         self._steps: List[StepRecord] = []
         self._consistency_notes: List[str] = []
+        self._last_updated = datetime.now(timezone.utc).isoformat()
 
     def set_scenario_hash(self, sha256_hex: str) -> None:
         self._scenario_sha256 = sha256_hex
@@ -159,6 +170,7 @@ class EvidenceManifest:
 
     def _write(self) -> None:
         """Write manifest.json atomically via temp file rename."""
+        self._last_updated = datetime.now(timezone.utc).isoformat()
         manifest = {
             "schema_version": SCHEMA_VERSION,
             "run_id": self._run_id,
@@ -168,6 +180,7 @@ class EvidenceManifest:
             "status": self._status,
             "started_at": self._started,
             "finished_at": self._finished,
+            "last_updated": self._last_updated,
             "artifacts": [a.to_dict() for a in self._artifacts],
             "steps": [s.to_dict() for s in self._steps],
         }
