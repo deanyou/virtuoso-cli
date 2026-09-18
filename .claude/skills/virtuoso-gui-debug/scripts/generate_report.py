@@ -82,6 +82,12 @@ snippet_runs = [dict(r) for r in conn.execute("""
     FROM snippet_executions ORDER BY executed_at DESC LIMIT 10
 """)]
 
+# Replay insights (Dream-RSI)
+insights = [dict(r) for r in conn.execute("""
+    SELECT insight_type, pattern, context, success_rate, sample_count, recommendation, created_at
+    FROM replay_insights ORDER BY sample_count DESC
+""")]
+
 # All functions for search (IC251 only, top 2000 by name)
 search_funcs = [dict(r) for r in conn.execute("""
     SELECT name, syntax, description, category, confidence
@@ -176,6 +182,7 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
   <button class="tab-btn" onclick="showTab('progress')">Progress</button>
   <button class="tab-btn" onclick="showTab('snippets')">Snippets</button>
+  <button class="tab-btn" onclick="showTab('insights')">Insights</button>
   <button class="tab-btn" onclick="showTab('search')">Search</button>
   <button class="tab-btn" onclick="showTab('recordings')">Recordings</button>
   <button class="tab-btn" onclick="showTab('categories')">Categories</button>
@@ -258,6 +265,19 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   </div>''' if snippet_runs else '')}
 </div>
 
+<div id="tab-insights" class="tab-panel">
+  <div class="card">
+    <h2>Dream-RSI: Auto-Learned Insights ({len(insights)})</h2>
+    <p style="font-size:12px;color:#6b7280;margin-bottom:12px;">Automatically discovered from exploration history via replay simulator.</p>
+    {''.join(f'''
+    <div style="padding:10px;background:{"#0a1a0a" if "pattern" in i["insight_type"] else "#1a0a0a" if "blocker" in i["insight_type"] else "#1a1a2e"};border-left:3px solid {"#52c41a" if "pattern" in i["insight_type"] else "#ef4444" if "blocker" in i["insight_type"] else "#8b5cf6"};border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:{"#52c41a" if "pattern" in i["insight_type"] else "#ef4444" if "blocker" in i["insight_type"] else "#8b5cf6"}">{i["pattern"]}</b>
+      <span style="color:#6b7280;font-size:11px;"> in {i["context"]} · {i["sample_count"]} samples · {int(i["success_rate"]*100)}% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">{i["recommendation"]}</div>
+    </div>''' for i in insights) if insights else '<p style="color:#6b7280">No insights yet. Run dream_rsi.py to generate.</p>'}
+  </div>
+</div>
+
 <div id="tab-search" class="tab-panel">
   <div class="card">
     <h2>Search Functions & Snippets</h2>
@@ -294,6 +314,7 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
           html += '<code style="color:#52c41a;">snippet:' + s.name + '</code> ';
           if (s.promoted_to) html += '<span style="font-size:11px;color:#8b5cf6;">→ ' + s.promoted_to + '</span>';
           html += '<br><span style="font-size:11px;color:#9ca3af;">' + (s.description||'') + '</span>';
+          if (s.code) html += '<br><code style="font-size:10px;color:#6b7280;display:block;margin-top:4px;padding:4px;background:#0f1117;border-radius:4px;">' + s.code.substring(0,100) + (s.code.length>100?'...':'') + '</code>';
           html += '</div>';
           sc++;
         }}
