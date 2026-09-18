@@ -621,11 +621,17 @@ def main():
         return
 
     if parsed.record:
+        from datetime import datetime
         func = parsed.record
         if parsed.error:
             record_failure(c, func, "runtime", parsed.error)
             print(f"Recorded error for {func}")
         else:
+            # Record success: update confidence in fnd_functions
+            c.execute("""UPDATE fnd_functions SET confidence='verified', last_verified_at=?
+                        WHERE name=? AND version=?""",
+                      (datetime.now().isoformat(), func, parsed.version))
+            c.commit()
             print(f"Recorded success for {func}")
         return
 
