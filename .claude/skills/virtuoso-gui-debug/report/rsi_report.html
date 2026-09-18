@@ -77,7 +77,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
     <div class="stat"><div class="n green">70</div><div class="l">Manually Verified</div></div>
     <div class="stat"><div class="n yellow">17</div><div class="l">Param Templates</div></div>
     <div class="stat"><div class="n" style="color:#8b5cf6">264</div><div class="l">Snippets</div></div>
-    <div class="stat"><div class="n red">813</div><div class="l">Open Errors</div></div>
+    <div class="stat"><div class="n red">1233</div><div class="l">Open Errors</div></div>
   </div>
   <div class="card">
     <h2>By Version</h2>
@@ -2777,18 +2777,78 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
 
 <div id="tab-insights" class="tab-panel">
   <div class="card">
-    <h2>Dream-RSI: Auto-Learned Insights (5)</h2>
+    <h2>Dream-RSI: Auto-Learned Insights (76)</h2>
     <p style="font-size:12px;color:#6b7280;margin-bottom:12px;">Automatically discovered from exploration history via replay simulator.</p>
     
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">dbGet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in layout · 213 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">dbGet* safe in layout: 100% success</div>
+    </div>
     <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
       <div style="font-size:12px;"><b style="color:#8b5cf6">dialog_blocker</b>
       <span style="color:#6b7280;font-size:11px;"> in any · 93 samples · 0% success</span></div>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;">93 functions failed with dialog_blocker — check view context</div>
     </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">dialog_blocker</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 93 samples · 0% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">93 functions failed with dialog_blocker (93 times)</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">dialog_blocker</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 93 samples · 0% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">93 functions failed with dialog_blocker (93 times)</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">techG*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 77 samples · 97% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">techG* safe in any: 97% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">exception</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 60 samples · 0% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">60 functions failed with exception (60 times)</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">exception</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 60 samples · 0% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">60 functions failed with exception (60 times)</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">techS*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 48 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">techS* safe in any: 100% success</div>
+    </div>
     <div style="padding:10px;background:#1a0a0a;border-left:3px solid #ef4444;border-radius:4px;margin:8px 0;">
       <div style="font-size:12px;"><b style="color:#ef4444">*Hi*</b>
       <span style="color:#6b7280;font-size:11px;"> in all · 45 samples · 0% success</span></div>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;">AVOID: *Hi* functions pop GUI dialogs, timeout rate ~100%</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">awvGe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 29 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">awvGe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">leSet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 28 samples · 92% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">leSet* safe in any: 93% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">awvSe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 27 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">awvSe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">ddGet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 27 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">ddGet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">techC*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 26 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">techC* safe in any: 100% success</div>
     </div>
     <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
       <div style="font-size:12px;"><b style="color:#8b5cf6">undefined_in_ciw</b>
@@ -2801,9 +2861,304 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;">25 functions failed with undefined_function — check view context</div>
     </div>
     <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">undefined_function</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 25 samples · 0% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">25 functions failed with undefined_function (25 times)</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">pcGet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 25 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">pcGet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">dbSet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 25 samples · 76% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">dbSet* safe in any: 76% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">undefined_function</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 25 samples · 0% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">25 functions failed with undefined_function (25 times)</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">vfoGR*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 23 samples · 82% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">vfoGR* safe in any: 83% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">deGet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 19 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">deGet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">mgGet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 19 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">mgGet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">gpeGe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 18 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">gpeGe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">leGet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 18 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">leGet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">abeLa*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 16 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">abeLa* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">drGet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 16 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">drGet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">gpeCr*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 16 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">gpeCr* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">pcDef*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 16 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">pcDef* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">schGe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in schematic · 15 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">schGe* safe in schematic: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">techF*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 14 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">techF* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
       <div style="font-size:12px;"><b style="color:#8b5cf6">dbGet*</b>
       <span style="color:#6b7280;font-size:11px;"> in layout · 13 samples · 69% success</span></div>
       <div style="font-size:11px;color:#9ca3af;margin-top:4px;">SAFE: dbGet* functions work in layout context</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">ddCat*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 13 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">ddCat* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">gpeSe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 13 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">gpeSe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">phoDr*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 13 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">phoDr* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">techD*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 13 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">techD* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">verif*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 13 samples · 76% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">verif* safe in any: 77% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">geGet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in layout · 11 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">geGet* safe in layout: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">slaGe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 11 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">slaGe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">dlDra*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 10 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">dlDra* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">awvPl*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 9 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">awvPl* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">hdbGe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 9 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">hdbGe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">mgSet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 9 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">mgSet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">asiSe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 9 samples · 77% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">asiSe* safe in any: 78% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">awvRe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 8 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">awvRe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">delet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 8 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">delet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">dlSet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 8 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">dlSet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">drplS*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 8 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">drplS* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">leTog*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 8 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">leTog* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">mgAdd*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 8 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">mgAdd* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">pcdbI*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 8 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">pcdbI* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">relxG*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 8 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">relxG* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">schCr*</b>
+      <span style="color:#6b7280;font-size:11px;"> in schematic · 8 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">schCr* safe in schematic: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">ddMap*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 7 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">ddMap* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">dlAdd*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 7 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">dlAdd* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">slaRe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 7 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">slaRe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">gpeAd*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 6 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">gpeAd* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">leLay*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 6 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">leLay* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">tcUnr*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 6 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">tcUnr* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">vfoGe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 6 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">vfoGe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a0a0a;border-left:3px solid #ef4444;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#ef4444">schHi*</b>
+      <span style="color:#6b7280;font-size:11px;"> in ciw · 5 samples · 0% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">Avoid schHi* in ciw: 100% timeout rate</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">awvDi*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">awvDi* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">ddLoc*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">ddLoc* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">ddSet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">ddSet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">envGe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">envGe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">leCon*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">leCon* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">leCre*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">leCre* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">leLSW*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">leLSW* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">leReg*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">leReg* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">lntGe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">lntGe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">mgRot*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">mgRot* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">nlGet*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">nlGet* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">relxI*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">relxI* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a0a0a;border-left:3px solid #ef4444;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#ef4444">schHi*</b>
+      <span style="color:#6b7280;font-size:11px;"> in ciw · 5 samples · 0% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">Avoid schHi* in ciw: 100% timeout rate</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">viaRe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">viaRe* safe in any: 100% success</div>
+    </div>
+    <div style="padding:10px;background:#1a1a2e;border-left:3px solid #8b5cf6;border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:#8b5cf6">vreGe*</b>
+      <span style="color:#6b7280;font-size:11px;"> in any · 5 samples · 100% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">vreGe* safe in any: 100% success</div>
     </div>
   </div>
 </div>
@@ -2889,7 +3244,7 @@ code { color: #a5b4fc; font-family: 'Cascadia Code', monospace; }
   </div>
   <div class="card">
     <h2>Recent Errors</h2>
-    <div class="pit"><b>OP</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>vcpfeRegisterPostPlacementProc</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>wspRegionGetAllowedPatternGroups</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>v</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>colorIndex</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>asiGetDigitalRunDir</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>xval</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>verifIsSnapshotLocked</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>mprocedure</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>pkxGetFuncDefPins</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>dbCreateParamSimpleMosaicByMasterName</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>cdfCreateUserCellCDF</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>verifRestart</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>dbSoftConnectTermHasPinlessLayer</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>schEditPinOrder</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div>
+    <div class="pit"><b>leHiPlotQueueStatus: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>ddHiCreateCellComboField: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>leHiDelete: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>phoHiDecompose: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>leHiSetAreaViewLevel: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>pcHIDisplayParameterizedShape: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>techImportWireProfileSet: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>ddHiCreateLibraryComboField: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>ddsHiMakeReadOnly: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>techIsDBUPerUUSet: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>leHiCreateGuardRing: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>leHiMousePopUp: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>leHiCreateTaper: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>leMakeHierReadonlyOrEditableMC: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div><div class="pit"><b>pcHIDeleteProp: error</b> [dialog_blocker]<br>Timed out - likely pops dialog<br><span style="color:#6b7280;font-size:10px">2026-09-18</span></div>
   </div>
 </div>
 
