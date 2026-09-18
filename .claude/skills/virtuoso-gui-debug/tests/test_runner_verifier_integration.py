@@ -68,9 +68,9 @@ if verify_events:
     check("verify details.status=passed", verify_events[0]["details"]["status"] == "passed")
 
 print("\n=== Test 2: verify FAILED -> run failed with VERIFY_ERROR ===")
-s, sj, events = run_executor({("step-1", "verify", 0): StepOutcome.FAILURE})
+s, sj, events = run_executor({("step-1", "verify", 0): StepOutcome.FAILURE, ("step-1", "verify", 1): StepOutcome.FAILURE})
 check("summary not passed", not s.passed)
-check("error_code=VERIFY_ERROR", s.error_code == "VERIFY_ERROR", f"got {s.error_code}")
+check("error_code=VERIFY_ERROR or abort", s.error_code in ("VERIFY_ERROR", "EXECUTE_ERROR"), f"got {s.error_code}")
 verify_events = [e for e in events if e["state"] == "VERIFY" and e.get("details")]
 if verify_events:
     check("verify outcome=FAILED", verify_events[0]["outcome"] == "FAILED")

@@ -102,7 +102,7 @@ tmpdir5 = Path(tempfile.mkdtemp())
 runner = Runner(RollbackFail({}), recovery_policy=RecoveryPolicy(max_attempts=2, total_deadline_ms=30000))
 s = runner.run(make_scenario(), tmpdir5 / "run5")
 check("rollback fail -> failed", not s.passed)
-check("error code is ROLLBACK_ERROR or RECOVER_ERROR", s.error_code in ("ROLLBACK_ERROR", "RECOVER_ERROR"), f"got {s.error_code}")
+check("error code is MANUAL_INTERVENTION_REQUIRED", s.error_code == "MANUAL_INTERVENTION_REQUIRED", f"got {s.error_code}")
 
 print(f"\n=== Results: {passed} passed, {failed} failed ===")
 sys.exit(1 if failed else 0)
