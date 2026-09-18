@@ -103,6 +103,20 @@ def expand(c, query):
 def search(c, query, version="IC251", limit=8):
     words = expand(c, query)
     results = {}
+    
+    # 加载 insights：blocker 和 safe 前缀
+    blocker_prefixes = set()
+    safe_prefixes = set()
+    try:
+        for row in c.execute("SELECT pattern, insight_type FROM replay_insights"):
+            pat = row['pattern'].rstrip('*').lower()
+            if 'blocker' in row['insight_type']:
+                blocker_prefixes.add(pat)
+            elif 'safe' in row['insight_type']:
+                safe_prefixes.add(pat)
+    except:
+        pass
+    
     for word in words:
         for pfx in PREFIXES:
             pattern = f"{pfx}%{word}%"
@@ -126,6 +140,23 @@ def search(c, query, version="IC251", limit=8):
                         score += 100
                     # Shorter names preferred
                     score -= len(nl) * 0.1
+                    
+                    # Insights 调整分数
+                    is_danger = False
+                    is_safe = False
+                    for bp in blocker_prefixes:
+                        if nl.startswith(bp):
+                            score -= 100  # 大幅降权
+                            is_danger = True
+                            break
+                    for sp in safe_prefixes:
+                        if nl.startswith(sp):
+                            score += 20  # 安全加分
+                            is_safe = True
+                            break
+                    d['danger'] = is_danger
+                    d['safe'] = is_safe
+                    
                     n = d['name']
                     results[n] = {**d, 'score': results[n]['score'] + score} if n in results else {**d, 'score': score}
             except: pass
@@ -678,7 +709,13 @@ def main():
         if not results:
             print("  (no functions found)")
         for r in results:
-            print(f"  {r['name']}")
+            # 安全标记
+            mark = ""
+            if r.get('danger'):
+                mark = " ⚠️ BLOCKER"
+            elif r.get('safe'):
+                mark = " ✓ SAFE"
+            print(f"  {r['name']}{mark}")
             print(f"    {r['description'][:70]}")
             print()
 
