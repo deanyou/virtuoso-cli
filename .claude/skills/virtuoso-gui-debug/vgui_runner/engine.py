@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 
 from .model import Scenario, Step
 from .trace import Trace
+from .verifier_result import VerifierResult, VerifyStatus, from_legacy_error
 
 
 class RunState(str, Enum):
@@ -41,6 +42,7 @@ ERROR_BASELINE = "BASELINE_ERROR"
 ERROR_EXECUTE = "EXECUTE_ERROR"
 ERROR_RECOVER = "RECOVER_ERROR"
 ERROR_VERIFY = "VERIFY_ERROR"
+ERROR_VERIFY_UNAVAILABLE = "VERIFY_UNAVAILABLE"
 ERROR_ROLLBACK = "ROLLBACK_ERROR"
 
 
@@ -114,10 +116,28 @@ class FakeExecutor(Executor):
             return {"error": f"execute failed for step {step.id}"}
         return None
 
-    def verify(self, step: Step, attempt: int) -> Optional[Dict[str, Any]]:
+    def verify(self, step: Step, attempt: int) -> VerifierResult:
+        """Return VerifierResult (new contract)."""
+        predicate = dict(step.verifier).get("predicate", "unknown")
+        expected = dict(step.verifier).get("expected")
         if self.outcome(step.id, StepPhase.VERIFY, attempt) == StepOutcome.FAILURE:
-            return {"error": f"verify failed for step {step.id}"}
-        return None
+            return VerifierResult(
+                predicate=predicate,
+                status=VerifyStatus.FAILED,
+                expected=expected,
+                observed="<not measured>",
+                reason_code="fake_verify_failed",
+                step_id=step.id,
+                attempt=attempt,
+            )
+        return VerifierResult(
+            predicate=predicate,
+            status=VerifyStatus.PASSED,
+            expected=expected,
+            observed=expected,
+            step_id=step.id,
+            attempt=attempt,
+        )
 
     def recover(self, step: Step, attempt: int, rollback: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if self.outcome(step.id, StepPhase.RECOVER, attempt) == StepOutcome.FAILURE:
@@ -252,14 +272,40 @@ class Runner:
                 else:
                     trace.emit(RunState.EXECUTE.value, step_id=step.id, attempt=attempt, outcome="SUCCESS", duration_ms=duration_ms)
 
-                    # Verify phase (same attempt)
+                    # Verify phase (same attempt) — VerifierResult contract
                     trace.emit(RunState.VERIFY.value, step_id=step.id, attempt=attempt)
                     start = time.monotonic()
-                    err = self._executor.verify(step, attempt)
+                    vresult_raw = self._executor.verify(step, attempt)
                     duration_ms = int((time.monotonic() - start) * 1000)
 
-                    if err:
-                        trace.emit(RunState.VERIFY.value, step_id=step.id, attempt=attempt, outcome="FAILURE", duration_ms=duration_ms, details=err)
+                    # Adapt legacy dict return to VerifierResult if needed
+                    if isinstance(vresult_raw, dict) or vresult_raw is None:
+                        predicate = dict(step.verifier).get("predicate", "unknown")
+                        expected = dict(step.verifier).get("expected")
+                        vresult = from_legacy_error(predicate, expected, vresult_raw,
+                                                    step_id=step.id, attempt=attempt)
+                    else:
+                        vresult = vresult_raw
+
+                    # Emit structured verify result to trace
+                    trace.emit(RunState.VERIFY.value, step_id=step.id, attempt=attempt,
+                               outcome=vresult.status.value.upper(),
+                               duration_ms=duration_ms,
+                               details=vresult.to_trace_details())
+
+                    if vresult.status == VerifyStatus.PASSED:
+                        step_succeeded = True
+                        step_index += 1
+                        break
+                    elif vresult.status == VerifyStatus.SKIPPED:
+                        # Policy decides: skipped does not fail the run by default.
+                        # Future: consult skip_policy. For now, treat as success.
+                        step_succeeded = True
+                        step_index += 1
+                        break
+                    elif vresult.status == VerifyStatus.UNAVAILABLE:
+                        # Verification channel unavailable — not a pass.
+                        # Distinct from FAILED in summary.
                         if step.rollback and attempt < max_retries:
                             trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="ROLLED_BACK")
                             start = time.monotonic()
@@ -275,7 +321,29 @@ class Runner:
                                 break
                             else:
                                 trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="SUCCESS", duration_ms=duration_ms)
-                                # continue to next attempt
+                        else:
+                            state = RunState.FAILED
+                            failed_step_id = step.id
+                            error_code = ERROR_VERIFY_UNAVAILABLE
+                            phase = "VERIFY"
+                            step_failed = True
+                            break
+                    else:  # FAILED
+                        if step.rollback and attempt < max_retries:
+                            trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="ROLLED_BACK")
+                            start = time.monotonic()
+                            rec_err = self._executor.recover(step, attempt, dict(step.rollback) if step.rollback else None)
+                            duration_ms = int((time.monotonic() - start) * 1000)
+                            if rec_err:
+                                trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="FAILURE", duration_ms=duration_ms, details=rec_err)
+                                state = RunState.FAILED
+                                failed_step_id = step.id
+                                error_code = ERROR_ROLLBACK
+                                phase = "RECOVER"
+                                step_failed = True
+                                break
+                            else:
+                                trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="SUCCESS", duration_ms=duration_ms)
                         else:
                             state = RunState.FAILED
                             failed_step_id = step.id
@@ -283,12 +351,6 @@ class Runner:
                             phase = "VERIFY"
                             step_failed = True
                             break
-                    else:
-                        trace.emit(RunState.VERIFY.value, step_id=step.id, attempt=attempt, outcome="SUCCESS", duration_ms=duration_ms)
-                        # Both execute and verify succeeded for this attempt
-                        step_succeeded = True
-                        step_index += 1
-                        break
 
             # If we exhausted all attempts without success and didn't fail explicitly
             if not step_succeeded and not step_failed:
