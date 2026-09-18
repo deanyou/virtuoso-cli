@@ -2,19 +2,16 @@
 
 Generates constrained Scenarios from pre-approved task templates.
 Does NOT generate arbitrary GUI actions. Every template has:
-- fixed step sequence
+- fixed step sequence (template_id + template_version for evidence)
 - declared risk class
 - built-in verifier
 - recovery policy hint
-
-Usage:
-    planner = Planner()
-    scenario = planner.plan("screenshot_window", window_title="CIW")
-    runner.run(scenario, output_dir)
+- documented side_effects
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+import uuid
 
 from .model import Scenario, Step, Operation
 from .router import RiskClass
@@ -32,28 +29,38 @@ class TemplateStep:
 
 @dataclass(frozen=True)
 class TaskTemplate:
-    name: str
+    template_id: str
+    template_version: str
     description: str
     risk_class: RiskClass
-    steps: tuple  # tuple[TemplateStep, ...]
-    required_params: tuple  # params that must be filled
-    optional_params: tuple = ()
+    steps: Tuple[TemplateStep, ...]
+    required_params: Tuple[str, ...]
+    optional_params: Tuple[str, ...] = ()
+    side_effects: Tuple[str, ...] = ()
+    postconditions: Tuple[str, ...] = ()
 
 
-# Pre-approved templates. Each is a fixed action graph with known risk.
+# Pre-approved templates. Conservative defaults:
+# - key_press is non_idempotent (Enter/Delete/hotkeys are irreversible)
+# - screenshot_window has focus side_effect (not pure read_only)
+# - window_close has async wait before verify
 TEMPLATES: Dict[str, TaskTemplate] = {
     "screenshot_window": TaskTemplate(
-        name="screenshot_window",
-        description="Take a screenshot of a named window (read-only)",
-        risk_class=RiskClass.READ_ONLY,
+        template_id="screenshot_window",
+        template_version="1.0.0",
+        description="Take a screenshot of a named window. Activate changes focus.",
+        risk_class=RiskClass.IDEMPOTENT_WRITE,  # not pure read_only — focus side effect
         required_params=("window_title",),
         optional_params=(),
+        side_effects=("window_focus",),
+        postconditions=("window_exists",),
         steps=(
             TemplateStep(
                 operation=Operation.WINDOW_ACTIVATE,
                 arguments={"window_title": "{window_title}"},
                 verifier={"predicate": "window_exists", "expected": True},
                 timeout_seconds=5,
+                max_retries=1,
             ),
             TemplateStep(
                 operation=Operation.SCREENSHOT,
@@ -64,11 +71,14 @@ TEMPLATES: Dict[str, TaskTemplate] = {
         ),
     ),
     "key_press": TaskTemplate(
-        name="key_press",
-        description="Send a keypress to a window (idempotent)",
-        risk_class=RiskClass.IDEMPOTENT_WRITE,
+        template_id="key_press",
+        template_version="1.1.0",
+        description="Send a keypress. Conservative: non_idempotent by default.",
+        risk_class=RiskClass.NON_IDEMPOTENT_WRITE,
         required_params=("window_title", "key"),
-        optional_params=(),
+        optional_params=("allow_retry",),
+        side_effects=("window_focus", "key_event_dispatched"),
+        postconditions=("window_exists",),
         steps=(
             TemplateStep(
                 operation=Operation.WINDOW_ACTIVATE,
@@ -80,40 +90,51 @@ TEMPLATES: Dict[str, TaskTemplate] = {
                 arguments={"key": "{key}"},
                 verifier={"predicate": "window_exists", "expected": True},
                 timeout_seconds=5,
-                max_retries=1,
-                rollback={"operation": "KEY", "arguments": {"key": "Escape"}},
+                max_retries=0,  # P1: no auto-retry by default
             ),
         ),
     ),
     "ciw_command": TaskTemplate(
-        name="ciw_command",
-        description="Execute a SKILL command in CIW (non-idempotent)",
+        template_id="ciw_command",
+        template_version="1.0.0",
+        description="Execute a SKILL command in CIW. Non-idempotent by default.",
         risk_class=RiskClass.NON_IDEMPOTENT_WRITE,
         required_params=("command",),
         optional_params=("window_title",),
+        side_effects=("ciw_state_change",),
+        postconditions=("ciw_eval",),
         steps=(
             TemplateStep(
                 operation=Operation.CIW_INPUT,
                 arguments={"text": "{command}"},
                 verifier={"predicate": "ciw_eval", "expected": True},
                 timeout_seconds=15,
-                max_retries=0,  # no auto-retry for non-idempotent
+                max_retries=0,
             ),
         ),
     ),
     "window_close": TaskTemplate(
-        name="window_close",
-        description="Close a window (destructive)",
+        template_id="window_close",
+        template_version="1.1.0",
+        description="Close a window. Waits for async close before verify.",
         risk_class=RiskClass.DESTRUCTIVE,
         required_params=("window_id",),
         optional_params=(),
+        side_effects=("window_destroyed",),
+        postconditions=("window_not_exists",),
         steps=(
             TemplateStep(
                 operation=Operation.CLOSE,
                 arguments={"window_id": "{window_id}"},
-                verifier={"predicate": "window_exists", "expected": False},
+                verifier={"predicate": "window_exists", "expected": True},
                 timeout_seconds=5,
                 max_retries=0,
+            ),
+            TemplateStep(
+                operation=Operation.WINDOW_WAIT,
+                arguments={"window_title": "", "state": "hidden"},
+                verifier={"predicate": "window_exists", "expected": False},
+                timeout_seconds=10,
             ),
         ),
     ),
@@ -134,11 +155,14 @@ class Planner:
         """List all available templates with their requirements."""
         return [
             {
-                "name": t.name,
+                "template_id": t.template_id,
+                "template_version": t.template_version,
                 "description": t.description,
                 "risk_class": t.risk_class.value,
                 "required_params": list(t.required_params),
                 "optional_params": list(t.optional_params),
+                "side_effects": list(t.side_effects),
+                "postconditions": list(t.postconditions),
                 "steps": len(t.steps),
             }
             for t in self._templates.values()
@@ -157,6 +181,7 @@ class Planner:
                 f"Available: {list(self._templates.keys())}"
             )
         tpl = self._templates[template_name]
+        plan_id = f"plan-{uuid.uuid4().hex[:8]}"
 
         # Validate required params
         missing = [p for p in tpl.required_params if p not in params]
@@ -202,7 +227,7 @@ class Planner:
                 if key in params:
                     result[k] = params[key]
                 else:
-                    result[k] = v  # leave placeholder if not filled
+                    result[k] = v
             else:
                 result[k] = v
         return result
