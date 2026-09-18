@@ -126,6 +126,64 @@ class RouteDecision:
     fallbacks: List[Channel] = field(default_factory=list)
     rejected: bool = False
 
+    def to_trace_details(self) -> dict:
+        """Serialize to stable, JSON-safe trace details.
+
+        Rules:
+        - No command arguments, tokens, or environment variables.
+        - Channel/risk are enum values (strings).
+        - Reason is a short code-like string, not free-form prose.
+        """
+        return {
+            "channel": self.channel.value,
+            "risk_class": self.risk_class.value,
+            "confidence": round(self.confidence, 2),
+            "reason_code": _reason_to_code(self.reason),
+            "required_capabilities": list(self.required_capabilities),
+            "fallbacks": [fb.value for fb in self.fallbacks],
+            "rejected": self.rejected,
+        }
+
+
+def _reason_to_code(reason: str) -> str:
+    """Map free-form reason to a stable short code for trace indexing."""
+    r = reason.lower()
+    if "vcli_call" in r or "allow_vcli_call" in r:
+        return "vcli_call_blocked"
+    if "ssh budget" in r or "budget exhausted" in r:
+        return "ssh_budget_exhausted"
+    if "window_identity" in r or "identity" in r:
+        return "no_window_identity"
+    if "no executor available" in r:
+        return "no_executor"
+    if "no route" in r:
+        return "no_route"
+    if "direct vcli" in r or "skill" in r:
+        return "skill_available"
+    if "vcli x11" in r or "action-x11" in r:
+        return "vcli_x11_available"
+    if "local xdotool" in r or "local x11" in r:
+        return "local_x11_available"
+    if "visual" in r or "vision" in r:
+        return "vision_fallback"
+    return "other"
+
+
+def emit_route_decision(trace, step_id: str, attempt: int, decision: RouteDecision) -> None:
+    """Emit a stable ROUTE_DECIDED event to trace.
+
+    Called exactly once per (step_id, attempt).
+    Rejected routes also emit (with rejected=true).
+    Does NOT invoke any executor or fallback.
+    """
+    trace.emit(
+        state="ROUTE_DECIDED",
+        step_id=step_id,
+        attempt=attempt,
+        outcome="rejected" if decision.rejected else "selected",
+        details=decision.to_trace_details(),
+    )
+
 
 def _classify_risk(operation: Operation) -> RiskClass:
     if operation in _READ_ONLY_OPERATIONS:
