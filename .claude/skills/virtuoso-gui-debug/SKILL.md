@@ -1190,3 +1190,26 @@ Correct assessment — do NOT use a single "85%" number:
 - MaxStartups: 2-3 rapid SSH connections triggers rate limit; use batch_runner.py
 - Screenshot black: X11 compositing issue when window not fully visible
 - CRLF: Windows Python scripts must use bytes mode when piping to SSH
+
+### P0 Follow-up Defects (do not fix now, track for P0 real-environment phase)
+
+1. **Recovery retry budget not checked** - when recovery policy decides RETRY but
+   step.max_retries is already exhausted, the loop falls through to the generic
+   EXECUTE_ERROR branch instead of preserving the correct phase-specific error
+   (VERIFY_UNAVAILABLE / VERIFY_ERROR). Fix: check remaining retry budget inside
+   the recovery decision path before continuing. Do NOT refactor Recovery until
+   Gate 1/2 real-environment validation.
+
+2. **Three-valued terminal semantics (UNKNOWN not yet first-class)** - current
+   manifest only has running/passed/failed. For destructive ops where SSH drops
+   mid-execution, failed may cause recovery to replay a non-idempotent action
+   that actually completed. Future: add unknown as terminal state. Deferred.
+
+### P0 Runtime Validation Baseline (2026-09-19, commit 9cf5fc4)
+
+    Gate 1  Native SSH reuse       BLOCKED - real SSH fixture needed
+    Gate 2  Screenshot semantics    BLOCKED - visible Virtuoso/X11 needed
+    Gate 3  Failure corpus          PASS - 9/9
+    Regression suite                185/185
+    Architecture                   FROZEN
+    New feature development        HOLD
