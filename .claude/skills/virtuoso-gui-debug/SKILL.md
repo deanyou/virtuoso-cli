@@ -1258,3 +1258,25 @@ Gate 3  Failure corpus: 9/9 fault injection pass
 Regression: 185/185+
 
 External real SSH host interop: not required, optional future test.
+
+### P1 Router Wiring Complete (2026-09-19)
+
+- Runner calls route() per attempt before execute
+- ROUTE_DECIDED trace event per (step_id, attempt)
+- ROUTE_REJECTED terminates step, executor not called
+- Recovery uses Router decision.risk_class (no hardcoded reclassification)
+- ROUTE_PROVENANCE event records capability_source (legacy_default / executor_probe)
+  and policy_mode (compatibility / strict)
+- Recovery fallback continue() triggers fresh route() on next attempt
+- mismatch test: rejected route does not call executor
+
+Test suites (P1-related, all pass):
+  engine 23, failure_corpus 9, full_chain 9, evidence_compat 15,
+  evidence_manifest 20, recovery_e2e 10, verifier_integration 19,
+  verifier_result 29, recovery 19, router_simple 12, router_trace 20,
+  router_mismatch 3, model OK, command_runner OK, local_executor OK
+
+Windows env limitations (not Router regressions):
+  test_live_executor: fcntl unavailable on Windows
+  test_cli: requires real vcli binary path
+  test_router: requires pytest
