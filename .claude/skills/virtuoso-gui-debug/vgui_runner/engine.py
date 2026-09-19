@@ -13,7 +13,7 @@ from .model import Scenario, Step
 from .trace import Trace
 from .verifier_result import VerifierResult, VerifyStatus, from_legacy_error
 from .recovery import RecoveryPolicy, RecoveryRequest, RecoveryAction, ErrorCategory, decide_recovery
-from .router import RiskClass, Channel
+from .router import RiskClass, Channel, ActionRequest, CapabilitySnapshot, RoutePolicy, route, emit_route_decision
 
 
 def _op_risk_class(operation) -> RiskClass:
@@ -169,9 +169,17 @@ class FakeExecutor(Executor):
 class Runner:
     """State machine runner that executes scenarios step-by-step."""
 
-    def __init__(self, executor: Executor, recovery_policy: Optional[RecoveryPolicy] = None):
+    def __init__(self, executor: Executor, recovery_policy: Optional[RecoveryPolicy] = None,
+                 caps: Optional[CapabilitySnapshot] = None, route_policy: Optional[RoutePolicy] = None):
         self._executor = executor
         self._recovery_policy = recovery_policy or RecoveryPolicy()
+        self._caps = caps or CapabilitySnapshot(
+            vcli_available=True, session_alive=True, pid_valid=True,
+            display_available=True, window_identity_known=True,
+            remote_x11_allowed=True, local_x11_available=True,
+            vision_enabled=False, ssh_budget_remaining=10, daemon_healthy=True,
+        )
+        self._route_policy = route_policy or RoutePolicy()
 
     def run(self, scenario: Scenario, output_dir: Path) -> RunSummary:
         output_dir.mkdir(parents=True, exist_ok=False)
@@ -260,6 +268,20 @@ class Runner:
 
             # Single finite for-attempt loop per step
             for attempt in range(max_retries + 1):
+                # P1 Router: decide channel before execute
+                req = ActionRequest(operation=step.operation, step_id=step.id, arguments=dict(step.arguments))
+                decision = route(req, self._caps, self._route_policy)
+                emit_route_decision(trace, step.id, attempt, decision)
+                if decision.rejected:
+                    trace.emit(RunState.EXECUTE.value, step_id=step.id, attempt=attempt, outcome="REJECTED",
+                               details={"reason": decision.reason, "channel": decision.channel.value})
+                    state = RunState.FAILED
+                    failed_step_id = step.id
+                    error_code = "ROUTE_REJECTED"
+                    phase = "ROUTE"
+                    step_failed = True
+                    break
+
                 # Execute phase
                 trace.emit(RunState.EXECUTE.value, step_id=step.id, attempt=attempt)
                 start = time.monotonic()
