@@ -83,11 +83,12 @@ TEMPLATES: Dict[str, TaskTemplate] = {
             TemplateStep(
                 operation=Operation.WINDOW_ACTIVATE,
                 arguments={"window_title": "{window_title}"},
+                verifier={"predicate": "window_exists", "expected": True},
                 timeout_seconds=5,
             ),
             TemplateStep(
                 operation=Operation.KEY,
-                arguments={"key": "{key}"},
+                arguments={"keys": "{key}"},
                 verifier={"predicate": "window_exists", "expected": True},
                 timeout_seconds=5,
                 max_retries=0,  # P1: no auto-retry by default
