@@ -105,7 +105,7 @@ impl WindowOps {
         let pattern = escape_skill_string(pattern);
         let capture = Self::skill_capture(&path);
         format!(
-            r#"let((matched w) matched = nil w = nil foreach(win hiGetWindowList() when(and(not matched) rexMatchp("{pattern}" hiGetWindowName(win))) w = win matched = t) if(matched prog(hiSetCurrentWindow(w) hiRaiseWindow(w) {capture}) "no-match"))"#
+            r#"let((matched w) matched = nil w = nil foreach(win hiGetWindowList() when(null(matched) rexMatchp("{pattern}" hiGetWindowName(win))) w = win matched = t) if(matched prog(hiSetCurrentWindow(w) hiRaiseWindow(w) {capture}) "no-match"))"#
         )
     }
 
