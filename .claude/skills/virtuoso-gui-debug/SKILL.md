@@ -1248,3 +1248,13 @@ Split into two layers:
   - PASS (CI run 35424420048, 9m23s)
 
 External real SSH host acceptance: optional, not required for baseline.
+
+### P0 Final Status (2026-09-19)
+
+Gate 1A native SSH protocol: in-process russh fixture, 18/18 pass on Linux
+Gate 1B Windows MSVC: check + test + clippy --features native-ssh all pass on windows-latest
+Gate 2  Screenshot: transport + visual content + window identity pass; X11 stacking = known limitation
+Gate 3  Failure corpus: 9/9 fault injection pass
+Regression: 185/185+
+
+External real SSH host interop: not required, optional future test.
