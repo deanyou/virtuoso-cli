@@ -1168,3 +1168,25 @@ Correct assessment — do NOT use a single "85%" number:
 - Every failure path links to trace + evidence
 - Concurrency does not cause SSH connection storm
 - Route fallback has explicit reason + bounded count
+
+## Stable Stage Status (2026-09-19)
+
+### Verified
+- Offline contract: 161/161 tests pass
+- Single-SSH batch runner: 5 ops in 1 SSH connection, 0 MaxStartups
+- Window identity: --window regex matching verified
+- vcli→daemon TCP: each process opens and closes connection (no cross-process reuse)
+
+### Not Yet Verified
+- Screenshot visual content: X11 black screen (occlusion/compositing, not vcli bug)
+- PR #87 native SSH long connection: requires vcli on a separate host
+  - Windows build blocked: missing MSVC linker (link.exe)
+  - Remote build: vcli runs on same host as daemon, uses TCP not SSH
+- vcli batch (in-process multi-op): not implemented
+- Evidence manifest cross-version compatibility: not tested
+- Recovery E2E on live Virtuoso: not tested
+
+### Known Limitations
+- MaxStartups: 2-3 rapid SSH connections triggers rate limit; use batch_runner.py
+- Screenshot black: X11 compositing issue when window not fully visible
+- CRLF: Windows Python scripts must use bytes mode when piping to SSH
