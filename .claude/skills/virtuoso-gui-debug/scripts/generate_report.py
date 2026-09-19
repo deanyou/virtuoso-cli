@@ -215,6 +215,17 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
     </table>
   </div>
   <div class="card">
+    <h2>Quick Search Suggestions</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='draw polygon';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">draw polygon</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='get cell';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">get cell</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='create rect';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">create rect</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='list layers';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">list layers</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='select shape';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">select shape</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='save design';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">save design</span>
+    </div>
+  </div>
+  <div class="card">
     <h2>RSI Efficiency</h2>
     <table>
       <tr><th>Metric</th><th>Value</th></tr>

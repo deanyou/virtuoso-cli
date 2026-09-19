@@ -290,8 +290,8 @@ class Runner:
 
                 if err:
                     trace.emit(RunState.EXECUTE.value, step_id=step.id, attempt=attempt, outcome="FAILURE", duration_ms=duration_ms, details=err)
-                    # P1: use operation risk class, not hardcoded non_idempotent
-                    op_risk = _op_risk_class(step.operation)
+                    # Use risk_class from Router decision (consistent with trace)
+                    op_risk = decision.risk_class
                     elapsed_ms = int((run_deadline - time.monotonic()) * 1000 * -1)
                     req = RecoveryRequest(
                         step_id=step.id, attempt=attempt,
@@ -380,7 +380,7 @@ class Runner:
                         break
                     elif vresult.status == VerifyStatus.UNAVAILABLE:
                         # P1 fix: use operation risk class, not hardcoded read_only
-                        op_risk = _op_risk_class(step.operation)
+                        op_risk = decision.risk_class
                         elapsed_ms = int((run_deadline - time.monotonic()) * 1000 * -1)
                         req = RecoveryRequest(
                             step_id=step.id, attempt=attempt,
@@ -428,7 +428,7 @@ class Runner:
                             step_failed = True
                             break
                     else:  # FAILED
-                        op_risk = _op_risk_class(step.operation)
+                        op_risk = decision.risk_class
                         elapsed_ms = int((run_deadline - time.monotonic()) * 1000 * -1)
                         req = RecoveryRequest(
                             step_id=step.id, attempt=attempt,

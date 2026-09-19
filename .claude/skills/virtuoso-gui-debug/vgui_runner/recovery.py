@@ -90,7 +90,8 @@ _RETRY_BY_RISK = {
                           ErrorCategory.WINDOW_GONE, ErrorCategory.VERIFY_FAILED,
                           ErrorCategory.VERIFY_UNAVAILABLE, ErrorCategory.UNKNOWN},
     RiskClass.IDEMPOTENT_WRITE: {ErrorCategory.TIMEOUT, ErrorCategory.CONNECTION_LOST,
-                                  ErrorCategory.VERIFY_FAILED, ErrorCategory.VERIFY_UNAVAILABLE},
+                                  ErrorCategory.VERIFY_FAILED, ErrorCategory.VERIFY_UNAVAILABLE,
+                                  ErrorCategory.UNKNOWN},
     RiskClass.NON_IDEMPOTENT_WRITE: set(),  # never auto-replay
     RiskClass.DESTRUCTIVE: set(),           # always manual
 }
