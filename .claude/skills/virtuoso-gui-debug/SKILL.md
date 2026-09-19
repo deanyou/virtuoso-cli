@@ -1232,3 +1232,19 @@ Future approach:
   2. optional explicit --activate-window (xdotool windowactivate --sync)
   3. per-window capture via import -window <window_id> (no focus change needed)
   4. Do not let screenshot auto-change focus
+
+### Gate 1 Native SSH Reuse (2026-09-19, 18/18 tests pass)
+
+Split into two layers:
+
+- Gate 1A: native SSH protocol behavior via in-process russh server fixture
+  - Run on Linux/CI: cargo test --features native-ssh --lib transport::native::tests
+  - 18/18 pass: connection reuse, concurrent channels, keepalive,
+    remote disconnect detection, SFTP roundtrip, deadline, generation cleanup
+  - PASS
+
+- Gate 1B: Windows MSVC build/run
+  - CI windows-latest job: check + test + clippy --features native-ssh
+  - PASS (CI run 35424420048, 9m23s)
+
+External real SSH host acceptance: optional, not required for baseline.
