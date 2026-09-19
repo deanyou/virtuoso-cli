@@ -99,13 +99,14 @@ impl WindowOps {
     }
 
     /// Capture a screenshot of the first window whose name matches a regex pattern.
-    /// Raises the matched window before capture so the screenshot shows it.
+    /// Activates the matched window as current context. Note: X11 stacking order
+    /// is not changed by hiSetCurrentWindow; the screenshot remains full-screen.
     pub fn screenshot_by_pattern(&self, path: &str, pattern: &str) -> String {
         let path = escape_skill_string(path);
         let pattern = escape_skill_string(pattern);
         let capture = Self::skill_capture(&path);
         format!(
-            r#"let((matched w) matched = nil w = nil foreach(win hiGetWindowList() when(null(matched) rexMatchp("{pattern}" hiGetWindowName(win))) w = win matched = t) if(matched prog(hiSetCurrentWindow(w) hiRaiseWindow(w) {capture}) "no-match"))"#
+            r#"let((matched w) matched = nil w = nil foreach(win hiGetWindowList() when(null(matched) rexMatchp("{pattern}" hiGetWindowName(win))) w = win matched = t) if(matched prog(hiSetCurrentWindow(w) {capture}) "no-match"))"#
         )
     }
 
