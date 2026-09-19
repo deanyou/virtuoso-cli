@@ -1213,3 +1213,22 @@ Correct assessment — do NOT use a single "85%" number:
     Regression suite                185/185
     Architecture                   FROZEN
     New feature development        HOLD
+
+### Gate 2 Screenshot Semantics (2026-09-19, commit 4d2b0de)
+
+Result: PASS with known limitation.
+
+- Screenshot transport: verified (PNG downloads via scp)
+- Visual content: verified (non-black, Virtuoso GUI visible)
+- --window regex: validates window existence, does NOT activate/raise
+- Per-window capture: known X11 limitation
+
+Do NOT use hiSetCurrentWindow before screenshot. It changes Cadence internal
+focus but not X11 stacking order, causing black root captures. The correct
+path for per-window capture is X11 layer (xdotool/wmctrl/import -window <id>).
+
+Future approach:
+  1. window discovery -> PID + DISPLAY + window_id + title
+  2. optional explicit --activate-window (xdotool windowactivate --sync)
+  3. per-window capture via import -window <window_id> (no focus change needed)
+  4. Do not let screenshot auto-change focus
