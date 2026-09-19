@@ -1,4 +1,4 @@
-use crate::client::bridge::escape_skill_string;
+﻿use crate::client::bridge::escape_skill_string;
 use crate::error::{Result, VirtuosoError};
 use std::path::{Path, PathBuf};
 
