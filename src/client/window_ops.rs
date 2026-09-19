@@ -99,14 +99,13 @@ impl WindowOps {
     }
 
     /// Capture a screenshot of the first window whose name matches a regex pattern.
-    /// Falls back to full-screen root capture (X11 import does not support per-window
-    /// targeting without xdotool).
+    /// Raises the matched window before capture so the screenshot shows it.
     pub fn screenshot_by_pattern(&self, path: &str, pattern: &str) -> String {
         let path = escape_skill_string(path);
         let pattern = escape_skill_string(pattern);
         let capture = Self::skill_capture(&path);
         format!(
-            r#"let((matched) matched = nil foreach(w hiGetWindowList() when(rexMatchp("{pattern}" hiGetWindowName(w)) matched = t)) if(matched {capture} "no-match"))"#
+            r#"let((matched w) matched = nil w = nil foreach(win hiGetWindowList() when(and(not matched) rexMatchp("{pattern}" hiGetWindowName(win))) w = win matched = t) if(matched hiSetCurrentWindow(w) hiRaiseWindow(w) {capture} "no-match"))"#
         )
     }
 
