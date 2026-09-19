@@ -179,7 +179,9 @@ class Runner:
             remote_x11_allowed=True, local_x11_available=True,
             vision_enabled=False, ssh_budget_remaining=10, daemon_healthy=True,
         )
+        self._caps_source = "executor_probe" if caps else "legacy_default"
         self._route_policy = route_policy or RoutePolicy()
+        self._policy_mode = "strict" if caps else "compatibility"
 
     def run(self, scenario: Scenario, output_dir: Path) -> RunSummary:
         output_dir.mkdir(parents=True, exist_ok=False)
@@ -272,6 +274,9 @@ class Runner:
                 req = ActionRequest(operation=step.operation, step_id=step.id, arguments=dict(step.arguments))
                 decision = route(req, self._caps, self._route_policy)
                 emit_route_decision(trace, step.id, attempt, decision)
+                # Augment trace with capability provenance
+                trace.emit("ROUTE_PROVENANCE", step_id=step.id, attempt=attempt,
+                           details={"capability_source": self._caps_source, "policy_mode": self._policy_mode})
                 if decision.rejected:
                     trace.emit(RunState.EXECUTE.value, step_id=step.id, attempt=attempt, outcome="REJECTED",
                                details={"reason": decision.reason, "channel": decision.channel.value})
