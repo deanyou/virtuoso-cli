@@ -57,3 +57,14 @@ jobs:
       # See audit.toml for the full rationale.
       - run: cargo install cargo-audit --version 0.22.2 --locked
       - run: cargo audit --ignore RUSTSEC-2023-0071
+
+  windows-native-ssh:
+    name: Windows native-ssh build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --features native-ssh --all-targets
+      - run: cargo test --features native-ssh --all-targets
+      - run: cargo clippy --features native-ssh --all-targets -- -D warnings
