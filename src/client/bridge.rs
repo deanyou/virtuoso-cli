@@ -1174,7 +1174,9 @@ mod tests {
         // hangs the bridge — if the cell is missing.
         let s = build_open_cell_view_skill("LIB", "CELL", "schematic", "a");
         let probe = s.find("ddGetObj(").expect("guard must probe with ddGetObj");
-        let open = s.find("deOpenCellView(").expect("must open via deOpenCellView");
+        let open = s
+            .find("deOpenCellView(")
+            .expect("must open via deOpenCellView");
         assert!(probe < open, "ddGetObj must precede deOpenCellView: {s}");
         // geOpenCellView is undefined on IC23 — it must not reappear.
         assert!(!s.contains("geOpenCellView"), "{s}");
