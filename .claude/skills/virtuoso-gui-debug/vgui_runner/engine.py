@@ -14,6 +14,7 @@ from .trace import Trace
 from .verifier_result import VerifierResult, VerifyStatus, from_legacy_error
 from .recovery import RecoveryPolicy, RecoveryRequest, RecoveryAction, ErrorCategory, decide_recovery
 from .router import RiskClass, Channel, ActionRequest, CapabilitySnapshot, RoutePolicy, route, emit_route_decision
+from .experience import init_schema, compile_run, write_experience
 
 
 def _op_risk_class(operation) -> RiskClass:
@@ -514,6 +515,23 @@ class Runner:
         )
 
         self._write_summary(output_dir, scenario.task_id, summary.passed, summary.failed_step_id, summary.error_code, summary.phase)
+
+        # P1 Experience writeback (fast loop: compile + store, never modify Skills)
+        try:
+            from pathlib import Path as _P
+            import sqlite3 as _sq
+            db_path = _P(__file__).parent.parent / "data" / "skill_db.sqlite3"
+            if db_path.exists():
+                _conn = _sq.connect(str(db_path))
+                _conn.row_factory = __import__("sqlite3").Row
+                init_schema(_conn)
+                _events, _case = compile_run(
+                    output_dir, run_id=scenario.task_id, task_id=scenario.task_id)
+                _e, _c = write_experience(_conn, _events, _case)
+                _conn.close()
+        except Exception:
+            pass  # Experience writeback must never break the run
+
         return summary
 
     def _write_summary(self, output_dir: Path, task_id: str, passed: bool, failed_step: Optional[str], error_code: Optional[str], phase: Optional[str]) -> None:
