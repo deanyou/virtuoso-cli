@@ -16,7 +16,7 @@
 | window_list | — | 9 |
 | screenshot | CIW / Layout / Schematic | 9+4+3+3 = 19 |
 | session_list | — | 8 |
-| skill_exec | getCurrentTime / hiGetCurrentWindow / version | 6+4 = 10 |
+| skill_exec | getCurrentTime / hiGetCurrentWindow (6), version (4, merged into skill_exec) | 10 |
 | lib_list | — | 4 |
 | **Total** | | **50** |
 
