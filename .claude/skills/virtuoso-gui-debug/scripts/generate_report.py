@@ -99,6 +99,29 @@ search_snippets = [dict(r) for r in conn.execute("""
     FROM snippets ORDER BY name
 """)]
 
+# Experience Platform: cases + events (Phase B.2)
+exp_cases = []
+exp_stats = {"gold": 0, "negative": 0, "unknown": 0, "total": 0}
+exp_top_failures = []
+try:
+    for r in conn.execute("SELECT * FROM experience_cases ORDER BY created_at DESC LIMIT 200"):
+        d = dict(r)
+        vs = d.get("verification_status", "")
+        ct = d.get("case_type", "unknown")
+        if vs == "PASSED" and ct in ("success", "recovery"):
+            pool = "GOLD"; exp_stats["gold"] += 1
+        elif vs == "FAILED":
+            pool = "NEGATIVE"; exp_stats["negative"] += 1
+        else:
+            pool = "UNKNOWN"; exp_stats["unknown"] += 1
+        d["pool"] = pool
+        exp_cases.append(d)
+    exp_stats["total"] = exp_stats["gold"] + exp_stats["negative"] + exp_stats["unknown"]
+    for r in conn.execute("SELECT failure_type, COUNT(*) as cnt FROM experience_cases WHERE failure_type IS NOT NULL GROUP BY failure_type ORDER BY cnt DESC LIMIT 10"):
+        exp_top_failures.append((r["failure_type"], r["cnt"]))
+except Exception:
+    pass
+
 # Common pitfalls (hardcoded from experience)
 pitfalls = [
     ("SQLite reserved word", "Column 'exists' causes syntax error. Use 'func_exists'."),
@@ -189,6 +212,7 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   <button class="tab-btn" onclick="showTab('params')">Param Templates</button>
   <button class="tab-btn" onclick="showTab('pitfalls')">Pitfalls</button>
   <button class="tab-btn" onclick="showTab('verified')">Verified</button>
+  <button class="tab-btn" onclick="showTab('experience')">Experience</button>
 </div>
 
 <div id="tab-overview" class="tab-panel active">
@@ -393,6 +417,27 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   </div>
 </div>
 
+<div id="tab-experience" class="tab-panel">
+  <div class="stats">
+    <div class="stat"><div class="n">{exp_stats["total"]}</div><div class="l">Total Cases</div></div>
+    <div class="stat"><div class="n green">{exp_stats["gold"]}</div><div class="l">GOLD</div></div>
+    <div class="stat"><div class="n red">{exp_stats["negative"]}</div><div class="l">NEGATIVE</div></div>
+    <div class="stat"><div class="n" style="color:#faad14">{exp_stats["unknown"]}</div><div class="l">UNKNOWN</div></div>
+  </div>
+  <div class="card">
+    <h2>Top Failure Types</h2>
+    {''.join(f'<div class="bar"><span class="n">{k}</span><div class="b"><div class="f" style="width:{v/(exp_top_failures[0][1] if exp_top_failures else 1)*100}%"></div></div><span class="c">{v}</span></div>' for k, v in exp_top_failures) if exp_top_failures else '<p style="color:#6b7280">No cases yet.</p>'}
+  </div>
+  <div class="card">
+    <h2>Experience Cases (latest 200)</h2>
+    <div class="search-box"><input type="text" id="searchExp" placeholder="Filter cases..." onkeyup="filterExpTable()"></div>
+    <table id="expTable">
+      <tr><th>Pool</th><th>Type</th><th>Failure</th><th>Verification</th><th>Outcome</th><th>Run ID</th></tr>
+      {''.join(f'<tr><td><span style="color:{"#52c41a" if c["pool"]=="GOLD" else "#ef4444" if c["pool"]=="NEGATIVE" else "#faad14"};font-weight:600">{c["pool"]}</span></td><td>{c["case_type"]}</td><td style="font-size:11px">{c.get("failure_type") or "—"}</td><td style="font-size:11px">{c.get("verification_status") or "—"}</td><td style="font-size:11px">{c["outcome"]}</td><td style="font-size:10px;color:#6b7280">{c["run_id"]}</td></tr>' for c in exp_cases)}
+    </table>
+  </div>
+</div>
+
 </div>
 <script>
 function showTab(name) {{
@@ -404,6 +449,13 @@ function showTab(name) {{
 function filterTable() {{
   var q = document.getElementById('searchVerified').value.toLowerCase();
   document.querySelectorAll('#verifiedTable tr').forEach(function(tr, i) {{
+    if (i === 0) return;
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  }});
+}}
+function filterExpTable() {{
+  var q = document.getElementById('searchExp').value.toLowerCase();
+  document.querySelectorAll('#expTable tr').forEach(function(tr, i) {{
     if (i === 0) return;
     tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
   }});
