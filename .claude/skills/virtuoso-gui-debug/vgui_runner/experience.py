@@ -211,21 +211,27 @@ def compile_run(output_dir: Path, run_id: str, task_id: str,
         error_code = summary.get("error_code")
         phase = summary.get("phase")
 
-        # Determine case_type
-        if run_passed and not recovery_actions:
-            case_type = "success"
-        elif recovery_actions:
-            case_type = "recovery"
-        elif not run_passed:
-            case_type = "failed"
-        else:
-            case_type = "unknown"
-
-        # Verification status
+        # Verification status (must be determined before case_type)
         if verifier_status in ("PASSED", "FAILED", "UNAVAILABLE"):
             verification_status = verifier_status
         else:
             verification_status = None
+
+        # Determine case_type
+        # Gate: execution failure != NEGATIVE verified unless verifier confirmed FAILED.
+        # NULL / UNAVAILABLE / timeout / response-lost → unknown, not failed.
+        if run_passed and not recovery_actions and verification_status == "PASSED":
+            case_type = "success"
+        elif recovery_actions and verification_status == "PASSED":
+            case_type = "recovery"
+        elif verification_status == "FAILED":
+            case_type = "failed"          # NEGATIVE: verifier confirmed failure
+        elif verification_status == "UNAVAILABLE":
+            case_type = "unknown"         # verifier couldn't confirm
+        elif not run_passed and verification_status is None:
+            case_type = "unknown"         # execution failed but no verifier evidence
+        else:
+            case_type = "unknown"
 
         # Problem signature
         failure_type = None
