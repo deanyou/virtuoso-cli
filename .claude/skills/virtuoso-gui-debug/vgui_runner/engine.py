@@ -426,6 +426,13 @@ class Runner:
                                     break
                             trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
                                        details={"result": "ok"})
+                            if attempt >= max_retries:
+                                state = RunState.FAILED
+                                failed_step_id = step.id
+                                error_code = ERROR_VERIFY_UNAVAILABLE
+                                phase = "VERIFY"
+                                step_failed = True
+                                break
                         else:
                             state = RunState.FAILED
                             failed_step_id = step.id
