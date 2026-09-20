@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>VCLI × GUI Skill Intelligence — 可视化演进方案</title>
+<style>
+:root{--bg:#07111f;--panel:#0d1b2d;--panel2:#10243b;--line:#294661;--text:#eaf2fb;--muted:#9db1c7;--cyan:#5ee7f2;--green:#72e6a6;--amber:#ffd27a;--red:#ff8f8f;--violet:#b9a7ff;--blue:#75b7ff}
+*{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 10% 0%,#102943 0,#07111f 38%,#050b14 100%);color:var(--text);font:15px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{max-width:1500px;margin:auto;padding:34px}.hero{padding:34px;border:1px solid #294866;border-radius:24px;background:linear-gradient(135deg,rgba(24,62,91,.82),rgba(8,19,33,.92));box-shadow:0 22px 70px rgba(0,0,0,.28)}h1{font-size:38px;margin:0 0 8px;letter-spacing:-.8px}.sub{font-size:18px;color:#bfd1e3;max-width:1100px}.badges{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}.badge{padding:7px 12px;border-radius:999px;border:1px solid #365875;background:#0b1929;color:#cfe2f5;font-size:13px}.badge.ok{border-color:#34765b;color:#9ff2c5}.badge.now{border-color:#7c6430;color:#ffe29b}.section{margin-top:28px}.section h2{font-size:22px;margin:0 0 14px}.grid{display:grid;gap:14px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}.card{border:1px solid #243f59;background:linear-gradient(180deg,rgba(15,34,55,.96),rgba(9,21,36,.96));border-radius:18px;padding:18px;min-height:120px}.card h3{font-size:16px;margin:0 0 7px}.card p{color:var(--muted);margin:0}.kpi{font-size:27px;font-weight:800;margin:7px 0}.okc{color:var(--green)}.cy{color:var(--cyan)}.am{color:var(--amber)}.vi{color:var(--violet)}.diagram{border:1px solid #294661;border-radius:22px;background:#081522;padding:22px;overflow:auto}.flow{display:flex;align-items:stretch;gap:12px;min-width:1150px}.lane{flex:1;border-radius:17px;padding:16px;border:1px solid #2b4861;background:#0d1d2e}.lane.ai{border-color:#5c4d85}.lane.skill{border-color:#2c6b72}.lane.runtime{border-color:#336e55}.lane.target{border-color:#715b31}.lane h3{margin:0 0 12px;font-size:15px}.node{padding:10px 11px;margin:8px 0;border-radius:11px;background:#132b43;border:1px solid #284a68}.skill .node{background:#0e3038}.runtime .node{background:#102d27}.target .node{background:#302819}.arrow{display:flex;align-items:center;font-size:30px;color:#6688a7}.boundary{margin:18px 0;border-top:2px dashed #466b84;text-align:center;color:#9fb5c9;padding-top:8px;font-size:12px;letter-spacing:.12em}.pipeline{display:grid;grid-template-columns:repeat(9,1fr);gap:8px;align-items:center}.pnode{padding:13px 8px;text-align:center;border:1px solid #31506a;background:#0f2236;border-radius:12px;min-height:74px;display:flex;align-items:center;justify-content:center}.parrow{text-align:center;color:#6d8ba7;font-size:22px}.code{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:#06101a;border:1px solid #20384d;border-radius:14px;padding:16px;color:#c9def2;white-space:pre-wrap}.timeline{display:grid;grid-template-columns:160px 1fr;gap:0}.phase{padding:18px;border-bottom:1px solid #263e54}.phase:nth-child(odd){background:#0a1828}.phase .name{font-weight:800}.phase .desc{color:#a9bfd2}.phase.now{box-shadow:inset 4px 0 var(--amber)}.phase.done{box-shadow:inset 4px 0 var(--green)}.phase.future{box-shadow:inset 4px 0 #55708a}.metric{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric div{padding:12px;border-radius:12px;background:#0a1928;border:1px solid #213c54;color:#bcd0e2}.note{border-left:4px solid var(--cyan);padding:14px 17px;background:#0a1c2b;border-radius:0 13px 13px 0;color:#c8d9e8}.footer{color:#718ba3;text-align:center;padding:30px 0 10px}@media(max-width:900px){.g4,.g3,.g2,.metric{grid-template-columns:1fr}.wrap{padding:16px}h1{font-size:30px}.pipeline{grid-template-columns:1fr}.parrow{transform:rotate(90deg)}.timeline{grid-template-columns:1fr}.flow{min-width:900px}}
+</style>
+</head>
+<body><div class="wrap">
+<section class="hero">
+<h1>VCLI × GUI Skill Intelligence</h1>
+<div class="sub">Virtuoso 智能 GUI 自动化的下一阶段：保持执行层确定性，把真实运行产生的 Evidence、Failure、Recovery 转化为可检索、可验证、可晋升、可回滚的 Skill Intelligence。</div>
+<div class="badges"><span class="badge ok">P0 Runtime Validation ✓</span><span class="badge ok">P1 Router Wiring ✓</span><span class="badge now">OBS Baseline · 50 Real Runs ✓</span><span class="badge ok">P1.5 Experience v0.1 ✓</span><span class="badge ok">P1.6 Retrieval v0.1 ✓</span><span class="badge">Architecture Frozen</span><span class="badge">Vision = Last Fallback</span></div>
+</section>
+
+<section class="section"><h2>01 · 当前基线</h2><div class="grid g4">
+<div class="card"><h3>Semantic Control</h3><div class="kpi cy">SKILL / VCLI</div><p>优先使用 Virtuoso 语义 API、CIW、数据库状态和高层命令，避免无意义 GUI 点击。</p></div>
+<div class="card"><h3>Deterministic GUI</h3><div class="kpi okc">X11 / Rust</div><p>窗口身份、坐标边界、原子输入、截图和远程传输保持窄职责执行。</p></div>
+<div class="card"><h3>Policy & Recovery</h3><div class="kpi vi">Python</div><p>Scenario、Router、风险分类、Verifier、Evidence、Recovery 由编排层负责。</p></div>
+<div class="card"><h3>Observation</h3><div class="kpi am">Evidence</div><p>50 次 real runs 已完成并归档，Observation 基线已结项。后续不主动跑测试凑样本；仅由实际设计任务自然产生新 case，并持续记录检索、失败、恢复与 Evidence。</p></div>
+</div></section>
+
+<section class="section"><h2>02 · 目标架构：上层越来越聪明，下层越来越确定</h2><div class="diagram"><div class="flow">
+<div class="lane ai"><h3>AI / Planner</h3><div class="node">Intent Understanding</div><div class="node">Task / Skill Selection</div><div class="node">Optional Critic</div><div class="node">Candidate Improvement</div></div>
+<div class="arrow">→</div>
+<div class="lane skill"><h3>Skill Intelligence Layer</h3><div class="node">Skill Index & Metadata Retrieval</div><div class="node">Experience Overlay</div><div class="node">Failure Knowledge</div><div class="node">Reliability History</div><div class="node">Controlled Evolution</div></div>
+<div class="arrow">→</div>
+<div class="lane runtime"><h3>VCLI Reliable Runtime</h3><div class="node">CapabilitySnapshot / Preconditions</div><div class="node">Router · Risk · Capability</div><div class="node">Executor · Atomic Action</div><div class="node">Verifier · Evidence</div><div class="node">Bounded Recovery</div></div>
+<div class="arrow">→</div>
+<div class="lane target"><h3>Virtuoso</h3><div class="node">SKILL / CIW</div><div class="node">Forms / Windows</div><div class="node">Layout / Schematic</div><div class="node">Maestro / Simulation</div><div class="node">X11 · Vision fallback</div></div>
+</div><div class="boundary">DETERMINISTIC BOUNDARY — AI 决定“做什么”，VCLI Runtime 证明“做对了”</div></div></section>
+
+<section class="section"><h2>03 · Action Router：执行通道优先级</h2><div class="pipeline">
+<div class="pnode">Intent / Procedure</div><div class="parrow">→</div><div class="pnode">P0<br><b>SKILL / VCLI</b></div><div class="parrow">→</div><div class="pnode">P1<br><b>Shortcut</b></div><div class="parrow">→</div><div class="pnode">P2<br><b>X11</b></div><div class="parrow">→</div><div class="pnode">P3<br><b>Vision</b><br>Last fallback</div>
+</div><div class="note" style="margin-top:14px">Router 保持纯决策层；Executor 消费 RouteDecision。风险越高，窗口身份、前置条件、Verifier 与 Evidence 要求越强。Vision 不自动开启。</div></section>
+
+<section class="section"><h2>04 · 当前 Skill Intelligence：SQLite + 文件 Evidence</h2><div class="grid g2"><div class="code">virtuoso-gui-debug/
+├── SKILL.md                 # 当前稳定入口 / Contract
+├── tests/                   # Regression corpus
+├── references/              # 文档与引用
+└── data/
+    └── skill_db.sqlite3
+        ├── experience_events
+        ├── experience_cases
+        ├── FTS5 index
+        └── metadata filters
+
+External Evidence / Artifacts
+├── screenshots
+├── logs / traces
+└── manifests
+     ↑ SQLite 保存引用/索引</div><div class="card"><h3>当前实现与演进原则</h3><p><b>P1.5 Experience Overlay v0.1 已存在：</b> experience_events / experience_cases 两层数据模型、RSI HTML Experience tab 已上线。<br><b>P1.6 Retrieval v0.1 已存在：</b> search_experience() + FTS5 + metadata filter 已实现。</p><br><p><b>Structured Skill Package 暂缓：</b> 当前 SKILL.md 尚未膨胀到必须拆分，不为了架构形式增加目录。经验与失败知识继续以 SQLite 为主，截图/日志等大对象使用文件引用。</p><br><p><b>检索演进：</b> 先改善 metadata / aliases / filters；只有真实 miss/irrelevant 数据证明需要时，再引入 hybrid/semantic retrieval。</p></div></div></section>
+
+<section class="section"><h2>05 · Failure → Knowledge → Skill Evolution</h2><div class="pipeline">
+<div class="pnode">Runtime Trace</div><div class="parrow">→</div><div class="pnode">Evidence</div><div class="parrow">→</div><div class="pnode">Pattern Extract</div><div class="parrow">→</div><div class="pnode">Candidate Experience</div><div class="parrow">→</div><div class="pnode">Validate / Promote</div>
+</div><div class="grid g3" style="margin-top:14px"><div class="card"><h3>短周期 · Runtime Loop</h3><p>Observe → Assert → Route → Execute → Verify → Recover。目标是让单次动作可靠。</p></div><div class="card"><h3>长周期 · Learning Loop</h3><p>Task → Failure/Success → Evidence → Diagnose → Experience → Regression → Promote。目标是让 Skill 随真实使用变强。</p></div><div class="card"><h3>安全边界</h3><p>Evolution allowed; uncontrolled self-modification forbidden。尤其 save/delete/overwrite 等 destructive 操作不允许在线自改 procedure。</p></div></div></section>
+
+<section class="section"><h2>06 · P1.7 State Model Promotion：不是新建状态，而是显式化现有状态</h2><div class="grid g2"><div class="code">Current State Sources
+├── CapabilitySnapshot
+│   ├── session / pid / display
+│   └── window / capabilities
+├── RouteDecision
+│   ├── channel / risk
+│   └── provenance
+├── VerifierResult / Evidence
+└── future promotion target
+    ├── environment
+│   ├── host / display / ssh
+│   └── virtuoso_pid / session
+├── design
+│   ├── library / cell / view
+│   └── dirty / revision
+├── ui
+│   ├── active_window / modal
+│   └── focused_widget
+├── execution
+│   ├── step / attempt / route
+│   └── risk_class
+└── verification
+    ├── status / evidence
+    └── checkpoint</div><div class="card"><h3>Promotion Trigger / State Transition Contract</h3><p style="margin-bottom:12px">CapabilitySnapshot 当前够用。只有当 Router / Verifier / Recovery 出现重复状态传递、状态不一致，或 checkpoint/recovery 难以表达时，才把分散状态提升为一等 RuntimeState。</p><div class="code">S0 = observe()
+assert precondition(S0)
+
+RouteDecision = route(action, S0)
+execute(RouteDecision)
+
+S1 = observe()
+verify(expected_transition(S0, S1))
+
+commit(Evidence)</div><p style="margin-top:12px">这比“截图看起来成功”可靠：能用 CIW/DB/window state 证明，就不依赖 OCR/Vision。</p></div></div></section>
+
+<section class="section"><h2>07 · Natural Production Learning：结项后自然积累，不主动凑样本</h2><div class="metric"><div>route_channel</div><div>route_reject_reason</div><div>capability_source</div><div>fallback_count</div><div>verification_status</div><div>recovery_action</div><div>ssh_connect_count</div><div>manifest_consistency</div></div><div class="note" style="margin-top:14px">50-run Observation campaign 已完成。此后这些指标只随真实设计任务自然追加：检索不相关时记录 query / expected / top-5；出现新 failure_type 时扩展 taxonomy；实际 recovery 成功后沉淀可复用 Evidence。禁止为了扩大样本而继续批量运行只读截图。</div></section>
+
+<section class="section"><h2>08 · Evidence-Driven Roadmap：由真实问题触发，而不是按编号机械推进</h2><div class="card" style="padding:0;overflow:hidden"><div class="timeline">
+<div class="phase done"><div class="name">P0</div><div class="desc">Runtime Validation · COMPLETE</div></div><div class="phase done"><div class="name">可靠执行基础</div><div class="desc">185+ tests / failure corpus / evidence manifest / runtime gates</div></div>
+<div class="phase done"><div class="name">P1</div><div class="desc">Router Wiring · COMPLETE</div></div><div class="phase done"><div class="name">策略接线</div><div class="desc">router.py / RouteDecision / risk class / fallback / provenance</div></div>
+<div class="phase done"><div class="name">OBS · Baseline</div><div class="desc">50 real runs · COMPLETE</div></div><div class="phase done"><div class="name">Observation Campaign</div><div class="desc">基线已结项；Architecture Frozen。后续仅随实际设计任务自然学习，不主动制造样本。</div></div>
+<div class="phase done"><div class="name">P1.5 · v0.1</div><div class="desc">Experience Overlay</div></div><div class="phase done"><div class="name">已有实现</div><div class="desc">experience_events + experience_cases + SQLite + RSI Experience tab；后续仅由真实设计任务自然扩展</div></div>
+<div class="phase done"><div class="name">P1.6 · v0.1</div><div class="desc">Skill Retrieval</div></div><div class="phase done"><div class="name">已有实现</div><div class="desc">search_experience() + FTS5 + metadata filter；出现检索质量问题时再增强 aliases / filters / hybrid retrieval</div></div>
+<div class="phase future"><div class="name">P1.7 · Triggered</div><div class="desc">State Model Promotion</div></div><div class="phase future"><div class="name">触发条件</div><div class="desc">CapabilitySnapshot 不够表达跨 Router/Verifier/Recovery 状态、checkpoint 或一致性时再提升为一等对象</div></div>
+<div class="phase future"><div class="name">P1.8 · Triggered</div><div class="desc">Controlled Evolution</div></div><div class="phase future"><div class="name">触发条件</div><div class="desc">积累足够 candidate 后才建设 Candidate → Regression → Shadow → Promote / Rollback</div></div>
+<div class="phase future"><div class="name">P2 · Conditional</div><div class="desc">Vision Grounding</div></div><div class="phase future"><div class="name">触发条件</div><div class="desc">只有 semantic / shortcut / X11 的真实 deterministic gap 被证实后才进入 Vision</div></div>
+<div class="phase future"><div class="name">P3+</div><div class="desc">Skill Graph / Distributed Runtime</div></div><div class="phase future"><div class="name">更远阶段</div><div class="desc">Graph 管任务；Loop 保证节点正确；Multi-Agent 只有真实 workload 需要时再引入</div></div>
+</div></div><div class="note" style="margin-top:14px"><b>当前不做：</b> 不拆 SKILL.md；不强行引入 RuntimeState；不建设没有 candidate 数据支撑的 Shadow/Promote 流程；不为了“扩大样本”继续批量跑只读截图。<br><b>自然触发：</b> 实际任务检索不相关 → 记录 query / expected / top-5，再改善 aliases/filters；出现新 failure_type → 自然扩展 taxonomy；写操作完成真实验收 → 再扩展 recovery knowledge；只有证据证明现有检索不足时才考虑 hybrid retrieval。</div></section>
+
+<section class="section"><h2>09 · 最终设计原则</h2><div class="grid g3"><div class="card"><h3 class="cy">Semantic First</h3><p>能用 Virtuoso 语义状态控制和验证，就绝不依赖坐标与视觉。</p></div><div class="card"><h3 class="okc">Evidence First</h3><p>执行成功不是“Agent 认为成功”，而是独立 Verifier 能证明后置条件。</p></div><div class="card"><h3 class="am">Learn Above, Freeze Below</h3><p>Skill/Knowledge 层可以持续学习；Runtime/Executor 层保持窄、确定、可测试、可恢复。Experience 可影响 procedure/context/recovery recommendation，但不能直接改 risk_class、permission、verifier requirement、retry budget 或 Router safety policy。</p></div></div></section>
+
+<div class="footer">VCLI × Virtuoso GUI Skill Intelligence · Architecture v2.1 · Evidence-Driven Evolution · 2026-09-20</div>
+</div></body></html>
