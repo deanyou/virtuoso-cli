@@ -29,4 +29,8 @@ gmid_test*.log
 # Agent workflow run records (per-session metadata, regenerated each run)
 .claude/workflow-runs/
 
+# Understand Anything (UA) — commit graph, ignore intermediates
+.ua/intermediate/
+.ua/diff-overlay.json
+
 /0
