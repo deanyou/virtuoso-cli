@@ -1,4 +1,5 @@
 use crate::client::bridge::escape_skill_string;
+use crate::error::{Result, VirtuosoError};
 
 /// SKILL expression yielding the current editor's cellview, or `nil` — without
 /// the GE-2067 warning storm.
@@ -85,6 +86,17 @@ pub fn pin_master_for(direction: &str) -> Option<(&'static str, &'static str)> {
         "jumper" => Some(("iopin", "jumper")),
         _ => None,
     }
+}
+
+/// The rejection message for an unrecognised pin direction.
+///
+/// One function so the RPC layer, the CLI and the batch builder cannot drift
+/// into three different wordings — or, worse, into one of them not rejecting.
+fn unknown_pin_direction(direction: &str) -> VirtuosoError {
+    VirtuosoError::Execution(format!(
+        "unknown pin direction '{direction}': expected one of \
+         input, output, inputOutput, switch, jumper"
+    ))
 }
 
 /// SKILL that resolves an instance name plus a terminal name to `pt` — that
@@ -359,16 +371,20 @@ impl SchematicOps {
     /// `dbMakeNet` + `dbCreateInst` + `dbCreatePin`, which never named the
     /// terminal and ignored direction entirely.
     ///
-    /// `direction` must already have been validated by the caller (see
-    /// `pin_master_for`); an unknown value is caller error, not a default.
-    pub fn create_pin(&self, net_name: &str, pin_type: &str, origin: (f64, f64)) -> String {
-        let (master, direction) = pin_master_for(pin_type).unwrap_or(("iopin", "inputOutput"));
+    /// An unknown `direction` is rejected here rather than defaulted. The
+    /// direction decides both the pin master and the terminal direction that
+    /// `symbol.generate` later reads, so substituting one produces a wrong
+    /// symbol with no error anywhere — and this is the one chokepoint all
+    /// three callers (RPC, CLI, batch builder) pass through.
+    pub fn create_pin(&self, net_name: &str, pin_type: &str, origin: (f64, f64)) -> Result<String> {
+        let (master, direction) =
+            pin_master_for(pin_type).ok_or_else(|| unknown_pin_direction(pin_type))?;
         let net_name = escape_skill_string(net_name);
         let (x, y) = origin;
         let guard = cv_guard();
-        format!(
+        Ok(format!(
             r#"let((cv master pin) cv = {EDIT_CV} {guard} master = dbOpenCellViewByType("basic" "{master}" "symbol" nil "r") when(!master error("basic/{master}/symbol not found")) pin = schCreatePin(cv master "{net_name}" "{direction}" nil list({x} {y}) "R0") when(!pin error("schCreatePin failed for net {net_name}")) sprintf(nil "{{\"net\":\"%s\",\"direction\":\"{direction}\",\"master\":\"basic/{master}\"}}" "{net_name}"))"#
-        )
+        ))
     }
 
     pub fn check(&self) -> String {
@@ -791,6 +807,41 @@ mod tests {
 
     fn ops() -> SchematicOps {
         SchematicOps::new()
+    }
+
+    /// The direction is not cosmetic: it picks the `basic` pin master *and* the
+    /// terminal direction `symbol.generate` reads back. A wrong one is a wrong
+    /// symbol, discovered much later.
+    #[test]
+    fn create_pin_maps_each_direction_to_its_own_master() {
+        for (dir, master) in [
+            ("input", "ipin"),
+            ("output", "opin"),
+            ("inputOutput", "iopin"),
+            ("switch", "iopin"),
+            ("jumper", "iopin"),
+        ] {
+            let s = ops().create_pin("VDD", dir, (1.0, 2.0)).expect("valid");
+            assert!(s.contains(&format!(r#""basic" "{master}""#)), "{dir}: {s}");
+            assert!(s.contains(&format!(r#""{dir}" nil"#)), "{dir}: {s}");
+        }
+    }
+
+    /// The failure this closes: `create_pin` used to fall back to
+    /// `("iopin", "inputOutput")`, so `vcli schematic pin --dir bogus` built an
+    /// inputOutput pin and reported success. Only the RPC layer rejected it, and
+    /// the RPC layer is not the only caller.
+    #[test]
+    fn create_pin_refuses_an_unknown_direction_instead_of_defaulting() {
+        let e = ops()
+            .create_pin("VDD", "bidirectional", (0.0, 0.0))
+            .expect_err("an unknown direction must not produce SKILL");
+        let msg = e.to_string();
+        assert!(msg.contains("bidirectional"), "{msg}");
+        assert!(
+            msg.contains("inputOutput"),
+            "must list the accepted set: {msg}"
+        );
     }
 
     #[test]

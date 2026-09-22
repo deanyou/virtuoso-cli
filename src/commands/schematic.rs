@@ -134,7 +134,7 @@ pub fn label(net: &str, x: f64, y: f64) -> Result<Value> {
 
 pub fn pin(net: &str, pin_type: &str, x: f64, y: f64) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let skill = client.schematic.create_pin(net, pin_type, (x, y));
+    let skill = client.schematic.create_pin(net, pin_type, (x, y))?;
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
@@ -435,7 +435,7 @@ pub fn build(spec_path: &str) -> Result<Value> {
     if !spec.pins.is_empty() {
         let mut ed = SchematicEditor::new(&client);
         for p in &spec.pins {
-            ed.add_pin(&p.net, &p.pin_type, (p.x, p.y));
+            ed.add_pin(&p.net, &p.pin_type, (p.x, p.y))?;
         }
         let r = ed.execute()?;
         if !r.skill_ok() {

@@ -359,19 +359,13 @@ impl RpcDispatcher {
             "pin" => {
                 let net = json_str(params.get("net"), "net")?;
                 let dir = json_str(params.get("direction"), "direction")?;
-                // Reject unknown directions instead of quietly falling back to
-                // a default: the direction decides the pin master and the
-                // terminal direction that `symbol.generate` later reads, so a
-                // silent substitution produces a wrong symbol with no error.
-                if crate::client::schematic_ops::pin_master_for(&dir).is_none() {
-                    return Err(VirtuosoError::Execution(format!(
-                        "unknown pin direction '{dir}': expected one of \
-                         input, output, inputOutput, switch, jumper"
-                    )));
-                }
                 let x = json_coord_or(params.get("x"), "x", 0.0)?;
                 let y = json_coord_or(params.get("y"), "y", 0.0)?;
-                let skill = ops.create_pin(&net, &dir, (x, y));
+                // The unknown-direction rejection lives in `create_pin`, which
+                // every caller reaches — the RPC layer, the CLI and the batch
+                // builder. A second copy here would be free to drift from the
+                // one that actually guards the SKILL.
+                let skill = ops.create_pin(&net, &dir, (x, y))?;
                 execute_required_skill(client, &skill, "create pin")?;
                 Ok(serde_json::json!({ "status": "ok", "net": net, "direction": dir }))
             }
