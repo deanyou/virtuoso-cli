@@ -82,7 +82,7 @@ impl<'a> SchematicEditor<'a> {
         cell: &str,
         view: &str,
         name: &str,
-        origin: (i64, i64),
+        origin: (f64, f64),
         orient: &str,
     ) {
         let ops = SchematicOps;
@@ -90,21 +90,27 @@ impl<'a> SchematicEditor<'a> {
             .push(ops.create_instance(lib, cell, view, name, origin, orient));
     }
 
-    pub fn add_wire(&mut self, points: Vec<(i64, i64)>, layer: &str, net_name: &str) {
+    /// `schCreateWire` has no layer argument, so neither does this: a schematic
+    /// wire is on the wire layer by construction.
+    pub fn add_wire(&mut self, points: Vec<(f64, f64)>, net_name: &str) {
         let ops = SchematicOps;
-        self.commands
-            .push(ops.create_wire(&points, layer, net_name));
+        self.commands.push(ops.create_wire(&points, net_name));
     }
 
-    pub fn add_label(&mut self, net_name: &str, origin: (i64, i64)) {
+    pub fn add_label(&mut self, net_name: &str, origin: (f64, f64)) {
         let ops = SchematicOps;
         self.commands.push(ops.create_wire_label(net_name, origin));
     }
 
-    pub fn add_pin(&mut self, net_name: &str, pin_type: &str, origin: (i64, i64)) {
+    /// Fallible where its siblings are not: an unknown pin direction is
+    /// rejected by [`SchematicOps::create_pin`] instead of defaulting, so a bad
+    /// direction in a batch spec stops the batch rather than silently building
+    /// an `inputOutput` pin.
+    pub fn add_pin(&mut self, net_name: &str, pin_type: &str, origin: (f64, f64)) -> Result<()> {
         let ops = SchematicOps;
         self.commands
-            .push(ops.create_pin(net_name, pin_type, origin));
+            .push(ops.create_pin(net_name, pin_type, origin)?);
+        Ok(())
     }
 
     pub fn set_param(&mut self, inst_name: &str, param: &str, value: &str) {

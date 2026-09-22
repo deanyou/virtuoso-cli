@@ -54,6 +54,19 @@ impl VirtuosoResult {
         }
     }
 
+    /// [`ok_or_exec`](Self::ok_or_exec) for calls where `nil` is a legitimate
+    /// answer, not a failure: a list that is simply empty (a library with no
+    /// cells). Only a transport error or a SKILL raise (NAK) is propagated. Use
+    /// it only when the SKILL side raises for every real failure, so that nil
+    /// cannot also mean "something went wrong".
+    pub fn ok_or_exec_nil_ok(self, context: &str) -> Result<Self> {
+        if self.ok() {
+            Ok(self)
+        } else {
+            self.ok_or_exec(context)
+        }
+    }
+
     /// Return the output string with surrounding SKILL double-quotes stripped.
     pub fn output_unquoted(&self) -> &str {
         self.output.trim_matches('"')
