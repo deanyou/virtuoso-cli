@@ -1,0 +1,354 @@
+{
+  "batchIndex": 11,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "type": "file",
+      "name": "skill_db.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "SQLite-backed persistent knowledge store for the virtuoso-gui-debug skill. Owns the schema (functions, layers, shapes, error_history, param_examples, fnd_functions) and exposes a set of record/query helpers that other debug scripts use to remember which SKILL functions exist, what their signatures look like, which layers are drawable, which shape properties work, and which parameter values have been validated.",
+      "tags": ["python", "sqlite", "skill-discovery", "knowledge-base", "schema", "rsi", "virtuoso"],
+      "complexity": "complex",
+      "languageNotes": "Pure standard library (sqlite3, json, os, datetime, pathlib). Uses sqlite3.Row for dict-like rows. All writers use UPSERT (INSERT ... ON CONFLICT DO UPDATE) and bump test_count / success_count so each call strengthens the stored knowledge."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "type": "file",
+      "name": "enumerate_functions.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "summary": "Generator/prober that discovers which Cadence SKILL functions exist in a running Virtuoso session. Builds a candidate name list from PREFIXES x ENTITIES plus a STANDALONE list, invokes each via `vcli skill exec <name>()`, parses the JSON status, distinguishes 'undefined function' from real arg errors, and persists results through skill_db.",
+      "tags": ["python", "virtuoso", "skill", "subprocess", "enumeration", "discovery", "vcli"],
+      "complexity": "moderate",
+      "languageNotes": "Drives `vcli` via subprocess.run with a 15s timeout. sys.path is extended at import time so the sibling skill_db.py can be imported directly. Distinguishes 'undefined' vs 'wrong args' by scanning both the JSON `output` and `errors` fields."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "type": "file",
+      "name": "probe_signatures.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "summary": "Second-pass signature extractor: for functions already known to exist (from enumerate_functions), it calls each one with 0..5 nil arguments via vcli, harvests the error messages, and uses a regex on `N expected, M given` to infer arity. The aggregated probe results are then written back as a compact signature string per function.",
+      "tags": ["python", "virtuoso", "skill", "subprocess", "signature-probe", "vcli"],
+      "complexity": "moderate",
+      "languageNotes": "Uses subprocess.Popen + communicate(timeout=10) per probe so a slow SKILL call cannot stall the loop. Failure-tolerant by design: any single bad probe is skipped and the function keeps going."
+    },
+    {
+      "id": "function:skill_db.get_db",
+      "type": "function",
+      "name": "get_db",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Opens the SQLite database at <skill>/data/skill_db.sqlite3 with row_factory=sqlite3.Row and idempotently creates the functions, layers, shapes, and error_history tables. Returns the live connection; every other module in this skill calls this first.",
+      "tags": ["python", "sqlite", "schema", "factory"],
+      "complexity": "simple",
+      "languageNotes": "Single CREATE TABLE IF NOT EXISTS per table, single commit. Path is resolved relative to the module's parent.parent (skill root)."
+    },
+    {
+      "id": "function:skill_db.record_function",
+      "type": "function",
+      "name": "record_function",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Upserts a function row with category derived from the leading underscore-delimited token, bumps test_count, and refreshes last_tested / signature / description / notes on conflict.",
+      "tags": ["python", "sqlite", "upsert", "knowledge-base"],
+      "complexity": "simple",
+      "languageNotes": "Category heuristic: name.split('_')[0] if '_' in name else name[:8]. COALESCE in the ON CONFLICT clause preserves prior values when new ones are None."
+    },
+    {
+      "id": "function:skill_db.record_failure",
+      "type": "function",
+      "name": "record_failure",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Inserts a row into error_history with fixed=0 so the recurring-self-improvement loop can avoid re-trying the same broken call. Truncates error_message to 500 chars.",
+      "tags": ["python", "sqlite", "error-tracking", "rsi"],
+      "complexity": "simple",
+      "languageNotes": "Plain INSERT, no upsert. Timestamps via datetime.now().isoformat() stored alongside the SQLite CURRENT_TIMESTAMP default."
+    },
+    {
+      "id": "function:skill_db.has_known_failure",
+      "type": "function",
+      "name": "has_known_failure",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Looks up the most recent unresolved (fixed=0) error row for a function. Returns a dict with error_type/error_message/created_at, or None if the function has no open failures.",
+      "tags": ["python", "sqlite", "query"],
+      "complexity": "simple",
+      "languageNotes": "ORDER BY created_at DESC LIMIT 1 — most recent only."
+    },
+    {
+      "id": "function:skill_db.get_known_functions",
+      "type": "function",
+      "name": "get_known_functions",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Returns all functions where func_exists=1, optionally filtered by category. Used by probe_signatures as the worklist for the second pass.",
+      "tags": ["python", "sqlite", "query", "filter"],
+      "complexity": "simple",
+      "languageNotes": "Two SQL branches: one with WHERE category=?, one without, both ordered (by name when filtered, by category,name otherwise)."
+    },
+    {
+      "id": "function:skill_db.get_function",
+      "type": "function",
+      "name": "get_function",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Single-row lookup by primary key; returns a dict via sqlite3.Row or None.",
+      "tags": ["python", "sqlite", "query"],
+      "complexity": "simple",
+      "languageNotes": "Two lines — SELECT ... WHERE name=? then dict(row) or None."
+    },
+    {
+      "id": "function:skill_db.record_layer",
+      "type": "function",
+      "name": "record_layer",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Upserts a (layer, purpose) row marking whether the layer/purpose combination is drawable.",
+      "tags": ["python", "sqlite", "upsert", "layers"],
+      "complexity": "simple",
+      "languageNotes": "Composite primary key (layer, purpose); ON CONFLICT updates drawable + last_tested only."
+    },
+    {
+      "id": "function:skill_db.record_shape_property",
+      "type": "function",
+      "name": "record_shape_property",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Upserts a (obj_type, property_name) row recording whether the property works and an example value. COALESCE preserves the existing example when the new one is None.",
+      "tags": ["python", "sqlite", "upsert", "shapes"],
+      "complexity": "simple",
+      "languageNotes": "Composite primary key (obj_type, property_name); works coerced via int() to 0/1."
+    },
+    {
+      "id": "function:skill_db.record_param_example",
+      "type": "function",
+      "name": "record_param_example",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Creates the param_examples table on first use and upserts a (function, param, value) row, incrementing success_count and refreshing last_used on conflict.",
+      "tags": ["python", "sqlite", "upsert", "parameter-values"],
+      "complexity": "moderate",
+      "languageNotes": "Lazy CREATE TABLE IF NOT EXISTS, then ON CONFLICT DO UPDATE that only touches success_count and last_used. Identical CREATE is repeated in get_param_examples — slight redundancy."
+    },
+    {
+      "id": "function:skill_db.get_param_examples",
+      "type": "function",
+      "name": "get_param_examples",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Returns known-good parameter values for a function, ordered by success_count DESC. Same lazy CREATE as record_param_example ensures the table exists on first read.",
+      "tags": ["python", "sqlite", "query", "parameter-values"],
+      "complexity": "simple",
+      "languageNotes": "SELECT param_name, example_value, success_count ... ORDER BY success_count DESC. Duplicates the CREATE TABLE statement from record_param_example."
+    },
+    {
+      "id": "function:skill_db.stats",
+      "type": "function",
+      "name": "stats",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Aggregates counts across all tables (functions, drawable layers, verified shape properties, fnd_functions, open errors) plus the DB path. Used as a self-test / dashboard print at the bottom of the script.",
+      "tags": ["python", "sqlite", "stats", "dashboard"],
+      "complexity": "simple",
+      "languageNotes": "Six scalar SELECT COUNT(*) queries; the fnd_functions SELECT will raise if that table was never created (no IF NOT EXISTS here)."
+    },
+    {
+      "id": "function:enumerate_functions.build_candidates",
+      "type": "function",
+      "name": "build_candidates",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "summary": "Generates the full sorted set of candidate SKILL function names by taking the cartesian product of the PREFIXES x ENTITIES lists plus the STANDALONE list, then dedupes via set() and sorts.",
+      "tags": ["python", "virtuoso", "skill", "enumeration", "generator"],
+      "complexity": "simple",
+      "languageNotes": "Pure-Python: nested for loops + set + sorted. No I/O."
+    },
+    {
+      "id": "function:enumerate_functions.test_function",
+      "type": "function",
+      "name": "test_function",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "summary": "Calls `vcli skill exec <name>()` and classifies the response: empty output -> does not exist; status=success -> exists with no signature; status=error -> exists with arity-error signature; 'undefined function' substring -> does not exist. Handles subprocess.TimeoutExpired and arbitrary exceptions.",
+      "tags": ["python", "virtuoso", "skill", "subprocess", "json"],
+      "complexity": "moderate",
+      "languageNotes": "15s subprocess timeout. Reads BOTH output and errors fields of the vcli JSON envelope, then lower-cases the joined text before substring matching."
+    },
+    {
+      "id": "function:enumerate_functions.run_enumeration",
+      "type": "function",
+      "name": "run_enumeration",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "summary": "Orchestrator: opens the DB, builds (optionally prefix-filtered) candidates, loops and records each as exists/missing/timeout/exception via skill_db.record_function, and prints a progress summary.",
+      "tags": ["python", "virtuoso", "skill", "orchestrator", "vcli"],
+      "complexity": "moderate",
+      "languageNotes": "Tri-state exists/missing from test_function. Imports record_layer and record_shape_property from skill_db even though they are not used here — keeps the surface area aligned with future probes."
+    },
+    {
+      "id": "function:probe_signatures.probe_signature",
+      "type": "function",
+      "name": "probe_signature",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "summary": "For a single SKILL function name, invokes it with 0..5 nil arguments, parses each response, and on 'error' status tries to extract the expected-arity from 'N expected, M given' via regex. Returns a dict {nargs: message}.",
+      "tags": ["python", "virtuoso", "skill", "regex", "subprocess", "signature"],
+      "complexity": "moderate",
+      "languageNotes": "Uses subprocess.Popen + communicate(timeout=10). Any per-call exception is caught and the loop continues, so one slow probe cannot block the whole batch."
+    },
+    {
+      "id": "function:probe_signatures.run_signature_probe",
+      "type": "function",
+      "name": "run_signature_probe",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "summary": "Reads known functions from skill_db (optionally truncated by --limit), probes each via probe_signature, concatenates per-nargs messages into a ' | '-joined signature string, and persists it via record_function.",
+      "tags": ["python", "virtuoso", "skill", "orchestrator", "vcli"],
+      "complexity": "moderate",
+      "languageNotes": "Prints a progress line every 20 probes. CLI entry point at module bottom reads vcli path from ~/.local/bin and the session id from sys.argv."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.get_db",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.record_function",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.record_failure",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.has_known_failure",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.get_known_functions",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.get_function",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.record_layer",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.record_shape_property",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.record_param_example",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.get_param_examples",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.stats",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "target": "function:enumerate_functions.build_candidates",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "target": "function:enumerate_functions.test_function",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "target": "function:enumerate_functions.run_enumeration",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "target": "function:probe_signatures.probe_signature",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "target": "function:probe_signatures.run_signature_probe",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "function:enumerate_functions.run_enumeration",
+      "target": "function:enumerate_functions.build_candidates",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "function:enumerate_functions.run_enumeration",
+      "target": "function:enumerate_functions.test_function",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "function:enumerate_functions.run_enumeration",
+      "target": "function:skill_db.get_db",
+      "type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "function:enumerate_functions.run_enumeration",
+      "target": "function:skill_db.record_function",
+      "type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "function:probe_signatures.run_signature_probe",
+      "target": "function:probe_signatures.probe_signature",
+      "type": "calls",
+      "weight": 1
+    },
+    {
+      "source": "function:probe_signatures.run_signature_probe",
+      "target": "function:skill_db.get_db",
+      "type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "function:probe_signatures.run_signature_probe",
+      "target": "function:skill_db.get_known_functions",
+      "type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "function:probe_signatures.run_signature_probe",
+      "target": "function:skill_db.record_function",
+      "type": "calls",
+      "weight": 0.9
+    }
+  ]
+}

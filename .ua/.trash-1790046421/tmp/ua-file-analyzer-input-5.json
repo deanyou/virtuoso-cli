@@ -1,0 +1,187 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "src/profile.rs",
+      "language": "rust",
+      "sizeLines": 587,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/rpc/mod.rs",
+      "language": "rust",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/rpc/schema.rs",
+      "language": "rust",
+      "sizeLines": 1216,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/runtime_paths.rs",
+      "language": "rust",
+      "sizeLines": 762,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/skill_finder/mod.rs",
+      "language": "rust",
+      "sizeLines": 787,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/skill_finder/parser.rs",
+      "language": "rust",
+      "sizeLines": 411,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/spectre/maestro_csv.rs",
+      "language": "rust",
+      "sizeLines": 408,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/spectre/mod.rs",
+      "language": "rust",
+      "sizeLines": 4,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/streaming/job_progress.rs",
+      "language": "rust",
+      "sizeLines": 229,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/streaming/mod.rs",
+      "language": "rust",
+      "sizeLines": 207,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/sys/linux_rename.rs",
+      "language": "rust",
+      "sizeLines": 191,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/sys/mod.rs",
+      "language": "rust",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/test_env.rs",
+      "language": "rust",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tests.rs",
+      "language": "rust",
+      "sizeLines": 2376,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transaction/diff.rs",
+      "language": "rust",
+      "sizeLines": 232,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transaction/mod.rs",
+      "language": "rust",
+      "sizeLines": 144,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transaction/snapshot.rs",
+      "language": "rust",
+      "sizeLines": 136,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/vtui.rs",
+      "language": "rust",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "src/profile.rs": [],
+    "src/rpc/mod.rs": [
+      "src/rpc/dispatcher.rs",
+      "src/rpc/schema.rs"
+    ],
+    "src/rpc/schema.rs": [],
+    "src/runtime_paths.rs": [],
+    "src/skill_finder/mod.rs": [
+      "src/skill_finder/parser.rs"
+    ],
+    "src/skill_finder/parser.rs": [],
+    "src/spectre/maestro_csv.rs": [],
+    "src/spectre/mod.rs": [
+      "src/spectre/jobs.rs",
+      "src/spectre/maestro_csv.rs",
+      "src/spectre/parsers.rs",
+      "src/spectre/runner.rs"
+    ],
+    "src/streaming/job_progress.rs": [
+      "src/streaming/mod.rs"
+    ],
+    "src/streaming/mod.rs": [],
+    "src/sys/linux_rename.rs": [],
+    "src/sys/mod.rs": [
+      "src/sys/linux_rename.rs"
+    ],
+    "src/test_env.rs": [],
+    "src/tests.rs": [],
+    "src/transaction/diff.rs": [
+      "src/transaction/snapshot.rs"
+    ],
+    "src/transaction/mod.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/transaction/diff.rs",
+      "src/transaction/snapshot.rs"
+    ],
+    "src/transaction/snapshot.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ],
+    "src/vtui.rs": [
+      "src/async_runtime.rs",
+      "src/auth.rs",
+      "src/capability/mod.rs",
+      "src/client/mod.rs",
+      "src/command_log.rs",
+      "src/commands/mod.rs",
+      "src/config.rs",
+      "src/config_file.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/exit_codes.rs",
+      "src/history.rs",
+      "src/mcp/mod.rs",
+      "src/models.rs",
+      "src/ocean/mod.rs",
+      "src/output.rs",
+      "src/plugins/mod.rs",
+      "src/profile.rs",
+      "src/rpc/mod.rs",
+      "src/runtime_paths.rs",
+      "src/skill_finder/mod.rs",
+      "src/spectre/mod.rs",
+      "src/streaming/mod.rs",
+      "src/sys/mod.rs",
+      "src/test_env.rs",
+      "src/transaction/mod.rs",
+      "src/transport/mod.rs",
+      "src/tui/mod.rs",
+      "src/version.rs"
+    ]
+  }
+}

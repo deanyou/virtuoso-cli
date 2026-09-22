@@ -1,0 +1,175 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "resources/maestro_snapshot_filter.yaml",
+      "language": "yaml",
+      "sizeLines": 60,
+      "fileCategory": "config"
+    },
+    {
+      "path": "resources/ramic_bridge.il",
+      "language": "il",
+      "sizeLines": 528,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/rb_connect_terminal.il",
+      "language": "il",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/x11_dismiss_dialog.py",
+      "language": "python",
+      "sizeLines": 826,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/load_test.ils",
+      "language": "ils",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/perf_benchmark.ils",
+      "language": "ils",
+      "sizeLines": 274,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/perf_test.ils",
+      "language": "ils",
+      "sizeLines": 104,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/daemon/main.rs",
+      "language": "rust",
+      "sizeLines": 159,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/config.rs",
+      "language": "rust",
+      "sizeLines": 291,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/config_check.rs",
+      "language": "rust",
+      "sizeLines": 253,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/config_check_cli.rs",
+      "language": "rust",
+      "sizeLines": 194,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/daemon_user_guard.rs",
+      "language": "rust",
+      "sizeLines": 784,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/docs/__init__.py",
+      "language": "python",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/docs/test_x11_dismiss_dialog.py",
+      "language": "python",
+      "sizeLines": 243,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/error_handling.rs",
+      "language": "rust",
+      "sizeLines": 239,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/linux_rename_compat.rs",
+      "language": "rust",
+      "sizeLines": 138,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/maestro_csv.rs",
+      "language": "rust",
+      "sizeLines": 191,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/ocean.rs",
+      "language": "rust",
+      "sizeLines": 156,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/skill_escape.rs",
+      "language": "rust",
+      "sizeLines": 74,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/skill_finder_include_desc.rs",
+      "language": "rust",
+      "sizeLines": 180,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/skill_load.rs",
+      "language": "rust",
+      "sizeLines": 231,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/spectre.rs",
+      "language": "rust",
+      "sizeLines": 221,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/tunnel_hostname_check.rs",
+      "language": "rust",
+      "sizeLines": 139,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/tunnel_profile.rs",
+      "language": "rust",
+      "sizeLines": 295,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "resources/maestro_snapshot_filter.yaml": [],
+    "resources/ramic_bridge.il": [],
+    "resources/rb_connect_terminal.il": [],
+    "resources/x11_dismiss_dialog.py": [],
+    "scripts/load_test.ils": [],
+    "scripts/perf_benchmark.ils": [],
+    "scripts/perf_test.ils": [],
+    "src/daemon/main.rs": [],
+    "tests/config.rs": [],
+    "tests/config_check.rs": [],
+    "tests/config_check_cli.rs": [],
+    "tests/daemon_user_guard.rs": [],
+    "tests/docs/__init__.py": [],
+    "tests/docs/test_x11_dismiss_dialog.py": [],
+    "tests/error_handling.rs": [],
+    "tests/linux_rename_compat.rs": [],
+    "tests/maestro_csv.rs": [],
+    "tests/ocean.rs": [],
+    "tests/skill_escape.rs": [],
+    "tests/skill_finder_include_desc.rs": [],
+    "tests/skill_load.rs": [],
+    "tests/spectre.rs": [],
+    "tests/tunnel_hostname_check.rs": [],
+    "tests/tunnel_profile.rs": []
+  }
+}

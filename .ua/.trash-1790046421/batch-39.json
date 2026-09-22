@@ -1,0 +1,515 @@
+{
+  "batchIndex": 39,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.pensieve/knowledge/smic-pdk-transistor-w-skill/content.md",
+      "type": "document",
+      "name": "smic-pdk-transistor-w-skill/content.md",
+      "filePath": ".pensieve/knowledge/smic-pdk-transistor-w-skill/content.md",
+      "summary": "Markdown knowledge document. Title: SMIC PDK Transistor Width via SKILL: CDF Chain & Working Path. Section heads: SMIC PDK Transistor Width via SKILL: CDF Chain & Working Path | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "smic",
+        "pdk"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/smic-rhrpo-netlist-terminals/content.md",
+      "type": "document",
+      "name": "smic-rhrpo-netlist-terminals/content.md",
+      "filePath": ".pensieve/knowledge/smic-rhrpo-netlist-terminals/content.md",
+      "summary": "Markdown knowledge document. Title: SMIC rhrpo_3t_ckt PCells: Missing Terminal Connections in Ocean-Generated Netlist. Section heads: SMIC rhrpo_3t_ckt PCells: Missing Terminal Connections in Ocean-Generated Netlist | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "smic",
+        "pdk"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/spectre-ade-model-path/content.md",
+      "type": "document",
+      "name": "spectre-ade-model-path/content.md",
+      "filePath": ".pensieve/knowledge/spectre-ade-model-path/content.md",
+      "summary": "Markdown knowledge document. Title: Spectre Model Path: ADE OA Indirection vs Direct Invocation. Section heads: Spectre Model Path: ADE OA Indirection vs Direct Invocation | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "spectre",
+        "eda"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/spectre-bandgap-dc-convergence/content.md",
+      "type": "document",
+      "name": "spectre-bandgap-dc-convergence/content.md",
+      "filePath": ".pensieve/knowledge/spectre-bandgap-dc-convergence/content.md",
+      "summary": "Markdown knowledge document. Title: Spectre Bandgap DC Convergence: homotopy=all for Multi-Stable Circuits. Section heads: Spectre Bandgap DC Convergence: homotopy=all for Multi-Stable Circuits | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "spectre",
+        "eda"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/spectre-cmi-2116-ade-netlist/content.md",
+      "type": "document",
+      "name": "spectre-cmi-2116-ade-netlist/content.md",
+      "filePath": ".pensieve/knowledge/spectre-cmi-2116-ade-netlist/content.md",
+      "summary": "Markdown knowledge document. Title: Spectre CMI-2116: ADE Netlist MOSFET Terminals Missing. Section heads: Spectre CMI-2116: ADE Netlist MOSFET Terminals Missing | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "spectre",
+        "eda"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/spectre-vacomp-2259-bound-step/content.md",
+      "type": "document",
+      "name": "spectre-vacomp-2259-bound-step/content.md",
+      "filePath": ".pensieve/knowledge/spectre-vacomp-2259-bound-step/content.md",
+      "summary": "Markdown knowledge document. Title: Verilog-A `bound_step()` Unsupported in SPECTRE231 / IC23.1. Section heads: Verilog-A `bound_step()` Unsupported in SPECTRE231 / IC23.1 | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "spectre",
+        "eda"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/spectre-vsource-ac-parameter/content.md",
+      "type": "document",
+      "name": "spectre-vsource-ac-parameter/content.md",
+      "filePath": ".pensieve/knowledge/spectre-vsource-ac-parameter/content.md",
+      "summary": "Markdown knowledge document. Title: Spectre vsource: AC Stimulus Parameter is `mag`, not `ac`. Section heads: Spectre vsource: AC Stimulus Parameter is `mag`, not `ac` | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "spectre",
+        "eda"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/taste-review/content.md",
+      "type": "document",
+      "name": "taste-review/content.md",
+      "filePath": ".pensieve/knowledge/taste-review/content.md",
+      "summary": "Markdown knowledge document. Title: Code Taste Review Knowledge Base. Section heads: Code Taste Review Knowledge Base | Sources | Supporting Materials | Summary.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "code-review",
+        "taste"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/vcli-bridge-cli-name/content.md",
+      "type": "document",
+      "name": "vcli-bridge-cli-name/content.md",
+      "filePath": ".pensieve/knowledge/vcli-bridge-cli-name/content.md",
+      "summary": "Markdown knowledge document. Title: vcli is the Bridge CLI — `virtuoso` in PATH is Cadence's Application Binary. Section heads: vcli is the Bridge CLI — `virtuoso` in PATH is Cadence's Application Binary | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "vcli"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/vcli-multi-session-concurrency/content.md",
+      "type": "document",
+      "name": "vcli-multi-session-concurrency/content.md",
+      "filePath": ".pensieve/knowledge/vcli-multi-session-concurrency/content.md",
+      "summary": "Markdown knowledge document. Title: vcli Multi-Session Concurrency Patterns. Section heads: vcli Multi-Session Concurrency Patterns | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "vcli"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/vcli-session-history-layout/content.md",
+      "type": "document",
+      "name": "vcli-session-history-layout/content.md",
+      "filePath": ".pensieve/knowledge/vcli-session-history-layout/content.md",
+      "summary": "Markdown knowledge document. Title: vcli Session History — File Layout and Test Pollution. Section heads: vcli Session History — File Layout and Test Pollution | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "vcli"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.pensieve/knowledge/virtuoso-daemon-install-feature-flag/content.md",
+      "type": "document",
+      "name": "virtuoso-daemon-install-feature-flag/content.md",
+      "filePath": ".pensieve/knowledge/virtuoso-daemon-install-feature-flag/content.md",
+      "summary": "Markdown knowledge document. Title: virtuoso-daemon Requires `--features daemon` for cargo install. Section heads: virtuoso-daemon Requires `--features daemon` for cargo install | Source | Summary | Content.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "virtuoso-daemon",
+        "installation"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "config:.pensieve/signals/latest.json",
+      "type": "config",
+      "name": "latest.json",
+      "filePath": ".pensieve/signals/latest.json",
+      "summary": "JSON signals manifest: top-level keys generated, recommended_skills, promotion_candidates, summary. Recommends hot skills and tracks promotion candidates for the Pensieve knowledge system.",
+      "tags": [
+        "config",
+        "pensieve",
+        "signals"
+      ],
+      "complexity": "simple",
+      "languageNotes": "JSON generated by Pensieve skill-doctor."
+    },
+    {
+      "id": "document:.pensieve/state.md",
+      "type": "document",
+      "name": ".pensieve/state.md",
+      "filePath": ".pensieve/state.md",
+      "summary": "Markdown knowledge document. Title: Pensieve Project State. Section heads: Pensieve Project State | Lifecycle State | Project Paths | Graph.",
+      "tags": [
+        "pensieve",
+        "state"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.workbuddy/skills/pr-review-hardening/SKILL.md",
+      "type": "document",
+      "name": "pr-review-hardening/SKILL.md",
+      "filePath": ".workbuddy/skills/pr-review-hardening/SKILL.md",
+      "summary": "Markdown knowledge document. Title: PR Review Hardening. Section heads: PR Review Hardening | Overview | When to Use | Workflow.",
+      "tags": [
+        "workbuddy",
+        "skill"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "document:.workbuddy/skills/pr-review-hardening/references/workflow.md",
+      "type": "document",
+      "name": "references/workflow.md",
+      "filePath": ".workbuddy/skills/pr-review-hardening/references/workflow.md",
+      "summary": "Markdown knowledge document. Title: PR Review Hardening — Workflow Reference. Section heads: PR Review Hardening — Workflow Reference | Phase 1 — Corrected-review template | Phase 2 — Single-seam fix commands | Phase 3 — Real-CI verification commands.",
+      "tags": [
+        "workbuddy",
+        "skill"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (Pensieve knowledge format)."
+    },
+    {
+      "id": "file:resources/daemons/ramic_bridge_daemon_27.py",
+      "type": "file",
+      "name": "ramic_bridge_daemon_27.py",
+      "filePath": "resources/daemons/ramic_bridge_daemon_27.py",
+      "summary": "Python daemon script. Defines functions: watchdog_callback, read_until_delimiter, handle_external_connection, start_server. Acts as a SKILL bridge server accepting TCP connections, spawning SKILL via stdin/stdout, with watchdog timer cleanup.",
+      "tags": [
+        "python",
+        "daemon",
+        "skill-bridge",
+        "virtuoso"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python 2.7 compatible (no f-strings)."
+    },
+    {
+      "id": "file:resources/daemons/ramic_bridge_daemon_3.py",
+      "type": "file",
+      "name": "ramic_bridge_daemon_3.py",
+      "filePath": "resources/daemons/ramic_bridge_daemon_3.py",
+      "summary": "Python daemon script. Defines functions: get_grandparent_pid, watchdog_callback, read_until_delimiter, handle_external_connection, start_server. Acts as a SKILL bridge server accepting TCP connections, spawning SKILL via stdin/stdout, with watchdog timer cleanup.",
+      "tags": [
+        "python",
+        "daemon",
+        "skill-bridge",
+        "virtuoso"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python 3 (uses f-strings and sys.stdin.buffer)."
+    },
+    {
+      "id": "data:cds.lib",
+      "type": "data",
+      "name": "cds.lib",
+      "filePath": "cds.lib",
+      "summary": "Cadence Virtuoso library definition file (cds.lib). SOFTINCLUDE of project.lib plus a single DEFINE for FT0001A_SH mapping to the local workarea. Auto-generated template.",
+      "tags": [
+        "virtuoso",
+        "cds.lib",
+        "eda",
+        "config",
+        "lib"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Binary or non-source artifact; metadata-only summary (extractor skipped structure parsing)."
+    },
+    {
+      "id": "file:examples/pasc_callbacks.ils",
+      "type": "file",
+      "name": "pasc_callbacks.ils",
+      "filePath": "examples/pasc_callbacks.ils",
+      "summary": "Cadence SKILL (IL) script demonstrating Spectre simulation callback handlers (pascDoneCB, pascErrorCB, pascStartCB, pascAbortCB). Reference example for safe callback use in ADE/Maestro.",
+      "tags": [
+        "skill",
+        "ils",
+        "spectre",
+        "callback",
+        "example"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Binary or non-source artifact; metadata-only summary (extractor skipped structure parsing)."
+    },
+    {
+      "id": "file:examples/vttype_update.ils",
+      "type": "file",
+      "name": "vttype_update.ils",
+      "filePath": "examples/vttype_update.ils",
+      "summary": "Cadence SKILL (IL) script with procedures swap_nmos_vttype and swap_pmos_vttype to update the VTTYPE CDF parameter when swapping NMOS/PMOS devices.",
+      "tags": [
+        "skill",
+        "ils",
+        "cdf",
+        "transistor",
+        "example"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Binary or non-source artifact; metadata-only summary (extractor skipped structure parsing)."
+    },
+    {
+      "id": "data:libManager.log.cdslck",
+      "type": "data",
+      "name": "libManager.log.cdslck",
+      "filePath": "libManager.log.cdslck",
+      "summary": "Cadence Virtuoso Edit Lock-Stake file (libManager.log.cdslck). Records current edit-lock owner; do not modify manually.",
+      "tags": [
+        "virtuoso",
+        "lock",
+        "eda",
+        "cdslck"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Binary or non-source artifact; metadata-only summary (extractor skipped structure parsing)."
+    },
+    {
+      "id": "config:resources/.env_template",
+      "type": "config",
+      "name": ".env_template",
+      "filePath": "resources/.env_template",
+      "summary": "virtuoso-bridge environment template. Defines VB_REMOTE_HOST/USER, optional jump host, and port variables for the bridge daemon.",
+      "tags": [
+        "config",
+        "env",
+        "virtuoso-bridge"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Binary or non-source artifact; metadata-only summary (extractor skipped structure parsing)."
+    },
+    {
+      "id": "data:resources/daemons/virtuoso-daemon-aarch64",
+      "type": "data",
+      "name": "virtuoso-daemon-aarch64",
+      "filePath": "resources/daemons/virtuoso-daemon-aarch64",
+      "summary": "Pre-built ELF 64-bit ARM aarch64 Linux binary of the virtuoso-daemon helper shipped in resources/daemon-lines/. Stripped, dynamically linked.",
+      "tags": [
+        "binary",
+        "aarch64",
+        "elf",
+        "daemon",
+        "unknown"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Binary or non-source artifact; metadata-only summary (extractor skipped structure parsing)."
+    },
+    {
+      "id": "data:resources/daemons/virtuoso-daemon-x86_64",
+      "type": "data",
+      "name": "virtuoso-daemon-x86_64",
+      "filePath": "resources/daemons/virtuoso-daemon-x86_64",
+      "summary": "Pre-built ELF 64-bit x86-64 Linux binary of the virtuoso-daemon helper. Stripped, dynamically linked.",
+      "tags": [
+        "binary",
+        "x86-64",
+        "elf",
+        "daemon",
+        "unknown"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Binary or non-source artifact; metadata-only summary (extractor skipped structure parsing)."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.workbuddy/skills/pr-review-hardening/SKILL.md",
+      "target": "document:.workbuddy/skills/pr-review-hardening/references/workflow.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:resources/daemons/ramic_bridge_daemon_27.py#handle_external_connection",
+      "target": "file:resources/daemons/ramic_bridge_daemon_27.py#read_until_delimiter",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "file:resources/daemons/ramic_bridge_daemon_27.py#start_server",
+      "target": "file:resources/daemons/ramic_bridge_daemon_27.py#handle_external_connection",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "file:resources/daemons/ramic_bridge_daemon_3.py#handle_external_connection",
+      "target": "file:resources/daemons/ramic_bridge_daemon_3.py#read_until_delimiter",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "file:resources/daemons/ramic_bridge_daemon_3.py#start_server",
+      "target": "file:resources/daemons/ramic_bridge_daemon_3.py#handle_external_connection",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "data:cds.lib",
+      "target": "file:resources/daemons/ramic_bridge_daemon_3.py",
+      "type": "configures",
+      "weight": 0.5
+    },
+    {
+      "source": "config:resources/.env_template",
+      "target": "file:resources/daemons/ramic_bridge_daemon_3.py",
+      "type": "configures",
+      "weight": 0.6
+    },
+    {
+      "source": "config:resources/.env_template",
+      "target": "file:resources/daemons/ramic_bridge_daemon_27.py",
+      "type": "configures",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.pensieve/knowledge/smic-pdk-transistor-w-skill/content.md",
+      "target": "file:examples/vttype_update.ils",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/knowledge/smic-rhrpo-netlist-terminals/content.md",
+      "target": "file:examples/pasc_callbacks.ils",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.pensieve/knowledge/spectre-ade-model-path/content.md",
+      "target": "data:resources/daemons/virtuoso-daemon-x86_64",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.pensieve/knowledge/spectre-bandgap-dc-convergence/content.md",
+      "target": "data:resources/daemons/virtuoso-daemon-x86_64",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.pensieve/knowledge/spectre-cmi-2116-ade-netlist/content.md",
+      "target": "data:resources/daemons/virtuoso-daemon-x86_64",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.pensieve/knowledge/spectre-vacomp-2259-bound-step/content.md",
+      "target": "data:resources/daemons/virtuoso-daemon-x86_64",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.pensieve/knowledge/spectre-vsource-ac-parameter/content.md",
+      "target": "data:resources/daemons/virtuoso-daemon-x86_64",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.pensieve/knowledge/vcli-bridge-cli-name/content.md",
+      "target": "data:resources/daemons/virtuoso-daemon-x86_64",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.pensieve/knowledge/vcli-multi-session-concurrency/content.md",
+      "target": "file:resources/daemons/ramic_bridge_daemon_3.py",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.pensieve/knowledge/vcli-session-history-layout/content.md",
+      "target": "file:resources/daemons/ramic_bridge_daemon_3.py",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.pensieve/knowledge/virtuoso-daemon-install-feature-flag/content.md",
+      "target": "data:resources/daemons/virtuoso-daemon-x86_64",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/knowledge/virtuoso-daemon-install-feature-flag/content.md",
+      "target": "data:resources/daemons/virtuoso-daemon-aarch64",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/knowledge/taste-review/content.md",
+      "target": "document:.workbuddy/skills/pr-review-hardening/SKILL.md",
+      "type": "documents",
+      "weight": 0.8
+    },
+    {
+      "source": "config:.pensieve/signals/latest.json",
+      "target": "document:.pensieve/knowledge/spectre-vsource-ac-parameter/content.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "config:.pensieve/signals/latest.json",
+      "target": "document:.pensieve/state.md",
+      "type": "documents",
+      "weight": 0.7
+    }
+  ]
+}

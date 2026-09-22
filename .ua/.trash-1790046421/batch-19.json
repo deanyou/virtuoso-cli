@@ -1,0 +1,95 @@
+{
+  "batchIndex": 19,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.claude/skills/_shared/README.md",
+      "type": "document",
+      "name": "_shared README",
+      "filePath": ".claude/skills/_shared/README.md",
+      "summary": "Adapter-layer overview for the .claude/skills/_shared/ directory. Describes the three contents (vcli.sh wrapper, convention.md naming contract, scripts/ helpers), the one-time symlink install (linking vcli.sh as both `vcli` and `virtuoso` on PATH), and editing rules: changes here affect every skill (client-SDK-release grade); keep vcli.sh a thin pass-through; convention.md owns the name mapping.",
+      "tags": [
+        "adapter",
+        "wrapper",
+        "shared",
+        "install",
+        "naming",
+        "skills",
+        "documentation"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Short markdown (38 lines, 30 non-empty) with three H2 sections (One-time install, Editing rules) and a contents table. Pure prose + a single bash install snippet; no executable logic."
+    },
+    {
+      "id": "document:.claude/skills/_shared/convention.md",
+      "type": "document",
+      "name": "vcli ↔ virtuoso naming convention",
+      "filePath": ".claude/skills/_shared/convention.md",
+      "summary": "Single source of truth for the `vcli` (binary) vs `virtuoso` (documented name) convention used by 16 of 27 SKILL.md files. Covers: TL;DR mapping table, why the corpus uses `virtuoso` (collision with the Cadence GUI executable, documentation drift), how the vcli.sh adapter resolves the binary (VCLI_BIN override → ~/.cargo/bin/vcli → ./target/release/vcli → PATH → /opt/cargo/bin/vcli) and forwards argv unchanged, one-time install recipe, the single-point migration contract (only vcli.sh + convention.md change when the binary is renamed), SKILL.md hygiene rules (use `virtuoso` in examples; allowed-tools globs), an extensive diagnostic playbook with 13 H3-level rules covering disk-cache silent writes, ramic_bridge.il one-shot load, Admin-gated RPC pool split, snake_case RPC naming, Maestro write split, IC25 SKILL string-quoted kwargs, ADE Editing-mode `mae*` session resolution, bypass-mode maestro.run disk-only writes, IC25 compressed PSF, session-close ownership, ?session + ~>name rejection, VB_REMOTE_HOST requirements for create_corner_netlist, and Cadence-version citation hygiene, plus a maintenance contract describing when to edit and when not to.",
+      "tags": [
+        "convention",
+        "naming",
+        "vcli",
+        "virtuoso",
+        "adapter",
+        "migration",
+        "diagnostics",
+        "playbook",
+        "rpc",
+        "maestro",
+        "skill",
+        "rules",
+        "documentation"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Long markdown (532 lines, 414 non-empty) with 26 sections (3 H1, 16 H2, 7 H3). Mixes prose, tables, fenced bash snippets, and bullet lists. No executable code; pure reference document organized as TL;DR + rationale + install + rules + maintenance contract."
+    },
+    {
+      "id": "file:.claude/skills/_shared/vcli.sh",
+      "type": "file",
+      "name": "vcli.sh wrapper",
+      "filePath": ".claude/skills/_shared/vcli.sh",
+      "summary": "Bash adapter that bridges the `virtuoso` documented name to the actual `vcli` Rust binary. Performs five roles: identity (accepts both names via $0 basename, forwards argv unchanged), binary resolution (VCLI_BIN override → ~/.cargo/bin/vcli → ./target/release/vcli → command -v vcli → /opt/cargo/bin/vcli, with PATH-ordering rationale documented inline), stderr logging (duplicates into $VB_LOG_DIR/harness-YYYYMMDD.log so forensic traces survive the harness's stdout buffer TTL), environment defaults (sets VB_TIMEOUT=120 if unset), and doctor subcommand diagnostics. Execs the resolved binary so its exit code reaches the harness unmodified. Does NOT rewrite argv, inject --format json, retry, or swallow errors.",
+      "tags": [
+        "bash",
+        "shell",
+        "wrapper",
+        "adapter",
+        "vcli",
+        "virtuoso",
+        "exec",
+        "logging",
+        "diagnostics",
+        "shared"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "POSIX bash with `set -euo pipefail`. 120 lines total, ~112 non-empty. Uses only built-ins (printf, basename, date, mkdir, command, cat, exec) plus shell parameter expansion and a heredoc for the doctor output. No external commands beyond the resolved vcli binary. Comment-heavy (~50% of the file is header documentation explaining rationale)."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.claude/skills/_shared/README.md",
+      "target": "file:.claude/skills/_shared/vcli.sh",
+      "type": "documents",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.claude/skills/_shared/README.md",
+      "target": "document:.claude/skills/_shared/convention.md",
+      "type": "documents",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.claude/skills/_shared/convention.md",
+      "target": "file:.claude/skills/_shared/vcli.sh",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "file:.claude/skills/_shared/vcli.sh",
+      "target": "file:vcli",
+      "type": "calls",
+      "weight": 1.0
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".claude/skills/_shared/README.md",
+      "language": "markdown",
+      "sizeLines": 38,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/_shared/convention.md",
+      "language": "markdown",
+      "sizeLines": 532,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/_shared/vcli.sh",
+      "language": "shell",
+      "sizeLines": 120,
+      "fileCategory": "script"
+    }
+  ],
+  "batchImportData": {
+    ".claude/skills/_shared/README.md": [],
+    ".claude/skills/_shared/convention.md": [],
+    ".claude/skills/_shared/vcli.sh": []
+  }
+}

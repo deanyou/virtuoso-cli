@@ -1,0 +1,182 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".claude/skills/maestro/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 228,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/ocean-netlist-regen/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 306,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/porting-skill/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 213,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/schematic-gen/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 194,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-measure/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 135,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-plot/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 199,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-plot/scripts/plot_sim.py",
+      "language": "python",
+      "sizeLines": 292,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/sim-run/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 287,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-setup/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 82,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-sweep/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 65,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/skill-exec/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 152,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/skill-review/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 94,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/skill-shell-gotchas/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 268,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/spec-driven-circuit-design/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 334,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/spectre-netlist-gotchas/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 331,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/spectre-netlist-gotchas/memory/error_log.jsonl",
+      "language": "jsonl",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/spectre-netlist-template/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 499,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "language": "python",
+      "sizeLines": 593,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/tunnel-connect/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 151,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/veriloga/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 206,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/veriloga/reference.md",
+      "language": "markdown",
+      "sizeLines": 450,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "language": "json",
+      "sizeLines": 111258,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "language": "sqlite3",
+      "sizeLines": 84605,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "language": "json",
+      "sizeLines": 257730,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "language": "il",
+      "sizeLines": 56,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    ".claude/skills/maestro/SKILL.md": [],
+    ".claude/skills/ocean-netlist-regen/SKILL.md": [],
+    ".claude/skills/porting-skill/SKILL.md": [],
+    ".claude/skills/schematic-gen/SKILL.md": [],
+    ".claude/skills/sim-measure/SKILL.md": [],
+    ".claude/skills/sim-plot/SKILL.md": [],
+    ".claude/skills/sim-plot/scripts/plot_sim.py": [],
+    ".claude/skills/sim-run/SKILL.md": [],
+    ".claude/skills/sim-setup/SKILL.md": [],
+    ".claude/skills/sim-sweep/SKILL.md": [],
+    ".claude/skills/skill-exec/SKILL.md": [],
+    ".claude/skills/skill-review/SKILL.md": [],
+    ".claude/skills/skill-shell-gotchas/SKILL.md": [],
+    ".claude/skills/spec-driven-circuit-design/SKILL.md": [],
+    ".claude/skills/spectre-netlist-gotchas/SKILL.md": [],
+    ".claude/skills/spectre-netlist-gotchas/memory/error_log.jsonl": [],
+    ".claude/skills/spectre-netlist-template/SKILL.md": [],
+    ".claude/skills/spectre-netlist-template/scripts/inject_stimulus.py": [],
+    ".claude/skills/tunnel-connect/SKILL.md": [],
+    ".claude/skills/veriloga/SKILL.md": [],
+    ".claude/skills/veriloga/reference.md": [],
+    ".claude/skills/virtuoso-gui-debug/data/rsi_share.json": [],
+    ".claude/skills/virtuoso-gui-debug/data/skill_db.sqlite3": [],
+    ".claude/skills/virtuoso-gui-debug/data/skill_db_backup.json": [],
+    ".claude/skills/virtuoso-gui-debug/data/vcli_snippets.il": []
+  }
+}

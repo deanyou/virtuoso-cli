@@ -1,0 +1,56 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".pensieve/maxims/ci-must-match-target-toolchain.md",
+      "language": "markdown",
+      "sizeLines": 26,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/reduce-complexity-before-adding-branches.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/skill-nil-is-not-an-error.md",
+      "language": "markdown",
+      "sizeLines": 66,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/test-with-ci-toolchain-before-push.md",
+      "language": "markdown",
+      "sizeLines": 27,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    ".pensieve/maxims/ci-must-match-target-toolchain.md": [],
+    ".pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md": [],
+    ".pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md": [],
+    ".pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md": [],
+    ".pensieve/maxims/reduce-complexity-before-adding-branches.md": [],
+    ".pensieve/maxims/skill-nil-is-not-an-error.md": [],
+    ".pensieve/maxims/test-with-ci-toolchain-before-push.md": []
+  }
+}

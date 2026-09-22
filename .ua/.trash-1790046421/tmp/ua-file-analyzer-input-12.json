@@ -1,0 +1,42 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "language": "yaml",
+      "sizeLines": 59,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/integration.yml",
+      "language": "yaml",
+      "sizeLines": 34,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "language": "yaml",
+      "sizeLines": 159,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/security-audit.yml",
+      "language": "yaml",
+      "sizeLines": 50,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/skill-tests.yml",
+      "language": "yaml",
+      "sizeLines": 39,
+      "fileCategory": "infra"
+    }
+  ],
+  "batchImportData": {
+    ".github/workflows/ci.yml": [],
+    ".github/workflows/integration.yml": [],
+    ".github/workflows/release.yml": [],
+    ".github/workflows/security-audit.yml": [],
+    ".github/workflows/skill-tests.yml": []
+  }
+}

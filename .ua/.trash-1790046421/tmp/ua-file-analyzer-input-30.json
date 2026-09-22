@@ -1,0 +1,56 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "docs/plans/2026-04-04-sim-automation-design.md",
+      "language": "markdown",
+      "sizeLines": 203,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/2026-04-05-bayesian-optimization-design.md",
+      "language": "markdown",
+      "sizeLines": 132,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/2026-04-06-sim-run-robustness.md",
+      "language": "markdown",
+      "sizeLines": 279,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/2026-06-13-borrow-from-virtuoso-bridge-lite.md",
+      "language": "markdown",
+      "sizeLines": 146,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/dean-main-design-20260417-192426.md",
+      "language": "markdown",
+      "sizeLines": 144,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/dean-main-eng-review-test-plan-20260417-223207.md",
+      "language": "markdown",
+      "sizeLines": 154,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/virtuoso-cli-enhancement-proposal.md",
+      "language": "markdown",
+      "sizeLines": 320,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    "docs/plans/2026-04-04-sim-automation-design.md": [],
+    "docs/plans/2026-04-05-bayesian-optimization-design.md": [],
+    "docs/plans/2026-04-06-sim-run-robustness.md": [],
+    "docs/plans/2026-06-13-borrow-from-virtuoso-bridge-lite.md": [],
+    "docs/plans/dean-main-design-20260417-192426.md": [],
+    "docs/plans/dean-main-eng-review-test-plan-20260417-223207.md": [],
+    "docs/plans/virtuoso-cli-enhancement-proposal.md": []
+  }
+}

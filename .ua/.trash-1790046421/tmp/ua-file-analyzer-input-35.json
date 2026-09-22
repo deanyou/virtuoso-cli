@@ -1,0 +1,182 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "language": "python",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "language": "python",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "language": "python",
+      "sizeLines": 103,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "language": "python",
+      "sizeLines": 70,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "language": "python",
+      "sizeLines": 379,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/__init__.py",
+      "language": "python",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/fail.json",
+      "language": "json",
+      "sizeLines": 27,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/pass.json",
+      "language": "json",
+      "sizeLines": 41,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "language": "python",
+      "sizeLines": 369,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "language": "python",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/agents/code-reviewer/agent.md",
+      "language": "markdown",
+      "sizeLines": 67,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/agents/unit-test-agent/agent.md",
+      "language": "markdown",
+      "sizeLines": 51,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/_shared/scripts/eda_auto_evolve.py",
+      "language": "python",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/_shared/scripts/eda_memory_saver.py",
+      "language": "python",
+      "sizeLines": 193,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/_shared/scripts/signal_matcher.py",
+      "language": "python",
+      "sizeLines": 207,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/amp-copilot/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 341,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/cell-explore/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 62,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/circuit-optimizer/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 467,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/circuit-optimizer/scripts/run_bandgap_sweep.py",
+      "language": "python",
+      "sizeLines": 269,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/diag/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 98,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/digital-import/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 362,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/gm-over-id/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 229,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/history-evolve/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 196,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/maestro-read-results/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 159,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/maestro-read-results/scripts/read_results.py",
+      "language": "python",
+      "sizeLines": 657,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    ".agents/skills/virtuoso-gui-debug/scripts/test_stability.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/validate_ic251.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/verify_db.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/verify_ic251.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/xdotool_cli.py": [],
+    ".agents/skills/virtuoso-gui-debug/tests/__init__.py": [],
+    ".agents/skills/virtuoso-gui-debug/tests/fail.json": [],
+    ".agents/skills/virtuoso-gui-debug/tests/pass.json": [],
+    ".agents/skills/virtuoso-gui-debug/tests/test_cli.py": [],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/__init__.py": [],
+    ".claude/agents/code-reviewer/agent.md": [],
+    ".claude/agents/unit-test-agent/agent.md": [],
+    ".claude/skills/_shared/scripts/eda_auto_evolve.py": [],
+    ".claude/skills/_shared/scripts/eda_memory_saver.py": [],
+    ".claude/skills/_shared/scripts/signal_matcher.py": [],
+    ".claude/skills/amp-copilot/SKILL.md": [],
+    ".claude/skills/cell-explore/SKILL.md": [],
+    ".claude/skills/circuit-optimizer/SKILL.md": [],
+    ".claude/skills/circuit-optimizer/scripts/run_bandgap_sweep.py": [],
+    ".claude/skills/diag/SKILL.md": [],
+    ".claude/skills/digital-import/SKILL.md": [],
+    ".claude/skills/gm-over-id/SKILL.md": [],
+    ".claude/skills/history-evolve/SKILL.md": [],
+    ".claude/skills/maestro-read-results/SKILL.md": [],
+    ".claude/skills/maestro-read-results/scripts/read_results.py": []
+  }
+}

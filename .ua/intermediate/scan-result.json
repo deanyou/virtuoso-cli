@@ -1,0 +1,4076 @@
+{
+  "name": "virtuoso-cli",
+  "description": "CLI tool to control Cadence Virtuoso from the command line — three binaries (vcli main CLI, vtui TUI, virtuoso-daemon background bridge relay). Provides session/job management, Maestro flow control, Spectre netlist/PSF parsing, Ocean expression evaluation, SSH-tunneled remote EDA workflows, and a SKILL-over-TCP bridge to a running Virtuoso instance. The companion skill catalog under .claude/skills automates analog IC design workflows (schematic capture, simulation sweeps, optimization, g_m/I_d characterization).",
+  "languages": [
+    "cdslck",
+    "config",
+    "html",
+    "il",
+    "ils",
+    "json",
+    "jsonl",
+    "lib",
+    "markdown",
+    "python",
+    "rust",
+    "shell",
+    "sqlite3",
+    "toml",
+    "unknown",
+    "yaml"
+  ],
+  "frameworks": [
+    "clap",
+    "serde",
+    "tokio (in daemon feature)",
+    "russh (optional native SSH backend)",
+    "tracing",
+    "GitHub Actions"
+  ],
+  "readmeHead": "",
+  "scriptCompleted": true,
+  "contentDigest": "e8ca7d0b922182a59b19909257e86193f285d07e85dc4b0b938da8ca3bc1aa71",
+  "estimatedComplexity": "large",
+  "totalFiles": 486,
+  "filteredByIgnore": 0,
+  "stats": {
+    "filesScanned": 486,
+    "byCategory": {
+      "docs": 180,
+      "code": 244,
+      "script": 31,
+      "config": 21,
+      "markup": 5,
+      "infra": 5
+    },
+    "byLanguage": {
+      "markdown": 180,
+      "python": 88,
+      "shell": 31,
+      "json": 16,
+      "sqlite3": 2,
+      "il": 4,
+      "html": 5,
+      "jsonl": 1,
+      "yaml": 7,
+      "toml": 2,
+      "lib": 1,
+      "ils": 5,
+      "cdslck": 1,
+      "config": 1,
+      "unknown": 2,
+      "rust": 140
+    }
+  },
+  "files": [
+    {
+      "path": ".agents/skills/_shared/README.md",
+      "language": "markdown",
+      "sizeLines": 38,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/_shared/convention.md",
+      "language": "markdown",
+      "sizeLines": 532,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/_shared/scripts/eda_auto_evolve.py",
+      "language": "python",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/_shared/scripts/eda_memory_saver.py",
+      "language": "python",
+      "sizeLines": 193,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/_shared/scripts/signal_matcher.py",
+      "language": "python",
+      "sizeLines": 207,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/_shared/vcli.sh",
+      "language": "shell",
+      "sizeLines": 120,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/amp-copilot/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 340,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/cell-explore/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 60,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/circuit-optimizer/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 294,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/diag/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 98,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/digital-import/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 362,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/gm-over-id/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 228,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/history-evolve/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 196,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/maestro-read-results/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 159,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/maestro-read-results/scripts/read_results.py",
+      "language": "python",
+      "sizeLines": 657,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/maestro/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 60,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/ocean-netlist-regen/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 187,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/porting-skill/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 213,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/batch-netlist-si.md",
+      "language": "markdown",
+      "sizeLines": 84,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/layout-python-api.md",
+      "language": "markdown",
+      "sizeLines": 110,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/layout-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 68,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/maestro-python-api.md",
+      "language": "markdown",
+      "sizeLines": 304,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/maestro-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 623,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/netlist.md",
+      "language": "markdown",
+      "sizeLines": 189,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/schematic-python-api.md",
+      "language": "markdown",
+      "sizeLines": 97,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/schematic-recreation.md",
+      "language": "markdown",
+      "sizeLines": 66,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/schematic-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 64,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/simulation-flow.md",
+      "language": "markdown",
+      "sizeLines": 202,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/testbench-migration.md",
+      "language": "markdown",
+      "sizeLines": 114,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/troubleshooting.md",
+      "language": "markdown",
+      "sizeLines": 173,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/schematic-gen/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 171,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-measure/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 134,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-plot/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 197,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-plot/scripts/plot_sim.py",
+      "language": "python",
+      "sizeLines": 292,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/sim-run/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 84,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-setup/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 81,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-sweep/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 64,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/skill-exec/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 48,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/skill-review/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 94,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/skill-shell-gotchas/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 148,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/spec-driven-circuit-design/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 333,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/spectre-netlist-gotchas/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 251,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/spectre-netlist-template/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 499,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "language": "python",
+      "sizeLines": 593,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/tunnel-connect/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 39,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/veriloga/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 308,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/README.md",
+      "language": "markdown",
+      "sizeLines": 98,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 1105,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "language": "json",
+      "sizeLines": 111258,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "language": "sqlite3",
+      "sizeLines": 84605,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "language": "json",
+      "sizeLines": 257730,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "language": "il",
+      "sizeLines": 56,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "language": "markdown",
+      "sizeLines": 238,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "language": "markdown",
+      "sizeLines": 73,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "language": "html",
+      "sizeLines": 467,
+      "fileCategory": "markup"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "language": "python",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "language": "python",
+      "sizeLines": 157,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "language": "python",
+      "sizeLines": 385,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_click.sh",
+      "language": "shell",
+      "sizeLines": 38,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_drag.sh",
+      "language": "shell",
+      "sizeLines": 42,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_env.sh",
+      "language": "shell",
+      "sizeLines": 18,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_find.sh",
+      "language": "shell",
+      "sizeLines": 19,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "language": "python",
+      "sizeLines": 287,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_scroll.sh",
+      "language": "shell",
+      "sizeLines": 24,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_shot.sh",
+      "language": "shell",
+      "sizeLines": 17,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_state.sh",
+      "language": "shell",
+      "sizeLines": 16,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_type.sh",
+      "language": "shell",
+      "sizeLines": 22,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_wait.sh",
+      "language": "shell",
+      "sizeLines": 16,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "language": "python",
+      "sizeLines": 121,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "language": "python",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "language": "python",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "language": "python",
+      "sizeLines": 94,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/promote.py",
+      "language": "python",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "language": "python",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "language": "python",
+      "sizeLines": 664,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "language": "python",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "language": "python",
+      "sizeLines": 255,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "language": "python",
+      "sizeLines": 215,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/smoke.sh",
+      "language": "shell",
+      "sizeLines": 37,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "language": "python",
+      "sizeLines": 172,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "language": "python",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "language": "python",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "language": "python",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "language": "python",
+      "sizeLines": 103,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "language": "python",
+      "sizeLines": 70,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "language": "python",
+      "sizeLines": 379,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/test_full.json",
+      "language": "json",
+      "sizeLines": 66,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/test_scenario.json",
+      "language": "json",
+      "sizeLines": 58,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/__init__.py",
+      "language": "python",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/fail.json",
+      "language": "json",
+      "sizeLines": 27,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/pass.json",
+      "language": "json",
+      "sizeLines": 41,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "language": "python",
+      "sizeLines": 369,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "language": "python",
+      "sizeLines": 213,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "language": "python",
+      "sizeLines": 485,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "language": "python",
+      "sizeLines": 910,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "language": "python",
+      "sizeLines": 383,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_model.py",
+      "language": "python",
+      "sizeLines": 875,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "language": "python",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "language": "python",
+      "sizeLines": 302,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "language": "python",
+      "sizeLines": 335,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "language": "python",
+      "sizeLines": 1026,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "language": "python",
+      "sizeLines": 451,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "language": "python",
+      "sizeLines": 596,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "language": "python",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 29,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/agents/code-reviewer/agent.md",
+      "language": "markdown",
+      "sizeLines": 67,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/agents/unit-test-agent/agent.md",
+      "language": "markdown",
+      "sizeLines": 51,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/hooks/auto_plot.sh",
+      "language": "shell",
+      "sizeLines": 68,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/hooks/eda_error_capture.sh",
+      "language": "shell",
+      "sizeLines": 50,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/hooks/rust_check.sh",
+      "language": "shell",
+      "sizeLines": 41,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/settings.json",
+      "language": "json",
+      "sizeLines": 28,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/settings.local.json",
+      "language": "json",
+      "sizeLines": 7,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/_shared/README.md",
+      "language": "markdown",
+      "sizeLines": 38,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/_shared/convention.md",
+      "language": "markdown",
+      "sizeLines": 532,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/_shared/scripts/eda_auto_evolve.py",
+      "language": "python",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/_shared/scripts/eda_memory_saver.py",
+      "language": "python",
+      "sizeLines": 193,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/_shared/scripts/signal_matcher.py",
+      "language": "python",
+      "sizeLines": 207,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/_shared/vcli.sh",
+      "language": "shell",
+      "sizeLines": 120,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/amp-copilot/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 341,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/cell-explore/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 62,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/circuit-optimizer/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 467,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/circuit-optimizer/scripts/run_bandgap_sweep.py",
+      "language": "python",
+      "sizeLines": 269,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/diag/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 98,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/digital-import/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 362,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/gm-over-id/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 229,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/history-evolve/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 196,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/maestro-read-results/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 159,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/maestro-read-results/scripts/read_results.py",
+      "language": "python",
+      "sizeLines": 657,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/maestro/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 228,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/ocean-netlist-regen/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 306,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/porting-skill/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 213,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/batch-netlist-si.md",
+      "language": "markdown",
+      "sizeLines": 84,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/layout-python-api.md",
+      "language": "markdown",
+      "sizeLines": 110,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/layout-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 68,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/maestro-python-api.md",
+      "language": "markdown",
+      "sizeLines": 304,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/maestro-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 623,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/netlist.md",
+      "language": "markdown",
+      "sizeLines": 189,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/schematic-python-api.md",
+      "language": "markdown",
+      "sizeLines": 97,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/schematic-recreation.md",
+      "language": "markdown",
+      "sizeLines": 66,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/schematic-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 64,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/simulation-flow.md",
+      "language": "markdown",
+      "sizeLines": 202,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/testbench-migration.md",
+      "language": "markdown",
+      "sizeLines": 114,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/troubleshooting.md",
+      "language": "markdown",
+      "sizeLines": 173,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/schematic-gen/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 194,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-measure/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 135,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-plot/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 199,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-plot/scripts/plot_sim.py",
+      "language": "python",
+      "sizeLines": 292,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/sim-run/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 287,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-setup/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 82,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/sim-sweep/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 65,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/skill-exec/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 152,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/skill-review/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 94,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/skill-shell-gotchas/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 268,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/spec-driven-circuit-design/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 334,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/spectre-netlist-gotchas/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 331,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/spectre-netlist-gotchas/memory/error_log.jsonl",
+      "language": "jsonl",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/spectre-netlist-template/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 499,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "language": "python",
+      "sizeLines": 593,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/tunnel-connect/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 151,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/veriloga/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 206,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/veriloga/reference.md",
+      "language": "markdown",
+      "sizeLines": 450,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/README.md",
+      "language": "markdown",
+      "sizeLines": 98,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 1105,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "language": "json",
+      "sizeLines": 111258,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "language": "sqlite3",
+      "sizeLines": 84605,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "language": "json",
+      "sizeLines": 257730,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "language": "il",
+      "sizeLines": 56,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "language": "markdown",
+      "sizeLines": 238,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "language": "markdown",
+      "sizeLines": 73,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "language": "html",
+      "sizeLines": 467,
+      "fileCategory": "markup"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "language": "python",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "language": "python",
+      "sizeLines": 157,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "language": "python",
+      "sizeLines": 385,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_click.sh",
+      "language": "shell",
+      "sizeLines": 38,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_drag.sh",
+      "language": "shell",
+      "sizeLines": 42,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_env.sh",
+      "language": "shell",
+      "sizeLines": 18,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_find.sh",
+      "language": "shell",
+      "sizeLines": 19,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "language": "python",
+      "sizeLines": 287,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_scroll.sh",
+      "language": "shell",
+      "sizeLines": 24,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_shot.sh",
+      "language": "shell",
+      "sizeLines": 17,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_state.sh",
+      "language": "shell",
+      "sizeLines": 16,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_type.sh",
+      "language": "shell",
+      "sizeLines": 22,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_wait.sh",
+      "language": "shell",
+      "sizeLines": 16,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "language": "python",
+      "sizeLines": 121,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "language": "python",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "language": "python",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "language": "python",
+      "sizeLines": 94,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/promote.py",
+      "language": "python",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "language": "python",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "language": "python",
+      "sizeLines": 664,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "language": "python",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "language": "python",
+      "sizeLines": 255,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "language": "python",
+      "sizeLines": 215,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/smoke.sh",
+      "language": "shell",
+      "sizeLines": 37,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "language": "python",
+      "sizeLines": 172,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "language": "python",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "language": "python",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "language": "python",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "language": "python",
+      "sizeLines": 103,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "language": "python",
+      "sizeLines": 70,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "language": "python",
+      "sizeLines": 379,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/test_full.json",
+      "language": "json",
+      "sizeLines": 66,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/test_scenario.json",
+      "language": "json",
+      "sizeLines": 58,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/__init__.py",
+      "language": "python",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/fail.json",
+      "language": "json",
+      "sizeLines": 27,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/pass.json",
+      "language": "json",
+      "sizeLines": 41,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "language": "python",
+      "sizeLines": 369,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "language": "python",
+      "sizeLines": 213,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "language": "python",
+      "sizeLines": 485,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "language": "python",
+      "sizeLines": 910,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "language": "python",
+      "sizeLines": 383,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "language": "python",
+      "sizeLines": 875,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "language": "python",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "language": "python",
+      "sizeLines": 302,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "language": "python",
+      "sizeLines": 335,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "language": "python",
+      "sizeLines": 1026,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "language": "python",
+      "sizeLines": 451,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "language": "python",
+      "sizeLines": 596,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "language": "python",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/workflows/ade-regression.md",
+      "language": "markdown",
+      "sizeLines": 39,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/workflows/analog-design-flow.md",
+      "language": "markdown",
+      "sizeLines": 17,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".codex/hooks.json",
+      "language": "json",
+      "sizeLines": 28,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".codex/hooks/auto_plot.sh",
+      "language": "shell",
+      "sizeLines": 68,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".codex/hooks/eda_error_capture.sh",
+      "language": "shell",
+      "sizeLines": 50,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".codex/hooks/rust_check.sh",
+      "language": "shell",
+      "sizeLines": 41,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "language": "yaml",
+      "sizeLines": 24,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".github/scripts/run-skill-tests.sh",
+      "language": "shell",
+      "sizeLines": 75,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "language": "yaml",
+      "sizeLines": 59,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/integration.yml",
+      "language": "yaml",
+      "sizeLines": 34,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "language": "yaml",
+      "sizeLines": 159,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/security-audit.yml",
+      "language": "yaml",
+      "sizeLines": 50,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/skill-tests.yml",
+      "language": "yaml",
+      "sizeLines": 39,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-11-session-vs-profile.md",
+      "language": "markdown",
+      "sizeLines": 34,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md",
+      "language": "markdown",
+      "sizeLines": 54,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md",
+      "language": "markdown",
+      "sizeLines": 77,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "language": "markdown",
+      "sizeLines": 77,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md",
+      "language": "markdown",
+      "sizeLines": 69,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-20-defer-version-branches-until-api-diverges.md",
+      "language": "markdown",
+      "sizeLines": 61,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "language": "markdown",
+      "sizeLines": 71,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-05-07-async-deferred.md",
+      "language": "markdown",
+      "sizeLines": 47,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-05-07-broadcast-vs-subagent.md",
+      "language": "markdown",
+      "sizeLines": 53,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/async-job-lazy-refresh/content.md",
+      "language": "markdown",
+      "sizeLines": 67,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-ic23-ade-window-title/content.md",
+      "language": "markdown",
+      "sizeLines": 59,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-ic23-dbopencellviewbytype/content.md",
+      "language": "markdown",
+      "sizeLines": 117,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-ic23-schcreateinst/content.md",
+      "language": "markdown",
+      "sizeLines": 96,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-osshnl-109/content.md",
+      "language": "markdown",
+      "sizeLines": 90,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-virtuoso-library-not-registered/content.md",
+      "language": "markdown",
+      "sizeLines": 74,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/claude-code-skill-variable-expansion/content.md",
+      "language": "markdown",
+      "sizeLines": 88,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ic23-design-variable-namespaces/content.md",
+      "language": "markdown",
+      "sizeLines": 102,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-ensure-view-bootstrap/content.md",
+      "language": "markdown",
+      "sizeLines": 56,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "language": "markdown",
+      "sizeLines": 130,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-session-types/content.md",
+      "language": "markdown",
+      "sizeLines": 48,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-simulator-mode-api/content.md",
+      "language": "markdown",
+      "sizeLines": 72,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ocean-createnetlist-prerequisites/content.md",
+      "language": "markdown",
+      "sizeLines": 134,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ocean-design-cell-switch/content.md",
+      "language": "markdown",
+      "sizeLines": 101,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ramic-bridge-callback-file-ipc/content.md",
+      "language": "markdown",
+      "sizeLines": 112,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ratatui-tui-architecture/content.md",
+      "language": "markdown",
+      "sizeLines": 75,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/rust-bin-vs-lib-crate-attrs/content.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/skill-instterms-cons-reversal/content.md",
+      "language": "markdown",
+      "sizeLines": 83,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/skill-sprintf-float-coords/content.md",
+      "language": "markdown",
+      "sizeLines": 32,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/smic-mosfet-terminal-order/content.md",
+      "language": "markdown",
+      "sizeLines": 86,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/smic-pdk-transistor-w-skill/content.md",
+      "language": "markdown",
+      "sizeLines": 110,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/smic-rhrpo-netlist-terminals/content.md",
+      "language": "markdown",
+      "sizeLines": 106,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-ade-model-path/content.md",
+      "language": "markdown",
+      "sizeLines": 93,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-bandgap-dc-convergence/content.md",
+      "language": "markdown",
+      "sizeLines": 104,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-cmi-2116-ade-netlist/content.md",
+      "language": "markdown",
+      "sizeLines": 119,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-vacomp-2259-bound-step/content.md",
+      "language": "markdown",
+      "sizeLines": 68,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-vsource-ac-parameter/content.md",
+      "language": "markdown",
+      "sizeLines": 77,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/taste-review/content.md",
+      "language": "markdown",
+      "sizeLines": 198,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/vcli-bridge-cli-name/content.md",
+      "language": "markdown",
+      "sizeLines": 72,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/vcli-multi-session-concurrency/content.md",
+      "language": "markdown",
+      "sizeLines": 76,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/vcli-session-history-layout/content.md",
+      "language": "markdown",
+      "sizeLines": 82,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/virtuoso-daemon-install-feature-flag/content.md",
+      "language": "markdown",
+      "sizeLines": 76,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/ci-must-match-target-toolchain.md",
+      "language": "markdown",
+      "sizeLines": 26,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/reduce-complexity-before-adding-branches.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/skill-nil-is-not-an-error.md",
+      "language": "markdown",
+      "sizeLines": 66,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/maxims/test-with-ci-toolchain-before-push.md",
+      "language": "markdown",
+      "sizeLines": 27,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/pipelines/run-when-committing.md",
+      "language": "markdown",
+      "sizeLines": 119,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/pipelines/run-when-reviewing-code.md",
+      "language": "markdown",
+      "sizeLines": 157,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/pipelines/run-when-syncing-to-main.md",
+      "language": "markdown",
+      "sizeLines": 128,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/signals/latest.json",
+      "language": "json",
+      "sizeLines": 19,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".pensieve/state.md",
+      "language": "markdown",
+      "sizeLines": 14,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-08-29.md",
+      "language": "markdown",
+      "sizeLines": 408,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-08-30.md",
+      "language": "markdown",
+      "sizeLines": 423,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-08-31.md",
+      "language": "markdown",
+      "sizeLines": 270,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-01.md",
+      "language": "markdown",
+      "sizeLines": 378,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-02.md",
+      "language": "markdown",
+      "sizeLines": 480,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-03.md",
+      "language": "markdown",
+      "sizeLines": 302,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-04.md",
+      "language": "markdown",
+      "sizeLines": 120,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-05.md",
+      "language": "markdown",
+      "sizeLines": 132,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-07.md",
+      "language": "markdown",
+      "sizeLines": 260,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-08.md",
+      "language": "markdown",
+      "sizeLines": 105,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-15.md",
+      "language": "markdown",
+      "sizeLines": 68,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/MEMORY.md",
+      "language": "markdown",
+      "sizeLines": 86,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/skills/pr-review-hardening/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 97,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/skills/pr-review-hardening/references/workflow.md",
+      "language": "markdown",
+      "sizeLines": 150,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "sizeLines": 167,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "language": "markdown",
+      "sizeLines": 1022,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 145,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "Cargo.toml",
+      "language": "toml",
+      "sizeLines": 83,
+      "fileCategory": "config"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "sizeLines": 1109,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "audit.toml",
+      "language": "toml",
+      "sizeLines": 34,
+      "fileCategory": "config"
+    },
+    {
+      "path": "cds.lib",
+      "language": "lib",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "docs/aarch64-cross-compile.md",
+      "language": "markdown",
+      "sizeLines": 113,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/architecture-review-20260713-virtuoso-bridge-lite.html",
+      "language": "html",
+      "sizeLines": 117,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "docs/p0a-config-callchain-inventory.md",
+      "language": "markdown",
+      "sizeLines": 173,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/p0a-notes-env-evidence.md",
+      "language": "markdown",
+      "sizeLines": 70,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/2026-04-04-sim-automation-design.md",
+      "language": "markdown",
+      "sizeLines": 203,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/2026-04-05-bayesian-optimization-design.md",
+      "language": "markdown",
+      "sizeLines": 132,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/2026-04-06-sim-run-robustness.md",
+      "language": "markdown",
+      "sizeLines": 279,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/2026-06-13-borrow-from-virtuoso-bridge-lite.md",
+      "language": "markdown",
+      "sizeLines": 146,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/dean-main-design-20260417-192426.md",
+      "language": "markdown",
+      "sizeLines": 144,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/dean-main-eng-review-test-plan-20260417-223207.md",
+      "language": "markdown",
+      "sizeLines": 154,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/plans/virtuoso-cli-enhancement-proposal.md",
+      "language": "markdown",
+      "sizeLines": 320,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-13-skill-runtime.md",
+      "language": "markdown",
+      "sizeLines": 398,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-29-upstream-hardening.md",
+      "language": "markdown",
+      "sizeLines": 143,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-01-virtuoso-gui-live-executor.md",
+      "language": "markdown",
+      "sizeLines": 210,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-01-virtuoso-gui-runner-foundation.md",
+      "language": "markdown",
+      "sizeLines": 169,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "language": "markdown",
+      "sizeLines": 172,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-29-native-remote-transport-design.md",
+      "language": "markdown",
+      "sizeLines": 617,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-29-upstream-hardening-design.md",
+      "language": "markdown",
+      "sizeLines": 60,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md",
+      "language": "markdown",
+      "sizeLines": 111,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/vcli-gui-debug-retrospective.html",
+      "language": "html",
+      "sizeLines": 363,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "docs/virtuoso-gui-debug-architecture.html",
+      "language": "html",
+      "sizeLines": 758,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "examples/pasc_callbacks.ils",
+      "language": "ils",
+      "sizeLines": 473,
+      "fileCategory": "code"
+    },
+    {
+      "path": "examples/vttype_update.ils",
+      "language": "ils",
+      "sizeLines": 365,
+      "fileCategory": "code"
+    },
+    {
+      "path": "install.sh",
+      "language": "shell",
+      "sizeLines": 133,
+      "fileCategory": "script"
+    },
+    {
+      "path": "libManager.log.cdslck",
+      "language": "cdslck",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/.env_template",
+      "language": "config",
+      "sizeLines": 16,
+      "fileCategory": "config"
+    },
+    {
+      "path": "resources/daemons/ramic_bridge_daemon_27.py",
+      "language": "python",
+      "sizeLines": 263,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/daemons/ramic_bridge_daemon_3.py",
+      "language": "python",
+      "sizeLines": 176,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/daemons/virtuoso-daemon-aarch64",
+      "language": "unknown",
+      "sizeLines": 2536,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/daemons/virtuoso-daemon-x86_64",
+      "language": "unknown",
+      "sizeLines": 920,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/maestro_snapshot_filter.yaml",
+      "language": "yaml",
+      "sizeLines": 60,
+      "fileCategory": "config"
+    },
+    {
+      "path": "resources/ramic_bridge.il",
+      "language": "il",
+      "sizeLines": 528,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/rb_connect_terminal.il",
+      "language": "il",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/x11_dismiss_dialog.py",
+      "language": "python",
+      "sizeLines": 826,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/load_test.ils",
+      "language": "ils",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/perf_benchmark.ils",
+      "language": "ils",
+      "sizeLines": 274,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/perf_test.ils",
+      "language": "ils",
+      "sizeLines": 104,
+      "fileCategory": "code"
+    },
+    {
+      "path": "setup-virtuoso-tmux.sh",
+      "language": "shell",
+      "sizeLines": 53,
+      "fileCategory": "script"
+    },
+    {
+      "path": "src/async_runtime.rs",
+      "language": "rust",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/auth.rs",
+      "language": "rust",
+      "sizeLines": 223,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/capability/mod.rs",
+      "language": "rust",
+      "sizeLines": 452,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/capability/plugin.rs",
+      "language": "rust",
+      "sizeLines": 573,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/bridge.rs",
+      "language": "rust",
+      "sizeLines": 1600,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/editor.rs",
+      "language": "rust",
+      "sizeLines": 125,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/layout_ops.rs",
+      "language": "rust",
+      "sizeLines": 230,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/library_ops.rs",
+      "language": "rust",
+      "sizeLines": 20,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/maestro_ops.rs",
+      "language": "rust",
+      "sizeLines": 1159,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/mod.rs",
+      "language": "rust",
+      "sizeLines": 12,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/schematic_ops.rs",
+      "language": "rust",
+      "sizeLines": 432,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/skill_loading.rs",
+      "language": "rust",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/skill_runtime.rs",
+      "language": "rust",
+      "sizeLines": 149,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/skill_sexp.rs",
+      "language": "rust",
+      "sizeLines": 272,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/symbol_ops.rs",
+      "language": "rust",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/whitelist.rs",
+      "language": "rust",
+      "sizeLines": 244,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/window_ops.rs",
+      "language": "rust",
+      "sizeLines": 444,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/command_log.rs",
+      "language": "rust",
+      "sizeLines": 27,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/cell.rs",
+      "language": "rust",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/config.rs",
+      "language": "rust",
+      "sizeLines": 207,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/design.rs",
+      "language": "rust",
+      "sizeLines": 183,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/diag.rs",
+      "language": "rust",
+      "sizeLines": 356,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/init.rs",
+      "language": "rust",
+      "sizeLines": 92,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/library.rs",
+      "language": "rust",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/maestro.rs",
+      "language": "rust",
+      "sizeLines": 2987,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/mod.rs",
+      "language": "rust",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/process.rs",
+      "language": "rust",
+      "sizeLines": 358,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/schema.rs",
+      "language": "rust",
+      "sizeLines": 184,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/schematic.rs",
+      "language": "rust",
+      "sizeLines": 548,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/session.rs",
+      "language": "rust",
+      "sizeLines": 2067,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/sim.rs",
+      "language": "rust",
+      "sizeLines": 984,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/skill.rs",
+      "language": "rust",
+      "sizeLines": 516,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/symbol.rs",
+      "language": "rust",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/transaction.rs",
+      "language": "rust",
+      "sizeLines": 56,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/transport_daemon.rs",
+      "language": "rust",
+      "sizeLines": 182,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/tunnel.rs",
+      "language": "rust",
+      "sizeLines": 1191,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/window.rs",
+      "language": "rust",
+      "sizeLines": 606,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/config.rs",
+      "language": "rust",
+      "sizeLines": 1851,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/config_file.rs",
+      "language": "rust",
+      "sizeLines": 574,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/context.rs",
+      "language": "rust",
+      "sizeLines": 427,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/daemon/main.rs",
+      "language": "rust",
+      "sizeLines": 159,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/error.rs",
+      "language": "rust",
+      "sizeLines": 266,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/exit_codes.rs",
+      "language": "rust",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/history.rs",
+      "language": "rust",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib.rs",
+      "language": "rust",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/main.rs",
+      "language": "rust",
+      "sizeLines": 2945,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/mcp/mod.rs",
+      "language": "rust",
+      "sizeLines": 203,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/mcp/server.rs",
+      "language": "rust",
+      "sizeLines": 138,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/mcp/tools.rs",
+      "language": "rust",
+      "sizeLines": 618,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/models.rs",
+      "language": "rust",
+      "sizeLines": 636,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ocean/corner.rs",
+      "language": "rust",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ocean/mod.rs",
+      "language": "rust",
+      "sizeLines": 319,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/output.rs",
+      "language": "rust",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/plugins/mod.rs",
+      "language": "rust",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/plugins/registry.rs",
+      "language": "rust",
+      "sizeLines": 157,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/plugins/schema.rs",
+      "language": "rust",
+      "sizeLines": 550,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/profile.rs",
+      "language": "rust",
+      "sizeLines": 587,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/rpc/dispatcher.rs",
+      "language": "rust",
+      "sizeLines": 1443,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/rpc/mod.rs",
+      "language": "rust",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/rpc/schema.rs",
+      "language": "rust",
+      "sizeLines": 1216,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/runtime_paths.rs",
+      "language": "rust",
+      "sizeLines": 762,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/session/heartbeat.rs",
+      "language": "rust",
+      "sizeLines": 135,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/session/mod.rs",
+      "language": "rust",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/skill_finder/mod.rs",
+      "language": "rust",
+      "sizeLines": 787,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/skill_finder/parser.rs",
+      "language": "rust",
+      "sizeLines": 411,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/spectre/jobs.rs",
+      "language": "rust",
+      "sizeLines": 240,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/spectre/maestro_csv.rs",
+      "language": "rust",
+      "sizeLines": 408,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/spectre/mod.rs",
+      "language": "rust",
+      "sizeLines": 4,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/spectre/parsers.rs",
+      "language": "rust",
+      "sizeLines": 1769,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/spectre/runner.rs",
+      "language": "rust",
+      "sizeLines": 2153,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/streaming/job_progress.rs",
+      "language": "rust",
+      "sizeLines": 229,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/streaming/mod.rs",
+      "language": "rust",
+      "sizeLines": 207,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/sys/linux_rename.rs",
+      "language": "rust",
+      "sizeLines": 191,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/sys/mod.rs",
+      "language": "rust",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/test_env.rs",
+      "language": "rust",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tests.rs",
+      "language": "rust",
+      "sizeLines": 2376,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transaction/diff.rs",
+      "language": "rust",
+      "sizeLines": 232,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transaction/mod.rs",
+      "language": "rust",
+      "sizeLines": 144,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transaction/snapshot.rs",
+      "language": "rust",
+      "sizeLines": 136,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/auth.rs",
+      "language": "rust",
+      "sizeLines": 145,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/backend.rs",
+      "language": "rust",
+      "sizeLines": 407,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/contract.rs",
+      "language": "rust",
+      "sizeLines": 882,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/daemon_lifecycle.rs",
+      "language": "rust",
+      "sizeLines": 616,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/host_keys.rs",
+      "language": "rust",
+      "sizeLines": 561,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/identity.rs",
+      "language": "rust",
+      "sizeLines": 623,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ipc/daemon.rs",
+      "language": "rust",
+      "sizeLines": 864,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ipc/framing.rs",
+      "language": "rust",
+      "sizeLines": 334,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ipc/messages.rs",
+      "language": "rust",
+      "sizeLines": 652,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ipc/mod.rs",
+      "language": "rust",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ipc/server.rs",
+      "language": "rust",
+      "sizeLines": 1459,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/lifecycle.rs",
+      "language": "rust",
+      "sizeLines": 780,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/mod.rs",
+      "language": "rust",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/native.rs",
+      "language": "rust",
+      "sizeLines": 2256,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/openssh.rs",
+      "language": "rust",
+      "sizeLines": 266,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/pool.rs",
+      "language": "rust",
+      "sizeLines": 929,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/scheduler.rs",
+      "language": "rust",
+      "sizeLines": 1155,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/session_discovery.rs",
+      "language": "rust",
+      "sizeLines": 303,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ssh.rs",
+      "language": "rust",
+      "sizeLines": 908,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/testutil.rs",
+      "language": "rust",
+      "sizeLines": 248,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/tunnel.rs",
+      "language": "rust",
+      "sizeLines": 1768,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/x11.rs",
+      "language": "rust",
+      "sizeLines": 5607,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/action.rs",
+      "language": "rust",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/data.rs",
+      "language": "rust",
+      "sizeLines": 133,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/event.rs",
+      "language": "rust",
+      "sizeLines": 220,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/mod.rs",
+      "language": "rust",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/overlay.rs",
+      "language": "rust",
+      "sizeLines": 141,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/state.rs",
+      "language": "rust",
+      "sizeLines": 164,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/mod.rs",
+      "language": "rust",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/theme.rs",
+      "language": "rust",
+      "sizeLines": 57,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/chrome.rs",
+      "language": "rust",
+      "sizeLines": 146,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/config.rs",
+      "language": "rust",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/content.rs",
+      "language": "rust",
+      "sizeLines": 39,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/footer.rs",
+      "language": "rust",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/jobs.rs",
+      "language": "rust",
+      "sizeLines": 170,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/mod.rs",
+      "language": "rust",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/confirm.rs",
+      "language": "rust",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/form.rs",
+      "language": "rust",
+      "sizeLines": 83,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/help.rs",
+      "language": "rust",
+      "sizeLines": 45,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/layout.rs",
+      "language": "rust",
+      "sizeLines": 170,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/log.rs",
+      "language": "rust",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/mod.rs",
+      "language": "rust",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/render.rs",
+      "language": "rust",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/sessions.rs",
+      "language": "rust",
+      "sizeLines": 131,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/shared.rs",
+      "language": "rust",
+      "sizeLines": 110,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/version.rs",
+      "language": "rust",
+      "sizeLines": 114,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/vtui.rs",
+      "language": "rust",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/config.rs",
+      "language": "rust",
+      "sizeLines": 291,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/config_check.rs",
+      "language": "rust",
+      "sizeLines": 253,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/config_check_cli.rs",
+      "language": "rust",
+      "sizeLines": 194,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/daemon_user_guard.rs",
+      "language": "rust",
+      "sizeLines": 784,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/docs/__init__.py",
+      "language": "python",
+      "sizeLines": 0,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/docs/test_x11_dismiss_dialog.py",
+      "language": "python",
+      "sizeLines": 243,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/error_handling.rs",
+      "language": "rust",
+      "sizeLines": 239,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/linux_rename_compat.rs",
+      "language": "rust",
+      "sizeLines": 138,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/maestro_csv.rs",
+      "language": "rust",
+      "sizeLines": 191,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/ocean.rs",
+      "language": "rust",
+      "sizeLines": 156,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/skill_escape.rs",
+      "language": "rust",
+      "sizeLines": 74,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/skill_finder_include_desc.rs",
+      "language": "rust",
+      "sizeLines": 180,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/skill_load.rs",
+      "language": "rust",
+      "sizeLines": 231,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/spectre.rs",
+      "language": "rust",
+      "sizeLines": 221,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/tunnel_hostname_check.rs",
+      "language": "rust",
+      "sizeLines": 139,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tests/tunnel_profile.rs",
+      "language": "rust",
+      "sizeLines": 295,
+      "fileCategory": "code"
+    }
+  ],
+  "importMap": {
+    ".agents/skills/_shared/README.md": [],
+    ".agents/skills/_shared/convention.md": [],
+    ".agents/skills/_shared/scripts/eda_auto_evolve.py": [],
+    ".agents/skills/_shared/scripts/eda_memory_saver.py": [],
+    ".agents/skills/_shared/scripts/signal_matcher.py": [],
+    ".agents/skills/_shared/vcli.sh": [],
+    ".agents/skills/amp-copilot/SKILL.md": [],
+    ".agents/skills/cell-explore/SKILL.md": [],
+    ".agents/skills/circuit-optimizer/SKILL.md": [],
+    ".agents/skills/diag/SKILL.md": [],
+    ".agents/skills/digital-import/SKILL.md": [],
+    ".agents/skills/gm-over-id/SKILL.md": [],
+    ".agents/skills/history-evolve/SKILL.md": [],
+    ".agents/skills/maestro-read-results/SKILL.md": [],
+    ".agents/skills/maestro-read-results/scripts/read_results.py": [],
+    ".agents/skills/maestro/SKILL.md": [],
+    ".agents/skills/ocean-netlist-regen/SKILL.md": [],
+    ".agents/skills/porting-skill/SKILL.md": [],
+    ".agents/skills/references/batch-netlist-si.md": [],
+    ".agents/skills/references/layout-python-api.md": [],
+    ".agents/skills/references/layout-skill-api.md": [],
+    ".agents/skills/references/maestro-python-api.md": [],
+    ".agents/skills/references/maestro-skill-api.md": [],
+    ".agents/skills/references/netlist.md": [],
+    ".agents/skills/references/schematic-python-api.md": [],
+    ".agents/skills/references/schematic-recreation.md": [],
+    ".agents/skills/references/schematic-skill-api.md": [],
+    ".agents/skills/references/simulation-flow.md": [],
+    ".agents/skills/references/testbench-migration.md": [],
+    ".agents/skills/references/troubleshooting.md": [],
+    ".agents/skills/schematic-gen/SKILL.md": [],
+    ".agents/skills/sim-measure/SKILL.md": [],
+    ".agents/skills/sim-plot/SKILL.md": [],
+    ".agents/skills/sim-plot/scripts/plot_sim.py": [],
+    ".agents/skills/sim-run/SKILL.md": [],
+    ".agents/skills/sim-setup/SKILL.md": [],
+    ".agents/skills/sim-sweep/SKILL.md": [],
+    ".agents/skills/skill-exec/SKILL.md": [],
+    ".agents/skills/skill-review/SKILL.md": [],
+    ".agents/skills/skill-shell-gotchas/SKILL.md": [],
+    ".agents/skills/spec-driven-circuit-design/SKILL.md": [],
+    ".agents/skills/spectre-netlist-gotchas/SKILL.md": [],
+    ".agents/skills/spectre-netlist-template/SKILL.md": [],
+    ".agents/skills/spectre-netlist-template/scripts/inject_stimulus.py": [],
+    ".agents/skills/tunnel-connect/SKILL.md": [],
+    ".agents/skills/veriloga/SKILL.md": [],
+    ".agents/skills/virtuoso-gui-debug/README.md": [],
+    ".agents/skills/virtuoso-gui-debug/SKILL.md": [],
+    ".agents/skills/virtuoso-gui-debug/data/rsi_share.json": [],
+    ".agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3": [],
+    ".agents/skills/virtuoso-gui-debug/data/skill_db_backup.json": [],
+    ".agents/skills/virtuoso-gui-debug/data/vcli_snippets.il": [],
+    ".agents/skills/virtuoso-gui-debug/references/scenario-schema.md": [],
+    ".agents/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md": [],
+    ".agents/skills/virtuoso-gui-debug/report/rsi_report.html": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/add_fts.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py": [
+      ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/scripts/generate_report.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_click.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_drag.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_env.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_find.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_runner.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_scroll.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_shot.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_state.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_type.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_wait.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/import_fnd.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/init_snippets.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/init_synonyms.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py": [
+      ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/scripts/promote.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/record_progress.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/rsi.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/rsi_export.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/rsi_query.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/smoke.sh": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/snippet_library.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py": [
+      ".agents/skills/virtuoso-gui-debug/scripts/rsi_query.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/scripts/test_stability.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/validate_ic251.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/verify_db.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/verify_ic251.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/xdotool_cli.py": [],
+    ".agents/skills/virtuoso-gui-debug/test_full.json": [],
+    ".agents/skills/virtuoso-gui-debug/test_scenario.json": [],
+    ".agents/skills/virtuoso-gui-debug/tests/__init__.py": [],
+    ".agents/skills/virtuoso-gui-debug/tests/fail.json": [],
+    ".agents/skills/virtuoso-gui-debug/tests/pass.json": [],
+    ".agents/skills/virtuoso-gui-debug/tests/test_cli.py": [],
+    ".agents/skills/virtuoso-gui-debug/tests/test_command_runner.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/tests/test_engine.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/tests/test_live_executor.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/tests/test_local_executor.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/tests/test_model.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/__init__.py": [],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py": [],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/trace.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/live_executor.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/local_executor.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py": [],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/trace.py": [],
+    ".claude/CLAUDE.md": [],
+    ".claude/agents/code-reviewer/agent.md": [],
+    ".claude/agents/unit-test-agent/agent.md": [],
+    ".claude/hooks/auto_plot.sh": [],
+    ".claude/hooks/eda_error_capture.sh": [],
+    ".claude/hooks/rust_check.sh": [],
+    ".claude/settings.json": [],
+    ".claude/settings.local.json": [],
+    ".claude/skills/_shared/README.md": [],
+    ".claude/skills/_shared/convention.md": [],
+    ".claude/skills/_shared/scripts/eda_auto_evolve.py": [],
+    ".claude/skills/_shared/scripts/eda_memory_saver.py": [],
+    ".claude/skills/_shared/scripts/signal_matcher.py": [],
+    ".claude/skills/_shared/vcli.sh": [],
+    ".claude/skills/amp-copilot/SKILL.md": [],
+    ".claude/skills/cell-explore/SKILL.md": [],
+    ".claude/skills/circuit-optimizer/SKILL.md": [],
+    ".claude/skills/circuit-optimizer/scripts/run_bandgap_sweep.py": [],
+    ".claude/skills/diag/SKILL.md": [],
+    ".claude/skills/digital-import/SKILL.md": [],
+    ".claude/skills/gm-over-id/SKILL.md": [],
+    ".claude/skills/history-evolve/SKILL.md": [],
+    ".claude/skills/maestro-read-results/SKILL.md": [],
+    ".claude/skills/maestro-read-results/scripts/read_results.py": [],
+    ".claude/skills/maestro/SKILL.md": [],
+    ".claude/skills/ocean-netlist-regen/SKILL.md": [],
+    ".claude/skills/porting-skill/SKILL.md": [],
+    ".claude/skills/references/batch-netlist-si.md": [],
+    ".claude/skills/references/layout-python-api.md": [],
+    ".claude/skills/references/layout-skill-api.md": [],
+    ".claude/skills/references/maestro-python-api.md": [],
+    ".claude/skills/references/maestro-skill-api.md": [],
+    ".claude/skills/references/netlist.md": [],
+    ".claude/skills/references/schematic-python-api.md": [],
+    ".claude/skills/references/schematic-recreation.md": [],
+    ".claude/skills/references/schematic-skill-api.md": [],
+    ".claude/skills/references/simulation-flow.md": [],
+    ".claude/skills/references/testbench-migration.md": [],
+    ".claude/skills/references/troubleshooting.md": [],
+    ".claude/skills/schematic-gen/SKILL.md": [],
+    ".claude/skills/sim-measure/SKILL.md": [],
+    ".claude/skills/sim-plot/SKILL.md": [],
+    ".claude/skills/sim-plot/scripts/plot_sim.py": [],
+    ".claude/skills/sim-run/SKILL.md": [],
+    ".claude/skills/sim-setup/SKILL.md": [],
+    ".claude/skills/sim-sweep/SKILL.md": [],
+    ".claude/skills/skill-exec/SKILL.md": [],
+    ".claude/skills/skill-review/SKILL.md": [],
+    ".claude/skills/skill-shell-gotchas/SKILL.md": [],
+    ".claude/skills/spec-driven-circuit-design/SKILL.md": [],
+    ".claude/skills/spectre-netlist-gotchas/SKILL.md": [],
+    ".claude/skills/spectre-netlist-gotchas/memory/error_log.jsonl": [],
+    ".claude/skills/spectre-netlist-template/SKILL.md": [],
+    ".claude/skills/spectre-netlist-template/scripts/inject_stimulus.py": [],
+    ".claude/skills/tunnel-connect/SKILL.md": [],
+    ".claude/skills/veriloga/SKILL.md": [],
+    ".claude/skills/veriloga/reference.md": [],
+    ".claude/skills/virtuoso-gui-debug/README.md": [],
+    ".claude/skills/virtuoso-gui-debug/SKILL.md": [],
+    ".claude/skills/virtuoso-gui-debug/data/rsi_share.json": [],
+    ".claude/skills/virtuoso-gui-debug/data/skill_db.sqlite3": [],
+    ".claude/skills/virtuoso-gui-debug/data/skill_db_backup.json": [],
+    ".claude/skills/virtuoso-gui-debug/data/vcli_snippets.il": [],
+    ".claude/skills/virtuoso-gui-debug/references/scenario-schema.md": [],
+    ".claude/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md": [],
+    ".claude/skills/virtuoso-gui-debug/report/rsi_report.html": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/add_fts.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py": [
+      ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/scripts/generate_report.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_click.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_drag.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_env.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_find.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_runner.py": [
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_scroll.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_shot.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_state.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_type.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_wait.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/import_fnd.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/init_snippets.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/init_synonyms.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py": [
+      ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/scripts/promote.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/record_progress.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/rsi.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/rsi_export.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/rsi_query.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/smoke.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/snippet_library.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py": [
+      ".claude/skills/virtuoso-gui-debug/scripts/rsi_query.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/scripts/test_stability.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/validate_ic251.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/verify_db.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/verify_ic251.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/xdotool_cli.py": [],
+    ".claude/skills/virtuoso-gui-debug/test_full.json": [],
+    ".claude/skills/virtuoso-gui-debug/test_scenario.json": [],
+    ".claude/skills/virtuoso-gui-debug/tests/__init__.py": [],
+    ".claude/skills/virtuoso-gui-debug/tests/fail.json": [],
+    ".claude/skills/virtuoso-gui-debug/tests/pass.json": [],
+    ".claude/skills/virtuoso-gui-debug/tests/test_cli.py": [],
+    ".claude/skills/virtuoso-gui-debug/tests/test_command_runner.py": [
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/tests/test_engine.py": [
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py": [
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/tests/test_local_executor.py": [
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/tests/test_model.py": [
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/vgui_runner/__init__.py": [],
+    ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py": [],
+    ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py": [
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/trace.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py": [
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py": [
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py": [],
+    ".claude/skills/virtuoso-gui-debug/vgui_runner/trace.py": [],
+    ".claude/workflows/ade-regression.md": [],
+    ".claude/workflows/analog-design-flow.md": [],
+    ".codex/hooks.json": [],
+    ".codex/hooks/auto_plot.sh": [],
+    ".codex/hooks/eda_error_capture.sh": [],
+    ".codex/hooks/rust_check.sh": [],
+    ".github/dependabot.yml": [],
+    ".github/scripts/run-skill-tests.sh": [],
+    ".github/workflows/ci.yml": [],
+    ".github/workflows/integration.yml": [],
+    ".github/workflows/release.yml": [],
+    ".github/workflows/security-audit.yml": [],
+    ".github/workflows/skill-tests.yml": [],
+    ".pensieve/decisions/2026-04-11-session-vs-profile.md": [],
+    ".pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md": [],
+    ".pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md": [],
+    ".pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md": [],
+    ".pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md": [],
+    ".pensieve/decisions/2026-04-20-defer-version-branches-until-api-diverges.md": [],
+    ".pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md": [],
+    ".pensieve/decisions/2026-05-07-async-deferred.md": [],
+    ".pensieve/decisions/2026-05-07-broadcast-vs-subagent.md": [],
+    ".pensieve/knowledge/async-job-lazy-refresh/content.md": [],
+    ".pensieve/knowledge/cadence-ic23-ade-window-title/content.md": [],
+    ".pensieve/knowledge/cadence-ic23-dbopencellviewbytype/content.md": [],
+    ".pensieve/knowledge/cadence-ic23-schcreateinst/content.md": [],
+    ".pensieve/knowledge/cadence-osshnl-109/content.md": [],
+    ".pensieve/knowledge/cadence-virtuoso-library-not-registered/content.md": [],
+    ".pensieve/knowledge/claude-code-skill-variable-expansion/content.md": [],
+    ".pensieve/knowledge/ic23-design-variable-namespaces/content.md": [],
+    ".pensieve/knowledge/maestro-ensure-view-bootstrap/content.md": [],
+    ".pensieve/knowledge/maestro-netlist-standalone-workflow/content.md": [],
+    ".pensieve/knowledge/maestro-session-types/content.md": [],
+    ".pensieve/knowledge/maestro-simulator-mode-api/content.md": [],
+    ".pensieve/knowledge/ocean-createnetlist-prerequisites/content.md": [],
+    ".pensieve/knowledge/ocean-design-cell-switch/content.md": [],
+    ".pensieve/knowledge/ramic-bridge-callback-file-ipc/content.md": [],
+    ".pensieve/knowledge/ratatui-tui-architecture/content.md": [],
+    ".pensieve/knowledge/rust-bin-vs-lib-crate-attrs/content.md": [],
+    ".pensieve/knowledge/skill-instterms-cons-reversal/content.md": [],
+    ".pensieve/knowledge/skill-sprintf-float-coords/content.md": [],
+    ".pensieve/knowledge/smic-mosfet-terminal-order/content.md": [],
+    ".pensieve/knowledge/smic-pdk-transistor-w-skill/content.md": [],
+    ".pensieve/knowledge/smic-rhrpo-netlist-terminals/content.md": [],
+    ".pensieve/knowledge/spectre-ade-model-path/content.md": [],
+    ".pensieve/knowledge/spectre-bandgap-dc-convergence/content.md": [],
+    ".pensieve/knowledge/spectre-cmi-2116-ade-netlist/content.md": [],
+    ".pensieve/knowledge/spectre-vacomp-2259-bound-step/content.md": [],
+    ".pensieve/knowledge/spectre-vsource-ac-parameter/content.md": [],
+    ".pensieve/knowledge/taste-review/content.md": [],
+    ".pensieve/knowledge/vcli-bridge-cli-name/content.md": [],
+    ".pensieve/knowledge/vcli-multi-session-concurrency/content.md": [],
+    ".pensieve/knowledge/vcli-session-history-layout/content.md": [],
+    ".pensieve/knowledge/virtuoso-daemon-install-feature-flag/content.md": [],
+    ".pensieve/maxims/ci-must-match-target-toolchain.md": [],
+    ".pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md": [],
+    ".pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md": [],
+    ".pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md": [],
+    ".pensieve/maxims/reduce-complexity-before-adding-branches.md": [],
+    ".pensieve/maxims/skill-nil-is-not-an-error.md": [],
+    ".pensieve/maxims/test-with-ci-toolchain-before-push.md": [],
+    ".pensieve/pipelines/run-when-committing.md": [],
+    ".pensieve/pipelines/run-when-reviewing-code.md": [],
+    ".pensieve/pipelines/run-when-syncing-to-main.md": [],
+    ".pensieve/signals/latest.json": [],
+    ".pensieve/state.md": [],
+    ".workbuddy/memory/2026-08-29.md": [],
+    ".workbuddy/memory/2026-08-30.md": [],
+    ".workbuddy/memory/2026-08-31.md": [],
+    ".workbuddy/memory/2026-09-01.md": [],
+    ".workbuddy/memory/2026-09-02.md": [],
+    ".workbuddy/memory/2026-09-03.md": [],
+    ".workbuddy/memory/2026-09-04.md": [],
+    ".workbuddy/memory/2026-09-05.md": [],
+    ".workbuddy/memory/2026-09-07.md": [],
+    ".workbuddy/memory/2026-09-08.md": [],
+    ".workbuddy/memory/2026-09-15.md": [],
+    ".workbuddy/memory/MEMORY.md": [],
+    ".workbuddy/skills/pr-review-hardening/SKILL.md": [],
+    ".workbuddy/skills/pr-review-hardening/references/workflow.md": [],
+    "AGENTS.md": [],
+    "CHANGELOG.md": [],
+    "CLAUDE.md": [],
+    "Cargo.toml": [],
+    "README.md": [],
+    "audit.toml": [],
+    "cds.lib": [],
+    "docs/aarch64-cross-compile.md": [],
+    "docs/architecture-review-20260713-virtuoso-bridge-lite.html": [],
+    "docs/p0a-config-callchain-inventory.md": [],
+    "docs/p0a-notes-env-evidence.md": [],
+    "docs/plans/2026-04-04-sim-automation-design.md": [],
+    "docs/plans/2026-04-05-bayesian-optimization-design.md": [],
+    "docs/plans/2026-04-06-sim-run-robustness.md": [],
+    "docs/plans/2026-06-13-borrow-from-virtuoso-bridge-lite.md": [],
+    "docs/plans/dean-main-design-20260417-192426.md": [],
+    "docs/plans/dean-main-eng-review-test-plan-20260417-223207.md": [],
+    "docs/plans/virtuoso-cli-enhancement-proposal.md": [],
+    "docs/superpowers/plans/2026-07-13-skill-runtime.md": [],
+    "docs/superpowers/plans/2026-08-29-upstream-hardening.md": [],
+    "docs/superpowers/plans/2026-09-01-virtuoso-gui-live-executor.md": [],
+    "docs/superpowers/plans/2026-09-01-virtuoso-gui-runner-foundation.md": [],
+    "docs/superpowers/specs/2026-07-13-skill-runtime-design.md": [],
+    "docs/superpowers/specs/2026-08-29-native-remote-transport-design.md": [],
+    "docs/superpowers/specs/2026-08-29-upstream-hardening-design.md": [],
+    "docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md": [],
+    "docs/vcli-gui-debug-retrospective.html": [],
+    "docs/virtuoso-gui-debug-architecture.html": [],
+    "examples/pasc_callbacks.ils": [],
+    "examples/vttype_update.ils": [],
+    "install.sh": [],
+    "libManager.log.cdslck": [],
+    "resources/.env_template": [],
+    "resources/daemons/ramic_bridge_daemon_27.py": [],
+    "resources/daemons/ramic_bridge_daemon_3.py": [],
+    "resources/daemons/virtuoso-daemon-aarch64": [],
+    "resources/daemons/virtuoso-daemon-x86_64": [],
+    "resources/maestro_snapshot_filter.yaml": [],
+    "resources/ramic_bridge.il": [],
+    "resources/rb_connect_terminal.il": [],
+    "resources/x11_dismiss_dialog.py": [],
+    "scripts/load_test.ils": [],
+    "scripts/perf_benchmark.ils": [],
+    "scripts/perf_test.ils": [],
+    "setup-virtuoso-tmux.sh": [],
+    "src/async_runtime.rs": [],
+    "src/auth.rs": [
+      "src/capability/mod.rs",
+      "src/error.rs"
+    ],
+    "src/capability/mod.rs": [
+      "src/capability/plugin.rs"
+    ],
+    "src/capability/plugin.rs": [],
+    "src/client/bridge.rs": [
+      "src/capability/mod.rs",
+      "src/client/layout_ops.rs",
+      "src/client/maestro_ops.rs",
+      "src/client/schematic_ops.rs",
+      "src/client/whitelist.rs",
+      "src/client/window_ops.rs",
+      "src/config.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/transport/contract.rs",
+      "src/transport/tunnel.rs",
+      "src/version.rs"
+    ],
+    "src/client/editor.rs": [
+      "src/client/bridge.rs",
+      "src/client/layout_ops.rs",
+      "src/client/schematic_ops.rs",
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/client/layout_ops.rs": [
+      "src/client/bridge.rs"
+    ],
+    "src/client/library_ops.rs": [],
+    "src/client/maestro_ops.rs": [
+      "src/client/bridge.rs",
+      "src/version.rs"
+    ],
+    "src/client/mod.rs": [
+      "src/client/bridge.rs",
+      "src/client/editor.rs",
+      "src/client/layout_ops.rs",
+      "src/client/library_ops.rs",
+      "src/client/maestro_ops.rs",
+      "src/client/schematic_ops.rs",
+      "src/client/skill_loading.rs",
+      "src/client/skill_runtime.rs",
+      "src/client/skill_sexp.rs",
+      "src/client/symbol_ops.rs",
+      "src/client/whitelist.rs",
+      "src/client/window_ops.rs"
+    ],
+    "src/client/schematic_ops.rs": [
+      "src/client/bridge.rs"
+    ],
+    "src/client/skill_loading.rs": [
+      "src/error.rs",
+      "src/transport/contract.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/client/skill_runtime.rs": [
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/client/skill_sexp.rs": [
+      "src/error.rs"
+    ],
+    "src/client/symbol_ops.rs": [
+      "src/client/bridge.rs"
+    ],
+    "src/client/whitelist.rs": [],
+    "src/client/window_ops.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ],
+    "src/command_log.rs": [],
+    "src/commands/cell.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ],
+    "src/commands/config.rs": [
+      "src/config.rs",
+      "src/error.rs",
+      "src/output.rs"
+    ],
+    "src/commands/design.rs": [
+      "src/error.rs",
+      "src/output.rs"
+    ],
+    "src/commands/diag.rs": [
+      "src/client/bridge.rs",
+      "src/config.rs",
+      "src/error.rs",
+      "src/transport/contract.rs"
+    ],
+    "src/commands/init.rs": [
+      "src/config_file.rs",
+      "src/error.rs"
+    ],
+    "src/commands/library.rs": [
+      "src/client/bridge.rs",
+      "src/client/library_ops.rs",
+      "src/client/skill_sexp.rs",
+      "src/error.rs"
+    ],
+    "src/commands/maestro.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_runtime.rs",
+      "src/commands/schematic.rs",
+      "src/config.rs",
+      "src/error.rs",
+      "src/transport/contract.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/commands/mod.rs": [
+      "src/commands/cell.rs",
+      "src/commands/config.rs",
+      "src/commands/design.rs",
+      "src/commands/diag.rs",
+      "src/commands/init.rs",
+      "src/commands/library.rs",
+      "src/commands/maestro.rs",
+      "src/commands/process.rs",
+      "src/commands/schema.rs",
+      "src/commands/schematic.rs",
+      "src/commands/session.rs",
+      "src/commands/sim.rs",
+      "src/commands/skill.rs",
+      "src/commands/symbol.rs",
+      "src/commands/transaction.rs",
+      "src/commands/transport_daemon.rs",
+      "src/commands/tunnel.rs",
+      "src/commands/window.rs"
+    ],
+    "src/commands/process.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_runtime.rs",
+      "src/error.rs"
+    ],
+    "src/commands/schema.rs": [],
+    "src/commands/schematic.rs": [
+      "src/client/bridge.rs",
+      "src/client/editor.rs",
+      "src/error.rs"
+    ],
+    "src/commands/session.rs": [
+      "src/client/bridge.rs",
+      "src/config.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/output.rs",
+      "src/transport/identity.rs",
+      "src/transport/tunnel.rs"
+    ],
+    "src/commands/sim.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_runtime.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/ocean/corner.rs",
+      "src/spectre/jobs.rs",
+      "src/spectre/runner.rs"
+    ],
+    "src/commands/skill.rs": [
+      "src/client/bridge.rs",
+      "src/config.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/skill_finder/mod.rs"
+    ],
+    "src/commands/symbol.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_sexp.rs",
+      "src/client/symbol_ops.rs",
+      "src/error.rs"
+    ],
+    "src/commands/transaction.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ],
+    "src/commands/transport_daemon.rs": [
+      "src/error.rs",
+      "src/transport/contract.rs",
+      "src/transport/pool.rs",
+      "src/transport/scheduler.rs"
+    ],
+    "src/commands/tunnel.rs": [
+      "src/client/bridge.rs",
+      "src/config.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/output.rs",
+      "src/transport/session_discovery.rs",
+      "src/transport/tunnel.rs"
+    ],
+    "src/commands/window.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/transport/contract.rs"
+    ],
+    "src/config.rs": [
+      "src/config_file.rs",
+      "src/error.rs"
+    ],
+    "src/config_file.rs": [
+      "src/error.rs"
+    ],
+    "src/context.rs": [
+      "src/config.rs",
+      "src/error.rs"
+    ],
+    "src/daemon/main.rs": [],
+    "src/error.rs": [
+      "src/output.rs"
+    ],
+    "src/exit_codes.rs": [],
+    "src/history.rs": [],
+    "src/lib.rs": [
+      "src/async_runtime.rs",
+      "src/auth.rs",
+      "src/capability/mod.rs",
+      "src/client/mod.rs",
+      "src/command_log.rs",
+      "src/commands/mod.rs",
+      "src/config.rs",
+      "src/config_file.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/exit_codes.rs",
+      "src/history.rs",
+      "src/mcp/mod.rs",
+      "src/models.rs",
+      "src/ocean/mod.rs",
+      "src/output.rs",
+      "src/plugins/mod.rs",
+      "src/profile.rs",
+      "src/rpc/mod.rs",
+      "src/runtime_paths.rs",
+      "src/session/mod.rs",
+      "src/skill_finder/mod.rs",
+      "src/spectre/mod.rs",
+      "src/streaming/mod.rs",
+      "src/sys/mod.rs",
+      "src/test_env.rs",
+      "src/transaction/mod.rs",
+      "src/transport/mod.rs",
+      "src/tui/mod.rs",
+      "src/version.rs"
+    ],
+    "src/main.rs": [
+      "src/async_runtime.rs",
+      "src/auth.rs",
+      "src/capability/mod.rs",
+      "src/client/mod.rs",
+      "src/command_log.rs",
+      "src/commands/mod.rs",
+      "src/config.rs",
+      "src/config_file.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/exit_codes.rs",
+      "src/history.rs",
+      "src/mcp/mod.rs",
+      "src/models.rs",
+      "src/ocean/mod.rs",
+      "src/output.rs",
+      "src/plugins/mod.rs",
+      "src/profile.rs",
+      "src/rpc/mod.rs",
+      "src/runtime_paths.rs",
+      "src/skill_finder/mod.rs",
+      "src/spectre/mod.rs",
+      "src/streaming/mod.rs",
+      "src/sys/mod.rs",
+      "src/test_env.rs",
+      "src/tests.rs",
+      "src/transaction/mod.rs",
+      "src/transport/mod.rs",
+      "src/tui/mod.rs",
+      "src/version.rs"
+    ],
+    "src/mcp/mod.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/mcp/server.rs",
+      "src/mcp/tools.rs"
+    ],
+    "src/mcp/server.rs": [
+      "src/error.rs"
+    ],
+    "src/mcp/tools.rs": [
+      "src/capability/mod.rs"
+    ],
+    "src/models.rs": [
+      "src/error.rs",
+      "src/transport/contract.rs"
+    ],
+    "src/ocean/corner.rs": [],
+    "src/ocean/mod.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_runtime.rs",
+      "src/ocean/corner.rs"
+    ],
+    "src/output.rs": [],
+    "src/plugins/mod.rs": [
+      "src/plugins/registry.rs",
+      "src/plugins/schema.rs"
+    ],
+    "src/plugins/registry.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/mcp/tools.rs",
+      "src/rpc/schema.rs"
+    ],
+    "src/plugins/schema.rs": [
+      "src/client/skill_runtime.rs",
+      "src/error.rs"
+    ],
+    "src/profile.rs": [],
+    "src/rpc/dispatcher.rs": [
+      "src/auth.rs",
+      "src/client/bridge.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/rpc/mod.rs": [
+      "src/rpc/dispatcher.rs",
+      "src/rpc/schema.rs"
+    ],
+    "src/rpc/schema.rs": [],
+    "src/runtime_paths.rs": [],
+    "src/session/heartbeat.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/session/mod.rs": [
+      "src/models.rs",
+      "src/session/heartbeat.rs"
+    ],
+    "src/skill_finder/mod.rs": [
+      "src/skill_finder/parser.rs"
+    ],
+    "src/skill_finder/parser.rs": [],
+    "src/spectre/jobs.rs": [
+      "src/error.rs"
+    ],
+    "src/spectre/maestro_csv.rs": [],
+    "src/spectre/mod.rs": [
+      "src/spectre/jobs.rs",
+      "src/spectre/maestro_csv.rs",
+      "src/spectre/parsers.rs",
+      "src/spectre/runner.rs"
+    ],
+    "src/spectre/parsers.rs": [
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/spectre/runner.rs": [
+      "src/error.rs",
+      "src/models.rs",
+      "src/spectre/jobs.rs",
+      "src/streaming/mod.rs",
+      "src/transport/contract.rs",
+      "src/transport/openssh.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/streaming/job_progress.rs": [
+      "src/streaming/mod.rs"
+    ],
+    "src/streaming/mod.rs": [],
+    "src/sys/linux_rename.rs": [],
+    "src/sys/mod.rs": [
+      "src/sys/linux_rename.rs"
+    ],
+    "src/test_env.rs": [],
+    "src/tests.rs": [],
+    "src/transaction/diff.rs": [
+      "src/transaction/snapshot.rs"
+    ],
+    "src/transaction/mod.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/transaction/diff.rs",
+      "src/transaction/snapshot.rs"
+    ],
+    "src/transaction/snapshot.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ],
+    "src/transport/auth.rs": [],
+    "src/transport/backend.rs": [
+      "src/config.rs",
+      "src/transport/contract.rs",
+      "src/transport/openssh.rs"
+    ],
+    "src/transport/contract.rs": [
+      "src/error.rs"
+    ],
+    "src/transport/daemon_lifecycle.rs": [
+      "src/models.rs",
+      "src/transport/identity.rs"
+    ],
+    "src/transport/host_keys.rs": [],
+    "src/transport/identity.rs": [],
+    "src/transport/ipc/daemon.rs": [
+      "src/transport/contract.rs",
+      "src/transport/ipc/framing.rs",
+      "src/transport/ipc/messages.rs",
+      "src/transport/ipc/server.rs"
+    ],
+    "src/transport/ipc/framing.rs": [],
+    "src/transport/ipc/messages.rs": [
+      "src/transport/contract.rs"
+    ],
+    "src/transport/ipc/mod.rs": [
+      "src/transport/ipc/daemon.rs",
+      "src/transport/ipc/framing.rs",
+      "src/transport/ipc/messages.rs",
+      "src/transport/ipc/server.rs"
+    ],
+    "src/transport/ipc/server.rs": [
+      "src/transport/contract.rs",
+      "src/transport/ipc/framing.rs",
+      "src/transport/ipc/messages.rs",
+      "src/transport/lifecycle.rs",
+      "src/transport/pool.rs",
+      "src/transport/scheduler.rs"
+    ],
+    "src/transport/lifecycle.rs": [
+      "src/transport/contract.rs"
+    ],
+    "src/transport/mod.rs": [
+      "src/transport/auth.rs",
+      "src/transport/backend.rs",
+      "src/transport/contract.rs",
+      "src/transport/daemon_lifecycle.rs",
+      "src/transport/host_keys.rs",
+      "src/transport/identity.rs",
+      "src/transport/ipc/mod.rs",
+      "src/transport/lifecycle.rs",
+      "src/transport/native.rs",
+      "src/transport/openssh.rs",
+      "src/transport/pool.rs",
+      "src/transport/scheduler.rs",
+      "src/transport/session_discovery.rs",
+      "src/transport/ssh.rs",
+      "src/transport/testutil.rs",
+      "src/transport/tunnel.rs",
+      "src/transport/x11.rs"
+    ],
+    "src/transport/native.rs": [
+      "src/config.rs",
+      "src/transport/contract.rs",
+      "src/transport/host_keys.rs",
+      "src/transport/lifecycle.rs"
+    ],
+    "src/transport/openssh.rs": [
+      "src/config.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/transport/contract.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/transport/pool.rs": [
+      "src/config.rs",
+      "src/transport/contract.rs",
+      "src/transport/scheduler.rs"
+    ],
+    "src/transport/scheduler.rs": [
+      "src/transport/contract.rs"
+    ],
+    "src/transport/session_discovery.rs": [
+      "src/error.rs",
+      "src/models.rs",
+      "src/transport/contract.rs"
+    ],
+    "src/transport/ssh.rs": [
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/transport/testutil.rs": [
+      "src/transport/contract.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/transport/tunnel.rs": [
+      "src/config.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/transport/contract.rs",
+      "src/transport/daemon_lifecycle.rs",
+      "src/transport/openssh.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/transport/x11.rs": [
+      "src/config.rs",
+      "src/error.rs",
+      "src/transport/contract.rs"
+    ],
+    "src/tui/app/action.rs": [
+      "src/spectre/jobs.rs",
+      "src/tui/app/overlay.rs",
+      "src/tui/app/state.rs"
+    ],
+    "src/tui/app/data.rs": [
+      "src/config_file.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/spectre/jobs.rs",
+      "src/tui/app/state.rs"
+    ],
+    "src/tui/app/event.rs": [
+      "src/spectre/jobs.rs",
+      "src/tui/app/action.rs",
+      "src/tui/app/overlay.rs",
+      "src/tui/app/state.rs"
+    ],
+    "src/tui/app/mod.rs": [
+      "src/tui/app/action.rs",
+      "src/tui/app/data.rs",
+      "src/tui/app/event.rs",
+      "src/tui/app/overlay.rs",
+      "src/tui/app/state.rs"
+    ],
+    "src/tui/app/overlay.rs": [],
+    "src/tui/app/state.rs": [
+      "src/models.rs",
+      "src/spectre/jobs.rs",
+      "src/tui/app/overlay.rs"
+    ],
+    "src/tui/mod.rs": [
+      "src/error.rs",
+      "src/tui/app/mod.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/mod.rs"
+    ],
+    "src/tui/theme.rs": [],
+    "src/tui/ui/chrome.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/config.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/content.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/mod.rs"
+    ],
+    "src/tui/ui/footer.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs"
+    ],
+    "src/tui/ui/jobs.rs": [
+      "src/spectre/jobs.rs",
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/mod.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/chrome.rs",
+      "src/tui/ui/config.rs",
+      "src/tui/ui/content.rs",
+      "src/tui/ui/footer.rs",
+      "src/tui/ui/jobs.rs",
+      "src/tui/ui/overlay/mod.rs",
+      "src/tui/ui/sessions.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/confirm.rs": [
+      "src/tui/app/overlay.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/form.rs": [
+      "src/tui/app/overlay.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/help.rs": [
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/layout.rs": [],
+    "src/tui/ui/overlay/log.rs": [
+      "src/tui/app/overlay.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/mod.rs": [
+      "src/tui/ui/overlay/confirm.rs",
+      "src/tui/ui/overlay/form.rs",
+      "src/tui/ui/overlay/help.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/overlay/log.rs",
+      "src/tui/ui/overlay/render.rs"
+    ],
+    "src/tui/ui/overlay/render.rs": [
+      "src/tui/app/overlay.rs",
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/mod.rs"
+    ],
+    "src/tui/ui/sessions.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/shared.rs": [
+      "src/tui/theme.rs"
+    ],
+    "src/version.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ],
+    "src/vtui.rs": [
+      "src/async_runtime.rs",
+      "src/auth.rs",
+      "src/capability/mod.rs",
+      "src/client/mod.rs",
+      "src/command_log.rs",
+      "src/commands/mod.rs",
+      "src/config.rs",
+      "src/config_file.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/exit_codes.rs",
+      "src/history.rs",
+      "src/mcp/mod.rs",
+      "src/models.rs",
+      "src/ocean/mod.rs",
+      "src/output.rs",
+      "src/plugins/mod.rs",
+      "src/profile.rs",
+      "src/rpc/mod.rs",
+      "src/runtime_paths.rs",
+      "src/skill_finder/mod.rs",
+      "src/spectre/mod.rs",
+      "src/streaming/mod.rs",
+      "src/sys/mod.rs",
+      "src/test_env.rs",
+      "src/transaction/mod.rs",
+      "src/transport/mod.rs",
+      "src/tui/mod.rs",
+      "src/version.rs"
+    ],
+    "tests/config.rs": [],
+    "tests/config_check.rs": [],
+    "tests/config_check_cli.rs": [],
+    "tests/daemon_user_guard.rs": [],
+    "tests/docs/__init__.py": [],
+    "tests/docs/test_x11_dismiss_dialog.py": [],
+    "tests/error_handling.rs": [],
+    "tests/linux_rename_compat.rs": [],
+    "tests/maestro_csv.rs": [],
+    "tests/ocean.rs": [],
+    "tests/skill_escape.rs": [],
+    "tests/skill_finder_include_desc.rs": [],
+    "tests/skill_load.rs": [],
+    "tests/spectre.rs": [],
+    "tests/tunnel_hostname_check.rs": [],
+    "tests/tunnel_profile.rs": []
+  },
+  "importMapStats": {
+    "filesScanned": 486,
+    "filesWithImports": 123,
+    "totalEdges": 477
+  }
+}

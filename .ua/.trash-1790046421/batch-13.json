@@ -1,0 +1,91 @@
+{
+  "batchIndex": 13,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:agents/skills/_shared/README.md",
+      "type": "document",
+      "name": "README.md (skills _shared)",
+      "filePath": ".agents/skills/_shared/README.md",
+      "summary": "Adapter-layer README for the shared skill directory. Explains that `_shared/` bridges the `.claude/skills/` document corpus to the `vcli` Rust binary, tabulates the role of `vcli.sh` (shell wrapper), `convention.md` (naming rules), and `scripts/` (cross-skill Python helpers). Documents the one-time install (symlink `~/.local/bin/vcli` and `~/.local/bin/virtuoso` to the wrapper), and prescribes editing rules: changes here affect every skill, keep `vcli.sh` a thin wrapper, and update `convention.md` atomically with the wrapper.",
+      "tags": [
+        "skill-shared",
+        "adapter",
+        "wrapper",
+        "documentation",
+        "install-instructions",
+        "naming-convention",
+        "virtuoso-cli"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Plain Markdown with a 3-row table and one fenced bash install snippet. 30 non-empty / 38 total lines; three sections (one H1, two H2). No code execution; the snippet is illustrative."
+    },
+    {
+      "id": "file:agents/skills/_shared/convention.md",
+      "type": "document",
+      "name": "convention.md (skills _shared)",
+      "filePath": ".agents/skills/_shared/convention.md",
+      "summary": "Single-source-of-truth doc for the `virtuoso` vs `vcli` naming convention and the diagnostic playbook pinned to binary 1.0.0 / Cadence IC25. 532 lines / 26 sections. After TL;DR, install, and rename-contract sections it ships 14 hard-won rules: silent-on-failure cache writes (`src/history.rs:36-44, :60-73`), ramic_bridge.il per-CIW daemon spawning, the two-pool RPC Admin gate (typed RPC vs raw SKILL), mandatory `<subdomain>.<verb>` snake_case RPC naming, Maestro's UI bookkeeping vs simulator variable split, IC25 SKILL keyword string-quoting, ADE Editing mode blocking implicit `asiSession` resolution, bypass-mode `maestro.run` skipping Explorer history, IC25 binary PSF, programmatic close of foreign sessions, IC25's `?session` literal-name requirement, ssh/`VB_REMOTE_HOST` requirements for `create_corner_netlist`, and per-Cadence-version SKILL signature pinning. Ends with a maintenance contract (supersede, don't delete) and a 'what this conversation produced' summary.",
+      "tags": [
+        "skill-shared",
+        "naming-convention",
+        "diagnostic-playbook",
+        "cadence-ic25",
+        "rpc",
+        "maestro",
+        "skill-language",
+        "ssh",
+        "psf-format",
+        "maintenance-contract"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Long-form Markdown with H1/H2/H3 sections, multiple fenced code blocks (bash, SKILL, Ocean), and Markdown tables used as structured content. 26 sections; ~7 of the rules are full sub-sections with Pattern/Why/Recovery triads."
+    },
+    {
+      "id": "file:agents/skills/_shared/vcli.sh",
+      "type": "script",
+      "name": "vcli.sh (skills wrapper)",
+      "filePath": ".agents/skills/_shared/vcli.sh",
+      "summary": "Bash wrapper that adapts the `virtuoso` command (used by 16 of 27 SKILL.md files) to the canonical `vcli` Rust binary without touching any SKILL.md. Single-point rename surface: if the binary is ever renamed again, only this file changes. Responsibilities in 6 labeled blocks: (1) resolve `VCLI_BIN` via a deliberate search order (`~/.cargo/bin/vcli` → `./target/release/vcli` → `command -v vcli` → `/opt/cargo/bin/vcli` — PATH-shadowing incident on 2026-08-14 is the rationale for not using `command -v` first), (2) detect the invocation name via `$0` and forward argv unchanged, (3) print a `doctor` summary on `doctor`, (4) default `VB_TIMEOUT=120`, (5) duplicate stderr into `$VB_LOG_DIR/harness-YYYYMMDD.log` for post-rollover forensics, (6) `exec` the binary so its pid and exit code pass through unmodified. Does NOT rewrite argv, inject `--format json`, retry, or swallow errors.",
+      "tags": [
+        "skill-shared",
+        "bash",
+        "wrapper",
+        "exec",
+        "logging",
+        "diagnostics",
+        "virtuoso-cli",
+        "PATH-resolution",
+        "single-point-adapter"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pure bash 5 (`set -euo pipefail`, parameter expansion, command substitution). 121 lines / 6 numbered `# ----- N. role -----` blocks. No tree-sitter function detection (top-level flow is a script body; no user-defined functions), but the six role blocks are the natural decomposition for navigation."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:agents/skills/_shared/README.md",
+      "target": "file:agents/skills/_shared/vcli.sh",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "file:agents/skills/_shared/README.md",
+      "target": "file:agents/skills/_shared/convention.md",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "file:agents/skills/_shared/convention.md",
+      "target": "file:agents/skills/_shared/vcli.sh",
+      "type": "documents",
+      "weight": 0.85
+    },
+    {
+      "source": "file:agents/skills/_shared/convention.md",
+      "target": "file:agents/skills/_shared/README.md",
+      "type": "documents",
+      "weight": 0.4
+    }
+  ]
+}

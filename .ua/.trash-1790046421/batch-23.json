@@ -1,0 +1,50 @@
+{
+  "batchIndex": 23,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:.codex/hooks/auto_plot.sh",
+      "type": "file",
+      "name": "auto_plot.sh",
+      "filePath": ".codex/hooks/auto_plot.sh",
+      "summary": "PostToolUse bash hook that auto-generates PNG plots whenever a `vcli sim sweep`, `vcli sim measure`, or `vcli process char` command is invoked with `--format json`. Reads the hook JSON from stdin, filters on command regex and format flag, validates the tool response is parseable JSON, chooses a plot prefix (sweep/measure/gmid), and pipes the response into plot_sim.py to write a timestamped PNG under plots/. Emits a JSON systemMessage with the relative + absolute plot path on success; silently exits on non-matching or unplottable inputs. Top-level logic split: filter_and_validate (lines 13-37), determine_prefix (lines 39-48), run_plotter (lines 50-68).",
+      "tags": ["hook", "posttooluse", "shell", "bash", "eda", "plotting", "sim", "cadence-virtuoso", "jq", "json-stdin"],
+      "complexity": "moderate",
+      "languageNotes": "Pure bash, no functions declared — single linear script body with labeled sections. Relies on external tools: jq (JSON parsing), python3 (validator + plot_sim.py runner), and the companion skill script at .claude/skills/sim-plot/scripts/plot_sim.py. Reads JSON from stdin (Codex/Claude hook protocol) and writes a JSON document to stdout via `jq -n`. Silent `exit 0` is used liberally for non-matching filters; only a successful plot emits a systemMessage. Uses $CLAUDE_PROJECT_DIR to anchor project-relative paths."
+    },
+    {
+      "id": "file:.codex/hooks/eda_error_capture.sh",
+      "type": "file",
+      "name": "eda_error_capture.sh",
+      "filePath": ".codex/hooks/eda_error_capture.sh",
+      "summary": "PostToolUse bash hook that captures EDA tool errors (Spectre SFE-/OSSHNL- codes, IPC failures, bridge NAKs, missing skill registrations, etc.) emitted by `vcli`, `virtuoso`, or `spectre` commands and routes them to eda_memory_saver.py for skill-scoped memory persistence. Reads hook JSON from stdin, pre-filters the tool response for known error fingerprints, classifies the source (spectre/vcli/unknown), then invokes the saver and echoes back a systemMessage that names the destination skill and matched pattern. Sections: filter_command (lines 7-19), pre_filter_errors (lines 21-28), classify_source (lines 30-37), run_saver (lines 39-50).",
+      "tags": ["hook", "posttooluse", "shell", "bash", "eda", "error-capture", "skill-memory", "cadence-virtuoso", "spectre", "jq", "json-stdin"],
+      "complexity": "moderate",
+      "languageNotes": "Bash with no declared functions — body organized by labeled comment sections. External deps: jq, python3, and .claude/skills/_shared/scripts/eda_memory_saver.py. Uses two python -c one-shots to extract JSON keys from the saver output, and jq -n to emit the final systemMessage JSON. Comment text mixes English with a Chinese systemMessage string `[eda_capture] 已记录到 ...`. Silent `exit 0` on every non-match path so successful captures are the only signal."
+    },
+    {
+      "id": "file:.codex/hooks/rust_check.sh",
+      "type": "file",
+      "name": "rust_check.sh",
+      "filePath": ".codex/hooks/rust_check.sh",
+      "summary": "PostToolUse bash hook that auto-formats and lint-checks Rust source files immediately after a Write/Edit operation. Reads hook JSON from stdin, gates on file extension `.rs` and a $CLAUDE_PROJECT_DIR path prefix, then runs `rustfmt --edition 2021 --check` before/after a `cargo fmt --quiet` to detect auto-fixes (emitting a systemMessage when a fix was applied). If formatting is clean, it then runs `cargo clippy -q -- -D warnings` and surfaces the first ten errors and five help hints as a systemMessage so the model can react. Sections: gate_input (lines 7-17), run_fmt (lines 19-27), run_clippy (lines 29-41).",
+      "tags": ["hook", "posttooluse", "shell", "bash", "rust", "rustfmt", "cargo", "clippy", "auto-fix", "jq", "json-stdin"],
+      "complexity": "moderate",
+      "languageNotes": "Bash with no declared functions — linear body grouped by labeled comments. External deps: jq, rustfmt, cargo (fmt + clippy subcommands). Uses bash parameter expansion `${FMT_BEFORE##*$'\\n'}` to strip multi-line `rustfmt` output down to its trailing exit code line. Emits JSON systemMessages via `jq -n`; otherwise exits silently on non-`.rs` files, files outside the project, or missing tools. Quiet clippy run (`-q`) with `-D warnings` so any lint is treated as an error."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.codex/hooks/auto_plot.sh",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.codex/hooks/eda_error_capture.sh",
+      "target": "file:.claude/skills/_shared/scripts/eda_memory_saver.py",
+      "type": "calls",
+      "weight": 0.9
+    }
+  ]
+}

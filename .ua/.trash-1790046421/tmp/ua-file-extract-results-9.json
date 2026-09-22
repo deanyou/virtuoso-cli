@@ -1,0 +1,6525 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 5,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 5,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 5,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": [
+    {
+      "path": "src/transport/ipc/daemon.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 864,
+      "nonEmptyLines": 797,
+      "functions": [
+        {
+          "name": "connect",
+          "startLine": 56,
+          "endLine": 76,
+          "params": [
+            "socket_path",
+            "profile",
+            "auth_token"
+          ]
+        },
+        {
+          "name": "challenge",
+          "startLine": 88,
+          "endLine": 102,
+          "params": []
+        },
+        {
+          "name": "request_shutdown",
+          "startLine": 111,
+          "endLine": 121,
+          "params": []
+        },
+        {
+          "name": "exchange",
+          "startLine": 123,
+          "endLine": 179,
+          "params": [
+            "operation",
+            "payload",
+            "deadline"
+          ]
+        },
+        {
+          "name": "lock_with_deadline",
+          "startLine": 189,
+          "endLine": 210,
+          "params": [
+            "mutex",
+            "deadline"
+          ]
+        },
+        {
+          "name": "do_handshake",
+          "startLine": 213,
+          "endLine": 265,
+          "params": [
+            "conn",
+            "profile",
+            "auth_token"
+          ]
+        },
+        {
+          "name": "frame_err_to_transport",
+          "startLine": 268,
+          "endLine": 275,
+          "params": [
+            "e"
+          ]
+        },
+        {
+          "name": "apply_socket_timeouts",
+          "startLine": 284,
+          "endLine": 314,
+          "params": [
+            "stream",
+            "timeout"
+          ]
+        },
+        {
+          "name": "apply_socket_timeouts_fd",
+          "startLine": 321,
+          "endLine": 344,
+          "params": [
+            "fd",
+            "timeout"
+          ]
+        },
+        {
+          "name": "test_connection",
+          "startLine": 348,
+          "endLine": 355,
+          "params": [
+            "deadline"
+          ]
+        },
+        {
+          "name": "run_command",
+          "startLine": 357,
+          "endLine": 372,
+          "params": [
+            "req"
+          ]
+        },
+        {
+          "name": "upload_file",
+          "startLine": 374,
+          "endLine": 385,
+          "params": [
+            "req"
+          ]
+        },
+        {
+          "name": "upload_text",
+          "startLine": 387,
+          "endLine": 398,
+          "params": [
+            "req"
+          ]
+        },
+        {
+          "name": "download_file",
+          "startLine": 400,
+          "endLine": 411,
+          "params": [
+            "req"
+          ]
+        },
+        {
+          "name": "download_dir",
+          "startLine": 413,
+          "endLine": 424,
+          "params": [
+            "req"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "NativeTransportClient",
+          "startLine": 44,
+          "endLine": 51,
+          "methods": [
+            "connect",
+            "challenge",
+            "request_shutdown",
+            "exchange",
+            "test_connection",
+            "run_command",
+            "upload_file",
+            "upload_text",
+            "download_file",
+            "download_dir"
+          ],
+          "properties": [
+            "conn",
+            "profile",
+            "auth_token",
+            "daemon_nonce"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "NativeTransportClient",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "connect",
+          "line": 56,
+          "isDefault": false
+        },
+        {
+          "name": "challenge",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "request_shutdown",
+          "line": 111,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "connect",
+          "callee": "UnixStream::connect(socket_path).map_err",
+          "lineNumber": 62
+        },
+        {
+          "caller": "connect",
+          "callee": "UnixStream::connect",
+          "lineNumber": 62
+        },
+        {
+          "caller": "connect",
+          "callee": "apply_socket_timeouts",
+          "lineNumber": 67
+        },
+        {
+          "caller": "connect",
+          "callee": "Duration::from_secs",
+          "lineNumber": 67
+        },
+        {
+          "caller": "connect",
+          "callee": "Mutex::new",
+          "lineNumber": 68
+        },
+        {
+          "caller": "connect",
+          "callee": "do_handshake",
+          "lineNumber": 69
+        },
+        {
+          "caller": "connect",
+          "callee": "Ok",
+          "lineNumber": 70
+        },
+        {
+          "caller": "connect",
+          "callee": "profile.to_string",
+          "lineNumber": 72
+        },
+        {
+          "caller": "connect",
+          "callee": "auth_token.to_string",
+          "lineNumber": 73
+        },
+        {
+          "caller": "challenge",
+          "callee": "self.exchange",
+          "lineNumber": 92
+        },
+        {
+          "caller": "challenge",
+          "callee": "Deadline::from_now",
+          "lineNumber": 95
+        },
+        {
+          "caller": "challenge",
+          "callee": "Duration::from_secs",
+          "lineNumber": 95
+        },
+        {
+          "caller": "challenge",
+          "callee": "serde_json::from_value(v).map_err",
+          "lineNumber": 98
+        },
+        {
+          "caller": "challenge",
+          "callee": "serde_json::from_value",
+          "lineNumber": 98
+        },
+        {
+          "caller": "challenge",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 99
+        },
+        {
+          "caller": "challenge",
+          "callee": "Err",
+          "lineNumber": 100
+        },
+        {
+          "caller": "challenge",
+          "callee": "TransportError::from",
+          "lineNumber": 100
+        },
+        {
+          "caller": "request_shutdown",
+          "callee": "self.exchange",
+          "lineNumber": 112
+        },
+        {
+          "caller": "request_shutdown",
+          "callee": "Deadline::from_now",
+          "lineNumber": 115
+        },
+        {
+          "caller": "request_shutdown",
+          "callee": "Duration::from_secs",
+          "lineNumber": 115
+        },
+        {
+          "caller": "request_shutdown",
+          "callee": "Ok",
+          "lineNumber": 118
+        },
+        {
+          "caller": "request_shutdown",
+          "callee": "Err",
+          "lineNumber": 119
+        },
+        {
+          "caller": "request_shutdown",
+          "callee": "TransportError::from",
+          "lineNumber": 119
+        },
+        {
+          "caller": "exchange",
+          "callee": "self.profile.clone",
+          "lineNumber": 132
+        },
+        {
+          "caller": "exchange",
+          "callee": "self.daemon_nonce.clone",
+          "lineNumber": 133
+        },
+        {
+          "caller": "exchange",
+          "callee": "self.auth_token.clone",
+          "lineNumber": 134
+        },
+        {
+          "caller": "exchange",
+          "callee": "RequestId::new",
+          "lineNumber": 135
+        },
+        {
+          "caller": "exchange",
+          "callee": "deadline.to_unix_ms",
+          "lineNumber": 136
+        },
+        {
+          "caller": "exchange",
+          "callee": "serde_json::to_vec(&env).map_err",
+          "lineNumber": 140
+        },
+        {
+          "caller": "exchange",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 140
+        },
+        {
+          "caller": "exchange",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 141
+        },
+        {
+          "caller": "exchange",
+          "callee": "lock_with_deadline",
+          "lineNumber": 146
+        },
+        {
+          "caller": "exchange",
+          "callee": "deadline.is_expired",
+          "lineNumber": 149
+        },
+        {
+          "caller": "exchange",
+          "callee": "Err",
+          "lineNumber": 150
+        },
+        {
+          "caller": "exchange",
+          "callee": "RequestId::new",
+          "lineNumber": 151
+        },
+        {
+          "caller": "exchange",
+          "callee": "std::os::unix::io::AsRawFd::as_raw_fd",
+          "lineNumber": 156
+        },
+        {
+          "caller": "exchange",
+          "callee": "FrameWriter::new(&mut *stream)\n            .write_frame_with_deadline(&bytes, Some(deadline.0), move |d| {\n                apply_socket_timeouts_fd(fd, d)\n            }).map_err",
+          "lineNumber": 160
+        },
+        {
+          "caller": "exchange",
+          "callee": "FrameWriter::new(&mut *stream).write_frame_with_deadline",
+          "lineNumber": 160
+        },
+        {
+          "caller": "exchange",
+          "callee": "FrameWriter::new",
+          "lineNumber": 160
+        },
+        {
+          "caller": "exchange",
+          "callee": "Some",
+          "lineNumber": 161
+        },
+        {
+          "caller": "exchange",
+          "callee": "apply_socket_timeouts_fd",
+          "lineNumber": 162
+        },
+        {
+          "caller": "exchange",
+          "callee": "FrameReader::new(&mut *stream).read_frame_until_with",
+          "lineNumber": 168
+        },
+        {
+          "caller": "exchange",
+          "callee": "FrameReader::new",
+          "lineNumber": 168
+        },
+        {
+          "caller": "exchange",
+          "callee": "Some",
+          "lineNumber": 169
+        },
+        {
+          "caller": "exchange",
+          "callee": "apply_socket_timeouts_fd",
+          "lineNumber": 169
+        },
+        {
+          "caller": "exchange",
+          "callee": "Err",
+          "lineNumber": 172
+        },
+        {
+          "caller": "exchange",
+          "callee": "Err",
+          "lineNumber": 173
+        },
+        {
+          "caller": "exchange",
+          "callee": "frame_err_to_transport",
+          "lineNumber": 173
+        },
+        {
+          "caller": "exchange",
+          "callee": "drop",
+          "lineNumber": 175
+        },
+        {
+          "caller": "exchange",
+          "callee": "serde_json::from_slice(&resp_bytes).map_err",
+          "lineNumber": 177
+        },
+        {
+          "caller": "exchange",
+          "callee": "serde_json::from_slice",
+          "lineNumber": 177
+        },
+        {
+          "caller": "exchange",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 178
+        },
+        {
+          "caller": "lock_with_deadline",
+          "callee": "mutex.try_lock",
+          "lineNumber": 194
+        },
+        {
+          "caller": "lock_with_deadline",
+          "callee": "Ok",
+          "lineNumber": 195
+        },
+        {
+          "caller": "lock_with_deadline",
+          "callee": "deadline.is_expired",
+          "lineNumber": 197
+        },
+        {
+          "caller": "lock_with_deadline",
+          "callee": "Err",
+          "lineNumber": 198
+        },
+        {
+          "caller": "lock_with_deadline",
+          "callee": "RequestId::new",
+          "lineNumber": 199
+        },
+        {
+          "caller": "lock_with_deadline",
+          "callee": "std::thread::sleep",
+          "lineNumber": 203
+        },
+        {
+          "caller": "lock_with_deadline",
+          "callee": "Duration::from_millis",
+          "lineNumber": 203
+        },
+        {
+          "caller": "lock_with_deadline",
+          "callee": "Err",
+          "lineNumber": 206
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Hello::new",
+          "lineNumber": 218
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "profile.to_string",
+          "lineNumber": 222
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "String::new",
+          "lineNumber": 223
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "auth_token.to_string",
+          "lineNumber": 224
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "RequestId::new",
+          "lineNumber": 225
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Deadline::from_now(Duration::from_secs(10)).to_unix_ms",
+          "lineNumber": 226
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Deadline::from_now",
+          "lineNumber": 226
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Duration::from_secs",
+          "lineNumber": 226
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::to_value(&hello).map_err",
+          "lineNumber": 228
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::to_value",
+          "lineNumber": 228
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 229
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::to_vec(&env).map_err",
+          "lineNumber": 231
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 231
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 232
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "conn.lock().unwrap",
+          "lineNumber": 234
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "conn.lock",
+          "lineNumber": 234
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 237
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Duration::from_secs",
+          "lineNumber": 237
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "std::os::unix::io::AsRawFd::as_raw_fd",
+          "lineNumber": 239
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "FrameWriter::new(&mut *stream)\n        .write_frame_with_deadline(&bytes, Some(handshake_deadline), move |d| {\n            apply_socket_timeouts_fd(fd, d)\n        }).map_err",
+          "lineNumber": 240
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "FrameWriter::new(&mut *stream).write_frame_with_deadline",
+          "lineNumber": 240
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "FrameWriter::new",
+          "lineNumber": 240
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Some",
+          "lineNumber": 241
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "apply_socket_timeouts_fd",
+          "lineNumber": 242
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "FrameReader::new(&mut *stream).read_frame_until_with",
+          "lineNumber": 245
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "FrameReader::new",
+          "lineNumber": 245
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Some",
+          "lineNumber": 246
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "apply_socket_timeouts_fd",
+          "lineNumber": 247
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Err",
+          "lineNumber": 250
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Err",
+          "lineNumber": 251
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "frame_err_to_transport",
+          "lineNumber": 251
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "drop",
+          "lineNumber": 253
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::from_slice(&resp_bytes).map_err",
+          "lineNumber": 255
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::from_slice",
+          "lineNumber": 255
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 256
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::from_value(v).map_err",
+          "lineNumber": 259
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::from_value",
+          "lineNumber": 259
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 260
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Ok",
+          "lineNumber": 261
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "Err",
+          "lineNumber": 263
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "TransportError::from",
+          "lineNumber": 263
+        },
+        {
+          "caller": "frame_err_to_transport",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 272
+        },
+        {
+          "caller": "apply_socket_timeouts",
+          "callee": "stream.as_raw_fd",
+          "lineNumber": 286
+        },
+        {
+          "caller": "apply_socket_timeouts",
+          "callee": "timeout.as_secs",
+          "lineNumber": 287
+        },
+        {
+          "caller": "apply_socket_timeouts",
+          "callee": "timeout.subsec_nanos",
+          "lineNumber": 288
+        },
+        {
+          "caller": "apply_socket_timeouts",
+          "callee": "libc::setsockopt",
+          "lineNumber": 299
+        },
+        {
+          "caller": "apply_socket_timeouts",
+          "callee": "std::mem::size_of::<libc::timeval>",
+          "lineNumber": 304
+        },
+        {
+          "caller": "apply_socket_timeouts",
+          "callee": "libc::setsockopt",
+          "lineNumber": 306
+        },
+        {
+          "caller": "apply_socket_timeouts",
+          "callee": "std::mem::size_of::<libc::timeval>",
+          "lineNumber": 311
+        },
+        {
+          "caller": "apply_socket_timeouts_fd",
+          "callee": "timeout.as_secs",
+          "lineNumber": 322
+        },
+        {
+          "caller": "apply_socket_timeouts_fd",
+          "callee": "timeout.subsec_nanos",
+          "lineNumber": 323
+        },
+        {
+          "caller": "apply_socket_timeouts_fd",
+          "callee": "libc::setsockopt",
+          "lineNumber": 329
+        },
+        {
+          "caller": "apply_socket_timeouts_fd",
+          "callee": "std::mem::size_of::<libc::timeval>",
+          "lineNumber": 334
+        },
+        {
+          "caller": "apply_socket_timeouts_fd",
+          "callee": "libc::setsockopt",
+          "lineNumber": 336
+        },
+        {
+          "caller": "apply_socket_timeouts_fd",
+          "callee": "std::mem::size_of::<libc::timeval>",
+          "lineNumber": 341
+        },
+        {
+          "caller": "test_connection",
+          "callee": "self.exchange",
+          "lineNumber": 349
+        },
+        {
+          "caller": "test_connection",
+          "callee": "serde_json::from_value(v).map_err",
+          "lineNumber": 351
+        },
+        {
+          "caller": "test_connection",
+          "callee": "serde_json::from_value",
+          "lineNumber": 351
+        },
+        {
+          "caller": "test_connection",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 352
+        },
+        {
+          "caller": "test_connection",
+          "callee": "Err",
+          "lineNumber": 353
+        },
+        {
+          "caller": "test_connection",
+          "callee": "TransportError::from",
+          "lineNumber": 353
+        },
+        {
+          "caller": "run_command",
+          "callee": "serde_json::to_value(WireCommand {\n            command: req.command.clone(),\n            timeout: req.timeout.map(|d| d.as_secs()),\n        }).map_err",
+          "lineNumber": 358
+        },
+        {
+          "caller": "run_command",
+          "callee": "serde_json::to_value",
+          "lineNumber": 358
+        },
+        {
+          "caller": "run_command",
+          "callee": "req.command.clone",
+          "lineNumber": 359
+        },
+        {
+          "caller": "run_command",
+          "callee": "req.timeout.map",
+          "lineNumber": 360
+        },
+        {
+          "caller": "run_command",
+          "callee": "d.as_secs",
+          "lineNumber": 360
+        },
+        {
+          "caller": "run_command",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 362
+        },
+        {
+          "caller": "run_command",
+          "callee": "self.exchange",
+          "lineNumber": 363
+        },
+        {
+          "caller": "run_command",
+          "callee": "serde_json::from_value(v).map_err",
+          "lineNumber": 366
+        },
+        {
+          "caller": "run_command",
+          "callee": "serde_json::from_value",
+          "lineNumber": 366
+        },
+        {
+          "caller": "run_command",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 367
+        },
+        {
+          "caller": "run_command",
+          "callee": "Ok",
+          "lineNumber": 368
+        },
+        {
+          "caller": "run_command",
+          "callee": "CommandResult::from",
+          "lineNumber": 368
+        },
+        {
+          "caller": "run_command",
+          "callee": "Err",
+          "lineNumber": 370
+        },
+        {
+          "caller": "run_command",
+          "callee": "TransportError::from",
+          "lineNumber": 370
+        },
+        {
+          "caller": "upload_file",
+          "callee": "serde_json::to_value(WireUploadFile {\n            local: req.local.to_string_lossy().into_owned(),\n            remote: req.remote.clone(),\n        }).map_err",
+          "lineNumber": 375
+        },
+        {
+          "caller": "upload_file",
+          "callee": "serde_json::to_value",
+          "lineNumber": 375
+        },
+        {
+          "caller": "upload_file",
+          "callee": "req.local.to_string_lossy().into_owned",
+          "lineNumber": 376
+        },
+        {
+          "caller": "upload_file",
+          "callee": "req.local.to_string_lossy",
+          "lineNumber": 376
+        },
+        {
+          "caller": "upload_file",
+          "callee": "req.remote.clone",
+          "lineNumber": 377
+        },
+        {
+          "caller": "upload_file",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 379
+        },
+        {
+          "caller": "upload_file",
+          "callee": "self.exchange",
+          "lineNumber": 380
+        },
+        {
+          "caller": "upload_file",
+          "callee": "Ok",
+          "lineNumber": 382
+        },
+        {
+          "caller": "upload_file",
+          "callee": "Err",
+          "lineNumber": 383
+        },
+        {
+          "caller": "upload_file",
+          "callee": "TransportError::from",
+          "lineNumber": 383
+        },
+        {
+          "caller": "upload_text",
+          "callee": "serde_json::to_value(WireUploadText {\n            text: req.text.clone(),\n            remote: req.remote.clone(),\n        }).map_err",
+          "lineNumber": 388
+        },
+        {
+          "caller": "upload_text",
+          "callee": "serde_json::to_value",
+          "lineNumber": 388
+        },
+        {
+          "caller": "upload_text",
+          "callee": "req.text.clone",
+          "lineNumber": 389
+        },
+        {
+          "caller": "upload_text",
+          "callee": "req.remote.clone",
+          "lineNumber": 390
+        },
+        {
+          "caller": "upload_text",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 392
+        },
+        {
+          "caller": "upload_text",
+          "callee": "self.exchange",
+          "lineNumber": 393
+        },
+        {
+          "caller": "upload_text",
+          "callee": "Ok",
+          "lineNumber": 395
+        },
+        {
+          "caller": "upload_text",
+          "callee": "Err",
+          "lineNumber": 396
+        },
+        {
+          "caller": "upload_text",
+          "callee": "TransportError::from",
+          "lineNumber": 396
+        },
+        {
+          "caller": "download_file",
+          "callee": "serde_json::to_value(WireDownloadFile {\n            remote: req.remote.clone(),\n            local: req.local.to_string_lossy().into_owned(),\n        }).map_err",
+          "lineNumber": 401
+        },
+        {
+          "caller": "download_file",
+          "callee": "serde_json::to_value",
+          "lineNumber": 401
+        },
+        {
+          "caller": "download_file",
+          "callee": "req.remote.clone",
+          "lineNumber": 402
+        },
+        {
+          "caller": "download_file",
+          "callee": "req.local.to_string_lossy().into_owned",
+          "lineNumber": 403
+        },
+        {
+          "caller": "download_file",
+          "callee": "req.local.to_string_lossy",
+          "lineNumber": 403
+        },
+        {
+          "caller": "download_file",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 405
+        },
+        {
+          "caller": "download_file",
+          "callee": "self.exchange",
+          "lineNumber": 406
+        },
+        {
+          "caller": "download_file",
+          "callee": "Ok",
+          "lineNumber": 408
+        },
+        {
+          "caller": "download_file",
+          "callee": "Err",
+          "lineNumber": 409
+        },
+        {
+          "caller": "download_file",
+          "callee": "TransportError::from",
+          "lineNumber": 409
+        },
+        {
+          "caller": "download_dir",
+          "callee": "serde_json::to_value(WireDownloadDir {\n            remote: req.remote.clone(),\n            local: req.local.to_string_lossy().into_owned(),\n        }).map_err",
+          "lineNumber": 414
+        },
+        {
+          "caller": "download_dir",
+          "callee": "serde_json::to_value",
+          "lineNumber": 414
+        },
+        {
+          "caller": "download_dir",
+          "callee": "req.remote.clone",
+          "lineNumber": 415
+        },
+        {
+          "caller": "download_dir",
+          "callee": "req.local.to_string_lossy().into_owned",
+          "lineNumber": 416
+        },
+        {
+          "caller": "download_dir",
+          "callee": "req.local.to_string_lossy",
+          "lineNumber": 416
+        },
+        {
+          "caller": "download_dir",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 418
+        },
+        {
+          "caller": "download_dir",
+          "callee": "self.exchange",
+          "lineNumber": 419
+        },
+        {
+          "caller": "download_dir",
+          "callee": "Ok",
+          "lineNumber": 421
+        },
+        {
+          "caller": "download_dir",
+          "callee": "Err",
+          "lineNumber": 422
+        },
+        {
+          "caller": "download_dir",
+          "callee": "TransportError::from",
+          "lineNumber": 422
+        },
+        {
+          "caller": "short_socket_path",
+          "callee": "std::path::PathBuf::from(\"/tmp\").join",
+          "lineNumber": 449
+        },
+        {
+          "caller": "short_socket_path",
+          "callee": "std::path::PathBuf::from",
+          "lineNumber": 449
+        },
+        {
+          "caller": "short_socket_path",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 453
+        },
+        {
+          "caller": "short_socket_path",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 453
+        },
+        {
+          "caller": "serve_one_via_real_server",
+          "callee": "listener.accept().unwrap",
+          "lineNumber": 466
+        },
+        {
+          "caller": "serve_one_via_real_server",
+          "callee": "listener.accept",
+          "lineNumber": 466
+        },
+        {
+          "caller": "serve_one_via_real_server",
+          "callee": "real_server::serve_one",
+          "lineNumber": 467
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "assert_send_sync::<NativeTransportClient>",
+          "lineNumber": 474
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "short_socket_path",
+          "lineNumber": 476
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 477
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "UnixListener::bind(&socket).unwrap",
+          "lineNumber": 478
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "UnixListener::bind",
+          "lineNumber": 478
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "thread::spawn",
+          "lineNumber": 480
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "serve_one_via_real_server",
+          "lineNumber": 481
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "Arc::new",
+          "lineNumber": 481
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 481
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "NativeTransportClient::connect(&socket, \"test-profile\", \"\").unwrap",
+          "lineNumber": 484
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 484
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "shared_contract_suite",
+          "lineNumber": 488
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "client\n            .run_command(&CommandRequest::untimed(\"echo hi\")).unwrap",
+          "lineNumber": 491
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "client.run_command",
+          "lineNumber": 491
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "CommandRequest::untimed",
+          "lineNumber": 492
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "client\n            .upload_text(&UploadTextRequest::untimed(\"payload\", \"/tmp/x\")).unwrap",
+          "lineNumber": 496
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "client.upload_text",
+          "lineNumber": 496
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "UploadTextRequest::untimed",
+          "lineNumber": 497
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "drop",
+          "lineNumber": 503
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "handle.join().unwrap",
+          "lineNumber": 504
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "handle.join",
+          "lineNumber": 504
+        },
+        {
+          "caller": "ipc_transport_passes_shared_contract_suite",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 505
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "Arc::new",
+          "lineNumber": 513
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "Mutex::new",
+          "lineNumber": 513
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "mutex.clone",
+          "lineNumber": 514
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "thread::spawn",
+          "lineNumber": 516
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "mutex_clone.lock().unwrap",
+          "lineNumber": 517
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "mutex_clone.lock",
+          "lineNumber": 517
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "std::thread::sleep",
+          "lineNumber": 518
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "Duration::from_secs",
+          "lineNumber": 518
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "drop",
+          "lineNumber": 519
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "std::thread::sleep",
+          "lineNumber": 522
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "Duration::from_millis",
+          "lineNumber": 522
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "Deadline::from_now",
+          "lineNumber": 524
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "Duration::from_millis",
+          "lineNumber": 524
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 525
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "lock_with_deadline",
+          "lineNumber": 526
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "start.elapsed",
+          "lineNumber": 527
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "handle.join().unwrap",
+          "lineNumber": 534
+        },
+        {
+          "caller": "lock_with_deadline_bails_when_deadline_passes",
+          "callee": "handle.join",
+          "lineNumber": 534
+        },
+        {
+          "caller": "test_connection",
+          "callee": "std::thread::sleep",
+          "lineNumber": 552
+        },
+        {
+          "caller": "test_connection",
+          "callee": "Duration::from_secs",
+          "lineNumber": 552
+        },
+        {
+          "caller": "test_connection",
+          "callee": "self.0.test_connection",
+          "lineNumber": 553
+        },
+        {
+          "caller": "run_command",
+          "callee": "self.0.run_command",
+          "lineNumber": 556
+        },
+        {
+          "caller": "upload_file",
+          "callee": "self.0.upload_file",
+          "lineNumber": 559
+        },
+        {
+          "caller": "upload_text",
+          "callee": "self.0.upload_text",
+          "lineNumber": 562
+        },
+        {
+          "caller": "download_file",
+          "callee": "self.0.download_file",
+          "lineNumber": 565
+        },
+        {
+          "caller": "download_dir",
+          "callee": "self.0.download_dir",
+          "lineNumber": 568
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "short_socket_path",
+          "lineNumber": 572
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 573
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "UnixListener::bind(&socket).unwrap",
+          "lineNumber": 574
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "UnixListener::bind",
+          "lineNumber": 574
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "thread::spawn",
+          "lineNumber": 576
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "listener.accept().unwrap",
+          "lineNumber": 577
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "listener.accept",
+          "lineNumber": 577
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "real_server::serve_one",
+          "lineNumber": 578
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "Arc::new",
+          "lineNumber": 580
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "SlowTransport",
+          "lineNumber": 580
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 580
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "Arc::new",
+          "lineNumber": 586
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "NativeTransportClient::connect(&socket, \"test-profile\", \"\").unwrap",
+          "lineNumber": 586
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 586
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "client.clone",
+          "lineNumber": 589
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "thread::spawn",
+          "lineNumber": 590
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "client_a.test_connection",
+          "lineNumber": 591
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "Deadline::from_now",
+          "lineNumber": 591
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "Duration::from_secs",
+          "lineNumber": 591
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "std::thread::sleep",
+          "lineNumber": 594
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "Duration::from_millis",
+          "lineNumber": 594
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 597
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "client.test_connection",
+          "lineNumber": 598
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "Deadline::from_now",
+          "lineNumber": 598
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "Duration::from_secs",
+          "lineNumber": 598
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "start.elapsed",
+          "lineNumber": 599
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "handle_a.join().unwrap",
+          "lineNumber": 608
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "handle_a.join",
+          "lineNumber": 608
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "drop",
+          "lineNumber": 609
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "server_handle.join().unwrap",
+          "lineNumber": 610
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "server_handle.join",
+          "lineNumber": 610
+        },
+        {
+          "caller": "short_deadline_request_times_out_while_lock_held",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 611
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "short_socket_path",
+          "lineNumber": 618
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 619
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "UnixListener::bind(&socket).unwrap",
+          "lineNumber": 620
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "UnixListener::bind",
+          "lineNumber": 620
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "thread::spawn",
+          "lineNumber": 625
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "listener.accept().unwrap",
+          "lineNumber": 627
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "listener.accept",
+          "lineNumber": 627
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "FrameReader::new",
+          "lineNumber": 629
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "reader.read_frame().unwrap().unwrap",
+          "lineNumber": 630
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "reader.read_frame().unwrap",
+          "lineNumber": 630
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "reader.read_frame",
+          "lineNumber": 630
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "FrameWriter::new(&mut stream)\n                .write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap",
+          "lineNumber": 641
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "FrameWriter::new(&mut stream).write_frame",
+          "lineNumber": 641
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "FrameWriter::new",
+          "lineNumber": 641
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "serde_json::to_vec(&ack).unwrap",
+          "lineNumber": 642
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 642
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "FrameReader::new",
+          "lineNumber": 646
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "reader.read_frame",
+          "lineNumber": 647
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "stream.write_all(&4u32.to_be_bytes()).unwrap",
+          "lineNumber": 652
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "stream.write_all",
+          "lineNumber": 652
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "4u32.to_be_bytes",
+          "lineNumber": 652
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "stream.flush().unwrap",
+          "lineNumber": 653
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "stream.flush",
+          "lineNumber": 653
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "std::thread::sleep",
+          "lineNumber": 656
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "Duration::from_millis",
+          "lineNumber": 656
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "stream.write_all(b\"x\").is_err",
+          "lineNumber": 657
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "stream.write_all",
+          "lineNumber": 657
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "stream.flush().unwrap",
+          "lineNumber": 660
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "stream.flush",
+          "lineNumber": 660
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "NativeTransportClient::connect(&socket, \"test-profile\", \"\").unwrap",
+          "lineNumber": 668
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 668
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 671
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "client.test_connection",
+          "lineNumber": 672
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "Deadline::from_now",
+          "lineNumber": 672
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "Duration::from_secs",
+          "lineNumber": 672
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "start.elapsed",
+          "lineNumber": 673
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "drop",
+          "lineNumber": 682
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "server_handle.join().unwrap",
+          "lineNumber": 683
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "server_handle.join",
+          "lineNumber": 683
+        },
+        {
+          "caller": "slow_chunked_response_hits_deadline",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 684
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "short_socket_path",
+          "lineNumber": 696
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 697
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "UnixListener::bind(&socket).unwrap",
+          "lineNumber": 698
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "UnixListener::bind",
+          "lineNumber": 698
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "thread::spawn",
+          "lineNumber": 700
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "listener.accept().unwrap",
+          "lineNumber": 702
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "listener.accept",
+          "lineNumber": 702
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "FrameReader::new",
+          "lineNumber": 705
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "reader.read_frame().unwrap().unwrap",
+          "lineNumber": 706
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "reader.read_frame().unwrap",
+          "lineNumber": 706
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "reader.read_frame",
+          "lineNumber": 706
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "FrameWriter::new(&mut stream)\n                .write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap",
+          "lineNumber": 717
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "FrameWriter::new(&mut stream).write_frame",
+          "lineNumber": 717
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "FrameWriter::new",
+          "lineNumber": 717
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "serde_json::to_vec(&ack).unwrap",
+          "lineNumber": 718
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 718
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "FrameReader::new",
+          "lineNumber": 724
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "reader.read_frame",
+          "lineNumber": 725
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "std::thread::sleep",
+          "lineNumber": 729
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "Duration::from_millis",
+          "lineNumber": 729
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "stream.write_all(&100u32.to_be_bytes()).is_err",
+          "lineNumber": 731
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "stream.write_all",
+          "lineNumber": 731
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "100u32.to_be_bytes",
+          "lineNumber": 731
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "stream.flush().unwrap",
+          "lineNumber": 734
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "stream.flush",
+          "lineNumber": 734
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "NativeTransportClient::connect(&socket, \"test-profile\", \"\").unwrap",
+          "lineNumber": 744
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 744
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 746
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "client.test_connection",
+          "lineNumber": 747
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "Deadline::from_now",
+          "lineNumber": 747
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "Duration::from_secs",
+          "lineNumber": 747
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "start.elapsed",
+          "lineNumber": 748
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "drop",
+          "lineNumber": 759
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "server_handle.join().unwrap",
+          "lineNumber": 760
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "server_handle.join",
+          "lineNumber": 760
+        },
+        {
+          "caller": "frame_header_near_deadline_then_stop",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 761
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "short_socket_path",
+          "lineNumber": 771
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 772
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "UnixListener::bind(&socket).unwrap",
+          "lineNumber": 773
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "UnixListener::bind",
+          "lineNumber": 773
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "mpsc::channel::<()>",
+          "lineNumber": 778
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "thread::spawn",
+          "lineNumber": 780
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "listener.accept().unwrap",
+          "lineNumber": 781
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "listener.accept",
+          "lineNumber": 781
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "FrameReader::new",
+          "lineNumber": 783
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "reader.read_frame().unwrap().unwrap",
+          "lineNumber": 784
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "reader.read_frame().unwrap",
+          "lineNumber": 784
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "reader.read_frame",
+          "lineNumber": 784
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "FrameWriter::new",
+          "lineNumber": 785
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "writer\n                .write_frame(&serde_json::to_vec(&ack).unwrap()).unwrap",
+          "lineNumber": 795
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "writer.write_frame",
+          "lineNumber": 795
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "serde_json::to_vec(&ack).unwrap",
+          "lineNumber": 796
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 796
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "rx.recv",
+          "lineNumber": 800
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "NativeTransportClient::connect(&socket, \"test-profile\", \"\").unwrap",
+          "lineNumber": 803
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 803
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "client.conn.lock().unwrap",
+          "lineNumber": 810
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "client.conn.lock",
+          "lineNumber": 810
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "guard.as_raw_fd",
+          "lineNumber": 811
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "libc::setsockopt",
+          "lineNumber": 814
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "std::mem::size_of::<i32>",
+          "lineNumber": 819
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "\"x\".repeat",
+          "lineNumber": 830
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "RequestId::new",
+          "lineNumber": 832
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "Deadline::from_now",
+          "lineNumber": 833
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "Duration::from_secs",
+          "lineNumber": 833
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "\"/tmp/big\".into",
+          "lineNumber": 835
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 838
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "client.upload_text",
+          "lineNumber": 839
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "start.elapsed",
+          "lineNumber": 840
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "drop",
+          "lineNumber": 859
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "tx.send",
+          "lineNumber": 860
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "server_handle.join().unwrap",
+          "lineNumber": 861
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "server_handle.join",
+          "lineNumber": 861
+        },
+        {
+          "caller": "large_request_to_nonreading_peer_hits_deadline",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 862
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 4,
+        "functionCount": 15,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "src/transport/ipc/framing.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 334,
+      "nonEmptyLines": 304,
+      "functions": [
+        {
+          "name": "fmt",
+          "startLine": 44,
+          "endLine": 52,
+          "params": [
+            "f"
+          ]
+        },
+        {
+          "name": "from",
+          "startLine": 58,
+          "endLine": 60,
+          "params": [
+            "e"
+          ]
+        },
+        {
+          "name": "encode_frame",
+          "startLine": 68,
+          "endLine": 76,
+          "params": [
+            "payload"
+          ]
+        },
+        {
+          "name": "new",
+          "startLine": 88,
+          "endLine": 93,
+          "params": [
+            "inner"
+          ]
+        },
+        {
+          "name": "read_frame",
+          "startLine": 96,
+          "endLine": 98,
+          "params": []
+        },
+        {
+          "name": "read_frame_until",
+          "startLine": 106,
+          "endLine": 111,
+          "params": [
+            "deadline"
+          ]
+        },
+        {
+          "name": "read_frame_until_with",
+          "startLine": 115,
+          "endLine": 158,
+          "params": [
+            "deadline",
+            "set_timeout"
+          ]
+        },
+        {
+          "name": "new",
+          "startLine": 167,
+          "endLine": 169,
+          "params": [
+            "inner"
+          ]
+        },
+        {
+          "name": "write_frame",
+          "startLine": 172,
+          "endLine": 177,
+          "params": [
+            "payload"
+          ]
+        },
+        {
+          "name": "write_frame_with_deadline",
+          "startLine": 183,
+          "endLine": 211,
+          "params": [
+            "payload",
+            "deadline",
+            "set_timeout"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "FrameError",
+          "startLine": 34,
+          "endLine": 41,
+          "methods": [
+            "fmt",
+            "from"
+          ],
+          "properties": [
+            "TooLarge",
+            "Truncated",
+            "Io"
+          ]
+        },
+        {
+          "name": "FrameReader",
+          "startLine": 82,
+          "endLine": 85,
+          "methods": [],
+          "properties": [
+            "inner",
+            "buf"
+          ]
+        },
+        {
+          "name": "FrameWriter",
+          "startLine": 162,
+          "endLine": 164,
+          "methods": [],
+          "properties": [
+            "inner"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "FrameError",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "encode_frame",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "FrameReader",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "new",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "read_frame",
+          "line": 96,
+          "isDefault": false
+        },
+        {
+          "name": "read_frame_until",
+          "line": 106,
+          "isDefault": false
+        },
+        {
+          "name": "read_frame_until_with",
+          "line": 115,
+          "isDefault": false
+        },
+        {
+          "name": "FrameWriter",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "new",
+          "line": 167,
+          "isDefault": false
+        },
+        {
+          "name": "write_frame",
+          "line": 172,
+          "isDefault": false
+        },
+        {
+          "name": "write_frame_with_deadline",
+          "line": 183,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "from",
+          "callee": "FrameError::Io",
+          "lineNumber": 59
+        },
+        {
+          "caller": "from",
+          "callee": "e.to_string",
+          "lineNumber": 59
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "payload.len",
+          "lineNumber": 69
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "Err",
+          "lineNumber": 70
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "FrameError::TooLarge",
+          "lineNumber": 70
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "payload.len",
+          "lineNumber": 70
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "Vec::with_capacity",
+          "lineNumber": 72
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "payload.len",
+          "lineNumber": 72
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "out.extend_from_slice",
+          "lineNumber": 73
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "(payload.len() as u32).to_be_bytes",
+          "lineNumber": 73
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "payload.len",
+          "lineNumber": 73
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "out.extend_from_slice",
+          "lineNumber": 74
+        },
+        {
+          "caller": "encode_frame",
+          "callee": "Ok",
+          "lineNumber": 75
+        },
+        {
+          "caller": "new",
+          "callee": "Vec::with_capacity",
+          "lineNumber": 91
+        },
+        {
+          "caller": "read_frame",
+          "callee": "self.read_frame_until",
+          "lineNumber": 97
+        },
+        {
+          "caller": "read_frame_until",
+          "callee": "self.read_frame_until_with",
+          "lineNumber": 110
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "d.saturating_duration_since",
+          "lineNumber": 125
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 125
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "remaining.is_zero",
+          "lineNumber": 126
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "Err",
+          "lineNumber": 127
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "FrameError::Io",
+          "lineNumber": 127
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "\"ipc read deadline exceeded\".into",
+          "lineNumber": 127
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "set_timeout",
+          "lineNumber": 130
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "remaining.max",
+          "lineNumber": 130
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "std::time::Duration::from_millis",
+          "lineNumber": 130
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "self.buf.len",
+          "lineNumber": 132
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "u32::from_be_bytes",
+          "lineNumber": 133
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "Err",
+          "lineNumber": 136
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "FrameError::TooLarge",
+          "lineNumber": 136
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "self.buf.len",
+          "lineNumber": 139
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "self.buf[FRAME_PREFIX_LEN..total].to_vec",
+          "lineNumber": 140
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "self.buf.drain",
+          "lineNumber": 141
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "Ok",
+          "lineNumber": 142
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "Some",
+          "lineNumber": 142
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "self.inner.read",
+          "lineNumber": 147
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "self.buf.is_empty",
+          "lineNumber": 150
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "Ok",
+          "lineNumber": 151
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "Err",
+          "lineNumber": 153
+        },
+        {
+          "caller": "read_frame_until_with",
+          "callee": "self.buf.extend_from_slice",
+          "lineNumber": 156
+        },
+        {
+          "caller": "write_frame",
+          "callee": "encode_frame",
+          "lineNumber": 173
+        },
+        {
+          "caller": "write_frame",
+          "callee": "self.inner.write_all",
+          "lineNumber": 174
+        },
+        {
+          "caller": "write_frame",
+          "callee": "self.inner.flush",
+          "lineNumber": 175
+        },
+        {
+          "caller": "write_frame",
+          "callee": "Ok",
+          "lineNumber": 176
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "encode_frame",
+          "lineNumber": 192
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "framed.len",
+          "lineNumber": 194
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "d.saturating_duration_since",
+          "lineNumber": 196
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 196
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "remaining.is_zero",
+          "lineNumber": 197
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "Err",
+          "lineNumber": 198
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "FrameError::Io",
+          "lineNumber": 198
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "\"ipc write deadline exceeded\".into",
+          "lineNumber": 198
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "set_timeout",
+          "lineNumber": 200
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "remaining.max",
+          "lineNumber": 200
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "std::time::Duration::from_millis",
+          "lineNumber": 200
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "self.inner.write",
+          "lineNumber": 202
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "Err",
+          "lineNumber": 203
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "FrameError::Io",
+          "lineNumber": 203
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "\"ipc write returned 0 bytes\".into",
+          "lineNumber": 203
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "e.kind",
+          "lineNumber": 205
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "Err",
+          "lineNumber": 206
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "FrameError::from",
+          "lineNumber": 206
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "self.inner.flush",
+          "lineNumber": 209
+        },
+        {
+          "caller": "write_frame_with_deadline",
+          "callee": "Ok",
+          "lineNumber": 210
+        },
+        {
+          "caller": "read",
+          "callee": "self.data.len",
+          "lineNumber": 237
+        },
+        {
+          "caller": "read",
+          "callee": "Ok",
+          "lineNumber": 238
+        },
+        {
+          "caller": "read",
+          "callee": "(self.pos + self.chunk).min",
+          "lineNumber": 240
+        },
+        {
+          "caller": "read",
+          "callee": "self.data.len",
+          "lineNumber": 240
+        },
+        {
+          "caller": "read",
+          "callee": "(end - self.pos).min",
+          "lineNumber": 241
+        },
+        {
+          "caller": "read",
+          "callee": "buf.len",
+          "lineNumber": 241
+        },
+        {
+          "caller": "read",
+          "callee": "buf[..n].copy_from_slice",
+          "lineNumber": 242
+        },
+        {
+          "caller": "read",
+          "callee": "Ok",
+          "lineNumber": 244
+        },
+        {
+          "caller": "round_trips_arbitrary_payload",
+          "callee": "encode_frame(payload).unwrap",
+          "lineNumber": 251
+        },
+        {
+          "caller": "round_trips_arbitrary_payload",
+          "callee": "encode_frame",
+          "lineNumber": 251
+        },
+        {
+          "caller": "round_trips_arbitrary_payload",
+          "callee": "u32::from_be_bytes",
+          "lineNumber": 252
+        },
+        {
+          "caller": "empty_payload_is_allowed",
+          "callee": "encode_frame(b\"\").unwrap",
+          "lineNumber": 259
+        },
+        {
+          "caller": "empty_payload_is_allowed",
+          "callee": "encode_frame",
+          "lineNumber": 259
+        },
+        {
+          "caller": "empty_payload_is_allowed",
+          "callee": "u32::from_be_bytes",
+          "lineNumber": 261
+        },
+        {
+          "caller": "rejects_oversize_payload",
+          "callee": "encode_frame",
+          "lineNumber": 268
+        },
+        {
+          "caller": "stream_reader_reassembles_split_writes",
+          "callee": "encode_frame(payload).unwrap",
+          "lineNumber": 283
+        },
+        {
+          "caller": "stream_reader_reassembles_split_writes",
+          "callee": "encode_frame",
+          "lineNumber": 283
+        },
+        {
+          "caller": "stream_reader_reassembles_split_writes",
+          "callee": "FrameReader::new",
+          "lineNumber": 284
+        },
+        {
+          "caller": "stream_reader_reassembles_split_writes",
+          "callee": "ChunkedReader::new",
+          "lineNumber": 284
+        },
+        {
+          "caller": "stream_reader_handles_concatenated_frames",
+          "callee": "encode_frame(b\"first\").unwrap",
+          "lineNumber": 291
+        },
+        {
+          "caller": "stream_reader_handles_concatenated_frames",
+          "callee": "encode_frame",
+          "lineNumber": 291
+        },
+        {
+          "caller": "stream_reader_handles_concatenated_frames",
+          "callee": "encode_frame(b\"second\").unwrap",
+          "lineNumber": 292
+        },
+        {
+          "caller": "stream_reader_handles_concatenated_frames",
+          "callee": "encode_frame",
+          "lineNumber": 292
+        },
+        {
+          "caller": "stream_reader_handles_concatenated_frames",
+          "callee": "Vec::new",
+          "lineNumber": 293
+        },
+        {
+          "caller": "stream_reader_handles_concatenated_frames",
+          "callee": "all.extend_from_slice",
+          "lineNumber": 294
+        },
+        {
+          "caller": "stream_reader_handles_concatenated_frames",
+          "callee": "all.extend_from_slice",
+          "lineNumber": 295
+        },
+        {
+          "caller": "stream_reader_handles_concatenated_frames",
+          "callee": "FrameReader::new",
+          "lineNumber": 296
+        },
+        {
+          "caller": "stream_reader_handles_concatenated_frames",
+          "callee": "Cursor::new",
+          "lineNumber": 296
+        },
+        {
+          "caller": "truncated_frame_is_an_error",
+          "callee": "encode_frame(b\"incomplete\").unwrap",
+          "lineNumber": 304
+        },
+        {
+          "caller": "truncated_frame_is_an_error",
+          "callee": "encode_frame",
+          "lineNumber": 304
+        },
+        {
+          "caller": "truncated_frame_is_an_error",
+          "callee": "framed.len",
+          "lineNumber": 305
+        },
+        {
+          "caller": "truncated_frame_is_an_error",
+          "callee": "FrameReader::new",
+          "lineNumber": 306
+        },
+        {
+          "caller": "truncated_frame_is_an_error",
+          "callee": "Cursor::new",
+          "lineNumber": 306
+        },
+        {
+          "caller": "truncated_frame_is_an_error",
+          "callee": "partial.to_vec",
+          "lineNumber": 306
+        },
+        {
+          "caller": "writer_and_reader_agree",
+          "callee": "Vec::new",
+          "lineNumber": 312
+        },
+        {
+          "caller": "writer_and_reader_agree",
+          "callee": "FrameWriter::new",
+          "lineNumber": 314
+        },
+        {
+          "caller": "writer_and_reader_agree",
+          "callee": "w.write_frame(b\"one\").unwrap",
+          "lineNumber": 315
+        },
+        {
+          "caller": "writer_and_reader_agree",
+          "callee": "w.write_frame",
+          "lineNumber": 315
+        },
+        {
+          "caller": "writer_and_reader_agree",
+          "callee": "w.write_frame(b\"two\").unwrap",
+          "lineNumber": 316
+        },
+        {
+          "caller": "writer_and_reader_agree",
+          "callee": "w.write_frame",
+          "lineNumber": 316
+        },
+        {
+          "caller": "writer_and_reader_agree",
+          "callee": "FrameReader::new",
+          "lineNumber": 318
+        },
+        {
+          "caller": "writer_and_reader_agree",
+          "callee": "Cursor::new",
+          "lineNumber": 318
+        },
+        {
+          "caller": "oversize_claim_is_rejected_before_buffering",
+          "callee": "Vec::new",
+          "lineNumber": 326
+        },
+        {
+          "caller": "oversize_claim_is_rejected_before_buffering",
+          "callee": "prefix.extend_from_slice",
+          "lineNumber": 327
+        },
+        {
+          "caller": "oversize_claim_is_rejected_before_buffering",
+          "callee": "(MAX_FRAME_SIZE as u32 + 1).to_be_bytes",
+          "lineNumber": 327
+        },
+        {
+          "caller": "oversize_claim_is_rejected_before_buffering",
+          "callee": "FrameReader::new",
+          "lineNumber": 328
+        },
+        {
+          "caller": "oversize_claim_is_rejected_before_buffering",
+          "callee": "Cursor::new",
+          "lineNumber": 328
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 11,
+        "functionCount": 10,
+        "classCount": 3
+      }
+    },
+    {
+      "path": "src/transport/ipc/messages.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 652,
+      "nonEmptyLines": 618,
+      "functions": [
+        {
+          "name": "current",
+          "startLine": 26,
+          "endLine": 31,
+          "params": []
+        },
+        {
+          "name": "compatible_with",
+          "startLine": 36,
+          "endLine": 38,
+          "params": [
+            "client"
+          ]
+        },
+        {
+          "name": "as_str",
+          "startLine": 68,
+          "endLine": 85,
+          "params": []
+        },
+        {
+          "name": "serialize",
+          "startLine": 89,
+          "endLine": 91,
+          "params": [
+            "s"
+          ]
+        },
+        {
+          "name": "deserialize",
+          "startLine": 95,
+          "endLine": 113,
+          "params": [
+            "d"
+          ]
+        },
+        {
+          "name": "new",
+          "startLine": 127,
+          "endLine": 135,
+          "params": [
+            "profile",
+            "auth_token"
+          ]
+        },
+        {
+          "name": "code",
+          "startLine": 248,
+          "endLine": 274,
+          "params": []
+        },
+        {
+          "name": "is_connection_level",
+          "startLine": 286,
+          "endLine": 294,
+          "params": []
+        },
+        {
+          "name": "from",
+          "startLine": 298,
+          "endLine": 354,
+          "params": [
+            "e"
+          ]
+        },
+        {
+          "name": "from",
+          "startLine": 358,
+          "endLine": 416,
+          "params": [
+            "e"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ProtocolVersion",
+          "startLine": 19,
+          "endLine": 22,
+          "methods": [
+            "current",
+            "compatible_with"
+          ],
+          "properties": [
+            "major",
+            "minor"
+          ]
+        },
+        {
+          "name": "Operation",
+          "startLine": 47,
+          "endLine": 65,
+          "methods": [
+            "as_str",
+            "serialize",
+            "deserialize"
+          ],
+          "properties": [
+            "Hello",
+            "TestConnection",
+            "RunCommand",
+            "UploadFile",
+            "UploadText",
+            "DownloadFile",
+            "DownloadDir",
+            "StartLocalForward",
+            "StopLocalForward",
+            "Health",
+            "Shutdown",
+            "Cancel",
+            "Challenge",
+            "Unknown"
+          ]
+        },
+        {
+          "name": "Hello",
+          "startLine": 118,
+          "endLine": 124,
+          "methods": [
+            "new"
+          ],
+          "properties": [
+            "profile",
+            "auth_token",
+            "client_major",
+            "client_minor"
+          ]
+        },
+        {
+          "name": "HelloAck",
+          "startLine": 140,
+          "endLine": 149,
+          "methods": [],
+          "properties": [
+            "server_major",
+            "server_minor",
+            "daemon_nonce",
+            "capabilities"
+          ]
+        },
+        {
+          "name": "RequestEnvelope",
+          "startLine": 154,
+          "endLine": 166,
+          "methods": [],
+          "properties": [
+            "protocol_major",
+            "protocol_minor",
+            "profile",
+            "daemon_nonce",
+            "auth_token",
+            "request_id",
+            "deadline_unix_ms",
+            "operation",
+            "payload"
+          ]
+        },
+        {
+          "name": "ResponseResult",
+          "startLine": 171,
+          "endLine": 174,
+          "methods": [],
+          "properties": [
+            "Ok",
+            "Err"
+          ]
+        },
+        {
+          "name": "ResponseEnvelope",
+          "startLine": 178,
+          "endLine": 181,
+          "methods": [],
+          "properties": [
+            "request_id",
+            "result"
+          ]
+        },
+        {
+          "name": "IpcError",
+          "startLine": 191,
+          "endLine": 244,
+          "methods": [
+            "code",
+            "is_connection_level",
+            "from"
+          ],
+          "properties": [
+            "Configuration",
+            "DaemonUnavailable",
+            "ProtocolMismatch",
+            "AuthenticationFailed",
+            "InteractionRequired",
+            "HostKeyUnknown",
+            "HostKeyChanged",
+            "HostKeyPolicyUnsupported",
+            "ProxyFailed",
+            "JumpFailed",
+            "ConnectionFailed",
+            "QueueTimeout",
+            "ExecutionTimeout",
+            "RemoteExit",
+            "OutcomeUnknown",
+            "TransferInterrupted",
+            "IntegrityMismatch",
+            "LocalIo",
+            "RemoteIo",
+            "Cancelled",
+            "RestartRequired",
+            "UnsupportedOperation",
+            "UnsupportedBackend"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ProtocolVersion",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "current",
+          "line": 26,
+          "isDefault": false
+        },
+        {
+          "name": "compatible_with",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "Operation",
+          "line": 47,
+          "isDefault": false
+        },
+        {
+          "name": "as_str",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "Hello",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "new",
+          "line": 127,
+          "isDefault": false
+        },
+        {
+          "name": "HelloAck",
+          "line": 140,
+          "isDefault": false
+        },
+        {
+          "name": "RequestEnvelope",
+          "line": 154,
+          "isDefault": false
+        },
+        {
+          "name": "ResponseResult",
+          "line": 171,
+          "isDefault": false
+        },
+        {
+          "name": "ResponseEnvelope",
+          "line": 178,
+          "isDefault": false
+        },
+        {
+          "name": "IpcError",
+          "line": 191,
+          "isDefault": false
+        },
+        {
+          "name": "code",
+          "line": 248,
+          "isDefault": false
+        },
+        {
+          "name": "is_connection_level",
+          "line": 286,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "as_str",
+          "callee": "s.as_str",
+          "lineNumber": 83
+        },
+        {
+          "caller": "serialize",
+          "callee": "s.serialize_str",
+          "lineNumber": 90
+        },
+        {
+          "caller": "serialize",
+          "callee": "self.as_str",
+          "lineNumber": 90
+        },
+        {
+          "caller": "deserialize",
+          "callee": "String::deserialize",
+          "lineNumber": 96
+        },
+        {
+          "caller": "deserialize",
+          "callee": "Ok",
+          "lineNumber": 97
+        },
+        {
+          "caller": "deserialize",
+          "callee": "raw.as_str",
+          "lineNumber": 97
+        },
+        {
+          "caller": "deserialize",
+          "callee": "Operation::Unknown",
+          "lineNumber": 111
+        },
+        {
+          "caller": "deserialize",
+          "callee": "other.to_string",
+          "lineNumber": 111
+        },
+        {
+          "caller": "new",
+          "callee": "ProtocolVersion::current",
+          "lineNumber": 128
+        },
+        {
+          "caller": "new",
+          "callee": "profile.into",
+          "lineNumber": 130
+        },
+        {
+          "caller": "new",
+          "callee": "auth_token.into",
+          "lineNumber": 131
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::Configuration",
+          "lineNumber": 300
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::AuthenticationFailed",
+          "lineNumber": 305
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::HostKeyPolicyUnsupported",
+          "lineNumber": 311
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::ProxyFailed",
+          "lineNumber": 312
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::JumpFailed",
+          "lineNumber": 313
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::ConnectionFailed",
+          "lineNumber": 314
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::LocalIo",
+          "lineNumber": 347
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::RemoteIo",
+          "lineNumber": 348
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::RestartRequired",
+          "lineNumber": 350
+        },
+        {
+          "caller": "from",
+          "callee": "IpcError::UnsupportedOperation",
+          "lineNumber": 351
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::Configuration",
+          "lineNumber": 360
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::AuthenticationFailed",
+          "lineNumber": 365
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::HostKeyPolicyUnsupported",
+          "lineNumber": 371
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::ProxyFailed",
+          "lineNumber": 372
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::JumpFailed",
+          "lineNumber": 373
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::ConnectionFailed",
+          "lineNumber": 374
+        },
+        {
+          "caller": "from",
+          "callee": "RequestId",
+          "lineNumber": 379
+        },
+        {
+          "caller": "from",
+          "callee": "RequestId",
+          "lineNumber": 387
+        },
+        {
+          "caller": "from",
+          "callee": "RequestId",
+          "lineNumber": 395
+        },
+        {
+          "caller": "from",
+          "callee": "RequestId",
+          "lineNumber": 400
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::LocalIo",
+          "lineNumber": 407
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::RemoteIo",
+          "lineNumber": 408
+        },
+        {
+          "caller": "from",
+          "callee": "RequestId",
+          "lineNumber": 410
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::RestartRequired",
+          "lineNumber": 412
+        },
+        {
+          "caller": "from",
+          "callee": "TransportError::UnsupportedOperation",
+          "lineNumber": 413
+        },
+        {
+          "caller": "current_version_matches_framing_constants",
+          "callee": "ProtocolVersion::current",
+          "lineNumber": 427
+        },
+        {
+          "caller": "known_operations_round_trip_as_snake_case",
+          "callee": "serde_json::to_string(&op).unwrap",
+          "lineNumber": 448
+        },
+        {
+          "caller": "known_operations_round_trip_as_snake_case",
+          "callee": "serde_json::to_string",
+          "lineNumber": 448
+        },
+        {
+          "caller": "known_operations_round_trip_as_snake_case",
+          "callee": "serde_json::from_str(&json).unwrap",
+          "lineNumber": 450
+        },
+        {
+          "caller": "known_operations_round_trip_as_snake_case",
+          "callee": "serde_json::from_str",
+          "lineNumber": 450
+        },
+        {
+          "caller": "unknown_operation_is_captured_not_rejected",
+          "callee": "serde_json::from_str(\"\\\"frobnicate\\\"\").unwrap",
+          "lineNumber": 457
+        },
+        {
+          "caller": "unknown_operation_is_captured_not_rejected",
+          "callee": "serde_json::from_str",
+          "lineNumber": 457
+        },
+        {
+          "caller": "hello_ignores_unknown_fields",
+          "callee": "serde_json::from_str(json).unwrap",
+          "lineNumber": 464
+        },
+        {
+          "caller": "hello_ignores_unknown_fields",
+          "callee": "serde_json::from_str",
+          "lineNumber": 464
+        },
+        {
+          "caller": "hello_ignores_unknown_fields",
+          "callee": "serde_json::to_string(&hello).unwrap",
+          "lineNumber": 466
+        },
+        {
+          "caller": "hello_ignores_unknown_fields",
+          "callee": "serde_json::to_string",
+          "lineNumber": 466
+        },
+        {
+          "caller": "hello_ignores_unknown_fields",
+          "callee": "serde_json::from_str(&round).unwrap",
+          "lineNumber": 467
+        },
+        {
+          "caller": "hello_ignores_unknown_fields",
+          "callee": "serde_json::from_str",
+          "lineNumber": 467
+        },
+        {
+          "caller": "hello_ack_carries_nonce_and_capabilities",
+          "callee": "BTreeSet::new",
+          "lineNumber": 473
+        },
+        {
+          "caller": "hello_ack_carries_nonce_and_capabilities",
+          "callee": "caps.insert",
+          "lineNumber": 474
+        },
+        {
+          "caller": "hello_ack_carries_nonce_and_capabilities",
+          "callee": "\"sftp\".to_string",
+          "lineNumber": 474
+        },
+        {
+          "caller": "hello_ack_carries_nonce_and_capabilities",
+          "callee": "\"abc123\".into",
+          "lineNumber": 478
+        },
+        {
+          "caller": "hello_ack_carries_nonce_and_capabilities",
+          "callee": "serde_json::to_string(&ack).unwrap",
+          "lineNumber": 481
+        },
+        {
+          "caller": "hello_ack_carries_nonce_and_capabilities",
+          "callee": "serde_json::to_string",
+          "lineNumber": 481
+        },
+        {
+          "caller": "hello_ack_carries_nonce_and_capabilities",
+          "callee": "serde_json::from_str(&json).unwrap",
+          "lineNumber": 482
+        },
+        {
+          "caller": "hello_ack_carries_nonce_and_capabilities",
+          "callee": "serde_json::from_str",
+          "lineNumber": 482
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "\"p\".into",
+          "lineNumber": 493
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "\"n\".into",
+          "lineNumber": 494
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "\"t\".into",
+          "lineNumber": 495
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "\"r1\".into",
+          "lineNumber": 496
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "serde_json::to_string(&env).unwrap",
+          "lineNumber": 501
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "serde_json::to_string",
+          "lineNumber": 501
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "serde_json::from_str(&json).unwrap",
+          "lineNumber": 502
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "serde_json::from_str",
+          "lineNumber": 502
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "\"r1\".into",
+          "lineNumber": 506
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 507
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "serde_json::to_string(&resp).unwrap",
+          "lineNumber": 509
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "serde_json::to_string",
+          "lineNumber": 509
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "serde_json::from_str(&rjson).unwrap",
+          "lineNumber": 510
+        },
+        {
+          "caller": "envelope_round_trips_with_json_payload",
+          "callee": "serde_json::from_str",
+          "lineNumber": 510
+        },
+        {
+          "caller": "ipc_error_round_trips_through_transport_error",
+          "callee": "e.clone().into",
+          "lineNumber": 571
+        },
+        {
+          "caller": "ipc_error_round_trips_through_transport_error",
+          "callee": "e.clone",
+          "lineNumber": 571
+        },
+        {
+          "caller": "ipc_error_round_trips_through_transport_error",
+          "callee": "wired.clone().into",
+          "lineNumber": 572
+        },
+        {
+          "caller": "ipc_error_round_trips_through_transport_error",
+          "callee": "wired.clone",
+          "lineNumber": 572
+        },
+        {
+          "caller": "deadline_ms_fits_u64",
+          "callee": "Deadline::from_now",
+          "lineNumber": 598
+        },
+        {
+          "caller": "deadline_ms_fits_u64",
+          "callee": "Duration::from_secs",
+          "lineNumber": 598
+        },
+        {
+          "caller": "deadline_ms_fits_u64",
+          "callee": "d.0.elapsed().as_millis",
+          "lineNumber": 599
+        },
+        {
+          "caller": "deadline_ms_fits_u64",
+          "callee": "d.0.elapsed",
+          "lineNumber": 599
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 14,
+        "functionCount": 10,
+        "classCount": 8
+      }
+    },
+    {
+      "path": "src/transport/ipc/mod.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 22,
+      "nonEmptyLines": 20,
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/transport/ipc/server.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 1459,
+      "nonEmptyLines": 1385,
+      "functions": [
+        {
+          "name": "new",
+          "startLine": 97,
+          "endLine": 103,
+          "params": [
+            "coordinator"
+          ]
+        },
+        {
+          "name": "drop",
+          "startLine": 112,
+          "endLine": 114,
+          "params": []
+        },
+        {
+          "name": "from",
+          "startLine": 145,
+          "endLine": 153,
+          "params": [
+            "r"
+          ]
+        },
+        {
+          "name": "from",
+          "startLine": 157,
+          "endLine": 165,
+          "params": [
+            "w"
+          ]
+        },
+        {
+          "name": "do_handshake",
+          "startLine": 225,
+          "endLine": 283,
+          "params": [
+            "writer",
+            "hello_env",
+            "expected_token",
+            "server_nonce"
+          ]
+        },
+        {
+          "name": "serve_one",
+          "startLine": 301,
+          "endLine": 308,
+          "params": [
+            "stream",
+            "transport",
+            "auth_token",
+            "server_nonce"
+          ]
+        },
+        {
+          "name": "serve_one_with_shutdown",
+          "startLine": 323,
+          "endLine": 346,
+          "params": [
+            "stream",
+            "transport",
+            "auth_token",
+            "server_nonce",
+            "shutdown"
+          ]
+        },
+        {
+          "name": "serve_loop",
+          "startLine": 373,
+          "endLine": 505,
+          "params": [
+            "stream",
+            "transport_for",
+            "on_connection_error",
+            "auth_token",
+            "server_nonce",
+            "shutdown"
+          ]
+        },
+        {
+          "name": "serve_one_pooled",
+          "startLine": 514,
+          "endLine": 572,
+          "params": [
+            "stream",
+            "pool",
+            "key",
+            "limits",
+            "factory",
+            "auth_token",
+            "server_nonce",
+            "shutdown"
+          ]
+        },
+        {
+          "name": "dispatch",
+          "startLine": 577,
+          "endLine": 707,
+          "params": [
+            "transport",
+            "env",
+            "server_nonce"
+          ]
+        },
+        {
+          "name": "bind_listener",
+          "startLine": 712,
+          "endLine": 746,
+          "params": [
+            "socket_path",
+            "shutdown"
+          ]
+        },
+        {
+          "name": "accept_loop",
+          "startLine": 757,
+          "endLine": 804,
+          "params": [
+            "listener",
+            "state",
+            "auth_token",
+            "server_nonce",
+            "spawn"
+          ]
+        },
+        {
+          "name": "run",
+          "startLine": 835,
+          "endLine": 865,
+          "params": [
+            "socket_path",
+            "transport",
+            "auth_token",
+            "server_nonce",
+            "shutdown"
+          ]
+        },
+        {
+          "name": "run_with_pool",
+          "startLine": 872,
+          "endLine": 907,
+          "params": [
+            "socket_path",
+            "pool",
+            "key",
+            "limits",
+            "factory",
+            "auth_token",
+            "server_nonce",
+            "shutdown"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ShutdownState",
+          "startLine": 83,
+          "endLine": 93,
+          "methods": [
+            "new"
+          ],
+          "properties": [
+            "token",
+            "active",
+            "coordinator"
+          ]
+        },
+        {
+          "name": "ActiveGuard",
+          "startLine": 109,
+          "endLine": 109,
+          "methods": [
+            "drop"
+          ],
+          "properties": []
+        },
+        {
+          "name": "WireCommand",
+          "startLine": 124,
+          "endLine": 127,
+          "methods": [],
+          "properties": [
+            "command",
+            "timeout"
+          ]
+        },
+        {
+          "name": "WireCommandResult",
+          "startLine": 136,
+          "endLine": 142,
+          "methods": [
+            "from"
+          ],
+          "properties": [
+            "exit_status",
+            "stdout",
+            "stderr",
+            "success",
+            "duration_ms"
+          ]
+        },
+        {
+          "name": "WireUploadFile",
+          "startLine": 169,
+          "endLine": 172,
+          "methods": [],
+          "properties": [
+            "local",
+            "remote"
+          ]
+        },
+        {
+          "name": "WireUploadText",
+          "startLine": 175,
+          "endLine": 178,
+          "methods": [],
+          "properties": [
+            "text",
+            "remote"
+          ]
+        },
+        {
+          "name": "WireDownloadFile",
+          "startLine": 181,
+          "endLine": 184,
+          "methods": [],
+          "properties": [
+            "remote",
+            "local"
+          ]
+        },
+        {
+          "name": "WireDownloadDir",
+          "startLine": 187,
+          "endLine": 190,
+          "methods": [],
+          "properties": [
+            "remote",
+            "local"
+          ]
+        },
+        {
+          "name": "ChallengeAck",
+          "startLine": 194,
+          "endLine": 200,
+          "methods": [],
+          "properties": [
+            "daemon_nonce"
+          ]
+        },
+        {
+          "name": "HandshakeOutcome",
+          "startLine": 204,
+          "endLine": 211,
+          "methods": [],
+          "properties": [
+            "Ok",
+            "Err"
+          ]
+        },
+        {
+          "name": "TransportAccess",
+          "startLine": 355,
+          "endLine": 364,
+          "methods": [],
+          "properties": [
+            "transport",
+            "captured_generation",
+            "_permit"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ShutdownState",
+          "line": 83,
+          "isDefault": false
+        },
+        {
+          "name": "new",
+          "line": 97,
+          "isDefault": false
+        },
+        {
+          "name": "WireCommand",
+          "line": 124,
+          "isDefault": false
+        },
+        {
+          "name": "WireCommandResult",
+          "line": 136,
+          "isDefault": false
+        },
+        {
+          "name": "WireUploadFile",
+          "line": 169,
+          "isDefault": false
+        },
+        {
+          "name": "WireUploadText",
+          "line": 175,
+          "isDefault": false
+        },
+        {
+          "name": "WireDownloadFile",
+          "line": 181,
+          "isDefault": false
+        },
+        {
+          "name": "WireDownloadDir",
+          "line": 187,
+          "isDefault": false
+        },
+        {
+          "name": "ChallengeAck",
+          "line": 194,
+          "isDefault": false
+        },
+        {
+          "name": "serve_one",
+          "line": 301,
+          "isDefault": false
+        },
+        {
+          "name": "serve_one_with_shutdown",
+          "line": 323,
+          "isDefault": false
+        },
+        {
+          "name": "serve_one_pooled",
+          "line": 514,
+          "isDefault": false
+        },
+        {
+          "name": "dispatch",
+          "line": 577,
+          "isDefault": false
+        },
+        {
+          "name": "run",
+          "line": 835,
+          "isDefault": false
+        },
+        {
+          "name": "run_with_pool",
+          "line": 872,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "new",
+          "callee": "CancellationToken::new",
+          "lineNumber": 99
+        },
+        {
+          "caller": "new",
+          "callee": "AtomicUsize::new",
+          "lineNumber": 100
+        },
+        {
+          "caller": "drop",
+          "callee": "self.0.active.fetch_sub",
+          "lineNumber": 113
+        },
+        {
+          "caller": "from",
+          "callee": "r.stdout.clone",
+          "lineNumber": 148
+        },
+        {
+          "caller": "from",
+          "callee": "r.stderr.clone",
+          "lineNumber": 149
+        },
+        {
+          "caller": "from",
+          "callee": "r.duration.as_millis",
+          "lineNumber": 151
+        },
+        {
+          "caller": "from",
+          "callee": "std::time::Duration::from_millis",
+          "lineNumber": 163
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "HandshakeOutcome::Err",
+          "lineNumber": 235
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "IpcError::Configuration",
+          "lineNumber": 235
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "HandshakeOutcome::Err",
+          "lineNumber": 241
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "PROTOCOL_MAJOR.to_string",
+          "lineNumber": 242
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "hello_env.protocol_major.to_string",
+          "lineNumber": 243
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "HandshakeOutcome::Err",
+          "lineNumber": 247
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "IpcError::AuthenticationFailed",
+          "lineNumber": 247
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "\"auth token did not match\".into",
+          "lineNumber": 248
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::from_value",
+          "lineNumber": 254
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "hello_env.payload.clone",
+          "lineNumber": 254
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "HandshakeOutcome::Err",
+          "lineNumber": 257
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "IpcError::Configuration",
+          "lineNumber": 257
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "server_nonce.to_string",
+          "lineNumber": 265
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "BTreeSet::new",
+          "lineNumber": 266
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "hello_env.request_id.clone",
+          "lineNumber": 269
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 270
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::to_value(&ack).unwrap_or",
+          "lineNumber": 270
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::to_value",
+          "lineNumber": 270
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 272
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "HandshakeOutcome::Err",
+          "lineNumber": 274
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "IpcError::LocalIo",
+          "lineNumber": 274
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "e.to_string",
+          "lineNumber": 274
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "writer.write_frame",
+          "lineNumber": 276
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "HandshakeOutcome::Err",
+          "lineNumber": 277
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "IpcError::LocalIo",
+          "lineNumber": 279
+        },
+        {
+          "caller": "do_handshake",
+          "callee": "other.to_string",
+          "lineNumber": 279
+        },
+        {
+          "caller": "serve_one",
+          "callee": "serve_one_with_shutdown",
+          "lineNumber": 307
+        },
+        {
+          "caller": "serve_one_with_shutdown",
+          "callee": "Ok",
+          "lineNumber": 331
+        },
+        {
+          "caller": "serve_one_with_shutdown",
+          "callee": "Arc::clone",
+          "lineNumber": 332
+        },
+        {
+          "caller": "serve_one_with_shutdown",
+          "callee": "serve_loop",
+          "lineNumber": 338
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "stream.try_clone",
+          "lineNumber": 384
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "FrameReader::new",
+          "lineNumber": 388
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "FrameWriter::new",
+          "lineNumber": 389
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "reader.read_frame",
+          "lineNumber": 392
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::from_slice",
+          "lineNumber": 396
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "first_env.request_id.clone",
+          "lineNumber": 406
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "do_handshake",
+          "lineNumber": 407
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 411
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec(&resp).unwrap_or_default",
+          "lineNumber": 413
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 413
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "writer.write_frame",
+          "lineNumber": 414
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "shutdown.map",
+          "lineNumber": 420
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "s.active.fetch_add",
+          "lineNumber": 421
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "ActiveGuard",
+          "lineNumber": 422
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "Arc::clone",
+          "lineNumber": 422
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "reader.read_frame",
+          "lineNumber": 424
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "s.token.is_cancelled",
+          "lineNumber": 427
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::from_slice",
+          "lineNumber": 431
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "String::new",
+          "lineNumber": 435
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 436
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "IpcError::LocalIo",
+          "lineNumber": 436
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "e.to_string",
+          "lineNumber": 436
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec(&resp).unwrap_or_default",
+          "lineNumber": 438
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 438
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "writer.write_frame",
+          "lineNumber": 439
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "s.token.cancel",
+          "lineNumber": 450
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "env.request_id.clone",
+          "lineNumber": 453
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 454
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 456
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "writer.write_frame",
+          "lineNumber": 457
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "transport_for",
+          "lineNumber": 464
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "env.request_id.clone",
+          "lineNumber": 468
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 469
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "IpcError::from",
+          "lineNumber": 469
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec(&resp).unwrap_or_default",
+          "lineNumber": 471
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 471
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "writer.write_frame",
+          "lineNumber": 472
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "env.request_id.clone",
+          "lineNumber": 477
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "dispatch",
+          "lineNumber": 478
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "on_connection_error",
+          "lineNumber": 486
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 488
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "env.request_id.clone",
+          "lineNumber": 492
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 493
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "IpcError::LocalIo",
+          "lineNumber": 493
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "e.to_string",
+          "lineNumber": 493
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec(&resp).unwrap_or_default",
+          "lineNumber": 495
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 495
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "writer.write_frame(&body).is_err",
+          "lineNumber": 498
+        },
+        {
+          "caller": "serve_loop",
+          "callee": "writer.write_frame",
+          "lineNumber": 498
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "Arc::clone",
+          "lineNumber": 524
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "key.clone",
+          "lineNumber": 525
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "pool.get_or_create",
+          "lineNumber": 527
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "key.clone",
+          "lineNumber": 527
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "factory",
+          "lineNumber": 527
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "Deadline::from_unix_ms",
+          "lineNumber": 540
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "Some",
+          "lineNumber": 541
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "endpoint.acquire",
+          "lineNumber": 541
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "RequestId",
+          "lineNumber": 543
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "env.request_id.clone",
+          "lineNumber": 543
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "endpoint.generation",
+          "lineNumber": 554
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "Ok",
+          "lineNumber": 555
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "Arc::clone",
+          "lineNumber": 556
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "pool_for_errors.remove_if_matches",
+          "lineNumber": 562
+        },
+        {
+          "caller": "serve_one_pooled",
+          "callee": "serve_loop",
+          "lineNumber": 564
+        },
+        {
+          "caller": "dispatch",
+          "callee": "Deadline::from_unix_ms",
+          "lineNumber": 582
+        },
+        {
+          "caller": "dispatch",
+          "callee": "env.request_id.clone",
+          "lineNumber": 583
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 585
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::Configuration",
+          "lineNumber": 585
+        },
+        {
+          "caller": "dispatch",
+          "callee": "\"Hello must precede any other operation\".into",
+          "lineNumber": 586
+        },
+        {
+          "caller": "dispatch",
+          "callee": "transport.test_connection",
+          "lineNumber": 588
+        },
+        {
+          "caller": "dispatch",
+          "callee": "serde_json::to_value",
+          "lineNumber": 589
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 590
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 591
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::LocalIo",
+          "lineNumber": 591
+        },
+        {
+          "caller": "dispatch",
+          "callee": "e.to_string",
+          "lineNumber": 591
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 593
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::from",
+          "lineNumber": 593
+        },
+        {
+          "caller": "dispatch",
+          "callee": "serde_json::from_value",
+          "lineNumber": 596
+        },
+        {
+          "caller": "dispatch",
+          "callee": "env.payload.clone",
+          "lineNumber": 596
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 598
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::Configuration",
+          "lineNumber": 598
+        },
+        {
+          "caller": "dispatch",
+          "callee": "e.to_string",
+          "lineNumber": 598
+        },
+        {
+          "caller": "dispatch",
+          "callee": "RequestId",
+          "lineNumber": 601
+        },
+        {
+          "caller": "dispatch",
+          "callee": "w.timeout.map",
+          "lineNumber": 604
+        },
+        {
+          "caller": "dispatch",
+          "callee": "transport.run_command",
+          "lineNumber": 606
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 607
+        },
+        {
+          "caller": "dispatch",
+          "callee": "serde_json::to_value(WireCommandResult::from(&r)).unwrap_or",
+          "lineNumber": 608
+        },
+        {
+          "caller": "dispatch",
+          "callee": "serde_json::to_value",
+          "lineNumber": 608
+        },
+        {
+          "caller": "dispatch",
+          "callee": "WireCommandResult::from",
+          "lineNumber": 608
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 610
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::from",
+          "lineNumber": 610
+        },
+        {
+          "caller": "dispatch",
+          "callee": "serde_json::from_value",
+          "lineNumber": 614
+        },
+        {
+          "caller": "dispatch",
+          "callee": "env.payload.clone",
+          "lineNumber": 614
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 616
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::Configuration",
+          "lineNumber": 616
+        },
+        {
+          "caller": "dispatch",
+          "callee": "e.to_string",
+          "lineNumber": 616
+        },
+        {
+          "caller": "dispatch",
+          "callee": "RequestId",
+          "lineNumber": 619
+        },
+        {
+          "caller": "dispatch",
+          "callee": "std::path::PathBuf::from",
+          "lineNumber": 621
+        },
+        {
+          "caller": "dispatch",
+          "callee": "transport.upload_file",
+          "lineNumber": 624
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 625
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 626
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::from",
+          "lineNumber": 626
+        },
+        {
+          "caller": "dispatch",
+          "callee": "serde_json::from_value",
+          "lineNumber": 630
+        },
+        {
+          "caller": "dispatch",
+          "callee": "env.payload.clone",
+          "lineNumber": 630
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 632
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::Configuration",
+          "lineNumber": 632
+        },
+        {
+          "caller": "dispatch",
+          "callee": "e.to_string",
+          "lineNumber": 632
+        },
+        {
+          "caller": "dispatch",
+          "callee": "RequestId",
+          "lineNumber": 635
+        },
+        {
+          "caller": "dispatch",
+          "callee": "transport.upload_text",
+          "lineNumber": 640
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 641
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 642
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::from",
+          "lineNumber": 642
+        },
+        {
+          "caller": "dispatch",
+          "callee": "serde_json::from_value",
+          "lineNumber": 646
+        },
+        {
+          "caller": "dispatch",
+          "callee": "env.payload.clone",
+          "lineNumber": 646
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 648
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::Configuration",
+          "lineNumber": 648
+        },
+        {
+          "caller": "dispatch",
+          "callee": "e.to_string",
+          "lineNumber": 648
+        },
+        {
+          "caller": "dispatch",
+          "callee": "RequestId",
+          "lineNumber": 651
+        },
+        {
+          "caller": "dispatch",
+          "callee": "std::path::PathBuf::from",
+          "lineNumber": 654
+        },
+        {
+          "caller": "dispatch",
+          "callee": "transport.download_file",
+          "lineNumber": 656
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 657
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 658
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::from",
+          "lineNumber": 658
+        },
+        {
+          "caller": "dispatch",
+          "callee": "serde_json::from_value",
+          "lineNumber": 662
+        },
+        {
+          "caller": "dispatch",
+          "callee": "env.payload.clone",
+          "lineNumber": 662
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 664
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::Configuration",
+          "lineNumber": 664
+        },
+        {
+          "caller": "dispatch",
+          "callee": "e.to_string",
+          "lineNumber": 664
+        },
+        {
+          "caller": "dispatch",
+          "callee": "RequestId",
+          "lineNumber": 667
+        },
+        {
+          "caller": "dispatch",
+          "callee": "std::path::PathBuf::from",
+          "lineNumber": 670
+        },
+        {
+          "caller": "dispatch",
+          "callee": "transport.download_dir",
+          "lineNumber": 672
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 673
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 674
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::from",
+          "lineNumber": 674
+        },
+        {
+          "caller": "dispatch",
+          "callee": "server_nonce.to_string",
+          "lineNumber": 686
+        },
+        {
+          "caller": "dispatch",
+          "callee": "serde_json::to_value",
+          "lineNumber": 688
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Ok",
+          "lineNumber": 689
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 690
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::LocalIo",
+          "lineNumber": 690
+        },
+        {
+          "caller": "dispatch",
+          "callee": "e.to_string",
+          "lineNumber": 690
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 696
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::UnsupportedOperation",
+          "lineNumber": 696
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 700
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::UnsupportedOperation",
+          "lineNumber": 700
+        },
+        {
+          "caller": "dispatch",
+          "callee": "\"cancel: per-request cancellation is a step-6 increment\".into",
+          "lineNumber": 701
+        },
+        {
+          "caller": "dispatch",
+          "callee": "ResponseResult::Err",
+          "lineNumber": 704
+        },
+        {
+          "caller": "dispatch",
+          "callee": "IpcError::UnsupportedOperation",
+          "lineNumber": 704
+        },
+        {
+          "caller": "dispatch",
+          "callee": "name.clone",
+          "lineNumber": 704
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "socket_path.parent",
+          "lineNumber": 716
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "parent.as_os_str().is_empty",
+          "lineNumber": 717
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "parent.as_os_str",
+          "lineNumber": 717
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "parent.exists",
+          "lineNumber": 717
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "Err",
+          "lineNumber": 718
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 725
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "UnixListener::bind(socket_path).map_err",
+          "lineNumber": 726
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "UnixListener::bind",
+          "lineNumber": 726
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "std::fs::Permissions::from_mode",
+          "lineNumber": 731
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "std::fs::set_permissions",
+          "lineNumber": 732
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "Err",
+          "lineNumber": 733
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "Arc::new",
+          "lineNumber": 738
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "ShutdownState::new",
+          "lineNumber": 738
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "listener\n        .set_nonblocking(true).map_err",
+          "lineNumber": 742
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "listener.set_nonblocking",
+          "lineNumber": 742
+        },
+        {
+          "caller": "bind_listener",
+          "callee": "Ok",
+          "lineNumber": 745
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "auth_token.to_string",
+          "lineNumber": 767
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "server_nonce.to_string",
+          "lineNumber": 768
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "state.token.is_cancelled",
+          "lineNumber": 770
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "listener.accept",
+          "lineNumber": 773
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "s.set_nonblocking",
+          "lineNumber": 779
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "spawn",
+          "lineNumber": 780
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "e.kind",
+          "lineNumber": 782
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "thread::sleep",
+          "lineNumber": 783
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "Duration::from_millis",
+          "lineNumber": 783
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "Arc::clone",
+          "lineNumber": 797
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "state.coordinator.execute",
+          "lineNumber": 798
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "drop",
+          "lineNumber": 799
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "phase2_state.active.load",
+          "lineNumber": 800
+        },
+        {
+          "caller": "accept_loop",
+          "callee": "Ok",
+          "lineNumber": 803
+        },
+        {
+          "caller": "run",
+          "callee": "bind_listener",
+          "lineNumber": 842
+        },
+        {
+          "caller": "run",
+          "callee": "accept_loop",
+          "lineNumber": 843
+        },
+        {
+          "caller": "run",
+          "callee": "Arc::clone",
+          "lineNumber": 849
+        },
+        {
+          "caller": "run",
+          "callee": "t.to_string",
+          "lineNumber": 850
+        },
+        {
+          "caller": "run",
+          "callee": "n.to_string",
+          "lineNumber": 851
+        },
+        {
+          "caller": "run",
+          "callee": "Arc::clone",
+          "lineNumber": 852
+        },
+        {
+          "caller": "run",
+          "callee": "thread::Builder::new()\n                .name(\"vcli-ipc\".to_string())\n                .spawn(move || serve_one_with_shutdown(s, transport, &token, &nonce, Some(&state))).map_err",
+          "lineNumber": 853
+        },
+        {
+          "caller": "run",
+          "callee": "thread::Builder::new()\n                .name(\"vcli-ipc\".to_string()).spawn",
+          "lineNumber": 853
+        },
+        {
+          "caller": "run",
+          "callee": "thread::Builder::new().name",
+          "lineNumber": 853
+        },
+        {
+          "caller": "run",
+          "callee": "thread::Builder::new",
+          "lineNumber": 853
+        },
+        {
+          "caller": "run",
+          "callee": "\"vcli-ipc\".to_string",
+          "lineNumber": 854
+        },
+        {
+          "caller": "run",
+          "callee": "serve_one_with_shutdown",
+          "lineNumber": 855
+        },
+        {
+          "caller": "run",
+          "callee": "Some",
+          "lineNumber": 855
+        },
+        {
+          "caller": "run",
+          "callee": "Ok",
+          "lineNumber": 857
+        },
+        {
+          "caller": "run",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 863
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "bind_listener",
+          "lineNumber": 882
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "accept_loop",
+          "lineNumber": 883
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "Arc::clone",
+          "lineNumber": 889
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "key.clone",
+          "lineNumber": 890
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "t.to_string",
+          "lineNumber": 891
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "n.to_string",
+          "lineNumber": 892
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "Arc::clone",
+          "lineNumber": 893
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "Arc::clone",
+          "lineNumber": 894
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "thread::Builder::new()\n                .name(\"vcli-ipc\".to_string())\n                .spawn(move || {\n                    serve_one_pooled(s, pool, key, limits, factory, &token, &nonce, Some(&state))\n                }).map_err",
+          "lineNumber": 895
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "thread::Builder::new()\n                .name(\"vcli-ipc\".to_string()).spawn",
+          "lineNumber": 895
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "thread::Builder::new().name",
+          "lineNumber": 895
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "thread::Builder::new",
+          "lineNumber": 895
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "\"vcli-ipc\".to_string",
+          "lineNumber": 896
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "serve_one_pooled",
+          "lineNumber": 898
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "Some",
+          "lineNumber": 898
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "Ok",
+          "lineNumber": 901
+        },
+        {
+          "caller": "run_with_pool",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 905
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 933
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 933
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 934
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "UnixListener::bind(&socket).expect",
+          "lineNumber": 935
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "UnixListener::bind",
+          "lineNumber": 935
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "socket.clone",
+          "lineNumber": 936
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "token.to_string",
+          "lineNumber": 937
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "nonce.to_string",
+          "lineNumber": 938
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "listener.try_clone().expect",
+          "lineNumber": 939
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "listener.try_clone",
+          "lineNumber": 939
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "thread::spawn",
+          "lineNumber": 940
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "listener_for_thread.accept",
+          "lineNumber": 942
+        },
+        {
+          "caller": "start_daemon",
+          "callee": "serve_one",
+          "lineNumber": 943
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "Arc::new",
+          "lineNumber": 953
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 953
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "start_daemon",
+          "lineNumber": 954
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "NativeTransportClient::connect(&socket, \"test-profile\", \"secret-token\").expect",
+          "lineNumber": 956
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 956
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "crate::transport::contract::test_support::shared_contract_suite",
+          "lineNumber": 959
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "client\n            .run_command(&CommandRequest::untimed(\"echo hi\")).unwrap",
+          "lineNumber": 962
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "client.run_command",
+          "lineNumber": 962
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "CommandRequest::untimed",
+          "lineNumber": 963
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "client\n            .upload_text(&UploadTextRequest::untimed(\"payload\", \"/tmp/x\")).unwrap",
+          "lineNumber": 966
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "client.upload_text",
+          "lineNumber": 966
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "UploadTextRequest::untimed",
+          "lineNumber": 967
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "drop",
+          "lineNumber": 973
+        },
+        {
+          "caller": "real_server_passes_shared_contract_suite",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 974
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "Arc::new",
+          "lineNumber": 981
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 981
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "start_daemon",
+          "lineNumber": 982
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "std::os::unix::net::UnixStream::connect(&socket).unwrap",
+          "lineNumber": 986
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "std::os::unix::net::UnixStream::connect",
+          "lineNumber": 986
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "stream.try_clone().unwrap",
+          "lineNumber": 987
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "stream.try_clone",
+          "lineNumber": 987
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "FrameReader::new",
+          "lineNumber": 988
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "FrameWriter::new",
+          "lineNumber": 989
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "\"p\".into",
+          "lineNumber": 994
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "String::new",
+          "lineNumber": 995
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "\"wrong-token\".into",
+          "lineNumber": 996
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "\"r1\".into",
+          "lineNumber": 997
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "serde_json::to_value(Hello::new(\"p\", \"wrong-token\")).unwrap",
+          "lineNumber": 1000
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "serde_json::to_value",
+          "lineNumber": 1000
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "Hello::new",
+          "lineNumber": 1000
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "writer\n            .write_frame(&serde_json::to_vec(&env).unwrap()).unwrap",
+          "lineNumber": 1002
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "writer.write_frame",
+          "lineNumber": 1002
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "serde_json::to_vec(&env).unwrap",
+          "lineNumber": 1003
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 1003
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "serde_json::from_slice(&reader.read_frame().unwrap().unwrap()).unwrap",
+          "lineNumber": 1006
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "serde_json::from_slice",
+          "lineNumber": 1006
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "reader.read_frame().unwrap().unwrap",
+          "lineNumber": 1006
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "reader.read_frame().unwrap",
+          "lineNumber": 1006
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "reader.read_frame",
+          "lineNumber": 1006
+        },
+        {
+          "caller": "hello_rejects_bad_token",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1011
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "Arc::new",
+          "lineNumber": 1019
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 1019
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "start_daemon",
+          "lineNumber": 1020
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "std::os::unix::net::UnixStream::connect(&socket).unwrap",
+          "lineNumber": 1022
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "std::os::unix::net::UnixStream::connect",
+          "lineNumber": 1022
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "stream.try_clone().unwrap",
+          "lineNumber": 1023
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "stream.try_clone",
+          "lineNumber": 1023
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "FrameReader::new",
+          "lineNumber": 1024
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "FrameWriter::new",
+          "lineNumber": 1025
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "\"p\".into",
+          "lineNumber": 1031
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "String::new",
+          "lineNumber": 1032
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "\"secret-token\".into",
+          "lineNumber": 1033
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "\"r-hello\".into",
+          "lineNumber": 1034
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::to_value(Hello::new(\"p\", \"secret-token\")).unwrap",
+          "lineNumber": 1037
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::to_value",
+          "lineNumber": 1037
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "Hello::new",
+          "lineNumber": 1037
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "writer\n            .write_frame(&serde_json::to_vec(&hello).unwrap()).unwrap",
+          "lineNumber": 1039
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "writer.write_frame",
+          "lineNumber": 1039
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::to_vec(&hello).unwrap",
+          "lineNumber": 1040
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 1040
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::from_slice(&reader.read_frame().unwrap().unwrap()).unwrap",
+          "lineNumber": 1043
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::from_slice",
+          "lineNumber": 1043
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "reader.read_frame().unwrap().unwrap",
+          "lineNumber": 1043
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "reader.read_frame().unwrap",
+          "lineNumber": 1043
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "reader.read_frame",
+          "lineNumber": 1043
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::from_value(v).unwrap",
+          "lineNumber": 1045
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::from_value",
+          "lineNumber": 1045
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "\"p\".into",
+          "lineNumber": 1054
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "ack.daemon_nonce.clone",
+          "lineNumber": 1055
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "\"secret-token\".into",
+          "lineNumber": 1056
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "\"r-challenge\".into",
+          "lineNumber": 1057
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "writer\n            .write_frame(&serde_json::to_vec(&challenge).unwrap()).unwrap",
+          "lineNumber": 1062
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "writer.write_frame",
+          "lineNumber": 1062
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::to_vec(&challenge).unwrap",
+          "lineNumber": 1063
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::to_vec",
+          "lineNumber": 1063
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::from_slice(&reader.read_frame().unwrap().unwrap()).unwrap",
+          "lineNumber": 1066
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::from_slice",
+          "lineNumber": 1066
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "reader.read_frame().unwrap().unwrap",
+          "lineNumber": 1066
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "reader.read_frame().unwrap",
+          "lineNumber": 1066
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "reader.read_frame",
+          "lineNumber": 1066
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::from_value(v).unwrap",
+          "lineNumber": 1068
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "serde_json::from_value",
+          "lineNumber": 1068
+        },
+        {
+          "caller": "challenge_answers_with_the_server_nonce",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1073
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Arc::new",
+          "lineNumber": 1086
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "AtomicUsize::new",
+          "lineNumber": 1086
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Arc::new",
+          "lineNumber": 1087
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "EndpointPool::new",
+          "lineNumber": 1087
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Arc::clone",
+          "lineNumber": 1088
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Arc::new",
+          "lineNumber": 1091
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "factory_calls.fetch_add",
+          "lineNumber": 1092
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Ok",
+          "lineNumber": 1093
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Arc::new",
+          "lineNumber": 1093
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 1093
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "\"eda-1\".into",
+          "lineNumber": 1097
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Vec::new",
+          "lineNumber": 1100
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Vec::new",
+          "lineNumber": 1102
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Vec::new",
+          "lineNumber": 1103
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Vec::new",
+          "lineNumber": 1104
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 1111
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 1111
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1112
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "UnixListener::bind(&socket).expect",
+          "lineNumber": 1113
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "UnixListener::bind",
+          "lineNumber": 1113
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "listener.try_clone().expect",
+          "lineNumber": 1114
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "listener.try_clone",
+          "lineNumber": 1114
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Arc::clone",
+          "lineNumber": 1115
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "key.clone",
+          "lineNumber": 1116
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "Arc::clone",
+          "lineNumber": 1117
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "thread::spawn",
+          "lineNumber": 1118
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "listener_for_thread.accept",
+          "lineNumber": 1119
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "serve_one_pooled",
+          "lineNumber": 1120
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "SchedulerLimits::default_limits",
+          "lineNumber": 1124
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "NativeTransportClient::connect(&socket, \"p\", \"secret-token\").expect",
+          "lineNumber": 1134
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 1134
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "client\n                .run_command(&CommandRequest::untimed(\"echo hi\")).expect",
+          "lineNumber": 1135
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "client.run_command",
+          "lineNumber": 1135
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "CommandRequest::untimed",
+          "lineNumber": 1136
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "drop",
+          "lineNumber": 1139
+        },
+        {
+          "caller": "pooled_serve_reuses_one_transport_across_requests",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1140
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Arc::new",
+          "lineNumber": 1164
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "AtomicUsize::new",
+          "lineNumber": 1164
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Arc::new",
+          "lineNumber": 1165
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "EndpointPool::new",
+          "lineNumber": 1165
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Arc::clone",
+          "lineNumber": 1166
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Arc::new",
+          "lineNumber": 1169
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "factory_calls.fetch_add",
+          "lineNumber": 1170
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 1171
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Some",
+          "lineNumber": 1173
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "TransportError::ConnectionFailed",
+          "lineNumber": 1173
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "\"tcp reset\".into",
+          "lineNumber": 1173
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Ok",
+          "lineNumber": 1177
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Arc::new",
+          "lineNumber": 1177
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "\"eda-1\".into",
+          "lineNumber": 1181
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Vec::new",
+          "lineNumber": 1184
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Vec::new",
+          "lineNumber": 1186
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Vec::new",
+          "lineNumber": 1187
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Vec::new",
+          "lineNumber": 1188
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 1193
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 1193
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1194
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "UnixListener::bind(&socket).expect",
+          "lineNumber": 1195
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "UnixListener::bind",
+          "lineNumber": 1195
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "listener.try_clone().expect",
+          "lineNumber": 1196
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "listener.try_clone",
+          "lineNumber": 1196
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Arc::clone",
+          "lineNumber": 1197
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "key.clone",
+          "lineNumber": 1198
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Arc::clone",
+          "lineNumber": 1199
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "thread::spawn",
+          "lineNumber": 1200
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "listener_for_thread.accept",
+          "lineNumber": 1201
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "serve_one_pooled",
+          "lineNumber": 1202
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "SchedulerLimits::default_limits",
+          "lineNumber": 1206
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "NativeTransportClient::connect(&socket, \"p\", \"secret-token\").expect",
+          "lineNumber": 1214
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 1214
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "client\n            .run_command(&CommandRequest::untimed(\"echo hi\")).expect_err",
+          "lineNumber": 1215
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "client.run_command",
+          "lineNumber": 1215
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "CommandRequest::untimed",
+          "lineNumber": 1216
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "drop",
+          "lineNumber": 1222
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1223
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 1230
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 1230
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1231
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "UnixListener::bind(&socket).expect",
+          "lineNumber": 1232
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "UnixListener::bind",
+          "lineNumber": 1232
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "listener.try_clone().expect",
+          "lineNumber": 1233
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "listener.try_clone",
+          "lineNumber": 1233
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Arc::clone",
+          "lineNumber": 1234
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "key.clone",
+          "lineNumber": 1235
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "Arc::clone",
+          "lineNumber": 1236
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "thread::spawn",
+          "lineNumber": 1237
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "listener_for_thread.accept",
+          "lineNumber": 1238
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "serve_one_pooled",
+          "lineNumber": 1239
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "SchedulerLimits::default_limits",
+          "lineNumber": 1243
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "NativeTransportClient::connect(&socket, \"p\", \"secret-token\").expect",
+          "lineNumber": 1251
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 1251
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "client\n            .run_command(&CommandRequest::untimed(\"echo hi\")).expect",
+          "lineNumber": 1252
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "client.run_command",
+          "lineNumber": 1252
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "CommandRequest::untimed",
+          "lineNumber": 1253
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "drop",
+          "lineNumber": 1256
+        },
+        {
+          "caller": "pooled_serve_evicts_on_connection_failure_but_not_on_business_failure",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1257
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "Arc::new",
+          "lineNumber": 1273
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 1273
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 1274
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 1274
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1275
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "crate::transport::lifecycle::ShutdownCoordinator::new",
+          "lineNumber": 1278
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "Duration::from_millis",
+          "lineNumber": 1278
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "Arc::clone",
+          "lineNumber": 1280
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "socket.clone",
+          "lineNumber": 1281
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "thread::spawn",
+          "lineNumber": 1283
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "run",
+          "lineNumber": 1283
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 1288
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "Some",
+          "lineNumber": 1289
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "thread::sleep",
+          "lineNumber": 1292
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "Duration::from_millis",
+          "lineNumber": 1292
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "client.expect",
+          "lineNumber": 1294
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "client.request_shutdown().expect",
+          "lineNumber": 1296
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "client.request_shutdown",
+          "lineNumber": 1296
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 1299
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "runner.is_finished",
+          "lineNumber": 1301
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "thread::sleep",
+          "lineNumber": 1308
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "Duration::from_millis",
+          "lineNumber": 1308
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "runner.join().expect",
+          "lineNumber": 1310
+        },
+        {
+          "caller": "shutdown_request_acks_and_stops_the_run_loop",
+          "callee": "runner.join",
+          "lineNumber": 1310
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 1331
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 1331
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1337
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "crate::transport::lifecycle::ShutdownCoordinator::new",
+          "lineNumber": 1339
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Duration::from_millis",
+          "lineNumber": 1339
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Arc::new",
+          "lineNumber": 1341
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "EndpointPool::new",
+          "lineNumber": 1341
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "\"eda-1\".to_string",
+          "lineNumber": 1348
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Vec::new",
+          "lineNumber": 1351
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Vec::new",
+          "lineNumber": 1353
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Vec::new",
+          "lineNumber": 1354
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "SchedulerLimits::default_limits",
+          "lineNumber": 1357
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Arc::new",
+          "lineNumber": 1358
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "AtomicUsize::new",
+          "lineNumber": 1358
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Arc::clone",
+          "lineNumber": 1362
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Arc::new",
+          "lineNumber": 1363
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "calls.fetch_add",
+          "lineNumber": 1364
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Ok",
+          "lineNumber": 1365
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Arc::new",
+          "lineNumber": 1365
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 1365
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "socket.clone",
+          "lineNumber": 1369
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "thread::spawn",
+          "lineNumber": 1370
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "run_with_pool",
+          "lineNumber": 1371
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 1386
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Some",
+          "lineNumber": 1387
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "thread::sleep",
+          "lineNumber": 1390
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Duration::from_millis",
+          "lineNumber": 1390
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "client.expect",
+          "lineNumber": 1392
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "client\n            .run_command(&CommandRequest::untimed(\"echo hi\")).expect",
+          "lineNumber": 1397
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "client.run_command",
+          "lineNumber": 1397
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "CommandRequest::untimed",
+          "lineNumber": 1398
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "client.request_shutdown().expect",
+          "lineNumber": 1400
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "client.request_shutdown",
+          "lineNumber": 1400
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "std::time::Instant::now",
+          "lineNumber": 1402
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "runner.is_finished",
+          "lineNumber": 1404
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "thread::sleep",
+          "lineNumber": 1411
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "Duration::from_millis",
+          "lineNumber": 1411
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "runner.join().expect",
+          "lineNumber": 1413
+        },
+        {
+          "caller": "run_with_pool_unlinks_its_socket_on_clean_shutdown",
+          "callee": "runner.join",
+          "lineNumber": 1413
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "Arc::new",
+          "lineNumber": 1436
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "ShutdownState::new",
+          "lineNumber": 1436
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "ShutdownCoordinator::new",
+          "lineNumber": 1436
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "Duration::from_millis",
+          "lineNumber": 1437
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 1440
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 1440
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1441
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "UnixListener::bind(&socket).expect",
+          "lineNumber": 1442
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "UnixListener::bind",
+          "lineNumber": 1442
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "listener.try_clone().expect",
+          "lineNumber": 1443
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "listener.try_clone",
+          "lineNumber": 1443
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "Arc::clone",
+          "lineNumber": 1444
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "thread::spawn",
+          "lineNumber": 1445
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "listener_for_thread.accept",
+          "lineNumber": 1446
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "serve_one_with_shutdown",
+          "lineNumber": 1447
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "Arc::new",
+          "lineNumber": 1447
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "FakeTransport::ok",
+          "lineNumber": 1447
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "Some",
+          "lineNumber": 1447
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "NativeTransportClient::connect(&socket, \"p\", \"t\").expect",
+          "lineNumber": 1451
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "NativeTransportClient::connect",
+          "lineNumber": 1451
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "client.request_shutdown().expect",
+          "lineNumber": 1452
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "client.request_shutdown",
+          "lineNumber": 1452
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "drop",
+          "lineNumber": 1455
+        },
+        {
+          "caller": "dispatch_loop_stops_taking_work_once_shutdown_is_fired",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 1456
+        }
+      ],
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 15,
+        "functionCount": 14,
+        "classCount": 11
+      }
+    }
+  ]
+}

@@ -1,0 +1,396 @@
+{
+  "batchIndex": 33,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:.agents/skills/_shared/scripts/eda_auto_evolve.py",
+      "type": "file",
+      "name": "eda_auto_evolve.py",
+      "filePath": ".agents/skills/_shared/scripts/eda_auto_evolve.py",
+      "summary": "EDA knowledge evolution driver: reads per-skill error_log.jsonl within a 7-day lookback window, counts error types via Counter, promotes any pattern hitting a threshold (default 3) into a memory/*.md file, syncs newly generated notes to the Tier-2 MEMORY.md index, and triggers signal matching on completion. Exposes skill_memory_dir, analyze_errors, detect_patterns, render_memory_md, sync_to_tier2, update_index, run_evolution, and _trigger_signal_match.",
+      "tags": ["python", "skill-infrastructure", "knowledge-evolution", "memory", "error-log", "eda", "pattern-detection", "cli"],
+      "complexity": "moderate",
+      "languageNotes": "Pure Python 3 script using stdlib only (json, os, re, sys, collections.Counter, datetime, pathlib.Path). Procedural with module-level helpers; designed to be invoked as `python3 eda_auto_evolve.py <skill_name>`."
+    },
+    {
+      "id": "file:.agents/skills/_shared/scripts/eda_memory_saver.py",
+      "type": "file",
+      "name": "eda_memory_saver.py",
+      "filePath": ".agents/skills/_shared/scripts/eda_memory_saver.py",
+      "summary": "Appends classified error entries to a skill's memory/error_log.jsonl. Provides extract_error_lines, classify_error (categorizes by regex/keyword buckets), is_duplicate (dedup), save_error, _trigger_evolve (kicks off eda_auto_evolve.py), and a main entrypoint. Acts as the write-side counterpart to eda_auto_evolve.py.",
+      "tags": ["python", "skill-infrastructure", "memory", "error-log", "eda", "deduplication", "cli"],
+      "complexity": "moderate",
+      "languageNotes": "Python 3 with stdlib only. No external dependencies; structured around small functions each handling one stage of the save/append pipeline."
+    },
+    {
+      "id": "file:.agents/skills/_shared/scripts/signal_matcher.py",
+      "type": "file",
+      "name": "signal_matcher.py",
+      "filePath": ".agents/skills/_shared/scripts/signal_matcher.py",
+      "summary": "Aggregates signals across skills by reading each skill's signal.jsonl, groups recurring patterns, and writes a Tier-2 signals.json plus promotion candidates (skills whose metrics suggest they should move up in the catalog). Functions: find_project_root, skills_dir, read_log, aggregate_signals, build_recommended, build_promotion_candidates, write_signals, main.",
+      "tags": ["python", "skill-infrastructure", "signal-aggregation", "promotion", "eda", "knowledge-base", "cli"],
+      "complexity": "moderate",
+      "languageNotes": "Python 3 stdlib-only. Walks the skills tree via pathlib and emits JSON summaries; no classes, just pure functions."
+    },
+    {
+      "id": "file:.agents/skills/amp-copilot/SKILL.md",
+      "type": "document",
+      "name": "amp-copilot",
+      "filePath": ".agents/skills/amp-copilot/SKILL.md",
+      "summary": "Skill specification for Amplifier Copilot — systematic amplifier design flow from spec capture through topology selection (25 amplifier topologies catalogued from Amplifier-Copilot), gm/Id lookup table characterization, transistor sizing, and PVT-corner simulation validation. Documented for OTA / opamp / comparator design across multiple process nodes.",
+      "tags": ["skill-doc", "amplifier", "ota", "gm-over-id", "topology", "analog-design", "pvt", "design-flow"],
+      "complexity": "complex",
+      "languageNotes": "Markdown with YAML frontmatter (name, description, allowed-tools). 23 sections including ASCII flow diagrams, topology tables, and structured JSON spec templates. English with some Chinese-language header annotations."
+    },
+    {
+      "id": "file:.agents/skills/cell-explore/SKILL.md",
+      "type": "document",
+      "name": "cell-explore",
+      "filePath": ".agents/skills/cell-explore/SKILL.md",
+      "summary": "Skill specification for browsing Cadence Virtuoso libraries, inspecting cellviews, and managing cells via the virtuoso-cli. Covers library listing, cellview inspection, cell management commands, and a key gotcha about virtuoso-cli vs raw SKILL behaviour.",
+      "tags": ["skill-doc", "virtuoso", "library", "cellview", "eda", "browse"],
+      "complexity": "simple",
+      "languageNotes": "Concise markdown doc (60 lines) with 5 sections; English with Chinese notes where helpful."
+    },
+    {
+      "id": "file:.agents/skills/circuit-optimizer/SKILL.md",
+      "type": "document",
+      "name": "circuit-optimizer",
+      "filePath": ".agents/skills/circuit-optimizer/SKILL.md",
+      "summary": "Skill specification for a Bayesian circuit optimizer. Step-by-step execution guide covering problem-definition JSON, gm/Id→W conversion, single-iteration simulation, and result scoring. Includes prerequisites and a 4-step loop suitable for amplifier and bias-circuit sizing sweeps.",
+      "tags": ["skill-doc", "bayesian-optimization", "circuit-sizing", "analog-design", "sweep", "automation"],
+      "complexity": "complex",
+      "languageNotes": "Markdown with 15 sections; structured numbered steps with code blocks and JSON examples."
+    },
+    {
+      "id": "file:.agents/skills/diag/SKILL.md",
+      "type": "document",
+      "name": "diag",
+      "filePath": ".agents/skills/diag/SKILL.md",
+      "summary": "Skill specification for read-only diagnostics via `vcli diag cdslck <LIB>`. Documents the cds.lib lock-file detection workflow, what to do when a lock is held, implementation notes about why cdslck semantics matter, and a related window-dismiss-dialog command.",
+      "tags": ["skill-doc", "diagnostics", "cdslck", "read-only", "lock-file", "vcli"],
+      "complexity": "simple",
+      "languageNotes": "Markdown with 5 sections; English with embedded back-tick CLI snippets."
+    },
+    {
+      "id": "file:.agents/skills/digital-import/SKILL.md",
+      "type": "document",
+      "name": "digital-import",
+      "filePath": ".agents/skills/digital-import/SKILL.md",
+      "summary": "Skill specification for a 4-step digital import pipeline: import GDS via strmin, import Verilog via ihdl, add power labels, then restyle labels. Each step includes a verification check (e.g. confirming every expected cell/module landed) and detailed prerequisite notes about cds.lib DEFINE lines.",
+      "tags": ["skill-doc", "digital", "gds-import", "verilog", "ihdl", "strmin", "pipeline", "labels"],
+      "complexity": "complex",
+      "languageNotes": "Markdown with 15 sections; long procedural walkthrough with embedded warning callouts and code blocks."
+    },
+    {
+      "id": "file:.agents/skills/gm-over-id/SKILL.md",
+      "type": "document",
+      "name": "gm-over-id",
+      "filePath": ".agents/skills/gm-over-id/SKILL.md",
+      "summary": "Skill specification for the gm/Id analog design methodology. Walks through deriving gm from specs, choosing gm/Id for the gain-bandwidth tradeoff, looking up Id and computing W, selecting L for gain vs speed, and automating the sweep with virtuoso-cli.",
+      "tags": ["skill-doc", "gm-over-id", "analog-design", "methodology", "transistor-sizing", "sweep"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with 21 sections; English mixed with Chinese terminology for design concepts (e.g. 核心思想, 设计流程)."
+    },
+    {
+      "id": "file:.agents/skills/history-evolve/SKILL.md",
+      "type": "document",
+      "name": "history-evolve",
+      "filePath": ".agents/skills/history-evolve/SKILL.md",
+      "summary": "Skill specification for evolving skill knowledge from CLI and SKILL execution history. Two-phase workflow: collect (load CLI history with noise filtering, load SKILL history for active sessions) and signal detection (hard failure exit_code != 0, SKILL nil return ok == false, correction patterns).",
+      "tags": ["skill-doc", "history", "signal-detection", "knowledge-evolution", "skill", "eda"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with 15 sections; structured two-phase workflow with explicit signal taxonomy."
+    },
+    {
+      "id": "file:.agents/skills/maestro-read-results/SKILL.md",
+      "type": "document",
+      "name": "maestro-read-results",
+      "filePath": ".agents/skills/maestro-read-results/SKILL.md",
+      "summary": "Skill specification for reading Cadence Maestro/ADE output expression values directly from PSF binary files without a GUI or bridge. Documents the script entrypoint (scripts/read_results.py), argument routing, output JSON format, supported Ocean expression functions (getData, dB20, phaseDeg, bandwidth, ymax, VF, VT…), and PSF-tool troubleshooting.",
+      "tags": ["skill-doc", "maestro", "ade", "psf", "ocean", "simulation-results", "no-gui"],
+      "complexity": "complex",
+      "languageNotes": "Markdown with 7 sections; documents a 657-line Python script via embedded bash usage blocks and Ocean function table."
+    },
+    {
+      "id": "file:.agents/skills/maestro-read-results/scripts/read_results.py",
+      "type": "file",
+      "name": "read_results.py",
+      "filePath": ".agents/skills/maestro-read-results/scripts/read_results.py",
+      "summary": "CLI to parse maestro.sdb + active.state XML (with Cadence non-standard dialect tolerance), locate the active history run via history.sdb, invoke the cadence `psf` tool to ASCII-dump signals, and evaluate Ocean-style output expressions (getData, dB20, phaseDeg, bandwidth, ymax, VF, VT) returning structured JSON. Includes a Waveform class for arithmetic across scalar/waveform values.",
+      "tags": ["python", "maestro", "psf", "ocean", "xml", "cli", "simulation-results", "no-gui"],
+      "complexity": "complex",
+      "languageNotes": "Python 3 script with argparse CLI; stdlib + subprocess for psf invocation. Defines a `Waveform` class plus 16 functions including expression tokenizer/evaluator (ocean_to_python, eval_expression)."
+    },
+    {
+      "id": "file:.agents/skills/maestro/SKILL.md",
+      "type": "document",
+      "name": "maestro",
+      "filePath": ".agents/skills/maestro/SKILL.md",
+      "summary": "Skill specification providing a quick-reference for Cadence Maestro (ADE Assembler). Documents the key difference between Explorer and Assembler modes, the typical flow, and three common failure modes (lock-file blocking edit mode, window stuck in Reading mode, maeAddOutput succeeding but maeGetResultOutputs returning nil).",
+      "tags": ["skill-doc", "maestro", "ade-assembler", "troubleshooting", "lock-file", "gui"],
+      "complexity": "simple",
+      "languageNotes": "Concise markdown (60 lines, 7 sections); Chinese terminology for cross-language support."
+    },
+    {
+      "id": "file:.agents/skills/ocean-netlist-regen/SKILL.md",
+      "type": "document",
+      "name": "ocean-netlist-regen",
+      "filePath": ".agents/skills/ocean-netlist-regen/SKILL.md",
+      "summary": "Skill specification explaining Ocean run() reliability and netlist regeneration pitfalls. Identifies three root causes (resultsDir change breaking run() being most common, sim setup disrupting active session, stale/missing netlist) and offers Solution A (restore resultsDir) and Solution B (direct Spectre invocation bypassing Ocean).",
+      "tags": ["skill-doc", "ocean", "spectre", "netlist", "resultsdir", "troubleshooting"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with 14 sections; English narrative format with clearly demarcated Problem / Root Cause / Solution sections."
+    },
+    {
+      "id": "file:.agents/skills/porting-skill/SKILL.md",
+      "type": "document",
+      "name": "porting-skill",
+      "filePath": ".agents/skills/porting-skill/SKILL.md",
+      "summary": "Skill specification for PDK / process technology migration. Three-phase workflow: audit (catalog model file refs in Ocean/netlists, list active design variables, check Maestro corners), corner name mapping, and update model file paths across Ocean / ADE setup scripts.",
+      "tags": ["skill-doc", "pdk-migration", "porting", "process-technology", "corners", "eda"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with 14 sections; phased execution guide with explicit audit → map → update workflow."
+    },
+    {
+      "id": "file:.agents/skills/schematic-gen/SKILL.md",
+      "type": "document",
+      "name": "schematic-gen",
+      "filePath": ".agents/skills/schematic-gen/SKILL.md",
+      "summary": "Skill specification for schematic generation. Documents CLI commands, the JSON spec format consumed, the end-to-end workflow, and topology templates (5T OTA with PMOS diff pair + NMOS mirror load, PMOS-input folded-cascode OTA, two-stage Miller OTA).",
+      "tags": ["skill-doc", "schematic", "topology-template", "ota", "json-spec", "cli"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with 11 sections; embeds JSON spec samples and topology netlist templates."
+    },
+    {
+      "id": "file:.agents/skills/sim-measure/SKILL.md",
+      "type": "document",
+      "name": "sim-measure",
+      "filePath": ".agents/skills/sim-measure/SKILL.md",
+      "summary": "Skill specification for measuring simulation results. Covers DC operating-point, transient, AC, and noise measurements, enumerates available signal accessors and waveform math functions, and shows usage patterns for each analysis type.",
+      "tags": ["skill-doc", "measurement", "simulation", "dc", "ac", "transient", "noise"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with 9 sections; reference-style doc with tables of accessors and math functions."
+    },
+    {
+      "id": "file:.agents/skills/sim-plot/SKILL.md",
+      "type": "document",
+      "name": "sim-plot",
+      "filePath": ".agents/skills/sim-plot/SKILL.md",
+      "summary": "Skill specification for Matplotlib-based simulation visualization. Five chart-type recipes (parameter sweep line plot, corner-analysis grouped bar, scalar measurements horizontal bar, AC Bode plot, gm/Id lookup-table transistor curves) plus a common-workflows section.",
+      "tags": ["skill-doc", "matplotlib", "plotting", "visualization", "bode", "sweep", "corner"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with 12 sections; each chart type documented with usage block, parameters, and example output description."
+    },
+    {
+      "id": "file:.agents/skills/sim-plot/scripts/plot_sim.py",
+      "type": "file",
+      "name": "plot_sim.py",
+      "filePath": ".agents/skills/sim-plot/scripts/plot_sim.py",
+      "summary": "Matplotlib driver implementing the chart types documented in sim-plot/SKILL.md: detect_chart_type, plot_sweep (line), plot_corner (grouped bar), plot_measure (horizontal bar), plot_bode (AC magnitude/phase), plot_lookup (transistor curves), plus a _shorten label helper. CLI entrypoint parses JSON spec and dispatches.",
+      "tags": ["python", "matplotlib", "plotting", "visualization", "bode", "sweep", "corner", "cli"],
+      "complexity": "moderate",
+      "languageNotes": "Python 3 script; uses matplotlib. 8 functions including a chart-type autodetector and per-chart plotters."
+    },
+    {
+      "id": "file:.agents/skills/sim-run/SKILL.md",
+      "type": "document",
+      "name": "sim-run",
+      "filePath": ".agents/skills/sim-run/SKILL.md",
+      "summary": "Skill specification for running a Spectre simulation. Documents prerequisites, the run analysis invocation, the critical warning to NOT change resultsDir, success verification, key indicators in output, and common errors found in spectre.out.",
+      "tags": ["skill-doc", "spectre", "simulation", "run", "resultsdir", "troubleshooting"],
+      "complexity": "simple",
+      "languageNotes": "Markdown with 7 sections; emphasizes the resultsDir invariant warning prominently."
+    },
+    {
+      "id": "file:.agents/skills/sim-setup/SKILL.md",
+      "type": "document",
+      "name": "sim-setup",
+      "filePath": ".agents/skills/sim-setup/SKILL.md",
+      "summary": "Skill specification for setting up simulations, covering prerequisites and the canonical setup steps prior to sim-run.",
+      "tags": ["skill-doc", "simulation", "setup", "eda"],
+      "complexity": "simple",
+      "languageNotes": "Short markdown doc (81 lines) with prerequisite and setup sections."
+    },
+    {
+      "id": "file:.agents/skills/sim-sweep/SKILL.md",
+      "type": "document",
+      "name": "sim-sweep",
+      "filePath": ".agents/skills/sim-sweep/SKILL.md",
+      "summary": "Skill specification for parameter sweeps across simulation analyses.",
+      "tags": ["skill-doc", "sweep", "parameter-sweep", "simulation", "eda"],
+      "complexity": "simple",
+      "languageNotes": "Short markdown doc (64 lines) focused on sweep usage."
+    },
+    {
+      "id": "file:.agents/skills/skill-exec/SKILL.md",
+      "type": "document",
+      "name": "skill-exec",
+      "filePath": ".agents/skills/skill-exec/SKILL.md",
+      "summary": "Skill specification for executing Skill (SKILL) language scripts inside Virtuoso sessions.",
+      "tags": ["skill-doc", "skill-language", "execution", "virtuoso"],
+      "complexity": "simple",
+      "languageNotes": "Concise markdown (48 lines) documenting SKILL script invocation."
+    },
+    {
+      "id": "file:.agents/skills/skill-review/SKILL.md",
+      "type": "document",
+      "name": "skill-review",
+      "filePath": ".agents/skills/skill-review/SKILL.md",
+      "summary": "Skill specification for reviewing and auditing skill definitions themselves (correctness, completeness, structure).",
+      "tags": ["skill-doc", "review", "audit", "meta-skill"],
+      "complexity": "simple",
+      "languageNotes": "Markdown doc (94 lines) targeting skill-quality review workflow."
+    },
+    {
+      "id": "file:.agents/skills/skill-shell-gotchas/SKILL.md",
+      "type": "document",
+      "name": "skill-shell-gotchas",
+      "filePath": ".agents/skills/skill-shell-gotchas/SKILL.md",
+      "summary": "Skill specification documenting common shell pitfalls encountered while running skills (quoting, environment, path handling, exit-code propagation).",
+      "tags": ["skill-doc", "shell", "gotchas", "troubleshooting", "bash"],
+      "complexity": "simple",
+      "languageNotes": "Markdown doc (148 lines) structured as a gotcha reference list."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.agents/skills/maestro-read-results/SKILL.md",
+      "target": "file:.agents/skills/maestro-read-results/scripts/read_results.py",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "file:.agents/skills/sim-plot/SKILL.md",
+      "target": "file:.agents/skills/sim-plot/scripts/plot_sim.py",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "file:.agents/skills/_shared/scripts/eda_auto_evolve.py",
+      "target": "file:.agents/skills/_shared/scripts/eda_memory_saver.py",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/_shared/scripts/eda_auto_evolve.py",
+      "target": "file:.agents/skills/_shared/scripts/signal_matcher.py",
+      "type": "calls",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/_shared/scripts/eda_memory_saver.py",
+      "target": "file:.agents/skills/_shared/scripts/eda_auto_evolve.py",
+      "type": "calls",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/amp-copilot/SKILL.md",
+      "target": "file:.agents/skills/gm-over-id/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/amp-copilot/SKILL.md",
+      "target": "file:.agents/skills/schematic-gen/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/amp-copilot/SKILL.md",
+      "target": "file:.agents/skills/circuit-optimizer/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/circuit-optimizer/SKILL.md",
+      "target": "file:.agents/skills/gm-over-id/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/sim-setup/SKILL.md",
+      "target": "file:.agents/skills/sim-run/SKILL.md",
+      "type": "documents",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.agents/skills/sim-run/SKILL.md",
+      "target": "file:.agents/skills/sim-measure/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/sim-run/SKILL.md",
+      "target": "file:.agents/skills/sim-sweep/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/sim-measure/SKILL.md",
+      "target": "file:.agents/skills/maestro-read-results/SKILL.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/sim-plot/SKILL.md",
+      "target": "file:.agents/skills/sim-measure/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/maestro/SKILL.md",
+      "target": "file:.agents/skills/maestro-read-results/SKILL.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/ocean-netlist-regen/SKILL.md",
+      "target": "file:.agents/skills/sim-run/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/maestro-read-results/scripts/read_results.py",
+      "target": "file:.agents/skills/maestro-read-results/SKILL.md",
+      "type": "tested_by",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.agents/skills/sim-plot/SKILL.md",
+      "type": "tested_by",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/_shared/scripts/eda_auto_evolve.py",
+      "target": "file:.agents/skills/history-evolve/SKILL.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/history-evolve/SKILL.md",
+      "target": "file:.agents/skills/_shared/scripts/signal_matcher.py",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/porting-skill/SKILL.md",
+      "target": "file:.agents/skills/gm-over-id/SKILL.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/digital-import/SKILL.md",
+      "target": "file:.agents/skills/cell-explore/SKILL.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/skill-shell-gotchas/SKILL.md",
+      "target": "file:.agents/skills/skill-exec/SKILL.md",
+      "type": "documents",
+      "weight": 0.5
+    }
+  ]
+}

@@ -1,0 +1,578 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 4,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 4
+    }
+  },
+  "results": [
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 98,
+      "nonEmptyLines": 72,
+      "sections": [
+        {
+          "heading": "virtuoso-gui-debug",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Quick Start",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Executors",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "RSI Knowledge Base",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Structure",
+          "level": 3,
+          "line": 30
+        },
+        {
+          "heading": "Usage",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "Confidence Levels",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "Versioning",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "Key Pitfalls",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "Testing",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "References",
+          "level": 2,
+          "line": 95
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 1105,
+      "nonEmptyLines": 828,
+      "sections": [
+        {
+          "heading": "Virtuoso GUI Debug Skill",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "Purpose",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Prerequisites",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Auto-Discovery (SSH Remote)",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "SSH Connection Etiquette",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "vcli GUI Debug 快速指南",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "一、连接 Session",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "二、发现 DISPLAY（云电脑关键！）",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "三、发现窗口",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "四、执行 GUI 操作",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "Usage",
+          "level": 2,
+          "line": 183
+        },
+        {
+          "heading": "Live-Mode Contract (fail-closed rules)",
+          "level": 2,
+          "line": 216
+        },
+        {
+          "heading": "Local-Mode Contract",
+          "level": 2,
+          "line": 232
+        },
+        {
+          "heading": "Output Files",
+          "level": 2,
+          "line": 242
+        },
+        {
+          "heading": "Allowed Operations",
+          "level": 2,
+          "line": 254
+        },
+        {
+          "heading": "Constraints",
+          "level": 2,
+          "line": 279
+        },
+        {
+          "heading": "GUI Operation Playbook (Multi-Method Matrix)",
+          "level": 2,
+          "line": 290
+        },
+        {
+          "heading": "Critical Environment Constraint",
+          "level": 3,
+          "line": 294
+        },
+        {
+          "heading": "1. Window Discovery (2+ methods)",
+          "level": 3,
+          "line": 302
+        },
+        {
+          "heading": "2. Coordinate Acquisition (2+ methods)",
+          "level": 3,
+          "line": 310
+        },
+        {
+          "heading": "3. Click Operation (3 methods)",
+          "level": 3,
+          "line": 328
+        },
+        {
+          "heading": "4. Text Input (3 stable methods, 1 unreliable)",
+          "level": 3,
+          "line": 338
+        },
+        {
+          "heading": "5. Button Submit / Confirm (3 methods)",
+          "level": 3,
+          "line": 347
+        },
+        {
+          "heading": "6. Close / Cancel (3 methods)",
+          "level": 3,
+          "line": 355
+        },
+        {
+          "heading": "7. Modal Dialog Handling (CRITICAL)",
+          "level": 3,
+          "line": 363
+        },
+        {
+          "heading": "8. CIW Input (the bootstrap channel)",
+          "level": 3,
+          "line": 374
+        },
+        {
+          "heading": "Recommended Debug Loop",
+          "level": 3,
+          "line": 403
+        },
+        {
+          "heading": "Performance Optimization (measured on Virtuoso IC25.1, DISPLAY=:5.0)",
+          "level": 2,
+          "line": 420
+        },
+        {
+          "heading": "Latency baseline",
+          "level": 3,
+          "line": 422
+        },
+        {
+          "heading": "P0 — Use xdotool by default, vcli only when server-side validation is required",
+          "level": 3,
+          "line": 436
+        },
+        {
+          "heading": "P0 — `--direct` is now the DEFAULT in live executor (5× faster)",
+          "level": 3,
+          "line": 452
+        },
+        {
+          "heading": "P0 — Use `action-x11-batch` for consecutive operations (6.3× faster)",
+          "level": 3,
+          "line": 469
+        },
+        {
+          "heading": "P0 — Use xwininfo for geometry, not vcli list-windows",
+          "level": 3,
+          "line": 495
+        },
+        {
+          "heading": "P1 — Reduce type delay to 10–15 ms",
+          "level": 3,
+          "line": 507
+        },
+        {
+          "heading": "P1 — Eliminate inter-operation sleep for consecutive xdotool calls",
+          "level": 3,
+          "line": 519
+        },
+        {
+          "heading": "P2 — vcli-side optimizations (Rust changes, all implemented)",
+          "level": 3,
+          "line": 539
+        },
+        {
+          "heading": "P2 — Coordinate caching",
+          "level": 3,
+          "line": 548
+        },
+        {
+          "heading": "P2 — Modal dialog auto-detection (default ON)",
+          "level": 3,
+          "line": 560
+        },
+        {
+          "heading": "P2 — Verification: prefer CIW state reads over screenshot+OCR",
+          "level": 3,
+          "line": 566
+        },
+        {
+          "heading": "Virtuoso GUI API Semantics (verified on IC25.1)",
+          "level": 2,
+          "line": 570
+        },
+        {
+          "heading": "Form Field Access Paths",
+          "level": 3,
+          "line": 574
+        },
+        {
+          "heading": "Widget Creation Dependencies",
+          "level": 3,
+          "line": 584
+        },
+        {
+          "heading": "Modal Form Behavior",
+          "level": 3,
+          "line": 594
+        },
+        {
+          "heading": "Menu System",
+          "level": 3,
+          "line": 601
+        },
+        {
+          "heading": "CIW Input Reliability",
+          "level": 3,
+          "line": 609
+        },
+        {
+          "heading": "CIW Input Boundary Conditions (verified 2026-09-11)",
+          "level": 3,
+          "line": 619
+        },
+        {
+          "heading": "CIW Input Stability Under Load (verified 50 cycles, 2026-09-11)",
+          "level": 3,
+          "line": 647
+        },
+        {
+          "heading": "Stress Test Findings (verified 2026-09-11)",
+          "level": 3,
+          "line": 670
+        },
+        {
+          "heading": "Remote GUI Program Debugging (verified 2026-09-11)",
+          "level": 3,
+          "line": 700
+        },
+        {
+          "heading": "Long-Run Stability Verification (verified 2026-09-11)",
+          "level": 3,
+          "line": 767
+        },
+        {
+          "heading": "Boundary Condition Tests (verified 2026-09-11)",
+          "level": 3,
+          "line": 784
+        },
+        {
+          "heading": "Layout/schematic X11 interaction: cautious by default, explorable on user approval (verified 2026-09-12)",
+          "level": 3,
+          "line": 807
+        },
+        {
+          "heading": "Concurrent execution note",
+          "level": 3,
+          "line": 828
+        },
+        {
+          "heading": "Layout Automation via SKILL (verified 2026-09-12)",
+          "level": 3,
+          "line": 832
+        },
+        {
+          "heading": "SKILL API Finder",
+          "level": 3,
+          "line": 913
+        },
+        {
+          "heading": "CIW Menu Bar (window 0x1600013)",
+          "level": 3,
+          "line": 923
+        },
+        {
+          "heading": "F-key mapping on layout window",
+          "level": 3,
+          "line": 936
+        },
+        {
+          "heading": "RSI — Recursive Self-Improvement Knowledge Base",
+          "level": 2,
+          "line": 969
+        },
+        {
+          "heading": "Quick query commands",
+          "level": 3,
+          "line": 974
+        },
+        {
+          "heading": "RSI workflow",
+          "level": 3,
+          "line": 997
+        },
+        {
+          "heading": "Key tables",
+          "level": 3,
+          "line": 1004
+        },
+        {
+          "heading": "Future Directions",
+          "level": 2,
+          "line": 1013
+        },
+        {
+          "heading": "Zero-screenshot perception (aspirational)",
+          "level": 3,
+          "line": 1015
+        },
+        {
+          "heading": "Testing",
+          "level": 2,
+          "line": 1031
+        },
+        {
+          "heading": "Schema Reference",
+          "level": 2,
+          "line": 1039
+        },
+        {
+          "heading": "RSI (Recursive Self-Improvement) Knowledge Base",
+          "level": 2,
+          "line": 1044
+        },
+        {
+          "heading": "What it is",
+          "level": 3,
+          "line": 1046
+        },
+        {
+          "heading": "Database schema",
+          "level": 3,
+          "line": 1052
+        },
+        {
+          "heading": "Usage",
+          "level": 3,
+          "line": 1064
+        },
+        {
+          "heading": "Enumeration scripts",
+          "level": 3,
+          "line": 1071
+        },
+        {
+          "heading": "Verified signatures",
+          "level": 3,
+          "line": 1077
+        },
+        {
+          "heading": "RSI efficiency",
+          "level": 3,
+          "line": 1087
+        },
+        {
+          "heading": "Pitfalls (never repeat)",
+          "level": 3,
+          "line": 1093
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 74
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/test_full.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 66,
+      "nonEmptyLines": 66,
+      "sections": [
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "task_id",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "session_id",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "pid",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "display",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "cellview",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "steps",
+          "level": 1,
+          "line": 8
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/test_scenario.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 58,
+      "nonEmptyLines": 58,
+      "sections": [
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "task_id",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "session_id",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "pid",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "display",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "cellview",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "steps",
+          "level": 1,
+          "line": 8
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".pensieve/decisions/2026-04-11-session-vs-profile.md",
+      "language": "markdown",
+      "sizeLines": 34,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md",
+      "language": "markdown",
+      "sizeLines": 54,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md",
+      "language": "markdown",
+      "sizeLines": 77,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "language": "markdown",
+      "sizeLines": 77,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md",
+      "language": "markdown",
+      "sizeLines": 69,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-20-defer-version-branches-until-api-diverges.md",
+      "language": "markdown",
+      "sizeLines": 61,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "language": "markdown",
+      "sizeLines": 71,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-05-07-async-deferred.md",
+      "language": "markdown",
+      "sizeLines": 47,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/decisions/2026-05-07-broadcast-vs-subagent.md",
+      "language": "markdown",
+      "sizeLines": 53,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    ".pensieve/decisions/2026-04-11-session-vs-profile.md": [],
+    ".pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md": [],
+    ".pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md": [],
+    ".pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md": [],
+    ".pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md": [],
+    ".pensieve/decisions/2026-04-20-defer-version-branches-until-api-diverges.md": [],
+    ".pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md": [],
+    ".pensieve/decisions/2026-05-07-async-deferred.md": [],
+    ".pensieve/decisions/2026-05-07-broadcast-vs-subagent.md": []
+  }
+}

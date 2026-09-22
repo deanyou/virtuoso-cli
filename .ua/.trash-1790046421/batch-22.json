@@ -1,0 +1,150 @@
+{
+  "batchIndex": 22,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_click.sh",
+      "type": "file",
+      "name": "gui_click.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_click.sh",
+      "summary": "Shell script that performs a mouse click at absolute screen coordinates via xdotool, with optional mouse-button and click-count selection. Activates the previously locked window (state from gui_find.sh), moves the cursor, clicks, then auto-captures a verify screenshot via ImageMagick `import` and writes a structured line to /tmp/gui_actions.log.",
+      "tags": ["shell", "xdotool", "gui-driver", "click", "verify-shot", "state-sharing", "virtuoso-cli"],
+      "complexity": "moderate",
+      "languageNotes": "Bash with `set -u`. Pairs arguments with manual while/case flag parser (no getopts). Sources /tmp/gui_session.env to read GUI_WID produced by gui_find.sh. Logs only token-level data to /tmp/gui_actions.log (window id, button, count, shot path) — coordinates but no content secrets."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_drag.sh",
+      "type": "file",
+      "name": "gui_drag.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_drag.sh",
+      "summary": "Shell script that executes a smooth mouse drag between two absolute screen points by interpolating intermediate positions with xdotool mousedown / mousemove / mouseup. Configurable button (left/middle/right) and step count (default 8) for trajectory smoothness. Logs the drag to /tmp/gui_actions.log.",
+      "tags": ["shell", "xdotool", "gui-driver", "drag", "interpolation", "state-sharing", "virtuoso-cli"],
+      "complexity": "moderate",
+      "languageNotes": "Bash with `set -u`. Uses integer arithmetic (`$(( X1 + (X2 - X1) * i / STEPS ))`) and a `for` loop driven by `seq 1 $STEPS` for step interpolation. Sources /tmp/gui_session.env for the locked window id. 42 lines — one of the longer scripts in the toolkit."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_env.sh",
+      "type": "file",
+      "name": "gui_env.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_env.sh",
+      "summary": "Shell preflight check that verifies the X11 GUI-driver prerequisites: DISPLAY is set, session is not Wayland (xdotool requires X), and the `xdotool` binary exists. Issues a non-fatal warning if neither `import` (ImageMagick) nor `scrot` is installed for the screenshot channel. Reports display geometry via `xdotool getdisplaygeometry`.",
+      "tags": ["shell", "xdotool", "preflight", "environment-check", "x11", "virtuoso-cli"],
+      "complexity": "simple",
+      "languageNotes": "Bash with `set -u`. Pure precondition gate: each unmet check exits with a numbered ERROR or a single WARN. Used by smoke.sh as the first smoke-test stage and is the canonical entry point for diagnosing missing-tool errors."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_find.sh",
+      "type": "file",
+      "name": "gui_find.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_find.sh",
+      "summary": "Shell script that searches for a visible X11 window by name then class via xdotool, takes the first match, and persists its window id as `GUI_WID` into the shared state file (default /tmp/gui_session.env). All later click/type actions in this session are then window-scoped to that id. Logs the lock event to /tmp/gui_actions.log.",
+      "tags": ["shell", "xdotool", "gui-driver", "window-lock", "state-producer", "virtuoso-cli"],
+      "complexity": "simple",
+      "languageNotes": "Bash with `set -u`. This is the only script that WRITES the session state file (using `export GUI_WID=…`); the other scripts source it read-only. Two-pass search (`--name` then `--class`) makes it forgiving of regex metacharacters in arguments."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_scroll.sh",
+      "type": "file",
+      "name": "gui_scroll.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_scroll.sh",
+      "summary": "Shell script that issues mouse-wheel scroll input at absolute screen coordinates. Maps the symbolic direction `up/down/left/right` onto the corresponding xdotool button codes (4/5/6/7) and emits N repeats with a small delay between clicks. Logs the scroll event to /tmp/gui_actions.log.",
+      "tags": ["shell", "xdotool", "gui-driver", "scroll", "wheel", "state-sharing", "virtuoso-cli"],
+      "complexity": "simple",
+      "languageNotes": "Bash with `set -u`. Uses a `case` block to translate direction words into numeric xdotool button constants. Note that it does NOT source the session state file — `GUI_WID` is only referenced for logging, not for action scoping, so scroll always targets the root window."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_shot.sh",
+      "type": "file",
+      "name": "gui_shot.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_shot.sh",
+      "summary": "Shell utility that captures the root-window screenshot to a path (default /tmp/gui_shot.png). Prefers ImageMagick `import` (matches xdotool-based workflows) and falls back to `scrot`. Exits non-zero if neither tool is present. Logs the capture to /tmp/gui_actions.log.",
+      "tags": ["shell", "screenshot", "imagemagick", "scrot", "observation-channel", "virtuoso-cli"],
+      "complexity": "simple",
+      "languageNotes": "Bash with `set -e` (the only script in the set that enables errexit instead of nounset). Compact `if/elif/else` over `command -v` for tool preference, then a single-shot capture. Used both stand-alone and as stage 4 of smoke.sh."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_state.sh",
+      "type": "file",
+      "name": "gui_state.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_state.sh",
+      "summary": "Shell introspection helper that lists the first ~40 visible X11 windows (id / truncated name / parsed geometry) and prints the currently active window. Designed to be called during the observation phase of an OODA-style loop so the decision layer can see what is actually on screen.",
+      "tags": ["shell", "xdotool", "gui-driver", "observation", "window-state", "virtuoso-cli"],
+      "complexity": "simple",
+      "languageNotes": "Bash with `set -u`. `for` loop over a multi-line `xdotool search` capture, per-iteration `xdotool getwindowname` + `getwindowgeometry` (parsed with awk to strip screen-offset suffix). Names are truncated to 60 chars with `head -c` to keep output compact."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_type.sh",
+      "type": "file",
+      "name": "gui_type.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_type.sh",
+      "summary": "Shell script that focuses the locked window and types a text string via `xdotool type --clearmodifiers --delay …`. Default per-key delay of 30 ms to avoid dropped characters in the target application. Logs the LENGTH only to /tmp/gui_actions.log so passwords and secrets never reach the audit log.",
+      "tags": ["shell", "xdotool", "gui-driver", "keyboard", "type", "state-sharing", "security", "virtuoso-cli"],
+      "complexity": "simple",
+      "languageNotes": "Bash with `set -u`. Uses `${#TEXT}` (parameter length expansion) and the `--` argument terminator on xdotool type to safely pass strings that begin with `-`. Slight enhancement over gui_click.sh: also tries `xdotool windowfocus` as a fallback before issuing keystrokes."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_wait.sh",
+      "type": "file",
+      "name": "gui_wait.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_wait.sh",
+      "summary": "Shell polling helper that waits until a window matching a name/class substring becomes visible (`appear` mode, default) or disappears (`disappear` mode). Implements a busy-wait loop with a hard wall-clock timeout (in seconds). Exits 0 when the condition is met, 1 on timeout.",
+      "tags": ["shell", "xdotool", "gui-driver", "wait", "polling", "timeout", "virtuoso-cli"],
+      "complexity": "simple",
+      "languageNotes": "Bash with `set -u`. Classic `deadline=$(( $(date +%s) + TIMEOUT ))` style timeout pattern. Uses `xdotool search … | wc -l` rather than capturing the PID list each iteration — cheap and adequate for window-presence checks."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/smoke.sh",
+      "type": "file",
+      "name": "smoke.sh",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/smoke.sh",
+      "summary": "Shell orchestrator that runs a 6-stage self-test of the GUI-debug toolkit: env check → launch `xmessage` → find/lock the window → pre-click screenshot → convert window-relative to absolute coordinates and click the OK button → verify the window closed. Prints `SMOKE PASS` on success, `SMOKE FAIL` plus non-zero exit on failure. Skips gracefully if `xmessage` is missing.",
+      "tags": ["shell", "orchestrator", "smoke-test", "xmessage", "xdotool", "virtuoso-cli"],
+      "complexity": "moderate",
+      "languageNotes": "Bash with `set -u`. Resolves its own directory with `HERE=$(cd \"$(dirname \"$0\")\" && pwd)` to invoke its sibling scripts by relative path. Reads `eval \"$(xdotool getwindowgeometry --shell …)\"` (xdotool's `--shell` mode emits POSIX-shell-evaluatable assignments) to perform the relative→absolute coordinate translation for the button click. The single piece of glue that turns the atomic scripts into a closed-loop diagnose tool."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/smoke.sh",
+      "target": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_env.sh",
+      "type": "calls",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/smoke.sh",
+      "target": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_find.sh",
+      "type": "calls",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/smoke.sh",
+      "target": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_shot.sh",
+      "type": "calls",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/smoke.sh",
+      "target": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_click.sh",
+      "type": "calls",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_find.sh",
+      "target": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_click.sh",
+      "type": "imports",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_find.sh",
+      "target": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_drag.sh",
+      "type": "imports",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_find.sh",
+      "target": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_type.sh",
+      "type": "imports",
+      "weight": 0.6
+    }
+  ]
+}

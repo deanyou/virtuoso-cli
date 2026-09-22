@@ -1,0 +1,5259 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 22,
+  "filesSkipped": [
+    ".agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+    ".agents/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+    ".agents/skills/virtuoso-gui-debug/report/rsi_report.html"
+  ],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 22,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 13,
+      "failed": 0,
+      "skipped": 9
+    }
+  },
+  "results": [
+    {
+      "path": ".agents/skills/spec-driven-circuit-design/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 333,
+      "nonEmptyLines": 274,
+      "sections": [
+        {
+          "heading": "Spec-Driven Circuit Design",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "Design Flow",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. Spec Capture Template",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "2. Spec Sanity Check",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "Fundamental Tradeoffs",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "Topology-Aware Power Calculation",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "Automated Feasibility via Virtuoso-CLI",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "3. Spec Decomposition",
+          "level": 2,
+          "line": 158
+        },
+        {
+          "heading": "Two-Stage Miller OTA Example",
+          "level": 3,
+          "line": 160
+        },
+        {
+          "heading": "Decomposition Rules",
+          "level": 3,
+          "line": 197
+        },
+        {
+          "heading": "4. Feasibility Matrix",
+          "level": 2,
+          "line": 212
+        },
+        {
+          "heading": "5. Simulation Verification Plan",
+          "level": 2,
+          "line": 230
+        },
+        {
+          "heading": "6. Spec Iteration Decision Tree",
+          "level": 2,
+          "line": 261
+        },
+        {
+          "heading": "Spec Templates for Common Circuits",
+          "level": 2,
+          "line": 305
+        },
+        {
+          "heading": "LDO Error Amplifier",
+          "level": 3,
+          "line": 307
+        },
+        {
+          "heading": "ADC Front-End (SHA)",
+          "level": 3,
+          "line": 314
+        },
+        {
+          "heading": "Sensor Readout (Instrumentation)",
+          "level": 3,
+          "line": 321
+        },
+        {
+          "heading": "Comparator",
+          "level": 3,
+          "line": 328
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": ".agents/skills/spectre-netlist-gotchas/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 251,
+      "nonEmptyLines": 196,
+      "sections": [
+        {
+          "heading": "Spectre Netlist-Mode Gotchas",
+          "level": 1,
+          "line": 18
+        },
+        {
+          "heading": "1. vsource AC Stimulus: `mag=` not `ac=`",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "Discovery",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "2. Noise oprobe: Parallel Probe, Not Series",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "Fix: Use a Large Parallel Resistor",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "Verification",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "3. oprobe Must Be a Circuit Element (SFE-1997)",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "4. PSF ASCII Format (Spectre 23.1)",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "DC (`dc_op.dc`)",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "AC (`ac_gain.ac`)",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "Noise (`noise_an.noise`)",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "5. Phase Margin for Inverting Amplifiers",
+          "level": 2,
+          "line": 141
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "Fix: Fold to (0°, 180°)",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "6. Slew Rate Measurement: Large-Signal Step Required",
+          "level": 2,
+          "line": 161
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 167
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "Verification",
+          "level": 3,
+          "line": 190
+        },
+        {
+          "heading": "7. ICMR from DC Sweep: Use Transistor Region, Not CM Gain",
+          "level": 2,
+          "line": 197
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 199
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 204
+        },
+        {
+          "heading": "Fix: Check Saturation Regions",
+          "level": 3,
+          "line": 209
+        },
+        {
+          "heading": "Output Swing (from Same Data)",
+          "level": 3,
+          "line": 223
+        },
+        {
+          "heading": "Quick Reference: Spectre Help",
+          "level": 2,
+          "line": 238
+        },
+        {
+          "heading": "Notes",
+          "level": 2,
+          "line": 246
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 33
+      }
+    },
+    {
+      "path": ".agents/skills/spectre-netlist-template/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 499,
+      "nonEmptyLines": 365,
+      "sections": [
+        {
+          "heading": "Spectre Netlist Template — Stimulus & Analysis",
+          "level": 1,
+          "line": 20
+        },
+        {
+          "heading": "Step 0 — Read and Classify the Netlist",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Syntax Reference (from IC231 documentation)",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "vsource parameters",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "isource parameters",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "port element (S-parameter / RF)",
+          "level": 3,
+          "line": 91
+        },
+        {
+          "heading": "iprobe (current probe — zero-voltage series sense)",
+          "level": 3,
+          "line": 98
+        },
+        {
+          "heading": "Analysis Statement Syntax (from IC231 Spectre Reference Manual)",
+          "level": 2,
+          "line": 105
+        },
+        {
+          "heading": "Circuit-Type Templates",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "1. OTA / Single-Ended Opamp",
+          "level": 3,
+          "line": 154
+        },
+        {
+          "heading": "2. Fully-Differential OTA",
+          "level": 3,
+          "line": 194
+        },
+        {
+          "heading": "3. LDO / Voltage Regulator",
+          "level": 3,
+          "line": 221
+        },
+        {
+          "heading": "4. Comparator (static / strong-arm)",
+          "level": 3,
+          "line": 254
+        },
+        {
+          "heading": "5. Bandgap Reference",
+          "level": 3,
+          "line": 289
+        },
+        {
+          "heading": "6. Current Mirror / Bias Generator",
+          "level": 3,
+          "line": 328
+        },
+        {
+          "heading": "7. Active Filter (OTA-C / Gm-C / Sallen-Key)",
+          "level": 3,
+          "line": 356
+        },
+        {
+          "heading": "8. Ring Oscillator / VCO",
+          "level": 3,
+          "line": 383
+        },
+        {
+          "heading": "9. LNA / RF Amplifier (S-parameters)",
+          "level": 3,
+          "line": 408
+        },
+        {
+          "heading": "Workflow",
+          "level": 2,
+          "line": 442
+        },
+        {
+          "heading": "Automated Script: inject_stimulus.py",
+          "level": 2,
+          "line": 470
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": ".agents/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 593,
+      "nonEmptyLines": 471,
+      "functions": [
+        {
+          "name": "parse_subcircuits",
+          "startLine": 38,
+          "endLine": 49,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "normalize",
+          "startLine": 52,
+          "endLine": 54,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "detect_type",
+          "startLine": 112,
+          "endLine": 147,
+          "params": [
+            "ports",
+            "cell_name"
+          ]
+        },
+        {
+          "name": "find_port",
+          "startLine": 154,
+          "endLine": 161,
+          "params": [
+            "ports",
+            "*patterns",
+            "fallback"
+          ]
+        },
+        {
+          "name": "find_ports_multi",
+          "startLine": 164,
+          "endLine": 172,
+          "params": [
+            "ports",
+            "*patterns"
+          ]
+        },
+        {
+          "name": "infer_supply_ports",
+          "startLine": 175,
+          "endLine": 178,
+          "params": [
+            "ports"
+          ]
+        },
+        {
+          "name": "_header",
+          "startLine": 185,
+          "endLine": 196,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file",
+            "ctype"
+          ]
+        },
+        {
+          "name": "gen_ota",
+          "startLine": 199,
+          "endLine": 230,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file"
+          ]
+        },
+        {
+          "name": "gen_diff_ota",
+          "startLine": 233,
+          "endLine": 264,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file"
+          ]
+        },
+        {
+          "name": "gen_ldo",
+          "startLine": 267,
+          "endLine": 302,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file"
+          ]
+        },
+        {
+          "name": "gen_comparator",
+          "startLine": 305,
+          "endLine": 350,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file"
+          ]
+        },
+        {
+          "name": "gen_bandgap",
+          "startLine": 353,
+          "endLine": 386,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file"
+          ]
+        },
+        {
+          "name": "gen_mirror",
+          "startLine": 389,
+          "endLine": 415,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file"
+          ]
+        },
+        {
+          "name": "gen_filter",
+          "startLine": 418,
+          "endLine": 446,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file"
+          ]
+        },
+        {
+          "name": "gen_vco",
+          "startLine": 449,
+          "endLine": 473,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file"
+          ]
+        },
+        {
+          "name": "gen_lna",
+          "startLine": 476,
+          "endLine": 501,
+          "params": [
+            "cell_name",
+            "ports",
+            "include_file"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 525,
+          "endLine": 589,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "parse_subcircuits",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "normalize",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "detect_type",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "find_port",
+          "line": 154,
+          "isDefault": false
+        },
+        {
+          "name": "find_ports_multi",
+          "line": 164,
+          "isDefault": false
+        },
+        {
+          "name": "infer_supply_ports",
+          "line": 175,
+          "isDefault": false
+        },
+        {
+          "name": "_header",
+          "line": 185,
+          "isDefault": false
+        },
+        {
+          "name": "gen_ota",
+          "line": 199,
+          "isDefault": false
+        },
+        {
+          "name": "gen_diff_ota",
+          "line": 233,
+          "isDefault": false
+        },
+        {
+          "name": "gen_ldo",
+          "line": 267,
+          "isDefault": false
+        },
+        {
+          "name": "gen_comparator",
+          "line": 305,
+          "isDefault": false
+        },
+        {
+          "name": "gen_bandgap",
+          "line": 353,
+          "isDefault": false
+        },
+        {
+          "name": "gen_mirror",
+          "line": 389,
+          "isDefault": false
+        },
+        {
+          "name": "gen_filter",
+          "line": 418,
+          "isDefault": false
+        },
+        {
+          "name": "gen_vco",
+          "line": 449,
+          "isDefault": false
+        },
+        {
+          "name": "gen_lna",
+          "line": 476,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 525,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parse_subcircuits",
+          "callee": "re.sub",
+          "lineNumber": 42
+        },
+        {
+          "caller": "parse_subcircuits",
+          "callee": "re.finditer",
+          "lineNumber": 43
+        },
+        {
+          "caller": "parse_subcircuits",
+          "callee": "m.group",
+          "lineNumber": 46
+        },
+        {
+          "caller": "parse_subcircuits",
+          "callee": "m.group(2).split",
+          "lineNumber": 47
+        },
+        {
+          "caller": "parse_subcircuits",
+          "callee": "m.group",
+          "lineNumber": 47
+        },
+        {
+          "caller": "parse_subcircuits",
+          "callee": "subcircuits.append",
+          "lineNumber": 48
+        },
+        {
+          "caller": "normalize",
+          "callee": "re.sub",
+          "lineNumber": 54
+        },
+        {
+          "caller": "normalize",
+          "callee": "name.lower",
+          "lineNumber": 54
+        },
+        {
+          "caller": "detect_type",
+          "callee": "' '.join",
+          "lineNumber": 114
+        },
+        {
+          "caller": "detect_type",
+          "callee": "normalize",
+          "lineNumber": 114
+        },
+        {
+          "caller": "detect_type",
+          "callee": "cell_name.lower",
+          "lineNumber": 115
+        },
+        {
+          "caller": "detect_type",
+          "callee": "re.search",
+          "lineNumber": 118
+        },
+        {
+          "caller": "detect_type",
+          "callee": "re.search",
+          "lineNumber": 120
+        },
+        {
+          "caller": "detect_type",
+          "callee": "re.search",
+          "lineNumber": 122
+        },
+        {
+          "caller": "detect_type",
+          "callee": "re.search",
+          "lineNumber": 124
+        },
+        {
+          "caller": "detect_type",
+          "callee": "re.search",
+          "lineNumber": 126
+        },
+        {
+          "caller": "detect_type",
+          "callee": "re.search",
+          "lineNumber": 128
+        },
+        {
+          "caller": "detect_type",
+          "callee": "re.search",
+          "lineNumber": 136
+        },
+        {
+          "caller": "detect_type",
+          "callee": "re.search",
+          "lineNumber": 142
+        },
+        {
+          "caller": "detect_type",
+          "callee": "len",
+          "lineNumber": 144
+        },
+        {
+          "caller": "find_port",
+          "callee": "p.upper",
+          "lineNumber": 157
+        },
+        {
+          "caller": "find_port",
+          "callee": "re.search",
+          "lineNumber": 159
+        },
+        {
+          "caller": "find_ports_multi",
+          "callee": "re.search",
+          "lineNumber": 169
+        },
+        {
+          "caller": "find_ports_multi",
+          "callee": "result.append",
+          "lineNumber": 170
+        },
+        {
+          "caller": "infer_supply_ports",
+          "callee": "find_port",
+          "lineNumber": 176
+        },
+        {
+          "caller": "infer_supply_ports",
+          "callee": "find_port",
+          "lineNumber": 177
+        },
+        {
+          "caller": "_header",
+          "callee": "\" \".join",
+          "lineNumber": 186
+        },
+        {
+          "caller": "_header",
+          "callee": "dedent",
+          "lineNumber": 187
+        },
+        {
+          "caller": "gen_ota",
+          "callee": "infer_supply_ports",
+          "lineNumber": 200
+        },
+        {
+          "caller": "gen_ota",
+          "callee": "find_port",
+          "lineNumber": 201
+        },
+        {
+          "caller": "gen_ota",
+          "callee": "find_port",
+          "lineNumber": 202
+        },
+        {
+          "caller": "gen_ota",
+          "callee": "find_port",
+          "lineNumber": 203
+        },
+        {
+          "caller": "gen_ota",
+          "callee": "_header",
+          "lineNumber": 205
+        },
+        {
+          "caller": "gen_ota",
+          "callee": "dedent",
+          "lineNumber": 206
+        },
+        {
+          "caller": "gen_diff_ota",
+          "callee": "infer_supply_ports",
+          "lineNumber": 234
+        },
+        {
+          "caller": "gen_diff_ota",
+          "callee": "find_port",
+          "lineNumber": 235
+        },
+        {
+          "caller": "gen_diff_ota",
+          "callee": "find_port",
+          "lineNumber": 236
+        },
+        {
+          "caller": "gen_diff_ota",
+          "callee": "find_port",
+          "lineNumber": 237
+        },
+        {
+          "caller": "gen_diff_ota",
+          "callee": "find_port",
+          "lineNumber": 238
+        },
+        {
+          "caller": "gen_diff_ota",
+          "callee": "find_port",
+          "lineNumber": 239
+        },
+        {
+          "caller": "gen_diff_ota",
+          "callee": "_header",
+          "lineNumber": 241
+        },
+        {
+          "caller": "gen_diff_ota",
+          "callee": "dedent",
+          "lineNumber": 242
+        },
+        {
+          "caller": "gen_diff_ota",
+          "callee": "dedent",
+          "lineNumber": 249
+        },
+        {
+          "caller": "gen_ldo",
+          "callee": "infer_supply_ports",
+          "lineNumber": 268
+        },
+        {
+          "caller": "gen_ldo",
+          "callee": "find_port",
+          "lineNumber": 269
+        },
+        {
+          "caller": "gen_ldo",
+          "callee": "find_port",
+          "lineNumber": 270
+        },
+        {
+          "caller": "gen_ldo",
+          "callee": "_header",
+          "lineNumber": 272
+        },
+        {
+          "caller": "gen_ldo",
+          "callee": "dedent",
+          "lineNumber": 273
+        },
+        {
+          "caller": "gen_comparator",
+          "callee": "infer_supply_ports",
+          "lineNumber": 306
+        },
+        {
+          "caller": "gen_comparator",
+          "callee": "find_port",
+          "lineNumber": 307
+        },
+        {
+          "caller": "gen_comparator",
+          "callee": "find_port",
+          "lineNumber": 308
+        },
+        {
+          "caller": "gen_comparator",
+          "callee": "find_port",
+          "lineNumber": 309
+        },
+        {
+          "caller": "gen_comparator",
+          "callee": "find_port",
+          "lineNumber": 310
+        },
+        {
+          "caller": "gen_comparator",
+          "callee": "_header",
+          "lineNumber": 312
+        },
+        {
+          "caller": "gen_comparator",
+          "callee": "dedent",
+          "lineNumber": 319
+        },
+        {
+          "caller": "gen_comparator",
+          "callee": "dedent",
+          "lineNumber": 337
+        },
+        {
+          "caller": "gen_bandgap",
+          "callee": "infer_supply_ports",
+          "lineNumber": 354
+        },
+        {
+          "caller": "gen_bandgap",
+          "callee": "find_port",
+          "lineNumber": 355
+        },
+        {
+          "caller": "gen_bandgap",
+          "callee": "_header",
+          "lineNumber": 357
+        },
+        {
+          "caller": "gen_bandgap",
+          "callee": "dedent",
+          "lineNumber": 358
+        },
+        {
+          "caller": "gen_mirror",
+          "callee": "infer_supply_ports",
+          "lineNumber": 390
+        },
+        {
+          "caller": "gen_mirror",
+          "callee": "find_port",
+          "lineNumber": 391
+        },
+        {
+          "caller": "gen_mirror",
+          "callee": "find_port",
+          "lineNumber": 392
+        },
+        {
+          "caller": "gen_mirror",
+          "callee": "_header",
+          "lineNumber": 394
+        },
+        {
+          "caller": "gen_mirror",
+          "callee": "dedent",
+          "lineNumber": 395
+        },
+        {
+          "caller": "gen_filter",
+          "callee": "infer_supply_ports",
+          "lineNumber": 419
+        },
+        {
+          "caller": "gen_filter",
+          "callee": "find_port",
+          "lineNumber": 420
+        },
+        {
+          "caller": "gen_filter",
+          "callee": "find_port",
+          "lineNumber": 421
+        },
+        {
+          "caller": "gen_filter",
+          "callee": "_header",
+          "lineNumber": 423
+        },
+        {
+          "caller": "gen_filter",
+          "callee": "dedent",
+          "lineNumber": 424
+        },
+        {
+          "caller": "gen_vco",
+          "callee": "infer_supply_ports",
+          "lineNumber": 450
+        },
+        {
+          "caller": "gen_vco",
+          "callee": "find_port",
+          "lineNumber": 451
+        },
+        {
+          "caller": "gen_vco",
+          "callee": "find_port",
+          "lineNumber": 452
+        },
+        {
+          "caller": "gen_vco",
+          "callee": "_header",
+          "lineNumber": 454
+        },
+        {
+          "caller": "gen_vco",
+          "callee": "dedent",
+          "lineNumber": 455
+        },
+        {
+          "caller": "gen_lna",
+          "callee": "infer_supply_ports",
+          "lineNumber": 477
+        },
+        {
+          "caller": "gen_lna",
+          "callee": "find_port",
+          "lineNumber": 478
+        },
+        {
+          "caller": "gen_lna",
+          "callee": "find_port",
+          "lineNumber": 479
+        },
+        {
+          "caller": "gen_lna",
+          "callee": "find_port",
+          "lineNumber": 480
+        },
+        {
+          "caller": "gen_lna",
+          "callee": "_header",
+          "lineNumber": 482
+        },
+        {
+          "caller": "gen_lna",
+          "callee": "dedent",
+          "lineNumber": 488
+        },
+        {
+          "caller": "main",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 526
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 529
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 530
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 531
+        },
+        {
+          "caller": "main",
+          "callee": "list",
+          "lineNumber": 532
+        },
+        {
+          "caller": "main",
+          "callee": "GENERATORS.keys",
+          "lineNumber": 532
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 535
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 539
+        },
+        {
+          "caller": "main",
+          "callee": "parser.parse_args",
+          "lineNumber": 543
+        },
+        {
+          "caller": "main",
+          "callee": "Path",
+          "lineNumber": 545
+        },
+        {
+          "caller": "main",
+          "callee": "input_path.exists",
+          "lineNumber": 546
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 547
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 548
+        },
+        {
+          "caller": "main",
+          "callee": "input_path.read_text",
+          "lineNumber": 550
+        },
+        {
+          "caller": "main",
+          "callee": "parse_subcircuits",
+          "lineNumber": 551
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 554
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 555
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 558
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 560
+        },
+        {
+          "caller": "main",
+          "callee": "' '.join",
+          "lineNumber": 560
+        },
+        {
+          "caller": "main",
+          "callee": "n.lower",
+          "lineNumber": 565
+        },
+        {
+          "caller": "main",
+          "callee": "args.cell.lower",
+          "lineNumber": 565
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 567
+        },
+        {
+          "caller": "main",
+          "callee": "\", \".join",
+          "lineNumber": 568
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 569
+        },
+        {
+          "caller": "main",
+          "callee": "detect_type",
+          "lineNumber": 576
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 578
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 579
+        },
+        {
+          "caller": "main",
+          "callee": "' '.join",
+          "lineNumber": 579
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 580
+        },
+        {
+          "caller": "main",
+          "callee": "gen_fn",
+          "lineNumber": 583
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 583
+        },
+        {
+          "caller": "main",
+          "callee": "Path",
+          "lineNumber": 585
+        },
+        {
+          "caller": "main",
+          "callee": "input_path.with_name",
+          "lineNumber": 585
+        },
+        {
+          "caller": "main",
+          "callee": "out_path.write_text",
+          "lineNumber": 588
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 589
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 17,
+        "functionCount": 17,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/tunnel-connect/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 39,
+      "nonEmptyLines": 30,
+      "sections": [
+        {
+          "heading": "Connect to Virtuoso",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "Local mode",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Remote mode",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Troubleshooting",
+          "level": 2,
+          "line": 35
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": ".agents/skills/veriloga/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 308,
+      "nonEmptyLines": 242,
+      "sections": [
+        {
+          "heading": "Verilog-A Design & Debug",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "Quick Start: Create and Simulate a Verilog-A Module",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Verilog-A Module Templates",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "1. Ideal Voltage Source (DC + AC + Pulse)",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "2. Ideal Current Mirror (behavioral)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "3. Ideal Opamp (finite gain, GBW, slew)",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "4. Bandgap Reference (behavioral)",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "5. Testbench Stimulus (PWL + Noise)",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "Verilog-A Language Reference",
+          "level": 2,
+          "line": 191
+        },
+        {
+          "heading": "Key Analog Operators",
+          "level": 3,
+          "line": 193
+        },
+        {
+          "heading": "Constants (`constants.vams`)",
+          "level": 3,
+          "line": 215
+        },
+        {
+          "heading": "Parameter Types",
+          "level": 3,
+          "line": 224
+        },
+        {
+          "heading": "Debugging Verilog-A in Spectre",
+          "level": 2,
+          "line": 233
+        },
+        {
+          "heading": "Common Errors and Fixes",
+          "level": 3,
+          "line": 235
+        },
+        {
+          "heading": "Convergence Best Practices",
+          "level": 3,
+          "line": 246
+        },
+        {
+          "heading": "Debug with Virtuoso-CLI",
+          "level": 3,
+          "line": 266
+        },
+        {
+          "heading": "Creating Verilog-A View in Virtuoso via CLI",
+          "level": 2,
+          "line": 284
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 111259,
+      "nonEmptyLines": 111259,
+      "sections": [
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "exported",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "synonyms",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "snippets",
+          "level": 1,
+          "line": 246
+        },
+        {
+          "heading": "error_history",
+          "level": 1,
+          "line": 468
+        },
+        {
+          "heading": "param_examples",
+          "level": 1,
+          "line": 477
+        },
+        {
+          "heading": "verified_functions",
+          "level": 1,
+          "line": 581
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 257731,
+      "nonEmptyLines": 257731,
+      "sections": [
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "virtuoso_versions",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "generated",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "manual_functions",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "fnd_functions",
+          "level": 1,
+          "line": 5279
+        },
+        {
+          "heading": "error_history",
+          "level": 1,
+          "line": 257686
+        },
+        {
+          "heading": "meta",
+          "level": 1,
+          "line": 257704
+        },
+        {
+          "heading": "stats",
+          "level": 1,
+          "line": 257722
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 238,
+      "nonEmptyLines": 192,
+      "sections": [
+        {
+          "heading": "Scenario JSON DSL Schema",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Top-Level Fields",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "CellView Object",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Step Object",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Allowed Operations",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "VCLI_LOAD",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "VCLI_CALL",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "WINDOW_WAIT",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "WINDOW_ACTIVATE",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "WINDOW_DISCOVER",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "DISMISS_DIALOG",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "CLOSE",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "KEY",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "TYPE",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "CLICK_REL",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "DRAG_REL",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "SCROLL",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "SCREENSHOT",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "VERIFY",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "RECOVER",
+          "level": 3,
+          "line": 105
+        },
+        {
+          "heading": "Verifier Object",
+          "level": 2,
+          "line": 109
+        },
+        {
+          "heading": "Rollback Object",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "Validation Rules",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "Complete Example",
+          "level": 2,
+          "line": 148
+        },
+        {
+          "heading": "Executor Semantics",
+          "level": 2,
+          "line": 186
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 25
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 73,
+      "nonEmptyLines": 60,
+      "sections": [
+        {
+          "heading": "xdotool 速查",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "常用命令",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Python 实现（推荐入口）",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "动作日志",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "坐标换算（重要）",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "已知陷阱",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "调试小技巧",
+          "level": 2,
+          "line": 69
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 76,
+      "nonEmptyLines": 68,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 385,
+      "nonEmptyLines": 346,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 121,
+      "nonEmptyLines": 100,
+      "functions": [
+        {
+          "name": "parse_fnd_file",
+          "startLine": 14,
+          "endLine": 46,
+          "params": [
+            "filepath",
+            "version",
+            "category"
+          ]
+        },
+        {
+          "name": "import_version",
+          "startLine": 48,
+          "endLine": 62,
+          "params": [
+            "version_dir",
+            "version_tag"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 64,
+          "endLine": 118,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "parse_fnd_file",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "import_version",
+          "line": 48,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 64,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parse_fnd_file",
+          "callee": "open",
+          "lineNumber": 16
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "f.read",
+          "lineNumber": 17
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "re.compile",
+          "lineNumber": 22
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "pattern.finditer",
+          "lineNumber": 27
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group",
+          "lineNumber": 28
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group(2).replace('\\n', ' ').strip",
+          "lineNumber": 29
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group(2).replace",
+          "lineNumber": 29
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group",
+          "lineNumber": 29
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group(3).replace('\\n', ' ').strip",
+          "lineNumber": 30
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group(3).replace",
+          "lineNumber": 30
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group",
+          "lineNumber": 30
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "re.search",
+          "lineNumber": 33
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "args_match.group(1).strip",
+          "lineNumber": 34
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "args_match.group",
+          "lineNumber": 34
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "len",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "args_str.split",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "a.strip",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "a.strip().startswith",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "a.strip",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "functions.append",
+          "lineNumber": 37
+        },
+        {
+          "caller": "import_version",
+          "callee": "sorted",
+          "lineNumber": 52
+        },
+        {
+          "caller": "import_version",
+          "callee": "version_dir.iterdir",
+          "lineNumber": 52
+        },
+        {
+          "caller": "import_version",
+          "callee": "subdir.is_dir",
+          "lineNumber": 53
+        },
+        {
+          "caller": "import_version",
+          "callee": "subdir.glob",
+          "lineNumber": 57
+        },
+        {
+          "caller": "import_version",
+          "callee": "parse_fnd_file",
+          "lineNumber": 58
+        },
+        {
+          "caller": "import_version",
+          "callee": "all_funcs.extend",
+          "lineNumber": 59
+        },
+        {
+          "caller": "import_version",
+          "callee": "print",
+          "lineNumber": 60
+        },
+        {
+          "caller": "import_version",
+          "callee": "len",
+          "lineNumber": 60
+        },
+        {
+          "caller": "main",
+          "callee": "sqlite3.connect",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 69
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 81
+        },
+        {
+          "caller": "main",
+          "callee": "import_version",
+          "lineNumber": 83
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 87
+        },
+        {
+          "caller": "main",
+          "callee": "import_version",
+          "lineNumber": 89
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 90
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 90
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 94
+        },
+        {
+          "caller": "main",
+          "callee": "conn.commit",
+          "lineNumber": 100
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 103
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 104
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 105
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 108
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 109
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 115
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 117
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 115,
+      "nonEmptyLines": 109,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 46,
+      "functions": [
+        {
+          "name": "main",
+          "startLine": 32,
+          "endLine": 47,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "main",
+          "line": 32,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "main",
+          "callee": "sqlite3.connect",
+          "lineNumber": 33
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 33
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 34
+        },
+        {
+          "caller": "main",
+          "callee": "SYNONYMS.items",
+          "lineNumber": 40
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 42
+        },
+        {
+          "caller": "main",
+          "callee": "conn.commit",
+          "lineNumber": 44
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM synonyms\").fetchone",
+          "lineNumber": 45
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 45
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 46
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/promote.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 102,
+      "nonEmptyLines": 85,
+      "functions": [
+        {
+          "name": "name_to_proc",
+          "startLine": 30,
+          "endLine": 33,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "generate_il",
+          "startLine": 36,
+          "endLine": 70,
+          "params": [
+            "snippets",
+            "conn"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 73,
+          "endLine": 98,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "name_to_proc",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "generate_il",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 73,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "name_to_proc",
+          "callee": "name.split",
+          "lineNumber": 32
+        },
+        {
+          "caller": "name_to_proc",
+          "callee": "\"\".join",
+          "lineNumber": 33
+        },
+        {
+          "caller": "name_to_proc",
+          "callee": "p.capitalize",
+          "lineNumber": 33
+        },
+        {
+          "caller": "generate_il",
+          "callee": "conn.execute(\"SELECT * FROM snippets WHERE name=?\", (db_name,)).fetchone",
+          "lineNumber": 44
+        },
+        {
+          "caller": "generate_il",
+          "callee": "conn.execute",
+          "lineNumber": 44
+        },
+        {
+          "caller": "generate_il",
+          "callee": "json.loads",
+          "lineNumber": 46
+        },
+        {
+          "caller": "generate_il",
+          "callee": "proc_body.replace",
+          "lineNumber": 53
+        },
+        {
+          "caller": "generate_il",
+          "callee": "proc_body.replace",
+          "lineNumber": 55
+        },
+        {
+          "caller": "generate_il",
+          "callee": "' '.join",
+          "lineNumber": 60
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 64
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 65
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 66
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 67
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 68
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 69
+        },
+        {
+          "caller": "generate_il",
+          "callee": "\"\\n\".join",
+          "lineNumber": 70
+        },
+        {
+          "caller": "main",
+          "callee": "sqlite3.connect",
+          "lineNumber": 74
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 74
+        },
+        {
+          "caller": "main",
+          "callee": "PROMOTE.items",
+          "lineNumber": 80
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 82
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\"SELECT * FROM snippets WHERE name=?\", (db_name,)).fetchone",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 86
+        },
+        {
+          "caller": "main",
+          "callee": "promoted.append",
+          "lineNumber": 87
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 88
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 90
+        },
+        {
+          "caller": "main",
+          "callee": "conn.commit",
+          "lineNumber": 92
+        },
+        {
+          "caller": "main",
+          "callee": "generate_il",
+          "lineNumber": 95
+        },
+        {
+          "caller": "main",
+          "callee": "IL_OUT.write_text",
+          "lineNumber": 96
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 97
+        },
+        {
+          "caller": "main",
+          "callee": "IL_OUT.stat",
+          "lineNumber": 97
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 59,
+      "nonEmptyLines": 53,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 664,
+      "nonEmptyLines": 610,
+      "functions": [
+        {
+          "name": "conn",
+          "startLine": 22,
+          "endLine": 25,
+          "params": []
+        },
+        {
+          "name": "_load_synonyms",
+          "startLine": 51,
+          "endLine": 62,
+          "params": [
+            "c"
+          ]
+        },
+        {
+          "name": "expand",
+          "startLine": 64,
+          "endLine": 77,
+          "params": [
+            "c",
+            "query"
+          ]
+        },
+        {
+          "name": "search",
+          "startLine": 79,
+          "endLine": 109,
+          "params": [
+            "c",
+            "query",
+            "version",
+            "limit"
+          ]
+        },
+        {
+          "name": "lookup",
+          "startLine": 113,
+          "endLine": 131,
+          "params": [
+            "c",
+            "name",
+            "version"
+          ]
+        },
+        {
+          "name": "record_failure",
+          "startLine": 135,
+          "endLine": 141,
+          "params": [
+            "c",
+            "func",
+            "err_type",
+            "message"
+          ]
+        },
+        {
+          "name": "record_param",
+          "startLine": 143,
+          "endLine": 151,
+          "params": [
+            "c",
+            "func",
+            "param",
+            "value"
+          ]
+        },
+        {
+          "name": "_handle_snippet",
+          "startLine": 157,
+          "endLine": 529,
+          "params": [
+            "c",
+            "argv"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 534,
+          "endLine": 659,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "conn",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "_load_synonyms",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "expand",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "search",
+          "line": 79,
+          "isDefault": false
+        },
+        {
+          "name": "lookup",
+          "line": 113,
+          "isDefault": false
+        },
+        {
+          "name": "record_failure",
+          "line": 135,
+          "isDefault": false
+        },
+        {
+          "name": "record_param",
+          "line": 143,
+          "isDefault": false
+        },
+        {
+          "name": "_handle_snippet",
+          "line": 157,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 534,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "conn",
+          "callee": "sqlite3.connect",
+          "lineNumber": 23
+        },
+        {
+          "caller": "conn",
+          "callee": "str",
+          "lineNumber": 23
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "c.execute",
+          "lineNumber": 57
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "cache.setdefault(variant, set()).add",
+          "lineNumber": 58
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "cache.setdefault",
+          "lineNumber": 58
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "set",
+          "lineNumber": 58
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "cache.setdefault(canon, set()).add",
+          "lineNumber": 59
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "cache.setdefault",
+          "lineNumber": 59
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "set",
+          "lineNumber": 59
+        },
+        {
+          "caller": "expand",
+          "callee": "set",
+          "lineNumber": 65
+        },
+        {
+          "caller": "expand",
+          "callee": "_load_synonyms",
+          "lineNumber": 66
+        },
+        {
+          "caller": "expand",
+          "callee": "query.lower().split",
+          "lineNumber": 67
+        },
+        {
+          "caller": "expand",
+          "callee": "query.lower",
+          "lineNumber": 67
+        },
+        {
+          "caller": "expand",
+          "callee": "words.add",
+          "lineNumber": 68
+        },
+        {
+          "caller": "expand",
+          "callee": "t.rstrip",
+          "lineNumber": 69
+        },
+        {
+          "caller": "expand",
+          "callee": "words.add",
+          "lineNumber": 71
+        },
+        {
+          "caller": "expand",
+          "callee": "words.add",
+          "lineNumber": 74
+        },
+        {
+          "caller": "expand",
+          "callee": "words.update",
+          "lineNumber": 76
+        },
+        {
+          "caller": "search",
+          "callee": "expand",
+          "lineNumber": 80
+        },
+        {
+          "caller": "search",
+          "callee": "c.execute(\n                    \"SELECT name, syntax, description, category FROM fnd_functions \"\n                    \"WHERE version=? AND LOWER(name) LIKE LOWER(?) LIMIT 200\",\n                    (version, pattern)).fetchall",
+          "lineNumber": 86
+        },
+        {
+          "caller": "search",
+          "callee": "c.execute",
+          "lineNumber": 86
+        },
+        {
+          "caller": "search",
+          "callee": "dict",
+          "lineNumber": 91
+        },
+        {
+          "caller": "search",
+          "callee": "d['name'].lower",
+          "lineNumber": 92
+        },
+        {
+          "caller": "search",
+          "callee": "nl.find",
+          "lineNumber": 93
+        },
+        {
+          "caller": "search",
+          "callee": "max",
+          "lineNumber": 94
+        },
+        {
+          "caller": "search",
+          "callee": "bare.startswith",
+          "lineNumber": 98
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 99
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 104
+        },
+        {
+          "caller": "search",
+          "callee": "sorted",
+          "lineNumber": 108
+        },
+        {
+          "caller": "search",
+          "callee": "results.values",
+          "lineNumber": 108
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute(\n        \"SELECT name, syntax, description, category, confidence, last_verified_at FROM fnd_functions WHERE name=? AND version=?\",\n        (name, version)).fetchone",
+          "lineNumber": 114
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute",
+          "lineNumber": 114
+        },
+        {
+          "caller": "lookup",
+          "callee": "dict",
+          "lineNumber": 118
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute(\n        \"SELECT error_type, error_message FROM error_history WHERE function_name=? AND fixed=0 ORDER BY created_at DESC LIMIT 3\",\n        (name,)).fetchall",
+          "lineNumber": 120
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute",
+          "lineNumber": 120
+        },
+        {
+          "caller": "lookup",
+          "callee": "dict",
+          "lineNumber": 124
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute(\n        \"SELECT param_name, example_value, success_count FROM param_examples WHERE function_name=? ORDER BY success_count DESC\",\n        (name,)).fetchall",
+          "lineNumber": 126
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute",
+          "lineNumber": 126
+        },
+        {
+          "caller": "lookup",
+          "callee": "dict",
+          "lineNumber": 130
+        },
+        {
+          "caller": "record_failure",
+          "callee": "c.execute",
+          "lineNumber": 136
+        },
+        {
+          "caller": "record_failure",
+          "callee": "c.execute",
+          "lineNumber": 139
+        },
+        {
+          "caller": "record_failure",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 140
+        },
+        {
+          "caller": "record_failure",
+          "callee": "datetime.now",
+          "lineNumber": 140
+        },
+        {
+          "caller": "record_failure",
+          "callee": "c.commit",
+          "lineNumber": 141
+        },
+        {
+          "caller": "record_param",
+          "callee": "c.execute",
+          "lineNumber": 144
+        },
+        {
+          "caller": "record_param",
+          "callee": "c.execute",
+          "lineNumber": 148
+        },
+        {
+          "caller": "record_param",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 150
+        },
+        {
+          "caller": "record_param",
+          "callee": "datetime.now",
+          "lineNumber": 150
+        },
+        {
+          "caller": "record_param",
+          "callee": "c.commit",
+          "lineNumber": 151
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 159
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT name, category, description, success_count, fail_count FROM snippets ORDER BY category, name\").fetchall",
+          "lineNumber": 165
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 165
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 166
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 166
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 170
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 174
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 177
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "\" \".join(argv[1:]).lower",
+          "lineNumber": 179
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "\" \".join",
+          "lineNumber": 179
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT name, category, description, success_count, fail_count FROM snippets\").fetchall",
+          "lineNumber": 180
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 180
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r[0].lower",
+          "lineNumber": 183
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r[1].lower",
+          "lineNumber": 183
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r[2].lower",
+          "lineNumber": 183
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "q.split",
+          "lineNumber": 185
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "matches.append",
+          "lineNumber": 190
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "matches.sort",
+          "lineNumber": 191
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 192
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 192
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 196
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 199
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM snippets WHERE name=?\", (argv[1],)).fetchone",
+          "lineNumber": 200
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 200
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 202
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 204
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 205
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 206
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 207
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 208
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.loads",
+          "lineNumber": 209
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 211
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 213
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "p.get",
+          "lineNumber": 213
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 214
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 215
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 218
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.startswith",
+          "lineNumber": 229
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.split",
+          "lineNumber": 230
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.startswith",
+          "lineNumber": 231
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a[2:].partition",
+          "lineNumber": 232
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM snippets WHERE name=?\", (name,)).fetchone",
+          "lineNumber": 234
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 234
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 236
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 238
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.loads",
+          "lineNumber": 240
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "overrides.get",
+          "lineNumber": 243
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "p.get",
+          "lineNumber": 243
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "fill.items",
+          "lineNumber": 244
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "code.replace",
+          "lineNumber": 245
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "d.get",
+          "lineNumber": 248
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "\" \".join",
+          "lineNumber": 250
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "str",
+          "lineNumber": 250
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 251
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 252
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 254
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 256
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now",
+          "lineNumber": 256
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "time.time",
+          "lineNumber": 259
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "code.replace",
+          "lineNumber": 264
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "str",
+          "lineNumber": 266
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "Path.home",
+          "lineNumber": 266
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "subprocess.run",
+          "lineNumber": 279
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 280
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "time.time",
+          "lineNumber": 280
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r.stdout.decode",
+          "lineNumber": 281
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r.stderr.decode",
+          "lineNumber": 282
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "out.find",
+          "lineNumber": 283
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.loads",
+          "lineNumber": 285
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "data.get",
+          "lineNumber": 286
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "data.get",
+          "lineNumber": 287
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "data.get",
+          "lineNumber": 289
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 294
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "time.time",
+          "lineNumber": 294
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "str",
+          "lineNumber": 296
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 298
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 301
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 305
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 308
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.dumps",
+          "lineNumber": 309
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 311
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "fill.items",
+          "lineNumber": 314
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 316
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 320
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 324
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 327
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 331
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "fill.items",
+          "lineNumber": 336
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 338
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 342
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 344
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 345
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 348
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.startswith",
+          "lineNumber": 362
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.split",
+          "lineNumber": 363
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.startswith",
+          "lineNumber": 364
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a[2:].partition",
+          "lineNumber": 365
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "clean_names.append",
+          "lineNumber": 368
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 370
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "' -> '.join",
+          "lineNumber": 370
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM snippets WHERE name=?\", (snip_name,)).fetchone",
+          "lineNumber": 373
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 373
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 375
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 378
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.loads",
+          "lineNumber": 380
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "overrides.get",
+          "lineNumber": 383
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "p.get",
+          "lineNumber": 383
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "fill.items",
+          "lineNumber": 384
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "code.replace",
+          "lineNumber": 385
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 386
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 387
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 389
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 392
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "re.findall",
+          "lineNumber": 396
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.dumps",
+          "lineNumber": 397
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 398
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 400
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now",
+          "lineNumber": 400
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 401
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 402
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "', '.join",
+          "lineNumber": 402
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 406
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 409
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 410
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 413
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 416
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 419
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 420
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 420
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now",
+          "lineNumber": 420
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT last_insert_rowid()\").fetchone",
+          "lineNumber": 421
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 421
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 422
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 423
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 424
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM recordings WHERE active=1 ORDER BY id DESC LIMIT 1\").fetchone",
+          "lineNumber": 426
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 426
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 428
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 431
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 432
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"\"\"SELECT snippet_name, success, duration_ms, executed_at\n                FROM snippet_executions WHERE executed_at >= ? ORDER BY id\"\"\",\n                (row[2],)).fetchall",
+          "lineNumber": 433
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 433
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 436
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 436
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "sum",
+          "lineNumber": 437
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 439
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 440
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 440
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 444
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "' '.join",
+          "lineNumber": 444
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 445
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 446
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT id, name, started_at, active FROM recordings ORDER BY id DESC LIMIT 10\").fetchall",
+          "lineNumber": 448
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 448
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 449
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 449
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 452
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 453
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 455
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 457
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM recordings WHERE id=?\", (rid,)).fetchone",
+          "lineNumber": 459
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 459
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 461
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"\"\"SELECT snippet_name, success, duration_ms, params_used\n                FROM snippet_executions WHERE executed_at >= ? ORDER BY id\"\"\",\n                (row[2],)).fetchall",
+          "lineNumber": 463
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 463
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 466
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 467
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 468
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 468
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "enumerate",
+          "lineNumber": 469
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 471
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 473
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 474
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 476
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 478
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM recordings WHERE id=?\", (rid,)).fetchone",
+          "lineNumber": 480
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 480
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 482
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT snippet_name FROM snippet_executions WHERE executed_at >= ? ORDER BY id\",\n                (row[2],)).fetchall",
+          "lineNumber": 484
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 484
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 487
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "' → '.join",
+          "lineNumber": 487
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 488
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 490
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"\"\"\n            SELECT name, success_count, fail_count,\n                   (success_count + fail_count) as total,\n                   ROUND(100.0 * success_count / (success_count + fail_count), 0) as rate\n            FROM snippets\n            WHERE success_count + fail_count >= 2\n            ORDER BY success_count DESC, rate DESC LIMIT 10\n        \"\"\").fetchall",
+          "lineNumber": 495
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 495
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 504
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 506
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 508
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 509
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 510
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"\"\"\n                SELECT a.snippet_name, b.snippet_name, COUNT(*) as cnt\n                FROM snippet_executions a\n                JOIN snippet_executions b ON a.id = b.id + 1\n                WHERE a.success = 1 AND b.success = 1\n                GROUP BY a.snippet_name, b.snippet_name\n                HAVING cnt >= 1\n                ORDER BY cnt DESC LIMIT 5\n            \"\"\").fetchall",
+          "lineNumber": 513
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 513
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 523
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 525
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 526
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "\" \".join",
+          "lineNumber": 526
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 526
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 529
+        },
+        {
+          "caller": "main",
+          "callee": "conn",
+          "lineNumber": 540
+        },
+        {
+          "caller": "main",
+          "callee": "_handle_snippet",
+          "lineNumber": 541
+        },
+        {
+          "caller": "main",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 544
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 545
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 546
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 547
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 548
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 549
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 550
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 551
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 552
+        },
+        {
+          "caller": "main",
+          "callee": "ap.parse_args",
+          "lineNumber": 553
+        },
+        {
+          "caller": "main",
+          "callee": "conn",
+          "lineNumber": 555
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute(f\"SELECT COUNT(*) FROM {t}\").fetchone",
+          "lineNumber": 560
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute",
+          "lineNumber": 560
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 561
+        },
+        {
+          "caller": "main",
+          "callee": "record_failure",
+          "lineNumber": 568
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 569
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 571
+        },
+        {
+          "caller": "main",
+          "callee": "lookup",
+          "lineNumber": 575
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 577
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 580
+        },
+        {
+          "caller": "main",
+          "callee": "datetime.fromisoformat",
+          "lineNumber": 583
+        },
+        {
+          "caller": "main",
+          "callee": "datetime.now",
+          "lineNumber": 584
+        },
+        {
+          "caller": "main",
+          "callee": "timedelta",
+          "lineNumber": 584
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 585
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 587
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 588
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 589
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 590
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute(\n                \"SELECT version, syntax FROM fnd_functions WHERE name=? ORDER BY version\",\n                (parsed.function,)).fetchall",
+          "lineNumber": 592
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute",
+          "lineNumber": 592
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 595
+        },
+        {
+          "caller": "main",
+          "callee": "syns.get",
+          "lineNumber": 597
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 600
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 602
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 603
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 604
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 606
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 614
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 615
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 616
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 617
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 619
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 621
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 626
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 627
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 629
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 631
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 632
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 633
+        },
+        {
+          "caller": "main",
+          "callee": "parsed.query.lower",
+          "lineNumber": 636
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute(\"SELECT name, category, description, success_count, fail_count FROM snippets\").fetchall",
+          "lineNumber": 638
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute",
+          "lineNumber": 638
+        },
+        {
+          "caller": "main",
+          "callee": "r[0].lower",
+          "lineNumber": 639
+        },
+        {
+          "caller": "main",
+          "callee": "r[1].lower",
+          "lineNumber": 639
+        },
+        {
+          "caller": "main",
+          "callee": "r[2].lower",
+          "lineNumber": 639
+        },
+        {
+          "caller": "main",
+          "callee": "q.split",
+          "lineNumber": 641
+        },
+        {
+          "caller": "main",
+          "callee": "snippet_matches.append",
+          "lineNumber": 646
+        },
+        {
+          "caller": "main",
+          "callee": "snippet_matches.sort",
+          "lineNumber": 647
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 650
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 650
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 654
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 655
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 656
+        },
+        {
+          "caller": "main",
+          "callee": "ap.print_help",
+          "lineNumber": 659
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 9,
+        "functionCount": 9,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 59,
+      "nonEmptyLines": 55,
+      "functions": [
+        {
+          "name": "export",
+          "startLine": 9,
+          "endLine": 32,
+          "params": [
+            "path"
+          ]
+        },
+        {
+          "name": "import_data",
+          "startLine": 34,
+          "endLine": 50,
+          "params": [
+            "path"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "export",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "import_data",
+          "line": 34,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "export",
+          "callee": "sqlite3.connect",
+          "lineNumber": 10
+        },
+        {
+          "caller": "export",
+          "callee": "str",
+          "lineNumber": 10
+        },
+        {
+          "caller": "export",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 14
+        },
+        {
+          "caller": "export",
+          "callee": "datetime.now",
+          "lineNumber": 14
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 15
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 15
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 16
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 16
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 18
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 18
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 20
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 20
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 22
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 22
+        },
+        {
+          "caller": "export",
+          "callee": "conn.close",
+          "lineNumber": 25
+        },
+        {
+          "caller": "export",
+          "callee": "Path(path).write_text",
+          "lineNumber": 26
+        },
+        {
+          "caller": "export",
+          "callee": "Path",
+          "lineNumber": 26
+        },
+        {
+          "caller": "export",
+          "callee": "json.dumps",
+          "lineNumber": 26
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 27
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 28
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 28
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 29
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 29
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 30
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 30
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 31
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 31
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 32
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 32
+        },
+        {
+          "caller": "import_data",
+          "callee": "json.loads",
+          "lineNumber": 35
+        },
+        {
+          "caller": "import_data",
+          "callee": "Path(path).read_text",
+          "lineNumber": 35
+        },
+        {
+          "caller": "import_data",
+          "callee": "Path",
+          "lineNumber": 35
+        },
+        {
+          "caller": "import_data",
+          "callee": "sqlite3.connect",
+          "lineNumber": 36
+        },
+        {
+          "caller": "import_data",
+          "callee": "str",
+          "lineNumber": 36
+        },
+        {
+          "caller": "import_data",
+          "callee": "data.get",
+          "lineNumber": 38
+        },
+        {
+          "caller": "import_data",
+          "callee": "conn.execute",
+          "lineNumber": 39
+        },
+        {
+          "caller": "import_data",
+          "callee": "data.get",
+          "lineNumber": 42
+        },
+        {
+          "caller": "import_data",
+          "callee": "conn.execute",
+          "lineNumber": 43
+        },
+        {
+          "caller": "import_data",
+          "callee": "conn.commit",
+          "lineNumber": 46
+        },
+        {
+          "caller": "import_data",
+          "callee": "print",
+          "lineNumber": 47
+        },
+        {
+          "caller": "import_data",
+          "callee": "print",
+          "lineNumber": 48
+        },
+        {
+          "caller": "import_data",
+          "callee": "len",
+          "lineNumber": 48
+        },
+        {
+          "caller": "import_data",
+          "callee": "data.get",
+          "lineNumber": 48
+        },
+        {
+          "caller": "import_data",
+          "callee": "print",
+          "lineNumber": 49
+        },
+        {
+          "caller": "import_data",
+          "callee": "len",
+          "lineNumber": 49
+        },
+        {
+          "caller": "import_data",
+          "callee": "data.get",
+          "lineNumber": 49
+        },
+        {
+          "caller": "import_data",
+          "callee": "conn.close",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 255,
+      "nonEmptyLines": 233,
+      "functions": [
+        {
+          "name": "get_conn",
+          "startLine": 19,
+          "endLine": 22,
+          "params": []
+        },
+        {
+          "name": "search",
+          "startLine": 24,
+          "endLine": 144,
+          "params": [
+            "conn",
+            "query",
+            "version",
+            "limit"
+          ]
+        },
+        {
+          "name": "get_function",
+          "startLine": 146,
+          "endLine": 152,
+          "params": [
+            "conn",
+            "name",
+            "version"
+          ]
+        },
+        {
+          "name": "list_category",
+          "startLine": 154,
+          "endLine": 161,
+          "params": [
+            "conn",
+            "category",
+            "version",
+            "limit"
+          ]
+        },
+        {
+          "name": "prefix_search",
+          "startLine": 163,
+          "endLine": 170,
+          "params": [
+            "conn",
+            "prefix",
+            "version",
+            "limit"
+          ]
+        },
+        {
+          "name": "check_errors",
+          "startLine": 172,
+          "endLine": 179,
+          "params": [
+            "conn",
+            "name"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 181,
+          "endLine": 252,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "get_conn",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "search",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "get_function",
+          "line": 146,
+          "isDefault": false
+        },
+        {
+          "name": "list_category",
+          "line": 154,
+          "isDefault": false
+        },
+        {
+          "name": "prefix_search",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "check_errors",
+          "line": 172,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 181,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get_conn",
+          "callee": "sqlite3.connect",
+          "lineNumber": 20
+        },
+        {
+          "caller": "get_conn",
+          "callee": "str",
+          "lineNumber": 20
+        },
+        {
+          "caller": "search",
+          "callee": "query.strip().split",
+          "lineNumber": 26
+        },
+        {
+          "caller": "search",
+          "callee": "query.strip",
+          "lineNumber": 26
+        },
+        {
+          "caller": "search",
+          "callee": "set",
+          "lineNumber": 53
+        },
+        {
+          "caller": "search",
+          "callee": "t.lower",
+          "lineNumber": 55
+        },
+        {
+          "caller": "search",
+          "callee": "expanded.add",
+          "lineNumber": 56
+        },
+        {
+          "caller": "search",
+          "callee": "tl.rstrip",
+          "lineNumber": 58
+        },
+        {
+          "caller": "search",
+          "callee": "expanded.add",
+          "lineNumber": 60
+        },
+        {
+          "caller": "search",
+          "callee": "expanded.add",
+          "lineNumber": 64
+        },
+        {
+          "caller": "search",
+          "callee": "w.endswith",
+          "lineNumber": 67
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 68
+        },
+        {
+          "caller": "search",
+          "callee": "expanded.add",
+          "lineNumber": 70
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute(\"\"\"\n                    SELECT name, syntax, description, category, version\n                    FROM fnd_functions\n                    WHERE version=? AND LOWER(name) LIKE LOWER(?)\n                    LIMIT 200\n                \"\"\", (version, pattern)).fetchall",
+          "lineNumber": 78
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute",
+          "lineNumber": 78
+        },
+        {
+          "caller": "search",
+          "callee": "dict",
+          "lineNumber": 85
+        },
+        {
+          "caller": "search",
+          "callee": "d['name'].lower",
+          "lineNumber": 86
+        },
+        {
+          "caller": "search",
+          "callee": "name_lower.find",
+          "lineNumber": 88
+        },
+        {
+          "caller": "search",
+          "callee": "max",
+          "lineNumber": 90
+        },
+        {
+          "caller": "search",
+          "callee": "bare.startswith",
+          "lineNumber": 94
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 95
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 100
+        },
+        {
+          "caller": "search",
+          "callee": "\" OR \".join",
+          "lineNumber": 110
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute(\"\"\"\n            SELECT name, syntax, description, category, version, 1 as score\n            FROM fnd_functions_fts\n            WHERE fnd_functions_fts MATCH ? AND version = ?\n            LIMIT ?\n        \"\"\", (fts_terms, version, limit * 3)).fetchall",
+          "lineNumber": 112
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute",
+          "lineNumber": 112
+        },
+        {
+          "caller": "search",
+          "callee": "dict",
+          "lineNumber": 119
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 126
+        },
+        {
+          "caller": "search",
+          "callee": "list",
+          "lineNumber": 127
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute(\"\"\"\n                    SELECT name, syntax, description, category, version\n                    FROM fnd_functions\n                    WHERE version=? AND LOWER(description) LIKE LOWER(?)\n                    LIMIT ?\n                \"\"\", (version, f'%{word}%', limit)).fetchall",
+          "lineNumber": 129
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute",
+          "lineNumber": 129
+        },
+        {
+          "caller": "search",
+          "callee": "dict",
+          "lineNumber": 136
+        },
+        {
+          "caller": "search",
+          "callee": "sorted",
+          "lineNumber": 143
+        },
+        {
+          "caller": "search",
+          "callee": "results.values",
+          "lineNumber": 143
+        },
+        {
+          "caller": "search",
+          "callee": "x.get",
+          "lineNumber": 143
+        },
+        {
+          "caller": "get_function",
+          "callee": "conn.execute(\"\"\"\n        SELECT name, syntax, description, category, version\n        FROM fnd_functions WHERE name = ? AND version = ?\n    \"\"\", (name, version)).fetchone",
+          "lineNumber": 148
+        },
+        {
+          "caller": "get_function",
+          "callee": "conn.execute",
+          "lineNumber": 148
+        },
+        {
+          "caller": "get_function",
+          "callee": "dict",
+          "lineNumber": 152
+        },
+        {
+          "caller": "list_category",
+          "callee": "conn.execute(\"\"\"\n        SELECT name, syntax, description\n        FROM fnd_functions WHERE category = ? AND version = ?\n        ORDER BY name LIMIT ?\n    \"\"\", (category, version, limit)).fetchall",
+          "lineNumber": 156
+        },
+        {
+          "caller": "list_category",
+          "callee": "conn.execute",
+          "lineNumber": 156
+        },
+        {
+          "caller": "list_category",
+          "callee": "dict",
+          "lineNumber": 161
+        },
+        {
+          "caller": "prefix_search",
+          "callee": "conn.execute(\"\"\"\n        SELECT name, syntax, description\n        FROM fnd_functions WHERE name LIKE ? AND version = ?\n        ORDER BY name LIMIT ?\n    \"\"\", (prefix + \"%\", version, limit)).fetchall",
+          "lineNumber": 165
+        },
+        {
+          "caller": "prefix_search",
+          "callee": "conn.execute",
+          "lineNumber": 165
+        },
+        {
+          "caller": "prefix_search",
+          "callee": "dict",
+          "lineNumber": 170
+        },
+        {
+          "caller": "check_errors",
+          "callee": "conn.execute(\"\"\"\n        SELECT error_type, error_message, created_at\n        FROM error_history WHERE function_name = ? AND fixed = 0\n        ORDER BY created_at DESC LIMIT 5\n    \"\"\", (name,)).fetchall",
+          "lineNumber": 174
+        },
+        {
+          "caller": "check_errors",
+          "callee": "conn.execute",
+          "lineNumber": 174
+        },
+        {
+          "caller": "check_errors",
+          "callee": "dict",
+          "lineNumber": 179
+        },
+        {
+          "caller": "main",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 182
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 183
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 184
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 185
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 186
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 187
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 188
+        },
+        {
+          "caller": "main",
+          "callee": "parser.parse_args",
+          "lineNumber": 189
+        },
+        {
+          "caller": "main",
+          "callee": "get_conn",
+          "lineNumber": 191
+        },
+        {
+          "caller": "main",
+          "callee": "get_function",
+          "lineNumber": 195
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 197
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 198
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 199
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 200
+        },
+        {
+          "caller": "main",
+          "callee": "check_errors",
+          "lineNumber": 201
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 203
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 203
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 205
+        },
+        {
+          "caller": "main",
+          "callee": "get_param_examples",
+          "lineNumber": 208
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 210
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 212
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 214
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\"\"\"\n                SELECT DISTINCT version FROM fnd_functions WHERE name=?\n            \"\"\", (args.function,)).fetchall",
+          "lineNumber": 216
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 216
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 220
+        },
+        {
+          "caller": "main",
+          "callee": "', '.join",
+          "lineNumber": 220
+        },
+        {
+          "caller": "main",
+          "callee": "list_category",
+          "lineNumber": 223
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 224
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 224
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 226
+        },
+        {
+          "caller": "main",
+          "callee": "prefix_search",
+          "lineNumber": 229
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 230
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 230
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 232
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 235
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 236
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 236
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 238
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 239
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 240
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM fnd_functions WHERE version=?\", (args.version,)).fetchone",
+          "lineNumber": 244
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 244
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 245
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 246
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 247
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 248
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 249
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 250
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 252
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 7,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 172,
+      "nonEmptyLines": 164,
+      "functions": [
+        {
+          "name": "init",
+          "startLine": 144,
+          "endLine": 168,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "init",
+          "line": 144,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "init",
+          "callee": "sqlite3.connect",
+          "lineNumber": 145
+        },
+        {
+          "caller": "init",
+          "callee": "str",
+          "lineNumber": 145
+        },
+        {
+          "caller": "init",
+          "callee": "conn.execute",
+          "lineNumber": 146
+        },
+        {
+          "caller": "init",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 159
+        },
+        {
+          "caller": "init",
+          "callee": "datetime.now",
+          "lineNumber": 159
+        },
+        {
+          "caller": "init",
+          "callee": "conn.execute",
+          "lineNumber": 161
+        },
+        {
+          "caller": "init",
+          "callee": "json.dumps",
+          "lineNumber": 164
+        },
+        {
+          "caller": "init",
+          "callee": "conn.commit",
+          "lineNumber": 165
+        },
+        {
+          "caller": "init",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM snippets\").fetchone",
+          "lineNumber": 166
+        },
+        {
+          "caller": "init",
+          "callee": "conn.execute",
+          "lineNumber": 166
+        },
+        {
+          "caller": "init",
+          "callee": "print",
+          "lineNumber": 167
+        },
+        {
+          "caller": "init",
+          "callee": "conn.close",
+          "lineNumber": 168
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 78,
+      "nonEmptyLines": 65,
+      "functions": [
+        {
+          "name": "vcli",
+          "startLine": 14,
+          "endLine": 26,
+          "params": [
+            "skill_expr"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 28,
+          "endLine": 75,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "vcli",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "vcli",
+          "callee": "skill_expr.replace",
+          "lineNumber": 15
+        },
+        {
+          "caller": "vcli",
+          "callee": "subprocess.run",
+          "lineNumber": 20
+        },
+        {
+          "caller": "vcli",
+          "callee": "r.stdout.decode",
+          "lineNumber": 21
+        },
+        {
+          "caller": "vcli",
+          "callee": "out.find",
+          "lineNumber": 22
+        },
+        {
+          "caller": "vcli",
+          "callee": "json.loads",
+          "lineNumber": 25
+        },
+        {
+          "caller": "vcli",
+          "callee": "data.get",
+          "lineNumber": 26
+        },
+        {
+          "caller": "vcli",
+          "callee": "data.get",
+          "lineNumber": 26
+        },
+        {
+          "caller": "vcli",
+          "callee": "data.get",
+          "lineNumber": 26
+        },
+        {
+          "caller": "main",
+          "callee": "get_conn",
+          "lineNumber": 29
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 32
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 33
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 36
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 38
+        },
+        {
+          "caller": "main",
+          "callee": "enumerate",
+          "lineNumber": 39
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 40
+        },
+        {
+          "caller": "main",
+          "callee": "get_function",
+          "lineNumber": 43
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 44
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 45
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 48
+        },
+        {
+          "caller": "main",
+          "callee": "vcli",
+          "lineNumber": 50
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 51
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 53
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 56
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 57
+        },
+        {
+          "caller": "main",
+          "callee": "enumerate",
+          "lineNumber": 58
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 59
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 62
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 63
+        },
+        {
+          "caller": "main",
+          "callee": "enumerate",
+          "lineNumber": 64
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 68
+        },
+        {
+          "caller": "main",
+          "callee": "get_function",
+          "lineNumber": 70
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 72
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 74
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".agents/skills/references/batch-netlist-si.md",
+      "language": "markdown",
+      "sizeLines": 84,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/layout-python-api.md",
+      "language": "markdown",
+      "sizeLines": 110,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/layout-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 68,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/maestro-python-api.md",
+      "language": "markdown",
+      "sizeLines": 304,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/maestro-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 623,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/netlist.md",
+      "language": "markdown",
+      "sizeLines": 189,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/schematic-python-api.md",
+      "language": "markdown",
+      "sizeLines": 97,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/schematic-recreation.md",
+      "language": "markdown",
+      "sizeLines": 66,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/schematic-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 64,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/simulation-flow.md",
+      "language": "markdown",
+      "sizeLines": 202,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/testbench-migration.md",
+      "language": "markdown",
+      "sizeLines": 114,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/references/troubleshooting.md",
+      "language": "markdown",
+      "sizeLines": 173,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    ".agents/skills/references/batch-netlist-si.md": [],
+    ".agents/skills/references/layout-python-api.md": [],
+    ".agents/skills/references/layout-skill-api.md": [],
+    ".agents/skills/references/maestro-python-api.md": [],
+    ".agents/skills/references/maestro-skill-api.md": [],
+    ".agents/skills/references/netlist.md": [],
+    ".agents/skills/references/schematic-python-api.md": [],
+    ".agents/skills/references/schematic-recreation.md": [],
+    ".agents/skills/references/schematic-skill-api.md": [],
+    ".agents/skills/references/simulation-flow.md": [],
+    ".agents/skills/references/testbench-migration.md": [],
+    ".agents/skills/references/troubleshooting.md": []
+  }
+}

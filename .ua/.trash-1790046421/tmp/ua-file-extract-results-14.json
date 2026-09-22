@@ -1,0 +1,986 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 12,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 12,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 12
+    }
+  },
+  "results": [
+    {
+      "path": ".agents/skills/references/batch-netlist-si.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 84,
+      "nonEmptyLines": 62,
+      "sections": [
+        {
+          "heading": "Batch Netlist (si)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Generate si.env from CIW",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "si.env fields",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Run si batch netlist",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "si vs Maestro netlist",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "View netlist in Virtuoso GUI",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "From Maestro (alternative)",
+          "level": 2,
+          "line": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".agents/skills/references/layout-python-api.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 110,
+      "nonEmptyLines": 83,
+      "sections": [
+        {
+          "heading": "Layout Python API",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "LayoutEditor (context manager)",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "LayoutEditor methods",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "SKILL builder functions (ops)",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Utility",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "Append mode",
+          "level": 3,
+          "line": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": ".agents/skills/references/layout-skill-api.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 68,
+      "nonEmptyLines": 54,
+      "sections": [
+        {
+          "heading": "Layout Reference",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Edit Pattern",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Read / Query",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "Control",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Tips",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "See also",
+          "level": 2,
+          "line": 66
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": ".agents/skills/references/maestro-python-api.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 304,
+      "nonEmptyLines": 225,
+      "sections": [
+        {
+          "heading": "Maestro Python API",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Two Session Modes",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Standard Simulation Flow",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Session Management",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "Read — Three independent functions",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "read_config — test setup",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "read_env — system settings",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "read_results — simulation results",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "export_waveform — download wave data",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "Write — Test",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "Write — Analysis",
+          "level": 2,
+          "line": 136
+        },
+        {
+          "heading": "Write — Outputs & Specs",
+          "level": 2,
+          "line": 153
+        },
+        {
+          "heading": "Write — Variables",
+          "level": 2,
+          "line": 174
+        },
+        {
+          "heading": "Write — Parameters (Parametric Sweep)",
+          "level": 2,
+          "line": 189
+        },
+        {
+          "heading": "Write — Environment & Simulator Options",
+          "level": 2,
+          "line": 201
+        },
+        {
+          "heading": "Write — Corners",
+          "level": 2,
+          "line": 217
+        },
+        {
+          "heading": "Write — Run Mode & Job Control",
+          "level": 2,
+          "line": 240
+        },
+        {
+          "heading": "Write — Simulation",
+          "level": 2,
+          "line": 253
+        },
+        {
+          "heading": "Write — Export",
+          "level": 2,
+          "line": 270
+        },
+        {
+          "heading": "Write — Migration",
+          "level": 2,
+          "line": 284
+        },
+        {
+          "heading": "Write — Save",
+          "level": 2,
+          "line": 296
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 21
+      }
+    },
+    {
+      "path": ".agents/skills/references/maestro-skill-api.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 623,
+      "nonEmptyLines": 462,
+      "sections": [
+        {
+          "heading": "Maestro SKILL API Reference",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Two Session Modes",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Table of Contents",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Supported ADE Types",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "asi\\* Fallback for Older Virtuoso Environments",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "Design Variables",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Maestro mae* API (IC618 / IC231)",
+          "level": 2,
+          "line": 84
+        },
+        {
+          "heading": "Session Management",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "Reading Existing Setup",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "Creating Tests",
+          "level": 3,
+          "line": 139
+        },
+        {
+          "heading": "Analysis Configuration",
+          "level": 3,
+          "line": 150
+        },
+        {
+          "heading": "Outputs",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "Design Variables",
+          "level": 3,
+          "line": 194
+        },
+        {
+          "heading": "Corners",
+          "level": 3,
+          "line": 208
+        },
+        {
+          "heading": "Create corner (empty)",
+          "level": 4,
+          "line": 210
+        },
+        {
+          "heading": "Create corner with model + temperature (pure SKILL API)",
+          "level": 4,
+          "line": 218
+        },
+        {
+          "heading": "Alternative: XML editing (legacy approach)",
+          "level": 4,
+          "line": 250
+        },
+        {
+          "heading": "Read corners",
+          "level": 4,
+          "line": 283
+        },
+        {
+          "heading": "Enable / Disable corner",
+          "level": 4,
+          "line": 296
+        },
+        {
+          "heading": "Delete corner",
+          "level": 4,
+          "line": 303
+        },
+        {
+          "heading": "Environment Options (Model Files)",
+          "level": 3,
+          "line": 310
+        },
+        {
+          "heading": "Save Setup",
+          "level": 3,
+          "line": 322
+        },
+        {
+          "heading": "Running Simulation",
+          "level": 3,
+          "line": 328
+        },
+        {
+          "heading": "Post-simulation callback (recommended)",
+          "level": 4,
+          "line": 337
+        },
+        {
+          "heading": "Blocking wait (use with caution)",
+          "level": 4,
+          "line": 353
+        },
+        {
+          "heading": "Reading Results (Programmatic)",
+          "level": 3,
+          "line": 364
+        },
+        {
+          "heading": "Opening Maestro & Displaying History Results",
+          "level": 3,
+          "line": 389
+        },
+        {
+          "heading": "Utility",
+          "level": 3,
+          "line": 428
+        },
+        {
+          "heading": "Known Blockers",
+          "level": 2,
+          "line": 442
+        },
+        {
+          "heading": "Pnoise Jitter Event — Automation Limitation",
+          "level": 2,
+          "line": 449
+        },
+        {
+          "heading": "What works",
+          "level": 3,
+          "line": 453
+        },
+        {
+          "heading": "What does NOT work",
+          "level": 3,
+          "line": 473
+        },
+        {
+          "heading": "Current best workaround",
+          "level": 3,
+          "line": 478
+        },
+        {
+          "heading": "Explored but failed approaches",
+          "level": 3,
+          "line": 488
+        },
+        {
+          "heading": "Key files",
+          "level": 3,
+          "line": 499
+        },
+        {
+          "heading": "Reading Results — OCEAN API",
+          "level": 2,
+          "line": 505
+        },
+        {
+          "heading": "OCEAN Quick Reference",
+          "level": 2,
+          "line": 526
+        },
+        {
+          "heading": "Complete Maestro Workflow (Python)",
+          "level": 2,
+          "line": 538
+        },
+        {
+          "heading": "Examples",
+          "level": 2,
+          "line": 586
+        },
+        {
+          "heading": "axl* API -- variable management",
+          "level": 2,
+          "line": 597
+        },
+        {
+          "heading": "See also",
+          "level": 2,
+          "line": 621
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 41
+      }
+    },
+    {
+      "path": ".agents/skills/references/netlist.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 189,
+      "nonEmptyLines": 144,
+      "sections": [
+        {
+          "heading": "Netlist Reference",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Formats",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "CDL (Circuit Description Language)",
+          "level": 3,
+          "line": 5
+        },
+        {
+          "heading": "Spectre",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "Key Differences",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Parameter Name Mapping",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "Source Device Mapping",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "Import: CDL → Virtuoso Schematic",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Export: Virtuoso Schematic → Spectre Netlist",
+          "level": 2,
+          "line": 111
+        },
+        {
+          "heading": "Direct Schematic Read → Netlist",
+          "level": 2,
+          "line": 133
+        },
+        {
+          "heading": "Roundtrip: Create → Export → Import",
+          "level": 2,
+          "line": 151
+        },
+        {
+          "heading": "Sample Netlists",
+          "level": 2,
+          "line": 169
+        },
+        {
+          "heading": "Examples",
+          "level": 2,
+          "line": 185
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": ".agents/skills/references/schematic-python-api.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 97,
+      "nonEmptyLines": 75,
+      "sections": [
+        {
+          "heading": "Schematic Python API",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "SchematicEditor (context manager)",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "SchematicEditor methods",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "SKILL builder functions (ops)",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "SchematicOps (direct execution)",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "Low-level SKILL builders",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "Terminal-aware helpers",
+          "level": 2,
+          "line": 93
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".agents/skills/references/schematic-recreation.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 66,
+      "nonEmptyLines": 50,
+      "sections": [
+        {
+          "heading": "Recreate a Schematic from an Existing Design",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Step 1: Read the original",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Step 2: Map to grid",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Step 3: Redraw",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Key rules",
+          "level": 2,
+          "line": 58
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": ".agents/skills/references/schematic-skill-api.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 64,
+      "nonEmptyLines": 47,
+      "sections": [
+        {
+          "heading": "Schematic Reference",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Edit Pattern",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "CDF Parameter Setting",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Read Placement",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "Tips",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "See also",
+          "level": 2,
+          "line": 62
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": ".agents/skills/references/simulation-flow.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 202,
+      "nonEmptyLines": 153,
+      "sections": [
+        {
+          "heading": "Standard Simulation Flow (GUI Mode)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "The 8-Step Flow",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "When you already have an open GUI session",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "How `run_and_wait` works",
+          "level": 2,
+          "line": 72
+        },
+        {
+          "heading": "Detecting Maestro session state",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "Closing Maestro sessions",
+          "level": 2,
+          "line": 105
+        },
+        {
+          "heading": "GUI-opened sessions (`maeCloseSession` won't work)",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "Background sessions (`maeOpenSetup`)",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "Clean up all sessions",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "Common pitfalls",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "Optimization loops",
+          "level": 2,
+          "line": 164
+        },
+        {
+          "heading": "Reading outputs manually (when `read_results` returns empty)",
+          "level": 2,
+          "line": 180
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".agents/skills/references/testbench-migration.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 114,
+      "nonEmptyLines": 88,
+      "sections": [
+        {
+          "heading": "Copy a Testbench to Another Library",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Step 1: Copy the DUT cell",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Step 2: Create the testbench schematic",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Step 3: CDF parameter name gotchas",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Step 4: Create Maestro",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "Step 5: Run simulation",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "Key pitfalls",
+          "level": 2,
+          "line": 102
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".agents/skills/references/troubleshooting.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 173,
+      "nonEmptyLines": 127,
+      "sections": [
+        {
+          "heading": "Troubleshooting — Known Gotchas & Pitfalls",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "SKILL / CIW",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "`csh()` returns `t`/`nil`, not command output",
+          "level": 3,
+          "line": 9
+        },
+        {
+          "heading": "`procedurep()` returns `nil` for compiled functions",
+          "level": 3,
+          "line": 12
+        },
+        {
+          "heading": "`inst~>prop` returns nil for PDK devices",
+          "level": 3,
+          "line": 15
+        },
+        {
+          "heading": "GUI Dialog Blocking",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "`simInitEnvWithArgs` triggers a GUI dialog",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "Maestro dialogs block the SKILL channel",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "ASSEMBLER-8127: cellview already open in edit mode",
+          "level": 3,
+          "line": 48
+        },
+        {
+          "heading": "Netlist / si",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Netlist files are on the remote",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "si output location",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "Maestro / Design Variables",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "`mae*` functions undefined (`*Error* undefined function`)",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "`maeGetSetup(?typeName \"globalVar\")` may return nil",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "Global vs test-level variables",
+          "level": 3,
+          "line": 91
+        },
+        {
+          "heading": "Must `maeSaveSetup` before `maeRunSimulation`",
+          "level": 3,
+          "line": 98
+        },
+        {
+          "heading": "Maestro \"Editing\" vs \"Reading\" mode",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "Lock files block Maestro open (`ASSEMBLER-xxxx`)",
+          "level": 3,
+          "line": 134
+        },
+        {
+          "heading": "Outputs \"Save\" checkbox cannot be enabled via SKILL",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "Connection / Tunnel",
+          "level": 2,
+          "line": 164
+        },
+        {
+          "heading": "Socket timeout at 30s",
+          "level": 3,
+          "line": 166
+        },
+        {
+          "heading": "`OPEN_FAILED` on view access",
+          "level": 3,
+          "line": 169
+        },
+        {
+          "heading": "`.il line 16` SKILL probe failure",
+          "level": 3,
+          "line": 172
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 24
+      }
+    }
+  ]
+}

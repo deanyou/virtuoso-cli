@@ -1,0 +1,184 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "language": "markdown",
+      "sizeLines": 238,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "language": "markdown",
+      "sizeLines": 73,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "language": "html",
+      "sizeLines": 467,
+      "fileCategory": "markup"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "language": "python",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "language": "python",
+      "sizeLines": 385,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "language": "python",
+      "sizeLines": 121,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "language": "python",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "language": "python",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/promote.py",
+      "language": "python",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "language": "python",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "language": "python",
+      "sizeLines": 664,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "language": "python",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "language": "python",
+      "sizeLines": 255,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "language": "python",
+      "sizeLines": 172,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "language": "python",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "language": "python",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "language": "python",
+      "sizeLines": 109,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "language": "python",
+      "sizeLines": 103,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "language": "python",
+      "sizeLines": 70,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "language": "python",
+      "sizeLines": 379,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/__init__.py",
+      "language": "python",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/fail.json",
+      "language": "json",
+      "sizeLines": 27,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/pass.json",
+      "language": "json",
+      "sizeLines": 41,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "language": "python",
+      "sizeLines": 369,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "language": "python",
+      "sizeLines": 1,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    ".claude/skills/virtuoso-gui-debug/references/scenario-schema.md": [],
+    ".claude/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md": [],
+    ".claude/skills/virtuoso-gui-debug/report/rsi_report.html": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/add_fts.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/generate_report.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/import_fnd.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/init_snippets.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/init_synonyms.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/promote.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/record_progress.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/rsi.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/rsi_export.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/rsi_query.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/snippet_library.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py": [
+      ".claude/skills/virtuoso-gui-debug/scripts/rsi_query.py"
+    ],
+    ".claude/skills/virtuoso-gui-debug/scripts/test_stability.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/validate_ic251.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/verify_db.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/verify_ic251.py": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/xdotool_cli.py": [],
+    ".claude/skills/virtuoso-gui-debug/tests/__init__.py": [],
+    ".claude/skills/virtuoso-gui-debug/tests/fail.json": [],
+    ".claude/skills/virtuoso-gui-debug/tests/pass.json": [],
+    ".claude/skills/virtuoso-gui-debug/tests/test_cli.py": [],
+    ".claude/skills/virtuoso-gui-debug/vgui_runner/__init__.py": []
+  }
+}

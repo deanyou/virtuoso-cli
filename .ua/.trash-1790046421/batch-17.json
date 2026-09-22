@@ -1,0 +1,74 @@
+{
+  "batchIndex": 17,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.claude/CLAUDE.md",
+      "type": "document",
+      "name": ".claude/CLAUDE.md",
+      "filePath": ".claude/CLAUDE.md",
+      "summary": "Concise project guide for Claude Code: mandates use of the .claude/skills/virtuoso-gui-debug skill for Virtuoso window operations, X11 automation, and GUI regression testing. Documents three executor modes (fake/live/local), the validate→run→inspect workflow, the supported scenario DSL ops (VCLI_LOAD, WINDOW_WAIT, KEY, CLICK_REL, DRAG_REL, SCROLL, SCREENSHOT, VERIFY, RECOVER), and pointers to the scenario schema, xdotool cheatsheet, and unit tests.",
+      "tags": ["claude-code", "project-guide", "gui-debugging", "skill-mandate", "x11", "virtuoso", "dsl", "docs"],
+      "complexity": "simple",
+      "languageNotes": "Lightweight Markdown with mixed Chinese and English headings/tables. ASCII table comparing three executors; command-line examples use inline backticks."
+    },
+    {
+      "id": "config:.claude/settings.json",
+      "type": "config",
+      "name": ".claude/settings.json",
+      "filePath": ".claude/settings.json",
+      "summary": "Shared Claude Code settings defining PostToolUse hooks. Write|Edit tools trigger .claude/hooks/rust_check.sh to lint/format Rust; Bash commands trigger .claude/hooks/auto_plot.sh and .claude/hooks/eda_error_capture.sh to process plot output and capture EDA stderr. Paths are resolved via $CLAUDE_PROJECT_DIR.",
+      "tags": ["claude-code", "hooks", "post-tool-use", "rust-check", "auto-plot", "eda-error", "config"],
+      "complexity": "simple",
+      "languageNotes": "Standard JSON object with nested hooks[] array; matcher strings and command paths with proper JSON escaping for shell variables."
+    },
+    {
+      "id": "config:.claude/settings.local.json",
+      "type": "config",
+      "name": ".claude/settings.local.json",
+      "filePath": ".claude/settings.local.json",
+      "summary": "Local-machine Claude Code permissions override, allowing the Bash tool to invoke `gh run:*` (GitHub Actions run inspection) without prompting.",
+      "tags": ["claude-code", "local-config", "permissions", "github-cli", "config"],
+      "complexity": "simple",
+      "languageNotes": "Tiny JSON permissions map; uses the tool-name(command-glob) syntax to whitelist a single Bash subcommand family."
+    }
+  ],
+  "edges": [
+    {
+      "source": "project:virtuoso-cli",
+      "target": "document:.claude/CLAUDE.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "project:virtuoso-cli",
+      "target": "config:.claude/settings.json",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "project:virtuoso-cli",
+      "target": "config:.claude/settings.local.json",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/CLAUDE.md",
+      "target": "skill:virtuoso-gui-debug",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "config:.claude/settings.json",
+      "target": "project:virtuoso-cli",
+      "type": "configures",
+      "weight": 0.7
+    },
+    {
+      "source": "config:.claude/settings.local.json",
+      "target": "config:.claude/settings.json",
+      "type": "configures",
+      "weight": 0.5
+    }
+  ]
+}

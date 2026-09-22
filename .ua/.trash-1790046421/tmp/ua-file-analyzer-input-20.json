@@ -1,0 +1,91 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".claude/skills/references/batch-netlist-si.md",
+      "language": "markdown",
+      "sizeLines": 84,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/layout-python-api.md",
+      "language": "markdown",
+      "sizeLines": 110,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/layout-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 68,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/maestro-python-api.md",
+      "language": "markdown",
+      "sizeLines": 304,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/maestro-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 623,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/netlist.md",
+      "language": "markdown",
+      "sizeLines": 189,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/schematic-python-api.md",
+      "language": "markdown",
+      "sizeLines": 97,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/schematic-recreation.md",
+      "language": "markdown",
+      "sizeLines": 66,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/schematic-skill-api.md",
+      "language": "markdown",
+      "sizeLines": 64,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/simulation-flow.md",
+      "language": "markdown",
+      "sizeLines": 202,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/testbench-migration.md",
+      "language": "markdown",
+      "sizeLines": 114,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/references/troubleshooting.md",
+      "language": "markdown",
+      "sizeLines": 173,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    ".claude/skills/references/batch-netlist-si.md": [],
+    ".claude/skills/references/layout-python-api.md": [],
+    ".claude/skills/references/layout-skill-api.md": [],
+    ".claude/skills/references/maestro-python-api.md": [],
+    ".claude/skills/references/maestro-skill-api.md": [],
+    ".claude/skills/references/netlist.md": [],
+    ".claude/skills/references/schematic-python-api.md": [],
+    ".claude/skills/references/schematic-recreation.md": [],
+    ".claude/skills/references/schematic-skill-api.md": [],
+    ".claude/skills/references/simulation-flow.md": [],
+    ".claude/skills/references/testbench-migration.md": [],
+    ".claude/skills/references/troubleshooting.md": []
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "batchIndex": 12,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:.github/workflows/ci.yml",
+      "type": "pipeline",
+      "name": "ci.yml (CI workflow)",
+      "filePath": ".github/workflows/ci.yml",
+      "summary": "Primary CI workflow for the Rust workspace. Triggers on push and PR to main. Runs four jobs sequentially-on-same-runner (each independent runner, no needs): (1) check — fmt --check + clippy with -D warnings across default, --features daemon, and --features native-ssh; (2) test — cargo test on default features; (3) build — cargo build for default and --features daemon; (4) audit — pinned cargo-audit 0.22.2 with --ignore RUSTSEC-2023-0071 (Marvin RSA timing side-channel, reachable only via ssh-key->russh under native-ssh; full rationale in audit.toml). Uses actions/checkout@v7, dtolnay/rust-toolchain@stable (with clippy, rustfmt for check), and Swatinem/rust-cache@v2 on every job. CARGO_TERM_COLOR=always. 59 lines / 4 jobs.",
+      "tags": [
+        "github-actions",
+        "ci",
+        "rust",
+        "cargo",
+        "clippy",
+        "fmt",
+        "cargo-audit",
+        "rustsec",
+        "pull-request",
+        "feature-matrix",
+        "virtuoso-cli"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "YAML workflow with 4 top-level keys (name, on, env, jobs) and 4 job definitions. Steps use both `uses:` (third-party actions) and `run:` (shell). Inline `#` comment block in audit step explains the RUSTSEC ignore."
+    },
+    {
+      "id": "file:.github/workflows/integration.yml",
+      "type": "pipeline",
+      "name": "integration.yml (Integration Matrix)",
+      "filePath": ".github/workflows/integration.yml",
+      "summary": "Cross-platform feature matrix workflow, labeled as 'Step 7 of the native-transport plan'. Triggers on push and PR to main. One matrix job (`matrix`) with fail-fast: false spanning os={ubuntu-latest, macos-latest, windows-latest} x features={default, native-ssh} — six cells total, each builds and tests with `cargo build` and `cargo test`, conditionally adding `--features native-ssh` when matrix.features != 'default' (YAML `format()` expression). The header comment explicitly states the goal: catch Windows-only native build breaks here rather than at release time, and avoid one OS masking another via fail-fast:false. 34 lines / 1 matrix job / 6 effective jobs.",
+      "tags": [
+        "github-actions",
+        "ci",
+        "matrix",
+        "cross-platform",
+        "windows",
+        "macos",
+        "linux",
+        "rust",
+        "native-ssh",
+        "fail-fast",
+        "virtuoso-cli"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "YAML workflow with 4 top-level keys plus a 5-line header comment block explaining the native-transport plan context. Uses GitHub Actions ${{ matrix.* }} and format() expressions to conditionally inject --features. 6 cells = 3 OS x 2 features."
+    },
+    {
+      "id": "file:.github/workflows/release.yml",
+      "type": "pipeline",
+      "name": "release.yml (Release workflow)",
+      "filePath": ".github/workflows/release.yml",
+      "summary": "Tag-driven release workflow that builds, packages, and uploads binaries plus optionally publishes to crates.io. Triggers on push of v* tags. Five jobs with explicit needs: (1) build-linux-x86_64 — ubuntu-latest, builds vcli/vtui with --features native-ssh and virtuoso-daemon with --features daemon, packages as `dist/{vcli,vtui,virtuoso-daemon}-${TAG}-linux-x86_64`, uploads via softprops/action-gh-release@v3 with auto-generated notes pointing to CHANGELOG.md; (2) build-linux-aarch64 — ubuntu-latest with aarch64-unknown-linux-gnu target, installs gcc-aarch64-linux-gnu, patches ~/.cargo/config.toml with the linker, daemon-only build, uploads daemon only; (3) build-macos-aarch64 — macos-latest (Apple Silicon), same triple-binary packaging; (4) build-windows-x86_64 — windows-latest with shell:bash for packaging, .exe suffix; (5) publish-crate — gated on all four builds, uses CARGO_REGISTRY_TOKEN secret, idempotent (skips silently if token unset or version already published). permissions: contents: write. 159 lines / 5 jobs.",
+      "tags": [
+        "github-actions",
+        "release",
+        "tag-trigger",
+        "cross-platform",
+        "linux-x86_64",
+        "linux-aarch64",
+        "macos-aarch64",
+        "windows-x86_64",
+        "crates-io",
+        "softprops",
+        "rust",
+        "virtuoso-cli",
+        "publish"
+      ],
+      "complexity": "complex",
+      "languageNotes": "YAML workflow with 5 top-level keys (name, on, env, permissions, jobs). Heavy use of multi-line `run: |` bash blocks with TAG=${{ github.ref_name }}; cargo config.toml heredoc injection for cross-target linker; matrix-style repetition of the build/package/upload pattern across 4 platforms with OS-specific binary naming (no .exe / .exe / .exe / .exe)."
+    },
+    {
+      "id": "file:.github/workflows/security-audit.yml",
+      "type": "pipeline",
+      "name": "security-audit.yml (Security audit)",
+      "filePath": ".github/workflows/security-audit.yml",
+      "summary": "Dedicated dependency vulnerability scan that surfaces RUSTSEC advisories on every dependency change and weekly. Path-triggered on **/Cargo.toml, **/Cargo.lock, audit.toml, and the workflow file itself; scheduled Monday ~03:37 UTC (off-peak to avoid the :00 stampede); also runnable via workflow_dispatch. Header comment explains why this workflow deliberately does NOT use rustsec/audit-check@v2.0.0 (that wrapper compiles cargo-audit from source and currently fails with 'Couldn't load ./Cargo.lock' because it runs outside the repo root) and instead installs a pinned cargo-audit 0.22.2 --locked directly and runs it from the repo root. Single audit job with the same RUSTSEC-2023-0071 (rsa Marvin) ignore as ci.yml, this time enforced on the command line because cargo-audit 0.22.2 does not auto-read audit.toml. permissions: contents: read, checks: write. 50 lines / 1 job.",
+      "tags": [
+        "github-actions",
+        "security",
+        "rustsec",
+        "cargo-audit",
+        "scheduled",
+        "weekly",
+        "path-filter",
+        "workflow-dispatch",
+        "virtuoso-cli"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "YAML workflow with 4 top-level keys (name, on, permissions, jobs). Long header comment block (~10 lines) explaining the rustsec/audit-check rejection. Uses both path-filtered push trigger and cron schedule. Inline `#` comments document the RUSTSEC ignore rationale and the audit.toml CLI gap."
+    },
+    {
+      "id": "file:.github/workflows/skill-tests.yml",
+      "type": "pipeline",
+      "name": "skill-tests.yml (Skill Tests)",
+      "filePath": ".github/workflows/skill-tests.yml",
+      "summary": "Python-skill test runner that fills the coverage gap left by the Rust-only ci.yml/integration.yml — header comment notes that changes under .claude/skills used to land with zero automated verification. Path-filtered to .claude/skills/**, the workflow file itself, and .github/scripts/run-skill-tests.sh so pure-Rust PRs are not slowed down. Triggers on push and PR to main. One python job with fail-fast: false across python-version matrix [3.9, 3.13] (3.9 = oldest supported system python, 3.13 = current stable). Uses actions/checkout@v7, actions/setup-python@v5, and delegates the actual test work to `bash .github/scripts/run-skill-tests.sh`, which byte-compiles every skill script and runs each skill's unittest suite. 39 lines / 1 matrix job / 2 effective jobs.",
+      "tags": [
+        "github-actions",
+        "python",
+        "skill-tests",
+        "matrix",
+        "path-filter",
+        "claude-skills",
+        "byte-compile",
+        "unittest",
+        "virtuoso-cli"
+      ],
+      "complexity": "simple",
+      "languageNotes": "YAML workflow with 3 top-level keys (name, on, jobs). Compact: setup-python@v5, then a single shell run. No explicit env block. Path-filter ensures the workflow skips on Rust-only changes."
+    }
+  ],
+  "edges": []
+}

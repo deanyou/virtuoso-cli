@@ -1,0 +1,73 @@
+{
+  "batchIndex": 26,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.pensieve/pipelines/run-when-committing.md",
+      "type": "document",
+      "name": "Commit Pipeline (Pensieve)",
+      "filePath": ".pensieve/pipelines/run-when-committing.md",
+      "summary": "Pensieve pipeline that runs on git commit. Auto-detects whether the commit contains reusable insights (debugging findings, architectural decisions, patterns, anti-patterns, ownership/boundary clarifications), extracts and classifies them (IS->knowledge, WANT->decision, MUST->maxim), writes them per spec, refreshes project state, and then performs atomic commits grouped by reason for change. Auto-gated, no user confirmation.",
+      "tags": ["pensieve", "pipeline", "commit", "self-improve", "atomic-commits", "knowledge-capture", "automation"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with YAML frontmatter (type: pipeline, status: active, stages, gate: auto). Frontmatter declares id, type, title, status, created/updated, tags, name, description, stages, gate. Body uses H1 title, H2 sections (Signal Judgment Rules, Task Blueprint, Failure Fallback) and H3 per-task blocks with Goal / Read inputs / Steps / Completion criteria sub-fields. Wikilink context-links point to knowledge/taste-review/content."
+    },
+    {
+      "id": "document:.pensieve/pipelines/run-when-reviewing-code.md",
+      "type": "document",
+      "name": "Code Review Pipeline (Pensieve)",
+      "filePath": ".pensieve/pipelines/run-when-reviewing-code.md",
+      "summary": "Pensieve pipeline for code review. Performs baseline exploration (commit history + hotspots) to scope review, prepares review context, runs a per-file evidence-recorded review, verifies candidates and filters out confidence <80 issues, generates an actionable report with severity tiers, and optionally captures reusable conclusions to decision/knowledge. Only high-signal, reproducible, locatable issues are reported; review standards live in the referenced knowledge/taste-review file to avoid duplication.",
+      "tags": ["pensieve", "pipeline", "code-review", "taste-review", "evidence-based", "signal-filtering"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with YAML frontmatter (type: pipeline, status: active, stages: [tasks], gate: auto). H1 title, H2 sections (Signal Judgment Rules, Task Blueprint, Failure Fallback), six H3 tasks each with Goal / Read inputs / Steps / Completion criteria. Explicitly defers standards and rationale to knowledge/taste-review/content.md. Lists explicit failure-mode handling for missing git history, unclear scope, unverifiable issues, and all-filtered-out."
+    },
+    {
+      "id": "document:.pensieve/pipelines/run-when-syncing-to-main.md",
+      "type": "document",
+      "name": "Sync to Main Pipeline (Pensieve)",
+      "filePath": ".pensieve/pipelines/run-when-syncing-to-main.md",
+      "summary": "Pensieve pipeline for syncing changes from experimental/zh branches to the English-only main branch while preserving contributor commit history. Steps: confirm scope via git diff stat, branch from main and merge with -X theirs, translate residual Chinese content to English (preserving code/paths/bilingual regex), commit with Co-authored-by annotations for external contributors, push, open PR via gh, merge, and clean up the temporary sync branch. Manually gated, project-specific to Pensieve language policy.",
+      "tags": ["pensieve", "pipeline", "sync", "translation", "git-workflow", "i18n", "manual-gate"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with YAML frontmatter (type: pipeline, status: active, gate: manual). H1 title, four H2 tasks (Confirm Scope, Create Branch and Merge, Translation, PR and Merge) plus Failure Fallback. References remote name 'kingkongshot' and repo 'kingkongshot/Pensieve' in concrete shell commands; defines CJK grep regex [一-龥] for residual-Chinese verification. No Based on/Leads to wikilinks."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.pensieve/pipelines/run-when-committing.md",
+      "target": "document:.pensieve/pipelines/run-when-reviewing-code.md",
+      "type": "related",
+      "weight": 0.6,
+      "notes": "Sibling Pensieve pipelines; both reference knowledge/taste-review/content and both follow the same Task Blueprint / Failure Fallback structure."
+    },
+    {
+      "source": "document:.pensieve/pipelines/run-when-committing.md",
+      "target": "document:.pensieve/pipelines/run-when-syncing-to-main.md",
+      "type": "related",
+      "weight": 0.5,
+      "notes": "Sibling Pensieve pipelines sharing the frontmatter schema and task-blueprint format."
+    },
+    {
+      "source": "document:.pensieve/pipelines/run-when-reviewing-code.md",
+      "target": "document:.pensieve/pipelines/run-when-syncing-to-main.md",
+      "type": "related",
+      "weight": 0.5,
+      "notes": "Sibling Pensieve pipelines; both define multi-stage manual-or-auto orchestration with explicit Failure Fallback."
+    },
+    {
+      "source": "document:.pensieve/pipelines/run-when-committing.md",
+      "target": "document:.pensieve/knowledge/taste-review/content.md",
+      "type": "documents",
+      "weight": 0.7,
+      "notes": "Based on wikilink [[knowledge/taste-review/content]] declared in the Context Links frontmatter section."
+    },
+    {
+      "source": "document:.pensieve/pipelines/run-when-reviewing-code.md",
+      "target": "document:.pensieve/knowledge/taste-review/content.md",
+      "type": "documents",
+      "weight": 0.9,
+      "notes": "Knowledge reference to knowledge/taste-review/content.md; the pipeline deliberately defers review standards and rationale to that file and reads it as a Read input across Tasks 1, 2, and 3."
+    }
+  ]
+}

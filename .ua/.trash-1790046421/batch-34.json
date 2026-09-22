@@ -1,0 +1,764 @@
+{
+  "batchIndex": 34,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.agents/skills/spec-driven-circuit-design/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".agents/skills/spec-driven-circuit-design/SKILL.md",
+      "summary": "Skill catalog entry guiding spec-driven analog circuit design — system-to-block-to-transistor decomposition, gm/Id feasibility checks, simulation verification, and a decision tree for iterating on conflicting specs. Includes worked OTA, LDO, SHA, instrumentation and comparator templates.",
+      "tags": [
+        "analog",
+        "spec",
+        "design-flow",
+        "docs",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown skill catalog entry; 18 section headings."
+    },
+    {
+      "id": "document:.agents/skills/spectre-netlist-gotchas/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".agents/skills/spectre-netlist-gotchas/SKILL.md",
+      "summary": "Catalogue of Cadence Spectre netlist-mode pitfalls (no ADE/Virtuoso). Covers vsource `mag=` vs `ac=`, oprobe element-vs-node requirement, noise topology, PSF ASCII output parsing, slew-rate step sizing, ICMR via region fields, and PM calculation for inverting topologies.",
+      "tags": [
+        "spectre",
+        "simulation",
+        "pitfalls",
+        "docs",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown skill catalog entry; 33 section headings."
+    },
+    {
+      "id": "document:.agents/skills/spectre-netlist-template/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".agents/skills/spectre-netlist-template/SKILL.md",
+      "summary": "SKILL catalog entry describing how to add stimulus and analysis blocks to a bare Spectre subcircuit netlist. References IC231 vsource/isource/port syntax and provides canonical stimulus + analysis templates for OTA, LDO, comparator, bandgap, mirror, filter, VCO and LNA topologies.",
+      "tags": [
+        "spectre",
+        "template",
+        "stimulus",
+        "docs",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Markdown skill catalog entry; 20 section headings."
+    },
+    {
+      "id": "file:.agents/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "file",
+      "name": "inject_stimulus.py",
+      "filePath": ".agents/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "summary": "CLI helper that injects stimulus and analysis blocks into a bare Spectre netlist. Auto-detects circuit topology from port names and device types, then prepends include preamble, instantiates the DUT, and writes a testbench `.scs` covering OTA, diff-OTA, LDO, comparator, bandgap, mirror, filter, VCO and LNA variants.",
+      "tags": [
+        "spectre",
+        "template",
+        "stimulus",
+        "python",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python; 17 functions, 0 classes across 593 lines."
+    },
+    {
+      "id": "document:.agents/skills/tunnel-connect/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".agents/skills/tunnel-connect/SKILL.md",
+      "summary": "Short SKILL catalog entry for connecting to Virtuoso via the virtuoso-cli bridge. Covers local-mode setup, remote SSH-tunnel mode, and quick troubleshooting guidance for the bridge socket.",
+      "tags": [
+        "bridge",
+        "connectivity",
+        "docs",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown skill catalog entry; 4 section headings."
+    },
+    {
+      "id": "document:.agents/skills/veriloga/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".agents/skills/veriloga/SKILL.md",
+      "summary": "SKILL catalog entry for designing and debugging Verilog-A behavioral models in Virtuoso/Spectre. Includes quick-start, ready-to-use templates for ideal sources, current mirror, and finite-Gain-Bandwidth-Slew opamp, plus Spectre error-debug patterns.",
+      "tags": [
+        "verilog-a",
+        "behavioral-model",
+        "docs",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown skill catalog entry; 17 section headings."
+    },
+    {
+      "id": "config:.agents/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "type": "config",
+      "name": "rsi_share.json",
+      "filePath": ".agents/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "summary": "JSON export of the RSI (SKILL Recursive Self-Improvement) knowledge base — synonyms, snippets, error history, parameter examples, and verified functions — intended for team sharing and re-import.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "data",
+        "automation",
+        "data-store",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "complex",
+      "languageNotes": "JSON data store; 111259 lines, 7 top-level keys."
+    },
+    {
+      "id": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "data",
+      "name": "skill_db.sqlite3",
+      "filePath": ".agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "summary": "SQLite knowledge store backing the virtuoso-gui-debug skill. Schema covers Virtuoso API functions (`fnd_functions`) with version, confidence, error history, parameter examples, snippets and progress milestones. (Binary — content not extracted; metadata only.)",
+      "tags": [
+        "virtuoso-gui-debug",
+        "data",
+        "automation",
+        "sqlite",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "complex",
+      "languageNotes": "sqlite3; 84605 lines."
+    },
+    {
+      "id": "config:.agents/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "type": "config",
+      "name": "skill_db_backup.json",
+      "filePath": ".agents/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "summary": "JSON snapshot of the virtuoso-gui-debug SQLite knowledge base covering IC231 / IC251 versions, manual and `.fnd`-derived functions, error history, and generation statistics.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "data",
+        "automation",
+        "data-store",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "complex",
+      "languageNotes": "JSON data store; 257731 lines, 8 top-level keys."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "type": "file",
+      "name": "vcli_snippets.il",
+      "filePath": ".agents/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "summary": "Generated Cadence SKILL (`.il`) library produced by `promote.py`. Defines `vcli*` procedures that wrap frequently-used Virtuoso layout operations such as `vcliDrawRect`, `vcliDrawPolygon`, `vcliSaveCv` and `vcliZoomFit`.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "data",
+        "automation",
+        "skill",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "simple",
+      "languageNotes": "il; 56 lines."
+    },
+    {
+      "id": "document:.agents/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "type": "document",
+      "name": "scenario-schema.md",
+      "filePath": ".agents/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "summary": "Reference spec for the Virtuoso GUI Runner scenario JSON DSL (schema 1.0). Defines top-level fields (`version`, `task_id`, `session_id`, `pid`, `display`), CellView/Step objects, allowed operations such as `VCLI_LOAD`, and strict validation rules (extra fields rejected).",
+      "tags": [
+        "virtuoso-gui-debug",
+        "reference",
+        "automation",
+        "docs",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown skill catalog entry; 25 section headings."
+    },
+    {
+      "id": "document:.agents/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "type": "document",
+      "name": "xdotool-cheatsheet.md",
+      "filePath": ".agents/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "summary": "Quick reference card for driving X11 windows with xdotool — window search, geometry, activation, mouse moves, clicks, drags, typing, key chords, and known coordinate-scaling pitfalls. (Bilingual headings.)",
+      "tags": [
+        "virtuoso-gui-debug",
+        "reference",
+        "automation",
+        "docs",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown skill catalog entry; 7 section headings."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "type": "file",
+      "name": "rsi_report.html",
+      "filePath": ".agents/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "summary": "Pre-rendered HTML status report for the RSI knowledge base, generated by `generate_report.py`. Surfaces function counts per version, manual vs verified confidence breakdown, snippet stats and recent activity. (Markup only.)",
+      "tags": [
+        "virtuoso-gui-debug",
+        "report",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "complex",
+      "languageNotes": "html; 467 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "type": "file",
+      "name": "add_fts.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "summary": "One-shot migration that creates an FTS5 full-text-search virtual table over `fnd_functions` in the RSI SQLite database, enabling BM25-ranked semantic lookups.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Python; 0 functions, 0 classes across 76 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "type": "file",
+      "name": "generate_report.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "summary": "Generates the tabbed HTML dashboard (`report/rsi_report.html`) from the RSI SQLite database — version counts, confidence breakdown, snippet stats and recent error history.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "report",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python; 0 functions, 0 classes across 385 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "type": "file",
+      "name": "import_fnd.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "summary": "Parser/loader that reads Cadence `.fnd` documentation files and imports their function entries (name, syntax, description) into the `fnd_functions` table of the RSI database for IC231 / IC618 versions.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "ingest",
+        "import",
+        "e2e"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python; 3 functions, 0 classes across 121 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "type": "file",
+      "name": "init_snippets.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "summary": "Initialiser that creates the `snippets` schema and seeds the SQLite database with a curated set of verified, parameterised Virtuoso SKILL snippets.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "seed",
+        "import",
+        "e2e"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Python; 0 functions, 0 classes across 115 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "type": "file",
+      "name": "init_synonyms.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "summary": "Initialiser that creates the `synonyms` table and seeds it with abbreviation / misspelling mappings (e.g. `rect` ↔ `rectangle`) that expand user search queries.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "seed",
+        "import",
+        "e2e"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Python; 1 functions, 0 classes across 50 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/promote.py",
+      "type": "file",
+      "name": "promote.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/promote.py",
+      "summary": "Builds the `vcli_snippets.il` SKILL library from high-success snippets in the RSI database, generating `vcliCamelCase` procedure definitions for frequent layout operations.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "codegen",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python; 3 functions, 0 classes across 102 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "type": "file",
+      "name": "record_progress.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "summary": "Appends dated phase / milestone rows to the `rsi_progress` table so RSI iterations can be tracked over time.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "logging",
+        "import",
+        "e2e"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Python; 0 functions, 0 classes across 59 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "type": "file",
+      "name": "rsi.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "summary": "Main RSI (SKILL Recursive Self-Improvement) CLI — provides DB-backed search, exact lookup, snippet invocation, success/failure recording, status reports and HTML generation. Drives `vcli` via subprocess for end-to-end automation.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "cli",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python; 9 functions, 0 classes across 664 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "type": "file",
+      "name": "rsi_export.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "summary": "CLI that exports the RSI knowledge base (synonyms, snippets, error history, parameter examples, verified functions) to a shareable JSON file and re-imports it on demand.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "export",
+        "import",
+        "e2e"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Python; 2 functions, 0 classes across 59 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "type": "file",
+      "name": "rsi_query.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "summary": "Search / lookup CLI for the RSI knowledge base — combines prefix matching, FTS5 BM25 and synonym expansion to find SKILL functions by natural-language query.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "search",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "e2e"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python; 7 functions, 0 classes across 255 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "type": "file",
+      "name": "snippet_library.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "summary": "Catalogue of verified, parameterised, composable SKILL snippets (single-responsibility layout / cellview operations) used to seed the RSI database and feed the snippet library.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "library",
+        "e2e"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python; 1 functions, 0 classes across 172 lines."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "type": "file",
+      "name": "test_rsi_e2e.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "summary": "End-to-end smoke test for the RSI workflow — runs an SSH `vcli` call to a live Virtuoso session, then records the outcome back into the RSI database.",
+      "tags": [
+        "virtuoso-gui-debug",
+        "python",
+        "automation",
+        "rsi",
+        "orchestrator",
+        "fts",
+        "migration",
+        "skill",
+        "html",
+        "import",
+        "test",
+        "e2e"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Python; 2 functions, 0 classes across 78 lines."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.agents/skills/spectre-netlist-template/SKILL.md",
+      "target": "file:.agents/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "document:.agents/skills/spectre-netlist-template/SKILL.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "target": "document:.agents/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "target": "document:.agents/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/promote.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/promote.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "config:.agents/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "target": "config:.agents/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "config:.agents/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "type": "tested_by",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "type": "tested_by",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "target": "config:.agents/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "type": "calls",
+      "weight": 0.4
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "configures",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "configures",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "configures",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "configures",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "target": "data:.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "configures",
+      "weight": 0.6
+    }
+  ]
+}

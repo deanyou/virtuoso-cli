@@ -1,0 +1,144 @@
+{
+  "batchIndex": 25,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.pensieve/maxims/ci-must-match-target-toolchain.md",
+      "type": "document",
+      "name": "CI Must Match Target Toolchain",
+      "filePath": ".pensieve/maxims/ci-must-match-target-toolchain.md",
+      "summary": "Pensieve maxim (active, 2026-05-27) declaring that CI lints must run on the same Rust toolchain users compile with; local nightly passes do not prove stable passes. Guidance: `cargo fix` and `cargo clippy --fix` skip lints absent from the current rustc (nightly may lack lints stable has and vice versa); after auto-fixing locally, verify against CI's toolchain before pushing; pin CI to `stable` unless nightly features are required. Boundary: does not apply when the project intentionally targets nightly-only.",
+      "tags": ["pensieve", "maxim", "ci", "rust", "toolchain", "clippy", "nightly-vs-stable"],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter (id, type: maxim, status, created/updated, tags). Five H2 sections follow a single H1 title."
+    },
+    {
+      "id": "document:.pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md",
+      "type": "document",
+      "name": "Eliminate special cases by redesigning data flow",
+      "filePath": ".pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md",
+      "summary": "Pensieve maxim (active, 2026-02-11) advising engineers to remove ad-hoc branches by reshaping data structures or flow so edge cases become the default path. Includes a quote about rewriting problems so the special case disappears, plus guidance: drop branches that exist only to patch one-off inputs, fix upstream contracts before adding downstream conditionals, refactor data structures first then simplify code paths. Boundary: removing a branch that breaks user-visible behavior is a migration and requires review. Cross-links preserve-user-visible-behavior and reduce-complexity maxims.",
+      "tags": ["pensieve", "maxim", "design", "refactoring", "data-flow", "special-cases"],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter; six H2 sections (Conclusion, Quote, Guidance, Boundaries, Context Links) under one H1."
+    },
+    {
+      "id": "document:.pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md",
+      "type": "document",
+      "name": "Prefer pragmatic solutions over theoretical completeness",
+      "filePath": ".pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md",
+      "summary": "Pensieve maxim (active, 2026-02-11) urging teams to solve the real problem now with the simplest reliable design rather than chasing abstract elegance. Quote: 'I'm a damn pragmatist.' Guidance: optimize for working systems and maintenance cost, expose invalid inputs early instead of hiding them with fallback layers, avoid speculative abstractions without clear near-term value. Boundary: pragmatism is not an excuse to skip critical quality checks. Cross-links preserve-user-visible-behavior and reduce-complexity maxims.",
+      "tags": ["pensieve", "maxim", "design", "pragmatism", "engineering-philosophy"],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter; six H2 sections following the standard maxim template."
+    },
+    {
+      "id": "document:.pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md",
+      "type": "document",
+      "name": "Preserve user-visible behavior as a hard rule",
+      "filePath": ".pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md",
+      "summary": "Pensieve maxim (active, 2026-02-11) treating any unexpected user-visible behavior change as a bug. Quote: 'We do not break user-visible behavior.' Guidance: keep outputs, contracts, and UX stable unless change is explicitly approved; treat behavior regressions as priority defects; add tests for behavior users already rely on. Boundary: explicitly approved behavior changes are allowed when documented and reviewed. Cross-links eliminate-special-cases and prefer-pragmatic maxims.",
+      "tags": ["pensieve", "maxim", "compatibility", "user-experience", "behavior-stability"],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter; six H2 sections following the standard maxim template."
+    },
+    {
+      "id": "document:.pensieve/maxims/reduce-complexity-before-adding-branches.md",
+      "type": "document",
+      "name": "Reduce complexity before adding branches",
+      "filePath": ".pensieve/maxims/reduce-complexity-before-adding-branches.md",
+      "summary": "Pensieve maxim (active, 2026-02-11) instructing engineers to simplify structure first and only add branches when necessary. Quote (Linus-style): 'If you need more than 3 levels of indentation, you're screwed anyway; fix your program.' Guidance: split large functions by responsibility, keep control flow shallow and explicit, prefer clear naming over explanatory comments. Boundary: small local branches are acceptable when they improve clarity. Cross-links prefer-pragmatic and eliminate-special-cases maxims.",
+      "tags": ["pensieve", "maxim", "design", "complexity", "control-flow", "indentation"],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter; six H2 sections following the standard maxim template."
+    },
+    {
+      "id": "document:.pensieve/maxims/skill-nil-is-not-an-error.md",
+      "type": "document",
+      "name": "SKILL nil return is not a transport error",
+      "filePath": ".pensieve/maxims/skill-nil-is-not-an-error.md",
+      "summary": "Pensieve maxim (active, 2026-04-07) explaining that `VirtuosoResult::ok()` reflects only the bridge transport (STX vs NAK), not the SKILL function's return value — a SKILL function returning `nil` on failure still yields `ok() == true`. Consequence: `if !result.ok() { return Err(...) }` guards only catch daemon errors and timeouts, never SKILL-level failures. Provides a fix pattern (check `output.trim() == \"nil\"` as well) and a special-case rule for list commands (maeGetEnabledAnalysis, maeGetSessions, maeGetResultTests) where SKILL `nil` means 'empty list', solved by wrapping with `skill_strings_to_json()` so the layer always returns a JSON array and checking only `r.ok()` in the command layer. Discovered during review of `src/commands/process.rs:28` (char() guard silently passes when lib/cell/view doesn't exist) and in 2026-04-20 for `get_analyses` returning error when no analyses were enabled.",
+      "tags": ["pensieve", "maxim", "skill", "error-handling", "virtuoso-bridge", "ipc", "rust", "nil-semantics"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with YAML frontmatter; seven H2 sections including embedded Rust code blocks showing the fix pattern and the ops-vs-command-layer split for list commands."
+    },
+    {
+      "id": "document:.pensieve/maxims/test-with-ci-toolchain-before-push.md",
+      "type": "document",
+      "name": "Test With CI Toolchain Before Push",
+      "filePath": ".pensieve/maxims/test-with-ci-toolchain-before-push.md",
+      "summary": "Pensieve maxim (active, 2026-05-27) requiring `cargo test && cargo clippy -- -D warnings` locally before every push; never assume `cargo fix` caught everything. Notes that nightly may lack lints stable has (and vice versa), that Config/model-construction tests break when new fields are added so test helpers must be updated, and that mutex poisoning cascades across tests unless `unwrap_or_else(|e| e.into_inner())` is used. Boundary: trivial doc-only changes can skip the rule. Based on the ci-must-match-target-toolchain maxim; related to rust-bin-vs-lib-crate-attrs.",
+      "tags": ["pensieve", "maxim", "ci", "testing", "rust", "clippy", "pre-push"],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML frontmatter; five H2 sections following the standard maxim template (no Quote section)."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.pensieve/maxims/ci-must-match-target-toolchain.md",
+      "target": "document:.pensieve/maxims/skill-nil-is-not-an-error.md",
+      "type": "related",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.pensieve/maxims/test-with-ci-toolchain-before-push.md",
+      "target": "document:.pensieve/maxims/ci-must-match-target-toolchain.md",
+      "type": "related",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md",
+      "target": "document:.pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md",
+      "target": "document:.pensieve/maxims/reduce-complexity-before-adding-branches.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md",
+      "target": "document:.pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md",
+      "target": "document:.pensieve/maxims/reduce-complexity-before-adding-branches.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md",
+      "target": "document:.pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md",
+      "target": "document:.pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.pensieve/maxims/reduce-complexity-before-adding-branches.md",
+      "target": "document:.pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.pensieve/maxims/reduce-complexity-before-adding-branches.md",
+      "target": "document:.pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.pensieve/maxims/skill-nil-is-not-an-error.md",
+      "target": "document:.pensieve/maxims/ci-must-match-target-toolchain.md",
+      "type": "related",
+      "weight": 0.4
+    }
+  ]
+}

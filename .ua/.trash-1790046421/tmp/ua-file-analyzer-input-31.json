@@ -1,0 +1,35 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "docs/superpowers/plans/2026-07-13-skill-runtime.md",
+      "language": "markdown",
+      "sizeLines": 398,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-29-upstream-hardening.md",
+      "language": "markdown",
+      "sizeLines": 143,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-01-virtuoso-gui-live-executor.md",
+      "language": "markdown",
+      "sizeLines": 210,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-01-virtuoso-gui-runner-foundation.md",
+      "language": "markdown",
+      "sizeLines": 169,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    "docs/superpowers/plans/2026-07-13-skill-runtime.md": [],
+    "docs/superpowers/plans/2026-08-29-upstream-hardening.md": [],
+    "docs/superpowers/plans/2026-09-01-virtuoso-gui-live-executor.md": [],
+    "docs/superpowers/plans/2026-09-01-virtuoso-gui-runner-foundation.md": []
+  }
+}

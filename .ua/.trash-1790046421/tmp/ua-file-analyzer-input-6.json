@@ -1,0 +1,209 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "src/spectre/runner.rs",
+      "language": "rust",
+      "sizeLines": 2153,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/auth.rs",
+      "language": "rust",
+      "sizeLines": 145,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/backend.rs",
+      "language": "rust",
+      "sizeLines": 407,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/contract.rs",
+      "language": "rust",
+      "sizeLines": 882,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/daemon_lifecycle.rs",
+      "language": "rust",
+      "sizeLines": 616,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/host_keys.rs",
+      "language": "rust",
+      "sizeLines": 561,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/identity.rs",
+      "language": "rust",
+      "sizeLines": 623,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/lifecycle.rs",
+      "language": "rust",
+      "sizeLines": 780,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/mod.rs",
+      "language": "rust",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/native.rs",
+      "language": "rust",
+      "sizeLines": 2256,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/openssh.rs",
+      "language": "rust",
+      "sizeLines": 266,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/pool.rs",
+      "language": "rust",
+      "sizeLines": 929,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/scheduler.rs",
+      "language": "rust",
+      "sizeLines": 1155,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/session_discovery.rs",
+      "language": "rust",
+      "sizeLines": 303,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ssh.rs",
+      "language": "rust",
+      "sizeLines": 908,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/testutil.rs",
+      "language": "rust",
+      "sizeLines": 248,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/tunnel.rs",
+      "language": "rust",
+      "sizeLines": 1768,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/x11.rs",
+      "language": "rust",
+      "sizeLines": 5607,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "src/spectre/runner.rs": [
+      "src/error.rs",
+      "src/models.rs",
+      "src/spectre/jobs.rs",
+      "src/streaming/mod.rs",
+      "src/transport/contract.rs",
+      "src/transport/openssh.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/transport/auth.rs": [],
+    "src/transport/backend.rs": [
+      "src/config.rs",
+      "src/transport/contract.rs",
+      "src/transport/openssh.rs"
+    ],
+    "src/transport/contract.rs": [
+      "src/error.rs"
+    ],
+    "src/transport/daemon_lifecycle.rs": [
+      "src/models.rs",
+      "src/transport/identity.rs"
+    ],
+    "src/transport/host_keys.rs": [],
+    "src/transport/identity.rs": [],
+    "src/transport/lifecycle.rs": [
+      "src/transport/contract.rs"
+    ],
+    "src/transport/mod.rs": [
+      "src/transport/auth.rs",
+      "src/transport/backend.rs",
+      "src/transport/contract.rs",
+      "src/transport/daemon_lifecycle.rs",
+      "src/transport/host_keys.rs",
+      "src/transport/identity.rs",
+      "src/transport/ipc/mod.rs",
+      "src/transport/lifecycle.rs",
+      "src/transport/native.rs",
+      "src/transport/openssh.rs",
+      "src/transport/pool.rs",
+      "src/transport/scheduler.rs",
+      "src/transport/session_discovery.rs",
+      "src/transport/ssh.rs",
+      "src/transport/testutil.rs",
+      "src/transport/tunnel.rs",
+      "src/transport/x11.rs"
+    ],
+    "src/transport/native.rs": [
+      "src/config.rs",
+      "src/transport/contract.rs",
+      "src/transport/host_keys.rs",
+      "src/transport/lifecycle.rs"
+    ],
+    "src/transport/openssh.rs": [
+      "src/config.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/transport/contract.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/transport/pool.rs": [
+      "src/config.rs",
+      "src/transport/contract.rs",
+      "src/transport/scheduler.rs"
+    ],
+    "src/transport/scheduler.rs": [
+      "src/transport/contract.rs"
+    ],
+    "src/transport/session_discovery.rs": [
+      "src/error.rs",
+      "src/models.rs",
+      "src/transport/contract.rs"
+    ],
+    "src/transport/ssh.rs": [
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/transport/testutil.rs": [
+      "src/transport/contract.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/transport/tunnel.rs": [
+      "src/config.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/transport/contract.rs",
+      "src/transport/daemon_lifecycle.rs",
+      "src/transport/openssh.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/transport/x11.rs": [
+      "src/config.rs",
+      "src/error.rs",
+      "src/transport/contract.rs"
+    ]
+  }
+}

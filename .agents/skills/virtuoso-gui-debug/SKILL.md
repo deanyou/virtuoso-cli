@@ -1,0 +1,1105 @@
+---
+name: virtuoso-gui-debug
+display_name: Virtuoso GUI Debug
+display_name_en: Virtuoso GUI Debug
+description: Replayable Cadence Virtuoso GUI debugging via a strict JSON DSL with fake / live (vcli) / local (xdotool) executors. Trigger when replaying or verifying Virtuoso GUI automation, driving vcli window action-x11, or scripting local X11 GUI flows.
+description_zh: 基于严格 JSON DSL 的可回放 Cadence Virtuoso GUI 调试技能，支持 fake / live (vcli) / local (xdotool) 三种执行器，用于 GUI 自动化回放、vcli 窗口操作与本地 X11 自动化。
+description_en: Replayable Cadence Virtuoso GUI debugging via a strict JSON DSL with fake / live (vcli) / local (xdotool) executors for GUI automation replay and verification.
+category: coding
+version: 1.0.0
+author: deanyou
+allowed-tools: Bash(python3 *) Read
+---
+
+# Virtuoso GUI Debug Skill
+
+## Purpose
+
+This skill provides deterministic, replayable Virtuoso GUI debugging via a strict JSON DSL. It parses and validates scenarios, executes them through one of three executors, and writes machine-readable evidence files.
+
+Three execution engines:
+
+- `--executor fake` — offline-only, deterministic, for regression tests and automation logic verification. No subprocess side effects beyond `python3` itself.
+- `--executor live` — drives the real `vcli` CLI through a fixed-argv command runner (local or SSH). All GUI input goes through `vcli window action-x11`, which re-validates window identity server-side on every action.
+- `--executor local` — direct `xdotool` execution on a local X11 DISPLAY. Binds the target window by PID (or explicit `--window-id`). Supports `SCROLL` (xdotool buttons 4/5/6/7). No vcli binary or session required. Live mode also supports `SCROLL` via `vcli window action-x11 --operation scroll --text direction[:count]`.
+
+## When to Use
+
+- Replaying a validated GUI-debug scenario for regression testing (fake)
+- Verifying GUI automation logic without a live Virtuoso environment (fake)
+- Executing an already-validated scenario against a real Virtuoso session via vcli (live)
+- Direct local X11 automation when vcli is unavailable or scroll/wheel input is needed (local)
+- Generating deterministic audit trails for agentic GUI operations
+- Quick manual GUI inspection via `scripts/xdotool_cli.py` (env/state/find/shot/click/type/key/drag/scroll/wait/smoke)
+
+## Prerequisites
+
+Each scenario requires explicit binding of:
+
+| Parameter | Description |
+|-----------|-------------|
+| `session_id` | Unique session identifier (non-empty string, e.g. `dean-user1-34929`) |
+| `pid` | Positive integer process ID |
+| `display` | Valid DISPLAY string (e.g., `:0` or `:1.0`) |
+| `cellview` | Target cellView in `lib/cell/view` format |
+
+Live mode additionally requires: `--session` (must equal the scenario's `session_id`), `--vcli PATH` (the vcli binary on the Virtuoso host), and `--output DIR` (a fresh output directory). `--ssh-host HOST` is optional; when given, vcli runs over SSH with a safely-quoted fixed argv.
+
+Local mode requires: `xdotool` on PATH, `DISPLAY` reachable, and `--output DIR`. `--window-id WID` optionally overrides PID-based window discovery. ImageMagick `import` is required for screenshots.
+
+## Auto-Discovery (SSH Remote)
+
+自动发现 Virtuoso 的 DISPLAY 和 PID：
+
+```bash
+# 方法1: 从 daemon log 直接获取
+ssh ubuntu-docker "tail /tmp/virtuoso-daemon.log"
+
+# 方法2: 查找 virtuoso 进程并获取 DISPLAY
+ssh ubuntu-docker "ps aux | grep virtuoso | grep -v grep | awk '{print \$2}' | head -1"
+ssh ubuntu-docker "strings /proc/<PID>/environ | grep DISPLAY"
+
+# 方法3: 从 daemon 获取当前会话端口
+ssh ubuntu-docker "cat /tmp/virtuoso-daemon.log | grep PORT"
+```
+
+**快速发现脚本** (在 skill-dev 目录执行):
+```bash
+./scripts/vssh.sh --discover
+```
+
+**典型结果**:
+- PID: `12784`
+- DISPLAY: `:5.0`
+- Session ID: `dean-user1-<PORT>`
+
+## SSH Connection Etiquette
+
+Rapid-fire `ssh` invocations from automation (one connection per command) can trip the remote
+sshd's connection protection (`MaxStartups` / Fail2ban), which shows up as:
+
+```
+ssh_exchange_identification: Connection closed by remote host
+```
+
+This is a **client-side connection-frequency issue, NOT a vcli bug**. vcli talks to the daemon
+over TCP (the session port from `vcli session list`), not SSH, so vcli never contributes to
+connection throttling.
+
+Mitigation:
+
+- **Batch commands**: pack multiple operations into one ssh call (e.g. one base64-encoded
+  script) instead of one ssh per command.
+- **Reuse connections**: for many sequential calls use SSH ControlMaster, e.g.
+  `ssh -o ControlMaster=auto -o ControlPath=/tmp/vcli-ssh-%r@%h:%p ...`.
+- **Back off on rejection**: after `Connection closed by remote host`, wait 60–120s before
+  retrying; the throttle is temporary.
+- **Prefer one round-trip**: for complex commands, base64-encode the script to avoid quoting
+  issues: `echo <b64> | base64 -d | bash`.
+- **Don't misread the symptom**: the remote session (daemon/vcli) keeps working during the
+  throttle; only the ssh control channel is refused.
+
+## vcli GUI Debug 快速指南
+
+### 一、连接 Session
+```bash
+# 列出所有 session
+VCLI_CAPABILITY=admin VB_PORT=XXXXX VB_REMOTE_HOST=localhost vcli session list
+
+# 查看 session 详情
+VCLI_CAPABILITY=admin VB_PORT=XXXXX VB_REMOTE_HOST=localhost vcli session show dean-user1-XXXXX
+```
+
+关键字段：
+- `alive: true` — session 存活
+- `pid: 0` — 旧 bridge 元数据，需通过窗口发现回退
+
+### 二、发现 DISPLAY（云电脑关键！）
+
+⚠️ vcli 的 `--display :0` 经常不对！云电脑上 Virtuoso 可能运行在其他 DISPLAY：
+
+```bash
+# 方法1：查看 X11 socket 文件
+ssh ubuntu-docker "ls /tmp/.X11-unix/"
+# 输出 X99 → DISPLAY=:99
+
+# 方法2：查看 Virtuoso 进程
+ssh ubuntu-docker "ps aux | grep virtuoso | grep -v grep"
+
+# 方法3：逐个尝试（常见 :0, :1, :99）
+vcli window list-windows-x11 --display :99 --session dean-user1-XXXXX
+```
+
+### 三、发现窗口
+```bash
+# 列出指定 DISPLAY 上的所有窗口
+vcli window list-windows-x11 --display :99 --session dean-user1-XXXXX
+```
+
+输出字段说明：
+```
+{
+  "window_id": "0x3000000",  // ← 操作时用这个字段（不是 id）
+  "pid": 393027,              // 进程 ID
+  "title": "VCLI_XDOTOOL_TEST",
+  "geometry": {"x":960,"y":446,"w":810,"h":634},
+  "visible": true
+}
+```
+
+快速筛选：
+```bash
+vcli window list-windows-x11 --display :99 --session dean-user1-XXXXX | python3 -c "
+import json,sys
+for w in json.load(sys.stdin)['windows']:
+    print(w['window_id'], w['pid'], w['title'][:40])
+"
+```
+
+### 四、执行 GUI 操作
+
+```bash
+# 通用格式（--direct 跳过 helper 上传，快 5 倍）
+vcli window action-x11 \
+  --window-id 0x3000000 \
+  --display :99 \
+  --session dean-user1-XXXXX \
+  --pid 393027 \
+  --operation <OP> \
+  --direct
+```
+
+常用操作：
+
+| 操作 | 额外参数 | 示例 |
+|------|---------|------|
+| activate | 无 | 激活窗口 |
+| click-rel | --x --y | 相对坐标点击 |
+| click-abs | --x --y | 绝对坐标点击 |
+| double-click | --x --y | 双击 |
+| key | --text Escape | 发送按键 |
+| type | --text "hello" | 输入文本 |
+
+## Usage
+
+**IMPORTANT:** Always validate before running:
+```bash
+python3 scripts/gui_runner.py validate SCENARIO
+```
+
+Run with fake executor (offline):
+```bash
+python3 scripts/gui_runner.py run SCENARIO --output DIR --executor fake
+```
+
+Run with live executor (real vcli):
+```bash
+python3 scripts/gui_runner.py run SCENARIO --output DIR \
+    --executor live --session dean-user1-34929 \
+    --vcli /usr/local/bin/vcli [--ssh-host compute-eda-42]
+```
+
+Run with local executor (direct xdotool):
+```bash
+python3 scripts/gui_runner.py run SCENARIO --output DIR \
+    --executor local [--window-id 0x3000006]
+```
+
+Quick manual GUI inspection (standalone xdotool CLI):
+```bash
+python3 scripts/xdotool_cli.py state
+python3 scripts/xdotool_cli.py find --name "Library Manager"
+python3 scripts/xdotool_cli.py click --x 100 --y 50
+python3 scripts/xdotool_cli.py scroll --direction down --count 5
+```
+
+## Live-Mode Contract (fail-closed rules)
+
+Before any GUI input is sent, precheck verifies in order:
+
+1. the session exists in `vcli session list` and its bridge port matches the session id's trailing number;
+2. the session PID is positive — a zero PID (old bridge metadata) falls back to the scenario PID via window discovery, and is rejected if no unique window binds to it;
+3. the DISPLAY reported by the X server matches the scenario exactly;
+4. exactly one window is bound to the PID on that DISPLAY — zero or multiple matches abort;
+5. an exclusive lock on the DISPLAY (lock file under `~/.cache/virtuoso_bridge/x11-locks/`) is acquired and held for the whole run.
+
+Every GUI action (`KEY`, `TYPE`, `CLICK_REL`, `CLICK_ABS`, `DOUBLE_CLICK`, `DRAG_REL`, `WINDOW_ACTIVATE`, `MINIMIZE`, `MAXIMIZE`, `CLOSE`, `SCROLL`) maps to a fixed `vcli window action-x11` argv carrying the resolved window id, PID, and DISPLAY. **`--direct` is enabled by default** (~5x faster, skips helper upload/env resolution/list-windows); use `--no-direct` for full server-side re-validation. `--pid` is optional since v1.3.1 (windows without `_NET_WM_PID` are reachable). `verify` prefers database-first predicates via vcli; the `ciw_eval` predicate executes SKILL via `vcli skill exec` and compares output. `recover` executes only rollback operations that pass scenario validation.
+
+Typed input text never appears in error payloads or logs — it is replaced by `text_length` markers.
+
+Failures close the run: there is no fallback to "first title-matched window", root-window coordinates, or unbound xdotool calls.
+
+## Local-Mode Contract
+
+Before any GUI input is sent, precheck verifies:
+
+1. `xdotool` is on PATH;
+2. the scenario's `DISPLAY` is reachable (`xdotool getdisplaygeometry`);
+3. a visible window is bound to the scenario PID — or the explicit `--window-id` is used.
+
+Actions are sent directly via `xdotool` with the bound window activated first. `SCROLL` maps to xdotool mouse buttons 4 (up), 5 (down), 6 (left), 7 (right). Screenshots use ImageMagick `import -window <id>`.
+
+## Output Files
+
+Each run writes to the caller-specified output directory:
+
+| File | Description |
+|------|-------------|
+| `task.json` | Validated scenario snapshot |
+| `agent-actions.jsonl` | Append-only event log |
+| `summary.json` | Final pass/fail with error details |
+| `baseline.png` | Baseline screenshot (local mode) |
+| `window_<id>.png` | Screenshots (live/local mode) |
+
+## Allowed Operations
+
+Only these operations are permitted:
+
+- `VCLI_LOAD` — load a SKILL file via `vcli skill load` (supports `skillpp: true` for SKILL++ mode). **Executable** by live executor.
+- `VCLI_CALL` — accepted by the schema; **not executable** by live or local executors (use `CIW_INPUT` for ad-hoc SKILL evaluation).
+- `WINDOW_WAIT` — poll window state until the requested condition or timeout
+- `WINDOW_ACTIVATE` — activate window
+- `WINDOW_DISCOVER` — discover/filter windows (title/class/pid filters)
+- `DISMISS_DIALOG` — dismiss a dialog (vcli dismiss-dialog / xdotool Escape)
+- `CLOSE` — close a window
+- `KEY` — send key event
+- `TYPE` — type text
+- `CLICK_REL` — relative click (window-relative coordinates)
+- `CLICK_ABS` — absolute click (screen coordinates)
+- `DOUBLE_CLICK` — double-click (window-relative coordinates)
+- `DRAG_REL` — relative drag (window-relative vector)
+- `SCROLL` — scroll wheel at window-relative position (directions: up/down/left/right, optional count 1-100; live mode via vcli scroll, local mode via xdotool buttons 4/5/6/7)
+- `MINIMIZE` — minimize/iconify the window
+- `MAXIMIZE` — maximize the window (requires xdotool ≥ 3.20210804.1; clear error on older versions)
+- `CIW_INPUT` — type a SKILL expression into the CIW input line and press Return (encapsulates activate→click input line→clear→type→Return)
+- `SCREENSHOT` — capture screenshot
+- `VERIFY` — verify state (predicates: window_exists, state_matches, title_matches, geometry_matches, ciw_eval)
+- `RECOVER` — recovery action (auto-dismiss for KEY/TYPE/CLICK_REL when no rollback)
+
+## Constraints
+
+- Unknown fields are REJECTED (strict schema enforcement)
+- Timeouts must be 1–300 seconds
+- Retries must be 0 or 1
+- Every action requires a verifier
+- Fake executor performs no shell, vcli, X11, xdotool, or live process execution
+- Live executor only runs the fixed vcli argv through the injected command runner — never ssh/xdotool/xprop/shell directly
+- Local executor calls xdotool directly but only after precheck binds a specific window
+- Live runs require an explicit fresh `--output` directory; nothing is written outside it
+
+## GUI Operation Playbook (Multi-Method Matrix)
+
+> Every GUI operation has **at least two stable, independently-verified methods**. If one fails or is unreliable, fall through to the next. All methods below were validated on a real Virtuoso IC25.1 session (DISPLAY=:5.0) with the `ui_dynamic_form.il` dynamic form.
+
+### Critical Environment Constraint
+
+**`vcli skill exec` has NO UI library** — `hiCreateAppForm`, `hiDisplayForm`, `hiGetFieldInfo`, `hiCreateRadioField` are all nil in the daemon exec context. Therefore:
+
+- GUI form creation/display MUST go through the **CIW** (xdotool type into the CIW input line).
+- GUI interaction (clicks, typing) MUST go through **xdotool** or **`vcli window action-x11`**.
+- Reading form state / setting field values can go through the **CIW** (form object access works there).
+
+### 1. Window Discovery (2+ methods)
+
+| Method | Command | Notes |
+|--------|---------|-------|
+| **A (recommended)** | `vcli window list-windows-x11 --display :5.0 --format json` | Returns window_id (hex), pid, title, geometry. Server-side validated. |
+| **B** | `xdotool search --name "Layer Replace"` | Returns decimal window id (e.g. `39860167` = `0x26037c7`). Usable directly with xdotool. |
+| C | `xwininfo -name "title"` | Returns geometry; useful for cross-checking absolute position. |
+
+### 2. Coordinate Acquisition (2+ methods)
+
+| Method | How | Precision |
+|--------|-----|-----------|
+| **A (recommended): SKILL reverse-engineering** | In CIW: `hiGetFieldInfo(form (quote fieldName))` → returns `((x y) (w h))` in **form-client-relative coordinates**. Field center = `(x + w/2, y + h/2)`. | Exact (±0px) |
+| **B: pixel-level crop** | `import -window <wid> out.png` then `convert out.png -crop WxH+X+Y -resize 200%` to visually confirm element position. | Exact after 2 rounds of cross-checking |
+| ❌ OCR percentage boxes | Do NOT rely on OCR's relative-percent bounding boxes — drift of ±40px observed across repeated captures of the same window. | Unreliable |
+
+**Coordinate reverse-engineering example** (validated on `udfLayerReplaceForm`):
+```skill
+hiGetFieldInfo(udfLayerReplaceForm (quote oldLayer))   ; → ((5 150) (590 35))
+hiGetFieldInfo(udfLayerReplaceForm (quote newLayer))   ; → ((5 187) (590 35))
+hiGetFieldInfo(udfLayerReplaceForm (quote layerOp))    ; → ((5 41) (590 33))
+hiGetFieldInfo(udfLayerReplaceForm (quote filePath))   ; → ((5 76) (590 35))
+```
+Field centers (form-relative): oldLayer=(300,167), newLayer=(300,204), layerOp=(300,57), filePath=(300,93).
+Use these directly with `xdotool mousemove --window <wid>` (method 3B) — no xwininfo needed.
+
+### 3. Click Operation (3 methods)
+
+| Method | Command | When to use |
+|--------|---------|-------------|
+| **A** | `vcli window action-x11 --window-id <hex> --pid <pid> --display :5.0 --operation click-rel --x <cx> --y <cy>` | Need server-side window re-validation; session-bound. |
+| **B (recommended, lightweight)** | `xdotool mousemove --window <wid> <cx> <cy>; sleep 0.3; xdotool click 1` | Window-relative coords; no xwininfo/absolute math; works with decimal or hex wid. |
+| C | `xdotool mousemove <abs_x> <abs_y>; xdotool click 1` | Only when you already have absolute coords from xwininfo. |
+
+> `cx, cy` are **form-client-relative** coordinates (from method 2A or 2B). For radio buttons inside a field, distribute evenly across the field width.
+
+### 4. Text Input (3 stable methods, 1 unreliable)
+
+| Method | How | Reliability |
+|--------|-----|-------------|
+| **A (recommended)** | Click/navigate to field, then `xdotool type --clearmodifiers --delay 50 "text"` | ✅ High — validated with "TABTEST", "METAL1" |
+| **B (coordinate-free)** | `xdotool key Tab` (repeat to reach target field), then `xdotool type` | ✅ High — 4 Tabs reached Target Layer in the test form |
+| **C (most reliable, bypasses GUI)** | In CIW: `form->field->value = "text"` | ✅ Highest — direct object assignment; no focus needed |
+| ❌ `vcli window action-x11 --operation type --text` | — | ❌ **Unreliable** — injected garbled/clipboard content instead of specified text on IC25.1. Do not use. |
+
+### 5. Button Submit / Confirm (3 methods)
+
+| Method | How | Notes |
+|--------|-----|-------|
+| **A** | Click the button (method 3A or 3B) | Works for OK/Apply when `?buttonLayout` callback is correctly bound. |
+| **B (recommended for dialogs)** | `xdotool key Return` (with dialog focused) | Equivalent to Open/OK in file dialogs; more reliable than clicking the Open button (which had coordinate-sensitivity issues). |
+| C | In CIW: call the callback directly, e.g. `udfApplyCB()` | Bypasses GUI entirely; useful for verifying callback logic independent of button wiring. |
+
+### 6. Close / Cancel (3 methods)
+
+| Method | How | Notes |
+|--------|-----|-------|
+| **A (recommended)** | `xdotool key Escape` (with window focused) | Dismisses most dialogs; falls back to windowclose if no response. |
+| **B** | In CIW: `hiFormCancel(form)` | Clean form dismissal; note: cannot cancel a form that is mapped (returns nil with WARNING). |
+| C | Click Cancel button (method 3) | Coordinate-dependent. |
+
+### 7. Modal Dialog Handling (CRITICAL)
+
+Modal dialogs (e.g. "Choose a File" from `hiDisplayFileDialog`) **intercept ALL input** — clicks and typing on the parent form will silently fail or go to the dialog.
+
+**Detection**: After any Browse/Open action, run `vcli window list-windows-x11` and check for unexpected dialog windows (title contains "Choose", "Confirm", "Error", etc.).
+
+**Resolution order**:
+1. `xdotool windowactivate <dialog_wid>; sleep 0.5; xdotool key Return` (submit) — or `Escape` (cancel)
+2. If Return doesn't close it, click the dialog's Open/Cancel button using method 3 with the **dialog's** window id and geometry
+3. Only after the dialog is gone should you resume operating the parent form
+
+### 8. CIW Input (the bootstrap channel)
+
+Since `vcli skill exec` cannot drive GUI, the CIW is the bootstrap for form creation and state inspection.
+
+**DSL operation `CIW_INPUT`** encapsulates the full flow: activate → click input line → clear → type → Return. Use this in scenarios instead of manual xdotool sequences.
+
+```json
+{"operation": "CIW_INPUT", "arguments": {"text": "load(\"/tmp/form.il\")"}}
+{"operation": "CIW_INPUT", "arguments": {"text": "udfShowForm()", "delay_ms": 10, "clear_first": true}}
+```
+
+**Manual CIW input pattern** (when not using the DSL):
+```bash
+xdotool windowactivate <ciw_wid>
+sleep 0.3
+xdotool mousemove --window <ciw_wid> 400 870
+xdotool click 1
+sleep 0.1
+xdotool key Escape          # NOT ctrl+a — Virtuoso CIW does not select-all
+xdotool type --clearmodifiers --delay 10 'load("/path/to/file.il")'
+xdotool key Return
+sleep 1
+```
+
+**CIW input line coordinates** (must be re-verified if the CIW window moves):
+- The input line is at the **bottom** of the CIW window; compute `y = height - 20` (approximate), then verify with a screenshot crop.
+- Always `xwininfo -id <ciw_wid>` before typing — the CIW can be moved/resized by the user.
+- **Geometry pitfall**: `vcli window list-windows-x11` reports window geometry including WM decorations (e.g. 730x743 for a 720x709 CIW). Using this for click-y coordinates lands outside the content area. The `CIW_INPUT` DSL operation reads the precise geometry from vcli's `/tmp/vcli_geom_<display>_<wid>.json` cache (written by `activate --direct`). For manual operations, use `xwininfo` not `list-windows`.
+
+### Recommended Debug Loop
+
+```
+1. debug_wrapper.py validate file.il              # syntax layer
+2. scp file.il ubuntu-docker:/home/user1/
+3. CIW input: load(".../file.il")                 # deploy
+4. CIW input: udfShowForm()                       # display
+5. vcli list-windows-x11 → get form wid           # locate
+6. CIW: hiGetFieldInfo(form (quote field))        # reverse-engineer coords
+7. xdotool mousemove --window + click             # interact (method 3B)
+8. xdotool type / Tab+type / CIW assign           # input (method 4A/B/C)
+9. ImageMagick crop screenshot                    # visual verify
+10. CIW screenshot → read callback output         # behavioral verify
+11. Modal dialog? → handle first (section 7)
+12. Bug found → fix SKILL → repeat from 2
+```
+
+## Performance Optimization (measured on Virtuoso IC25.1, DISPLAY=:5.0)
+
+### Latency baseline
+
+| Operation | Latency | Notes |
+|-----------|---------|-------|
+| `vcli window action-x11 click-rel` | **~1350 ms** | Per call — Rust binary startup + X11 reconnect + server-side window re-resolution |
+| `vcli window list-windows-x11` | **~940 ms** | Per call — full window tree scan |
+| `xdotool mousemove --window + click` | **~10 ms** | 135× faster than vcli |
+| `xwininfo -id <wid>` | **~3 ms** | 313× faster than vcli list-windows |
+| `xdotool type --delay 50` (20 chars) | ~530 ms | Default in earlier scripts |
+| `xdotool type --delay 10` (20 chars) | ~120 ms | 4.4× faster; verified no char loss |
+| `xdotool type --delay 5` (20 chars) | ~70 ms | Reliable for ASCII; use 10 for safety |
+| `import -window <wid>` (screenshot) | ~20 ms | Fast; occasional failure on unmapped windows |
+| CIW input + exec (click+ctrl+a+type+Return) | ~425 ms | With delay=10; ~800 ms with delay=50 |
+
+### P0 — Use xdotool by default, vcli only when server-side validation is required
+
+The `vcli window action-x11` path pays a **1.3 second per-call tax** because every invocation starts the Rust binary, reconnects to X11, and re-resolves the window. For rapid GUI interaction (clicks, typing, dragging), use direct `xdotool` with `--window <wid>`:
+
+```bash
+# Fast path (10 ms):
+xdotool mousemove --window 0x26037c7 300 167
+xdotool click 1
+
+# Slow path (1350 ms) — only when you need the Rust side to re-validate window identity:
+vcli window action-x11 --window-id 0x26037c7 --pid 114668 --display :5.0 \
+  --operation click-rel --x 300 --y 167
+```
+
+Use vcli when: (a) the window identity must be server-verified for safety, (b) you are in `--executor live` mode of the DSL runner, or (c) xdotool is unavailable.
+
+### P0 — `--direct` is now the DEFAULT in live executor (5× faster)
+
+The live executor uses `vcli window action-x11 --direct` by default, skipping helper upload, env resolution, and list-windows scan. This reduces per-action latency from ~1350ms to ~260ms. Use `--no-direct` CLI flag only when you need full server-side window re-validation (e.g., untrusted window ids).
+
+```bash
+# Default (fast, 260ms):
+python3 scripts/gui_runner.py run scenario.json --output out --executor live \
+    --session dean-user1-XXXXX --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker
+
+# Full validation (slow, 1350ms, use --no-direct):
+python3 scripts/gui_runner.py run scenario.json --output out --executor live \
+    --session dean-user1-XXXXX --vcli ~/.cargo/bin/vcli --ssh-host ubuntu-docker \
+    --no-direct
+```
+
+`--direct` supports: `activate`, `key`, `type`, `click-rel`, `drag-rel`, `scroll`, `close`. It **rejects** `wait` (needs window-list polling) and `screenshot` (needs artifact fetch) with a clear config error. Verified on IC25.1: click/type/key all succeed with correct field values and callback firing.
+
+### P0 — Use `action-x11-batch` for consecutive operations (6.3× faster)
+
+When you have a sequence of GUI operations (click → type → click → type...), use `action-x11-batch` with `--direct` to execute them all in **one process invocation and one SSH round-trip**. All xdotool commands are merged into a single shell script with per-command exit-code markers.
+
+```bash
+# batch.jsonl — one JSON action per line:
+{"window_id": "0x2603839", "operation": "click-rel", "x": 116, "y": 59}
+{"window_id": "0x2603839", "operation": "click-rel", "x": 300, "y": 167}
+{"window_id": "0x2603839", "operation": "type", "text": "METAL1"}
+{"window_id": "0x2603839", "operation": "click-rel", "x": 300, "y": 204}
+{"window_id": "0x2603839", "operation": "type", "text": "METAL2"}
+
+# Execute all 5 in one call (260ms total vs 1300ms for 5 separate --direct calls):
+vcli window action-x11-batch --file batch.jsonl --direct --pid 114668 --display :5.0
+```
+
+Result includes per-action status, duration, and error. A single action failure does not abort the batch. Each action may override `pid` and `display`; CLI flags are defaults.
+
+**Performance comparison (6 actions, IC25.1 remote):**
+
+| Mode | Total | Per-action | Speedup |
+|------|-------|-----------|---------|
+| 6× separate `action-x11` (normal) | ~7300 ms | ~1213 ms | 1× |
+| 6× separate `action-x11 --direct` | ~1650 ms | ~275 ms | 4.4× |
+| `action-x11-batch --direct` (merged shell) | **260 ms** | ~43 ms | **28×** |
+
+### P0 — Use xwininfo for geometry, not vcli list-windows
+
+```bash
+# Fast (3 ms):
+xwininfo -id 0x26037c7 | grep -E "Absolute|Width|Height"
+
+# Slow (940 ms) — only when you need to discover windows by title/pid:
+vcli window list-windows-x11 --display :5.0 --format json
+```
+
+Reserve `list-windows-x11` for **window discovery** (finding a window you don't have the id for). Once you have the id, all geometry checks use `xwininfo`.
+
+### P1 — Reduce type delay to 10–15 ms
+
+`--delay 50` was conservative. `--delay 10` is verified reliable for ASCII input into both form fields and the CIW (no dropped characters across 6 repeated rounds). Use `--delay 15` for non-ASCII or complex strings.
+
+```bash
+# Before (530 ms for 20 chars):
+xdotool type --clearmodifiers --delay 50 "METAL1"
+
+# After (120 ms for 20 chars):
+xdotool type --clearmodifiers --delay 10 "METAL1"
+```
+
+### P1 — Eliminate inter-operation sleep for consecutive xdotool calls
+
+Consecutive `xdotool mousemove` + `click` calls with **zero sleep** are reliable (verified: 6 rapid radio clicks all fired callbacks and changed form height correctly). Only sleep when waiting for Virtuoso to respond asynchronously:
+
+- **No sleep needed**: consecutive clicks, consecutive type, mousemove→click
+- **Sleep / poll needed**: after triggering a form redraw (radio callback changes layout), after opening a modal dialog, after CIW Return (wait for eval result)
+- **Prefer conditional polling** over fixed sleep: `xwininfo` loop waiting for height change, or `vcli list-windows` waiting for dialog appearance
+
+```bash
+# Bad: fixed 800ms sleep after every click
+xdotool click 1; sleep 0.8
+
+# Good: poll for the expected state change
+for i in $(seq 1 20); do
+  h=$(xwininfo -id $WID 2>/dev/null | grep Height | awk '{print $2}')
+  [ "$h" = "250" ] && break
+  sleep 0.05
+done
+```
+
+### P2 — vcli-side optimizations (Rust changes, all implemented)
+
+- **✅ `--direct` flag (implemented, commit 513f929)**: skips helper upload, env resolution, and list-windows scan. 4.7× faster (1213ms → 260ms). Use when vcli is required but window identity is already known.
+- **✅ `action-x11-batch` (implemented, commit bab1809 + 10c88dc)**: JSONL batch mode with merged shell execution. 6 actions in 260ms (28× vs normal mode). All xdotool commands merged into one SSH round-trip with per-command exit-code markers.
+- **✅ Geometry precheck in `--direct` mode (PR #68)**: before sending a `click-rel`/`drag-rel`/`scroll` with coordinates, runs `xwininfo` to verify the window is not zero-sized (minimized/unmapped) and the coordinates are within bounds. Out-of-bounds coordinates are rejected with exit code 2 and a clear error message (`"coordinates (x, y) out of bounds for window size WxH"`). Prevents sending clicks to stale coordinates after a window moves/resizes.
+- **✅ Batch non-direct shared list-windows (PR #68)**: in non-direct batch mode, the helper upload, env resolution, and list-windows scan are done **once per unique DISPLAY** and reused across all actions in the batch. 3 actions in 1527ms (per-action only 134–271ms vs ~940ms each without sharing).
+- **✅ Geometry file cache (PR #68)**: direct-mode writes a `/tmp/vcli_geom_<display>_<wid>.json` cache (cross-platform via `std::env::temp_dir()`) with 500ms TTL. Used for zero-size fast-reject (avoids xwininfo round-trip on repeated calls to a minimized window). Coordinate bounds checking always uses fresh xwininfo.
+- **Daemon mode (deferred)**: persistent `vcli gui-daemon` holding X11 connection over a local socket. Batch mode already covers the main use case (consecutive operations in one process); daemon's marginal gain is small.
+
+### P2 — Coordinate caching
+
+`hiGetFieldInfo` reverse-engineering costs one CIW round-trip (~425ms). The live executor provides a coordinate cache API:
+
+```python
+executor.cache_coords("myForm", "oldLayer", x=5, y=150, w=590, h=35)
+coords = executor.get_cached_coords("myForm", "oldLayer")  # → {"x":5, "y":150, "w":590, "h":35}
+executor.invalidate_coords("myForm")  # call after window resize/layout change
+```
+
+Cache the resulting `((x y) (w h))` per field for the lifetime of the form; only re-query if `xwininfo` detects the window was resized or a radio callback changed the layout.
+
+### P2 — Modal dialog auto-detection (default ON)
+
+After any GUI action that may spawn a dialog (`CLICK_REL`, `CLICK_ABS`, `DOUBLE_CLICK`, `KEY`, `TYPE`, `CIW_INPUT`), the live executor automatically scans for new dialog windows (titles containing Choose/Confirm/Error/Warning/Dialog/Message/Alert/Question) and dismisses them via `vcli dismiss-window-x11`. This prevents silent failures when a Browse/Open action spawns a file chooser that intercepts all subsequent input.
+
+Disable with `--no-auto-dismiss` if you need to interact with dialogs explicitly.
+
+### P2 — Verification: prefer CIW state reads over screenshot+OCR
+
+Reading a field value via CIW (`form->field->value`) costs ~425ms and is deterministic. Screenshot+OCR costs ~20ms but is unreliable (±40px drift, garbled text). Use CIW reads for behavioral verification; use screenshots only for visual evidence in reports.
+
+## Virtuoso GUI API Semantics (verified on IC25.1)
+
+> Hard-won findings from testing 13 example GUI programs (ui_dynamic_form, ui_callback_patterns, ui_color_picker, ui_listbox_*, ui_multipage_form, ui_progress_*, ui_table_form, ui_toggle_combo_form, menu_demo/*). These are NOT in the Cadence docs — they were discovered by breaking things.
+
+### Form Field Access Paths
+
+| Field type | Access pattern | Gotcha |
+|---|---|---|
+| Top-level field | `form->fieldName->value` | Direct access works |
+| Field inside **tab field** | `form->tabField->pageName->fieldName->value` | **Direct `form->fieldName->value` returns nil** — must go through tab→page |
+| ListBox field | `form->listbox->value` is always a **list** | Read with `car()`, set with `(list val)` |
+| Cyclic field | `form->cyclic->value` is a **single string** | Not a list |
+| Toggle field | `form->toggle->value` is `t`/`nil` list | `?choices` each item must be `(symbol label)` list |
+
+### Widget Creation Dependencies
+
+| Widget | Requires | Gotcha |
+|---|---|---|
+| `hiCreateLayerCyclicField` | Open cellview (`geGetEditRep()` non-nil) | `techGetTechFile(nil)` crashes. Guard: `when(rep Tech=techGetTechFile(rep) ...)` |
+| `hiCreateReportField` | None | Data is static list of lists; no dynamic update API |
+| `hiCreateTabField` | None | Pages are symbols; fields inside need tab→page access path |
+| `hiCreateSpinBox` | None | Arrows are ~10px, hard to click via xdotool. Prefer CIW: `form->spinbox->value = n` |
+| `hiCreatePointField` / `hiCreatePointListField` | None | Values are `(x y)` lists; render as read-only text |
+
+### Modal Form Behavior
+
+- `hiDisplayForm` creates a **modal** form that **blocks `vcli skill exec`** (30s timeout). While the form is open, all `vcli skill exec` calls hang until the form is dismissed.
+- To read form state while a modal form is open: use **CIW input** (xdotool type into CIW), not `vcli skill exec`.
+- `Escape` does NOT always close a form — click Cancel/OK button, or use `hiFormCancel(form)` via CIW.
+- `alt+F4` and `xdotool windowclose` may not work on Virtuoso modal forms.
+
+### Menu System
+
+- `hiInsertBannerMenu((hiGetCIWindow) menu)` inserts a pulldown into the CIW menu bar.
+- `hiCreateSliderMenuItem` with `?subMenu` renders a right-arrow (▶) indicating a submenu.
+- `hiCreateSeparatorMenuItem` renders a horizontal divider.
+- Menu `?callback` is a **string** that gets `eval`'d on click. If the function is undefined, CIW shows `undefined variable - funcName` (callback DID fire).
+- Submenus open on hover in most cases; if not, click the parent item.
+
+### CIW Input Reliability
+
+- `ctrl+a` does NOT select-all in Virtuoso form fields. Use `Escape` to clear the CIW input line.
+- **`ciw_eval` verifier format**: `expected` must be a dict, not a string. Use `{"expression": "varName", "equals": "42"}` or `{"expression": "func()", "contains": "substring"}`. A bare string `"42"` fails with `ciw_eval predicate requires expected.expression`.
+- **CIW_INPUT geometry fix** (v1.3.4+): The operation now reads precise window geometry from vcli's `/tmp/vcli_geom_*.json` cache after `activate`, instead of using `list-windows` geometry which includes WM decorations. Click-y is computed as `height - 20` (the CIW input line).
+- `vcli skill load` times out on large files (>~50 lines). Use CIW `load("/path/file.il")` instead.
+- Semicolon-separated multi-expression CIW input: the second assignment may not execute. Run expressions one at a time.
+- `lambda((x) body)` fails — must be `lambda( (x) body)` with a space after `lambda(`.
+- `return` only works inside `prog()` blocks, not `let()` blocks. In `let`, the last expression is the implicit return.
+
+### CIW Input Boundary Conditions (verified 2026-09-11)
+
+**Long text input**: No practical length limit. Tested up to 511 characters (500-char payload) — `xdotool type` succeeds and the command executes correctly. Type performance is ~6.7ms/char (209ms for 28 chars, 3.4s for 511 chars). The CIW input line wraps visually but accepts the full string.
+
+**SKILL string quoting (critical)**: Unquoted alphabetic text is parsed as a variable reference, not a string literal. `myVar = abcdef` fails with `*Error* eval: unbound variable - abcdef`. Always quote strings: `myVar = "abcdef"`. This is correct SKILL behavior, not a bug. Numeric literals (`myVar = 42`) do not need quotes.
+
+**Input validation boundaries** (all return clear errors, no crashes):
+
+| Condition | Behavior |
+|-----------|----------|
+| Empty `--text` for type | `config_error: operation 'type' requires non-empty --text` |
+| `--pid 0` | `config_error: PID must be positive when supplied` |
+| Invalid window ID (`not-a-window`) | `status: failure` |
+| Wrong DISPLAY (`:99.0`) | `status: failure` |
+| Negative coordinates | `config_error: coordinates (-10,-10) out of bounds for window size WxH` |
+| Zero coordinates `(0,0)` | Success (inside window) |
+| Boundary coordinates `(W-1,H-1)` | Success (inside window) |
+| Empty batch file | `config_error: batch file contains no actions` |
+| Invalid JSON in batch | `config_error: invalid JSON on line N` |
+
+**Minimized window**: `minimize` succeeds; subsequent `click-rel` on the minimized window also returns success (events are delivered to the unmapped window). `activate` restores the window and input resumes normally.
+
+**gui_runner.py scenario validation** rejects invalid input at parse time:
+- Missing required fields (`session_id`, `pid`, `display`, `cellview`, `steps`)
+- Version not exactly `"1.0"`
+- Unknown operations (lists all allowed operations in the error)
+- Empty `steps` array
+
+### CIW Input Stability Under Load (verified 50 cycles, 2026-09-11)
+
+**Critical finding**: High-frequency CIW input (< 1s per full cycle) can cause the CIW's X11 event queue to overflow, resulting in **complete keyboard input failure** while the TCP channel (`vcli skill exec`) remains fully functional. The CIW window stays active and mapped, but all `xdotool type`/`key` and `vcli action-x11 type`/`key` operations silently produce no input. This state is **not recoverable via X11 operations** — requires restarting the Virtuoso process.
+
+**Verified stable cycle** (50/50 success, 0 failures, ~4 min total):
+
+| Step | Operation | Minimum delay |
+|------|-----------|---------------|
+| 1 | `click-rel` on input line (y = height - 20) | 0.5s |
+| 2 | `key Escape` to clear | 0.5s |
+| 3 | `type` the command | 1.0s |
+| 4 | `key Return` to execute | 1.5s |
+| 5 | `skill exec` verify | — |
+
+**Total: ~3.5s per cycle**. Do not reduce below this for automated loops.
+
+**What triggers the failure**:
+- 20 rapid cycles with delays 0.1s/0.1s/0.3s/0.5s (~1s/cycle) → CIW keyboard input dies at some point during the loop
+- The failure is **not** caused by `MINIMIZE`/restore — verified: minimize → activate → type still works perfectly in a fresh session
+- The failure is **not** caused by input line pollution — verified: fresh session with clean input line still fails under rapid cycling
+
+**Recovery**: If CIW keyboard input stops responding but `vcli skill exec` still works, the CIW X11 event queue has overflowed. **Pause for 3-5 seconds** with no X11 operations — the queue drains and input recovers automatically (verified: 3s pause → full recovery). Only if recovery fails after 10s should you restart the Virtuoso process. Do not waste time trying X11-based recovery during the overflow window.
+
+### Stress Test Findings (verified 2026-09-11)
+
+**Concurrency**: Multiple `vcli` processes can run concurrently against the same session without conflicts:
+- 5 parallel `skill exec` calls: all succeed, daemon processes each in ~10ms
+- 3 parallel X11 operations + 3 parallel TCP operations: all 6 succeed
+- Variable assignments persist correctly across concurrent calls (the earlier "concurrent failure" was a test-script sed parsing bug — output values are quoted strings, not bare numbers)
+
+**High-frequency operations** (no delay between calls):
+- 100 rapid `click-rel`: 100/100 success, ~136ms/click
+- 100 rapid `key Escape`: 100/100 success, ~24ms/key
+- Clicks and keys alone do NOT trigger X11 event queue overflow — only the full type+Return cycle does
+- Special keys all work: `ctrl+a`, `ctrl+c`, `ctrl+v`, `alt+Tab`, `shift+a`, `F1`, `F5`, `Escape`, `Return`, `BackSpace`
+
+**Batch efficiency**: `action-x11-batch` with 50 mixed operations completes in ~5ms (10000 ops/s). Use batch for non-interactive operation sequences.
+
+**Resource stability** after stress (100 clicks + 100 keys + 20 rapid type cycles + concurrent calls):
+- Virtuoso RSS: +1MB (747→748MB)
+- No vcli process leaks (0 lingering)
+- sshd count stable (5)
+- CIW fully responsive after 3s recovery pause
+
+**What NOT to do**:
+- Do not run type+Return cycles faster than ~3.5s/cycle in automated loops
+- Do not parse `vcli skill exec` output with `sed 's/.*"output": \([0-9]*\).*/\1/'` — values are JSON strings (`"123"`), not bare numbers. Use `jq -r .output` or a proper JSON parser.
+
+**Screensaver caveat**: On Xfce/Xvnc, `xfce4-screensaver` may cover the full screen (1853x1011), causing `xdotool search --onlyvisible` to return empty while the CIW window is still mapped underneath. Disable with `xset s off && xset -dpms && killall xfce4-screensaver` before automated GUI testing.
+
+**New session CIW default size**: A freshly started Virtuoso CIW is typically 600x200. Resize with `xdotool windowsize <wid> 1200 800` before testing.
+
+**xdotool search caveat on Xvnc**: In some Xvnc configurations, `xdotool search --name ".*"` returns empty even when windows exist, while `xdotool getactivewindow` works. Use Python Xlib window-tree traversal as a fallback to discover the CIW window ID.
+### Remote GUI Program Debugging (verified 2026-09-11)
+
+When debugging external SKILL GUI programs (e.g. from a skill library repo) on a remote Virtuoso session:
+
+**Loading and launching**:
+- Upload the `.il` file to the remote machine (e.g. `/tmp/program.il`)
+- Load via CIW input: `load("/tmp/program.il")` — do NOT use `vcli skill load` (times out on files >50 lines)
+- Launch the form via CIW: `procedureName()` — the form appears as a new top-level window
+- `hiDisplayForm` forms do NOT block CIW input in IC25.1 — you can continue typing while the form is open
+
+**Window discovery on Xvnc** (`xdotool search` returns empty):
+Use Python Xlib window-tree traversal filtering by `WM_CLASS` containing "virtuoso", width>50, height>20.
+
+**Verified GUI programs** (from skill library examples):
+
+| Program | Launch function | Form | Widgets tested | Result |
+|---------|----------------|------|----------------|--------|
+| `ui_color_picker.il` | `ucpCreateColorPicker("title" "red" nil)` | Pick Color (600x72) | 12 radio buttons, OK/Cancel/Apply | Radio selection changes form field value; Apply triggers callback |
+| `ui_dynamic_form.il` | `udfShowLayerReplaceForm()` | Layer Replace Utility (600x176) | 4 radio ops, dynamic fields, Browse | Copy/Replace show Source+Target Layer; Remove shows Source only; none hides both |
+| `ui_table_form.il` | `utfCreateTableForm("title" list(cols) list(rows))` | Test Table (600x87) | Table cells, row selection | Click/double-click selects rows; `hiGetCurrentForm()` returns table form |
+| `ui_multipage_form.il` | `umpCreateTabbedForm("title" list("Tab1" "Tab2"))` | Multi Page (600x63) | Tab headers | Tab clicks switch active page; `umpGetActiveTab(formPair)` returns active tab |
+| `ui_listbox_form.il` | `ulbCreateSingleSelect("title" list(items) nil)` | Select Item (600x87) | List items, scrollbar | Click selects item; `ulbGetSelection(form)` returns selected item (verified "Cherry") |
+| `ui_progress_form.il` | `upfShowProgressForm()` | Working... (600x63) | Progress bar, Cancel | Progress updates; Cancel stops loop |
+| `ui_callback_patterns.il` | `ucpShowCallbackForm()` | UCP Callback Patterns Demo (600x209) | Button, cyclic, toggle, field callbacks | All callback types fire correctly |
+| `ui_progress_bar.il` | `upbCreate("title" maxSteps)` → `upbUpdate(form step msg)` → `upbComplete(form)` | Progress Test (600x63) | Standalone progress bar component | Create/update/complete lifecycle works |
+| `ui_toggle_combo_form.il` | `utcShowSelectionForm("title" list(toggles) list(items) nil)` | Toggle Combo (600x98) | Toggle checkboxes + combo dropdown | Toggle click and combo click operations work |
+| `ui_listbox_browser.il` | `ulbbCreateBrowser(list("lib1" "lib2"))` | Library/Cell Browser (600x148) | Dual list (Library+Cell), OK/Cancel/Defaults/Apply/Help | Click library item, scroll works; cell list empty for fake lib names |
+
+**Programs with known issues (not usable as GUI debug targets)**:
+
+| Program | Issue | Cause |
+|---------|-------|-------|
+| `form_buttons.il` | `fbTest` undefined function | Source file syntax error: unclosed parens at EOF (lines 61, 99) |
+| `form_fields_variable.il` | `ffTest` undefined function | Source file syntax error: unclosed parens at EOF (lines 43, 74, 116) |
+| `form_wizard_utils.il` | `hiCreateAppForm: unrecognized keyword - ?cancelCallback` | IC25.1 compatibility: `?cancelCallback` not supported |
+| `form_auto_resize.il` | No visible window from `frmTest()` | Test function runs but creates/closes form internally; use `frmCreateResizableForm()` directly |
+| `form_modify_callback.il` | No launcher | Utility-only module; no demo form entry point |
+
+**Fixed form name collision**: `ucpCreateColorPicker` uses a hardcoded form name `ucpColorForm`. Calling it twice while the first form is mapped produces `*WARNING* hiDeleteForm: Cannot delete a form that is mapped` and `*WARNING* hiCreateAppForm: Could not delete already created form`. The second call may reuse or fail to create the window. Use unique form names or close (unmap) before recreating.
+
+**Form deletion caveat**: `hiDeleteForm()` fails on mapped (visible) forms with error. Use `hiUnmapForm()` first to hide, then delete. Or close via the Cancel button click.
+
+**Verifying form state via CIW**: After clicking a radio button, read the form field directly: `formName->fieldName->value`. Example: `udfLayerReplaceForm->layerOp->value` returns the selected operation. For listbox: `ulbGetSelection(form)`. For multipage: `umpGetActiveTab(formPair)` — note `hiGetCurrentForm()` may return a different form if another window is active; pass the form variable explicitly.
+
+**Coordinate precision for small forms**:
+- Color picker (600x72): radio buttons ~60px apart, row 1 at y≈25, row 2 at y≈45, buttons at y≈60
+- Dynamic form (600x176): radio at y≈50, Browse at y≈120, OK/Cancel at y≈155
+- Listbox (600x87): items ~15px apart starting at y≈20, OK/Cancel at y≈70
+- Table (600x87): header at y≈15, rows ~15px apart, OK/Cancel at y≈70
+- Estimated coordinates may be off by 1-2 widgets — verify with screenshots and adjust
+
+**CIW input line pollution — CRITICAL FIX (verified 2026-09-11)**:
+Previous method (Escape x3 + wait 0.3s) had **30% failure rate** in 10-cycle loops: residue concatenated with new input (e.g. `cycleVar = 1cycleVar = 6`), causing syntax errors.
+
+**Reliable method (10/10 success)**:
+1. Click input line (y = height - 20), wait 0.5s
+2. Press `Escape`, wait 0.2s
+3. Press `Escape` again, wait 0.2s
+4. Press `ctrl+u` (kill line), wait **0.5s** (critical — shorter wait causes failure)
+5. Type command, wait 1.0s
+6. Press `Return`, wait 1.5s
+7. Verify via `vcli skill exec`
+
+The `ctrl+u` + 0.5s wait is the key difference. Without it, Escape alone does not reliably clear the input line under load.
+
+**Modal form behavior**: `hiDisplayForm` in IC25.1 does NOT block `vcli skill exec` or CIW input. The form stays open while you continue interacting with CIW.
+
+### Long-Run Stability Verification (verified 2026-09-11)
+
+| Test | Result | Duration | Rate |
+|------|--------|----------|------|
+| 10 cycles (old clear method) | 7/10 (70%) | — | — |
+| 10 cycles (fixed clear method) | **10/10 (100%)** | ~43s | 4.3s/cycle |
+| 20 cycles (fixed method) | **20/20 (100%)** | 86s | 4.3s/cycle |
+| **50 cycles (fixed method)** | **50/50 (100%)** | **215s** | **4.3s/cycle** |
+
+**Cumulative: 80 CIW input cycles with 0 failures** using the fixed clear method.
+
+**Resource stability after 50 cycles**:
+- Virtuoso RSS: 748 → 756 MB (+8 MB, stable)
+- vcli processes: 0 (no leaks)
+- sshd connections: 5 (stable)
+- CIW fully responsive, no X11 event queue overflow
+
+### Boundary Condition Tests (verified 2026-09-11)
+
+| Test | Result | Notes |
+|------|--------|-------|
+| Drag operation | ✅ Pass | `drag-rel` on form controls, no crash |
+| Scroll operation | ✅ Pass | `scroll down:3` / `up:2` on listbox |
+| Special chars input | ✅ Pass | `"hello (world) [1+2=3] {a:b}"` returned correctly |
+| Invalid coords (9999,9999) | ✅ Pass | Silently handled, no crash |
+| Negative coords (-100,-100) | ✅ Pass | Silently handled, no crash |
+| Window minimize/restore | ✅ Pass | `skill exec` works while minimized (TCP channel independent of X11) |
+| Rapid key stress (10×Escape, 0.05s) | ✅ Pass | No crash, CIW remains responsive |
+| Empty text type | ✅ Pass | Clear error: `"operation 'type' requires non-empty --text"` |
+| 200-char text input | ✅ Pass | `length()` returns 200 |
+| 500-char command | ⚠️ Partial | type/Return succeed, but `length(x)` returns error — possible CIW input line limit or variable name collision; investigate with shorter variable names |
+
+**Key boundary findings**:
+- **Minimize does NOT affect TCP bridge**: `vcli skill exec` works while CIW window is minimized. X11 operations and TCP bridge are fully independent.
+- **Empty input has explicit error**: vcli rejects empty `--text` with config_error, does not silently no-op.
+- **Out-of-bounds clicks are safe**: Coordinates far outside window bounds do not crash vcli or Virtuoso.
+- **Long text boundary**: 200 chars verified working; 500 chars may hit CIW input line limits. Use `vcli skill exec` for long commands instead of CIW typing.
+- **Process recovery**: Not verified in this test cycle (Virtuoso PID was stable throughout). If Virtuoso restarts, daemon behavior should be tested separately — do not assume auto-reconnect.
+- **Rapid key safety**: 10 Escape keys at 0.05s interval (20 Hz) does not cause X11 event queue overflow. The previously documented overflow requires `type+Return` cycles at <1s, not raw key presses.
+
+### Layout/schematic X11 interaction: cautious by default, explorable on user approval (verified 2026-09-12)
+
+Double-clicking inside a Layout Suite or Schematic Editor window triggers an interactive command that enters a **modal wait state**. This blocks:
+- All subsequent X11 operations on any window (xdotool, vcli action-x11 all timeout)
+- `vcli skill exec` (TCP bridge depends on CIW responsiveness)
+- Cannot be recovered by killing child processes — must manually press Escape in the VNC console
+
+**Default rules**:
+- **Prefer SKILL over X11 clicks** for all layout/schematic operations.
+- **Clicks/double-clicks on form/dialog windows** (hiDisplayForm popups, file browsers, color pickers) are always safe.
+- Single clicks on layout are lower risk than double-clicks but may still trigger select/edit commands.
+- If CIW hangs, the user must go to VNC console and press Escape to cancel the pending command.
+
+**When the user explicitly authorizes layout/schematic X11 exploration**:
+- It is OK to attempt click, double-click, drag, and scroll on layout/schematic windows to discover automation capabilities.
+- Start with low-risk operations (scroll, keyboard shortcuts, single click on empty area).
+- After each operation, verify CIW responsiveness via a quick `vcli skill exec` before proceeding.
+- If a modal dialog appears, press Escape immediately and note the trigger pattern for future avoidance.
+- Record what worked and what hung in this skill doc for future reference.
+- Always have VNC access available as recovery path.
+
+### Concurrent execution note
+
+Virtuoso SKILL interpreter is single-threaded. Concurrent `vcli skill exec` calls arrive in parallel (5 connections within 56ms), but Virtuoso serializes SKILL evaluation. SSH pooling provides transport reuse, not SKILL parallelism.
+
+### Layout Automation via SKILL (verified 2026-09-12)
+
+Layout/schematic windows support a rich set of **safe, programmatic operations via `vcli skill exec`** that avoid the interactive-command trap. These are preferred over X11 clicks for layout debugging.
+
+**Safe SKILL queries (read-only, ~10ms each)**:
+
+```skill
+cv = geGetEditCellView()
+cv~>libName       ; library name
+cv~>cellName      ; cell name
+cv~>viewName      ; view name (layout/schematic)
+length(cv~>shapes) ; shape count
+length(cv~>insts)  ; instance count
+length(cv~>nets)   ; net count
+cv~>bBox           ; bounding box: ((LLx LLy) (URx URy))
+foreach(s cv~>shapes collect s~>layerName)  ; list all layers used
+foreach(i cv~>insts collect i~>instName)     ; list all instances
+length(setof(s cv~>shapes s~>layerName=="NW"))  ; shapes on NW layer
+```
+
+**Programmatic shape creation (verified 2026-09-12, all ~10ms)**:
+
+```skill
+; Draw rectangle: dbCreateRect(cv layerPurpose bbox)
+dbCreateRect(geGetEditCellView() list("SN" "drawing") list(list(0 0) list(10 10)))
+
+; Draw polygon
+dbCreatePolygon(geGetEditCellView() list("AA" "drawing")
+  list(list(0 20) list(10 20) list(5 30)))
+
+; Draw wire/path: dbCreatePath(cv layerPurpose pointList width)
+dbCreatePath(geGetEditCellView() list("CL" "drawing")
+  list(list(0 40) list(30 40) list(30 50)) 0.5)
+
+; Place instance: dbCreateInst(editCv srcCv name origin orient)
+let(((srcCv dbOpenCellView(ddGetObj("FT0001A_SH") "P2P" "layout" "r")))
+  dbCreateInst(geGetEditCellView() srcCv "I0" list(30 20) "R0"))
+
+; Delete / Create net / Save / Close
+dbDeleteObject(nth(0 geGetEditCellView()~>shapes))
+dbCreateNet(geGetEditCellView() "test_net")
+dbSave(geGetEditCellView())
+dbClose(geGetEditCellView())
+```
+
+**SKILL syntax gotchas**:
+
+| Pattern | Wrong | Correct |
+|---------|-------|---------|
+| let bindings | `let((v e) ...)` | `let(((v e)) ...)` double parens |
+| layer+purpose | `dbCreateRect(cv "SN" "drawing" ...)` | `list("SN" "drawing")` one arg |
+| bBox format | `list(xl yl xh yh)` | `list(list(xl yl) list(xh yh))` |
+| shape index | `first(cv~>shapes)` | `nth(0 cv~>shapes)` |
+
+**Available layers**: SN, NSR, PSR, AMO, CO, KV, AA, NW, PC, CL, DNW, PW, NC, CPT, BNP. Purposes: drawing + pin. Unavailable: OM, PP, DRAW, poly, metal1.
+
+**Shape introspection**: `s~>objType` (rect/path/polygon; schematic: line/ellipse/label), `s~>layerName`, `s~>purpose`, `s~>bBox`, `i~>instName`, `n~>name`.
+
+**Schematic vs Layout**: schematic stores all objects in `~>shapes` (192 shapes); `~>insts`/`~>pins` may be empty. Must `xdotool windowactivate <wid>` before `geGetEditCellView()` switches.
+
+**Performance**: 10 dbCreateRect in for loop = 16ms. **Errors**: wrong layer/cell/polygon<3pts error; single-point path silent nil.
+
+**Unavailable functions**: hiSelectObject, hiUpdateView, hiZoomSelect, hiSetEditCellView, hiSetCurrentLayer, dbCreatePin, dbCreateLabel, dbMoveObject, dbCopyObject, dbTransformObject, dbFindCell, dbFindCellView, dbCreateText, dbCreateContact, _ilgRunSkillIde (needs skillDev license).
+
+**Path-specific properties**: `s~>points` returns list of (x y) coordinate pairs; `s~>width` returns path line width. `s~>bBox` includes width margin (e.g. width=1 → bBox expanded by 0.5).
+
+**Region query**: `dbGetOverlaps(cv bbox)` returns all shapes overlapping a bounding box. bbox format: `list(list(xl yl) list(xh yh))`. Useful for DRC-style queries.
+
+**Boundary conditions verified**:
+- Zero-area rect → silently returns nil (no error)
+- path width=0 → error; width must be > 0
+- polygon with 2 points → error; minimum 3 points
+- Thin shapes (0.1 width) → OK
+- Large coordinates (5000+) → OK
+- layer/purpose MUST be passed as `list("layer" "purpose")` single arg; two separate string args → error
+- `setof(s list s~>layerName=="XX")` filters shapes by layer
+
+**Instance creation note**: `dbCreateInst` returns a db object immediately, but `cv~>insts` may still show 0 — the list updates after a refresh/save. Screenshot confirms instance exists visually.
+
+**Performance**: 10/20/50 dbCreateRect in for loop all ≈15ms (linear, no degradation).
+
+### SKILL API Finder
+
+```skill
+startFinder()  ; opens "Cadence SKILL API Finder" window, returns 0
+```
+
+- GUI searchable function reference with natural language query
+- **Limitation**: Finder is a Motif/Xt application — remote X11 input (xdotool/vcli action-x11) cannot type into its search field. Use manually or query via SKILL experimentation instead.
+- Alternative: `_ilgRunSkillIde()` opens SKILL IDE but requires `skillDev` license (not enabled in this environment).
+
+### CIW Menu Bar (window 0x1600013)
+
+| Menu | Relative X | Key items |
+|------|-----------|-----------|
+| File | 30 | New, Open, Import/Export, recent files, Save/Close/Exit |
+| Tools | 75 | Library Manager, ADE suite, SKILL IDE (license-gated), CDF, Technology File Manager |
+| Options | 115 | CIW preferences |
+| RAMIC | 165 | RAMIC tools |
+| Toolkits | 215 | Toolbox plugins |
+| Help | 270 | User Guide, Documentation Library, Search |
+
+Menu click via: `xdotool mousemove --window $CIW <x> 15 && xdotool click 1`, then navigate dropdown.
+
+### F-key mapping on layout window
+
+| Key | Action |
+|-----|--------|
+| F1 | Opens Find/Replace dialog (NOT help) |
+| f | Zoom fit |
+| shift+f | Zoom all |
+
+**Safe X11 keyboard shortcuts on layout window** (verified, no interactive trap):
+
+| Key | Action | Notes |
+|-----|--------|-------|
+| `f` | Zoom fit (fill window) | Safe, immediate |
+| `shift+f` | Zoom all (entire cell) | Safe |
+| `z` | Zoom-in mode | Must press `Escape` immediately after to cancel; do not click |
+| scroll wheel | Pan/zoom | Safe |
+
+**Default-cautious on layout/schematic windows** (safe to explore with user approval):
+- **Double-click** - may trigger modal command; test one at a time and verify CIW between steps
+- **Click-rel** - may trigger select/edit commands; SKILL `hiSelectObject()` is preferred but X11 click can be explored
+- **Drag** - may trigger move/edit; start with small drags on empty canvas
+- **Scroll/keyboard** - always safe (zoom/pan shortcuts verified)
+- **SKILL remains preferred** for production; X11 exploration is for discovering what is possible
+**Recommended layout debugging workflow**:
+1. Query structure via SKILL (`geGetEditCellView()~>shapes`, etc.)
+2. Screenshot via `import -window <wid>` for visual evidence
+3. Navigate via `f` / `shift+f` / scroll (keyboard only)
+4. Select objects via SKILL `hiSelectObject()` (not X11 click)
+5. Measure via SKILL bBox / coordinates
+6. Use SKILL for all modifications; use X11 only for screenshot and safe navigation
+
+
+
+## RSI — Recursive Self-Improvement Knowledge Base
+
+Before trying any SKILL function, **query the RSI database first**. It contains 28,000+ official
+function signatures from Cadence .fnd docs (IC231/IC251/IC618 versions).
+
+### Quick query commands
+
+```bash
+cd .Codex/skills/virtuoso-gui-debug/scripts
+
+# Search by natural language (FTS5 full-text)
+python3 rsi_query.py "draw rectangle"
+python3 rsi_query.py "create path"
+python3 rsi_query.py "select object"
+
+# Exact function lookup (includes known errors)
+python3 rsi_query.py -f dbCreateRect
+
+# List by category
+python3 rsi_query.py -c Custom_Layout
+
+# Prefix search
+python3 rsi_query.py -p dbCreate
+
+# Specify version (default: IC251)
+python3 rsi_query.py -v IC618 -f dbCreateRect
+```
+
+### RSI workflow
+
+1. **Before calling a function**: query RSI to get the exact signature.
+2. **After a failure**: the error is recorded in `error_history`.
+   Next time you query the same function, RSI shows the known error.
+3. **Version awareness**: IC251 uses IC231 as baseline. Discrepancies are recorded.
+
+### Key tables
+
+| Table | Content |
+|-------|---------|
+| `fnd_functions` | 28,045 official signatures (IC231/IC251/IC618) |
+| `functions` | Live-verified functions |
+| `error_history` | Recorded failures (never repeat) |
+| `fnd_functions_fts` | FTS5 full-text index |
+
+## Future Directions
+
+### Zero-screenshot perception (aspirational)
+
+Current GUI debugging relies heavily on screenshots to verify window state. This is slow (network round-trip + image analysis) and fragile (resolution/theme changes).
+
+**Goal**: Eliminate screenshots by reading UI state through structured queries:
+- Window state via X11 properties (WM_NAME, WM_CLASS, geometry, visibility)
+- Form state via SKILL (`formName->fieldName->value`) — already works for verified forms
+- Widget introspection via `hiGetCurrentForm()` and field traversal
+- Screenshot as fallback only, not default verification
+
+**Why**: Structured JSON query returns in ~10ms; screenshot requires render + capture + download + visual analysis (100x slower).
+
+**Steps**:
+1. Build `vcli window introspect` returning window tree + form fields as JSON
+2. Use form field values as verification predicates in scenario DSL
+3. Reserve screenshots for visual regression only
+## Testing
+
+```bash
+python3 -m unittest tests.test_cli tests.test_command_runner \
+    tests.test_live_executor tests.test_local_executor \
+    tests.test_engine tests.test_model
+```
+
+## Schema Reference
+
+See `references/scenario-schema.md` for the complete JSON DSL specification.
+See `references/xdotool-cheatsheet.md` for xdotool command reference (local mode).
+
+## RSI (Recursive Self-Improvement) Knowledge Base
+
+### What it is
+
+A SQLite database (/tmp/skill_db.sqlite3 on remote) that persists discovered SKILL function signatures, avoiding re-experimentation.
+
+**Core principle**: Query the DB before trying a function. Record every mistake. Never repeat.
+
+### Database schema
+
+`sql
+CREATE TABLE functions (
+    id INTEGER PRIMARY KEY,
+    name TEXT UNIQUE,
+    category TEXT,
+    func_exists BOOLEAN,
+    signature TEXT
+);
+`
+
+### Usage
+
+`ash
+sqlite3 /tmp/skill_db.sqlite3 "SELECT signature FROM functions WHERE name='dbCreateRect'"
+sqlite3 /tmp/skill_db.sqlite3 "SELECT name FROM functions WHERE name LIKE 'dbCreate%'"
+`
+
+### Enumeration scripts
+
+- scripts/skill_db.py — DB management
+- scripts/enumerate_functions.py — Pattern-based discovery (439 functions)
+- scripts/probe_signatures.py — Call with nil args to extract signatures
+
+### Verified signatures
+
+| Function | Args | Notes |
+|----------|------|-------|
+| dbCreateRect | 3 | cv layer(list) bbox(list of lists) |
+| dbCreatePolygon | 3 | cv layer(list) points(list of lists) |
+| dbCreatePath | >=4 | cv layer(list) points(...) |
+| dbCreateInst | >=5 | cv cellview instName(...) |
+| dbCreateLabel | 8 | cv layer purpose text bbox just4just7 |
+
+### RSI efficiency
+
+- First run: ~300s to enumerate 439 functions
+- Second run: ~0.02s to query known functions
+- **Speedup: ~15,000x**
+
+### Pitfalls (never repeat)
+
+1. **SQLite reserved word** — column exists -> use unc_exists
+2. **Python 3.6** — no capture_output; use stdout=PIPE
+3. **vcli errors** — errors in errors array, not output
+4. **Motif/Xt input** — Finder search ignores XTest events
+5. **F1 != Help** — opens Find/Replace; use startFinder()
+6. **layer/purpose** — must be list("layer" "purpose")
+7. **let double parens** — always let(((v e)) body)
+8. **Zero-area rect** — silently returns nil; always check bbox
+9. **Dead session** — check port alive before skill exec
+10. **"Unavailable" functions** — dbCreateLabel/Pin/Contact/Text ALL exist
+

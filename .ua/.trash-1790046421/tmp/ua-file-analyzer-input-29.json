@@ -1,0 +1,49 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "docs/aarch64-cross-compile.md",
+      "language": "markdown",
+      "sizeLines": 113,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/architecture-review-20260713-virtuoso-bridge-lite.html",
+      "language": "html",
+      "sizeLines": 117,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "docs/p0a-config-callchain-inventory.md",
+      "language": "markdown",
+      "sizeLines": 173,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/p0a-notes-env-evidence.md",
+      "language": "markdown",
+      "sizeLines": 70,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/vcli-gui-debug-retrospective.html",
+      "language": "html",
+      "sizeLines": 363,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "docs/virtuoso-gui-debug-architecture.html",
+      "language": "html",
+      "sizeLines": 758,
+      "fileCategory": "markup"
+    }
+  ],
+  "batchImportData": {
+    "docs/aarch64-cross-compile.md": [],
+    "docs/architecture-review-20260713-virtuoso-bridge-lite.html": [],
+    "docs/p0a-config-callchain-inventory.md": [],
+    "docs/p0a-notes-env-evidence.md": [],
+    "docs/vcli-gui-debug-retrospective.html": [],
+    "docs/virtuoso-gui-debug-architecture.html": []
+  }
+}

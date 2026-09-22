@@ -1,0 +1,72 @@
+{
+  "batchIndex": 15,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.agents/skills/virtuoso-gui-debug/README.md",
+      "type": "document",
+      "name": "virtuoso-gui-debug README",
+      "filePath": ".agents/skills/virtuoso-gui-debug/README.md",
+      "summary": "Skill directory entry-point README for the virtuoso-gui-debug skill. Describes quick start, executors (xdotool vs vcli), an embedded RSI knowledge base with confidence levels and versioning notes, key pitfalls, testing entry points, and references. 98 lines across 11 sections.",
+      "tags": ["skill", "readme", "virtuoso-gui-debug", "rsi", "xdotool", "vcli"],
+      "complexity": "simple",
+      "languageNotes": "Markdown with H1/H2/H3 hierarchy; sectionCount=11, no code fences."
+    },
+    {
+      "id": "document:.agents/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "document",
+      "name": "virtuoso-gui-debug SKILL spec",
+      "filePath": ".agents/skills/virtuoso-gui-debug/SKILL.md",
+      "summary": "Comprehensive skill specification for automated GUI debugging of Cadence Virtuoso. Covers purpose, prerequisites, SSH/DISPLAY auto-discovery for cloud workstations, a Chinese-language quick guide (连接 Session/发现 DISPLAY/发现窗口/执行 GUI 操作), live-mode and local-mode contracts, output file conventions, allowed operations, constraints, and an 8-section GUI operation playbook (window discovery, coordinate acquisition, click, text input, button submit, close/cancel, modal dialog handling, CIW bootstrap). Includes measured performance optimization guidance (P0/P1/P2) with xdotool baseline latencies, Virtuoso GUI API semantics verified on IC25.1, verified stress/stability/boundary tests from 2026-09-11, layout/schematic X11 interaction policy, layout automation via Cadence SKILL, and a recursive self-improvement (RSI) knowledge base schema. 1105 lines across 74 sections.",
+      "tags": ["skill", "spec", "virtuoso-gui-debug", "x11", "xdotool", "vcli", "cadence", "virtuoso", "rsi", "ciw", "ic25", "performance", "layout", "schematic"],
+      "complexity": "complex",
+      "languageNotes": "Markdown mixed with English and Chinese (zh-Hans) headings; sectionCount=74; dense verification date stamps (2026-09-11, 2026-09-12) anchor measurement claims; references CIW window ids (e.g. 0x1600013) and DISPLAY=:5.0."
+    },
+    {
+      "id": "config:.agents/skills/virtuoso-gui-debug/test_full.json",
+      "type": "config",
+      "name": "GUI debug test fixture (full)",
+      "filePath": ".agents/skills/virtuoso-gui-debug/test_full.json",
+      "summary": "JSON test fixture for the virtuoso-gui-debug skill. Top-level keys: version, task_id, session_id, pid, display, cellview, steps (an ordered array driving the GUI debugger). 66 lines, used as an executable scenario that exercises the SKILL's live-mode contract.",
+      "tags": ["config", "test-fixture", "gui-debug", "virtuoso", "scenario"],
+      "complexity": "moderate",
+      "languageNotes": "JSON object with scalar metadata plus a steps[] array; consumes the live-mode contract documented in SKILL.md."
+    },
+    {
+      "id": "config:.agents/skills/virtuoso-gui-debug/test_scenario.json",
+      "type": "config",
+      "name": "GUI debug test scenario",
+      "filePath": ".agents/skills/virtuoso-gui-debug/test_scenario.json",
+      "summary": "Companion JSON test scenario for virtuoso-gui-debug. Mirrors the schema of test_full.json (version, task_id, session_id, pid, display, cellview, steps) with a smaller or alternate step sequence, providing a lighter-weight regression scenario. 58 lines.",
+      "tags": ["config", "test-fixture", "scenario", "gui-debug", "virtuoso"],
+      "complexity": "moderate",
+      "languageNotes": "JSON object; sibling of test_full.json, follows the same key schema."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/README.md",
+      "target": "document:.agents/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/SKILL.md",
+      "target": "config:.agents/skills/virtuoso-gui-debug/test_full.json",
+      "type": "documents",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/SKILL.md",
+      "target": "config:.agents/skills/virtuoso-gui-debug/test_scenario.json",
+      "type": "documents",
+      "weight": 0.85
+    },
+    {
+      "source": "config:.agents/skills/virtuoso-gui-debug/test_full.json",
+      "target": "config:.agents/skills/virtuoso-gui-debug/test_scenario.json",
+      "type": "documents",
+      "weight": 0.5
+    }
+  ]
+}

@@ -1,0 +1,182 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".claude/workflows/ade-regression.md",
+      "language": "markdown",
+      "sizeLines": 39,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/workflows/analog-design-flow.md",
+      "language": "markdown",
+      "sizeLines": 17,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".codex/hooks.json",
+      "language": "json",
+      "sizeLines": 28,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "language": "yaml",
+      "sizeLines": 24,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".github/scripts/run-skill-tests.sh",
+      "language": "shell",
+      "sizeLines": 75,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".pensieve/knowledge/async-job-lazy-refresh/content.md",
+      "language": "markdown",
+      "sizeLines": 67,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-ic23-ade-window-title/content.md",
+      "language": "markdown",
+      "sizeLines": 59,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-ic23-dbopencellviewbytype/content.md",
+      "language": "markdown",
+      "sizeLines": 117,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-ic23-schcreateinst/content.md",
+      "language": "markdown",
+      "sizeLines": 96,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-osshnl-109/content.md",
+      "language": "markdown",
+      "sizeLines": 90,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-virtuoso-library-not-registered/content.md",
+      "language": "markdown",
+      "sizeLines": 74,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/claude-code-skill-variable-expansion/content.md",
+      "language": "markdown",
+      "sizeLines": 88,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ic23-design-variable-namespaces/content.md",
+      "language": "markdown",
+      "sizeLines": 102,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-ensure-view-bootstrap/content.md",
+      "language": "markdown",
+      "sizeLines": 56,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "language": "markdown",
+      "sizeLines": 130,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-session-types/content.md",
+      "language": "markdown",
+      "sizeLines": 48,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-simulator-mode-api/content.md",
+      "language": "markdown",
+      "sizeLines": 72,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ocean-createnetlist-prerequisites/content.md",
+      "language": "markdown",
+      "sizeLines": 134,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ocean-design-cell-switch/content.md",
+      "language": "markdown",
+      "sizeLines": 101,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ramic-bridge-callback-file-ipc/content.md",
+      "language": "markdown",
+      "sizeLines": 112,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/ratatui-tui-architecture/content.md",
+      "language": "markdown",
+      "sizeLines": 75,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/rust-bin-vs-lib-crate-attrs/content.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/skill-instterms-cons-reversal/content.md",
+      "language": "markdown",
+      "sizeLines": 83,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/skill-sprintf-float-coords/content.md",
+      "language": "markdown",
+      "sizeLines": 32,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/smic-mosfet-terminal-order/content.md",
+      "language": "markdown",
+      "sizeLines": 86,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    ".claude/workflows/ade-regression.md": [],
+    ".claude/workflows/analog-design-flow.md": [],
+    ".codex/hooks.json": [],
+    ".github/dependabot.yml": [],
+    ".github/scripts/run-skill-tests.sh": [],
+    ".pensieve/knowledge/async-job-lazy-refresh/content.md": [],
+    ".pensieve/knowledge/cadence-ic23-ade-window-title/content.md": [],
+    ".pensieve/knowledge/cadence-ic23-dbopencellviewbytype/content.md": [],
+    ".pensieve/knowledge/cadence-ic23-schcreateinst/content.md": [],
+    ".pensieve/knowledge/cadence-osshnl-109/content.md": [],
+    ".pensieve/knowledge/cadence-virtuoso-library-not-registered/content.md": [],
+    ".pensieve/knowledge/claude-code-skill-variable-expansion/content.md": [],
+    ".pensieve/knowledge/ic23-design-variable-namespaces/content.md": [],
+    ".pensieve/knowledge/maestro-ensure-view-bootstrap/content.md": [],
+    ".pensieve/knowledge/maestro-netlist-standalone-workflow/content.md": [],
+    ".pensieve/knowledge/maestro-session-types/content.md": [],
+    ".pensieve/knowledge/maestro-simulator-mode-api/content.md": [],
+    ".pensieve/knowledge/ocean-createnetlist-prerequisites/content.md": [],
+    ".pensieve/knowledge/ocean-design-cell-switch/content.md": [],
+    ".pensieve/knowledge/ramic-bridge-callback-file-ipc/content.md": [],
+    ".pensieve/knowledge/ratatui-tui-architecture/content.md": [],
+    ".pensieve/knowledge/rust-bin-vs-lib-crate-attrs/content.md": [],
+    ".pensieve/knowledge/skill-instterms-cons-reversal/content.md": [],
+    ".pensieve/knowledge/skill-sprintf-float-coords/content.md": [],
+    ".pensieve/knowledge/smic-mosfet-terminal-order/content.md": []
+  }
+}

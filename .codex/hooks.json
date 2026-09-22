@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/dean/Documents/git/virtuoso-cli/.codex/hooks/rust_check.sh'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/dean/Documents/git/virtuoso-cli/.codex/hooks/auto_plot.sh'"
+          },
+          {
+            "type": "command",
+            "command": "'/Users/dean/Documents/git/virtuoso-cli/.codex/hooks/eda_error_capture.sh'"
+          }
+        ]
+      }
+    ]
+  }
+}

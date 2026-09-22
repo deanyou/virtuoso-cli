@@ -1,0 +1,143 @@
+{
+  "batchIndex": 21,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.claude/skills/virtuoso-gui-debug/README.md",
+      "type": "document",
+      "name": "virtuoso-gui-debug README",
+      "filePath": ".claude/skills/virtuoso-gui-debug/README.md",
+      "summary": "Concise entry-point README for the virtuoso-gui-debug skill. Describes the three executors (fake / live / local), quick-start CLI invocations for `vcli` and `scripts/gui_runner.py`, and the Recursive Self-Improvement (RSI) SQLite knowledge base of discovered SKILL functions. Also lists the nine key pitfalls (SQLite reserved words, Python 3.6 subprocess quirks, Motif/Xt ignoring XTest events, F1 semantics, `let` double-parens, zero-area rects, dead-session detection) and points to scenario-schema and xdotool-cheatsheet references.",
+      "tags": [
+        "skill",
+        "virtuoso",
+        "gui-debug",
+        "x11",
+        "xdotool",
+        "vcli",
+        "rsi",
+        "sqlite",
+        "readme",
+        "documentation"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with YAML-like inline content; 98 lines / 11 H1-H2 sections; primarily index/orientation content that defers deep material to SKILL.md."
+    },
+    {
+      "id": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "document",
+      "name": "Virtuoso GUI Debug SKILL spec",
+      "filePath": ".claude/skills/virtuoso-gui-debug/SKILL.md",
+      "summary": "Authoritative skill manifest and operational spec for `virtuoso-gui-debug` (frontmatter + 1105 lines, 74 sections). Defines a strict JSON scenario DSL replayable by fake / live (vcli action-x11 over TCP or SSH) / local (xdotool) executors. Covers SSH etiquette, DISPLAY/PID auto-discovery, live-mode fail-closed contract, allowed operations, the GUI Operation Playbook (window discovery, coordinate acquisition, click, text input, button submit, modal handling, CIW input), performance optimizations measured on Virtuoso IC25.1 (xdotool default, `--direct` default, batched `action-x11`), SKILL API semantics, stress-test findings (verified 2026-09-11), and the RSI SQLite knowledge base with enumeration/probe/verify scripts and confidence levels (verified vs discovered).",
+      "tags": [
+        "skill",
+        "virtuoso",
+        "gui-debug",
+        "x11",
+        "xdotool",
+        "vcli",
+        "json-dsl",
+        "scenario",
+        "ciw",
+        "rsi",
+        "sqlite",
+        "playbook",
+        "ssh",
+        "playbook"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Mixed Chinese/English Markdown with YAML frontmatter (name, description_en/zh, allowed-tools); structured H1/H2/H3 hierarchy with embedded tables, bash code blocks, and empirical 'verified 2026-09-11' annotations. Defines a contract-driven executor model with strict JSON DSL semantics."
+    },
+    {
+      "id": "config:.claude/skills/virtuoso-gui-debug/test_full.json",
+      "type": "config",
+      "name": "virtuoso-gui-debug full test scenario",
+      "filePath": ".claude/skills/virtuoso-gui-debug/test_full.json",
+      "summary": "Sample scenario JSON (DSL v1.0, 7 steps, 66 lines) exercising the broadest mix of executor operations against session `dean-user1-37787` (DISPLAY :5.0, pid 537774). Steps cover VCLI_LOAD (load /tmp/test_load.il and assert `testLoadFunc()==42`), WINDOW_ACTIVATE, CLICK_ABS, DOUBLE_CLICK, SCROLL (down ×2), CIW_INPUT (`2+2` with 10 ms delay, clear_first=true), and VERIFY with a `ciw_eval` predicate. Each step carries a verifier (ciw_eval or window_exists), timeout_seconds, and max_retries=0. Functions as a regression fixture validating the full executor surface area.",
+      "tags": [
+        "skill",
+        "virtuoso",
+        "gui-debug",
+        "scenario",
+        "json-dsl",
+        "test-fixture",
+        "ciw",
+        "xdotool",
+        "regression"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Strict JSON conforming to the scenario schema documented in SKILL.md; top-level keys version, task_id, session_id, pid, display, cellview, steps[]; each step has id, operation, arguments, verifier, timeout_seconds, max_retries."
+    },
+    {
+      "id": "config:.claude/skills/virtuoso-gui-debug/test_scenario.json",
+      "type": "config",
+      "name": "virtuoso-gui-debug optimization test scenario",
+      "filePath": ".claude/skills/virtuoso-gui-debug/test_scenario.json",
+      "summary": "Compact scenario JSON (DSL v1.0, 6 steps, 58 lines) targeting the live executor's performance optimizations on the same session `dean-user1-37787` (DISPLAY :5.0, pid 537774). Steps: WINDOW_ACTIVATE, CLICK_REL at (400,400), KEY `Escape`, SCROLL down ×2 at (400,400), CIW_INPUT `2+2` with 10 ms delay, and a closing VERIFY ciw_eval. Designed as a small, repeatable bench scenario for the P0/P2 optimization work (xdotool-by-default, `--direct`, `action-x11` batching, coordinate caching).",
+      "tags": [
+        "skill",
+        "virtuoso",
+        "gui-debug",
+        "scenario",
+        "json-dsl",
+        "test-fixture",
+        "benchmark",
+        "optimization",
+        "ciw",
+        "scroll"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Strict JSON; same top-level schema as test_full.json but a shorter step list focused on the optimization-loop executor path (CLICK_REL, KEY, SCROLL, CIW)."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.claude/skills/virtuoso-gui-debug/README.md",
+      "target": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "documents",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.claude/skills/virtuoso-gui-debug/README.md",
+      "target": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "config:.claude/skills/virtuoso-gui-debug/test_full.json",
+      "target": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "config:.claude/skills/virtuoso-gui-debug/test_full.json",
+      "target": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "configures",
+      "weight": 0.55
+    },
+    {
+      "source": "config:.claude/skills/virtuoso-gui-debug/test_scenario.json",
+      "target": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "config:.claude/skills/virtuoso-gui-debug/test_scenario.json",
+      "target": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "configures",
+      "weight": 0.55
+    },
+    {
+      "source": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "target": "config:.claude/skills/virtuoso-gui-debug/test_full.json",
+      "type": "configures",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "target": "config:.claude/skills/virtuoso-gui-debug/test_scenario.json",
+      "type": "configures",
+      "weight": 0.6
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "batchIndex": 32,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "type": "document",
+      "name": "SKILL Runtime Refinement Design",
+      "filePath": "docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "summary": "Architecture-spec for centralizing SKILL string-literal escaping, transport/non-nil result semantics, and JSON decoding into a new internal `client::skill_runtime` module sitting between domain commands and `VirtuosoClient::execute_skill()`. Defines four runtime capabilities (string literal, require_transport, require_non_nil, decode_json), a data-flow diagram, migration scope across `src/commands/sim.rs`, `process.rs`, `ocean/mod.rs`, `schematic.rs`, and `maestro.rs`, error-handling rules, TDD test strategy covering runtime unit tests and OCEAN builder regressions, explicit non-goals (no typed SKILL AST, no new CLI commands, no daemon wire changes), and completion criteria requiring a shared decoder/escape path, schematic noun parser removal, and strict Clippy + full test pass.",
+      "tags": ["design", "rust", "skill-runtime", "string-escaping", "json-decoder", "ocean", "process", "sim", "virtuoso-client", "tdd"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown spec primarily in Chinese with embedded pseudo-code, ASCII data-flow block, and bash validation commands; references Rust source paths and function names without including executable code."
+    },
+    {
+      "id": "document:docs/superpowers/specs/2026-08-29-native-remote-transport-design.md",
+      "type": "document",
+      "name": "Native Remote Transport Design",
+      "filePath": "docs/superpowers/specs/2026-08-29-native-remote-transport-design.md",
+      "summary": "Comprehensive design for a pure-Rust russh-based SSH transport running as a hidden local `vcli __transport-daemon` mode, layered atop the existing OpenSSH backend and selected explicitly via `VB_SSH_BACKEND=native`. Documents v1.2.0 delivered status with explicit deltas (SOCKS5/ProxyJump and RAMIC/X11 forwarding deferred), terminology distinguishing transport daemon from `virtuoso-daemon`, `RemoteTransport` trait, `Arc<dyn RemoteTransport>` handoff, connection identity/pooling, channel scheduler with capacity invariant, file transfer via streaming SFTP, reconnect/retry safety, host-key and SSH configuration policy, versioned local IPC protocol with state-file versioning, error model, health/observability, dependency boundary (no Python/Paramiko/libssh2/system SSH), testing topology with contract tests, and delivery sequence table. Calls out Linux/macOS/Windows integration matrices.",
+      "tags": ["design", "rust", "russh", "ssh", "transport-daemon", "ipc", "channel-scheduler", "sftp", "socks5", "feature-gated", "v1.2.0"],
+      "complexity": "complex",
+      "languageNotes": "English-language architecture spec with extensive Markdown tables, code-fence references to Cargo features and CLI flags, and per-step delivery tracking; largest file in the batch at 617 lines / 41 sections."
+    },
+    {
+      "id": "document:docs/superpowers/specs/2026-08-29-upstream-hardening-design.md",
+      "type": "document",
+      "name": "Upstream Hardening Design",
+      "filePath": "docs/superpowers/specs/2026-08-29-upstream-hardening-design.md",
+      "summary": "Tight hardening spec covering three concerns after a Maestro upstream pull: (1) Maestro command safety via a local POSIX shell-word quoting procedure applied to `netPath` inside the generated SKILL program, preserving `dec=<N>` injection and forbidding `/tmp/vcli_dec_skill.txt` diagnostic writes; (2) Clippy gate restoration by replacing seven string parameters of `LayoutOps::xstream_out` with `XstreamOutRequest<'a>`, using `LibraryOps` unit struct directly, and collapsing two boolean equality / nested empty-window conditions; (3) a strict opt-in PSF access layer (`PsfDataset`, `read_psf_ascii_strict`, `find_exact_result_file`, `require_scalar/vector/frequency_hz`) with strict path-containment and explicit error mapping (`NotFound`, `Config`, `Execution`, `Io`). Validation enumerates test-first acceptance via `cargo test --lib client::maestro_ops`, `cargo test --lib spectre::parsers`, full `cargo test`, strict Clippy, and `cargo fmt --check`.",
+      "tags": ["design", "rust", "upstream", "hardening", "maestro", "clippy", "psf", "spectre", "shell-injection", "tdd"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown design spec in English with embedded Rust API signatures inside a fenced code block; concise at 60 lines with 6 sections, references existing public function names and validation shell commands."
+    },
+    {
+      "id": "document:docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md",
+      "type": "document",
+      "name": "Virtuoso GUI Real Executor Design",
+      "filePath": "docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md",
+      "summary": "Design for wiring `.claude/skills/virtuoso-gui-debug/` to a live Virtuoso session through `vcli`, SSH, and X11 while enforcing a Rust-side safety boundary. Reports remote-probe findings (session `dean-user1-34929`, port `34929`, cached PID zero, X11 scratch permission failure on `/tmp`). Defines a Rust `vcli window` X11 boundary exposing fixed-semantic DSL operations, a Python `LiveExecutor` paired with the existing `FakeExecutor` (using an injected `CommandRunner`, never direct ssh/xdotool/xprop/shell), CLI flags `--executor live --vcli PATH --ssh-host HOST`, a `precheck` sequence validating session/PID/DISPLAY/unique window/exclusive DISPLAY lock, a `baseline/execute/verify/recover` flow with TYPE-log redaction, collaboration rules for the remote `virtuoso-skill-dev` skill, closed-fail failure strategy, and a phased smoke test starting from read-only checks before any keystroke/text/click/drag is permitted.",
+      "tags": ["design", "gui", "x11", "xdotool", "ssh", "rust", "python", "live-executor", "security", "redaction", "virtuoso-gui-debug"],
+      "complexity": "moderate",
+      "languageNotes": "Markdown design written primarily in Chinese with English CLI flags, function names, and host identifiers; references skills under `.claude/skills/virtuoso-gui-debug/` and a remote `virtuoso-skill-dev` that is not present in the local skill catalog."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "target": "document:docs/superpowers/plans/2026-07-13-skill-runtime.md",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-08-29-upstream-hardening-design.md",
+      "target": "document:docs/superpowers/plans/2026-08-29-upstream-hardening.md",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md",
+      "target": "document:docs/superpowers/plans/2026-09-01-virtuoso-gui-live-executor.md",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "target": "document:docs/superpowers/specs/2026-08-29-native-remote-transport-design.md",
+      "type": "related",
+      "weight": 0.4
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-08-29-upstream-hardening-design.md",
+      "target": "document:docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "type": "related",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md",
+      "target": "document:docs/superpowers/specs/2026-08-29-native-remote-transport-design.md",
+      "type": "related",
+      "weight": 0.6
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md",
+      "target": "document:docs/superpowers/specs/2026-08-29-upstream-hardening-design.md",
+      "type": "related",
+      "weight": 0.4
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "target": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "related",
+      "weight": 0.3
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md",
+      "target": "document:.claude/skills/virtuoso-gui-debug/SKILL.md",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-08-29-native-remote-transport-design.md",
+      "target": "document:.claude/skills/tunnel-connect/SKILL.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "target": "document:.claude/skills/skill-exec/SKILL.md",
+      "type": "related",
+      "weight": 0.6
+    }
+  ]
+}

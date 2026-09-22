@@ -1,0 +1,262 @@
+{
+  "batchIndex": 10,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "type": "file",
+      "name": "skill_db.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "SQLite-backed persistent knowledge store for the Virtuoso SKILL API (virtuoso-gui-debug skill). Defines DB_PATH and exposes connection management plus CRUD helpers: get_db (lazy schema creation for functions, error_history, layers, shapes, fnd_functions, param_examples tables), record_function, record_failure, has_known_failure, get_known_functions, get_function, record_layer, record_shape_property, record_param_example, get_param_examples, and stats. Each writer stamps an ISO timestamp and commits; readers project sqlite3.Row rows into dicts. Forms the persistence layer every other script in this skill imports.",
+      "tags": ["python", "sqlite", "database", "skill-internal", "knowledge-store", "persistence", "virtuoso-gui-debug"],
+      "complexity": "moderate",
+      "languageNotes": "Python 3 with stdlib sqlite3 only; uses Path for filesystem layout, dict-row projection via sqlite3.Row. No third-party deps. ~215 lines, 11 functions, no classes."
+    },
+    {
+      "id": "function:skill_db.py:get_db",
+      "type": "function",
+      "name": "get_db",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Opens (creating if needed) the SQLite database at DB_PATH and ensures the full schema (functions, error_history, layers, shapes, fnd_functions, param_examples) exists via idempotent CREATE TABLE IF NOT EXISTS statements. Returns a connection with row_factory=sqlite3.Row.",
+      "tags": ["python", "sqlite", "schema-init"],
+      "complexity": "moderate",
+      "languageNotes": "Lines 19-66; calls sqlite3.connect, conn.execute (x4), conn.commit."
+    },
+    {
+      "id": "function:skill_db.py:record_function",
+      "type": "function",
+      "name": "record_function",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Inserts or updates a row in the functions table for a discovered SKILL function, splitting the dotted name into category prefix and writing existence flag, signature, description, notes, and a current ISO timestamp.",
+      "tags": ["python", "sqlite", "upsert", "functions"],
+      "complexity": "simple",
+      "languageNotes": "Lines 69-85; ~17 lines, single INSERT OR REPLACE."
+    },
+    {
+      "id": "function:skill_db.py:record_failure",
+      "type": "function",
+      "name": "record_failure",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Logs a probe failure into error_history with error_type, error_message, and an ISO timestamp, used to track which functions are known broken so future runs skip them.",
+      "tags": ["python", "sqlite", "error-tracking"],
+      "complexity": "simple",
+      "languageNotes": "Lines 88-94; single INSERT."
+    },
+    {
+      "id": "function:skill_db.py:has_known_failure",
+      "type": "function",
+      "name": "has_known_failure",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Returns the most recent unresolved error_history row for a given function_name (fixed=0) or None if there is no open failure. Used to short-circuit re-probing of broken functions.",
+      "tags": ["python", "sqlite", "query"],
+      "complexity": "simple",
+      "languageNotes": "Lines 97-104; SELECT with LIMIT 1, dict projection."
+    },
+    {
+      "id": "function:skill_db.py:get_known_functions",
+      "type": "function",
+      "name": "get_known_functions",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Lists known-working SKILL functions. Overload: with a category argument returns rows for that category only; without it returns all func_exists=1 rows ordered by category, name. Each row is projected to a dict.",
+      "tags": ["python", "sqlite", "query"],
+      "complexity": "simple",
+      "languageNotes": "Lines 107-116; two SELECT branches based on whether category is provided."
+    },
+    {
+      "id": "function:skill_db.py:record_param_example",
+      "type": "function",
+      "name": "record_param_example",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Records a working example value for a parameter of a SKILL function, incrementing its success_count via a conditional UPDATE (or inserting a new row) so frequently-successful examples bubble to the top of get_param_examples results.",
+      "tags": ["python", "sqlite", "upsert", "examples"],
+      "complexity": "moderate",
+      "languageNotes": "Lines 149-168; ~20 lines combining UPDATE-then-INSERT and a trailing commit."
+    },
+    {
+      "id": "function:skill_db.py:stats",
+      "type": "function",
+      "name": "stats",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "summary": "Aggregates row counts across all tables (functions, functions where func_exists=1, drawable layers, working shapes, fnd_functions, unresolved error_history) and formats them as a multi-line summary string with str() casts.",
+      "tags": ["python", "sqlite", "reporting"],
+      "complexity": "simple",
+      "languageNotes": "Lines 191-207; six COUNT(*) SELECTs and string assembly."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "type": "file",
+      "name": "enumerate_functions.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "summary": "Discovers SKILL functions by name pattern for the virtuoso-gui-debug skill. Generates candidate names from prefix x entity combinations (build_candidates), probes each candidate by invoking `name()` via vcli skill exec (test_function, classifies 'undefined' vs arg-count error responses), and orchestrates a filtered run with optional --session and --prefix CLI args (run_enumeration). Every successful probe is recorded through skill_db.record_function, while known-broken functions are skipped via has_known_failure.",
+      "tags": ["python", "skill-script", "discovery", "subprocess", "virtuoso-gui-debug"],
+      "complexity": "complex",
+      "languageNotes": "Python 3 script using subprocess.run to shell out to vcli, json.loads to parse responses, and argparse for CLI. Imports get_db/record_function/record_layer/record_shape_property from sibling skill_db. ~157 lines, 3 functions, no classes."
+    },
+    {
+      "id": "function:enumerate_functions.py:test_function",
+      "type": "function",
+      "name": "test_function",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "summary": "Calls a single SKILL function name via vcli skill exec with no args, parses the JSON envelope, classifies the response (undefined function vs arg-count error vs generic failure), and lower-cases a combined stdout+stderr snippet for downstream matching. Returns a JSON-friendly result tuple/dict.",
+      "tags": ["python", "subprocess", "probe", "classification"],
+      "complexity": "moderate",
+      "languageNotes": "Lines 62-109; ~48 lines, subprocess + JSON parsing, multiple decision branches."
+    },
+    {
+      "id": "function:enumerate_functions.py:run_enumeration",
+      "type": "function",
+      "name": "run_enumeration",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "summary": "Driver that opens the DB, builds the candidate list (optionally filtered by prefix), iterates with progress reporting, calls test_function for each candidate, and persists results through record_function. Prints progress counts at intervals and a final summary.",
+      "tags": ["python", "orchestration", "cli"],
+      "complexity": "moderate",
+      "languageNotes": "Lines 112-143; ~32 lines, the entrypoint function for the script."
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "type": "file",
+      "name": "probe_signatures.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "summary": "Reverse-engineers SKILL function argument counts by invoking each known function with 0..5 nil arguments and parsing the error message to recover the expected arity and a cleaned signature string. Wraps a per-function probe (probe_signature) and a batch driver (run_signature_probe) that reads the candidate list from skill_db.get_known_functions, threads Popen subprocess calls with a short timeout, and stores results back via skill_db.record_function.",
+      "tags": ["python", "skill-script", "signature-probe", "subprocess", "virtuoso-gui-debug"],
+      "complexity": "moderate",
+      "languageNotes": "Python 3 using subprocess.Popen + communicate, re.search for arity regex, and sqlite3 rows via skill_db. ~94 lines, 2 functions, no classes."
+    },
+    {
+      "id": "function:probe_signatures.py:probe_signature",
+      "type": "function",
+      "name": "probe_signature",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "summary": "Calls a single SKILL function with 0..5 nil arguments via vcli, collects the resulting error messages, regex-extracts the expected argument count, and returns (arg_count, signature) or (None, None) when no signal is recoverable.",
+      "tags": ["python", "subprocess", "regex", "probe"],
+      "complexity": "moderate",
+      "languageNotes": "Lines 16-57; ~42 lines, Popen + communicate + re.search + int coercion."
+    },
+    {
+      "id": "function:probe_signatures.py:run_signature_probe",
+      "type": "function",
+      "name": "run_signature_probe",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "summary": "Batch driver: loads candidate functions from skill_db (filtered by --limit), calls probe_signature on each, aggregates results into a per-category signature summary, and persists updated records back through record_function. Prints per-stage progress and totals.",
+      "tags": ["python", "orchestration", "aggregation"],
+      "complexity": "moderate",
+      "languageNotes": "Lines 60-87; ~28 lines, the script's entrypoint."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.py:get_db",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.py:record_function",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.py:record_failure",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.py:has_known_failure",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.py:get_known_functions",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.py:record_param_example",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "target": "function:skill_db.py:stats",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "target": "function:enumerate_functions.py:test_function",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "target": "function:enumerate_functions.py:run_enumeration",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "target": "function:probe_signatures.py:probe_signature",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "target": "function:probe_signatures.py:run_signature_probe",
+      "type": "contains",
+      "weight": 1.0
+    },
+    {
+      "source": "function:enumerate_functions.py:run_enumeration",
+      "target": "function:skill_db.py:get_db",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "function:enumerate_functions.py:run_enumeration",
+      "target": "function:skill_db.py:record_function",
+      "type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "function:probe_signatures.py:run_signature_probe",
+      "target": "function:skill_db.py:get_db",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "function:probe_signatures.py:run_signature_probe",
+      "target": "function:skill_db.py:get_known_functions",
+      "type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "function:probe_signatures.py:run_signature_probe",
+      "target": "function:skill_db.py:record_function",
+      "type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "function:probe_signatures.py:run_signature_probe",
+      "target": "function:probe_signatures.py:probe_signature",
+      "type": "calls",
+      "weight": 1.0
+    }
+  ]
+}

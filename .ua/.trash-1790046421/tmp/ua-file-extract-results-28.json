@@ -1,0 +1,1195 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 8,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 8,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 8
+    }
+  },
+  "results": [
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 167,
+      "nonEmptyLines": 129,
+      "sections": [
+        {
+          "heading": "virtuoso-cli — Agent Guide",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Build & Test",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "Source Layout",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Critical Invariants",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "`VirtuosoResult` has two layers — always use `skill_ok()`",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "Error propagation — `VirtuosoError`, not `anyhow`",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "Security",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "Adding a New Command",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Binary vs Script boundary",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "Session Files",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "Three-Host Model (Local → Jump → Compute)",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "Environment Variables",
+          "level": 2,
+          "line": 142
+        },
+        {
+          "heading": "GUI Debugging",
+          "level": 2,
+          "line": 152
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "CHANGELOG.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 1022,
+      "nonEmptyLines": 865,
+      "sections": [
+        {
+          "heading": "Changelog",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "[Unreleased]",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 7
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 15
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "Deprecated",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "[1.3.4] - 2026-09-04",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "[1.3.3] - 2026-09-04",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "Tests",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "[1.3.2] - 2026-09-04",
+          "level": 2,
+          "line": 130
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 138
+        },
+        {
+          "heading": "Internal",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "[1.3.1] - 2026-09-04",
+          "level": 2,
+          "line": 175
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "[1.3.0] - 2026-09-03",
+          "level": 2,
+          "line": 213
+        },
+        {
+          "heading": "Added (X11 GUI automation)",
+          "level": 3,
+          "line": 223
+        },
+        {
+          "heading": "Added (virtuoso-gui-debug skill)",
+          "level": 3,
+          "line": 261
+        },
+        {
+          "heading": "Added (CI / build / release)",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 288
+        },
+        {
+          "heading": "Changed (dependencies)",
+          "level": 3,
+          "line": 313
+        },
+        {
+          "heading": "Changed (docs)",
+          "level": 3,
+          "line": 326
+        },
+        {
+          "heading": "[1.2.0] - 2026-09-01",
+          "level": 2,
+          "line": 334
+        },
+        {
+          "heading": "Added (native backend, single-hop)",
+          "level": 3,
+          "line": 345
+        },
+        {
+          "heading": "Added (diagnostics)",
+          "level": 3,
+          "line": 382
+        },
+        {
+          "heading": "Added (CI)",
+          "level": 3,
+          "line": 391
+        },
+        {
+          "heading": "Changed (README)",
+          "level": 3,
+          "line": 407
+        },
+        {
+          "heading": "Design",
+          "level": 3,
+          "line": 417
+        },
+        {
+          "heading": "[1.1.2] - 2026-09-01",
+          "level": 2,
+          "line": 423
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 431
+        },
+        {
+          "heading": "Changed (test infrastructure)",
+          "level": 3,
+          "line": 454
+        },
+        {
+          "heading": "[1.1.1] - 2026-08-31",
+          "level": 2,
+          "line": 464
+        },
+        {
+          "heading": "Added (from `main`, missing in `1.1.0`)",
+          "level": 3,
+          "line": 470
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 475
+        },
+        {
+          "heading": "[1.1.0] - 2026-08-31",
+          "level": 2,
+          "line": 480
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 482
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 496
+        },
+        {
+          "heading": "[1.0.0] - 2026-08-29",
+          "level": 2,
+          "line": 509
+        },
+        {
+          "heading": "[0.4.0-alpha.11] - 2026-06-18",
+          "level": 2,
+          "line": 514
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 516
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 535
+        },
+        {
+          "heading": "Borrowed from virtuoso-bridge-lite",
+          "level": 3,
+          "line": 539
+        },
+        {
+          "heading": "[0.4.0-alpha.10] - 2026-06-13",
+          "level": 2,
+          "line": 544
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 546
+        },
+        {
+          "heading": "Tests",
+          "level": 3,
+          "line": 572
+        },
+        {
+          "heading": "[0.4.0-alpha.9] - 2026-06-03",
+          "level": 2,
+          "line": 582
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 584
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 601
+        },
+        {
+          "heading": "Security",
+          "level": 3,
+          "line": 616
+        },
+        {
+          "heading": "Tests",
+          "level": 3,
+          "line": 623
+        },
+        {
+          "heading": "[0.4.0-alpha.8] - 2026-06-03",
+          "level": 2,
+          "line": 634
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 636
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 653
+        },
+        {
+          "heading": "[0.4.0-alpha.7] - 2026-06-02",
+          "level": 2,
+          "line": 669
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 671
+        },
+        {
+          "heading": "Tests",
+          "level": 3,
+          "line": 693
+        },
+        {
+          "heading": "[0.4.0-alpha.6] - 2026-06-02",
+          "level": 2,
+          "line": 701
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 703
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 727
+        },
+        {
+          "heading": "[0.4.0-alpha.5] - 2026-06-01",
+          "level": 2,
+          "line": 732
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 734
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 771
+        },
+        {
+          "heading": "Security",
+          "level": 3,
+          "line": 791
+        },
+        {
+          "heading": "Tests",
+          "level": 3,
+          "line": 798
+        },
+        {
+          "heading": "[0.3.18] - 2026-05-01",
+          "level": 2,
+          "line": 805
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 807
+        },
+        {
+          "heading": "[0.3.17] - 2026-05-01",
+          "level": 2,
+          "line": 814
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 816
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 819
+        },
+        {
+          "heading": "[0.3.16] - 2026-05-01",
+          "level": 2,
+          "line": 824
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 826
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 830
+        },
+        {
+          "heading": "[0.3.15] - 2026-05-01",
+          "level": 2,
+          "line": 833
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 835
+        },
+        {
+          "heading": "[0.3.14] - 2026-04-30",
+          "level": 2,
+          "line": 838
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 840
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 843
+        },
+        {
+          "heading": "[0.3.13] - 2026-04-29",
+          "level": 2,
+          "line": 847
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 849
+        },
+        {
+          "heading": "[0.3.12] - 2026-04-27",
+          "level": 2,
+          "line": 855
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 857
+        },
+        {
+          "heading": "[0.3.11] - 2026-04-26",
+          "level": 2,
+          "line": 860
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 862
+        },
+        {
+          "heading": "[0.3.10] - 2026-04-26",
+          "level": 2,
+          "line": 866
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 868
+        },
+        {
+          "heading": "[0.3.9] - 2026-04-26",
+          "level": 2,
+          "line": 872
+        },
+        {
+          "heading": "Refactored",
+          "level": 3,
+          "line": 874
+        },
+        {
+          "heading": "[0.3.8] - 2026-04-25",
+          "level": 2,
+          "line": 880
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 882
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 889
+        },
+        {
+          "heading": "Removed",
+          "level": 3,
+          "line": 892
+        },
+        {
+          "heading": "[0.3.7] - 2026-04-25",
+          "level": 2,
+          "line": 897
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 899
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 906
+        },
+        {
+          "heading": "[0.3.6] - 2026-04-25",
+          "level": 2,
+          "line": 911
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 913
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 916
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 919
+        },
+        {
+          "heading": "[0.3.5] - 2026-04-24",
+          "level": 2,
+          "line": 922
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 924
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 929
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 936
+        },
+        {
+          "heading": "[0.3.4] - 2026-04-24",
+          "level": 2,
+          "line": 940
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 942
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 945
+        },
+        {
+          "heading": "[0.3.0] - 2026-04-19",
+          "level": 2,
+          "line": 949
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 951
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 957
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 960
+        },
+        {
+          "heading": "[0.2.0] - 2026-04-18",
+          "level": 2,
+          "line": 963
+        },
+        {
+          "heading": "Changed",
+          "level": 3,
+          "line": 965
+        },
+        {
+          "heading": "[0.1.5] - 2026-04-15",
+          "level": 2,
+          "line": 969
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 971
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 975
+        },
+        {
+          "heading": "Refactored",
+          "level": 3,
+          "line": 980
+        },
+        {
+          "heading": "[0.1.4] - 2026-04-15",
+          "level": 2,
+          "line": 984
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 986
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 993
+        },
+        {
+          "heading": "[0.1.3] - 2026-04-15",
+          "level": 2,
+          "line": 998
+        },
+        {
+          "heading": "Fixed",
+          "level": 3,
+          "line": 1000
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 1004
+        },
+        {
+          "heading": "Dependencies",
+          "level": 3,
+          "line": 1008
+        },
+        {
+          "heading": "[0.1.2] - 2026-04-13",
+          "level": 2,
+          "line": 1011
+        },
+        {
+          "heading": "Added",
+          "level": 3,
+          "line": 1013
+        },
+        {
+          "heading": "[0.1.1] - Previous release",
+          "level": 2,
+          "line": 1020
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 126
+      }
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 145,
+      "nonEmptyLines": 106,
+      "sections": [
+        {
+          "heading": "virtuoso-cli — 开发指南",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "语言",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "角色",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "关键不变量（必读）",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "`VirtuosoResult` 两层含义",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "错误传播",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "安全红线",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "使用 skills，不要造轮子",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "项目细节（按需读源码，勿在此重复）",
+          "level": 2,
+          "line": 72
+        },
+        {
+          "heading": "主程序 vs Skill 的归属原则",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "固化进主程序（binary）",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "写成 Skill",
+          "level": 3,
+          "line": 106
+        },
+        {
+          "heading": "灰色地带的裁决",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "Skill Script 的位置约定",
+          "level": 3,
+          "line": 126
+        },
+        {
+          "heading": "添加新命令（项目特定工作流）",
+          "level": 2,
+          "line": 139
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "Cargo.toml",
+      "language": "toml",
+      "fileCategory": "config",
+      "totalLines": 83,
+      "nonEmptyLines": 76,
+      "sections": [
+        {
+          "heading": "package",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "[[bin]]",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "[[bin]]",
+          "level": 1,
+          "line": 17
+        },
+        {
+          "heading": "[[bin]]",
+          "level": 1,
+          "line": 21
+        },
+        {
+          "heading": "features",
+          "level": 1,
+          "line": 26
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 36
+        },
+        {
+          "heading": "dev-dependencies",
+          "level": 1,
+          "line": 67
+        },
+        {
+          "heading": "profile.release",
+          "level": 2,
+          "line": 80
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 1109,
+      "nonEmptyLines": 878,
+      "sections": [
+        {
+          "heading": "vcli — Virtuoso CLI",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "English",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Overview",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "Key Features",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "Installation",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Multi-user / shared install",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "System Dependencies",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "Quick Start",
+          "level": 3,
+          "line": 126
+        },
+        {
+          "heading": "Multi-Session Architecture",
+          "level": 3,
+          "line": 267
+        },
+        {
+          "heading": "Command Reference",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "Configuration",
+          "level": 3,
+          "line": 329
+        },
+        {
+          "heading": "SSH Remote Connection Setup",
+          "level": 3,
+          "line": 349
+        },
+        {
+          "heading": "A. Remote-side configuration (on the compute server)",
+          "level": 4,
+          "line": 355
+        },
+        {
+          "heading": "B. Local-host configuration (on your workstation)",
+          "level": 4,
+          "line": 376
+        },
+        {
+          "heading": "C. Connect with vcli",
+          "level": 4,
+          "line": 402
+        },
+        {
+          "heading": "SSH Backend Selection",
+          "level": 3,
+          "line": 470
+        },
+        {
+          "heading": "Capability matrix (current)",
+          "level": 4,
+          "line": 499
+        },
+        {
+          "heading": "GUI Debugging",
+          "level": 3,
+          "line": 519
+        },
+        {
+          "heading": "Window commands",
+          "level": 4,
+          "line": 523
+        },
+        {
+          "heading": "virtuoso-gui-debug skill",
+          "level": 4,
+          "line": 541
+        },
+        {
+          "heading": "Multi-method operation matrix (validated on IC25.1)",
+          "level": 4,
+          "line": 550
+        },
+        {
+          "heading": "Modal dialog handling",
+          "level": 4,
+          "line": 561
+        },
+        {
+          "heading": "Quick GUI debug loop",
+          "level": 4,
+          "line": 565
+        },
+        {
+          "heading": "How It Works",
+          "level": 3,
+          "line": 579
+        },
+        {
+          "heading": "中文",
+          "level": 2,
+          "line": 610
+        },
+        {
+          "heading": "简介",
+          "level": 3,
+          "line": 617
+        },
+        {
+          "heading": "核心特性",
+          "level": 3,
+          "line": 621
+        },
+        {
+          "heading": "安装",
+          "level": 3,
+          "line": 647
+        },
+        {
+          "heading": "多用户 / 共享安装",
+          "level": 3,
+          "line": 669
+        },
+        {
+          "heading": "系统依赖",
+          "level": 3,
+          "line": 702
+        },
+        {
+          "heading": "快速开始",
+          "level": 3,
+          "line": 718
+        },
+        {
+          "heading": "多 Session 工作原理",
+          "level": 3,
+          "line": 810
+        },
+        {
+          "heading": "命令参考",
+          "level": 3,
+          "line": 822
+        },
+        {
+          "heading": "配置说明",
+          "level": 3,
+          "line": 867
+        },
+        {
+          "heading": "SSH 远程连接配置",
+          "level": 3,
+          "line": 887
+        },
+        {
+          "heading": "SSH 后端选择",
+          "level": 3,
+          "line": 965
+        },
+        {
+          "heading": "能力矩阵（当前）",
+          "level": 4,
+          "line": 994
+        },
+        {
+          "heading": "GUI 调试",
+          "level": 3,
+          "line": 1014
+        },
+        {
+          "heading": "窗口命令",
+          "level": 4,
+          "line": 1020
+        },
+        {
+          "heading": "virtuoso-gui-debug 技能",
+          "level": 4,
+          "line": 1038
+        },
+        {
+          "heading": "多方法操作矩阵（IC25.1 真机验证）",
+          "level": 4,
+          "line": 1047
+        },
+        {
+          "heading": "模态对话框处理",
+          "level": 4,
+          "line": 1058
+        },
+        {
+          "heading": "GUI 调试快速循环",
+          "level": 4,
+          "line": 1062
+        },
+        {
+          "heading": "工作原理",
+          "level": 3,
+          "line": 1076
+        },
+        {
+          "heading": "License / 许可证",
+          "level": 2,
+          "line": 1107
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 45
+      }
+    },
+    {
+      "path": "audit.toml",
+      "language": "toml",
+      "fileCategory": "config",
+      "totalLines": 34,
+      "nonEmptyLines": 32,
+      "sections": [
+        {
+          "heading": "advisories",
+          "level": 1,
+          "line": 14
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "path": "install.sh",
+      "language": "shell",
+      "fileCategory": "script",
+      "totalLines": 133,
+      "nonEmptyLines": 112,
+      "functions": [
+        {
+          "name": "die",
+          "startLine": 37,
+          "endLine": 37,
+          "params": []
+        },
+        {
+          "name": "usage",
+          "startLine": 39,
+          "endLine": 42,
+          "params": []
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "setup-virtuoso-tmux.sh",
+      "language": "shell",
+      "fileCategory": "script",
+      "totalLines": 53,
+      "nonEmptyLines": 45,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,216 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [
+    "docs/architecture-review-20260713-virtuoso-bridge-lite.html",
+    "docs/vcli-gui-debug-retrospective.html",
+    "docs/virtuoso-gui-debug-architecture.html"
+  ],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 3,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 3
+    }
+  },
+  "results": [
+    {
+      "path": "docs/aarch64-cross-compile.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 113,
+      "nonEmptyLines": 84,
+      "sections": [
+        {
+          "heading": "aarch64 Cross-Compile Setup",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "Why a wrapper is needed",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "The \"cannot find -lgcc_s\" trap",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Rebuilding the sysroot from scratch",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "What was *not* needed",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "Status",
+          "level": 2,
+          "line": 105
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/p0a-config-callchain-inventory.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 173,
+      "nonEmptyLines": 131,
+      "sections": [
+        {
+          "heading": "P0-A · 配置调用链盘点（Config Call-Chain Inventory）",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. 现状问题",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "2. 生产路径上的配置重读入口",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "3. 结论：改造面与顺序",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "4. 已完成（本阶段）",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "5. CommandContext 迁移进度（P0-A 进行中）",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "5.1 tunnel 命令族二轮审阅修复（本地回退 / attach 归属 / profile 参数）",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "5.2 tunnel 命令族三轮审阅修复（默认端口非约束 / 转发成功证明 / 部署-尚未就绪）",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "5.3 四轮审阅修复（转发持有者证明 / ControlMaster 禁用 / restart 语义 / digest 补字段）",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "5.4 四轮修复的复检加固（本轮，代码已改、未提交）",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "6. 整体方案状态（2026-09-08 更新）",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "已合并入 main",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "部分交付（核心已合入，完整语义待补）",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "进行中",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "待实现（按优先级）",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "独立任务（可单独排队）",
+          "level": 3,
+          "line": 165
+        },
+        {
+          "heading": "7. 本地环境已知问题（不构成合并阻塞）",
+          "level": 2,
+          "line": 170
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/p0a-notes-env-evidence.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 70,
+      "nonEmptyLines": 53,
+      "sections": [
+        {
+          "heading": "P0-A · 环境问题证据记录（未定论）",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. streaming 管道测试偶发失败（`transport::ssh`）",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "2. 文件描述符上限",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "3. `cargo fmt` 段错误（未解决）",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "4. 后续建议（不自动执行）",
+          "level": 2,
+          "line": 65
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    }
+  ]
+}

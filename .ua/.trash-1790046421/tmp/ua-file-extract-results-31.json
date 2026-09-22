@@ -1,0 +1,223 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 4,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 4
+    }
+  },
+  "results": [
+    {
+      "path": "docs/superpowers/plans/2026-07-13-skill-runtime.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 398,
+      "nonEmptyLines": 281,
+      "sections": [
+        {
+          "heading": "SKILL Runtime Implementation Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "文件结构",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Task 1: SKILL string literal",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Task 2: transport/non-nil 结果语义",
+          "level": 3,
+          "line": 92
+        },
+        {
+          "heading": "Task 3: JSON decoder 与 noun 解耦",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "Task 4: OCEAN 与 process string 参数安全迁移",
+          "level": 3,
+          "line": 250
+        },
+        {
+          "heading": "Task 5: sim 命令采用显式结果语义",
+          "level": 3,
+          "line": 325
+        },
+        {
+          "heading": "Task 6: 最终兼容性审计",
+          "level": 3,
+          "line": 363
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-29-upstream-hardening.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 143,
+      "nonEmptyLines": 83,
+      "sections": [
+        {
+          "heading": "Upstream Hardening Implementation Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Global Constraints",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Task 1: Harden Maestro `dec` injection",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "Task 2: Restore Clippy compliance at all four lint sites",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "Task 3: Add strict PSF APIs",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "Task 4: Codex acceptance gate",
+          "level": 3,
+          "line": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-01-virtuoso-gui-live-executor.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 210,
+      "nonEmptyLines": 132,
+      "sections": [
+        {
+          "heading": "Virtuoso GUI 真实执行器实施计划",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "全局约束",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "任务 1：远端 X11 scratch 隔离和窗口身份解析",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "任务 2：Rust 固定语义 X11 动作命令",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "任务 3：Python 固定 argv transport 与 LiveExecutor",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "任务 4：Skill 文档和本地总验收",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "任务 5：远端只读 smoke 与 activation-only 验收",
+          "level": 3,
+          "line": 183
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-01-virtuoso-gui-runner-foundation.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 169,
+      "nonEmptyLines": 105,
+      "sections": [
+        {
+          "heading": "Virtuoso GUI Runner Foundation Implementation Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Global Constraints",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Task 1: Skill entrypoint and scenario contract",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Task 2: Strict scenario model and parser",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Task 3: State machine, fake executor, and evidence trace",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "Task 4: CLI wrapper and offline acceptance tests",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "Self-review",
+          "level": 2,
+          "line": 165
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    }
+  ]
+}

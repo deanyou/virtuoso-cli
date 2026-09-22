@@ -1,0 +1,218 @@
+{
+  "batchIndex": 27,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.workbuddy/memory/2026-08-29.md",
+      "type": "document",
+      "name": "2026-08-29 work log",
+      "filePath": ".workbuddy/memory/2026-08-29.md",
+      "summary": "Day log: review of the native-remote-transport design (docs/superpowers/specs/2026-08-29-native-remote-transport-design.md). Audit findings cover SSHRunner method surface, x11.rs forwarding absence, VirtuosoClient::execute_skill retry loop in bridge.rs:225-274, spectre runner.rs:816-865 worker cloning reality vs stale doc comments at lines 797-798, verify_ssh_pid Windows fallback at transport/tunnel.rs:88-102, TunnelState v2 model, tokio feature gaps, and test baseline. Includes corrections to the doc comment at src/spectre/runner.rs:797-798 and design spec expansion (325 -> 580 lines). Sets up Step 0 + Step 1 RemoteTransport contract landing with the new transport/contract.rs, backend.rs, and host_keys.rs files, and migration of 8 call sites across 3 modules (models.rs, x11.rs, tunnel.rs) with documented intentional behavior deltas. Notes x11/window migration, blockers on models.rs depending on SSHClient migration, and final spectre runner migration with 8 commits landing (not pushed). Records git friction, no RemoteRepository.ts push yet.",
+      "tags": ["work-log", "design-review", "native-remote-transport", "RemoteTransport", "SSHRunner", "transport", "audit", "migration", "step-0", "step-1"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language daily engineering log; mixes prose, code-fenced Rust snippets, commit SHAs, file:line references, and structured headings. References design docs (docs/superpowers/specs/, docs/superpowers/plans/) and source files (src/transport/, src/spectre/runner.rs, src/client/bridge.rs)."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-08-30.md",
+      "type": "document",
+      "name": "2026-08-30 work log (native remote transport cont.)",
+      "filePath": ".workbuddy/memory/2026-08-30.md",
+      "summary": "Day log continuing native remote transport work. Step 4 sub-increment: SSH backend selection + native-ssh feature gating (commit 7ebfa99, pushed). Adds src/transport/backend.rs with SshBackend::{OpenSsh,Native}, parse()/from_config()/open_transport(), with OpenSSH as the unchanged default and explicit UnsupportedBackend when native-ssh is not built. Updates Cargo.toml ([features] native-ssh = []), Config.ssh_backend, src/tests.rs make_config(). 10 unit tests. Pitfalls: Arc<dyn RemoteTransport> lacks Debug; adding Config fields forces a literal update in src/tests.rs:29; cargo test only accepts one TESTNAME filter. Step 6 prereq (commit 255cc8b): src/transport/identity.rs ProcessIdentity with executable_path/pid/start_identity, matches() requires all three attributes equal, fail-closed on missing attributes. Documents continuation blockers (step 3 network/russh dependency, macOS Seatbelt sshd issue) and notes native-ssh feature is in place.",
+      "tags": ["work-log", "native-ssh", "feature-gate", "SshBackend", "UnsupportedBackend", "ProcessIdentity", "step-4", "step-6"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language daily engineering log; code-block Rust snippets, commit SHAs, file:line references, structured headings. Cross-references docs/superpowers/specs/2026-08-29-native-remote-transport-design.md and the implementation plan at docs/superpowers/plans/2026-08-30-transport-p1.md."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-08-31.md",
+      "type": "document",
+      "name": "2026-08-31 work log (test gap audit)",
+      "filePath": ".workbuddy/memory/2026-08-31.md",
+      "summary": "Day log: test gap audit against main@806b662 in isolated worktree /private/tmp/vcli-ccb-p1-20260830, no source edits. Lists seven self-corrected mistakes: CLI stop call chain was fabricated, RemoteRoles has 5 tests not 0 (all in src/tests.rs not config.rs), v1/v2 compatibility tests exist, sshd fixture graceful-skip branch exists, 'identity attributes point to parent process' was wrong, 'security vs OpenSSH usability binary' was wrong, and config snapshot test target misunderstood. Then catalogues confirmed findings: (A) CLI stop and transport stop_decision are independent paths so prior daemon_lifecycle/identity/verdict_to_decision work is dead code from the CLI's perspective; (B) macOS `vcli tunnel stop` never kills process but unconditionally clears state because /proc does not exist on macOS while commands/tunnel.rs:112 clears unconditionally; (C) commands/tunnel.rs::stop has zero test coverage; (D) force flag bypasses checks, taskkill result ignored on non-unix, weak ssh substring match, unconditional remote cleanup before state clear contradicts the plan. Fix section for bug B follows.",
+      "tags": ["work-log", "test-audit", "bug-analysis", "macos", "/proc", "commands/tunnel.rs", "stop-decision", "dead-code"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language engineering log with structured severity-tagged (A/B/C/D/E) sections, code-fenced Rust paths and line numbers. Repeats and corrects findings from prior days."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-09-01.md",
+      "type": "document",
+      "name": "2026-09-01 work log (P0 push)",
+      "filePath": ".workbuddy/memory/2026-09-01.md",
+      "summary": "Day log: P0 push. #4 serial_test (commit 287c187) adds serial_test = '3' dev-dep, marks all std::env::* reading/writing tests #[serial], deletes src/test_env.rs ENV_LOCK/lock(), updates tests.rs/bridge.rs/session.rs/runtime_paths.rs/transport/tunnel.rs, drops env_lock() from runtime_paths::with_env_many. #3 real daemon (commit 1428336) lifts serve_one/dispatch from src/transport/ipc/daemon.rs test mod to public src/transport/ipc/server.rs, adds Operation::Challenge nonce, run_with feature-gated hookup to Config::from_env -> open_transport -> server::run. Version bump to v1.1.2 (commit fb3c9d4, tag v1.1.2) with CHANGELOG entry, cargo publish, gh release. #2 Tier-1 real wiring (commit f342240): NativeTransportClient::challenge with 2s deadline, apply_socket_timeouts with SO_RCVTIMEO/SO_SNDTIMEO, daemon_lifecycle::challenge_via_ipc closure replacing |_nonce| false placeholder. Records sun_path 104-byte socket path limit (use /tmp/vcli-c-<uuid>.sock, not std::env::temp_dir). Design decisions to remember: ipc::daemon and ipc::server are now feature-gated.",
+      "tags": ["work-log", "p0", "serial_test", "daemon", "Tier-1", "challenge", "NativeTransportClient", "release", "v1.1.2"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language daily engineering log with structured headings per commit, code-fenced snippets, commit SHAs and tags, version references."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-09-02.md",
+      "type": "document",
+      "name": "2026-09-02 work log (Dependabot, native boundary, CI red)",
+      "filePath": ".workbuddy/memory/2026-09-02.md",
+      "summary": "Day log. 8f (commit e0c1c33): Dependabot configuration at .github/dependabot.yml with version 2, cargo + github-actions ecosystems, weekly cadence, open-pull-requests-limit 10. 8e: cargo-audit installed (19 min sandbox compile) but cannot pull advisory DB - crates.io API reachable, github.com HTML timeout, RustSec/advisory-db smart-http 502. 8g2 (commit 2710537): native scope-boundary regression tests in src/transport/native.rs +48 lines covering jump_host fail-fast in establish (UnsupportedOperation) and trait-default UnsupportedOperation for start_local_forward/stop_local_forward. Documents wording imprecision: missing key returns Configuration not UnsupportedOperation. CRITICAL: main Integration Matrix all-red (run 33519718019, 6/6 jobs failing) with three independent breakages - Windows compile errors in commands/maestro.rs and spectre/jobs.rs, ramic version stamp lag in resources/ramic_bridge.il vs Cargo.toml, dispatcher ping assertion outdated in tests/daemon_user_guard.rs:314. Identifies that P1-1 was never actually validated in CI because maestro.rs fails to compile before identity.rs gets compiled.",
+      "tags": ["work-log", "dependabot", "cargo-audit", "native-boundary", "integration-matrix", "ci-red", "windows-build", "ramic-version-stamp"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language daily engineering log. Includes a table for CI breakages, commit SHAs, run IDs, and file:line references."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-09-03.md",
+      "type": "document",
+      "name": "2026-09-03 work log (PR/Issue review)",
+      "filePath": ".workbuddy/memory/2026-09-03.md",
+      "summary": "Day log: PR/Issue review with no code changes. Only open PR is #62 (fix/dismiss-minimized-focus, +12/-0 py) with CI runs stuck in_progress (33694185328/33694185320), mergeable_state unstable. CI run status from `gh run list` is stale; must use `gh run view <id> --json status,conclusion,updatedAt`. Catalogs zombie issues whose code is fixed but ticket still open: #30 (PR #33 O_NOFOLLOW in x11.rs:1586-1603), #34 (PR #39), #35 (PR #39 + #42), #47 (PR #51 _semantic_dialog_classification:428), #48 (PR #51). Notes that PR #51 closing-keyword only closed #46 due to comma-separated Closes lines. Lists still-open issues: #50 dup #53 (SKILL window reflection limited, hiGetCurrentDialog IC25.1 undefined), #54 (X11Operation enum only 8 items), #55 (--pid u32 required), #49 (positional vs long inconsistency), #11 (CentOS7 glibc 2.28). Process observations: 7 consecutive PRs 9-02 21:25-23:14 chain-fixed the GUI boundary theme with decreasing test coverage. Notes local branch fix/x11-list-windows-empty is 13 commits behind origin/main.",
+      "tags": ["work-log", "pr-review", "issue-review", "zombie-issues", "github", "ci-status", "process-observations"],
+      "complexity": "moderate",
+      "languageNotes": "Chinese-language daily engineering log with structured headings per issue/PR and tables for zombie-issue tracking."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-09-04.md",
+      "type": "document",
+      "name": "2026-09-04 work log (live Virtuoso IC25.1)",
+      "filePath": ".workbuddy/memory/2026-09-04.md",
+      "summary": "Day log: live Virtuoso IC25.1 connection setup. Connects via SSH ubuntu-docker using virtuoso-skill-dev skill. Documents: daemon port is dynamic (session json in .cache/virtuoso_bridge/sessions/), actual daemon port 37787 not the cached 40939; macOS cache path uses XDG_CACHE_HOME (/Users/dean/.cache), NOT ~/Library/Caches; ~/.Users/dean/.env pollutes VB_SESSION/VB_REMOTE_HOST via load_dotenv_upward - must override. Working invocation: VCLI_CAPABILITY=admin VB_CACHE_DIR=/Users/dean/.cache VB_SESSION=dean-user1-37787 VB_TIMEOUT=120 ./target/debug/vcli. IC25.1 fboundp test: hiGetWindowList/hiGetWindowName/geGetEditCellView available; hiGetWindowId, hiGetWindowType, hiGetWindowMode, hiGetWindowScreenBox, hiGetProcessId, hiGetWindowProcessId, dbGetWindowId, hiGetEditCellView unbound. Hence kind/mode/geometry/pid reflection cannot be implemented in IC25.1. CRITICAL regression - PR #70 id field depends on hiGetWindowId -> vcli window list fails on IC25.1. Documents SKILL evaluator traps: sprintf mishandled as if/when/top-level expression, if/when require constant branches, strcat rejects nil -> version-tolerance must use errset + default ''. PR #72 (src/client/window_ops.rs::list_windows) adds errset guard + idstr default ''.",
+      "tags": ["work-log", "virtuoso-ic25.1", "live-test", "fboundp", "errset", "version-tolerance", "list_windows", "macos-paths"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language engineering log. Documents SKILL/Lisp evaluation edge cases. Code-fenced SKILL snippets and CLI invocations. Cross-references MEMORY.md updates written from findings."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-09-05.md",
+      "type": "document",
+      "name": "2026-09-05 work log (tunnel command family)",
+      "filePath": ".workbuddy/memory/2026-09-05.md",
+      "summary": "Day log: tunnel command family rounds 3-4 review fixes plus round 5 hardening (commit f694659, unpushed). Branch fix/gui-debug-env-session-improvements based on 8cbf83a. Lands (P1-1) forwarding success determination: try_ssh_tunnel adds -v + -o LogLevel=DEBUG1, wait_for_forward uses three-condition check (ssh stderr binding marker + port reachable + child alive), background thread drains stderr, fail-then-kill-reap; (P1-2) PID must own the forward -> drops -f, explicit -o ControlMaster=no; (P1-3) restart semantics -> discover_live_session() shared helper for attach/restart, restart prechecks before disconnect; (P2-4) Config::digest() hashes port_explicit. Default-port non-constraint: Config.port_explicit from VB_PORT presence or target.port.is_some(). Round 5 hardening: -v only raises LogLevel when user config does not set it (QUIET silences binding marker - so explicit -o LogLevel=DEBUG1 required); parameterized polling budget TUNNEL_FORWARD_BUDGET=20s; numeric port boundary check (port 30001 must not match port 3000); E0716 fix via snapshot() returning owned String. All gates green (fmt/clippy/test/build --features daemon). Pitfall: shell is zsh not fish - globs must be quoted.",
+      "tags": ["work-log", "tunnel", "ssh-tunneling", "controlmaster", "wait_for_forward", "OpenSSH", "shell-pitfall"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language daily engineering log with structured headings per round and gate-result summary. Code-block shell invocations and Rust function signatures."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-09-07.md",
+      "type": "document",
+      "name": "2026-09-07 work log (PR #74 merge + CI gap)",
+      "filePath": ".workbuddy/memory/2026-09-07.md",
+      "summary": "Day log. PR #74 (branch fix/gui-debug-env-session-improvements - env allowlist, session-aware vcli, dynamic CIW coordinates, P1/P2 review corrections, 5 files +133/-16 pure Python/SKILL.md) rebase-merged into main at 01:52:23Z. Rebased 4 commits to 5efa915..a641306, .claude content byte-identical to old head (verified via `git diff dcdf436 HEAD -- .claude`). Post-merge main CI 10/10 green (Check&Lint 4 + Integration Matrix 6, run 34074401746/34074401756). CRITICAL long-term observation: CI does NOT cover .claude/skills Python tests - none of the 4 workflows (ci/integration/release/security-audit) mention python. Local must run: `cd .claude/skills/virtuoso-gui-debug && python3 -m unittest discover tests`. Verified Python 3.13.12 and system 3.9.6 both pass 242/242. Documents workaround for git rebase refusing with unstaged .workbuddy/memory/*.md via detached worktree + rebase + force-with-lease. PR #78 deferred per user decision pending daemon connection pool/scheduler.",
+      "tags": ["work-log", "pr-merge", "rebase", "worktree", "ci-gap", "python-tests", "uncovered"],
+      "complexity": "moderate",
+      "languageNotes": "Chinese-language engineering log with structured headings, run IDs, command-line snippets, and a code block with the worktree-based rebase procedure."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-09-08.md",
+      "type": "document",
+      "name": "2026-09-08 work log (RFC #83 step 2)",
+      "filePath": ".workbuddy/memory/2026-09-08.md",
+      "summary": "Day log. RFC #83 step 2 implementation (continues PR #88 feat/drop-dotenv-read, still OPEN, the earlier '#88 merged' record was wrong). Adds src/config_file.rs (single config.toml, one read, profile section, broken file=hard error, path via VB_CONFIG_DIR/VB_HOME) and wires Config Layers (priority: <KEY>_<PROFILE> env -> <KEY> env -> file profile -> file global -> default; invalid set = error). env_with_profile() unchanged - file is read only once at from_env_resolve. TUI + vcli init target config.toml. Rebase clean. PITFALL: vtui bin missing mod config_file / mod profile -> three entries all mod config_file; profile via virtuoso_cli::profile pub API, no duplicate mod profile; config_file::has only used in single test -> #[allow(dead_code)]. Gates green: fmt/clippy/test default 3161 passed/0 failed. force-pushed d7eab91..bd690cd, PR #88 description updated. PR #88 review 4 fixes (in 4afd51d): P1 key-name inconsistency (symmetric mapping file_key/env_key), P2 save corruption (toml::to_string_pretty with Table), P3 clear --user swallows errors (io::Result), P4 test isolation (isolate_config_dir()). PR #92 config-check (RFC #83 step 3, addressing #73) is OPEN, 6 files +1370/-5.",
+      "tags": ["work-log", "config-file", "RFC-83", "PR-88", "PR-92", "dotenv", "profile", "config-toml"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language engineering log with detailed section headings per review fix, file/line references, and shell pitfalls (fish vs zsh, clippy 'Finished in 0.7s' may be no-op)."
+    },
+    {
+      "id": "document:.workbuddy/memory/2026-09-15.md",
+      "type": "document",
+      "name": "2026-09-15 work log (skill packaging + live executor)",
+      "filePath": ".workbuddy/memory/2026-09-15.md",
+      "summary": "Day log: pack virtuoso-gui-debug skill for WorkBuddy developer platform. main pulled to ef28b0a (v1.3.5 tag). Source: repo .claude/skills/virtuoso-gui-debug/ (current/full version, SKILL.md 33KB) NOT ~/.workbuddy/skills/ (stale 6KB from 2026-09-03). Frontmatter required: display_name/description_zh/description_en/category/version/author. CRITICAL: source SKILL.md has UTF-8 BOM (\ufeff) which breaks platform parsing - stripped. Package excludes .claude/skills/virtuoso-gui-debug/data/ (29MB runtime sqlite3/json) and report/. Keeps SKILL.md + references/ + scripts/ + tests/ + root test_*.json = 59 files / 142KB. CRITICAL platform constraint: only 2-level directory structure supported. Violations: scripts/vgui_runner/ (Python package), scripts/bash/ (11 files), tests/fixtures/ (2 files). Flattened: scripts/vgui_runner/ -> skill root vgui_runner/ (preserving relative imports), scripts/bash/*.sh -> scripts/, tests/fixtures/*.json -> tests/. Path injection: scripts/gui_runner.py already inserts scripts/ into sys.path, plus skill root; tests/__init__.py injects skill root. Validated: 242 tests pass; max depth 1; 58 files / 141KB. Live connection test from sandbox to remote daemon (PID 51646) via SSH ubuntu-docker succeeds: skill exec 1+1=2, strcat, getVersion=IC25.1-64b 02/10/2026. live executor fix: vgui_runner/live_executor.py _run_action - screenshot via vcli window screenshot, normalize status:saved -> success, SSH runner mode uses result['path']. Validation PASSED on real daemon.",
+      "tags": ["work-log", "skill-packaging", "workbuddy-platform", "virtuoso-gui-debug", "two-level-directory", "live-executor", "remote-daemon", "IC25.1"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language engineering log with structured headings, file paths, and diagnostic details. Documented pitfalls for SKILL.md frontmatter and platform 2-level directory limits."
+    },
+    {
+      "id": "document:.workbuddy/memory/MEMORY.md",
+      "type": "document",
+      "name": "virtuoso-cli long-term project memory",
+      "filePath": ".workbuddy/memory/MEMORY.md",
+      "summary": "Long-term project memory file consolidating cross-day findings. Main thread state (2026-09-02): steps 0-8 + 8a-8g2 + CI fix chain all in origin/main; integration matrix 6/6 green; v1.2.0 released; OpenSSH is the permanent default backend with no auto-migration; PR #29 (b5cbe64) and PR #31 (9e54dd0) merged to fix Security Audit red (rsa RUSTSEC-2023-0071 handled via cargo-audit 0.22.2 --locked + CLI --ignore; default build does not link rsa); lru 0.12.5 unsound TODO cleared (lru is not in dependency tree). Native scope boundary (long-term fact): v1.2.0 native backend = single-hop direct connect + pubkey auth minimum stable slice; step 5 SOCKS5 + jump NOT (cfg.jump_host -> UnsupportedOperation in establish); step 6 RAMIC/X11 forwarding NOT (trait default UnsupportedOperation); agent/password/keyboard-interactive not implemented; missing key returns TransportError::Configuration at construct time. Pending: #30 fully closed (PR #32 + PR #33) with detailed fix breakdown. Issue inventory (2026-09-03, baseline origin/main 602e163 / v1.3.0): closed #30/#34/#35/#47/#48; open #49/#54/#55 (PR #70 closed); #50 closed but kind/mode/geometry/pid reflection permanently deferred (IC25.1 has no API), #72 (#67ca635) for IC25.1 errset version-tolerance. Environment facts: local git often lags remote by days - git fetch origin first; macOS shell is fish (heredoc fish begin-end fail, prefix VAR=x cmd invalid, multi-line scripts use bash); no timeout/no /proc/manual sshd Seatbelt-blocked/KERN_PROCARGS2 EPERM; gh CLI reachable; crates.io reachable, advisory-db git blocked. Live Virtuoso IC25.1 connection recipe documented. SKILL evaluator traps: sprintf mishandling, if/when require constant branches, strcat rejects nil, version-tolerance via errset + default ''. IC25.1 window API fboundp table. Conventions: fmt/clippy/test/diff-check gates; ramic_bridge.il RB_VERSION stamp must sync with Cargo.toml; verify main CI green before opening PR; one seam per commit, zero behavior change, document deltas; platform-specific logic via #[cfg(unix)]/#[cfg(not(unix))]; VirtuosoResult two-layer (r.skill_ok() not ok()); cargo test one positional filter. crates.io release process documented.",
+      "tags": ["long-term-memory", "mainline-status", "native-scope", "issue-inventory", "conventions", "environment-facts", "crates-io-release", "ic25.1-api", "version-tolerance"],
+      "complexity": "complex",
+      "languageNotes": "Chinese-language long-term reference document with structured sections and dense file:line references, commit SHAs, issue/PR numbers, and PR/runtime version tags."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.workbuddy/memory/2026-08-29.md",
+      "target": "document:.workbuddy/memory/2026-08-30.md",
+      "type": "related",
+      "weight": 0.95
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-08-30.md",
+      "target": "document:.workbuddy/memory/2026-08-31.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-08-31.md",
+      "target": "document:.workbuddy/memory/2026-09-01.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-09-01.md",
+      "target": "document:.workbuddy/memory/2026-09-02.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-09-02.md",
+      "target": "document:.workbuddy/memory/2026-09-03.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-09-03.md",
+      "target": "document:.workbuddy/memory/2026-09-04.md",
+      "type": "related",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-09-04.md",
+      "target": "document:.workbuddy/memory/MEMORY.md",
+      "type": "documents",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-09-04.md",
+      "target": "document:.workbuddy/memory/2026-09-05.md",
+      "type": "related",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-09-05.md",
+      "target": "document:.workbuddy/memory/2026-09-07.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-09-07.md",
+      "target": "document:.workbuddy/memory/2026-09-08.md",
+      "type": "related",
+      "weight": 0.8
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-09-08.md",
+      "target": "document:.workbuddy/memory/2026-09-15.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-09-15.md",
+      "target": "document:.workbuddy/memory/MEMORY.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.workbuddy/memory/MEMORY.md",
+      "target": "document:.workbuddy/memory/2026-09-02.md",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "document:.workbuddy/memory/MEMORY.md",
+      "target": "document:.workbuddy/memory/2026-09-03.md",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "document:.workbuddy/memory/2026-08-29.md",
+      "target": "document:.workbuddy/memory/MEMORY.md",
+      "type": "related",
+      "weight": 0.6
+    }
+  ]
+}

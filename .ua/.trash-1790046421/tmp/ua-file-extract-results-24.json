@@ -1,0 +1,548 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 9,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 9,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 9
+    }
+  },
+  "results": [
+    {
+      "path": ".pensieve/decisions/2026-04-11-session-vs-profile.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 34,
+      "nonEmptyLines": 27,
+      "sections": [
+        {
+          "heading": "Session vs Profile: Two-Layer Connection Addressing",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Details",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Alternatives Considered",
+          "level": 2,
+          "line": 32
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 54,
+      "nonEmptyLines": 37,
+      "sections": [
+        {
+          "heading": "TODO: createNetlist 路径 CMI-2116 问题",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "状态",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "问题描述",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "已验证失败的路径（2026-04-19）",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "当前 Workaround",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "待调查方向",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "补充：IC23.1 Maestro API 全部阻塞 bridge（2026-04-20）",
+          "level": 2,
+          "line": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 77,
+      "nonEmptyLines": 58,
+      "sections": [
+        {
+          "heading": "LLM-Assisted Inline Repair for Intermittent Netlist Issues",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Problem",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Alternatives Considered",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "Consequence",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "Exploration Reduction",
+          "level": 2,
+          "line": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 77,
+      "nonEmptyLines": 60,
+      "sections": [
+        {
+          "heading": "Standalone Spectre for One-Off Circuit Verification",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Problem",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "Alternatives Considered",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "Consequence",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "Exploration Reduction",
+          "level": 2,
+          "line": 68
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 69,
+      "nonEmptyLines": 51,
+      "sections": [
+        {
+          "heading": "virtuoso-bridge-lite 借鉴范围决策",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Problem",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Alternatives Considered",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "采纳（进 binary）",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "暂缓",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "Consequence",
+          "level": 2,
+          "line": 59
+        },
+        {
+          "heading": "Exploration Reduction",
+          "level": 2,
+          "line": 66
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-20-defer-version-branches-until-api-diverges.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 61,
+      "nonEmptyLines": 46,
+      "sections": [
+        {
+          "heading": "Defer version-specific code branches until API actually diverges",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Problem",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Alternatives Considered",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Consequence",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Exploration Reduction",
+          "level": 2,
+          "line": 54
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": ".pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 71,
+      "nonEmptyLines": 52,
+      "sections": [
+        {
+          "heading": "Maestro 仿真触发 API 在 IC23.1 上阻塞 bridge",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Problem",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Alternatives Considered",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "Consequence",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "Exploration Reduction",
+          "level": 2,
+          "line": 67
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": ".pensieve/decisions/2026-05-07-async-deferred.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 47,
+      "nonEmptyLines": 33,
+      "sections": [
+        {
+          "heading": "Async Runtime Deferred — Use std::thread::scope for Concurrency",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Problem",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Alternatives Considered",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "Consequence",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Exploration Reduction",
+          "level": 2,
+          "line": 44
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": ".pensieve/decisions/2026-05-07-broadcast-vs-subagent.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 53,
+      "nonEmptyLines": 39,
+      "sections": [
+        {
+          "heading": "Broadcast vs Subagent for Multi-Session Operations",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Problem",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Alternatives Considered",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Decision",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "Consequence",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "Exploration Reduction",
+          "level": 2,
+          "line": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    }
+  ]
+}

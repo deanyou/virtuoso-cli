@@ -1,0 +1,333 @@
+{
+  "batchIndex": 14,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.agents/skills/references/batch-netlist-si.md",
+      "type": "document",
+      "name": "Batch Netlist (si)",
+      "filePath": ".agents/skills/references/batch-netlist-si.md",
+      "summary": "Guide to batch netlisting with the Cadence si translator without Maestro. Covers generating si.env via simInitEnvWithArgs, si.env field meanings (simLibName, simViewList, simNetlistHier), running si -batch -cdslib, the critical nl vs netlist command for Spectre, downloading the netlist output, and a comparison table contrasting si (pure circuit, symbolic variables) with maeCreateNetlistForCorner (full simulation deck).",
+      "tags": [
+        "netlist",
+        "si",
+        "spectre",
+        "hspice",
+        "batch",
+        "skill",
+        "virtuoso",
+        "automation",
+        "ci"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown reference doc with Python code blocks wrapping SKILL execute_skill calls. Emphasizes csh-specific syntax (; not &&) and the unreliable stdout behavior of run_shell_command."
+    },
+    {
+      "id": "document:.agents/skills/references/layout-python-api.md",
+      "type": "document",
+      "name": "Layout Python API",
+      "filePath": ".agents/skills/references/layout-python-api.md",
+      "summary": "Python wrapper reference for Cadence Virtuoso layout editing (virtuoso_bridge.virtuoso.layout). Documents the LayoutEditor context manager that batches SKILL commands and auto-saves on exit, plus skill-builder ops for shapes (dbCreateRect, dbCreatePath, dbCreatePolygon, dbCreateLabel), instances and vias (dbCreateParamInst, dbCreateSimpleMosaic, dbCreateVia), read helpers, edit operations, and layer visibility controls. Includes an append-mode pattern for chunked large edits.",
+      "tags": [
+        "layout",
+        "python",
+        "skill",
+        "virtuoso",
+        "dbCreateRect",
+        "dbCreateVia",
+        "context-manager",
+        "mosaic",
+        "lpp"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with extensive Python tables. Distinguishes create-read-edit-control operations and emphasizes the mode=w vs mode=a split for appending to large layouts."
+    },
+    {
+      "id": "document:.agents/skills/references/layout-skill-api.md",
+      "type": "document",
+      "name": "Layout SKILL API Reference",
+      "filePath": ".agents/skills/references/layout-skill-api.md",
+      "summary": "Quick-reference cheat sheet for layout editing using the virtuoso_bridge Python wrappers. Shows canonical edit/read/control patterns (rect, path, label, polygon, inst, via, mosaic), CDF-driven read queries (layout_read_geometry, layout_list_shapes, layout_read_summary), and high-level controls (layout_fit_view, layout_show_only_layers, layout_highlight_net, layout_delete_shapes_on_layer, layout_delete_cell). Includes operational tips: read before routing, chunk large edits, query viaDefs for via names, derive mosaic pitch from bboxes, and visually verify with screenshots.",
+      "tags": [
+        "layout",
+        "skill",
+        "reference",
+        "cheatsheet",
+        "python",
+        "bridge",
+        "read",
+        "edit"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown quick-reference card. See also pointer to references/layout-python-api.md."
+    },
+    {
+      "id": "document:.agents/skills/references/maestro-python-api.md",
+      "type": "document",
+      "name": "Maestro Python API",
+      "filePath": ".agents/skills/references/maestro-python-api.md",
+      "summary": "Python wrapper documentation for the virtuoso_bridge.virtuoso.maestro package. Covers the two session modes (background maeOpenSetup for read/write config vs GUI deOpenCellView for running simulations), session management (open_session, close_session, find_open_session), three independent read functions (read_config, read_env, read_results), waveform export via OCEAN, and write APIs for tests, analysis, outputs and specs, design variables, parameters, env/sim options, and corners. Links to simulation-flow.md as the canonical 8-step flow.",
+      "tags": [
+        "maestro",
+        "python",
+        "skill",
+        "ade",
+        "assembler",
+        "simulation",
+        "reader",
+        "writer",
+        "virtuoso",
+        "ocnPrint"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Largest reference doc in this batch (304 lines, 21 sections). Heavy on Python wrapping of mae*/asi* SKILL calls with return-type notes (dict[str, tuple[str, str]])."
+    },
+    {
+      "id": "document:.agents/skills/references/maestro-skill-api.md",
+      "type": "document",
+      "name": "Maestro SKILL API Reference",
+      "filePath": ".agents/skills/references/maestro-skill-api.md",
+      "summary": "Comprehensive SKILL-level reference for ADE Assembler / Maestro on IC618+ with asi* fallback for older Virtuoso. Documents the two session modes, supported ADE types, the mae* API for sessions, tests, analyses, outputs, specs, variables, corners, env/sim options, save/run/result flow, known blockers (GUI dialogs, edit locks, ASSEMBLER-8127), pnoise jitter automation limits, OCEAN quick reference for results, a complete Python workflow, axl* variable management, and worked examples under examples/01_virtuoso/maestro/.",
+      "tags": [
+        "maestro",
+        "skill",
+        "ade",
+        "assembler",
+        "mae",
+        "asi",
+        "ocn",
+        "simulation",
+        "pss",
+        "pnoise",
+        "spectre",
+        "axl"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Largest file in this batch (623 lines, 41 sections, 7 worked examples). Mixes scheme SKILL with backtick-quoted list syntax and Python snippets. See also maestro-python-api.md."
+    },
+    {
+      "id": "document:.agents/skills/references/netlist.md",
+      "type": "document",
+      "name": "Netlist Reference",
+      "filePath": ".agents/skills/references/netlist.md",
+      "summary": "Reference covering CDL and Spectre netlist formats side by side: pin syntax (TOP BOT vs (TOP BOT)), device-name differences (cap/res/ind vs capacitor/resistor/inductor), bus escaping (BOT<0> vs BOT<0>), case conventions, and parameter-name mapping (acm→mag, vdc→dc). Documents spiceIn CLI invocation for CDL-to-schematic import (must run via SSH to avoid CIW deadlock), devmap file format, schPinListToSymbol regeneration in a single-line SKILL string, and maeCreateNetlistForCorner-based Spectre export through a temporary Maestro view. References a sample RC cascade under references/netlist_samples/.",
+      "tags": [
+        "netlist",
+        "cdl",
+        "spectre",
+        "spiceIn",
+        "lvs",
+        "schematic",
+        "virtuoso",
+        "import",
+        "export"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown reference with side-by-side format tables and Python snippets wrapping SKILL. Documents the gotcha that spiceIn must run via SSH, not via SKILL system()."
+    },
+    {
+      "id": "document:.agents/skills/references/schematic-python-api.md",
+      "type": "document",
+      "name": "Schematic Python API",
+      "filePath": ".agents/skills/references/schematic-python-api.md",
+      "summary": "Python wrapper reference for Cadence Virtuoso schematic editing (virtuoso_bridge.virtuoso.schematic). Documents the SchematicEditor context manager (queues SKILL, runs schCheck + dbSave on exit), SKILL-builder ops for instances, wires, labels, pins (schematic_create_inst_by_master_name, schematic_create_wire_between_instance_terms, schematic_create_pin, schematic_label_instance_term), direct SchematicOps methods (open/save/check/add_instance/...), and the low-level schematic/ops.py helpers. Notes the add_net_label_to_transistor helper that labels MOS D/G/S/B terminals with auto-detected stub directions.",
+      "tags": [
+        "schematic",
+        "python",
+        "skill",
+        "virtuoso",
+        "schematic-editor",
+        "mos",
+        "cdf",
+        "context-manager"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown reference with paired Python-to-SKILL tables. Emphasizes context-managed batching vs direct execution."
+    },
+    {
+      "id": "document:.agents/skills/references/schematic-recreation.md",
+      "type": "document",
+      "name": "Recreate a Schematic from an Existing Design",
+      "filePath": ".agents/skills/references/schematic-recreation.md",
+      "summary": "Workflow for reverse-engineering an existing schematic onto a clean grid for learning or variant generation. Three steps: (1) read original via read_schematic to extract instances, connectivity, positions; (2) analyze relative positions and map to a uniform grid, identifying differential pairs (R0/MY) and vertical layering (NMOS bottom, PMOS top); (3) redraw using client.schematic.edit with a placement list and labels list, using add_net_label_to_transistor with no explicit wires. Codifies key rules: GRID=1.5, pins in a dedicated column, output stages offset right, verify with CIW screenshot.",
+      "tags": [
+        "schematic",
+        "reverse-engineer",
+        "grid",
+        "differential-pair",
+        "placement",
+        "analog",
+        "reuse"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown procedural guide with Python code blocks and a final key-rules checklist."
+    },
+    {
+      "id": "document:.agents/skills/references/schematic-skill-api.md",
+      "type": "document",
+      "name": "Schematic SKILL API Reference",
+      "filePath": ".agents/skills/references/schematic-skill-api.md",
+      "summary": "Quick-reference cheat sheet for schematic editing using the virtuoso_bridge Python wrappers. Covers the canonical edit pattern (inst, pin, wire, label, add_net_label_to_transistor), CDF parameter setting (set_instance_params via schHiReplace + CDF callback, or direct cdfGetInstCDF for analogLib), read_placement for instance xy/orient, and key tips (use MOS terminal helpers, check + save before simulation, schematic must be open in GUI for Maestro). See also schematic-python-api.md.",
+      "tags": [
+        "schematic",
+        "skill",
+        "reference",
+        "cheatsheet",
+        "cdf",
+        "python",
+        "bridge"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown quick-reference card. See also pointer to references/schematic-python-api.md."
+    },
+    {
+      "id": "document:.agents/skills/references/simulation-flow.md",
+      "type": "document",
+      "name": "Standard Simulation Flow (GUI Mode)",
+      "filePath": ".agents/skills/references/simulation-flow.md",
+      "summary": "Canonical 8-step Maestro GUI simulation workflow: purge stale cellviews → open_gui_session (auto-cleanup) → modify vars → save_setup + run_and_wait (callback + SSH poll, SKILL channel free) → read_results → optional export_waveform. Explains why GUI mode is required (background wait_until_done returns immediately, close_session cancels runs). Documents the run_and_wait mechanism (SKILL callback writes marker file, polled via SSHRunner), the path when a GUI session is already open, and the window-title parsing workaround for the missing SKILL API to query Maestro edit/read-only state.",
+      "tags": [
+        "maestro",
+        "simulation",
+        "gui",
+        "run_and_wait",
+        "callback",
+        "ssh",
+        "poll",
+        "session"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown procedural guide. Linked from maestro-python-api.md. Emphasizes the callback pattern that keeps the SKILL channel free during simulation wait."
+    },
+    {
+      "id": "document:.agents/skills/references/testbench-migration.md",
+      "type": "document",
+      "name": "Copy a Testbench to Another Library",
+      "filePath": ".agents/skills/references/testbench-migration.md",
+      "summary": "Five-step workflow for cloning a testbench + Maestro setup into a new library: (1) dbCopyCellView for DUT schematic and symbol (db object, not string); (2) build the testbench with schematic.edit, setting per-instance CDF parameters via cdfGetInstCDF instead of schHiReplace cellName match; (3) CDF-vs-Spectre parameter name gotchas (vsin vdc→sinedc, va→ampl); (4) create Maestro via open_session + maeCreateTest, set analysis via .il files for backtick syntax, set outputs with unique names; (5) run via maeRunSimulation in GUI mode and poll spectre.out via SSH. Includes a pitfalls table for the most common breakage modes.",
+      "tags": [
+        "testbench",
+        "migration",
+        "cdf",
+        "maestro",
+        "maeRunSimulation",
+        "analysis",
+        "pitfalls"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown procedural guide with a final pitfalls table (symptom → fix). Emphasizes the schHiReplace pitfall and the VAR() netlist-listing gotcha."
+    },
+    {
+      "id": "document:.agents/skills/references/troubleshooting.md",
+      "type": "document",
+      "name": "Troubleshooting — Known Gotchas & Pitfalls",
+      "filePath": ".agents/skills/references/troubleshooting.md",
+      "summary": "Catalog of known failure modes grouped by area: SKILL/CIW (csh()/sh() return t/nil not output, procedurep nil for compiled functions, inst~>prop nil for PDK CDF params), GUI dialog blocking (simInitEnvWithArgs dialog, Maestro dialogs block SKILL channel, ASSEMBLER-8127 edit-lock deadlock requiring X11 ctypes recovery), netlist/si (remote filesystem output, near-empty spectre.inp on dialog block), Maestro design vars (mae* undefined → use asi*, global vs test-level scoping, asian vs maeSetVar differences), and miscellaneous workflow pitfalls. Each entry pairs the symptom with a concrete workaround.",
+      "tags": [
+        "troubleshooting",
+        "pitfalls",
+        "skill",
+        "dialog",
+        "assembler-8127",
+        "cdf",
+        "asi",
+        "mae",
+        "X11"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Markdown troubleshooting catalog with 24 named sections. Includes shell snippets (Python 2.7 + ctypes) for X11 key-event recovery. References maestro-skill-api.md for the mae→asi mapping table."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.agents/skills/references/layout-skill-api.md",
+      "target": "document:.agents/skills/references/layout-python-api.md",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "document:.agents/skills/references/schematic-skill-api.md",
+      "target": "document:.agents/skills/references/schematic-python-api.md",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "document:.agents/skills/references/maestro-skill-api.md",
+      "target": "document:.agents/skills/references/maestro-python-api.md",
+      "type": "documents",
+      "weight": 0.95
+    },
+    {
+      "source": "document:.agents/skills/references/maestro-python-api.md",
+      "target": "document:.agents/skills/references/simulation-flow.md",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.agents/skills/references/troubleshooting.md",
+      "target": "document:.agents/skills/references/maestro-skill-api.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/references/layout-python-api.md",
+      "target": "document:.agents/skills/references/layout-skill-api.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.agents/skills/references/schematic-python-api.md",
+      "target": "document:.agents/skills/references/schematic-skill-api.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.agents/skills/references/schematic-recreation.md",
+      "target": "document:.agents/skills/references/schematic-python-api.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.agents/skills/references/schematic-recreation.md",
+      "target": "document:.agents/skills/references/schematic-skill-api.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.agents/skills/references/maestro-python-api.md",
+      "target": "document:.agents/skills/references/maestro-skill-api.md",
+      "type": "related",
+      "weight": 0.85
+    },
+    {
+      "source": "document:.agents/skills/references/simulation-flow.md",
+      "target": "document:.agents/skills/references/maestro-skill-api.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.agents/skills/references/netlist.md",
+      "target": "document:.agents/skills/references/batch-netlist-si.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.agents/skills/references/testbench-migration.md",
+      "target": "document:.agents/skills/references/maestro-skill-api.md",
+      "type": "related",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/references/testbench-migration.md",
+      "target": "document:.agents/skills/references/maestro-python-api.md",
+      "type": "related",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/references/troubleshooting.md",
+      "target": "document:.agents/skills/references/simulation-flow.md",
+      "type": "related",
+      "weight": 0.5
+    }
+  ]
+}

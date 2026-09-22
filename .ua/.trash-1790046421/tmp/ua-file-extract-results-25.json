@@ -1,0 +1,336 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 7,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 7,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 7
+    }
+  },
+  "results": [
+    {
+      "path": ".pensieve/maxims/ci-must-match-target-toolchain.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 26,
+      "nonEmptyLines": 21,
+      "sections": [
+        {
+          "heading": "CI Must Match Target Toolchain",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Guidance",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Boundaries",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": ".pensieve/maxims/eliminate-special-cases-by-redesigning-data-flow.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 30,
+      "nonEmptyLines": 24,
+      "sections": [
+        {
+          "heading": "Eliminate special cases by redesigning data flow",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Quote",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Guidance",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Boundaries",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Context Links (recommended)",
+          "level": 2,
+          "line": 27
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": ".pensieve/maxims/prefer-pragmatic-solutions-over-theoretical-completeness.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 30,
+      "nonEmptyLines": 24,
+      "sections": [
+        {
+          "heading": "Prefer pragmatic solutions over theoretical completeness",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Quote",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Guidance",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Boundaries",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Context Links (recommended)",
+          "level": 2,
+          "line": 27
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": ".pensieve/maxims/preserve-user-visible-behavior-as-a-hard-rule.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 30,
+      "nonEmptyLines": 24,
+      "sections": [
+        {
+          "heading": "Preserve user-visible behavior as a hard rule",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Quote",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Guidance",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Boundaries",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Context Links (recommended)",
+          "level": 2,
+          "line": 27
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": ".pensieve/maxims/reduce-complexity-before-adding-branches.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 30,
+      "nonEmptyLines": 24,
+      "sections": [
+        {
+          "heading": "Reduce complexity before adding branches",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Quote",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Guidance",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Boundaries",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Context Links (recommended)",
+          "level": 2,
+          "line": 27
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": ".pensieve/maxims/skill-nil-is-not-an-error.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 66,
+      "nonEmptyLines": 50,
+      "sections": [
+        {
+          "heading": "SKILL nil return is not a transport error",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Statement",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Consequence",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Fix Pattern",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "When It Matters",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Special case: SKILL nil means \"empty list\" for list commands",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Discovered",
+          "level": 2,
+          "line": 60
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".pensieve/maxims/test-with-ci-toolchain-before-push.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 27,
+      "nonEmptyLines": 22,
+      "sections": [
+        {
+          "heading": "Test With CI Toolchain Before Push",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "One-line Conclusion",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Guidance",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Boundaries",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 25
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    }
+  ]
+}

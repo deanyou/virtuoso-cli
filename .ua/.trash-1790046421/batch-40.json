@@ -1,0 +1,427 @@
+{
+  "batchIndex": 40,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "config:resources/maestro_snapshot_filter.yaml",
+      "type": "config",
+      "name": "maestro_snapshot_filter.yaml",
+      "filePath": "resources/maestro_snapshot_filter.yaml",
+      "summary": "YAML filter config for maestro snapshot skill: declares always-run rules, state filters, skill summary/run-level selectors, and netlist/psf exclude patterns.",
+      "tags": [
+        "config",
+        "yaml",
+        "maestro",
+        "snapshot",
+        "filter",
+        "skill-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Single-document YAML with 7 top-level sections (always, state, skill_summary, run_level, netlist, psf, exclude). Used as data input by the maestro snapshot skill."
+    },
+    {
+      "id": "file:resources/ramic_bridge.il",
+      "type": "file",
+      "name": "ramic_bridge.il",
+      "filePath": "resources/ramic_bridge.il",
+      "summary": "(skipped by extractor) Cadence SKILL/IL bridge module hosted inside Virtuoso: provides ramic bridge recovery hint strings, an rb_version stamp, and IPC helpers used by the daemon.",
+      "tags": [
+        "skill",
+        "il",
+        "ramic",
+        "bridge",
+        "virtuoso",
+        "skipped"
+      ],
+      "complexity": "simple",
+      "languageNotes": "IL/SKILL source for the in-Virtuoso side of the bridge; extractor skipped because of language coverage. 528 lines."
+    },
+    {
+      "id": "file:resources/rb_connect_terminal.il",
+      "type": "file",
+      "name": "rb_connect_terminal.il",
+      "filePath": "resources/rb_connect_terminal.il",
+      "summary": "(skipped by extractor) Small SKILL/IL helper used by the ramic_bridge to expose terminal connection info to the daemon.",
+      "tags": [
+        "skill",
+        "il",
+        "ramic",
+        "terminal",
+        "skipped"
+      ],
+      "complexity": "simple",
+      "languageNotes": "IL/SKILL source; 46 lines. Extractor skipped due to language coverage."
+    },
+    {
+      "id": "file:resources/x11_dismiss_dialog.py",
+      "type": "file",
+      "name": "x11_dismiss_dialog.py",
+      "filePath": "resources/x11_dismiss_dialog.py",
+      "summary": "Python helper that discovers and dismisses X11 dialog windows belonging to a running Virtuoso process (used for CI automation on Linux).",
+      "tags": [
+        "python",
+        "x11",
+        "dialog",
+        "virtuoso",
+        "ci",
+        "helper",
+        "window-management"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Procedural script with 18 functions; uses subprocess (pgrep/xdotool/xprop/xwininfo/wmctrl) and python-xlib via ctypes. No third-party imports; pure stdlib + system CLIs."
+    },
+    {
+      "id": "file:scripts/load_test.ils",
+      "type": "file",
+      "name": "load_test.ils",
+      "filePath": "scripts/load_test.ils",
+      "summary": "(skipped by extractor) ILS load-test script: hammers the Virtuoso load path to benchmark SKILL file ingestion timing.",
+      "tags": [
+        "skill",
+        "ils",
+        "load-test",
+        "benchmark",
+        "skipped"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Top-level .ils script (interpreted). 67 lines. Extractor skipped."
+    },
+    {
+      "id": "file:scripts/perf_benchmark.ils",
+      "type": "file",
+      "name": "perf_benchmark.ils",
+      "filePath": "scripts/perf_benchmark.ils",
+      "summary": "(skipped by extractor) ILS benchmark harness exercising analysis/sweep/corner skill emission paths to measure SKILL codegen performance.",
+      "tags": [
+        "skill",
+        "ils",
+        "benchmark",
+        "perf",
+        "skipped"
+      ],
+      "complexity": "simple",
+      "languageNotes": "274-line .ils script; extractor skipped."
+    },
+    {
+      "id": "file:scripts/perf_test.ils",
+      "type": "file",
+      "name": "perf_test.ils",
+      "filePath": "scripts/perf_test.ils",
+      "summary": "(skipped by extractor) ILS perf-test driver: short end-to-end run of the performance skill to baseline timings.",
+      "tags": [
+        "skill",
+        "ils",
+        "perf",
+        "skipped"
+      ],
+      "complexity": "simple",
+      "languageNotes": "104-line .ils script; extractor skipped."
+    },
+    {
+      "id": "file:src/daemon/main.rs",
+      "type": "file",
+      "name": "main.rs",
+      "filePath": "src/daemon/main.rs",
+      "summary": "Entrypoint for the feature-gated virtuoso-daemon binary: spawns a TCP listener, dispatches SkillRequest messages, and writes per-skill stats/callback files.",
+      "tags": [
+        "rust",
+        "daemon",
+        "tcp",
+        "entrypoint",
+        "feature-gated"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Standalone main.rs with SkillRequest struct (camelCase serde fields) plus stdlib networking (TcpListener). No internal crate imports detected by import extractor."
+    },
+    {
+      "id": "file:tests/config.rs",
+      "type": "file",
+      "name": "config.rs",
+      "filePath": "tests/config.rs",
+      "summary": "Integration tests for the vcli config layer: env vs file precedence, defaults, digest stability, allow_cross_user_daemon overrides, and TUI save round-trip via EnvGuard + isolate_config_dir helpers.",
+      "tags": [
+        "rust",
+        "test",
+        "config",
+        "env",
+        "precedence",
+        "digest"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Defines EnvGuard RAII helper; uses vcli public test API plus std::env::set_var/remove_var. 17 test functions."
+    },
+    {
+      "id": "file:tests/config_check.rs",
+      "type": "file",
+      "name": "config_check.rs",
+      "filePath": "tests/config_check.rs",
+      "summary": "Unit tests for the config_check JSON-shape report: every known key carries a source, env wins over file wins over default, malformed values degrade to warnings, and empty profile sections fall through to global.",
+      "tags": [
+        "rust",
+        "test",
+        "config",
+        "config-check",
+        "precedence",
+        "layering"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Two test fixtures (EnvGuard, ConfigDirRestore). 11 test functions, no external deps beyond the library crate."
+    },
+    {
+      "id": "file:tests/config_check_cli.rs",
+      "type": "file",
+      "name": "config_check_cli.rs",
+      "filePath": "tests/config_check_cli.rs",
+      "summary": "CLI-level tests for the `vcli config-check` subcommand: broken active target emits structured JSON and a non-zero exit; valid target exits zero with valid=true.",
+      "tags": [
+        "rust",
+        "test",
+        "cli",
+        "config-check",
+        "json"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Wraps the compiled vcli binary through EnvGuard; uses assert_cmd/process-style assertions. 5 test functions."
+    },
+    {
+      "id": "file:tests/daemon_user_guard.rs",
+      "type": "file",
+      "name": "daemon_user_guard.rs",
+      "filePath": "tests/daemon_user_guard.rs",
+      "summary": "Broad integration suite for daemon user/session hygiene: client_id sanitization & overrides, session_info serde round-trip with/without daemon_user and daemon_version, ramic_bridge version + IPC pinger+1 wiring, and VB_CACHE_DIR / VB_LOG_DIR env override propagation.",
+      "tags": [
+        "rust",
+        "test",
+        "daemon",
+        "session",
+        "client-id",
+        "sanitize",
+        "ramic"
+      ],
+      "complexity": "complex",
+      "languageNotes": "33 test functions covering both serialization and behavioral contracts. No mock framework; uses std::sync::Mutex ENV_LOCK for serial env mutation."
+    },
+    {
+      "id": "file:tests/docs/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "tests/docs/__init__.py",
+      "summary": "Empty package marker for tests/docs so unittest discovery picks up the docs test module.",
+      "tags": [
+        "python",
+        "package-marker",
+        "tests"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Single-line (empty) __init__.py file."
+    },
+    {
+      "id": "file:tests/docs/test_x11_dismiss_dialog.py",
+      "type": "file",
+      "name": "test_x11_dismiss_dialog.py",
+      "filePath": "tests/docs/test_x11_dismiss_dialog.py",
+      "summary": "unittest suite for resources/x11_dismiss_dialog.py: covers window-line parsing, _NET_WM_PID handling, geometry parsing, dialog sizing, action choice, and Virtuoso class detection.",
+      "tags": [
+        "python",
+        "test",
+        "unittest",
+        "docs",
+        "x11"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Loads the helper via importlib.util.spec_from_file_location (no package install). 6 TestCase classes, 1 helper function _load_helper."
+    },
+    {
+      "id": "file:tests/error_handling.rs",
+      "type": "file",
+      "name": "error_handling.rs",
+      "filePath": "tests/error_handling.rs",
+      "summary": "Tests for the unified error/Result types in vcli: Display/Debug formatting, transport failure vs success, ok_or_exec semantics, and per-kind error variants (timeout/conflict/auth) with retryable metadata.",
+      "tags": [
+        "rust",
+        "test",
+        "error",
+        "result",
+        "debug",
+        "display"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Pure unit tests; no IO. 18 test functions covering Display/Debug/From impls and constructors."
+    },
+    {
+      "id": "file:tests/linux_rename_compat.rs",
+      "type": "file",
+      "name": "linux_rename_compat.rs",
+      "filePath": "tests/linux_rename_compat.rs",
+      "summary": "Verifies that the linux-only rename-compat shim module is absent on non-Linux targets (compile-time cfg gating).",
+      "tags": [
+        "rust",
+        "test",
+        "platform",
+        "linux",
+        "cfg"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Single test that fails to compile if the compat module leaks into non-Linux builds. 138 lines incl. comments."
+    },
+    {
+      "id": "file:tests/maestro_csv.rs",
+      "type": "file",
+      "name": "maestro_csv.rs",
+      "filePath": "tests/maestro_csv.rs",
+      "summary": "CSV parser tests for MaestroResult: single-point AC, multi-point sweep, specs/weights, quoted parameters, scientific notation, header-only files, multi-test layouts, summary parsing, and trailing newline artifacts.",
+      "tags": [
+        "rust",
+        "test",
+        "maestro",
+        "csv",
+        "parser"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Calls MaestroResult::parse_csv on inline fixture strings. 11 test functions."
+    },
+    {
+      "id": "file:tests/ocean.rs",
+      "type": "file",
+      "name": "ocean.rs",
+      "filePath": "tests/ocean.rs",
+      "summary": "Tests for OCEAN (OceanScript) skill emission: setup_skill generates progn, escapes embedded quotes; analysis_skill handles simple numbers/booleans/strings; sweep_skill emits desvar; parse_skill_list tolerates nested/single/nil/quoted shapes; corner_config structure stable.",
+      "tags": [
+        "rust",
+        "test",
+        "ocean",
+        "skill",
+        "oceanscript"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pure unit tests against library helpers. 11 test functions."
+    },
+    {
+      "id": "file:tests/skill_escape.rs",
+      "type": "file",
+      "name": "skill_escape.rs",
+      "filePath": "tests/skill_escape.rs",
+      "summary": "Targeted unit tests for the Skill string-escape utility: basic strings, embedded double quotes, backslashes, complex mixed content, empty input, whitespace preservation, unicode, and that parentheses are NOT escaped.",
+      "tags": [
+        "rust",
+        "test",
+        "skill",
+        "escape",
+        "string"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "8 short test functions; very small surface area (74 lines total)."
+    },
+    {
+      "id": "file:tests/skill_finder_include_desc.rs",
+      "type": "file",
+      "name": "skill_finder_include_desc.rs",
+      "filePath": "tests/skill_finder_include_desc.rs",
+      "summary": "Behavioral tests for skill search with include_description toggled: fuzzy matches hit descriptions, name-shape filters still apply, case-insensitive matching, prefix/suffix filters, regex mode, result limit, and edge cases (empty query, unloaded finder).",
+      "tags": [
+        "rust",
+        "test",
+        "skill",
+        "finder",
+        "search",
+        "description"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Builds an inline SkillFinder::Corpus + Finder for each scenario. 13 test functions."
+    },
+    {
+      "id": "file:tests/skill_load.rs",
+      "type": "file",
+      "name": "skill_load.rs",
+      "filePath": "tests/skill_load.rs",
+      "summary": "Integration tests for the load skill path: admin gating before bridge RPC, local file preservation of absolute path and .ils suffix, symlink suffix + path escaping, RPC success returns execution-host path, nil/skill-error propagation, and raw nil remains a valid expression result.",
+      "tags": [
+        "rust",
+        "test",
+        "skill",
+        "load",
+        "admin",
+        "rpc",
+        "symlink"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Defines a Bridge helper (TcpListener on 127.0.0.1:0 + worker thread) to simulate the daemon. 13 test functions."
+    },
+    {
+      "id": "file:tests/spectre.rs",
+      "type": "file",
+      "name": "spectre.rs",
+      "filePath": "tests/spectre.rs",
+      "summary": "Tests for Spectre (analog) skill generation: setup_skill progn + escape; analysis_skill number/boolean/string handling; sweep_skill with multiple measures; parse_skill_list tolerates nested/single/nil/quoted/flat/mixed shapes; corner_skill structural shape.",
+      "tags": [
+        "rust",
+        "test",
+        "spectre",
+        "skill",
+        "analog"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pure unit tests. 14 test functions."
+    },
+    {
+      "id": "file:tests/tunnel_hostname_check.rs",
+      "type": "file",
+      "name": "tunnel_hostname_check.rs",
+      "filePath": "tests/tunnel_hostname_check.rs",
+      "summary": "CLI tests for `vcli tunnel status` hostname-check behavior: unreachable daemon path, JSON top-level keys, missing hostname check, tunnel section reports not-running, config section reflects env overrides, table format includes daemon section, and skip when no remote host.",
+      "tags": [
+        "rust",
+        "test",
+        "cli",
+        "tunnel",
+        "status",
+        "hostname"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Spawns vcli with Command::new + env overrides. 8 test functions."
+    },
+    {
+      "id": "file:tests/tunnel_profile.rs",
+      "type": "file",
+      "name": "tunnel_profile.rs",
+      "filePath": "tests/tunnel_profile.rs",
+      "summary": "CLI + helper tests for profile-scoped config dirs: helpers produce distinct dirs per profile, env keys carry profile suffixes, bind_user/clear lifecycle, user-scope does not touch real $HOME, and bind_user rejects no-scope and multi-scope forms.",
+      "tags": [
+        "rust",
+        "test",
+        "cli",
+        "profile",
+        "tunnel",
+        "env"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Spawns the compiled vcli binary with custom PATH/profiles. 9 test functions."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:resources/x11_dismiss_dialog.py",
+      "target": "file:tests/docs/test_x11_dismiss_dialog.py",
+      "type": "tested_by",
+      "weight": 0.95
+    },
+    {
+      "source": "file:resources/x11_dismiss_dialog.py",
+      "target": "file:tests/docs/__init__.py",
+      "type": "tested_by",
+      "weight": 0.2
+    },
+    {
+      "source": "file:tests/daemon_user_guard.rs",
+      "target": "file:src/daemon/main.rs",
+      "type": "tested_by",
+      "weight": 0.85
+    },
+    {
+      "source": "file:tests/daemon_user_guard.rs",
+      "target": "file:resources/ramic_bridge.il",
+      "type": "tested_by",
+      "weight": 0.9
+    }
+  ]
+}

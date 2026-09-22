@@ -1,0 +1,3296 @@
+{
+  "batchIndex": 4,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:src/client/skill_loading.rs",
+      "type": "file",
+      "name": "skill_loading.rs",
+      "filePath": "src/client/skill_loading.rs",
+      "summary": "Helper that stages a local SKILL file on the remote host over the SSH transport before invocation. Copies the local file into a remote temp directory via tempfile + run_command, then executes it through CommandRequest::untimed and validates the response.",
+      "tags": [
+        "client",
+        "skill",
+        "ssh",
+        "file-staging"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Single async function using a transport trait abstraction and tempfile; the remote call path is exercised by tests."
+    },
+    {
+      "id": "file:src/commands/config.rs",
+      "type": "file",
+      "name": "config.rs",
+      "filePath": "src/commands/config.rs",
+      "summary": "CLI subcommand for inspecting the resolved configuration. Implements `check`, an entries JSON dump, source-label resolution, per-entry status reporting, and a tabular renderer; consumed by the `config` subcommand of the vcli binary.",
+      "tags": [
+        "cli",
+        "config",
+        "command",
+        "diagnostics"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pure functions over ResolvedConfig and ConfigReport; output formatting lives in src/output.rs."
+    },
+    {
+      "id": "file:src/commands/design.rs",
+      "type": "file",
+      "name": "design.rs",
+      "filePath": "src/commands/design.rs",
+      "summary": "Device-sizing command providing MOSFET `size`, `explore`, and gm/Id lookup-table helpers. Builds lookup tables from raw arrays, finds the closest L for a target gm/Id, and interpolates current density; used during analog sizing flows.",
+      "tags": [
+        "cli",
+        "analog",
+        "design",
+        "sizing",
+        "gmid"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pure numeric helpers plus a CLI entrypoint; no transport calls."
+    },
+    {
+      "id": "file:src/commands/diag.rs",
+      "type": "file",
+      "name": "diag.rs",
+      "filePath": "src/commands/diag.rs",
+      "summary": "Diagnostics subcommands including `cdslck` (library lock inspector) and `batch_read_locks` (batched read of cdslck records). Includes shell-quoting, owner-record parsing, age formatting, and a parallel SSH fan-out path over the client bridge.",
+      "tags": [
+        "cli",
+        "diagnostics",
+        "cdslck",
+        "locks",
+        "ssh"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Combines batched remote command dispatch via the transport bridge with structured stdout parsing."
+    },
+    {
+      "id": "file:src/commands/session.rs",
+      "type": "file",
+      "name": "session.rs",
+      "filePath": "src/commands/session.rs",
+      "summary": "Largest CLI module: orchestrates session discovery, listing, current-selection, history, cleanup, and detailed show output. Handles local-direct vs remote-tunnel endpoint resolution, hostname/IP matching, version-skew detection, cross-user validation, and TCP reachability checks across the client bridge and transport tunnel.",
+      "tags": [
+        "cli",
+        "session",
+        "discovery",
+        "transport",
+        "endpoint"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Heavily uses async, transport bridge traits, and Model types; endpoint resolution has multiple fallback paths."
+    },
+    {
+      "id": "file:src/commands/sim.rs",
+      "type": "file",
+      "name": "sim.rs",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Simulation command surface: setup, run, validate_measure_expr, measure, sweep, corner, results, create_netlist, async/parallel job dispatch, job_status/list/cancel, and license check. Calls the spectre jobs/runner and ocean/corner modules for netlist composition, measure-expression validation, and worker pool scheduling.",
+      "tags": [
+        "cli",
+        "simulation",
+        "spectre",
+        "ocean",
+        "jobs"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Module is a thin CLI wrapper around the spectre::* and ocean::corner APIs with extensive clap-derived argument plumbing."
+    },
+    {
+      "id": "file:src/commands/skill.rs",
+      "type": "file",
+      "name": "skill.rs",
+      "filePath": "src/commands/skill.rs",
+      "summary": "SKILL command surface for the vcli binary: exec, broadcast, load, eval, find, info, plus skill_finder directory discovery, remote skill_finder sync, and cache show. Wires SkillFinder paths from the local filesystem or remote skill_runtime through the client bridge.",
+      "tags": [
+        "cli",
+        "skill",
+        "skill-finder",
+        "exec",
+        "cache"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Combines local filesystem lookups with remote sync; relies on skill_finder::discover and skill_runtime transports."
+    },
+    {
+      "id": "file:src/commands/transport_daemon.rs",
+      "type": "file",
+      "name": "transport_daemon.rs",
+      "filePath": "src/commands/transport_daemon.rs",
+      "summary": "Subcommand entrypoints for the optional `virtuoso-daemon` binary (feature-gated). Provides `run`, `run_with`, and a transport-to-VirtuosoError converter. Backed by transport pool/scheduler/contract modules for Unix-socket daemon management.",
+      "tags": [
+        "cli",
+        "transport",
+        "daemon",
+        "feature-gated"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Likely gated behind a Cargo feature; thin glue over transport::* internals."
+    },
+    {
+      "id": "file:src/commands/tunnel.rs",
+      "type": "file",
+      "name": "tunnel.rs",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "SSH tunnel lifecycle management: start, scoped session attach, attach candidate discovery, live session discovery, attach/stop/detach/restart, diagnose, status, backend diagnostics, run, JSON serialization, and PID cleanup helpers. Coordinates transport tunnel/session discovery modules with the client bridge.",
+      "tags": [
+        "cli",
+        "tunnel",
+        "ssh",
+        "lifecycle",
+        "diagnostics"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Largest non-session CLI module; mixes JSON serialization, PID file management, and SSH process control."
+    },
+    {
+      "id": "file:src/commands/window.rs",
+      "type": "file",
+      "name": "window.rs",
+      "filePath": "src/commands/window.rs",
+      "summary": "GUI window/dialog command surface: list, dismiss_dialog, x11 enumeration and dismissal, screenshot, action_x11/action_x11_batch execution, mode classification, Skill octal escape decoding, and JSON parsing helpers. Provides mode-annotation utilities consumed by the TUI.",
+      "tags": [
+        "cli",
+        "window",
+        "x11",
+        "screenshot",
+        "dialog"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Includes X11 integration (likely via xdotool/x11rb) and SKILL octal string decoding; window_mode enum classifies windows for downstream display."
+    },
+    {
+      "id": "file:src/config.rs",
+      "type": "file",
+      "name": "config.rs",
+      "filePath": "src/config.rs",
+      "summary": "Core configuration module: defines ResolvedConfig, ConfigReport, ValueSource, and ConfigValue helpers. Implements env-with-profile resolution, target-based resolution, SSH target derivation, profile selection, digest hashing, build_report generation, and a large set of typed accessor/report methods. Central to the CLI’s config model.",
+      "tags": [
+        "config",
+        "core",
+        "env-resolution",
+        "profile",
+        "ssh-target"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Very large module with many tiny accessor functions; structure is data-oriented with explicit ValueSource tracking and a digest for change detection."
+    },
+    {
+      "id": "file:src/context.rs",
+      "type": "file",
+      "name": "context.rs",
+      "filePath": "src/context.rs",
+      "summary": "Runtime context that bundles a ResolvedConfig with a target id and exposes ownership validators. Owns config_digest, target_id, and validates session/tunnel/endpoint ownership so commands can refuse actions targeting other users’ resources.",
+      "tags": [
+        "context",
+        "config",
+        "ownership",
+        "runtime"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pure struct with validation methods; the cross-user guard is critical for daemon security."
+    },
+    {
+      "id": "file:src/error.rs",
+      "type": "file",
+      "name": "error.rs",
+      "filePath": "src/error.rs",
+      "summary": "Defines VirtuosoError, the project-wide error enum, plus CliError helpers. Provides exit_code, error_type, retryable, suggestion, diagnostic_context, and to_cli_error conversion. Implemented via thiserror for ergonomic Display/Error derives.",
+      "tags": [
+        "error",
+        "core",
+        "thiserror",
+        "cli-error"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Central error type shared across crates; includes a retryable hint and human-readable suggestions for CLI display."
+    },
+    {
+      "id": "file:src/models.rs",
+      "type": "file",
+      "name": "models.rs",
+      "filePath": "src/models.rs",
+      "summary": "Domain models and small helper modules: SkillEvalResult, RpcResponse<T>, VersionInfo, AppPaths (with cache_dir, sessions_dir, load/save), SessionRecord (list/list_remote/sync_from_remote/is_alive), SessionFile helpers, SshBackend, and per-profile config persistence.",
+      "tags": [
+        "models",
+        "domain",
+        "session",
+        "rpc",
+        "persistence"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Many small data types and accessors; SessionRecord::list_remote and sync_from_remote are the most consequential async methods."
+    },
+    {
+      "id": "file:src/output.rs",
+      "type": "file",
+      "name": "output.rs",
+      "filePath": "src/output.rs",
+      "summary": "CLI output formatting helpers: resolve format choice, print JSON or human-readable text, print_json, and print_value. Acts as the sink layer between commands and stdout.",
+      "tags": [
+        "output",
+        "formatting",
+        "cli",
+        "json"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Tiny module with no external deps; relies on serde_json for pretty printing."
+    },
+    {
+      "id": "file:src/rpc/dispatcher.rs",
+      "type": "file",
+      "name": "dispatcher.rs",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "RPC dispatcher routing JSON-RPC method names to specialized handlers: dispatch_schematic, dispatch_maestro, dispatch_window, dispatch_cell, dispatch_tx, dispatch_file, dispatch_util, dispatch_skill, and dispatch_sim. Includes Skill result parsing, octal-escape normalization, and JSON-field coercion helpers.",
+      "tags": [
+        "rpc",
+        "dispatcher",
+        "json-rpc",
+        "skill",
+        "core"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Largest function file by handler count; each dispatch_* fn is a match arm on a typed payload struct."
+    },
+    {
+      "id": "file:src/session/heartbeat.rs",
+      "type": "file",
+      "name": "heartbeat.rs",
+      "filePath": "src/session/heartbeat.rs",
+      "summary": "Heartbeat watchdog: track active sessions, periodically mark stale ones, and clear stale entries. Used by the daemon/bridge to detect dead SSH sessions and trigger cleanup.",
+      "tags": [
+        "session",
+        "heartbeat",
+        "watchdog",
+        "cleanup"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Background task driven by tokio timers; pure state transitions plus async I/O for stale checks."
+    },
+    {
+      "id": "file:src/session/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/session/mod.rs",
+      "summary": "Module declaration file for the `session` submodule. Re-exports heartbeat and any sibling modules (currently only heartbeat) and provides no behavior of its own.",
+      "tags": [
+        "module-root",
+        "session"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Trivial mod file with only `pub mod heartbeat;` and re-exports."
+    },
+    {
+      "id": "file:src/spectre/parsers.rs",
+      "type": "file",
+      "name": "parsers.rs",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Spectre PSF output parsers: parse_psf_ascii, parse_psf_dir, parse_psf_signal_file, parse_sweep_psf_directory, strict variants, sweep-flat parser, structured op-block parser, scalar/vector/frequency accessors, and exact-result-file discovery. Implements both lenient and strict PSF formats used by the sim command’s results phase.",
+      "tags": [
+        "spectre",
+        "psf",
+        "parser",
+        "simulation",
+        "sweep"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Large parser module with many small functions; strict vs lenient parsers coexist, and op-block parsing is recursive (find_closing_paren)."
+    },
+    {
+      "id": "function:src/client/skill_loading.rs:stage_remote_file@7",
+      "type": "function",
+      "name": "stage_remote_file",
+      "filePath": "src/client/skill_loading.rs",
+      "summary": "Function stage_remote_file(transport, local) in src/client/skill_loading.rs (lines 7-52).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/config.rs:check@22",
+      "type": "function",
+      "name": "check",
+      "filePath": "src/commands/config.rs",
+      "summary": "Function check(format, require_explicit, pre_check) in src/commands/config.rs (lines 22-54).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/config.rs:entries_json@61",
+      "type": "function",
+      "name": "entries_json",
+      "filePath": "src/commands/config.rs",
+      "summary": "Function entries_json(report) in src/commands/config.rs (lines 61-82).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/config.rs:render_table@119",
+      "type": "function",
+      "name": "render_table",
+      "filePath": "src/commands/config.rs",
+      "summary": "Function render_table(report, status) in src/commands/config.rs (lines 119-207).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/design.rs:size@5",
+      "type": "function",
+      "name": "size",
+      "filePath": "src/commands/design.rs",
+      "summary": "Function size(gmid_target, l_target, gm_req, id_req, pdk, device_type, format) in src/commands/design.rs (lines 5-81).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/design.rs:explore@83",
+      "type": "function",
+      "name": "explore",
+      "filePath": "src/commands/design.rs",
+      "summary": "Function explore(pdk, device_type, format) in src/commands/design.rs (lines 83-135).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/diag.rs:cdslck@55",
+      "type": "function",
+      "name": "cdslck",
+      "filePath": "src/commands/diag.rs",
+      "summary": "Function cdslck(ctx, lib, view_filter) in src/commands/diag.rs (lines 55-151).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/diag.rs:batch_read_locks@153",
+      "type": "function",
+      "name": "batch_read_locks",
+      "filePath": "src/commands/diag.rs",
+      "summary": "Function batch_read_locks(transport, paths) in src/commands/diag.rs (lines 153-174).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/diag.rs:parse_batch_output@176",
+      "type": "function",
+      "name": "parse_batch_output",
+      "filePath": "src/commands/diag.rs",
+      "summary": "Function parse_batch_output(stdout, paths) in src/commands/diag.rs (lines 176-225).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/diag.rs:parse_owner_record@227",
+      "type": "function",
+      "name": "parse_owner_record",
+      "filePath": "src/commands/diag.rs",
+      "summary": "Function parse_owner_record(rec) in src/commands/diag.rs (lines 227-250).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:resolve_local_direct@89",
+      "type": "function",
+      "name": "resolve_local_direct",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function resolve_local_direct(ctx, session) in src/commands/session.rs (lines 89-117).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:resolve_remote_tunnel@129",
+      "type": "function",
+      "name": "resolve_remote_tunnel",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function resolve_remote_tunnel(ctx, session, state) in src/commands/session.rs (lines 129-243).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:system_hostname@253",
+      "type": "function",
+      "name": "system_hostname",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function system_hostname() in src/commands/session.rs (lines 253-276).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:hostnames_match@293",
+      "type": "function",
+      "name": "hostnames_match",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function hostnames_match(a, b) in src/commands/session.rs (lines 293-312).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:is_local_session@326",
+      "type": "function",
+      "name": "is_local_session",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function is_local_session(cfg, session) in src/commands/session.rs (lines 326-354).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:list@389",
+      "type": "function",
+      "name": "list",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function list(ctx, format) in src/commands/session.rs (lines 389-548).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:current@559",
+      "type": "function",
+      "name": "current",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function current(ctx) in src/commands/session.rs (lines 559-635).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:cleanup@648",
+      "type": "function",
+      "name": "cleanup",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function cleanup(ctx, dry_run) in src/commands/session.rs (lines 648-738).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:history@746",
+      "type": "function",
+      "name": "history",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function history(ctx, id, only_skill, only_cmd, limit) in src/commands/session.rs (lines 746-811).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:show@826",
+      "type": "function",
+      "name": "show",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function show(ctx, id, _format) in src/commands/session.rs (lines 826-969).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/session.rs:check_cross_user@1011",
+      "type": "function",
+      "name": "check_cross_user",
+      "filePath": "src/commands/session.rs",
+      "summary": "Function check_cross_user(cfg, session, daemon_user) in src/commands/session.rs (lines 1011-1039).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:run@29",
+      "type": "function",
+      "name": "run",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function run(analysis, params, timeout) in src/commands/sim.rs (lines 29-89).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:validate_measure_expr@93",
+      "type": "function",
+      "name": "validate_measure_expr",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function validate_measure_expr(expr) in src/commands/sim.rs (lines 93-121).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:measure@123",
+      "type": "function",
+      "name": "measure",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function measure(analysis, exprs) in src/commands/sim.rs (lines 123-203).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:sweep@205",
+      "type": "function",
+      "name": "sweep",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function sweep(var, from, to, step, analysis, measure_exprs, timeout) in src/commands/sim.rs (lines 205-257).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:corner@259",
+      "type": "function",
+      "name": "corner",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function corner(file, timeout) in src/commands/sim.rs (lines 259-300).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:results@302",
+      "type": "function",
+      "name": "results",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function results() in src/commands/sim.rs (lines 302-323).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:create_netlist_inner@331",
+      "type": "function",
+      "name": "create_netlist_inner",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function create_netlist_inner(client, lib, cell, view, recreate) in src/commands/sim.rs (lines 331-426).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:netlist@442",
+      "type": "function",
+      "name": "netlist",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function netlist(lib, cell, view, recreate, analyses) in src/commands/sim.rs (lines 442-579).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:run_parallel@606",
+      "type": "function",
+      "name": "run_parallel",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function run_parallel(ctx, inputs) in src/commands/sim.rs (lines 606-633).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:parallel_report@635",
+      "type": "function",
+      "name": "parallel_report",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function parallel_report(results, total) in src/commands/sim.rs (lines 635-696).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/sim.rs:check_license@728",
+      "type": "function",
+      "name": "check_license",
+      "filePath": "src/commands/sim.rs",
+      "summary": "Function check_license() in src/commands/sim.rs (lines 728-833).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/skill.rs:exec@8",
+      "type": "function",
+      "name": "exec",
+      "filePath": "src/commands/skill.rs",
+      "summary": "Function exec(ctx, code, timeout, readonly) in src/commands/skill.rs (lines 8-27).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/skill.rs:broadcast@32",
+      "type": "function",
+      "name": "broadcast",
+      "filePath": "src/commands/skill.rs",
+      "summary": "Function broadcast(code, timeout) in src/commands/skill.rs (lines 32-117).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/skill.rs:eval@144",
+      "type": "function",
+      "name": "eval",
+      "filePath": "src/commands/skill.rs",
+      "summary": "Function eval(ctx, code, stdin) in src/commands/skill.rs (lines 144-193).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/skill.rs:find@208",
+      "type": "function",
+      "name": "find",
+      "filePath": "src/commands/skill.rs",
+      "summary": "Function find(ctx, query, mode, limit, refresh, include_desc) in src/commands/skill.rs (lines 208-265).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/skill.rs:info@270",
+      "type": "function",
+      "name": "info",
+      "filePath": "src/commands/skill.rs",
+      "summary": "Function info(ctx, func_name) in src/commands/skill.rs (lines 270-312).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/skill.rs:find_skill_finder_dir@319",
+      "type": "function",
+      "name": "find_skill_finder_dir",
+      "filePath": "src/commands/skill.rs",
+      "summary": "Function find_skill_finder_dir(cfg) in src/commands/skill.rs (lines 319-362).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/skill.rs:discover_skill_finder_remote@365",
+      "type": "function",
+      "name": "discover_skill_finder_remote",
+      "filePath": "src/commands/skill.rs",
+      "summary": "Function discover_skill_finder_remote(target, cadence_cshrc) in src/commands/skill.rs (lines 365-421).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/skill.rs:sync_cache@424",
+      "type": "function",
+      "name": "sync_cache",
+      "filePath": "src/commands/skill.rs",
+      "summary": "Function sync_cache(ctx, host, cshrc, verbose) in src/commands/skill.rs (lines 424-472).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/skill.rs:show_cache@475",
+      "type": "function",
+      "name": "show_cache",
+      "filePath": "src/commands/skill.rs",
+      "summary": "Function show_cache(ctx, host, clear) in src/commands/skill.rs (lines 475-516).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/transport_daemon.rs:run_with@62",
+      "type": "function",
+      "name": "run_with",
+      "filePath": "src/commands/transport_daemon.rs",
+      "summary": "Function run_with(ipc_endpoint, token_path, daemon_nonce) in src/commands/transport_daemon.rs (lines 62-121).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/tunnel.rs:start@12",
+      "type": "function",
+      "name": "start",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "Function start(ctx, _timeout, dry_run) in src/commands/tunnel.rs (lines 12-55).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/tunnel.rs:discover_live_session@95",
+      "type": "function",
+      "name": "discover_live_session",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "Function discover_live_session(ctx, client) in src/commands/tunnel.rs (lines 95-134).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/tunnel.rs:attach@149",
+      "type": "function",
+      "name": "attach",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "Function attach(ctx, dry_run) in src/commands/tunnel.rs (lines 149-246).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/tunnel.rs:stop@248",
+      "type": "function",
+      "name": "stop",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "Function stop(ctx, force, dry_run) in src/commands/tunnel.rs (lines 248-300).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/tunnel.rs:detach@313",
+      "type": "function",
+      "name": "detach",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "Function detach(ctx) in src/commands/tunnel.rs (lines 313-343).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/tunnel.rs:diagnose@365",
+      "type": "function",
+      "name": "diagnose",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "Function diagnose(ctx) in src/commands/tunnel.rs (lines 365-465).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/tunnel.rs:status@467",
+      "type": "function",
+      "name": "status",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "Function status(ctx, format) in src/commands/tunnel.rs (lines 467-640).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/tunnel.rs:backend_diagnostics@657",
+      "type": "function",
+      "name": "backend_diagnostics",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "Function backend_diagnostics(cfg, state_backend) in src/commands/tunnel.rs (lines 657-687).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/tunnel.rs:run@712",
+      "type": "function",
+      "name": "run",
+      "filePath": "src/commands/tunnel.rs",
+      "summary": "Function run(vc, configured, timeout) in src/commands/tunnel.rs (lines 712-741).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:dismiss_dialog@145",
+      "type": "function",
+      "name": "dismiss_dialog",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function dismiss_dialog(ctx, action, dry_run) in src/commands/window.rs (lines 145-167).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:list_dialogs_x11@174",
+      "type": "function",
+      "name": "list_dialogs_x11",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function list_dialogs_x11(ctx, explicit_display) in src/commands/window.rs (lines 174-195).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:dismiss_dialog_x11@207",
+      "type": "function",
+      "name": "dismiss_dialog_x11",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function dismiss_dialog_x11(ctx, action, dry_run, explicit_display, window_id) in src/commands/window.rs (lines 207-255).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:list_windows_x11@264",
+      "type": "function",
+      "name": "list_windows_x11",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function list_windows_x11(ctx, explicit_display) in src/commands/window.rs (lines 264-285).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:dismiss_window_x11@292",
+      "type": "function",
+      "name": "dismiss_window_x11",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function dismiss_window_x11(ctx, window_id, pid, action, explicit_display) in src/commands/window.rs (lines 292-372).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:screenshot@377",
+      "type": "function",
+      "name": "screenshot",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function screenshot(ctx, path, window_pattern) in src/commands/window.rs (lines 377-409).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:action_x11@416",
+      "type": "function",
+      "name": "action_x11",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function action_x11(ctx, window_id, pid, display, operation, x, y, text, button, output_dir, timeout_secs, explicit_display, direct) in src/commands/window.rs (lines 416-463).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:action_x11_batch@472",
+      "type": "function",
+      "name": "action_x11_batch",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function action_x11_batch(ctx, file_path, direct, default_pid, default_display, explicit_display, timeout_secs) in src/commands/window.rs (lines 472-525).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:decode_skill_octal@559",
+      "type": "function",
+      "name": "decode_skill_octal",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function decode_skill_octal(s) in src/commands/window.rs (lines 559-585).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/commands/window.rs:annotate_modes@587",
+      "type": "function",
+      "name": "annotate_modes",
+      "filePath": "src/commands/window.rs",
+      "summary": "Function annotate_modes(v) in src/commands/window.rs (lines 587-606).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:fmt@188",
+      "type": "function",
+      "name": "fmt",
+      "filePath": "src/config.rs",
+      "summary": "Function fmt(f) in src/config.rs (lines 188-229).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:build_report_from_target@626",
+      "type": "function",
+      "name": "build_report_from_target",
+      "filePath": "src/config.rs",
+      "summary": "Function build_report_from_target(target, target_name, report) in src/config.rs (lines 626-666).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:target_provides@675",
+      "type": "function",
+      "name": "target_provides",
+      "filePath": "src/config.rs",
+      "summary": "Function target_provides(key, t) in src/config.rs (lines 675-715).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:raw_with_source@734",
+      "type": "function",
+      "name": "raw_with_source",
+      "filePath": "src/config.rs",
+      "summary": "Function raw_with_source(key) in src/config.rs (lines 734-772).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:to_config@847",
+      "type": "function",
+      "name": "to_config",
+      "filePath": "src/config.rs",
+      "summary": "Function to_config() in src/config.rs (lines 847-922).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:resolve_profile@955",
+      "type": "function",
+      "name": "resolve_profile",
+      "filePath": "src/config.rs",
+      "summary": "Function resolve_profile() in src/config.rs (lines 955-1017).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:from_env_resolve@1030",
+      "type": "function",
+      "name": "from_env_resolve",
+      "filePath": "src/config.rs",
+      "summary": "Function from_env_resolve(profile, honor_vb_target) in src/config.rs (lines 1030-1066).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:from_target@1082",
+      "type": "function",
+      "name": "from_target",
+      "filePath": "src/config.rs",
+      "summary": "Function from_target(target, target_name) in src/config.rs (lines 1082-1139).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:digest@1151",
+      "type": "function",
+      "name": "digest",
+      "filePath": "src/config.rs",
+      "summary": "Function digest() in src/config.rs (lines 1151-1177).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/config.rs:build_report@1205",
+      "type": "function",
+      "name": "build_report",
+      "filePath": "src/config.rs",
+      "summary": "Function build_report(profile, pre_check) in src/config.rs (lines 1205-1465).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/context.rs:validate_endpoint_ownership@95",
+      "type": "function",
+      "name": "validate_endpoint_ownership",
+      "filePath": "src/context.rs",
+      "summary": "Function validate_endpoint_ownership(kind, id, host, port) in src/context.rs (lines 95-129).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/error.rs:suggestion@99",
+      "type": "function",
+      "name": "suggestion",
+      "filePath": "src/error.rs",
+      "summary": "Function suggestion() in src/error.rs (lines 99-130).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/error.rs:diagnostic_context@134",
+      "type": "function",
+      "name": "diagnostic_context",
+      "filePath": "src/error.rs",
+      "summary": "Function diagnostic_context() in src/error.rs (lines 134-177).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/models.rs:list@238",
+      "type": "function",
+      "name": "list",
+      "filePath": "src/models.rs",
+      "summary": "Function list() in src/models.rs (lines 238-257).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/models.rs:state_path@458",
+      "type": "function",
+      "name": "state_path",
+      "filePath": "src/models.rs",
+      "summary": "Function state_path(profile) in src/models.rs (lines 458-478).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch@107",
+      "type": "function",
+      "name": "dispatch",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch(client, request) in src/rpc/dispatcher.rs (lines 107-135).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch_inner@137",
+      "type": "function",
+      "name": "dispatch_inner",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch_inner(client, method, params) in src/rpc/dispatcher.rs (lines 137-208).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch_schematic@210",
+      "type": "function",
+      "name": "dispatch_schematic",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch_schematic(client, op, params) in src/rpc/dispatcher.rs (lines 210-349).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch_maestro@351",
+      "type": "function",
+      "name": "dispatch_maestro",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch_maestro(client, op, params) in src/rpc/dispatcher.rs (lines 351-548).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch_window@550",
+      "type": "function",
+      "name": "dispatch_window",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch_window(client, op, params) in src/rpc/dispatcher.rs (lines 550-644).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch_cell@646",
+      "type": "function",
+      "name": "dispatch_cell",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch_cell(client, op, params) in src/rpc/dispatcher.rs (lines 646-708).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch_tx@710",
+      "type": "function",
+      "name": "dispatch_tx",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch_tx(client, op, params) in src/rpc/dispatcher.rs (lines 710-759).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch_file@761",
+      "type": "function",
+      "name": "dispatch_file",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch_file(client, op, params) in src/rpc/dispatcher.rs (lines 761-780).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch_util@782",
+      "type": "function",
+      "name": "dispatch_util",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch_util(client, op, params) in src/rpc/dispatcher.rs (lines 782-828).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/dispatcher.rs:dispatch_skill@830",
+      "type": "function",
+      "name": "dispatch_skill",
+      "filePath": "src/rpc/dispatcher.rs",
+      "summary": "Function dispatch_skill(client, op, params) in src/rpc/dispatcher.rs (lines 830-901).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/session/heartbeat.rs:start@39",
+      "type": "function",
+      "name": "start",
+      "filePath": "src/session/heartbeat.rs",
+      "summary": "Function start() in src/session/heartbeat.rs (lines 39-64).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/session/heartbeat.rs:check_all_sessions@73",
+      "type": "function",
+      "name": "check_all_sessions",
+      "filePath": "src/session/heartbeat.rs",
+      "summary": "Function check_all_sessions() in src/session/heartbeat.rs (lines 73-107).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_psf_dir@30",
+      "type": "function",
+      "name": "parse_psf_dir",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_psf_dir(dir) in src/spectre/parsers.rs (lines 30-49).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_psf_ascii_content@74",
+      "type": "function",
+      "name": "parse_psf_ascii_content",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_psf_ascii_content(content) in src/spectre/parsers.rs (lines 74-109).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_sweep_psf_directory@139",
+      "type": "function",
+      "name": "parse_sweep_psf_directory",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_sweep_psf_directory(output_dir) in src/spectre/parsers.rs (lines 139-240).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:require_scalar@304",
+      "type": "function",
+      "name": "require_scalar",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function require_scalar(key) in src/spectre/parsers.rs (lines 304-330).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:require_vector@333",
+      "type": "function",
+      "name": "require_vector",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function require_vector(key) in src/spectre/parsers.rs (lines 333-353).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:require_frequency_hz@356",
+      "type": "function",
+      "name": "require_frequency_hz",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function require_frequency_hz(key) in src/spectre/parsers.rs (lines 356-390).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:read_psf_ascii_strict@411",
+      "type": "function",
+      "name": "read_psf_ascii_strict",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function read_psf_ascii_strict(path) in src/spectre/parsers.rs (lines 411-438).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_simple_floats_strict@456",
+      "type": "function",
+      "name": "parse_simple_floats_strict",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_simple_floats_strict(content) in src/spectre/parsers.rs (lines 456-480).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_sweep_section_strict@487",
+      "type": "function",
+      "name": "parse_sweep_section_strict",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_sweep_section_strict(content) in src/spectre/parsers.rs (lines 487-525).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:find_exact_result_file@539",
+      "type": "function",
+      "name": "find_exact_result_file",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function find_exact_result_file(root, relative_name) in src/spectre/parsers.rs (lines 539-598).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_psf_ascii_strict_directory@610",
+      "type": "function",
+      "name": "parse_psf_ascii_strict_directory",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_psf_ascii_strict_directory(raw_dir) in src/spectre/parsers.rs (lines 610-658).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_sweep_flat@661",
+      "type": "function",
+      "name": "parse_sweep_flat",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_sweep_flat(output_dir) in src/spectre/parsers.rs (lines 661-686).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_structured_op_blocks@702",
+      "type": "function",
+      "name": "parse_structured_op_blocks",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_structured_op_blocks(raw_dir) in src/spectre/parsers.rs (lines 702-726).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_psf_type_library@766",
+      "type": "function",
+      "name": "parse_psf_type_library",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_psf_type_library(content) in src/spectre/parsers.rs (lines 766-798).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_op_blocks_from_content@801",
+      "type": "function",
+      "name": "parse_op_blocks_from_content",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_op_blocks_from_content(content, ops) in src/spectre/parsers.rs (lines 801-882).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:find_closing_paren@886",
+      "type": "function",
+      "name": "find_closing_paren",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function find_closing_paren(content, open_offset) in src/spectre/parsers.rs (lines 886-906).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/parsers.rs:parse_op_inner_values@909",
+      "type": "function",
+      "name": "parse_op_inner_values",
+      "filePath": "src/spectre/parsers.rs",
+      "summary": "Function parse_op_inner_values(inner) in src/spectre/parsers.rs (lines 909-940).",
+      "tags": [
+        "rust-function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/client/skill_loading.rs",
+      "target": "function:src/client/skill_loading.rs:stage_remote_file@7",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/config.rs",
+      "target": "function:src/commands/config.rs:check@22",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/config.rs",
+      "target": "function:src/commands/config.rs:entries_json@61",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/config.rs",
+      "target": "function:src/commands/config.rs:render_table@119",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/design.rs",
+      "target": "function:src/commands/design.rs:size@5",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/design.rs",
+      "target": "function:src/commands/design.rs:explore@83",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/diag.rs",
+      "target": "function:src/commands/diag.rs:cdslck@55",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/diag.rs",
+      "target": "function:src/commands/diag.rs:batch_read_locks@153",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/diag.rs",
+      "target": "function:src/commands/diag.rs:parse_batch_output@176",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/diag.rs",
+      "target": "function:src/commands/diag.rs:parse_owner_record@227",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:resolve_local_direct@89",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:resolve_remote_tunnel@129",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:system_hostname@253",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:hostnames_match@293",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:is_local_session@326",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:list@389",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:current@559",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:cleanup@648",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:history@746",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:show@826",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "function:src/commands/session.rs:check_cross_user@1011",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:run@29",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:validate_measure_expr@93",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:measure@123",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:sweep@205",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:corner@259",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:results@302",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:create_netlist_inner@331",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:netlist@442",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:run_parallel@606",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:parallel_report@635",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "function:src/commands/sim.rs:check_license@728",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "function:src/commands/skill.rs:exec@8",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "function:src/commands/skill.rs:broadcast@32",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "function:src/commands/skill.rs:eval@144",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "function:src/commands/skill.rs:find@208",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "function:src/commands/skill.rs:info@270",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "function:src/commands/skill.rs:find_skill_finder_dir@319",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "function:src/commands/skill.rs:discover_skill_finder_remote@365",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "function:src/commands/skill.rs:sync_cache@424",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "function:src/commands/skill.rs:show_cache@475",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/transport_daemon.rs",
+      "target": "function:src/commands/transport_daemon.rs:run_with@62",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "function:src/commands/tunnel.rs:start@12",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "function:src/commands/tunnel.rs:discover_live_session@95",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "function:src/commands/tunnel.rs:attach@149",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "function:src/commands/tunnel.rs:stop@248",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "function:src/commands/tunnel.rs:detach@313",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "function:src/commands/tunnel.rs:diagnose@365",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "function:src/commands/tunnel.rs:status@467",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "function:src/commands/tunnel.rs:backend_diagnostics@657",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "function:src/commands/tunnel.rs:run@712",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:dismiss_dialog@145",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:list_dialogs_x11@174",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:dismiss_dialog_x11@207",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:list_windows_x11@264",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:dismiss_window_x11@292",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:screenshot@377",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:action_x11@416",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:action_x11_batch@472",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:decode_skill_octal@559",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "function:src/commands/window.rs:annotate_modes@587",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:fmt@188",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:build_report_from_target@626",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:target_provides@675",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:raw_with_source@734",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:to_config@847",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:resolve_profile@955",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:from_env_resolve@1030",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:from_target@1082",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:digest@1151",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "function:src/config.rs:build_report@1205",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/context.rs",
+      "target": "function:src/context.rs:validate_endpoint_ownership@95",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/error.rs",
+      "target": "function:src/error.rs:suggestion@99",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/error.rs",
+      "target": "function:src/error.rs:diagnostic_context@134",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/models.rs",
+      "target": "function:src/models.rs:list@238",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/models.rs",
+      "target": "function:src/models.rs:state_path@458",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch@107",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch_inner@137",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch_schematic@210",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch_maestro@351",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch_window@550",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch_cell@646",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch_tx@710",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch_file@761",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch_util@782",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "function:src/rpc/dispatcher.rs:dispatch_skill@830",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/session/heartbeat.rs",
+      "target": "function:src/session/heartbeat.rs:start@39",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/session/heartbeat.rs",
+      "target": "function:src/session/heartbeat.rs:check_all_sessions@73",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_psf_dir@30",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_psf_ascii_content@74",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_sweep_psf_directory@139",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:require_scalar@304",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:require_vector@333",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:require_frequency_hz@356",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:read_psf_ascii_strict@411",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_simple_floats_strict@456",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_sweep_section_strict@487",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:find_exact_result_file@539",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_psf_ascii_strict_directory@610",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_sweep_flat@661",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_structured_op_blocks@702",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_psf_type_library@766",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_op_blocks_from_content@801",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:find_closing_paren@886",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "function:src/spectre/parsers.rs:parse_op_inner_values@909",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/client/skill_loading.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/client/skill_loading.rs",
+      "target": "file:src/transport/contract.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/client/skill_loading.rs",
+      "target": "file:src/transport/ssh.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/config.rs",
+      "target": "file:src/config.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/config.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/config.rs",
+      "target": "file:src/output.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/design.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/design.rs",
+      "target": "file:src/output.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/diag.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/diag.rs",
+      "target": "file:src/config.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/diag.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/diag.rs",
+      "target": "file:src/transport/contract.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "file:src/config.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "file:src/context.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "file:src/output.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "file:src/transport/identity.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/session.rs",
+      "target": "file:src/transport/tunnel.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "file:src/client/skill_runtime.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "file:src/ocean/corner.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "file:src/spectre/jobs.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/sim.rs",
+      "target": "file:src/spectre/runner.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "file:src/config.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/skill.rs",
+      "target": "file:src/skill_finder/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/transport_daemon.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/transport_daemon.rs",
+      "target": "file:src/transport/contract.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/transport_daemon.rs",
+      "target": "file:src/transport/pool.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/transport_daemon.rs",
+      "target": "file:src/transport/scheduler.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "file:src/config.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "file:src/context.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "file:src/output.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "file:src/transport/session_discovery.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/tunnel.rs",
+      "target": "file:src/transport/tunnel.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/window.rs",
+      "target": "file:src/transport/contract.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "file:src/config_file.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/config.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/context.rs",
+      "target": "file:src/config.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/context.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/error.rs",
+      "target": "file:src/output.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/models.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/models.rs",
+      "target": "file:src/transport/contract.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "file:src/auth.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "file:src/context.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/session/heartbeat.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/session/heartbeat.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/session/heartbeat.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/session/mod.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/session/mod.rs",
+      "target": "file:src/session/heartbeat.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/spectre/parsers.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/rpc/dispatcher.rs",
+      "target": "file:tests/daemon_user_guard.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "function:src/commands/config.rs:check@22",
+      "target": "function:src/commands/config.rs:status_for@103",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/config.rs:check@22",
+      "target": "function:src/commands/config.rs:render_table@119",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/config.rs:entries_json@61",
+      "target": "function:src/commands/config.rs:source_label@85",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/design.rs:size@5",
+      "target": "function:src/commands/design.rs:load_lookup@137",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/design.rs:size@5",
+      "target": "function:src/commands/design.rs:find_closest_l@148",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/design.rs:size@5",
+      "target": "function:src/commands/design.rs:interpolate_gmid@168",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/design.rs:explore@83",
+      "target": "function:src/commands/design.rs:load_lookup@137",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/diag.rs:cdslck@55",
+      "target": "function:src/commands/diag.rs:batch_read_locks@153",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/diag.rs:batch_read_locks@153",
+      "target": "function:src/commands/diag.rs:shell_quote@252",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/diag.rs:batch_read_locks@153",
+      "target": "function:src/commands/diag.rs:parse_batch_output@176",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/diag.rs:parse_batch_output@176",
+      "target": "function:src/commands/diag.rs:parse_owner_record@227",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:resolve_probe_endpoint@50",
+      "target": "function:src/commands/session.rs:resolve_probe_endpoint_with_state@73",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:resolve_probe_endpoint_with_state@73",
+      "target": "function:src/commands/session.rs:resolve_remote_tunnel@129",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:resolve_probe_endpoint_with_state@73",
+      "target": "function:src/commands/session.rs:resolve_local_direct@89",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:resolve_local_direct@89",
+      "target": "function:src/commands/session.rs:is_local_session@326",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:resolve_local_direct@89",
+      "target": "function:src/commands/session.rs:tcp_reachable@358",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:resolve_remote_tunnel@129",
+      "target": "function:src/commands/session.rs:tcp_reachable@358",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:hostnames_match@293",
+      "target": "function:src/commands/session.rs:is_ip_address@280",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:is_local_session@326",
+      "target": "function:src/commands/session.rs:system_hostname@253",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:is_local_session@326",
+      "target": "function:src/commands/session.rs:hostnames_match@293",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:list@389",
+      "target": "function:src/commands/session.rs:compute_endpoint_match@976",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:list@389",
+      "target": "function:src/commands/session.rs:resolve_probe_endpoint_with_state@73",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:current@559",
+      "target": "function:src/commands/session.rs:compute_endpoint_match@976",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:current@559",
+      "target": "function:src/commands/session.rs:resolve_probe_endpoint@50",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:cleanup@648",
+      "target": "function:src/commands/session.rs:compute_endpoint_match@976",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:cleanup@648",
+      "target": "function:src/commands/session.rs:resolve_probe_endpoint@50",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:history@746",
+      "target": "function:src/commands/session.rs:compute_endpoint_match@976",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:show@826",
+      "target": "function:src/commands/session.rs:compute_endpoint_match@976",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:show@826",
+      "target": "function:src/commands/session.rs:resolve_probe_endpoint@50",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:show@826",
+      "target": "function:src/commands/session.rs:check_version_skew@990",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/session.rs:show@826",
+      "target": "function:src/commands/session.rs:check_cross_user@1011",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/sim.rs:measure@123",
+      "target": "function:src/commands/sim.rs:validate_measure_expr@93",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/sim.rs:netlist@442",
+      "target": "function:src/commands/sim.rs:create_netlist_inner@331",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/sim.rs:netlist@442",
+      "target": "function:src/commands/sim.rs:analysis_block@430",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/sim.rs:run_parallel@606",
+      "target": "function:src/commands/sim.rs:parallel_report@635",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/sim.rs:parallel_report@635",
+      "target": "function:src/commands/sim.rs:results@302",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/skill.rs:find@208",
+      "target": "function:src/commands/skill.rs:find_skill_finder_dir@319",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/skill.rs:find_skill_finder_dir@319",
+      "target": "function:src/commands/skill.rs:discover_skill_finder_remote@365",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/tunnel.rs:attach_candidate_sessions@74",
+      "target": "function:src/commands/tunnel.rs:scoped_attach_sessions@60",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/tunnel.rs:discover_live_session@95",
+      "target": "function:src/commands/tunnel.rs:attach_candidate_sessions@74",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/tunnel.rs:attach@149",
+      "target": "function:src/commands/tunnel.rs:discover_live_session@95",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/tunnel.rs:detach@313",
+      "target": "function:src/commands/tunnel.rs:kill_tunnel_pid@827",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/tunnel.rs:restart@345",
+      "target": "function:src/commands/tunnel.rs:discover_live_session@95",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/tunnel.rs:restart@345",
+      "target": "function:src/commands/tunnel.rs:stop@248",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/tunnel.rs:restart@345",
+      "target": "function:src/commands/tunnel.rs:attach@149",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/tunnel.rs:diagnose@365",
+      "target": "function:src/commands/tunnel.rs:start@12",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/tunnel.rs:status@467",
+      "target": "function:src/commands/tunnel.rs:backend_diagnostics@657",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/window.rs:list@121",
+      "target": "function:src/commands/window.rs:parse_window_json@548",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/window.rs:list@121",
+      "target": "function:src/commands/window.rs:annotate_modes@587",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/window.rs:parse_window_json@548",
+      "target": "function:src/commands/window.rs:decode_skill_octal@559",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/window.rs:annotate_modes@587",
+      "target": "function:src/commands/window.rs:window_mode@528",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/window.rs:annotate_modes@587",
+      "target": "function:src/commands/window.rs:classify_window@56",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config.rs:sanitize_raw_value@517",
+      "target": "function:src/config.rs:raw@719",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config.rs:v_bool@547",
+      "target": "function:src/config.rs:raw@719",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config.rs:v_truthy@563",
+      "target": "function:src/config.rs:raw@719",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config.rs:build_report_from_target@626",
+      "target": "function:src/config.rs:target_provides@675",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config.rs:build_report@1205",
+      "target": "function:src/config.rs:build_report_from_target@626",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config.rs:build_report@1205",
+      "target": "function:src/config.rs:sanitize_raw_value@517",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/context.rs:new@33",
+      "target": "function:src/context.rs:config@44",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/models.rs:list@238",
+      "target": "function:src/models.rs:path@178",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/models.rs:load_with_profile@491",
+      "target": "function:src/models.rs:path@178",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/models.rs:clear_with_profile@506",
+      "target": "function:src/models.rs:path@178",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/output.rs:print_value@68",
+      "target": "function:src/output.rs:print_json@61",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:parse_skill_json@36",
+      "target": "function:src/rpc/dispatcher.rs:fix_skill_octal_escapes@21",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:execute_required_skill@60",
+      "target": "function:src/rpc/dispatcher.rs:require_skill_result@56",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:execute_query_skill@74",
+      "target": "function:src/rpc/dispatcher.rs:require_transport_result@69",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:require_cell_write_result@82",
+      "target": "function:src/rpc/dispatcher.rs:require_skill_result@56",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_inner@137",
+      "target": "function:src/rpc/dispatcher.rs:json_str@919",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_inner@137",
+      "target": "function:src/rpc/dispatcher.rs:json_str_or@926",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_schematic@210",
+      "target": "function:src/rpc/dispatcher.rs:json_str@919",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_schematic@210",
+      "target": "function:src/rpc/dispatcher.rs:json_str_or@926",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_schematic@210",
+      "target": "function:src/rpc/dispatcher.rs:execute_required_skill@60",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_schematic@210",
+      "target": "function:src/rpc/dispatcher.rs:json_i64_or@933",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_schematic@210",
+      "target": "function:src/rpc/dispatcher.rs:execute_query_skill@74",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_schematic@210",
+      "target": "function:src/rpc/dispatcher.rs:parse_skill_json@36",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_maestro@351",
+      "target": "function:src/rpc/dispatcher.rs:json_str@919",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_maestro@351",
+      "target": "function:src/rpc/dispatcher.rs:json_str_or@926",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_maestro@351",
+      "target": "function:src/rpc/dispatcher.rs:execute_required_skill@60",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_maestro@351",
+      "target": "function:src/rpc/dispatcher.rs:execute_query_skill@74",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_maestro@351",
+      "target": "function:src/rpc/dispatcher.rs:parse_skill_json@36",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_window@550",
+      "target": "function:src/rpc/dispatcher.rs:execute_query_skill@74",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_window@550",
+      "target": "function:src/rpc/dispatcher.rs:parse_skill_json@36",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_window@550",
+      "target": "function:src/rpc/dispatcher.rs:json_str@919",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_window@550",
+      "target": "function:src/rpc/dispatcher.rs:json_str_or@926",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_window@550",
+      "target": "function:src/rpc/dispatcher.rs:execute_required_skill@60",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_cell@646",
+      "target": "function:src/rpc/dispatcher.rs:json_str@919",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_cell@646",
+      "target": "function:src/rpc/dispatcher.rs:json_str_or@926",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_cell@646",
+      "target": "function:src/rpc/dispatcher.rs:require_cell_write_result@82",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_cell@646",
+      "target": "function:src/rpc/dispatcher.rs:execute_required_skill@60",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_cell@646",
+      "target": "function:src/rpc/dispatcher.rs:execute_query_skill@74",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_tx@710",
+      "target": "function:src/rpc/dispatcher.rs:json_str@919",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_tx@710",
+      "target": "function:src/rpc/dispatcher.rs:json_str_or@926",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_file@761",
+      "target": "function:src/rpc/dispatcher.rs:json_str@919",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_util@782",
+      "target": "function:src/rpc/dispatcher.rs:json_str@919",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_util@782",
+      "target": "function:src/rpc/dispatcher.rs:require_skill_result@56",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/rpc/dispatcher.rs:dispatch_skill@830",
+      "target": "function:src/rpc/dispatcher.rs:json_str@919",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/session/heartbeat.rs:start@39",
+      "target": "function:src/session/heartbeat.rs:stop@67",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_psf_ascii@12",
+      "target": "function:src/spectre/parsers.rs:parse_psf_dir@30",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_psf_dir@30",
+      "target": "function:src/spectre/parsers.rs:parse_psf_signal_file@53",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_psf_signal_file@53",
+      "target": "function:src/spectre/parsers.rs:parse_psf_ascii_content@74",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_psf_signal_file@53",
+      "target": "function:src/spectre/parsers.rs:parse_simple_floats@112",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_sweep_psf_directory@139",
+      "target": "function:src/spectre/parsers.rs:parse_psf_dir@30",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_sweep_psf_directory@139",
+      "target": "function:src/spectre/parsers.rs:parse_psf_signal_file@53",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:read_psf_ascii_strict@411",
+      "target": "function:src/spectre/parsers.rs:parse_psf_ascii_strict_content@441",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:read_psf_ascii_strict@411",
+      "target": "function:src/spectre/parsers.rs:signals@299",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_psf_ascii_strict_content@441",
+      "target": "function:src/spectre/parsers.rs:parse_sweep_section_strict@487",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_psf_ascii_strict_content@441",
+      "target": "function:src/spectre/parsers.rs:parse_simple_floats_strict@456",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_psf_ascii_strict_directory@610",
+      "target": "function:src/spectre/parsers.rs:find_exact_result_file@539",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_psf_ascii_strict_directory@610",
+      "target": "function:src/spectre/parsers.rs:read_psf_ascii_strict@411",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_sweep_flat@661",
+      "target": "function:src/spectre/parsers.rs:parse_sweep_psf_directory@139",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_structured_op_blocks@702",
+      "target": "function:src/spectre/parsers.rs:find_psf_scan_root@243",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_structured_op_blocks@702",
+      "target": "function:src/spectre/parsers.rs:should_skip_psf_file@730",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_structured_op_blocks@702",
+      "target": "function:src/spectre/parsers.rs:parse_op_blocks_from_content@801",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_op_blocks_from_content@801",
+      "target": "function:src/spectre/parsers.rs:parse_psf_type_library@766",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_op_blocks_from_content@801",
+      "target": "function:src/spectre/parsers.rs:find_closing_paren@886",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_op_blocks_from_content@801",
+      "target": "function:src/spectre/parsers.rs:parse_op_inner_values@909",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/spectre/parsers.rs:parse_op_inner_values@909",
+      "target": "function:src/spectre/parsers.rs:parse_scalar@943",
+      "type": "calls",
+      "weight": 0.5
+    }
+  ]
+}

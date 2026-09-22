@@ -1,0 +1,320 @@
+{
+  "batchIndex": 24,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.pensieve/decisions/2026-04-11-session-vs-profile.md",
+      "type": "document",
+      "name": "Session vs Profile: Two-Layer Connection Addressing",
+      "filePath": ".pensieve/decisions/2026-04-11-session-vs-profile.md",
+      "summary": "Decision documenting that Session (auto-registered Virtuoso process identity on a server, selects daemon port) and Profile (manually configured environment via VB_*_<profile> env vars, selects server + connection params) are orthogonal layers composing connection addressing. State files are profile-scoped; sessions are not. Examples: \"--profile gpu1 --session eda-meow-3\" targets the 3rd Virtuoso on the gpu1 server.",
+      "tags": [
+        "decision",
+        "connection",
+        "session",
+        "profile",
+        "cli",
+        "architecture"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with Decision/Context/Details/Alternatives Considered sections. Frontmatter includes id, type, status, created/updated timestamps, and tags. Short (34 lines), mostly prose with one bullet list."
+    },
+    {
+      "id": "document:.pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md",
+      "type": "document",
+      "name": "TODO: createNetlist 路径 CMI-2116 问题",
+      "filePath": ".pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md",
+      "summary": "Open TODO documenting that for SMIC 0.13µm mmRF PDK (n33/p33 BSIM3v3), all Cadence netlist export paths omit MOSFET port connections (CMI-2116) because port mapping lives in the OA binary DB and spectre must query it at runtime via -env ade +adespetkn=TOKEN. Lists paths already verified to fail on 2026-04-19 (Ocean createNetlist, virtuoso-daemon convertNetlist, ADE GUI netlist). Documents current workaround and investigation directions. Update 2026-04-20 adds that all IC23.1 Maestro APIs that trigger netlisting block the bridge.",
+      "tags": [
+        "decision",
+        "todo",
+        "open",
+        "cmi-2116",
+        "netlist",
+        "smic",
+        "pdk",
+        "ocean",
+        "ade",
+        "maestro"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown in mixed Chinese/English. Uses tables to record failed paths and workaround status. 54 lines, frontmatter-driven pensieve note."
+    },
+    {
+      "id": "document:.pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md",
+      "type": "document",
+      "name": "LLM-Assisted Inline Repair for Intermittent Netlist Issues",
+      "filePath": ".pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md",
+      "summary": "Decision to use an LLM (instead of bespoke patch scripts) to read and fix intermittent netlist structural defects — e.g., rhrpo_3t_ckt resistors with 0 terminals, MOSFET instances missing (D G S B), BJTs missing (C B E). Driven by PDK-version/schematic-version variability. Justification: low frequency, structurally diverse, often new — script maintenance cost exceeds LLM call cost. Includes a prompt template with verification steps (model-file lookup, terminal-order discovery, subckt re-emission).",
+      "tags": [
+        "decision",
+        "llm",
+        "netlist-repair",
+        "smic",
+        "pdk",
+        "automation",
+        "sfe-45"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown decision record with structured Alternatives Considered, Decision, Consequence, and Exploration Reduction sections. Contains fenced SKILL/spectre code samples and an embedded prompt template."
+    },
+    {
+      "id": "document:.pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "type": "document",
+      "name": "Standalone Spectre for One-Off Circuit Verification",
+      "filePath": ".pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "summary": "Decision to extract OA topology via SKILL (dbOpenCellViewByType + dbTraverseElements) and emit a topology-complete input.scs for standalone Spectre, instead of fighting ADE token / Maestro paths. Used for FT0001A_SH/CMOP/schematic (static comparator) — supports DC op, DC sweep, transient. Alternatives considered and rejected: ADE netlist (CMI-2116), -env ade +adespetkn=TOKEN (stale token), maeRunSimulation (modal blocks bridge 30s). Includes a SKILL topology-extraction template.",
+      "tags": [
+        "decision",
+        "spectre",
+        "standalone",
+        "cmi-2116",
+        "topology-extraction",
+        "skill",
+        "oa",
+        "verification"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with bulleted alternatives, code samples (SKILL/Spectre), and structured Decision/Consequence/Exploration Reduction sections. 77 lines."
+    },
+    {
+      "id": "document:.pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md",
+      "type": "document",
+      "name": "virtuoso-bridge-lite 借鉴范围决策",
+      "filePath": ".pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md",
+      "summary": "Selective port decision from Arcadia-1/virtuoso-bridge-lite. Adopts (a) Callback File IPC into ramic_bridge.il + src/daemon/main.rs to fix IC23.1/RHEL8 second-call hang, and (b) vcli maestro session-info for atomically exposing current ADE design as structured JSON. Defers variable scope/sweep (no current need; maeSetVar suffices) and SanitizingClient (existing escape_skill_string already secure). Python daemon files under resources/daemons/ flagged as legacy and not modified.",
+      "tags": [
+        "decision",
+        "bridge",
+        "callback-ipc",
+        "session-info",
+        "port",
+        "sanitizing-client",
+        "rust"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Chinese/English markdown with two tables (Adopted / Deferred) plus rationale columns. Standard Decision/Consequence/Exploration Reduction sections."
+    },
+    {
+      "id": "document:.pensieve/decisions/2026-04-20-defer-version-branches-until-api-diverges.md",
+      "type": "document",
+      "name": "Defer version-specific code branches until API actually diverges",
+      "filePath": ".pensieve/decisions/2026-04-20-defer-version-branches-until-api-diverges.md",
+      "summary": "Decision to remove speculative IC25/IC23 version branches from get_analyses and set_analysis (PR #4 review follow-up, 2026-04-20). Every get_analyses call was paying 2 SKILL RTTs for getVersion(t) + fallback even though is_ic25() always returned false — permanently unreachable dead code. Adopted lazy detection: client.version() called only inside the code path that needs it. Version infrastructure stays as scaffolding. Invalidation condition: a real IC25 API divergence confirmed by tests.",
+      "tags": [
+        "decision",
+        "version",
+        "ic23",
+        "ic25",
+        "performance",
+        "lazy-detection",
+        "maestro",
+        "rtt"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with bulleted alternatives and structured Decision/Consequence/Exploration Reduction sections. 61 lines."
+    },
+    {
+      "id": "document:.pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "type": "document",
+      "name": "Maestro 仿真触发 API 在 IC23.1 上阻塞 bridge",
+      "filePath": ".pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "summary": "Decision documenting that on IC23.1, every Maestro API that triggers simulation (maeRunSimulation, maeCreateNetlist, asiCreateNetlist) blocks the SKILL bridge for 30s waiting for a GUI modal/progress bar. Read/write APIs (maeSetDesignVar, maeGetDesignVar, maeGetSessions, maeGetAnalysisType, hiGetCurrentWindow/cw->davSession, asiGetAnalogRunDir) are safe. Conclusion: Maestro automation in vcli is limited to set-var + session-info, then invoke standalone spectre. maeNetlistAndRun untested but presumed to block. Invalidation: IC25 introduces non-blocking run API.",
+      "tags": [
+        "decision",
+        "maestro",
+        "ic23.1",
+        "bridge-blocker",
+        "run-api",
+        "modal",
+        "spectre",
+        "standalone"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Chinese/English markdown with two API tables (blocking / safe), Alternatives Considered, Decision, Consequence, and Exploration Reduction sections. 71 lines."
+    },
+    {
+      "id": "document:.pensieve/decisions/2026-05-07-async-deferred.md",
+      "type": "document",
+      "name": "Async Runtime Deferred — Use std::thread::scope for Concurrency",
+      "filePath": ".pensieve/decisions/2026-05-07-async-deferred.md",
+      "summary": "Decision to defer adopting tokio in vcli (evaluated during si-view/via analysis on 2026-05-07). SKILL bridge is single-threaded per session, so async does not improve per-session throughput. The only parallel I/O opportunities are multiple independent session connections and TUI polling — both fit std::thread::scope (~40-line broadcast() implementation, no Arc, scoped borrows). Revisit only if vcli adds a persistent daemon-side connection pool or TUI latency becomes a real complaint. Future async conversion point: execute_skill.",
+      "tags": [
+        "decision",
+        "async",
+        "tokio",
+        "std-thread-scope",
+        "concurrency",
+        "broadcast",
+        "defer",
+        "rust"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with bulleted alternatives (tokio/thread::scope/rayon), Decision criteria, Consequence, and Exploration Reduction sections. 47 lines."
+    },
+    {
+      "id": "document:.pensieve/decisions/2026-05-07-broadcast-vs-subagent.md",
+      "type": "document",
+      "name": "Broadcast vs Subagent for Multi-Session Operations",
+      "filePath": ".pensieve/decisions/2026-05-07-broadcast-vs-subagent.md",
+      "summary": "Decision defining when to use vcli skill broadcast vs Claude Code subagents for multi-session Virtuoso work. Use broadcast for: same SKILL expression across all sessions, minimal overhead (health checks, save-all, global queries). Use main+subagent when: tasks differ per session, multi-step reasoning needed per session, or per-session inputs diverge. Async/tokio rejected again (overkill). Both patterns compose: broadcast to survey, then targeted subagents only for sessions needing work. Relies on VB_SESSION=<id> env var prefix for per-process session isolation.",
+      "tags": [
+        "decision",
+        "broadcast",
+        "subagent",
+        "multi-session",
+        "vb-session",
+        "concurrency",
+        "orchestration"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown with criteria table (broadcast vs subagent), Decision/Consequence/Exploration Reduction sections. 53 lines."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.pensieve/decisions/2026-04-20-defer-version-branches-until-api-diverges.md",
+      "target": "document:.pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "type": "related",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "target": "document:.pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "type": "related",
+      "weight": 0.8
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md",
+      "target": "document:smic-rhrpo-netlist-terminals",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md",
+      "target": "document:smic-mosfet-terminal-order",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md",
+      "target": "document:ocean-createnetlist-prerequisites",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "target": "document:spectre-cmi-2116-ade-netlist",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "target": "document:smic-mosfet-terminal-order",
+      "type": "documents",
+      "weight": 0.8
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "target": "document:spectre-ade-model-path",
+      "type": "documents",
+      "weight": 0.8
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "target": "document:cadence-ic23-dbopencellviewbytype",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "target": "document:maestro-netlist-standalone-workflow",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md",
+      "target": "document:ramic-bridge-callback-file-ipc",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md",
+      "target": "document:vcli-bridge-cli-name",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-20-defer-version-branches-until-api-diverges.md",
+      "target": "document:maestro-session-types",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "target": "document:ramic-bridge-callback-file-ipc",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "target": "document:maestro-session-types",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-05-07-async-deferred.md",
+      "target": "document:vcli-multi-session-concurrency",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-05-07-async-deferred.md",
+      "target": "document:ramic-bridge-callback-file-ipc",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-05-07-broadcast-vs-subagent.md",
+      "target": "document:vcli-multi-session-concurrency",
+      "type": "documents",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-05-07-broadcast-vs-subagent.md",
+      "target": "document:ramic-bridge-callback-file-ipc",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md",
+      "target": "document:.pensieve/decisions/2026-04-19-llm-for-intermittent-netlist-repair.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md",
+      "target": "document:.pensieve/decisions/2026-04-19-standalone-spectre-for-one-off-verification.md",
+      "type": "related",
+      "weight": 0.8
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "target": "document:.pensieve/decisions/2026-04-19-createnetlist-cmi2116-todo.md",
+      "type": "related",
+      "weight": 0.7
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-05-07-async-deferred.md",
+      "target": "document:.pensieve/decisions/2026-05-07-broadcast-vs-subagent.md",
+      "type": "related",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md",
+      "target": "document:.pensieve/decisions/2026-04-20-maestro-api-run-blocks-ic23.md",
+      "type": "related",
+      "weight": 0.5
+    }
+  ]
+}

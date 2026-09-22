@@ -1,0 +1,5327 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 25,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 5,
+      "failed": 0,
+      "skipped": 20
+    }
+  },
+  "results": [
+    {
+      "path": ".agents/skills/_shared/scripts/eda_auto_evolve.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 186,
+      "nonEmptyLines": 145,
+      "functions": [
+        {
+          "name": "skill_memory_dir",
+          "startLine": 22,
+          "endLine": 23,
+          "params": [
+            "skill_name"
+          ]
+        },
+        {
+          "name": "analyze_errors",
+          "startLine": 26,
+          "endLine": 40,
+          "params": [
+            "skill_name"
+          ]
+        },
+        {
+          "name": "detect_patterns",
+          "startLine": 43,
+          "endLine": 56,
+          "params": [
+            "entries"
+          ]
+        },
+        {
+          "name": "memory_filename",
+          "startLine": 59,
+          "endLine": 60,
+          "params": [
+            "error_type"
+          ]
+        },
+        {
+          "name": "render_memory_md",
+          "startLine": 63,
+          "endLine": 94,
+          "params": [
+            "skill_name",
+            "pattern"
+          ]
+        },
+        {
+          "name": "sync_to_tier2",
+          "startLine": 97,
+          "endLine": 117,
+          "params": [
+            "skill_name",
+            "new_files"
+          ]
+        },
+        {
+          "name": "update_index",
+          "startLine": 120,
+          "endLine": 138,
+          "params": [
+            "skill_name"
+          ]
+        },
+        {
+          "name": "run_evolution",
+          "startLine": 141,
+          "endLine": 170,
+          "params": [
+            "skill_name"
+          ]
+        },
+        {
+          "name": "_trigger_signal_match",
+          "startLine": 173,
+          "endLine": 178,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "skill_memory_dir",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "analyze_errors",
+          "line": 26,
+          "isDefault": false
+        },
+        {
+          "name": "detect_patterns",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "memory_filename",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "render_memory_md",
+          "line": 63,
+          "isDefault": false
+        },
+        {
+          "name": "sync_to_tier2",
+          "line": 97,
+          "isDefault": false
+        },
+        {
+          "name": "update_index",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "run_evolution",
+          "line": 141,
+          "isDefault": false
+        },
+        {
+          "name": "_trigger_signal_match",
+          "line": 173,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "analyze_errors",
+          "callee": "skill_memory_dir",
+          "lineNumber": 27
+        },
+        {
+          "caller": "analyze_errors",
+          "callee": "log_path.exists",
+          "lineNumber": 28
+        },
+        {
+          "caller": "analyze_errors",
+          "callee": "datetime.now().timestamp",
+          "lineNumber": 30
+        },
+        {
+          "caller": "analyze_errors",
+          "callee": "datetime.now",
+          "lineNumber": 30
+        },
+        {
+          "caller": "analyze_errors",
+          "callee": "log_path.read_text().splitlines",
+          "lineNumber": 32
+        },
+        {
+          "caller": "analyze_errors",
+          "callee": "log_path.read_text",
+          "lineNumber": 32
+        },
+        {
+          "caller": "analyze_errors",
+          "callee": "json.loads",
+          "lineNumber": 34
+        },
+        {
+          "caller": "analyze_errors",
+          "callee": "datetime.fromisoformat(e[\"timestamp\"]).timestamp",
+          "lineNumber": 35
+        },
+        {
+          "caller": "analyze_errors",
+          "callee": "datetime.fromisoformat",
+          "lineNumber": 35
+        },
+        {
+          "caller": "analyze_errors",
+          "callee": "entries.append",
+          "lineNumber": 37
+        },
+        {
+          "caller": "detect_patterns",
+          "callee": "Counter",
+          "lineNumber": 44
+        },
+        {
+          "caller": "detect_patterns",
+          "callee": "counts.items",
+          "lineNumber": 46
+        },
+        {
+          "caller": "detect_patterns",
+          "callee": "patterns.append",
+          "lineNumber": 49
+        },
+        {
+          "caller": "memory_filename",
+          "callee": "error_type.replace",
+          "lineNumber": 60
+        },
+        {
+          "caller": "render_memory_md",
+          "callee": "datetime.now().strftime",
+          "lineNumber": 64
+        },
+        {
+          "caller": "render_memory_md",
+          "callee": "datetime.now",
+          "lineNumber": 64
+        },
+        {
+          "caller": "render_memory_md",
+          "callee": "\"\\n\".join",
+          "lineNumber": 65
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "Path.home",
+          "lineNumber": 102
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "project_dir.exists",
+          "lineNumber": 103
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "project_dir.iterdir",
+          "lineNumber": 106
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "memory_md.exists",
+          "lineNumber": 108
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "str",
+          "lineNumber": 108
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "memory_md.read_text().splitlines",
+          "lineNumber": 109
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "memory_md.read_text",
+          "lineNumber": 109
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "any",
+          "lineNumber": 113
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "lines.append",
+          "lineNumber": 115
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "memory_md.write_text",
+          "lineNumber": 116
+        },
+        {
+          "caller": "sync_to_tier2",
+          "callee": "\"\\n\".join",
+          "lineNumber": 116
+        },
+        {
+          "caller": "update_index",
+          "callee": "skill_memory_dir",
+          "lineNumber": 121
+        },
+        {
+          "caller": "update_index",
+          "callee": "sorted",
+          "lineNumber": 122
+        },
+        {
+          "caller": "update_index",
+          "callee": "memory_dir.glob",
+          "lineNumber": 122
+        },
+        {
+          "caller": "update_index",
+          "callee": "sum",
+          "lineNumber": 124
+        },
+        {
+          "caller": "update_index",
+          "callee": "log_path.read_text().splitlines",
+          "lineNumber": 124
+        },
+        {
+          "caller": "update_index",
+          "callee": "log_path.read_text",
+          "lineNumber": 124
+        },
+        {
+          "caller": "update_index",
+          "callee": "log_path.exists",
+          "lineNumber": 124
+        },
+        {
+          "caller": "update_index",
+          "callee": "datetime.now().strftime",
+          "lineNumber": 128
+        },
+        {
+          "caller": "update_index",
+          "callee": "datetime.now",
+          "lineNumber": 128
+        },
+        {
+          "caller": "update_index",
+          "callee": "len",
+          "lineNumber": 130
+        },
+        {
+          "caller": "update_index",
+          "callee": "index_lines.append",
+          "lineNumber": 136
+        },
+        {
+          "caller": "update_index",
+          "callee": "(memory_dir / \"ERROR_INDEX.md\").write_text",
+          "lineNumber": 138
+        },
+        {
+          "caller": "update_index",
+          "callee": "\"\\n\".join",
+          "lineNumber": 138
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "analyze_errors",
+          "lineNumber": 142
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "detect_patterns",
+          "lineNumber": 146
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "skill_memory_dir",
+          "lineNumber": 147
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "memory_filename",
+          "lineNumber": 151
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "fpath.exists",
+          "lineNumber": 153
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "fpath.write_text",
+          "lineNumber": 154
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "render_memory_md",
+          "lineNumber": 154
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "new_files.append",
+          "lineNumber": 155
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "sync_to_tier2",
+          "lineNumber": 158
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "update_index",
+          "lineNumber": 160
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "_trigger_signal_match",
+          "lineNumber": 162
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "len",
+          "lineNumber": 166
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "len",
+          "lineNumber": 167
+        },
+        {
+          "caller": "run_evolution",
+          "callee": "len",
+          "lineNumber": 168
+        },
+        {
+          "caller": "_trigger_signal_match",
+          "callee": "Path",
+          "lineNumber": 176
+        },
+        {
+          "caller": "_trigger_signal_match",
+          "callee": "matcher.exists",
+          "lineNumber": 177
+        },
+        {
+          "caller": "_trigger_signal_match",
+          "callee": "subprocess.run",
+          "lineNumber": 178
+        },
+        {
+          "caller": "_trigger_signal_match",
+          "callee": "str",
+          "lineNumber": 178
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 9,
+        "functionCount": 9,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/_shared/scripts/eda_memory_saver.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 193,
+      "nonEmptyLines": 163,
+      "functions": [
+        {
+          "name": "skill_memory_dir",
+          "startLine": 71,
+          "endLine": 74,
+          "params": [
+            "skill_name"
+          ]
+        },
+        {
+          "name": "extract_error_lines",
+          "startLine": 77,
+          "endLine": 88,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "classify_error",
+          "startLine": 91,
+          "endLine": 96,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "is_duplicate",
+          "startLine": 99,
+          "endLine": 118,
+          "params": [
+            "skill_name",
+            "error_type",
+            "source"
+          ]
+        },
+        {
+          "name": "save_error",
+          "startLine": 121,
+          "endLine": 155,
+          "params": [
+            "command",
+            "output",
+            "source"
+          ]
+        },
+        {
+          "name": "_trigger_evolve",
+          "startLine": 158,
+          "endLine": 165,
+          "params": [
+            "skill_name"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 168,
+          "endLine": 189,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "skill_memory_dir",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "extract_error_lines",
+          "line": 77,
+          "isDefault": false
+        },
+        {
+          "name": "classify_error",
+          "line": 91,
+          "isDefault": false
+        },
+        {
+          "name": "is_duplicate",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "save_error",
+          "line": 121,
+          "isDefault": false
+        },
+        {
+          "name": "_trigger_evolve",
+          "line": 158,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 168,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "skill_memory_dir",
+          "callee": "d.mkdir",
+          "lineNumber": 73
+        },
+        {
+          "caller": "extract_error_lines",
+          "callee": "text.splitlines",
+          "lineNumber": 80
+        },
+        {
+          "caller": "extract_error_lines",
+          "callee": "any",
+          "lineNumber": 81
+        },
+        {
+          "caller": "extract_error_lines",
+          "callee": "lines.append",
+          "lineNumber": 85
+        },
+        {
+          "caller": "extract_error_lines",
+          "callee": "line.strip",
+          "lineNumber": 85
+        },
+        {
+          "caller": "extract_error_lines",
+          "callee": "len",
+          "lineNumber": 86
+        },
+        {
+          "caller": "classify_error",
+          "callee": "re.search",
+          "lineNumber": 94
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "skill_memory_dir",
+          "lineNumber": 100
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "log_path.exists",
+          "lineNumber": 101
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "datetime.now().timestamp",
+          "lineNumber": 103
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "datetime.now",
+          "lineNumber": 103
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "log_path.read_text().splitlines",
+          "lineNumber": 105
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "log_path.read_text",
+          "lineNumber": 105
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "reversed",
+          "lineNumber": 106
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "json.loads",
+          "lineNumber": 108
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "datetime.fromisoformat(entry[\"timestamp\"]).timestamp",
+          "lineNumber": 109
+        },
+        {
+          "caller": "is_duplicate",
+          "callee": "datetime.fromisoformat",
+          "lineNumber": 109
+        },
+        {
+          "caller": "save_error",
+          "callee": "extract_error_lines",
+          "lineNumber": 126
+        },
+        {
+          "caller": "save_error",
+          "callee": "classify_error",
+          "lineNumber": 130
+        },
+        {
+          "caller": "save_error",
+          "callee": "is_duplicate",
+          "lineNumber": 134
+        },
+        {
+          "caller": "save_error",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 138
+        },
+        {
+          "caller": "save_error",
+          "callee": "datetime.now",
+          "lineNumber": 138
+        },
+        {
+          "caller": "save_error",
+          "callee": "skill_memory_dir",
+          "lineNumber": 148
+        },
+        {
+          "caller": "save_error",
+          "callee": "open",
+          "lineNumber": 149
+        },
+        {
+          "caller": "save_error",
+          "callee": "f.write",
+          "lineNumber": 150
+        },
+        {
+          "caller": "save_error",
+          "callee": "json.dumps",
+          "lineNumber": 150
+        },
+        {
+          "caller": "save_error",
+          "callee": "threading.Thread(target=_trigger_evolve, args=(skill_name,), daemon=True).start",
+          "lineNumber": 153
+        },
+        {
+          "caller": "save_error",
+          "callee": "threading.Thread",
+          "lineNumber": 153
+        },
+        {
+          "caller": "_trigger_evolve",
+          "callee": "Path",
+          "lineNumber": 159
+        },
+        {
+          "caller": "_trigger_evolve",
+          "callee": "evolve_script.exists",
+          "lineNumber": 160
+        },
+        {
+          "caller": "_trigger_evolve",
+          "callee": "subprocess.run",
+          "lineNumber": 162
+        },
+        {
+          "caller": "_trigger_evolve",
+          "callee": "str",
+          "lineNumber": 163
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 169
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 170
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 171
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 175
+        },
+        {
+          "caller": "main",
+          "callee": "sys.stdin.read",
+          "lineNumber": 177
+        },
+        {
+          "caller": "main",
+          "callee": "save_error",
+          "lineNumber": 179
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 181
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 181
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 183
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 185
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 185
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 187
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 189
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 7,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/_shared/scripts/signal_matcher.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 207,
+      "nonEmptyLines": 171,
+      "functions": [
+        {
+          "name": "find_project_root",
+          "startLine": 30,
+          "endLine": 37,
+          "params": []
+        },
+        {
+          "name": "skills_dir",
+          "startLine": 40,
+          "endLine": 41,
+          "params": [
+            "script_path"
+          ]
+        },
+        {
+          "name": "read_log",
+          "startLine": 44,
+          "endLine": 57,
+          "params": [
+            "log_path",
+            "since_ts"
+          ]
+        },
+        {
+          "name": "aggregate_signals",
+          "startLine": 60,
+          "endLine": 92,
+          "params": [
+            "skills_root",
+            "hot_since",
+            "warm_since"
+          ]
+        },
+        {
+          "name": "build_recommended",
+          "startLine": 95,
+          "endLine": 111,
+          "params": [
+            "hot",
+            "last_seen"
+          ]
+        },
+        {
+          "name": "build_promotion_candidates",
+          "startLine": 114,
+          "endLine": 156,
+          "params": [
+            "skills_root",
+            "warm_since",
+            "threshold"
+          ]
+        },
+        {
+          "name": "write_signals",
+          "startLine": 159,
+          "endLine": 173,
+          "params": [
+            "project_root",
+            "recommended",
+            "candidates"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 176,
+          "endLine": 203,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "find_project_root",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "skills_dir",
+          "line": 40,
+          "isDefault": false
+        },
+        {
+          "name": "read_log",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "aggregate_signals",
+          "line": 60,
+          "isDefault": false
+        },
+        {
+          "name": "build_recommended",
+          "line": 95,
+          "isDefault": false
+        },
+        {
+          "name": "build_promotion_candidates",
+          "line": 114,
+          "isDefault": false
+        },
+        {
+          "name": "write_signals",
+          "line": 159,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 176,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "find_project_root",
+          "callee": "Path(__file__).resolve",
+          "lineNumber": 32
+        },
+        {
+          "caller": "find_project_root",
+          "callee": "Path",
+          "lineNumber": 32
+        },
+        {
+          "caller": "find_project_root",
+          "callee": "range",
+          "lineNumber": 33
+        },
+        {
+          "caller": "find_project_root",
+          "callee": "(candidate / \".pensieve\").is_dir",
+          "lineNumber": 35
+        },
+        {
+          "caller": "find_project_root",
+          "callee": "RuntimeError",
+          "lineNumber": 37
+        },
+        {
+          "caller": "read_log",
+          "callee": "log_path.read_text(encoding=\"utf-8\").splitlines",
+          "lineNumber": 47
+        },
+        {
+          "caller": "read_log",
+          "callee": "log_path.read_text",
+          "lineNumber": 47
+        },
+        {
+          "caller": "read_log",
+          "callee": "json.loads",
+          "lineNumber": 49
+        },
+        {
+          "caller": "read_log",
+          "callee": "datetime.fromisoformat(e[\"timestamp\"]).timestamp",
+          "lineNumber": 50
+        },
+        {
+          "caller": "read_log",
+          "callee": "datetime.fromisoformat",
+          "lineNumber": 50
+        },
+        {
+          "caller": "read_log",
+          "callee": "entries.append",
+          "lineNumber": 52
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "defaultdict",
+          "lineNumber": 67
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "defaultdict",
+          "lineNumber": 67
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "defaultdict",
+          "lineNumber": 68
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "sorted",
+          "lineNumber": 71
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "skills_root.iterdir",
+          "lineNumber": 71
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "skill_dir.is_dir",
+          "lineNumber": 72
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "skill_dir.name.startswith",
+          "lineNumber": 72
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "log_path.exists",
+          "lineNumber": 75
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "read_log",
+          "lineNumber": 78
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "datetime.fromisoformat(e[\"timestamp\"]).timestamp",
+          "lineNumber": 80
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "datetime.fromisoformat",
+          "lineNumber": 80
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "hot[name][e[\"type\"]].append",
+          "lineNumber": 84
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "len",
+          "lineNumber": 86
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "max",
+          "lineNumber": 89
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "dict",
+          "lineNumber": 92
+        },
+        {
+          "caller": "aggregate_signals",
+          "callee": "dict",
+          "lineNumber": 92
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "hot.items",
+          "lineNumber": 97
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "sum",
+          "lineNumber": 98
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "len",
+          "lineNumber": 98
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "type_map.values",
+          "lineNumber": 98
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "sorted",
+          "lineNumber": 99
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "type_map.keys",
+          "lineNumber": 99
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "len",
+          "lineNumber": 99
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "top_descriptions.append",
+          "lineNumber": 103
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "len",
+          "lineNumber": 103
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "sample.get",
+          "lineNumber": 103
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "recs.append",
+          "lineNumber": 104
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "\"; \".join",
+          "lineNumber": 106
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "last_seen.get",
+          "lineNumber": 109
+        },
+        {
+          "caller": "build_recommended",
+          "callee": "sorted",
+          "lineNumber": 111
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "sorted",
+          "lineNumber": 121
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "skills_root.iterdir",
+          "lineNumber": 121
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "skill_dir.is_dir",
+          "lineNumber": 122
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "skill_dir.name.startswith",
+          "lineNumber": 122
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "log_path.exists",
+          "lineNumber": 126
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "read_log",
+          "lineNumber": 129
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "Counter",
+          "lineNumber": 131
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "sorted",
+          "lineNumber": 133
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "memory_dir.glob",
+          "lineNumber": 133
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "len",
+          "lineNumber": 135
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "stem.replace",
+          "lineNumber": 136
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "type_counts.get",
+          "lineNumber": 137
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "sum",
+          "lineNumber": 140
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "type_counts.items",
+          "lineNumber": 140
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "auto_file.read_text(encoding=\"utf-8\").splitlines",
+          "lineNumber": 144
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "auto_file.read_text",
+          "lineNumber": 144
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "first_line.lstrip(\"#\").strip",
+          "lineNumber": 145
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "first_line.lstrip",
+          "lineNumber": 145
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "candidates.append",
+          "lineNumber": 148
+        },
+        {
+          "caller": "build_promotion_candidates",
+          "callee": "sorted",
+          "lineNumber": 156
+        },
+        {
+          "caller": "write_signals",
+          "callee": "signals_dir.mkdir",
+          "lineNumber": 161
+        },
+        {
+          "caller": "write_signals",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 163
+        },
+        {
+          "caller": "write_signals",
+          "callee": "datetime.now",
+          "lineNumber": 163
+        },
+        {
+          "caller": "write_signals",
+          "callee": "len",
+          "lineNumber": 167
+        },
+        {
+          "caller": "write_signals",
+          "callee": "sum",
+          "lineNumber": 168
+        },
+        {
+          "caller": "write_signals",
+          "callee": "path.write_text",
+          "lineNumber": 172
+        },
+        {
+          "caller": "write_signals",
+          "callee": "json.dumps",
+          "lineNumber": 172
+        },
+        {
+          "caller": "main",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 177
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 178
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 179
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 180
+        },
+        {
+          "caller": "main",
+          "callee": "parser.parse_args",
+          "lineNumber": 181
+        },
+        {
+          "caller": "main",
+          "callee": "Path",
+          "lineNumber": 183
+        },
+        {
+          "caller": "main",
+          "callee": "find_project_root",
+          "lineNumber": 183
+        },
+        {
+          "caller": "main",
+          "callee": "skills_dir",
+          "lineNumber": 184
+        },
+        {
+          "caller": "main",
+          "callee": "Path(__file__).resolve",
+          "lineNumber": 184
+        },
+        {
+          "caller": "main",
+          "callee": "Path",
+          "lineNumber": 184
+        },
+        {
+          "caller": "main",
+          "callee": "datetime.now().timestamp",
+          "lineNumber": 186
+        },
+        {
+          "caller": "main",
+          "callee": "datetime.now",
+          "lineNumber": 186
+        },
+        {
+          "caller": "main",
+          "callee": "aggregate_signals",
+          "lineNumber": 191
+        },
+        {
+          "caller": "main",
+          "callee": "build_recommended",
+          "lineNumber": 192
+        },
+        {
+          "caller": "main",
+          "callee": "build_promotion_candidates",
+          "lineNumber": 193
+        },
+        {
+          "caller": "main",
+          "callee": "write_signals",
+          "lineNumber": 195
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 198
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 199
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 200
+        },
+        {
+          "caller": "main",
+          "callee": "sum",
+          "lineNumber": 201
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 203
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 203
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 8,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/amp-copilot/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 340,
+      "nonEmptyLines": 279,
+      "sections": [
+        {
+          "heading": "Amplifier Copilot",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "Design Flow Overview",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "1. Spec Capture",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "2. Topology Selection",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "25 Amplifier Topologies (from Amplifier-Copilot database)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "Selection Logic",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "3. Process Characterization (gm/Id Lookup Tables)",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "Process Data Directory Structure",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "Process Config (`config.json`)",
+          "level": 3,
+          "line": 121
+        },
+        {
+          "heading": "Lookup Table Format (`nmos_lookup.json`)",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "Characterization Script (via virtuoso-cli)",
+          "level": 3,
+          "line": 173
+        },
+        {
+          "heading": "4. Transistor Sizing",
+          "level": 2,
+          "line": 205
+        },
+        {
+          "heading": "Role-Based gm/Id Selection",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "Two-Stage Miller OTA Sizing Example",
+          "level": 3,
+          "line": 236
+        },
+        {
+          "heading": "5. PVT Corner Validation",
+          "level": 2,
+          "line": 250
+        },
+        {
+          "heading": "Standard Corner Set",
+          "level": 3,
+          "line": 252
+        },
+        {
+          "heading": "Validation Metrics (13 performance parameters)",
+          "level": 3,
+          "line": 266
+        },
+        {
+          "heading": "Pass/Fail Report",
+          "level": 3,
+          "line": 285
+        },
+        {
+          "heading": "Process Portability",
+          "level": 2,
+          "line": 296
+        },
+        {
+          "heading": "Porting to a New Process",
+          "level": 3,
+          "line": 298
+        },
+        {
+          "heading": "Quick Validation with Verilog-A Ideal Model",
+          "level": 3,
+          "line": 308
+        },
+        {
+          "heading": "Key Process-Dependent Parameters",
+          "level": 3,
+          "line": 321
+        },
+        {
+          "heading": "Quick Reference: SKILL Oppoint Parameters",
+          "level": 2,
+          "line": 332
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 23
+      }
+    },
+    {
+      "path": ".agents/skills/cell-explore/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 60,
+      "nonEmptyLines": 42,
+      "sections": [
+        {
+          "heading": "Explore Virtuoso Cellviews",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "Library browsing",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Cellview inspection",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Cell management",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "Key gotcha",
+          "level": 2,
+          "line": 56
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": ".agents/skills/circuit-optimizer/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 294,
+      "nonEmptyLines": 228,
+      "sections": [
+        {
+          "heading": "Circuit Optimizer (Bayesian)",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Prerequisites",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Step-by-Step Execution",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Step 1: Build Problem Definition",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "Step 2: Convert gm/Id to W",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "Step 3: Run One Iteration",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "Step 4: Score the Result",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "Step 5: Update History",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "Step 6: Suggest Next Point (Surrogate Reasoning)",
+          "level": 3,
+          "line": 184
+        },
+        {
+          "heading": "Step 7: Decide Continue/Phase-Up/Stop",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "Progress Report Format",
+          "level": 2,
+          "line": 226
+        },
+        {
+          "heading": "Final Report",
+          "level": 2,
+          "line": 247
+        },
+        {
+          "heading": "Resume Support",
+          "level": 2,
+          "line": 273
+        },
+        {
+          "heading": "Integration with Other Skills",
+          "level": 2,
+          "line": 285
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": ".agents/skills/diag/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 98,
+      "nonEmptyLines": 80,
+      "sections": [
+        {
+          "heading": "Read-only diagnostics",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "`vcli diag cdslck <LIB>`",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Workflow when a lock is held",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "Implementation notes",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "Related: `vcli window dismiss-dialog --x11`",
+          "level": 2,
+          "line": 78
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": ".agents/skills/digital-import/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 362,
+      "nonEmptyLines": 296,
+      "sections": [
+        {
+          "heading": "Digital Import — 4-Step Pipeline",
+          "level": 1,
+          "line": 16
+        },
+        {
+          "heading": "Prerequisite — cds.lib DEFINE lines",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Step 1 — Import GDS (strmin)",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "⚠️ Verify every expected cell actually landed",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "Step 2 — Import Verilog (ihdl)",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "Verify every expected module created a view",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "Step 3 — Add Power Labels",
+          "level": 2,
+          "line": 169
+        },
+        {
+          "heading": "Step 4 — Restyle Labels",
+          "level": 2,
+          "line": 190
+        },
+        {
+          "heading": "Critical SKILL Gotchas",
+          "level": 2,
+          "line": 248
+        },
+        {
+          "heading": "`~>attr = val` not `dbSet` for label properties",
+          "level": 3,
+          "line": 250
+        },
+        {
+          "heading": "Two-pass approach for pin orientation (bbox timing bug)",
+          "level": 3,
+          "line": 265
+        },
+        {
+          "heading": "strmin does not update cds.lib",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "Bus bracket rewriting",
+          "level": 3,
+          "line": 284
+        },
+        {
+          "heading": "The 10-min trap — strmin/ihdl die silently",
+          "level": 3,
+          "line": 290
+        },
+        {
+          "heading": "PDK Portability",
+          "level": 2,
+          "line": 351
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": ".agents/skills/gm-over-id/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 228,
+      "nonEmptyLines": 177,
+      "sections": [
+        {
+          "heading": "gm/Id 设计方法论",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "核心思想",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "设计流程",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "Step 1: 从规格推导 gm",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "Step 2: 选择 gm/Id（增益-带宽折中）",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "Step 3: 查表得 Id → 计算 W",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "Step 4: 选择 L（增益-速度折中）",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "用 virtuoso-cli 自动化仿真",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "1. 生成 gm/Id 查找表（单管 DC 仿真）",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "2. 生成完整曲线（参数扫描 L）",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "3. 从查找表读取设计参数",
+          "level": 3,
+          "line": 121
+        },
+        {
+          "heading": "4. PMOS 仿真（注意 abs）",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "设计实例：二级 OTA",
+          "level": 2,
+          "line": 157
+        },
+        {
+          "heading": "规格",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "Step 1: 输入对管 gm",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "Step 2: 选 gm/Id = 12 (中等反型，增益-速度平衡)",
+          "level": 3,
+          "line": 167
+        },
+        {
+          "heading": "Step 3: 查表 Id/W (L=500n 时)",
+          "level": 3,
+          "line": 172
+        },
+        {
+          "heading": "Step 4: 验证增益",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "设计指导原则",
+          "level": 3,
+          "line": 184
+        },
+        {
+          "heading": "Ocean SKILL 代码参考",
+          "level": 2,
+          "line": 194
+        },
+        {
+          "heading": "关键陷阱",
+          "level": 2,
+          "line": 220
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 21
+      }
+    },
+    {
+      "path": ".agents/skills/history-evolve/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 196,
+      "nonEmptyLines": 146,
+      "sections": [
+        {
+          "heading": "History Evolve",
+          "level": 1,
+          "line": 17
+        },
+        {
+          "heading": "Phase 1 — Collect",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "1a. Load CLI history (filter test noise)",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "1b. Load SKILL history for active sessions",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "Phase 2 — Signal Detection",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "Signal A — Hard Failure (`exit_code != 0`)",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "Signal B — SKILL nil return (`ok == false`)",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "Signal C — Correction Pattern",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "Signal D — Command-Not-Found (subcommand typo / wrong noun)",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "Phase 3 — Map Signals to Skills",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "Phase 4 — Read Target Skills",
+          "level": 2,
+          "line": 126
+        },
+        {
+          "heading": "Phase 5 — Write Improvements",
+          "level": 2,
+          "line": 141
+        },
+        {
+          "heading": "Phase 6 — Pensieve Sync (if new reusable insight emerged)",
+          "level": 2,
+          "line": 158
+        },
+        {
+          "heading": "Signal Priority",
+          "level": 2,
+          "line": 175
+        },
+        {
+          "heading": "Output Format",
+          "level": 2,
+          "line": 186
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": ".agents/skills/maestro-read-results/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 159,
+      "nonEmptyLines": 129,
+      "sections": [
+        {
+          "heading": "Arguments routing",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Overview",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "Quick Start",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Finding the Maestro Directory",
+          "level": 2,
+          "line": 62
+        },
+        {
+          "heading": "Output Format",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "Supported Ocean Functions",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "Troubleshooting",
+          "level": 2,
+          "line": 113
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".agents/skills/maestro-read-results/scripts/read_results.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 657,
+      "nonEmptyLines": 540,
+      "functions": [
+        {
+          "name": "parse_sdb",
+          "startLine": 36,
+          "endLine": 49,
+          "params": [
+            "path"
+          ]
+        },
+        {
+          "name": "field_text",
+          "startLine": 52,
+          "endLine": 57,
+          "params": [
+            "element",
+            "name"
+          ]
+        },
+        {
+          "name": "fields_dict",
+          "startLine": 60,
+          "endLine": 66,
+          "params": [
+            "element"
+          ]
+        },
+        {
+          "name": "parse_maestro_sdb",
+          "startLine": 73,
+          "endLine": 106,
+          "params": [
+            "maestro_dir"
+          ]
+        },
+        {
+          "name": "parse_active_state",
+          "startLine": 113,
+          "endLine": 151,
+          "params": [
+            "maestro_dir"
+          ]
+        },
+        {
+          "name": "parse_history_sdb",
+          "startLine": 158,
+          "endLine": 185,
+          "params": [
+            "maestro_dir"
+          ]
+        },
+        {
+          "name": "find_psf_tool",
+          "startLine": 192,
+          "endLine": 203,
+          "params": []
+        },
+        {
+          "name": "psf_to_ascii",
+          "startLine": 206,
+          "endLine": 212,
+          "params": [
+            "psf_file",
+            "psf_tool"
+          ]
+        },
+        {
+          "name": "parse_psf_ascii",
+          "startLine": 215,
+          "endLine": 267,
+          "params": [
+            "ascii_text",
+            "analysis_type"
+          ]
+        },
+        {
+          "name": "load_psf",
+          "startLine": 270,
+          "endLine": 290,
+          "params": [
+            "psf_dir",
+            "analysis",
+            "psf_tool"
+          ]
+        },
+        {
+          "name": "ocean_to_python",
+          "startLine": 315,
+          "endLine": 325,
+          "params": [
+            "expr"
+          ]
+        },
+        {
+          "name": "make_ocean_env",
+          "startLine": 328,
+          "endLine": 465,
+          "params": [
+            "psf_cache",
+            "psf_tool"
+          ]
+        },
+        {
+          "name": "eval_expression",
+          "startLine": 468,
+          "endLine": 489,
+          "params": [
+            "expr_raw",
+            "psf_dir",
+            "psf_tool"
+          ]
+        },
+        {
+          "name": "summarize_result",
+          "startLine": 492,
+          "endLine": 526,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "find_psf_dir",
+          "startLine": 533,
+          "endLine": 549,
+          "params": [
+            "psf_base",
+            "test_name",
+            "corner_idx"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 552,
+          "endLine": 653,
+          "params": []
+        }
+      ],
+      "classes": [
+        {
+          "name": "Waveform",
+          "startLine": 297,
+          "endLine": 312,
+          "methods": [
+            "__getitem__",
+            "__truediv__",
+            "__rtruediv__"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "parse_sdb",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "field_text",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "fields_dict",
+          "line": 60,
+          "isDefault": false
+        },
+        {
+          "name": "parse_maestro_sdb",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "parse_active_state",
+          "line": 113,
+          "isDefault": false
+        },
+        {
+          "name": "parse_history_sdb",
+          "line": 158,
+          "isDefault": false
+        },
+        {
+          "name": "find_psf_tool",
+          "line": 192,
+          "isDefault": false
+        },
+        {
+          "name": "psf_to_ascii",
+          "line": 206,
+          "isDefault": false
+        },
+        {
+          "name": "parse_psf_ascii",
+          "line": 215,
+          "isDefault": false
+        },
+        {
+          "name": "load_psf",
+          "line": 270,
+          "isDefault": false
+        },
+        {
+          "name": "Waveform",
+          "line": 297,
+          "isDefault": false
+        },
+        {
+          "name": "ocean_to_python",
+          "line": 315,
+          "isDefault": false
+        },
+        {
+          "name": "make_ocean_env",
+          "line": 328,
+          "isDefault": false
+        },
+        {
+          "name": "eval_expression",
+          "line": 468,
+          "isDefault": false
+        },
+        {
+          "name": "summarize_result",
+          "line": 492,
+          "isDefault": false
+        },
+        {
+          "name": "find_psf_dir",
+          "line": 533,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 552,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parse_sdb",
+          "callee": "Path(path).read_text",
+          "lineNumber": 38
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "Path",
+          "lineNumber": 38
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "text.strip",
+          "lineNumber": 39
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "ET.fromstring",
+          "lineNumber": 40
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "re.sub",
+          "lineNumber": 42
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "re.sub",
+          "lineNumber": 43
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "ET.fromstring",
+          "lineNumber": 45
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "re.sub",
+          "lineNumber": 48
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "m.group(1).strip().startswith",
+          "lineNumber": 48
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "m.group(1).strip",
+          "lineNumber": 48
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "m.group",
+          "lineNumber": 48
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "m.group",
+          "lineNumber": 48
+        },
+        {
+          "caller": "parse_sdb",
+          "callee": "ET.fromstring",
+          "lineNumber": 49
+        },
+        {
+          "caller": "field_text",
+          "callee": "element.iter",
+          "lineNumber": 54
+        },
+        {
+          "caller": "field_text",
+          "callee": "f.get",
+          "lineNumber": 55
+        },
+        {
+          "caller": "field_text",
+          "callee": "(f.text or '').strip",
+          "lineNumber": 56
+        },
+        {
+          "caller": "fields_dict",
+          "callee": "f.get",
+          "lineNumber": 65
+        },
+        {
+          "caller": "fields_dict",
+          "callee": "(f.text or '').strip",
+          "lineNumber": 65
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "Path",
+          "lineNumber": 74
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "parse_sdb",
+          "lineNumber": 75
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "str",
+          "lineNumber": 75
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "root.find",
+          "lineNumber": 76
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "field_text",
+          "lineNumber": 84
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "active.findall",
+          "lineNumber": 87
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "test.get",
+          "lineNumber": 88
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(test.text or '').strip().split('\\n')[0].strip",
+          "lineNumber": 88
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(test.text or '').strip().split",
+          "lineNumber": 88
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(test.text or '').strip",
+          "lineNumber": 88
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "test.findall",
+          "lineNumber": 90
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "opt.get",
+          "lineNumber": 91
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(opt.text or '').strip().split('\\n')[0].strip",
+          "lineNumber": 91
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(opt.text or '').strip().split",
+          "lineNumber": 91
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(opt.text or '').strip",
+          "lineNumber": 91
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "field_text",
+          "lineNumber": 92
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "result['tests'].append",
+          "lineNumber": 95
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "active.findall",
+          "lineNumber": 97
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "result['corners'].append",
+          "lineNumber": 98
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(corner.text or '').strip",
+          "lineNumber": 98
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "active.findall",
+          "lineNumber": 100
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "var.get",
+          "lineNumber": 101
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(var.text or '').strip().split('\\n')[0].strip",
+          "lineNumber": 101
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(var.text or '').strip().split",
+          "lineNumber": 101
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "(var.text or '').strip",
+          "lineNumber": 101
+        },
+        {
+          "caller": "parse_maestro_sdb",
+          "callee": "field_text",
+          "lineNumber": 102
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "Path",
+          "lineNumber": 114
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "path.exists",
+          "lineNumber": 115
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "path.read_text",
+          "lineNumber": 118
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "re.finditer",
+          "lineNumber": 125
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "m.end",
+          "lineNumber": 126
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "re.search",
+          "lineNumber": 131
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "end_m.start",
+          "lineNumber": 132
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "re.search",
+          "lineNumber": 134
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "re.search",
+          "lineNumber": 135
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "re.search",
+          "lineNumber": 136
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "expr_m.group(1).strip",
+          "lineNumber": 141
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "expr_m.group",
+          "lineNumber": 141
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "outputs.append",
+          "lineNumber": 145
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "name_m.group",
+          "lineNumber": 146
+        },
+        {
+          "caller": "parse_active_state",
+          "callee": "eval_m.group",
+          "lineNumber": 148
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "Path",
+          "lineNumber": 159
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "path.exists",
+          "lineNumber": 160
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "parse_sdb",
+          "lineNumber": 163
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "str",
+          "lineNumber": 163
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "root.findall",
+          "lineNumber": 165
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "entry.get",
+          "lineNumber": 167
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "(entry.text or '').strip",
+          "lineNumber": 170
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "raw.split('\\n')[0].strip",
+          "lineNumber": 171
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "raw.split",
+          "lineNumber": 171
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "(child.text or '').strip",
+          "lineNumber": 176
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "(child.text or '').strip",
+          "lineNumber": 178
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "psf_dir_raw.replace",
+          "lineNumber": 182
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "runs.append",
+          "lineNumber": 183
+        },
+        {
+          "caller": "parse_history_sdb",
+          "callee": "dir",
+          "lineNumber": 183
+        },
+        {
+          "caller": "find_psf_tool",
+          "callee": "Path(candidate).exists",
+          "lineNumber": 194
+        },
+        {
+          "caller": "find_psf_tool",
+          "callee": "Path",
+          "lineNumber": 194
+        },
+        {
+          "caller": "find_psf_tool",
+          "callee": "subprocess.run",
+          "lineNumber": 198
+        },
+        {
+          "caller": "find_psf_tool",
+          "callee": "result.stdout.strip",
+          "lineNumber": 200
+        },
+        {
+          "caller": "psf_to_ascii",
+          "callee": "subprocess.run",
+          "lineNumber": 208
+        },
+        {
+          "caller": "psf_to_ascii",
+          "callee": "str",
+          "lineNumber": 209
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "ascii_text.split",
+          "lineNumber": 222
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "line.strip",
+          "lineNumber": 229
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "re.match",
+          "lineNumber": 238
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "float",
+          "lineNumber": 240
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "m.group",
+          "lineNumber": 240
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "sweep.append",
+          "lineNumber": 241
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "re.match",
+          "lineNumber": 245
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "signals.setdefault(m.group(1), []).append",
+          "lineNumber": 247
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "signals.setdefault",
+          "lineNumber": 247
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "m.group",
+          "lineNumber": 247
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "float",
+          "lineNumber": 247
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "m.group",
+          "lineNumber": 247
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "re.match",
+          "lineNumber": 251
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "float",
+          "lineNumber": 253
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "m.group",
+          "lineNumber": 253
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "float",
+          "lineNumber": 253
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "m.group",
+          "lineNumber": 253
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "signals.setdefault(m.group(1), []).append",
+          "lineNumber": 254
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "signals.setdefault",
+          "lineNumber": 254
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "m.group",
+          "lineNumber": 254
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "complex",
+          "lineNumber": 254
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "re.match",
+          "lineNumber": 258
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "signals.setdefault(m.group(1), []).append",
+          "lineNumber": 260
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "signals.setdefault",
+          "lineNumber": 260
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "m.group",
+          "lineNumber": 260
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "float",
+          "lineNumber": 260
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "m.group",
+          "lineNumber": 260
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "len",
+          "lineNumber": 265
+        },
+        {
+          "caller": "parse_psf_ascii",
+          "callee": "signals.items",
+          "lineNumber": 265
+        },
+        {
+          "caller": "load_psf",
+          "callee": "analysis_map.get",
+          "lineNumber": 280
+        },
+        {
+          "caller": "load_psf",
+          "callee": "Path",
+          "lineNumber": 281
+        },
+        {
+          "caller": "load_psf",
+          "callee": "psf_file.exists",
+          "lineNumber": 282
+        },
+        {
+          "caller": "load_psf",
+          "callee": "list",
+          "lineNumber": 284
+        },
+        {
+          "caller": "load_psf",
+          "callee": "Path(psf_dir).glob",
+          "lineNumber": 284
+        },
+        {
+          "caller": "load_psf",
+          "callee": "Path",
+          "lineNumber": 284
+        },
+        {
+          "caller": "load_psf",
+          "callee": "psf_to_ascii",
+          "lineNumber": 289
+        },
+        {
+          "caller": "load_psf",
+          "callee": "str",
+          "lineNumber": 289
+        },
+        {
+          "caller": "load_psf",
+          "callee": "parse_psf_ascii",
+          "lineNumber": 290
+        },
+        {
+          "caller": "__getitem__",
+          "callee": "super().__getitem__",
+          "lineNumber": 301
+        },
+        {
+          "caller": "__getitem__",
+          "callee": "super",
+          "lineNumber": 301
+        },
+        {
+          "caller": "__getitem__",
+          "callee": "isinstance",
+          "lineNumber": 302
+        },
+        {
+          "caller": "__truediv__",
+          "callee": "isinstance",
+          "lineNumber": 307
+        },
+        {
+          "caller": "__truediv__",
+          "callee": "Waveform",
+          "lineNumber": 308
+        },
+        {
+          "caller": "__truediv__",
+          "callee": "zip",
+          "lineNumber": 308
+        },
+        {
+          "caller": "__truediv__",
+          "callee": "Waveform",
+          "lineNumber": 309
+        },
+        {
+          "caller": "__rtruediv__",
+          "callee": "Waveform",
+          "lineNumber": 312
+        },
+        {
+          "caller": "ocean_to_python",
+          "callee": "re.sub",
+          "lineNumber": 322
+        },
+        {
+          "caller": "ocean_to_python",
+          "callee": "re.sub",
+          "lineNumber": 324
+        },
+        {
+          "caller": "get_signal",
+          "callee": "net.lstrip",
+          "lineNumber": 335
+        },
+        {
+          "caller": "get_signal",
+          "callee": "psf_cache.get",
+          "lineNumber": 337
+        },
+        {
+          "caller": "get_signal",
+          "callee": "psf_cache.get",
+          "lineNumber": 338
+        },
+        {
+          "caller": "get_signal",
+          "callee": "data['signals'].get",
+          "lineNumber": 341
+        },
+        {
+          "caller": "get_sweep",
+          "callee": "psf_cache.get",
+          "lineNumber": 345
+        },
+        {
+          "caller": "get_sweep",
+          "callee": "psf_cache.get",
+          "lineNumber": 346
+        },
+        {
+          "caller": "getData",
+          "callee": "get_signal",
+          "lineNumber": 350
+        },
+        {
+          "caller": "getData",
+          "callee": "get_sweep",
+          "lineNumber": 353
+        },
+        {
+          "caller": "getData",
+          "callee": "Waveform",
+          "lineNumber": 355
+        },
+        {
+          "caller": "getData",
+          "callee": "zip",
+          "lineNumber": 355
+        },
+        {
+          "caller": "VF",
+          "callee": "getData",
+          "lineNumber": 359
+        },
+        {
+          "caller": "VT",
+          "callee": "getData",
+          "lineNumber": 362
+        },
+        {
+          "caller": "dB20",
+          "callee": "isinstance",
+          "lineNumber": 365
+        },
+        {
+          "caller": "dB20",
+          "callee": "math.log10",
+          "lineNumber": 366
+        },
+        {
+          "caller": "dB20",
+          "callee": "abs",
+          "lineNumber": 366
+        },
+        {
+          "caller": "dB20",
+          "callee": "abs",
+          "lineNumber": 366
+        },
+        {
+          "caller": "dB20",
+          "callee": "math.log10",
+          "lineNumber": 370
+        },
+        {
+          "caller": "dB20",
+          "callee": "abs",
+          "lineNumber": 370
+        },
+        {
+          "caller": "dB20",
+          "callee": "abs",
+          "lineNumber": 370
+        },
+        {
+          "caller": "db",
+          "callee": "dB20",
+          "lineNumber": 373
+        },
+        {
+          "caller": "mag",
+          "callee": "isinstance",
+          "lineNumber": 376
+        },
+        {
+          "caller": "mag",
+          "callee": "abs",
+          "lineNumber": 377
+        },
+        {
+          "caller": "mag",
+          "callee": "abs",
+          "lineNumber": 378
+        },
+        {
+          "caller": "phase_deg",
+          "callee": "math.degrees",
+          "lineNumber": 381
+        },
+        {
+          "caller": "phase_deg",
+          "callee": "math.atan2",
+          "lineNumber": 381
+        },
+        {
+          "caller": "phaseDeg",
+          "callee": "isinstance",
+          "lineNumber": 384
+        },
+        {
+          "caller": "phaseDeg",
+          "callee": "phase_deg",
+          "lineNumber": 385
+        },
+        {
+          "caller": "phaseDeg",
+          "callee": "isinstance",
+          "lineNumber": 385
+        },
+        {
+          "caller": "phaseDeg",
+          "callee": "phase_deg",
+          "lineNumber": 386
+        },
+        {
+          "caller": "phaseDeg",
+          "callee": "isinstance",
+          "lineNumber": 386
+        },
+        {
+          "caller": "phaseDegUnwrapped",
+          "callee": "isinstance",
+          "lineNumber": 390
+        },
+        {
+          "caller": "phaseDegUnwrapped",
+          "callee": "phaseDeg",
+          "lineNumber": 391
+        },
+        {
+          "caller": "phaseDegUnwrapped",
+          "callee": "phase_deg",
+          "lineNumber": 392
+        },
+        {
+          "caller": "phaseDegUnwrapped",
+          "callee": "isinstance",
+          "lineNumber": 392
+        },
+        {
+          "caller": "phaseDegUnwrapped",
+          "callee": "unwrapped.append",
+          "lineNumber": 403
+        },
+        {
+          "caller": "ymax",
+          "callee": "isinstance",
+          "lineNumber": 408
+        },
+        {
+          "caller": "ymax",
+          "callee": "abs",
+          "lineNumber": 409
+        },
+        {
+          "caller": "ymax",
+          "callee": "max",
+          "lineNumber": 410
+        },
+        {
+          "caller": "ymin",
+          "callee": "isinstance",
+          "lineNumber": 414
+        },
+        {
+          "caller": "ymin",
+          "callee": "abs",
+          "lineNumber": 415
+        },
+        {
+          "caller": "ymin",
+          "callee": "min",
+          "lineNumber": 416
+        },
+        {
+          "caller": "bandwidth",
+          "callee": "isinstance",
+          "lineNumber": 421
+        },
+        {
+          "caller": "bandwidth",
+          "callee": "dB20",
+          "lineNumber": 423
+        },
+        {
+          "caller": "bandwidth",
+          "callee": "max",
+          "lineNumber": 424
+        },
+        {
+          "caller": "bandwidth",
+          "callee": "range",
+          "lineNumber": 427
+        },
+        {
+          "caller": "bandwidth",
+          "callee": "len",
+          "lineNumber": 427
+        },
+        {
+          "caller": "slewRate",
+          "callee": "isinstance",
+          "lineNumber": 440
+        },
+        {
+          "caller": "slewRate",
+          "callee": "len",
+          "lineNumber": 442
+        },
+        {
+          "caller": "slewRate",
+          "callee": "abs",
+          "lineNumber": 444
+        },
+        {
+          "caller": "slewRate",
+          "callee": "max",
+          "lineNumber": 444
+        },
+        {
+          "caller": "slewRate",
+          "callee": "range",
+          "lineNumber": 445
+        },
+        {
+          "caller": "slewRate",
+          "callee": "len",
+          "lineNumber": 445
+        },
+        {
+          "caller": "slewRate",
+          "callee": "max",
+          "lineNumber": 446
+        },
+        {
+          "caller": "load_fn",
+          "callee": "load_psf",
+          "lineNumber": 476
+        },
+        {
+          "caller": "eval_expression",
+          "callee": "make_ocean_env",
+          "lineNumber": 479
+        },
+        {
+          "caller": "eval_expression",
+          "callee": "ocean_to_python",
+          "lineNumber": 482
+        },
+        {
+          "caller": "eval_expression",
+          "callee": "eval",
+          "lineNumber": 485
+        },
+        {
+          "caller": "eval_expression",
+          "callee": "str",
+          "lineNumber": 487
+        },
+        {
+          "caller": "eval_expression",
+          "callee": "summarize_result",
+          "lineNumber": 489
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "isinstance",
+          "lineNumber": 497
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "isinstance",
+          "lineNumber": 500
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "abs",
+          "lineNumber": 501
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "math.log10",
+          "lineNumber": 506
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "math.degrees",
+          "lineNumber": 507
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "math.atan2",
+          "lineNumber": 507
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "isinstance",
+          "lineNumber": 510
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "abs",
+          "lineNumber": 514
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "real_y.index",
+          "lineNumber": 516
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "max",
+          "lineNumber": 516
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "len",
+          "lineNumber": 519
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "math.log10",
+          "lineNumber": 522
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "summarize_result",
+          "lineNumber": 523
+        },
+        {
+          "caller": "summarize_result",
+          "callee": "str",
+          "lineNumber": 526
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "Path",
+          "lineNumber": 536
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "str",
+          "lineNumber": 536
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "candidate.exists",
+          "lineNumber": 537
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "str",
+          "lineNumber": 538
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "Path",
+          "lineNumber": 541
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "candidate2.exists",
+          "lineNumber": 542
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "str",
+          "lineNumber": 543
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "(Path(psf_base) / 'dc.dc').exists",
+          "lineNumber": 546
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "Path",
+          "lineNumber": 546
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "(Path(psf_base) / 'ac.ac').exists",
+          "lineNumber": 546
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "Path",
+          "lineNumber": 546
+        },
+        {
+          "caller": "find_psf_dir",
+          "callee": "str",
+          "lineNumber": 547
+        },
+        {
+          "caller": "main",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 553
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 554
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 555
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 556
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 557
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 558
+        },
+        {
+          "caller": "main",
+          "callee": "parser.parse_args",
+          "lineNumber": 559
+        },
+        {
+          "caller": "main",
+          "callee": "find_psf_tool",
+          "lineNumber": 564
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 566
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 566
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 567
+        },
+        {
+          "caller": "main",
+          "callee": "parse_maestro_sdb",
+          "lineNumber": 570
+        },
+        {
+          "caller": "main",
+          "callee": "parse_active_state",
+          "lineNumber": 571
+        },
+        {
+          "caller": "main",
+          "callee": "parse_history_sdb",
+          "lineNumber": 572
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 575
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 575
+        },
+        {
+          "caller": "main",
+          "callee": "sdb.get",
+          "lineNumber": 576
+        },
+        {
+          "caller": "main",
+          "callee": "next",
+          "lineNumber": 584
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 586
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 586
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 587
+        },
+        {
+          "caller": "_mtime",
+          "callee": "Path",
+          "lineNumber": 593
+        },
+        {
+          "caller": "_mtime",
+          "callee": "p.stat",
+          "lineNumber": 595
+        },
+        {
+          "caller": "_mtime",
+          "callee": "p.exists",
+          "lineNumber": 595
+        },
+        {
+          "caller": "main",
+          "callee": "max",
+          "lineNumber": 599
+        },
+        {
+          "caller": "main",
+          "callee": "sdb.get",
+          "lineNumber": 602
+        },
+        {
+          "caller": "main",
+          "callee": "Path",
+          "lineNumber": 603
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 604
+        },
+        {
+          "caller": "main",
+          "callee": "sdb.get",
+          "lineNumber": 607
+        },
+        {
+          "caller": "main",
+          "callee": "next",
+          "lineNumber": 609
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 611
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 611
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 612
+        },
+        {
+          "caller": "main",
+          "callee": "test.get",
+          "lineNumber": 616
+        },
+        {
+          "caller": "main",
+          "callee": "find_psf_dir",
+          "lineNumber": 619
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 621
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 621
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 626
+        },
+        {
+          "caller": "main",
+          "callee": "Path",
+          "lineNumber": 629
+        },
+        {
+          "caller": "main",
+          "callee": "eval_done.exists",
+          "lineNumber": 630
+        },
+        {
+          "caller": "main",
+          "callee": "any",
+          "lineNumber": 630
+        },
+        {
+          "caller": "main",
+          "callee": "Path(psf_dir).glob",
+          "lineNumber": 630
+        },
+        {
+          "caller": "main",
+          "callee": "Path",
+          "lineNumber": 630
+        },
+        {
+          "caller": "main",
+          "callee": "any",
+          "lineNumber": 630
+        },
+        {
+          "caller": "main",
+          "callee": "Path(psf_dir).glob",
+          "lineNumber": 630
+        },
+        {
+          "caller": "main",
+          "callee": "Path",
+          "lineNumber": 630
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 633
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 633
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 634
+        },
+        {
+          "caller": "main",
+          "callee": "eval_expression",
+          "lineNumber": 639
+        },
+        {
+          "caller": "main",
+          "callee": "results.append",
+          "lineNumber": 640
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 647
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 647
+        },
+        {
+          "caller": "main",
+          "callee": "run.get",
+          "lineNumber": 650
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 17,
+        "functionCount": 16,
+        "classCount": 1
+      }
+    },
+    {
+      "path": ".agents/skills/maestro/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 60,
+      "nonEmptyLines": 42,
+      "sections": [
+        {
+          "heading": "Maestro (ADE Assembler) — Quick Reference",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "关键模式区别",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "快速流程",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "常见问题",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "锁文件导致打不开编辑模式",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "窗口是 Reading 模式",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "maeAddOutput 成功但 maeGetResultOutputs 返回 nil",
+          "level": 3,
+          "line": 58
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".agents/skills/ocean-netlist-regen/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 187,
+      "nonEmptyLines": 135,
+      "sections": [
+        {
+          "heading": "Ocean run() Reliability & Netlist Regeneration",
+          "level": 1,
+          "line": 16
+        },
+        {
+          "heading": "Problem",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Context / Trigger Conditions",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Root Cause 1: resultsDir Change Breaks run() ⚠️ MOST COMMON",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Root Cause 2: sim setup Disrupts Active Session",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "Root Cause 3: Stale or Missing Netlist",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "Solution A: Restore resultsDir (for Root Cause 1)",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "Solution B: Direct Spectre Invocation (most reliable, bypasses Ocean)",
+          "level": 2,
+          "line": 97
+        },
+        {
+          "heading": "Solution C: Add Analyses to Netlist Directly",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "Solution D: Regenerate via ADE GUI (for missing netlist)",
+          "level": 2,
+          "line": 132
+        },
+        {
+          "heading": "PSF Signal Naming",
+          "level": 2,
+          "line": 140
+        },
+        {
+          "heading": "Diagnostic Checklist",
+          "level": 2,
+          "line": 160
+        },
+        {
+          "heading": "Key Files",
+          "level": 2,
+          "line": 170
+        },
+        {
+          "heading": "Notes",
+          "level": 2,
+          "line": 180
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": ".agents/skills/porting-skill/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 213,
+      "nonEmptyLines": 151,
+      "sections": [
+        {
+          "heading": "PDK / Process Technology Migration",
+          "level": 1,
+          "line": 18
+        },
+        {
+          "heading": "Phase 1: Audit — catalog all PDK-specific references",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Find model file references in existing Ocean/netlists",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "List active design variables",
+          "level": 3,
+          "line": 48
+        },
+        {
+          "heading": "Check Maestro session corners",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "Phase 2: Corner name mapping",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "Phase 3: Update model file paths",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "Ocean / ADE setup scripts",
+          "level": 3,
+          "line": 98
+        },
+        {
+          "heading": "Standalone .scs netlists",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "Phase 4: Design variable migration",
+          "level": 2,
+          "line": 128
+        },
+        {
+          "heading": "Phase 5: Maestro session re-setup",
+          "level": 2,
+          "line": 155
+        },
+        {
+          "heading": "Verify corners are applied",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "Phase 6: Re-netlist and validate",
+          "level": 2,
+          "line": 178
+        },
+        {
+          "heading": "Common Pitfalls",
+          "level": 2,
+          "line": 200
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": ".agents/skills/schematic-gen/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 171,
+      "nonEmptyLines": 144,
+      "sections": [
+        {
+          "heading": "Schematic Generation",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "CLI Commands",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "JSON Spec Format",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Workflow",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "Topology Templates",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "5T OTA (PMOS Diff Pair + NMOS Mirror Load)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "Folded-Cascode OTA (PMOS Input)",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "Two-Stage Miller OTA",
+          "level": 3,
+          "line": 134
+        },
+        {
+          "heading": "Coordinate Conventions",
+          "level": 2,
+          "line": 147
+        },
+        {
+          "heading": "PDK Master Names",
+          "level": 2,
+          "line": 155
+        },
+        {
+          "heading": "Notes",
+          "level": 2,
+          "line": 165
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".agents/skills/sim-measure/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 134,
+      "nonEmptyLines": 104,
+      "sections": [
+        {
+          "heading": "Measure Simulation Results",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "Usage",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "DC operating point measurements",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Transient measurements",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "AC measurements",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "Available signal accessors",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "Waveform math functions",
+          "level": 2,
+          "line": 80
+        },
+        {
+          "heading": "Noise measurements",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "Common amplifier measurements (complete recipe)",
+          "level": 2,
+          "line": 113
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": ".agents/skills/sim-plot/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 197,
+      "nonEmptyLines": 161,
+      "sections": [
+        {
+          "heading": "sim-plot: Matplotlib Visualization",
+          "level": 1,
+          "line": 16
+        },
+        {
+          "heading": "Usage by Chart Type",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "1. Parameter Sweep → Line Plot",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "2. Corner Analysis → Grouped Bar Chart",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "3. Scalar Measurements → Horizontal Bar Chart",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "4. AC Bode Plot",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "5. gm/Id Lookup Table → Transistor Curves",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "Common Workflows",
+          "level": 2,
+          "line": 150
+        },
+        {
+          "heading": "After a W-sweep optimization run",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "After process char",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "Script Location",
+          "level": 2,
+          "line": 179
+        },
+        {
+          "heading": "Output",
+          "level": 2,
+          "line": 193
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".agents/skills/sim-plot/scripts/plot_sim.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 292,
+      "nonEmptyLines": 240,
+      "functions": [
+        {
+          "name": "detect_chart_type",
+          "startLine": 32,
+          "endLine": 45,
+          "params": [
+            "data"
+          ]
+        },
+        {
+          "name": "_shorten",
+          "startLine": 52,
+          "endLine": 53,
+          "params": [
+            "expr",
+            "maxlen"
+          ]
+        },
+        {
+          "name": "plot_sweep",
+          "startLine": 56,
+          "endLine": 85,
+          "params": [
+            "data",
+            "ax",
+            "title"
+          ]
+        },
+        {
+          "name": "plot_corner",
+          "startLine": 88,
+          "endLine": 119,
+          "params": [
+            "data",
+            "fig",
+            "title"
+          ]
+        },
+        {
+          "name": "plot_measure",
+          "startLine": 122,
+          "endLine": 147,
+          "params": [
+            "data",
+            "ax",
+            "title"
+          ]
+        },
+        {
+          "name": "plot_bode",
+          "startLine": 150,
+          "endLine": 197,
+          "params": [
+            "data",
+            "fig",
+            "title"
+          ]
+        },
+        {
+          "name": "plot_lookup",
+          "startLine": 200,
+          "endLine": 240,
+          "params": [
+            "data",
+            "fig",
+            "title"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 247,
+          "endLine": 288,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "detect_chart_type",
+          "line": 32,
+          "isDefault": false
+        },
+        {
+          "name": "_shorten",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "plot_sweep",
+          "line": 56,
+          "isDefault": false
+        },
+        {
+          "name": "plot_corner",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "plot_measure",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "plot_bode",
+          "line": 150,
+          "isDefault": false
+        },
+        {
+          "name": "plot_lookup",
+          "line": 200,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 247,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "detect_chart_type",
+          "callee": "isinstance",
+          "lineNumber": 35
+        },
+        {
+          "caller": "detect_chart_type",
+          "callee": "isinstance",
+          "lineNumber": 37
+        },
+        {
+          "caller": "detect_chart_type",
+          "callee": "isinstance",
+          "lineNumber": 39
+        },
+        {
+          "caller": "detect_chart_type",
+          "callee": "isinstance",
+          "lineNumber": 41
+        },
+        {
+          "caller": "_shorten",
+          "callee": "len",
+          "lineNumber": 53
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "data.get",
+          "lineNumber": 59
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "rows[0].keys",
+          "lineNumber": 62
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "float",
+          "lineNumber": 65
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "list",
+          "lineNumber": 67
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "range",
+          "lineNumber": 67
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "len",
+          "lineNumber": 67
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "max",
+          "lineNumber": 71
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "abs",
+          "lineNumber": 71
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "max",
+          "lineNumber": 71
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "abs",
+          "lineNumber": 71
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "float",
+          "lineNumber": 76
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "ax.plot",
+          "lineNumber": 79
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "_shorten",
+          "lineNumber": 79
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "ax.set_xlabel",
+          "lineNumber": 81
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "ax.set_ylabel",
+          "lineNumber": 82
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "ax.set_title",
+          "lineNumber": 83
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "ax.legend",
+          "lineNumber": 84
+        },
+        {
+          "caller": "plot_sweep",
+          "callee": "ax.grid",
+          "lineNumber": 85
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "data.get",
+          "lineNumber": 90
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "list",
+          "lineNumber": 92
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "rows[0].keys",
+          "lineNumber": 92
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "h.lower",
+          "lineNumber": 95
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "str",
+          "lineNumber": 96
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "r.get",
+          "lineNumber": 96
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "enumerate",
+          "lineNumber": 96
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "len",
+          "lineNumber": 98
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "len",
+          "lineNumber": 99
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "np.arange",
+          "lineNumber": 103
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "fig.add_subplot",
+          "lineNumber": 105
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "enumerate",
+          "lineNumber": 107
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "float",
+          "lineNumber": 109
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "ax.bar",
+          "lineNumber": 112
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "_shorten",
+          "lineNumber": 112
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "ax.set_xticks",
+          "lineNumber": 114
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "ax.set_xticklabels",
+          "lineNumber": 115
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "ax.set_ylabel",
+          "lineNumber": 116
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "ax.set_title",
+          "lineNumber": 117
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "ax.legend",
+          "lineNumber": 118
+        },
+        {
+          "caller": "plot_corner",
+          "callee": "ax.grid",
+          "lineNumber": 119
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "m.get",
+          "lineNumber": 126
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "values.append",
+          "lineNumber": 130
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "float",
+          "lineNumber": 130
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "labels.append",
+          "lineNumber": 131
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "_shorten",
+          "lineNumber": 131
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "m.get",
+          "lineNumber": 131
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "ax.text",
+          "lineNumber": 136
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "ax.barh",
+          "lineNumber": 141
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "range",
+          "lineNumber": 141
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "len",
+          "lineNumber": 141
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "ax.set_yticks",
+          "lineNumber": 142
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "range",
+          "lineNumber": 142
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "len",
+          "lineNumber": 142
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "ax.set_yticklabels",
+          "lineNumber": 143
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "ax.set_xlabel",
+          "lineNumber": 144
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "ax.set_title",
+          "lineNumber": 145
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "ax.grid",
+          "lineNumber": 146
+        },
+        {
+          "caller": "plot_measure",
+          "callee": "ax.invert_yaxis",
+          "lineNumber": 147
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.array",
+          "lineNumber": 151
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.array",
+          "lineNumber": 152
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "data.get",
+          "lineNumber": 152
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "data.get",
+          "lineNumber": 152
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.array",
+          "lineNumber": 153
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "data.get",
+          "lineNumber": 153
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "data.get",
+          "lineNumber": 153
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "fig.add_subplot",
+          "lineNumber": 155
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "fig.add_subplot",
+          "lineNumber": 156
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax1.semilogx",
+          "lineNumber": 158
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax1.set_ylabel",
+          "lineNumber": 159
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax1.set_title",
+          "lineNumber": 160
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax1.grid",
+          "lineNumber": 161
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax1.axhline",
+          "lineNumber": 162
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.where",
+          "lineNumber": 166
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.diff",
+          "lineNumber": 166
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.sign",
+          "lineNumber": 166
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "len",
+          "lineNumber": 167
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.interp",
+          "lineNumber": 169
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax1.axvline",
+          "lineNumber": 170
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax1.legend",
+          "lineNumber": 172
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "len",
+          "lineNumber": 176
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax2.semilogx",
+          "lineNumber": 177
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax2.set_ylabel",
+          "lineNumber": 178
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax2.set_xlabel",
+          "lineNumber": 179
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax2.grid",
+          "lineNumber": 180
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax2.axhline",
+          "lineNumber": 181
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.where",
+          "lineNumber": 185
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.diff",
+          "lineNumber": 185
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.sign",
+          "lineNumber": 185
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "len",
+          "lineNumber": 186
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.interp",
+          "lineNumber": 188
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "np.interp",
+          "lineNumber": 189
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax2.axvline",
+          "lineNumber": 191
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "ax2.legend",
+          "lineNumber": 193
+        },
+        {
+          "caller": "plot_bode",
+          "callee": "fig.tight_layout",
+          "lineNumber": 197
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "data.get",
+          "lineNumber": 202
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "data.get",
+          "lineNumber": 203
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "fig.add_subplot",
+          "lineNumber": 205
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "fig.add_subplot",
+          "lineNumber": 206
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "fig.add_subplot",
+          "lineNumber": 207
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "fig.add_subplot",
+          "lineNumber": 208
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "entry.get",
+          "lineNumber": 211
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "entry.get",
+          "lineNumber": 212
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "p.get",
+          "lineNumber": 216
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "p.get",
+          "lineNumber": 216
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "p.get",
+          "lineNumber": 217
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "p.get",
+          "lineNumber": 218
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "np.log10",
+          "lineNumber": 218
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "abs",
+          "lineNumber": 218
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "p.get",
+          "lineNumber": 219
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "p.get",
+          "lineNumber": 219
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "abs",
+          "lineNumber": 220
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "p.get",
+          "lineNumber": 220
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "p.get",
+          "lineNumber": 220
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "ax1.plot",
+          "lineNumber": 222
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "ax2.plot",
+          "lineNumber": 223
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "ax3.plot",
+          "lineNumber": 224
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "ax4.semilogy",
+          "lineNumber": 225
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "ax.set_xlabel",
+          "lineNumber": 233
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "ax.set_ylabel",
+          "lineNumber": 234
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "ax.set_title",
+          "lineNumber": 235
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "ax.legend",
+          "lineNumber": 236
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "ax.grid",
+          "lineNumber": 237
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "fig.suptitle",
+          "lineNumber": 239
+        },
+        {
+          "caller": "plot_lookup",
+          "callee": "fig.tight_layout",
+          "lineNumber": 240
+        },
+        {
+          "caller": "main",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 248
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 249
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 250
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 251
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 252
+        },
+        {
+          "caller": "main",
+          "callee": "parser.parse_args",
+          "lineNumber": 253
+        },
+        {
+          "caller": "main",
+          "callee": "open",
+          "lineNumber": 257
+        },
+        {
+          "caller": "main",
+          "callee": "json.load",
+          "lineNumber": 258
+        },
+        {
+          "caller": "main",
+          "callee": "json.load",
+          "lineNumber": 260
+        },
+        {
+          "caller": "main",
+          "callee": "detect_chart_type",
+          "lineNumber": 262
+        },
+        {
+          "caller": "main",
+          "callee": "plt.style.use",
+          "lineNumber": 264
+        },
+        {
+          "caller": "main",
+          "callee": "plt.figure",
+          "lineNumber": 265
+        },
+        {
+          "caller": "main",
+          "callee": "fig.add_subplot",
+          "lineNumber": 268
+        },
+        {
+          "caller": "main",
+          "callee": "plot_sweep",
+          "lineNumber": 269
+        },
+        {
+          "caller": "main",
+          "callee": "plot_corner",
+          "lineNumber": 271
+        },
+        {
+          "caller": "main",
+          "callee": "fig.add_subplot",
+          "lineNumber": 273
+        },
+        {
+          "caller": "main",
+          "callee": "plot_measure",
+          "lineNumber": 274
+        },
+        {
+          "caller": "main",
+          "callee": "plot_bode",
+          "lineNumber": 276
+        },
+        {
+          "caller": "main",
+          "callee": "plt.close",
+          "lineNumber": 278
+        },
+        {
+          "caller": "main",
+          "callee": "plt.figure",
+          "lineNumber": 279
+        },
+        {
+          "caller": "main",
+          "callee": "plot_lookup",
+          "lineNumber": 280
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 282
+        },
+        {
+          "caller": "main",
+          "callee": "list",
+          "lineNumber": 282
+        },
+        {
+          "caller": "main",
+          "callee": "data.keys",
+          "lineNumber": 282
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 283
+        },
+        {
+          "caller": "main",
+          "callee": "os.makedirs",
+          "lineNumber": 285
+        },
+        {
+          "caller": "main",
+          "callee": "os.path.dirname",
+          "lineNumber": 285
+        },
+        {
+          "caller": "main",
+          "callee": "os.path.abspath",
+          "lineNumber": 285
+        },
+        {
+          "caller": "main",
+          "callee": "fig.savefig",
+          "lineNumber": 286
+        },
+        {
+          "caller": "main",
+          "callee": "plt.close",
+          "lineNumber": 287
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 288
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 8,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".agents/skills/sim-run/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 84,
+      "nonEmptyLines": 61,
+      "sections": [
+        {
+          "heading": "Run Simulation",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "Prerequisites",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Run analysis",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Important: resultsDir — DO NOT CHANGE",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Verify success",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "Key indicators",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "Common errors in spectre.out",
+          "level": 2,
+          "line": 77
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".agents/skills/sim-setup/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 81,
+      "nonEmptyLines": 56,
+      "sections": [
+        {
+          "heading": "Simulation Setup",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "Steps",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. Set simulator and design",
+          "level": 3,
+          "line": 13
+        },
+        {
+          "heading": "2. Set model files (if not already configured in ADE)",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "3. Set design variables",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "4. Set results directory",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "Critical workflow",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Known issues",
+          "level": 2,
+          "line": 72
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": ".agents/skills/sim-sweep/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 64,
+      "nonEmptyLines": 53,
+      "sections": [
+        {
+          "heading": "Parameter Sweep & Corner Analysis",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "Parameter sweep",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "PVT corner analysis",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Tips",
+          "level": 2,
+          "line": 59
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": ".agents/skills/skill-exec/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 48,
+      "nonEmptyLines": 34,
+      "sections": [
+        {
+          "heading": "Execute SKILL Code on Virtuoso",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "Quick reference",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Important notes",
+          "level": 2,
+          "line": 42
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": ".agents/skills/skill-review/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 94,
+      "nonEmptyLines": 70,
+      "sections": [
+        {
+          "heading": "Codex Skill Spec Auditor",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "Step 1 — Locate the skill file",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Step 2 — Checklist (score PASS / WARN / FAIL)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "A. File size",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "B. Frontmatter fields",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "C. Skill body",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "D. Content quality",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "Step 3 — Report",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "Step 4 — Offer to fix",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "Spec reference (invariants)",
+          "level": 2,
+          "line": 88
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": ".agents/skills/skill-shell-gotchas/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 148,
+      "nonEmptyLines": 113,
+      "sections": [
+        {
+          "heading": "SKILL Shell & IPC Gotchas",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "Problem 1: `sh()` Returns `t`/`nil`, Not stdout",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 18
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "Problem 2: `fprintf`/`outfile` Writes 0-Byte Files",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "Problem 3: `getpid()` Is Undefined in SKILL",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "Problem 4: `boundp` Preserves Stale Values Across `load()`",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 89
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "Problem 5: `ipcBeginProcess` PATH Is Stripped",
+          "level": 2,
+          "line": 110
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 120
+        },
+        {
+          "heading": "Summary Table",
+          "level": 2,
+          "line": 140
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 22
+      }
+    }
+  ]
+}

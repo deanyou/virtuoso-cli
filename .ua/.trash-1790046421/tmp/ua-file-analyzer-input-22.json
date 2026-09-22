@@ -1,0 +1,77 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_click.sh",
+      "language": "shell",
+      "sizeLines": 38,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_drag.sh",
+      "language": "shell",
+      "sizeLines": 42,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_env.sh",
+      "language": "shell",
+      "sizeLines": 18,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_find.sh",
+      "language": "shell",
+      "sizeLines": 19,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_scroll.sh",
+      "language": "shell",
+      "sizeLines": 24,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_shot.sh",
+      "language": "shell",
+      "sizeLines": 17,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_state.sh",
+      "language": "shell",
+      "sizeLines": 16,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_type.sh",
+      "language": "shell",
+      "sizeLines": 22,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/gui_wait.sh",
+      "language": "shell",
+      "sizeLines": 16,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/smoke.sh",
+      "language": "shell",
+      "sizeLines": 37,
+      "fileCategory": "script"
+    }
+  ],
+  "batchImportData": {
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_click.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_drag.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_env.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_find.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_scroll.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_shot.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_state.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_type.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/gui_wait.sh": [],
+    ".claude/skills/virtuoso-gui-debug/scripts/smoke.sh": []
+  }
+}

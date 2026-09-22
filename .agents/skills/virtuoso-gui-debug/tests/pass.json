@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "task_id": "pass-task-001",
+  "session_id": "sess-pass-abc123",
+  "pid": 12345,
+  "display": ":0",
+  "cellview": {
+    "lib": "testLib",
+    "cell": "testCell",
+    "view": "schematic"
+  },
+  "steps": [
+    {
+      "id": "step1",
+      "operation": "VCLI_LOAD",
+      "arguments": {
+        "command": "loadDesign"
+      },
+      "verifier": {
+        "predicate": "window_exists",
+        "expected": true
+      },
+      "timeout_seconds": 30,
+      "max_retries": 0
+    },
+    {
+      "id": "step2",
+      "operation": "WINDOW_WAIT",
+      "arguments": {
+        "window_title": "Virtuoso",
+        "state": "visible"
+      },
+      "verifier": {
+        "predicate": "state_matches",
+        "expected": "visible"
+      },
+      "timeout_seconds": 60,
+      "max_retries": 1
+    }
+  ]
+}

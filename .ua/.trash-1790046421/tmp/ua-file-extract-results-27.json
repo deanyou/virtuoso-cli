@@ -1,0 +1,1726 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 12,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 12,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 12
+    }
+  },
+  "results": [
+    {
+      "path": ".workbuddy/memory/2026-08-29.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 408,
+      "nonEmptyLines": 347,
+      "sections": [
+        {
+          "heading": "2026-08-29",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "审核 native-remote-transport 设计方案（仅分析，未改代码）",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "关键代码事实（供后续复用）",
+          "level": 3,
+          "line": 8
+        },
+        {
+          "heading": "实施：方案修订 + 前置注释修复（本轮已落盘，未提交）",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "1. `src/spectre/runner.rs:797-798` 陈旧注释已修正",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "2. `docs/superpowers/specs/2026-08-29-native-remote-transport-design.md`（325 → 580 行）",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "下一步",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "实施 step 0 + step 1：RemoteTransport 契约落地（已通过验收门，未提交）",
+          "level": 2,
+          "line": 90
+        },
+        {
+          "heading": "新增文件（纯新增，零调用点改动 → 零行为变更由构造保证）",
+          "level": 3,
+          "line": 92
+        },
+        {
+          "heading": "联动发现（未修，已记录）",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "验收门",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "下一步",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "实施 step 1 调用点迁移（已过验收门，未提交）",
+          "level": 2,
+          "line": 127
+        },
+        {
+          "heading": "契约侧新增的迁移辅助 API（contract.rs）",
+          "level": 3,
+          "line": 129
+        },
+        {
+          "heading": "已迁移（3 个模块，8 个调用点）",
+          "level": 3,
+          "line": 138
+        },
+        {
+          "heading": "⚠️ 有意的行为 delta（已告知用户）",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "验收门",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "剩余生产调用点（未迁）",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "实施 step 1 续：x11 / window 迁移（已过验收门，未提交）",
+          "level": 2,
+          "line": 165
+        },
+        {
+          "heading": "已迁移",
+          "level": 3,
+          "line": 167
+        },
+        {
+          "heading": "⚠️ 发现的阻塞点：`models.rs` 不能先于 `SSHClient` 迁移",
+          "level": 3,
+          "line": 182
+        },
+        {
+          "heading": "实施 step 1 收尾：spectre/runner.rs 迁移 + 8 个提交全部落地",
+          "level": 2,
+          "line": 194
+        },
+        {
+          "heading": "spectre 迁移的两个值得记住的判断",
+          "level": 3,
+          "line": 196
+        },
+        {
+          "heading": "8 个提交（已落，未推送）",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "踩坑记录",
+          "level": 3,
+          "line": 222
+        },
+        {
+          "heading": "剩余（step 6 范畴）",
+          "level": 3,
+          "line": 230
+        },
+        {
+          "heading": "step 1 收尾：SSHClient + 会话同步迁移 —— step 1 全部完成",
+          "level": 2,
+          "line": 234
+        },
+        {
+          "heading": "✅ step 1 完成态",
+          "level": 3,
+          "line": 251
+        },
+        {
+          "heading": "下一步：delivery sequence step 2",
+          "level": 3,
+          "line": 259
+        },
+        {
+          "heading": "step 2 进行中（本轮提交 930f694 + baa75a8，已推送 origin/main）",
+          "level": 3,
+          "line": 263
+        },
+        {
+          "heading": "下一步（step 2 剩余接缝）",
+          "level": 3,
+          "line": 292
+        },
+        {
+          "heading": "✅ step 2 子增量 3：state 模型 v2（提交 39fb5bd，已推送 origin/main）",
+          "level": 3,
+          "line": 301
+        },
+        {
+          "heading": "下一步（step 2 剩余接缝，state 之后）",
+          "level": 3,
+          "line": 324
+        },
+        {
+          "heading": "验收门",
+          "level": 3,
+          "line": 331
+        },
+        {
+          "heading": "✅ step 2 子增量 4：fake daemon + NativeTransportClient（提交 691edf8，已推送 origin/main）",
+          "level": 3,
+          "line": 334
+        },
+        {
+          "heading": "下一步（step 2 之后）",
+          "level": 3,
+          "line": 357
+        },
+        {
+          "heading": "剩余（历史，step 1 阶段遗留，已并入 step 2 主线）",
+          "level": 3,
+          "line": 362
+        },
+        {
+          "heading": "⚠️ step 3 环境阻断（本机 macOS 沙箱）",
+          "level": 3,
+          "line": 365
+        },
+        {
+          "heading": "✅ step 3 子增量 1：host_keys 主机密钥校验 + auth 认证方式选择（提交 1408cf3，已推送）",
+          "level": 3,
+          "line": 377
+        },
+        {
+          "heading": "✅ step 3 子增量 2：sshd 单跳测试 fixture 骨架（提交 d259fbf，已推送）",
+          "level": 3,
+          "line": 391
+        },
+        {
+          "heading": "step 3 剩余（环境阻塞，需联网机器 / Linux CI 解封）",
+          "level": 3,
+          "line": 404
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 41
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-08-30.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 423,
+      "nonEmptyLines": 353,
+      "sections": [
+        {
+          "heading": "2026-08-30 — native remote transport（承接 2026-08-29）",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "✅ step 4 子增量：SSH 后端选择 + `native-ssh` feature 门控（提交 7ebfa99，已推送）",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "踩坑记录（本轮）",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "上下文延续（step 3 阻断未解）",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "✅ step 6 前置：Tier2 进程身份校验（提交 255cc8b，已推送）",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "🔑 macOS sysctl 关键点（踩坑 + 结论，可复用）",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "✅ refactor：host_keys 手写 base64 → `base64` crate（提交 47bb619，已推送）",
+          "level": 2,
+          "line": 87
+        },
+        {
+          "heading": "⚠️ 发现（非本轮引入）：`cargo test` 存在间歇性 env 竞争",
+          "level": 2,
+          "line": 95
+        },
+        {
+          "heading": "✅ 修 env 竞态（提交 23638bf，已推送）—— 已完成，见下",
+          "level": 2,
+          "line": 116
+        },
+        {
+          "heading": "✅ fix：identity.rs macOS 缺失 PID 判定（提交 7e4fc76，已推送）",
+          "level": 2,
+          "line": 148
+        },
+        {
+          "heading": "✅ daemon 两级存活判定（提交 68eeef1，已推送）",
+          "level": 2,
+          "line": 164
+        },
+        {
+          "heading": "✅ 接线 assess 到 SSHClient::stop（提交 f3c3a65，已推送）",
+          "level": 2,
+          "line": 187
+        },
+        {
+          "heading": "未做（需独立接缝或决策）",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "✅ 修两个既有 bug（提交 70a57fd，已推送）",
+          "level": 2,
+          "line": 217
+        },
+        {
+          "heading": "bug 1（主要）：macOS 上 `tunnel stop` 从不杀进程",
+          "level": 3,
+          "line": 219
+        },
+        {
+          "heading": "bug 2：`is_tunnel_alive()` 在非 unix 上杀掉被测进程",
+          "level": 3,
+          "line": 228
+        },
+        {
+          "heading": "测试（macOS 可跑，均为回归性质）",
+          "level": 3,
+          "line": 234
+        },
+        {
+          "heading": "复用教训",
+          "level": 3,
+          "line": 244
+        },
+        {
+          "heading": "下一接缝候选",
+          "level": 2,
+          "line": 250
+        },
+        {
+          "heading": "✅ 状态清理按裁决门控（提交 84e4cd3，已推送）",
+          "level": 2,
+          "line": 259
+        },
+        {
+          "heading": "复用教训",
+          "level": 3,
+          "line": 282
+        },
+        {
+          "heading": "下一接缝候选（更新）",
+          "level": 2,
+          "line": 286
+        },
+        {
+          "heading": "✅ Windows 进程身份 + 关闭盲信 PID 缺口（提交 7a02f3e，已推送）",
+          "level": 2,
+          "line": 292
+        },
+        {
+          "heading": "✅ __transport-daemon 隐藏子命令（提交 806b662，已推送）",
+          "level": 2,
+          "line": 315
+        },
+        {
+          "heading": "剩余（环境硬阻断，非代码问题）",
+          "level": 2,
+          "line": 331
+        },
+        {
+          "heading": "待办已归档",
+          "level": 2,
+          "line": 340
+        },
+        {
+          "heading": "收尾后追加：清陈旧 sequencer + PR #12 等待手动合并",
+          "level": 2,
+          "line": 347
+        },
+        {
+          "heading": "复用教训",
+          "level": 3,
+          "line": 374
+        },
+        {
+          "heading": "✅ step 3：native russh 直连客户端（提交 c69811e，已推送）",
+          "level": 2,
+          "line": 382
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 29
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-08-31.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 270,
+      "nonEmptyLines": 227,
+      "sections": [
+        {
+          "heading": "2026-08-31",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "测试缺口审查（对照 main@806b662 + 隔离工作树 /private/tmp/vcli-ccb-p1-20260830）",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "我自己犯的错（已由用户纠正 + 我复核确认，勿再重犯）",
+          "level": 3,
+          "line": 7
+        },
+        {
+          "heading": "核实后仍成立 / 新发现（按严重度）",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "环境事实（补充）",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "修复：B 号 bug（macOS stop 静默泄漏）",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "全量测试的 2 个 flaky（与本轮无关，已验证）",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "仍未做的（同本轮清单 A/D/E，未排期）",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "完成：A 号（CLI stop 接入统一 stop_saved_tunnel）",
+          "level": 2,
+          "line": 95
+        },
+        {
+          "heading": "编译/门禁坑（已填）",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "门禁结果",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "剩余",
+          "level": 3,
+          "line": 130
+        },
+        {
+          "heading": "发布：v1.1.0 → crates.io（已上线）",
+          "level": 2,
+          "line": 135
+        },
+        {
+          "heading": "⚠️ 发布内容缺口（重要，待决策）",
+          "level": 3,
+          "line": 146
+        },
+        {
+          "heading": "完成：合并 main + 发布 v1.1.1（用户 \"yes go\"）",
+          "level": 2,
+          "line": 159
+        },
+        {
+          "heading": "合并",
+          "level": 3,
+          "line": 161
+        },
+        {
+          "heading": "发布 v1.1.1",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "🔴 凭证文件格式坑（重要，可复用）",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "工作树残留（非本轮）",
+          "level": 3,
+          "line": 192
+        },
+        {
+          "heading": "完成：README SSH 配置文档（commit `e683cb5`，已推 main）",
+          "level": 2,
+          "line": 196
+        },
+        {
+          "heading": "🔴 草稿里查出的 2 处事实错误（照做必失败）",
+          "level": 3,
+          "line": 201
+        },
+        {
+          "heading": "其他处置",
+          "level": 3,
+          "line": 209
+        },
+        {
+          "heading": "文档类改动的校验手法（可复用）",
+          "level": 3,
+          "line": 217
+        },
+        {
+          "heading": "⚠️ 沙箱陷阱（本会话第二次踩）",
+          "level": 3,
+          "line": 222
+        },
+        {
+          "heading": "完成：E 号（Task 3 — 真实后端选择接入生产路径）",
+          "level": 2,
+          "line": 226
+        },
+        {
+          "heading": "改动",
+          "level": 3,
+          "line": 230
+        },
+        {
+          "heading": "测试",
+          "level": 3,
+          "line": 247
+        },
+        {
+          "heading": "门禁（全过）",
+          "level": 3,
+          "line": 256
+        },
+        {
+          "heading": "工作树未提交项（非本轮，排除）",
+          "level": 3,
+          "line": 262
+        },
+        {
+          "heading": "本轮 transport P1 收尾状态",
+          "level": 3,
+          "line": 266
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 30
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-01.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 378,
+      "nonEmptyLines": 332,
+      "sections": [
+        {
+          "heading": "2026-09-01",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "P0 推进",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "#4 serial_test（P0 #4）— 提交 `287c187`",
+          "level": 3,
+          "line": 5
+        },
+        {
+          "heading": "#3 真 daemon（P0 #3）— 提交 `1428336`",
+          "level": 3,
+          "line": 14
+        },
+        {
+          "heading": "升版 v1.1.2 — 提交 `fb3c9d4` + tag `v1.1.2`",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "P0 推进（续）",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "#2 Tier-1 真接线 — 提交 `f342240`",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "关键设计决定（要记住）",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "step 4/6 推进（下午，提交 8a61848 / 097eabc / f09641a / 82b18a2 / 2e9968a）",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "step 6c — native transport 真正消费 lifecycle 原语（全部完成）",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "6c-1 keepalive + 建立期重试 — 提交 `2d13710`",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "6c-2 SKILL RetryPolicy::Never + OutcomeUnknown — 提交 `165942f`",
+          "level": 3,
+          "line": 102
+        },
+        {
+          "heading": "6c-3 daemon 关停走 ShutdownCoordinator — 提交 `6cd8eeb`",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "6c-3 调试教训（重要）",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "6c 剩余 / 下一接缝",
+          "level": 3,
+          "line": 132
+        },
+        {
+          "heading": "6c-4 tunnel stop 优先 IPC 优雅关停 — 提交 `f6effc2`",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "step 6c 全部收尾（6c-1 `2d13710` / 6c-2 `165942f` / 6c-3 `6cd8eeb` / 6c-4 `f6effc2`）",
+          "level": 2,
+          "line": 154
+        },
+        {
+          "heading": "step 4 收尾 SFTP streaming（单文件）— 提交 `134ba36`",
+          "level": 2,
+          "line": 159
+        },
+        {
+          "heading": "step 7 跨平台集成矩阵 — 提交 `04a1f5e`",
+          "level": 2,
+          "line": 191
+        },
+        {
+          "heading": "step 7b 真 SFTP roundtrip 集成测试 — 提交 `7a0f589`",
+          "level": 2,
+          "line": 211
+        },
+        {
+          "heading": "step 8a `tunnel status` SSH backend diagnostics — 提交 `15c5ce6`",
+          "level": 2,
+          "line": 242
+        },
+        {
+          "heading": "step 8b README SSH 后端选择迁移文档 — 提交 `8fb4422`",
+          "level": 2,
+          "line": 266
+        },
+        {
+          "heading": "step 8c v1.2.0 stable 发布 — 提交 `121309c`",
+          "level": 2,
+          "line": 288
+        },
+        {
+          "heading": "step 8d release.yml macOS/Windows 二进制 — 提交 `3c03a09`",
+          "level": 2,
+          "line": 304
+        },
+        {
+          "heading": "交付完成总览",
+          "level": 2,
+          "line": 319
+        },
+        {
+          "heading": "step 8g 设计文档 Status 标注 — 提交 `bb58daa`",
+          "level": 2,
+          "line": 332
+        },
+        {
+          "heading": "step 8e 依赖漏洞扫描 CI — 提交 `99c1e59`",
+          "level": 2,
+          "line": 350
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 27
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-02.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 480,
+      "nonEmptyLines": 411,
+      "sections": [
+        {
+          "heading": "2026-09-02 工作日志",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "8f：Dependabot 配置（提交 `e0c1c33`）",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "8e：本地预扫失败 → 网络出口事实（重要）",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "8g2：native 范围边界回归测试（提交 `2710537`，`src/transport/native.rs` +48 行）",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "🔴 重大发现：`main` 的 Integration Matrix 全红（run `33519718019`，6/6 job 失败）",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "阻塞点（修断点 2 需先处理）",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "记忆维护",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "🔧 CI 全红修复（断点 3 + 2 + 1）下午第二段",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "断点 3：`fda7ed0`（test-only）",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "断点 2：`6230d33`（resources/ramic_bridge.il 一行）",
+          "level": 3,
+          "line": 70
+        },
+        {
+          "heading": "断点 1：`ad30a36` + `61aae96`（Windows 编译，分两接缝提交）",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "推送后 CI",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "经验沉淀",
+          "level": 2,
+          "line": 100
+        },
+        {
+          "heading": "8h3：scheduler race-free + 4 unix-only test gates（提交 `490fd50`，4 文件 +67 行）",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "8h4：skill_load Windows bridge skip（提交 `a973b24`，1 文件 +5 行）",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "8h5：tunnel_profile HOME 缺失（提交 `0b14dfb`，1 文件 +1 行）",
+          "level": 2,
+          "line": 137
+        },
+        {
+          "heading": "🟢 最终状态：CI 全绿（run `33581451701`，6/6 job 通过）",
+          "level": 2,
+          "line": 142
+        },
+        {
+          "heading": "9a：PR #29 review + 合并（codex/ccb-vgui-p2fixes → main）",
+          "level": 2,
+          "line": 161
+        },
+        {
+          "heading": "Review 结论（🔴/🟠/🟢 分级）",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "合并流程（决策：merge commit）",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "合并后的额外收益",
+          "level": 3,
+          "line": 187
+        },
+        {
+          "heading": "follow-up 追踪",
+          "level": 3,
+          "line": 192
+        },
+        {
+          "heading": "Security Audit 红灯（pre-existing，独立于 PR #29）",
+          "level": 2,
+          "line": 199
+        },
+        {
+          "heading": "10：PR #31 — Security Audit 转绿（fix/audit-rsa-ignore → main）",
+          "level": 2,
+          "line": 219
+        },
+        {
+          "heading": "10a：不止 rsa，且 audit-check action 本身坏了",
+          "level": 3,
+          "line": 223
+        },
+        {
+          "heading": "10b：修法（两处工作流 + audit.toml）",
+          "level": 3,
+          "line": 233
+        },
+        {
+          "heading": "10c：验证与合并",
+          "level": 3,
+          "line": 243
+        },
+        {
+          "heading": "剩余 warning（不阻断，待独立处理）",
+          "level": 3,
+          "line": 252
+        },
+        {
+          "heading": "11：PR #32 — x11.rs 截图路径 hardening（follow-up to issue #30 / request-changes review）",
+          "level": 2,
+          "line": 259
+        },
+        {
+          "heading": "修复清单（src/transport/x11.rs，3 commit，base origin/main @ 9e54dd0）",
+          "level": 3,
+          "line": 263
+        },
+        {
+          "heading": "验收（真机 CI 为准）",
+          "level": 3,
+          "line": 277
+        },
+        {
+          "heading": "环境事故（重要）",
+          "level": 3,
+          "line": 285
+        },
+        {
+          "heading": "合并",
+          "level": 3,
+          "line": 294
+        },
+        {
+          "heading": "stash 事故收口（用户 \"fix it\"）",
+          "level": 3,
+          "line": 301
+        },
+        {
+          "heading": "PR #33 — validate_png_artifact O_NOFOLLOW follow-on（用户二次 \"fix it\"）",
+          "level": 3,
+          "line": 314
+        },
+        {
+          "heading": "9：审核外部《vcli 1.2.0 安装与 xdotool 调用测试报告》（纯分析，未改代码）",
+          "level": 2,
+          "line": 328
+        },
+        {
+          "heading": "🔴 真实归因：3 项「版本兼容」其实全是 vcli 代码 Bug（xdotool 任何版本都不支持）",
+          "level": 3,
+          "line": 332
+        },
+        {
+          "heading": "🔴 Bug #1（display 未填充）根因分析正确，但 main 上仍未修复",
+          "level": 3,
+          "line": 343
+        },
+        {
+          "heading": "🟠 报告遗漏：drag 的第二类错误 `mousemove --relative`",
+          "level": 3,
+          "line": 351
+        },
+        {
+          "heading": "🟡 数字口径问题",
+          "level": 3,
+          "line": 359
+        },
+        {
+          "heading": "✅ 核实无误的部分",
+          "level": 3,
+          "line": 365
+        },
+        {
+          "heading": "复用事实（下次直接用，勿重新查）",
+          "level": 3,
+          "line": 370
+        },
+        {
+          "heading": "10：修复审核发现的两个 x11 Bug（分支 `fix/x11-xdotool-argv-syntax`，已提交未推送）",
+          "level": 2,
+          "line": 375
+        },
+        {
+          "heading": "验收门结果（两提交均全绿）",
+          "level": 3,
+          "line": 392
+        },
+        {
+          "heading": "🔑 环境事实（重要，下次直接复用）",
+          "level": 3,
+          "line": 399
+        },
+        {
+          "heading": "遗留（未做，非本次接缝）",
+          "level": 3,
+          "line": 405
+        },
+        {
+          "heading": "11：按审核结论修订外部测试报告 HTML（纯文档，未动代码）",
+          "level": 2,
+          "line": 412
+        },
+        {
+          "heading": "修订点",
+          "level": 3,
+          "line": 417
+        },
+        {
+          "heading": "post-edit 校验",
+          "level": 3,
+          "line": 434
+        },
+        {
+          "heading": "交付状态",
+          "level": 3,
+          "line": 438
+        },
+        {
+          "heading": "12：沉淀可复用 skill — pr-review-hardening（user-level）",
+          "level": 2,
+          "line": 444
+        },
+        {
+          "heading": "13：执行 PR 审核报告（/tmp/vcli-pr-review.html）建议 —— 13 个 OPEN PR 全收口",
+          "level": 3,
+          "line": 461
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 52
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-03.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 302,
+      "nonEmptyLines": 254,
+      "sections": [
+        {
+          "heading": "2026-09-03",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "PR / Issue review（纯分析，未改代码）",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "事实清单（已核实，对照 origin/main @ b18081a）",
+          "level": 3,
+          "line": 5
+        },
+        {
+          "heading": "🔴 僵尸 issue（代码已修，issue 未关）",
+          "level": 3,
+          "line": 13
+        },
+        {
+          "heading": "仍真实未修的 issue",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "process 观察",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "本地工作区",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "安装 virtuoso-gui-debug 技能（`.claude/skills/` → 用户级）",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "安全审计结论：P2 安全，可安装",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "审计中发现并已修正的 doc-vs-code 偏差（源 + 安装副本都已改）",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "易踩",
+          "level": 3,
+          "line": 67
+        },
+        {
+          "heading": "安装 virtuoso-skill-dev 技能（git/skill 仓库 → 用户级）",
+          "level": 2,
+          "line": 72
+        },
+        {
+          "heading": "审计：无恶意代码，但 2 个 P1 本地攻击面（用户选择「原样安装」，**风险已接受**）",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "待办（用户未授权，未做）",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "用户级技能现状",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "第二轮 PR review（15:00，纯分析，未改代码）",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "🔴 main 持续红（04:40 起，ci.yml 的 Check & Lint 连续 4+ 次 failure）",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "🔴 PR #66（open，CentOS7 glibc 2.17，修 issue #11）两颗雷",
+          "level": 3,
+          "line": 120
+        },
+        {
+          "heading": "🟠 已合并 PR / 直推提交的问题",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "🟠 action-x11-batch / --direct 的风险（直推 main，无 PR 审查）",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "执行修复（15:22 起，Agent 模式）",
+          "level": 2,
+          "line": 153
+        },
+        {
+          "heading": "Task 1 — main 门禁（PR #67 已开，CI 验证通过）",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "Task 2 — PR #66 CentOS7 glibc 修复（已推送，等 Linux CI）",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "待收尾",
+          "level": 3,
+          "line": 173
+        },
+        {
+          "heading": "Task 3 — `--direct` drag 补 MouseButtonGuard（PR #69 已开，全绿）",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "Task 4 — PR #68 squash-merge + 工作区清理（用户输入 \"继续\" 后下一轮）",
+          "level": 3,
+          "line": 198
+        },
+        {
+          "heading": "Task 5 — PR #66 + #69 全部 squash-merge（用户\"继续合并\"）",
+          "level": 3,
+          "line": 216
+        },
+        {
+          "heading": "Task 6 — 复核\"残留 #62\"（用户\"顺手把残留的 #62 也重跑/合并\"）",
+          "level": 3,
+          "line": 231
+        },
+        {
+          "heading": "Task 7 — 对齐工作区 SKILL.md 到 origin/main（用户选方案 A）",
+          "level": 3,
+          "line": 241
+        },
+        {
+          "heading": "Issue 全量盘点与关闭（2026-09-03 晚）",
+          "level": 2,
+          "line": 251
+        },
+        {
+          "heading": "修复打开的 X11 issue（2026-09-03 晚，续）",
+          "level": 2,
+          "line": 273
+        },
+        {
+          "heading": "#50 活 Virtuoso 实测（续，20xx，有实例了）",
+          "level": 2,
+          "line": 286
+        },
+        {
+          "heading": "IC25.1 实测函数可用性（fboundp）",
+          "level": 3,
+          "line": 290
+        },
+        {
+          "heading": "结论",
+          "level": 3,
+          "line": 294
+        },
+        {
+          "heading": "连活 Virtuoso 的环境坑（下次省时间）",
+          "level": 3,
+          "line": 299
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 35
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-04.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 120,
+      "nonEmptyLines": 102,
+      "sections": [
+        {
+          "heading": "2026-09-04 工作日志",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "背景",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "一、打通活体 Virtuoso IC25.1（踩坑记录）",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "二、IC25.1 fboundp 实测结论",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "三、daemon SKILL 求值器陷阱（bisect 出来的，已写进 MEMORY.md）",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "四、PR #72：list_windows 版本容错（核心交付）",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "五、PR #71：顺手修好 main 的 CI 红灯",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "六、结果与产物",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "七、本地测试环境事实（复用）",
+          "level": 2,
+          "line": 62
+        },
+        {
+          "heading": "清理",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "八、v1.3.1 本地发版准备（09-04 续，未发布）",
+          "level": 2,
+          "line": 84
+        },
+        {
+          "heading": "九、push main 与版本戳回归（09-04 07:25）",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "十、v1.3.1 正式发布（09-04 07:47）",
+          "level": 2,
+          "line": 100
+        },
+        {
+          "heading": "十一、发布产物端到端验证（09-04 07:25–08:11）",
+          "level": 2,
+          "line": 109
+        },
+        {
+          "heading": "十二、清理编译产物（09-04 08:39）",
+          "level": 2,
+          "line": 117
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-05.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 132,
+      "nonEmptyLines": 110,
+      "sections": [
+        {
+          "heading": "2026-09-05",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "tunnel 命令族：第 3~4 轮审阅修复 + 第 5 轮复检加固（commit f694659，未推送）",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "落地内容",
+          "level": 3,
+          "line": 7
+        },
+        {
+          "heading": "第 5 轮复检加固（我本轮追加）",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "门禁结果（全绿）",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "环境事实（本轮新踩）",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "提交纪律口径",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "🔴 分支污染事故：两个工作流被误堆在同一分支（已修复）",
+          "level": 2,
+          "line": 59
+        },
+        {
+          "heading": "PR #75 CI 红灯修复：Windows 上 `dirs::home_dir()` 忽略 `HOME`（commit eeb3a7f）",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "🔴 新踩坑：`perl -pi -e` 批量替换误伤函数定义",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "本地门禁环境抖动（非回归）",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "✅ PR #75 已合并（2026-09-05T22:35:42Z）",
+          "level": 2,
+          "line": 122
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-07.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 260,
+      "nonEmptyLines": 206,
+      "sections": [
+        {
+          "heading": "2026-09-07",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "PR #74 已 rebase 合并入 main（01:52:23Z）",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "🔴 长期事实：CI 完全不覆盖 `.claude/skills` 的 Python 测试",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "手法：用临时 worktree 做 rebase，避免污染主工作区",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "PR #78 暂缓（用户决策，本轮未动源码）",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "建 issue #79 / #80（用户要求只拆 2 个，不拆 4 个）",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "PR #81：把 skill Python 测试接入 CI",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "PR #82：0 测试守卫（#81 的补强）",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "PR #78 已留合并门槛评论",
+          "level": 2,
+          "line": 91
+        },
+        {
+          "heading": "🔴 沙箱会 kill 长跑测试进程（本地命令，非 CI）",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "PR #82 已 rebase 合并入 main（约 05:10Z）",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "PR #78 三提交推进（对象池接线）：编译修复 → 条件失效 → socket 清理",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "提交1 `6751893` 修复 default/native-ssh 双构建（零行为变更）",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "提交2 `636ceee` 条件失效（generation）",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "提交3 `c6570bd` 恢复 socket 退出清理",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "提交4 `216cc0d` clippy 1.98 差异（Linux CI 才暴露）",
+          "level": 3,
+          "line": 146
+        },
+        {
+          "heading": "🔴 本机别跑 native-ssh 测试（会卡 1h+）",
+          "level": 2,
+          "line": 153
+        },
+        {
+          "heading": "复审 #78 抓出两个 🔴：remove_if_matches 死锁 + scheduler 归属错误",
+          "level": 2,
+          "line": 158
+        },
+        {
+          "heading": "A. 🔴 `let` shadowing 不 drop 旧 guard → 同 Mutex 二次 lock **死锁**（通用 Rust 陷阱）",
+          "level": 3,
+          "line": 160
+        },
+        {
+          "heading": "B. 🔴 #79 ③ 原先没真正满足：scheduler 挂错了对象",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "口径修正（用户指出）",
+          "level": 3,
+          "line": 187
+        },
+        {
+          "heading": "流程事实",
+          "level": 3,
+          "line": 194
+        },
+        {
+          "heading": "#78 已合并（main `0b07869`，12:57Z）",
+          "level": 2,
+          "line": 199
+        },
+        {
+          "heading": "🔴 macOS Unix socket `sun_path` ≤104 字节（只在 macOS 失败，极易误判）",
+          "level": 2,
+          "line": 208
+        },
+        {
+          "heading": "🔴 CI 僵尸 run 会占满并发",
+          "level": 2,
+          "line": 217
+        },
+        {
+          "heading": "口径：main 验收的项目数不是固定 12",
+          "level": 2,
+          "line": 221
+        },
+        {
+          "heading": "工作区清理（用户指示「清掉后继续」）",
+          "level": 2,
+          "line": 226
+        },
+        {
+          "heading": "🔴 `fix/target-context-tunnel` 是 PR #75 的陈旧副本，别再为它开 PR",
+          "level": 2,
+          "line": 232
+        },
+        {
+          "heading": "PR #76 复审（外部贡献 LXY-freshman，shared daemon 安装）",
+          "level": 2,
+          "line": 243
+        },
+        {
+          "heading": "发现（详见本轮对话报告）",
+          "level": 3,
+          "line": 249
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 30
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-08.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 105,
+      "nonEmptyLines": 83,
+      "sections": [
+        {
+          "heading": "2026-09-08",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "RFC #83 第 2 步落地（接 PR #88）",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "后续",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "PR #88 review 4 项修复（并入 `4afd51d`）",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "PR #92 config-check（RFC #83 第 3 步，#73）",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "合并顺序：#88（drop-dotenv-read）→ #92（config-check）",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "SHA snapshot（2026-09-08 21:06 +0800）",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "CI 触发规则（事实订正）",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "工作流拓扑",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "合并步骤（用户给定的 5 步）",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "自我修正（事实订正）",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "RFC #83 收尾：#88 → #92 按序落地（全部完成）",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "#88（drop-dotenv-read / config.toml）",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "#92（config check）",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "两个新踩的坑",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "结果",
+          "level": 3,
+          "line": 103
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-15.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 68,
+      "nonEmptyLines": 63,
+      "sections": [
+        {
+          "heading": "2026-09-15",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "打包 virtuoso-gui-debug 技能上传 WorkBuddy 开发者平台",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "🔴 二级目录上限（实测，重要）",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "活连接测试（从 agent 沙箱驱动远端 Virtuoso daemon 成功）",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "🔴 live executor 在真实 daemon 上验证 + 修复（重要，可复用）",
+          "level": 2,
+          "line": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": ".workbuddy/memory/MEMORY.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 86,
+      "nonEmptyLines": 76,
+      "sections": [
+        {
+          "heading": "virtuoso-cli — 项目长期记忆",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "主线状态（2026-09-02）",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "native 范围边界（长期事实，勿误述为已交付）",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "待办",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Issue 盘点（2026-09-03，基线 origin/main `602e163` / v1.3.0）",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "环境事实（易踩）",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "活体 Virtuoso（IC25.1）连接方法（2026-09-04 实测跑通）",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "🔴 SKILL 求值器陷阱（IC25.1 daemon 实测，写新 SKILL 必守）",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "IC25.1 窗口 API 可用性（fboundp 实测表）",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "约定",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "crates.io 发布",
+          "level": 2,
+          "line": 81
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    }
+  ]
+}

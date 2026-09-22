@@ -1,0 +1,82 @@
+{
+  "batchIndex": 18,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:.claude/hooks/auto_plot.sh",
+      "type": "file",
+      "name": "auto_plot.sh",
+      "filePath": ".claude/hooks/auto_plot.sh",
+      "summary": "Claude Code PostToolUse hook that auto-plots simulation results. Reads a hook JSON payload from stdin, filters for `vcli sim sweep|measure` or `virtuoso sim sweep|measure` or `process char` commands with `--format json`, then invokes the Python helper `.claude/skills/sim-plot/scripts/plot_sim.py` to render a chart (line, bar, or gm/Id lookup) into `plots/<prefix>_<timestamp>.png`. Selects a plot prefix (`sweep` / `measure` / `gmid`) from the command verb, silently bails when jq/python3 are missing or JSON output is empty/unparsable, and returns a `systemMessage` via jq pointing to the saved PNG. Failures from plot_sim.py are deliberately swallowed.",
+      "tags": [
+        "shell",
+        "bash",
+        "claude-hook",
+        "PostToolUse",
+        "eda",
+        "plotting",
+        "sim-plot",
+        "jq",
+        "python-helper"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Single-file bash script with no named functions — control flow is a linear sequence of guard clauses (`exit 0`) followed by branch selection and a single Python invocation. Tree-sitter shell parser is not applied by the extractor; top-level functions: none. External deps: jq, python3, plot_sim.py. Uses `${CLAUDE_PROJECT_DIR}` to anchor paths under the repo root."
+    },
+    {
+      "id": "file:.claude/hooks/eda_error_capture.sh",
+      "type": "file",
+      "name": "eda_error_capture.sh",
+      "filePath": ".claude/hooks/eda_error_capture.sh",
+      "summary": "Claude Code PostToolUse hook that classifies EDA errors emitted by `vcli`, `virtuoso`, or `spectre` Bash invocations and saves them into per-skill `memory/` files via `.claude/skills/_shared/scripts/eda_memory_saver.py`. Reads the hook JSON from stdin, pre-filters the tool response with a regex covering SFE-/OSSHNL- codes, premature termination, IPC failures, bridge NAK, missing skill registration, nil netlists, connection refused, and exit 127; classifies the source as `spectre`/`vcli`/`unknown`; pipes the output through the saver; and surfaces a localized `systemMessage` (`[eda_capture] 已记录到 <skill>/memory/: <pattern>`) on success.",
+      "tags": [
+        "shell",
+        "bash",
+        "claude-hook",
+        "PostToolUse",
+        "eda",
+        "error-capture",
+        "skill-memory",
+        "jq",
+        "python-helper"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Single-file bash script with no named functions; control flow is sequential guards and regex filters. External deps: jq, python3, eda_memory_saver.py. Contains a Chinese-language user-facing message; otherwise English comments."
+    },
+    {
+      "id": "file:.claude/hooks/rust_check.sh",
+      "type": "file",
+      "name": "rust_check.sh",
+      "filePath": ".claude/hooks/rust_check.sh",
+      "summary": "Claude Code PostToolUse hook that auto-formats and lints Rust files after Write/Edit. Reads the hook JSON, validates that `tool_input.file_path` ends with `.rs` and lives under `$CLAUDE_PROJECT_DIR`, then runs `rustfmt --edition 2021 --check` before and after `cargo fmt --quiet` to detect whether formatting was applied (emitting a systemMessage only on a before→after transition). If the file is formatted, runs `cargo clippy -q -- -D warnings`, extracts the first ten `error...` lines and up to five `= help:` hints, and surfaces them as a single systemMessage naming the file. Silently exits if rustfmt/jq are missing.",
+      "tags": [
+        "shell",
+        "bash",
+        "claude-hook",
+        "PostToolUse",
+        "rust",
+        "cargo",
+        "rustfmt",
+        "clippy",
+        "lint",
+        "auto-fix",
+        "jq"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Single-file bash script with no named functions; relies on bash-specific parameter expansion (`${FMT_BEFORE##*$'\\n'}`) to recover the trailing exit status from a captured command. External deps: rustfmt, cargo, jq. Re-uses `cd \"$CLAUDE_PROJECT_DIR\"` before invoking cargo."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.claude/hooks/auto_plot.sh",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/hooks/eda_error_capture.sh",
+      "target": "file:.claude/skills/_shared/scripts/eda_memory_saver.py",
+      "type": "calls",
+      "weight": 0.7
+    }
+  ]
+}

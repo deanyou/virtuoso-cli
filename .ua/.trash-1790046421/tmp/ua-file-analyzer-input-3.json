@@ -1,0 +1,236 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "src/async_runtime.rs",
+      "language": "rust",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/auth.rs",
+      "language": "rust",
+      "sizeLines": 223,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/capability/mod.rs",
+      "language": "rust",
+      "sizeLines": 452,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/capability/plugin.rs",
+      "language": "rust",
+      "sizeLines": 573,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/command_log.rs",
+      "language": "rust",
+      "sizeLines": 27,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/init.rs",
+      "language": "rust",
+      "sizeLines": 92,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/config_file.rs",
+      "language": "rust",
+      "sizeLines": 574,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/exit_codes.rs",
+      "language": "rust",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/history.rs",
+      "language": "rust",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib.rs",
+      "language": "rust",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/main.rs",
+      "language": "rust",
+      "sizeLines": 2945,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/mcp/mod.rs",
+      "language": "rust",
+      "sizeLines": 203,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/mcp/server.rs",
+      "language": "rust",
+      "sizeLines": 138,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/mcp/tools.rs",
+      "language": "rust",
+      "sizeLines": 618,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ocean/corner.rs",
+      "language": "rust",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ocean/mod.rs",
+      "language": "rust",
+      "sizeLines": 319,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/plugins/mod.rs",
+      "language": "rust",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/plugins/registry.rs",
+      "language": "rust",
+      "sizeLines": 157,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/plugins/schema.rs",
+      "language": "rust",
+      "sizeLines": 550,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "src/async_runtime.rs": [],
+    "src/auth.rs": [
+      "src/capability/mod.rs",
+      "src/error.rs"
+    ],
+    "src/capability/mod.rs": [
+      "src/capability/plugin.rs"
+    ],
+    "src/capability/plugin.rs": [],
+    "src/command_log.rs": [],
+    "src/commands/init.rs": [
+      "src/config_file.rs",
+      "src/error.rs"
+    ],
+    "src/config_file.rs": [
+      "src/error.rs"
+    ],
+    "src/exit_codes.rs": [],
+    "src/history.rs": [],
+    "src/lib.rs": [
+      "src/async_runtime.rs",
+      "src/auth.rs",
+      "src/capability/mod.rs",
+      "src/client/mod.rs",
+      "src/command_log.rs",
+      "src/commands/mod.rs",
+      "src/config.rs",
+      "src/config_file.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/exit_codes.rs",
+      "src/history.rs",
+      "src/mcp/mod.rs",
+      "src/models.rs",
+      "src/ocean/mod.rs",
+      "src/output.rs",
+      "src/plugins/mod.rs",
+      "src/profile.rs",
+      "src/rpc/mod.rs",
+      "src/runtime_paths.rs",
+      "src/session/mod.rs",
+      "src/skill_finder/mod.rs",
+      "src/spectre/mod.rs",
+      "src/streaming/mod.rs",
+      "src/sys/mod.rs",
+      "src/test_env.rs",
+      "src/transaction/mod.rs",
+      "src/transport/mod.rs",
+      "src/tui/mod.rs",
+      "src/version.rs"
+    ],
+    "src/main.rs": [
+      "src/async_runtime.rs",
+      "src/auth.rs",
+      "src/capability/mod.rs",
+      "src/client/mod.rs",
+      "src/command_log.rs",
+      "src/commands/mod.rs",
+      "src/config.rs",
+      "src/config_file.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/exit_codes.rs",
+      "src/history.rs",
+      "src/mcp/mod.rs",
+      "src/models.rs",
+      "src/ocean/mod.rs",
+      "src/output.rs",
+      "src/plugins/mod.rs",
+      "src/profile.rs",
+      "src/rpc/mod.rs",
+      "src/runtime_paths.rs",
+      "src/skill_finder/mod.rs",
+      "src/spectre/mod.rs",
+      "src/streaming/mod.rs",
+      "src/sys/mod.rs",
+      "src/test_env.rs",
+      "src/tests.rs",
+      "src/transaction/mod.rs",
+      "src/transport/mod.rs",
+      "src/tui/mod.rs",
+      "src/version.rs"
+    ],
+    "src/mcp/mod.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/mcp/server.rs",
+      "src/mcp/tools.rs"
+    ],
+    "src/mcp/server.rs": [
+      "src/error.rs"
+    ],
+    "src/mcp/tools.rs": [
+      "src/capability/mod.rs"
+    ],
+    "src/ocean/corner.rs": [],
+    "src/ocean/mod.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_runtime.rs",
+      "src/ocean/corner.rs"
+    ],
+    "src/plugins/mod.rs": [
+      "src/plugins/registry.rs",
+      "src/plugins/schema.rs"
+    ],
+    "src/plugins/registry.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/mcp/tools.rs",
+      "src/rpc/schema.rs"
+    ],
+    "src/plugins/schema.rs": [
+      "src/client/skill_runtime.rs",
+      "src/error.rs"
+    ]
+  }
+}

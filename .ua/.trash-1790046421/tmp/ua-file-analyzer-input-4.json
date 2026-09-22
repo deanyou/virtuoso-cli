@@ -1,0 +1,224 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "src/client/skill_loading.rs",
+      "language": "rust",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/config.rs",
+      "language": "rust",
+      "sizeLines": 207,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/design.rs",
+      "language": "rust",
+      "sizeLines": 183,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/diag.rs",
+      "language": "rust",
+      "sizeLines": 356,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/session.rs",
+      "language": "rust",
+      "sizeLines": 2067,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/sim.rs",
+      "language": "rust",
+      "sizeLines": 984,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/skill.rs",
+      "language": "rust",
+      "sizeLines": 516,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/transport_daemon.rs",
+      "language": "rust",
+      "sizeLines": 182,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/tunnel.rs",
+      "language": "rust",
+      "sizeLines": 1191,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/window.rs",
+      "language": "rust",
+      "sizeLines": 606,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/config.rs",
+      "language": "rust",
+      "sizeLines": 1851,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/context.rs",
+      "language": "rust",
+      "sizeLines": 427,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/error.rs",
+      "language": "rust",
+      "sizeLines": 266,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/models.rs",
+      "language": "rust",
+      "sizeLines": 636,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/output.rs",
+      "language": "rust",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/rpc/dispatcher.rs",
+      "language": "rust",
+      "sizeLines": 1443,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/session/heartbeat.rs",
+      "language": "rust",
+      "sizeLines": 135,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/session/mod.rs",
+      "language": "rust",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/spectre/parsers.rs",
+      "language": "rust",
+      "sizeLines": 1769,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "src/client/skill_loading.rs": [
+      "src/error.rs",
+      "src/transport/contract.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/commands/config.rs": [
+      "src/config.rs",
+      "src/error.rs",
+      "src/output.rs"
+    ],
+    "src/commands/design.rs": [
+      "src/error.rs",
+      "src/output.rs"
+    ],
+    "src/commands/diag.rs": [
+      "src/client/bridge.rs",
+      "src/config.rs",
+      "src/error.rs",
+      "src/transport/contract.rs"
+    ],
+    "src/commands/session.rs": [
+      "src/client/bridge.rs",
+      "src/config.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/output.rs",
+      "src/transport/identity.rs",
+      "src/transport/tunnel.rs"
+    ],
+    "src/commands/sim.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_runtime.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/ocean/corner.rs",
+      "src/spectre/jobs.rs",
+      "src/spectre/runner.rs"
+    ],
+    "src/commands/skill.rs": [
+      "src/client/bridge.rs",
+      "src/config.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/skill_finder/mod.rs"
+    ],
+    "src/commands/transport_daemon.rs": [
+      "src/error.rs",
+      "src/transport/contract.rs",
+      "src/transport/pool.rs",
+      "src/transport/scheduler.rs"
+    ],
+    "src/commands/tunnel.rs": [
+      "src/client/bridge.rs",
+      "src/config.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/output.rs",
+      "src/transport/session_discovery.rs",
+      "src/transport/tunnel.rs"
+    ],
+    "src/commands/window.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/transport/contract.rs"
+    ],
+    "src/config.rs": [
+      "src/config_file.rs",
+      "src/error.rs"
+    ],
+    "src/context.rs": [
+      "src/config.rs",
+      "src/error.rs"
+    ],
+    "src/error.rs": [
+      "src/output.rs"
+    ],
+    "src/models.rs": [
+      "src/error.rs",
+      "src/transport/contract.rs"
+    ],
+    "src/output.rs": [],
+    "src/rpc/dispatcher.rs": [
+      "src/auth.rs",
+      "src/client/bridge.rs",
+      "src/context.rs",
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/session/heartbeat.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/session/mod.rs": [
+      "src/models.rs",
+      "src/session/heartbeat.rs"
+    ],
+    "src/spectre/parsers.rs": [
+      "src/error.rs",
+      "src/models.rs"
+    ]
+  }
+}

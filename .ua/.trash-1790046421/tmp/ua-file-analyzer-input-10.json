@@ -1,0 +1,32 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "language": "python",
+      "sizeLines": 157,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "language": "python",
+      "sizeLines": 94,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "language": "python",
+      "sizeLines": 215,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    ".agents/skills/virtuoso-gui-debug/scripts/enumerate_functions.py": [
+      ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/scripts/probe_signatures.py": [
+      ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/scripts/skill_db.py": []
+  }
+}

@@ -1,0 +1,1032 @@
+{
+  "batchIndex": 9,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:src/transport/ipc/daemon.rs",
+      "type": "file",
+      "name": "daemon.rs",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "Synchronous `NativeTransportClient` (Unix-only) that talks the versioned IPC protocol to the transport daemon. Implements `RemoteTransport` over a length-prefixed JSON frame channel on a Unix domain socket: performs the `Hello` handshake (profile, auth token, daemon nonce), then offers test_connection / run_command / upload_file|upload_text / download_file|download_dir / challenge / request_shutdown. Also owns the end-to-end integration `mod tests` that round-trips through the real server.",
+      "tags": [
+        "rust",
+        "ipc",
+        "client",
+        "unix-domain-socket",
+        "remote-transport",
+        "feature-gated",
+        "integration-test"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust, edition per workspace Cargo.toml. Module gated on `(unix, any(test, feature = \"native-ssh\"))` where applicable; serde for JSON wire types; std-only framing layer (no tokio, no russh at the IPC layer)."
+    },
+    {
+      "id": "file:src/transport/ipc/framing.rs",
+      "type": "file",
+      "name": "framing.rs",
+      "filePath": "src/transport/ipc/framing.rs",
+      "summary": "Transport-agnostic byte framing for the IPC protocol: four-byte big-endian length prefix + UTF-8 payload, with an 8 MiB hard ceiling (`MAX_FRAME_SIZE`). Exposes `encode_frame`, `FrameReader<R: Read>` (streaming, deadline-aware `read_frame_until`/`read_frame_until_with`), and `FrameWriter<W: Write>` (`write_frame_with_deadline`). `FrameError` covers TooLarge, Truncated, and Io variants. The layer never sees SSH, Tokio, or daemon-internal types.",
+      "tags": [
+        "rust",
+        "ipc",
+        "framing",
+        "length-prefix",
+        "streaming",
+        "no-i/o-deps"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust, edition per workspace Cargo.toml. Module gated on `(unix, any(test, feature = \"native-ssh\"))` where applicable; serde for JSON wire types; std-only framing layer (no tokio, no russh at the IPC layer)."
+    },
+    {
+      "id": "file:src/transport/ipc/messages.rs",
+      "type": "file",
+      "name": "messages.rs",
+      "filePath": "src/transport/ipc/messages.rs",
+      "summary": "Plain `serde` request/response vocabulary for the IPC protocol: `ProtocolVersion` (major/minor, current constants pulled from `framing`, major must match exactly), `Operation` enum (Hello, RunCommand, UploadFile, DownloadDir, Health, Shutdown, etc., with custom serde via `as_str`), `Hello`/`HelloAck`, `RequestEnvelope`/`ResponseEnvelope`/`ResponseResult`, and the `IpcError` taxonomy (codes, connection-level predicate, and From impls for serde_json / std::io errors).",
+      "tags": [
+        "rust",
+        "ipc",
+        "serde",
+        "protocol-version",
+        "error-taxonomy",
+        "wire-types"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust, edition per workspace Cargo.toml. Module gated on `(unix, any(test, feature = \"native-ssh\"))` where applicable; serde for JSON wire types; std-only framing layer (no tokio, no russh at the IPC layer)."
+    },
+    {
+      "id": "file:src/transport/ipc/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/transport/ipc/mod.rs",
+      "summary": "Module root for `transport::ipc`. Declares `daemon`, `framing`, `messages`, and `server` submodules, with `daemon`/`server` gated on `(unix, any(test, feature = \"native-ssh\"))` because the real daemon is feature-gated but the test suite exercises the same code. The module owns only the wire format; no russh, Tokio, SSH, or daemon-internal types leak.",
+      "tags": [
+        "rust",
+        "ipc",
+        "module-root",
+        "cfg-gate"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust, edition per workspace Cargo.toml. Module gated on `(unix, any(test, feature = \"native-ssh\"))` where applicable; serde for JSON wire types; std-only framing layer (no tokio, no russh at the IPC layer)."
+    },
+    {
+      "id": "file:src/transport/ipc/server.rs",
+      "type": "file",
+      "name": "server.rs",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "Server half of the versioned IPC protocol (Unix-only). `serve_one` / `serve_one_with_shutdown` handle a single connection: `Hello` handshake, then dispatch every subsequent `RequestEnvelope` onto the supplied `RemoteTransport` (or an `EndpointPool` via `serve_one_pooled`/`run_with_pool`) until the peer closes. `dispatch` is the central request router (~130 lines, handles RunCommand, uploads, downloads, Health, Shutdown, Challenge, Cancel, local-forward). `run` binds the Unix socket, sets mode `0600`, and accepts forever. Implements the Tier-1 liveness `Challenge` probe by answering with the recorded daemon nonce.",
+      "tags": [
+        "rust",
+        "ipc",
+        "server",
+        "dispatch",
+        "connection-pool",
+        "shutdown-handling",
+        "feature-gated",
+        "unix-only"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust, edition per workspace Cargo.toml. Module gated on `(unix, any(test, feature = \"native-ssh\"))` where applicable; serde for JSON wire types; std-only framing layer (no tokio, no russh at the IPC layer)."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::connect",
+      "type": "function",
+      "name": "connect",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "connect(socket_path, profile, auth_token) — 21 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::challenge",
+      "type": "function",
+      "name": "challenge",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "challenge() — 15 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::request_shutdown",
+      "type": "function",
+      "name": "request_shutdown",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "request_shutdown() — 11 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "function",
+      "name": "exchange",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "exchange(operation, payload, deadline) — 57 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::lock_with_deadline",
+      "type": "function",
+      "name": "lock_with_deadline",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "lock_with_deadline(mutex, deadline) — 22 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::do_handshake",
+      "type": "function",
+      "name": "do_handshake",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "do_handshake(conn, profile, auth_token) — 53 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::apply_socket_timeouts",
+      "type": "function",
+      "name": "apply_socket_timeouts",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "apply_socket_timeouts(stream, timeout) — 31 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::apply_socket_timeouts_fd",
+      "type": "function",
+      "name": "apply_socket_timeouts_fd",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "apply_socket_timeouts_fd(fd, timeout) — 24 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::run_command",
+      "type": "function",
+      "name": "run_command",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "run_command(req) — 16 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::upload_file",
+      "type": "function",
+      "name": "upload_file",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "upload_file(req) — 12 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::upload_text",
+      "type": "function",
+      "name": "upload_text",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "upload_text(req) — 12 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::download_file",
+      "type": "function",
+      "name": "download_file",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "download_file(req) — 12 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/daemon.rs::download_dir",
+      "type": "function",
+      "name": "download_dir",
+      "filePath": "src/transport/ipc/daemon.rs",
+      "summary": "download_dir(req) — 12 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/framing.rs::read_frame_until_with",
+      "type": "function",
+      "name": "read_frame_until_with",
+      "filePath": "src/transport/ipc/framing.rs",
+      "summary": "read_frame_until_with(deadline, set_timeout) — 44 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/framing.rs::write_frame_with_deadline",
+      "type": "function",
+      "name": "write_frame_with_deadline",
+      "filePath": "src/transport/ipc/framing.rs",
+      "summary": "write_frame_with_deadline(payload, deadline, set_timeout) — 29 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/messages.rs::as_str",
+      "type": "function",
+      "name": "as_str",
+      "filePath": "src/transport/ipc/messages.rs",
+      "summary": "as_str() — 18 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/messages.rs::deserialize",
+      "type": "function",
+      "name": "deserialize",
+      "filePath": "src/transport/ipc/messages.rs",
+      "summary": "deserialize(d) — 19 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/messages.rs::code",
+      "type": "function",
+      "name": "code",
+      "filePath": "src/transport/ipc/messages.rs",
+      "summary": "code() — 27 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/messages.rs::from",
+      "type": "function",
+      "name": "from",
+      "filePath": "src/transport/ipc/messages.rs",
+      "summary": "from(e) — 57 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/messages.rs::from",
+      "type": "function",
+      "name": "from",
+      "filePath": "src/transport/ipc/messages.rs",
+      "summary": "from(e) — 59 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "class:src/transport/ipc/messages.rs::Operation",
+      "type": "class",
+      "name": "Operation",
+      "filePath": "src/transport/ipc/messages.rs",
+      "summary": "Operation — 19-line definition with 3 method(s): as_str, serialize, deserialize.",
+      "tags": [
+        "rust",
+        "impl-block"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum definition (impl block methods tracked separately)."
+    },
+    {
+      "id": "class:src/transport/ipc/messages.rs::RequestEnvelope",
+      "type": "class",
+      "name": "RequestEnvelope",
+      "filePath": "src/transport/ipc/messages.rs",
+      "summary": "RequestEnvelope — 13-line definition with 0 method(s): none.",
+      "tags": [
+        "rust",
+        "data-struct"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum definition (impl block methods tracked separately)."
+    },
+    {
+      "id": "class:src/transport/ipc/messages.rs::IpcError",
+      "type": "class",
+      "name": "IpcError",
+      "filePath": "src/transport/ipc/messages.rs",
+      "summary": "IpcError — 54-line definition with 3 method(s): code, is_connection_level, from.",
+      "tags": [
+        "rust",
+        "impl-block"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust struct/enum definition (impl block methods tracked separately)."
+    },
+    {
+      "id": "function:src/transport/ipc/server.rs::do_handshake",
+      "type": "function",
+      "name": "do_handshake",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "do_handshake(writer, hello_env, expected_token, server_nonce) — 59 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/server.rs::serve_one_with_shutdown",
+      "type": "function",
+      "name": "serve_one_with_shutdown",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "serve_one_with_shutdown(stream, transport, auth_token, server_nonce, shutdown) — 24 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/server.rs::serve_loop",
+      "type": "function",
+      "name": "serve_loop",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "serve_loop(stream, transport_for, on_connection_error, auth_token, server_nonce, shutdown) — 133 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/server.rs::serve_one_pooled",
+      "type": "function",
+      "name": "serve_one_pooled",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "serve_one_pooled(stream, pool, key, limits, factory, auth_token, server_nonce, shutdown) — 59 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/server.rs::dispatch",
+      "type": "function",
+      "name": "dispatch",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "dispatch(transport, env, server_nonce) — 131 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/server.rs::bind_listener",
+      "type": "function",
+      "name": "bind_listener",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "bind_listener(socket_path, shutdown) — 35 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/server.rs::accept_loop",
+      "type": "function",
+      "name": "accept_loop",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "accept_loop(listener, state, auth_token, server_nonce, spawn) — 48 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/server.rs::run",
+      "type": "function",
+      "name": "run",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "run(socket_path, transport, auth_token, server_nonce, shutdown) — 31 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    },
+    {
+      "id": "function:src/transport/ipc/server.rs::run_with_pool",
+      "type": "function",
+      "name": "run_with_pool",
+      "filePath": "src/transport/ipc/server.rs",
+      "summary": "run_with_pool(socket_path, pool, key, limits, factory, auth_token, server_nonce, shutdown) — 36 lines.",
+      "tags": [
+        "rust",
+        "function"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Free function or inherent impl method. Body size measured by extractor."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::connect",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::challenge",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::request_shutdown",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::lock_with_deadline",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::do_handshake",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::apply_socket_timeouts",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::apply_socket_timeouts_fd",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::run_command",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::upload_file",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::upload_text",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::download_file",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "function:src/transport/ipc/daemon.rs::download_dir",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/framing.rs",
+      "target": "function:src/transport/ipc/framing.rs::read_frame_until_with",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/framing.rs",
+      "target": "function:src/transport/ipc/framing.rs::write_frame_with_deadline",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/messages.rs",
+      "target": "function:src/transport/ipc/messages.rs::as_str",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/messages.rs",
+      "target": "function:src/transport/ipc/messages.rs::deserialize",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/messages.rs",
+      "target": "function:src/transport/ipc/messages.rs::code",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/messages.rs",
+      "target": "function:src/transport/ipc/messages.rs::from",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/messages.rs",
+      "target": "function:src/transport/ipc/messages.rs::from",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/messages.rs",
+      "target": "class:src/transport/ipc/messages.rs::Operation",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/messages.rs",
+      "target": "class:src/transport/ipc/messages.rs::RequestEnvelope",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/messages.rs",
+      "target": "class:src/transport/ipc/messages.rs::IpcError",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "function:src/transport/ipc/server.rs::do_handshake",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "function:src/transport/ipc/server.rs::serve_one_with_shutdown",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "function:src/transport/ipc/server.rs::serve_loop",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "function:src/transport/ipc/server.rs::serve_one_pooled",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "function:src/transport/ipc/server.rs::dispatch",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "function:src/transport/ipc/server.rs::bind_listener",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "function:src/transport/ipc/server.rs::accept_loop",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "function:src/transport/ipc/server.rs::run",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "function:src/transport/ipc/server.rs::run_with_pool",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "file:src/transport/ipc/framing.rs",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "file:src/transport/ipc/messages.rs",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "file:src/transport/ipc/server.rs",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/transport/ipc/mod.rs",
+      "target": "file:src/transport/ipc/daemon.rs",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/transport/ipc/mod.rs",
+      "target": "file:src/transport/ipc/framing.rs",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/transport/ipc/mod.rs",
+      "target": "file:src/transport/ipc/messages.rs",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/transport/ipc/mod.rs",
+      "target": "file:src/transport/ipc/server.rs",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "file:src/transport/ipc/framing.rs",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "file:src/transport/ipc/messages.rs",
+      "type": "imports",
+      "weight": 0.9
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::connect",
+      "target": "function:src/transport/ipc/daemon.rs::apply_socket_timeouts",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::connect",
+      "target": "function:src/transport/ipc/daemon.rs::do_handshake",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::challenge",
+      "target": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::request_shutdown",
+      "target": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::exchange",
+      "target": "function:src/transport/ipc/daemon.rs::lock_with_deadline",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::exchange",
+      "target": "function:src/transport/ipc/daemon.rs::apply_socket_timeouts_fd",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::exchange",
+      "target": "function:src/transport/ipc/daemon.rs::frame_err_to_transport",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::do_handshake",
+      "target": "function:src/transport/ipc/daemon.rs::apply_socket_timeouts_fd",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::do_handshake",
+      "target": "function:src/transport/ipc/daemon.rs::frame_err_to_transport",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::test_connection",
+      "target": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::run_command",
+      "target": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::upload_file",
+      "target": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::upload_text",
+      "target": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::download_file",
+      "target": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/daemon.rs::download_dir",
+      "target": "function:src/transport/ipc/daemon.rs::exchange",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/framing.rs::read_frame",
+      "target": "function:src/transport/ipc/framing.rs::read_frame_until",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/framing.rs::read_frame_until",
+      "target": "function:src/transport/ipc/framing.rs::read_frame_until_with",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/framing.rs::write_frame",
+      "target": "function:src/transport/ipc/framing.rs::encode_frame",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/framing.rs::write_frame_with_deadline",
+      "target": "function:src/transport/ipc/framing.rs::encode_frame",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/framing.rs::write_frame_with_deadline",
+      "target": "function:src/transport/ipc/framing.rs::from",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/messages.rs::serialize",
+      "target": "function:src/transport/ipc/messages.rs::as_str",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/messages.rs::deserialize",
+      "target": "function:src/transport/ipc/messages.rs::as_str",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/messages.rs::new",
+      "target": "function:src/transport/ipc/messages.rs::current",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::do_handshake",
+      "target": "function:src/transport/ipc/server.rs::new",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::serve_one",
+      "target": "function:src/transport/ipc/server.rs::serve_one_with_shutdown",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::serve_one_with_shutdown",
+      "target": "function:src/transport/ipc/server.rs::serve_loop",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::serve_loop",
+      "target": "function:src/transport/ipc/server.rs::new",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::serve_loop",
+      "target": "function:src/transport/ipc/server.rs::do_handshake",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::serve_loop",
+      "target": "function:src/transport/ipc/server.rs::from",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::serve_loop",
+      "target": "function:src/transport/ipc/server.rs::dispatch",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::serve_one_pooled",
+      "target": "function:src/transport/ipc/server.rs::serve_loop",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::dispatch",
+      "target": "function:src/transport/ipc/server.rs::from",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::bind_listener",
+      "target": "function:src/transport/ipc/server.rs::new",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::accept_loop",
+      "target": "function:src/transport/ipc/server.rs::drop",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::run",
+      "target": "function:src/transport/ipc/server.rs::bind_listener",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::run",
+      "target": "function:src/transport/ipc/server.rs::accept_loop",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::run",
+      "target": "function:src/transport/ipc/server.rs::new",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::run",
+      "target": "function:src/transport/ipc/server.rs::serve_one_with_shutdown",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::run_with_pool",
+      "target": "function:src/transport/ipc/server.rs::bind_listener",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::run_with_pool",
+      "target": "function:src/transport/ipc/server.rs::accept_loop",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::run_with_pool",
+      "target": "function:src/transport/ipc/server.rs::new",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "function:src/transport/ipc/server.rs::run_with_pool",
+      "target": "function:src/transport/ipc/server.rs::serve_one_pooled",
+      "type": "calls",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/transport/ipc/daemon.rs",
+      "target": "file:src/transport/ipc/daemon.rs#tests",
+      "type": "tested_by",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transport/ipc/framing.rs",
+      "target": "file:src/transport/ipc/framing.rs#tests",
+      "type": "tested_by",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transport/ipc/messages.rs",
+      "target": "file:src/transport/ipc/messages.rs#tests",
+      "type": "tested_by",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transport/ipc/server.rs",
+      "target": "file:src/transport/ipc/server.rs#tests",
+      "type": "tested_by",
+      "weight": 0.5
+    }
+  ]
+}

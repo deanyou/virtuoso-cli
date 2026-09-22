@@ -1,0 +1,1496 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 25,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 25
+    }
+  },
+  "results": [
+    {
+      "path": ".claude/workflows/ade-regression.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 39,
+      "nonEmptyLines": 34,
+      "sections": [
+        {
+          "heading": "步骤",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "Corner 配置示例",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "输出",
+          "level": 2,
+          "line": 35
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": ".claude/workflows/analog-design-flow.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 17,
+      "nonEmptyLines": 14,
+      "sections": [
+        {
+          "heading": "步骤",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "迭代回路",
+          "level": 2,
+          "line": 15
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 2
+      }
+    },
+    {
+      "path": ".codex/hooks.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 28,
+      "nonEmptyLines": 28,
+      "sections": [
+        {
+          "heading": "hooks",
+          "level": 1,
+          "line": 2
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "language": "yaml",
+      "fileCategory": "config",
+      "totalLines": 24,
+      "nonEmptyLines": 23,
+      "sections": [
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "updates",
+          "level": 1,
+          "line": 2
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 2
+      }
+    },
+    {
+      "path": ".github/scripts/run-skill-tests.sh",
+      "language": "shell",
+      "fileCategory": "script",
+      "totalLines": 75,
+      "nonEmptyLines": 67,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/async-job-lazy-refresh/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 67,
+      "nonEmptyLines": 54,
+      "sections": [
+        {
+          "heading": "Async job status: lazy refresh, not monitor threads",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Critical Caveat: Zombie Processes (discovered 2026-04-18)",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 64
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-ic23-ade-window-title/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 59,
+      "nonEmptyLines": 46,
+      "sections": [
+        {
+          "heading": "IC23.1 ADE window title format",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Actual format (IC23.1-64b.500)",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Grammar",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "Parsing rule",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "Modes",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 58
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-ic23-dbopencellviewbytype/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 117,
+      "nonEmptyLines": 85,
+      "sections": [
+        {
+          "heading": "Cadence IC23: dbOpenCellViewByType API and Open-Mode Behavior",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Working Forms in IC23",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Broken Forms",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "Already-Held cv (Returns nil)",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "SKILL `setof` Multi-Condition Pitfall",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "Listing All Open CVs",
+          "level": 3,
+          "line": 70
+        },
+        {
+          "heading": "dbSave on Already-Open cv",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "Safe Read-Only Form (for Exploration via Bridge)",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "⚠️ Write-Mode Danger via Bridge",
+          "level": 3,
+          "line": 92
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 115
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-ic23-schcreateinst/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 96,
+      "nonEmptyLines": 74,
+      "sections": [
+        {
+          "heading": "Cadence IC23 schCreateInst Signature",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Correct IC23 Signature",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "Full Working Example",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "Common Mistakes",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "After Instance Deletion: Reconnect Gate Labels",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "Verify Connectivity",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "schCheck Before Save",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 95
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-osshnl-109/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 90,
+      "nonEmptyLines": 74,
+      "sections": [
+        {
+          "heading": "Cadence OSSHNL-109: Schematic Modified Since Last Extraction",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Trigger Conditions",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "Why `dbOpenCellViewByType` May Return nil",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "vcli Implementation",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "Distinguishing OSSHNL-109 from Library-Not-Registered (both produce err_count == -1)",
+          "level": 3,
+          "line": 67
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 87
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/cadence-virtuoso-library-not-registered/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 74,
+      "nonEmptyLines": 60,
+      "sections": [
+        {
+          "heading": "Cadence Virtuoso: Library Not Registered in Session",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Trigger Condition",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "Diagnosis: Read CDS.log",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "Probe from vcli / bridge",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "Fix: Correct Startup Directory",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "vcli Error Message (after the ddGetLibList probe)",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 72
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/claude-code-skill-variable-expansion/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 88,
+      "nonEmptyLines": 64,
+      "sections": [
+        {
+          "heading": "Claude Code Skill Body: Variable Expansion is Global",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "What expands",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Symptom of accidental expansion",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "Rules when writing skills",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "Correct pattern",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "Anti-pattern (will corrupt table)",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 87
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/ic23-design-variable-namespaces/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 102,
+      "nonEmptyLines": 78,
+      "sections": [
+        {
+          "heading": "IC23 Design Variable Namespaces：两层架构",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "两层命名空间对照表",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "症状",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "正确 Pattern（替换单个变量）",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "IC23.1 下以下函数未定义，勿用",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "验证方法",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "关联故障：CMI-2441（PMOS 宽度越界）",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 95
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-ensure-view-bootstrap/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 56,
+      "nonEmptyLines": 44,
+      "sections": [
+        {
+          "heading": "Maestro View Bootstrap — maeOpenSetup + maeSaveSetup",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "Fix — Two SKILL calls (idempotent)",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "When to Use",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 54
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 130,
+      "nonEmptyLines": 101,
+      "sections": [
+        {
+          "heading": "Maestro Netlist → Standalone Spectre Workflow（标准 CMOS n12/p12）",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "适用条件",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "Step 0 — 获取 netlist 路径",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "Step 1 — 检查 netlist 时效性（必须）",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "Step 2 — 检查 model 路径是否含 `oa/.../../`",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Step 3 — 注入参数值和分析语句",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "Step 4 — 运行 spectre",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "Step 5 — 读取结果",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "已验证结果（5T OTA，W34=8u，Iref=100µA，VDD=1.2V）",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 127
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-session-types/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 48,
+      "nonEmptyLines": 38,
+      "sections": [
+        {
+          "heading": "Maestro session name vs Ocean session name",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Rule",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "Anti-pattern that causes failure",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/maestro-simulator-mode-api/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 72,
+      "nonEmptyLines": 58,
+      "sections": [
+        {
+          "heading": "Maestro Simulator Mode — asiSetHighPerformanceOptionVal",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Symptom of Wrong Approach",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "Correct API",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "Mode Table",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "Verification",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "IC23 Notes",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 71
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/ocean-createnetlist-prerequisites/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 134,
+      "nonEmptyLines": 101,
+      "sections": [
+        {
+          "heading": "Ocean: createNetlist Prerequisites for a Complete Netlist",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "What Each Variable Controls in the Netlist",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "modelFile Syntax",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "desVar Syntax",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "Recovering Values from a Backup Netlist",
+          "level": 3,
+          "line": 70
+        },
+        {
+          "heading": "Verification Before Netlisting",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "Full Setup Sequence",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "Running Spectre Directly (after netlist)",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 125
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 131
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/ocean-design-cell-switch/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 101,
+      "nonEmptyLines": 77,
+      "sections": [
+        {
+          "heading": "Ocean: Switching Target Cell Requires Explicit design() Call",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "Fix: Explicit design() Before Netlisting",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "Also: desVar() State is Per-Design",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "Verification",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "design() Returns nil After vcli sim setup on a Fresh Session",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 94
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/ramic-bridge-callback-file-ipc/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 112,
+      "nonEmptyLines": 87,
+      "sections": [
+        {
+          "heading": "RAMIC Bridge: Callback File IPC 协议",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "平台 Bug",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "修复：Callback File 协议",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "⚠️ 关键陷阱：cb_port 必须用 actual_port",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "关键细节",
+          "level": 3,
+          "line": 79
+        },
+        {
+          "heading": "Rust Daemon 位置",
+          "level": 3,
+          "line": 89
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 103
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 110
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/ratatui-tui-architecture/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 75,
+      "nonEmptyLines": 64,
+      "sections": [
+        {
+          "heading": "ratatui TUI Architecture Pattern for CLI Tools",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Module Structure",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Critical: Name your event handler `input.rs`, NOT `event.rs`",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "Event Loop Pattern",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "Don't refresh data on idle tick",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "kv_line helper for detail panels",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "CLI Integration",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 72
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/rust-bin-vs-lib-crate-attrs/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 30,
+      "nonEmptyLines": 23,
+      "sections": [
+        {
+          "heading": "Rust: bin crate `#![allow]` is separate from lib crate",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/skill-instterms-cons-reversal/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 83,
+      "nonEmptyLines": 65,
+      "sections": [
+        {
+          "heading": "SKILL instTerms: cons/foreach Reversal",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "The Trap",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Correct Approaches",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "Recommended Pattern: Name-Based Lookup",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "Verification",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 81
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/skill-sprintf-float-coords/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 32,
+      "nonEmptyLines": 26,
+      "sections": [
+        {
+          "heading": "SKILL sprintf: %d silently fails on float coordinates",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 29
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/smic-mosfet-terminal-order/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 86,
+      "nonEmptyLines": 68,
+      "sections": [
+        {
+          "heading": "SMIC 0.13µm mmRF: CDF Terminal Order vs Spectre Order",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Terminal Order Table",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "Diagnosis",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "Fix Workflow for Standalone Netlists",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "Warning: ADE Re-Netlist Overwrites Fixes",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 83
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    }
+  ]
+}

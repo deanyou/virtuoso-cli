@@ -1,0 +1,606 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 7,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 7,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 7
+    }
+  },
+  "results": [
+    {
+      "path": "docs/plans/2026-04-04-sim-automation-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 203,
+      "nonEmptyLines": 168,
+      "sections": [
+        {
+          "heading": "Simulation Automation Module Design",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Motivation",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Approach: Ocean Script via SKILL Bridge",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Command Tree",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Typical Workflows",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "Quick single simulation",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "Parameter sweep",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "PVT corner analysis",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "Corner Configuration File",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Implementation Architecture",
+          "level": 2,
+          "line": 103
+        },
+        {
+          "heading": "New Files",
+          "level": 3,
+          "line": 105
+        },
+        {
+          "heading": "Data Flow",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "Ocean SKILL Generation Examples",
+          "level": 3,
+          "line": 134
+        },
+        {
+          "heading": "Error Handling",
+          "level": 2,
+          "line": 165
+        },
+        {
+          "heading": "Output Format",
+          "level": 2,
+          "line": 176
+        },
+        {
+          "heading": "Environment Verification",
+          "level": 2,
+          "line": 184
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "docs/plans/2026-04-05-bayesian-optimization-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 132,
+      "nonEmptyLines": 106,
+      "sections": [
+        {
+          "heading": "Bayesian Optimization Skill for Circuit Auto-Tuning",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "Decisions",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Architecture",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Iteration Sequence",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "Three-Phase Progressive Flow",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "Problem Definition",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "Scoring Function (Hierarchical)",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "Surrogate Strategy (Claude Reasoning)",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "Stopping Criteria",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "History File",
+          "level": 2,
+          "line": 120
+        },
+        {
+          "heading": "Skill Dependencies",
+          "level": 2,
+          "line": 126
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/plans/2026-04-06-sim-run-robustness.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 279,
+      "nonEmptyLines": 214,
+      "sections": [
+        {
+          "heading": "sim run Robustness Fixes",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Task 1: `sim run` — Detect run() returning nil",
+          "level": 3,
+          "line": 13
+        },
+        {
+          "heading": "Task 2: `sim measure` — Diagnose all-nil results",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "Task 3: Add `sim netlist` subcommand",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "Task 4: Guard against dangerous SKILL commands",
+          "level": 3,
+          "line": 230
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/plans/2026-06-13-borrow-from-virtuoso-bridge-lite.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 146,
+      "nonEmptyLines": 110,
+      "sections": [
+        {
+          "heading": "Borrow from virtuoso-bridge-lite — Review & Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Upstream cross-pollination baseline",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "1. Gaps to consider borrowing",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "2. Plan — what to actually pick up",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "A. X11-bypass path for the dialog deadlock (G1) — concrete spec",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "B. `.cdslck` sniffer (G2) — small, high-leverage",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "C. Knowledge transfer (G3, G4) — pure docs",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "3. What we should NOT adopt (and why)",
+          "level": 2,
+          "line": 110
+        },
+        {
+          "heading": "4. Open questions to confirm before implementation",
+          "level": 2,
+          "line": 120
+        },
+        {
+          "heading": "5. Estimated effort",
+          "level": 2,
+          "line": 126
+        },
+        {
+          "heading": "6. Status",
+          "level": 2,
+          "line": 137
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/plans/dean-main-design-20260417-192426.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 144,
+      "nonEmptyLines": 107,
+      "sections": [
+        {
+          "heading": "Design: Virtuoso-CLI AI Circuit Optimization Framework",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Problem Statement",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "What Makes This Cool",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Target User & Narrowest Wedge",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Constraints",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Premises",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Approaches Considered",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Approach A: 批量自动化（最小可行）",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "Approach B: AI辅助调参",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Approach C: 端到端自动优化（推荐）",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "Recommended Approach",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "Open Questions",
+          "level": 2,
+          "line": 95
+        },
+        {
+          "heading": "Success Criteria",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "Distribution Plan",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "Next Steps",
+          "level": 2,
+          "line": 115
+        },
+        {
+          "heading": "What I noticed about how you think",
+          "level": 2,
+          "line": 139
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "docs/plans/dean-main-eng-review-test-plan-20260417-223207.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 154,
+      "nonEmptyLines": 114,
+      "sections": [
+        {
+          "heading": "Test Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Test Framework",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "New Modules to Test",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. `src/spectre/batch.rs` — BatchSimulator",
+          "level": 3,
+          "line": 13
+        },
+        {
+          "heading": "2. `src/optimizer/mod.rs` — Optimizer",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "3. `src/queue/mod.rs` — JobQueue",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "4. `src/spec/bandgap.rs` — BandgapSpec",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "5. `src/spectre/parsers.rs` — existing PSF parser",
+          "level": 3,
+          "line": 106
+        },
+        {
+          "heading": "Existing Tests to Verify Still Pass",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "Failure Mode Gaps (Critical)",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "Test Execution",
+          "level": 2,
+          "line": 142
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/plans/virtuoso-cli-enhancement-proposal.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 321,
+      "nonEmptyLines": 233,
+      "sections": [
+        {
+          "heading": "virtuoso-cli AI-First EDA Infrastructure Enhancement Proposal",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "概述",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "一、当前架构优点",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. Session Registry + Dynamic Port",
+          "level": 3,
+          "line": 13
+        },
+        {
+          "heading": "2. JSON-first CLI",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "3. noun-verb command structure",
+          "level": 3,
+          "line": 30
+        },
+        {
+          "heading": "4. Rust 技术选型",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "二、目前最大的结构问题",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "三、升级路线图（按价值优先级排序）",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "Phase 1 — 最关键（安全 + 稳定性）",
+          "level": 3,
+          "line": 67
+        },
+        {
+          "heading": "1. Typed RPC Layer（第一优先级）",
+          "level": 4,
+          "line": 69
+        },
+        {
+          "heading": "2. 安全加固（刻不容缓）",
+          "level": 4,
+          "line": 105
+        },
+        {
+          "heading": "3. MCP（Model Context Protocol）支持（战略优先级）",
+          "level": 4,
+          "line": 132
+        },
+        {
+          "heading": "Phase 2 — 架构升级",
+          "level": 3,
+          "line": 205
+        },
+        {
+          "heading": "4. EDA Object Model",
+          "level": 4,
+          "line": 207
+        },
+        {
+          "heading": "5. Design Diff Engine",
+          "level": 4,
+          "line": 223
+        },
+        {
+          "heading": "6. Transaction / Rollback System",
+          "level": 4,
+          "line": 240
+        },
+        {
+          "heading": "Phase 3 — AI-Native 演进",
+          "level": 3,
+          "line": 253
+        },
+        {
+          "heading": "7. Graph-based Design Representation",
+          "level": 4,
+          "line": 255
+        },
+        {
+          "heading": "8. Simulation Job System 升级",
+          "level": 4,
+          "line": 259
+        },
+        {
+          "heading": "9. TUI → EDA Terminal IDE",
+          "level": 4,
+          "line": 265
+        },
+        {
+          "heading": "四、隐藏风险：Cadence 版本兼容",
+          "level": 2,
+          "line": 279
+        },
+        {
+          "heading": "五、最终评价",
+          "level": 2,
+          "line": 294
+        },
+        {
+          "heading": "六、建议贡献方式（按难度/价值排序）",
+          "level": 2,
+          "line": 313
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 24
+      }
+    }
+  ]
+}

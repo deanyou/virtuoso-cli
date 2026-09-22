@@ -1,0 +1,66 @@
+{
+  "batchIndex": 31,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:docs/superpowers/plans/2026-07-13-skill-runtime.md",
+      "type": "document",
+      "name": "SKILL Runtime Implementation Plan",
+      "filePath": "docs/superpowers/plans/2026-07-13-skill-runtime.md",
+      "summary": "TDD implementation plan that centralizes SKILL string-literal escaping, transport/non-nil result semantics, and JSON decoding into a new internal `client::skill_runtime` module. Covers six tasks: string_literal/escape_string, require_transport/require_non_nil, decode_json with noun decoupling, OCEAN/process string-parameter migration with require_identifier, explicit result semantics on the sim command, and final compatibility audit. Preserves the existing Rust public Interface and CLI success output while migrating schematic, maestro, ocean, process, and sim call sites.",
+      "tags": ["plan", "rust", "skill-runtime", "tdd", "string-escaping", "json-decoder", "ocean", "process", "sim", "virtuoso-client"],
+      "complexity": "complex",
+      "languageNotes": "Markdown plan written in mixed English/Chinese with embedded Rust code blocks and shell test commands; uses superpowers subagent-driven-development workflow with checkbox steps and RED/GREEN/REFACTOR TDD discipline."
+    },
+    {
+      "id": "document:docs/superpowers/plans/2026-08-29-upstream-hardening.md",
+      "type": "document",
+      "name": "Upstream Hardening Implementation Plan",
+      "filePath": "docs/superpowers/plans/2026-08-29-upstream-hardening.md",
+      "summary": "Four-task hardening plan for pulled upstream code: harden Maestro `dec` injection with POSIX shell-safe quoting and removal of `/tmp/vcli_dec_skill.txt` diagnostic write; restore strict Clippy compliance across layout_ops, library, library_ops, transport/x11, and spectre/runner; add opt-in strict PSF APIs (`PsfDataset`, `read_psf_ascii_strict`, path-containment checks) without breaking legacy parsers; and a Codex acceptance gate that verifies scope, security, and full test/lint/format pass. Bound by global constraints forbidding new dependencies, CLI commands, env vars, commits, or pushes.",
+      "tags": ["plan", "rust", "upstream", "hardening", "clippy", "maestro", "psf", "spectre", "shell-injection", "tdd"],
+      "complexity": "complex",
+      "languageNotes": "Markdown plan with strict global constraints section, TDD RED/GREEN steps, embedded Rust signature specs and shell verification commands; references an external design spec at docs/superpowers/specs/2026-08-29-upstream-hardening-design.md."
+    },
+    {
+      "id": "document:docs/superpowers/plans/2026-09-01-virtuoso-gui-live-executor.md",
+      "type": "document",
+      "name": "Virtuoso GUI Live Executor Implementation Plan",
+      "filePath": "docs/superpowers/plans/2026-09-01-virtuoso-gui-live-executor.md",
+      "summary": "Chinese-language plan to wire `virtuoso-gui-debug`'s strict DSL to a real `vcli`/SSH/X11 path. Defines five tasks: remote X11 scratch isolation and unique window identity resolution; a Rust `vcli window action-x11` CLI for fixed-semantic xdotool operations (activate, key, type, click-rel, drag-rel, screenshot, wait); a Python `CommandRunner` and `LiveExecutor` that only invoke fixed argv over SSH with sanitized environment; skill documentation updates and local validation gate; and remote read-only smoke plus activation-only acceptance. Enforces closed-fail behavior on PID/DISPLAY/window/lock mismatch, no shell concatenation, TYPE-log redaction, and fake-executor compatibility preservation.",
+      "tags": ["plan", "gui", "x11", "ssh", "xdotool", "rust", "python", "live-executor", "security", "virtuoso-gui-debug"],
+      "complexity": "complex",
+      "languageNotes": "Markdown plan written primarily in Chinese with English command/CLI names; uses checkbox progress with most steps already marked complete (x); targets Rust + Python 3.9 standard library and references a design spec at docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md."
+    },
+    {
+      "id": "document:docs/superpowers/plans/2026-09-01-virtuoso-gui-runner-foundation.md",
+      "type": "document",
+      "name": "Virtuoso GUI Runner Foundation Implementation Plan",
+      "filePath": "docs/superpowers/plans/2026-09-01-virtuoso-gui-runner-foundation.md",
+      "summary": "Foundation plan for safe, deterministic offline replay of validated Virtuoso GUI-debug scenarios without a live `vcli`/X11/xdotool. Defines four tasks under `.claude/skills/virtuoso-gui-debug/`: skill entrypoint and JSON scenario contract; strict immutable typed parser (`Scenario`, `Step`, `Operation`, `CellView`, `ScenarioValidationError`) rejecting unknown fields/operations, empty session, non-positive PID, invalid DISPLAY, out-of-range timeouts/retries; state machine with `FakeExecutor`, bounded retry, append-only JSONL trace, and atomic evidence writes (`task.json`, `agent-actions.jsonl`, `summary.json`); and a CLI wrapper with sanitize/minimal-env subprocess tests. Self-review section explicitly defers real `vcli`, SKILL adapter, X11, screenshots, live recovery, and PVT/PDK integration.",
+      "tags": ["plan", "gui", "python", "fake-executor", "state-machine", "tdd", "scenario-dsl", "evidence-trace", "virtuoso-gui-debug"],
+      "complexity": "complex",
+      "languageNotes": "Markdown plan in English with embedded shell test commands; uses independent review gate after each task and Python 3.9+ standard-library-only constraint; references a plan doc hosted outside the repo via a wxwork temp path."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/superpowers/plans/2026-09-01-virtuoso-gui-runner-foundation.md",
+      "target": "document:docs/superpowers/plans/2026-09-01-virtuoso-gui-live-executor.md",
+      "type": "related",
+      "weight": 0.9
+    },
+    {
+      "source": "document:docs/superpowers/plans/2026-07-13-skill-runtime.md",
+      "target": "document:docs/superpowers/plans/2026-08-29-upstream-hardening.md",
+      "type": "related",
+      "weight": 0.6
+    },
+    {
+      "source": "document:docs/superpowers/plans/2026-08-29-upstream-hardening.md",
+      "target": "document:docs/superpowers/plans/2026-07-13-skill-runtime.md",
+      "type": "related",
+      "weight": 0.5
+    }
+  ]
+}

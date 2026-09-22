@@ -1,0 +1,3813 @@
+{
+  "batchIndex": 3,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:src/async_runtime.rs",
+      "type": "file",
+      "name": "async_runtime.rs",
+      "filePath": "src/async_runtime.rs",
+      "summary": "Thin wrappers around tokio runtime creation (single-threaded and multi-threaded) plus a block_on helper for synchronous bridges.",
+      "tags": [
+        "runtime",
+        "tokio",
+        "helpers"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "function:src/async_runtime.rs::runtime",
+      "type": "function",
+      "name": "runtime",
+      "filePath": "src/async_runtime.rs",
+      "summary": "Builds a single-threaded tokio runtime.",
+      "tags": [
+        "runtime",
+        "tokio",
+        "helpers",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 13-20."
+    },
+    {
+      "id": "function:src/async_runtime.rs::multi_threaded_runtime",
+      "type": "function",
+      "name": "multi_threaded_runtime",
+      "filePath": "src/async_runtime.rs",
+      "summary": "Builds a multi-threaded tokio runtime with all CPUs.",
+      "tags": [
+        "runtime",
+        "tokio",
+        "helpers",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 24-32."
+    },
+    {
+      "id": "function:src/async_runtime.rs::block_on",
+      "type": "function",
+      "name": "block_on",
+      "filePath": "src/async_runtime.rs",
+      "summary": "Synchronously runs a future on the current thread.",
+      "tags": [
+        "runtime",
+        "tokio",
+        "helpers",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 36-38."
+    },
+    {
+      "id": "file:src/auth.rs",
+      "type": "file",
+      "name": "auth.rs",
+      "filePath": "src/auth.rs",
+      "summary": "Authentication and audit subsystem: API-key init, capability gating, constant-time key comparison, and append-only audit log writer.",
+      "tags": [
+        "auth",
+        "security",
+        "audit",
+        "capability"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "class:src/auth.rs::Auth",
+      "type": "class",
+      "name": "Auth",
+      "filePath": "src/auth.rs",
+      "summary": "Global authentication state, capability set, and audit counters.",
+      "tags": [
+        "auth",
+        "security",
+        "audit",
+        "capability",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 22-30."
+    },
+    {
+      "id": "class:src/auth.rs::AuditEntry",
+      "type": "class",
+      "name": "AuditEntry",
+      "filePath": "src/auth.rs",
+      "summary": "Audit log entry capturing an authenticated action.",
+      "tags": [
+        "auth",
+        "security",
+        "audit",
+        "capability",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 122-130."
+    },
+    {
+      "id": "function:src/auth.rs::init",
+      "type": "function",
+      "name": "init",
+      "filePath": "src/auth.rs",
+      "summary": "Initializes the global auth singleton from environment.",
+      "tags": [
+        "auth",
+        "security",
+        "audit",
+        "capability",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 37-48."
+    },
+    {
+      "id": "function:src/auth.rs::validate",
+      "type": "function",
+      "name": "validate",
+      "filePath": "src/auth.rs",
+      "summary": "Validates an API key against the configured auth state.",
+      "tags": [
+        "auth",
+        "security",
+        "audit",
+        "capability",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 52-95."
+    },
+    {
+      "id": "function:src/auth.rs::constant_time_eq",
+      "type": "function",
+      "name": "constant_time_eq",
+      "filePath": "src/auth.rs",
+      "summary": "Constant-time byte comparison.",
+      "tags": [
+        "auth",
+        "security",
+        "audit",
+        "capability",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 109-118."
+    },
+    {
+      "id": "function:src/auth.rs::new",
+      "type": "function",
+      "name": "new",
+      "filePath": "src/auth.rs",
+      "summary": "Constructor.",
+      "tags": [
+        "auth",
+        "security",
+        "audit",
+        "capability",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 133-154."
+    },
+    {
+      "id": "function:src/auth.rs::check_auth",
+      "type": "function",
+      "name": "check_auth",
+      "filePath": "src/auth.rs",
+      "summary": "Verifies auth on a request and returns a verdict.",
+      "tags": [
+        "auth",
+        "security",
+        "audit",
+        "capability",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 181-197."
+    },
+    {
+      "id": "file:src/capability/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Capability model: per-domain capabilities, sets loaded from environment, and a domain-aware permit API with plugin-aware fallthrough.",
+      "tags": [
+        "capability",
+        "rbac",
+        "security"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "class:src/capability/mod.rs::Capability",
+      "type": "class",
+      "name": "Capability",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Single capability token with optional domain restriction.",
+      "tags": [
+        "capability",
+        "rbac",
+        "security",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 21-32."
+    },
+    {
+      "id": "class:src/capability/mod.rs::CapabilitySet",
+      "type": "class",
+      "name": "CapabilitySet",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Set of capabilities plus the `permits*` query API.",
+      "tags": [
+        "capability",
+        "rbac",
+        "security",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 71-71."
+    },
+    {
+      "id": "class:src/capability/mod.rs::CapabilityError",
+      "type": "class",
+      "name": "CapabilityError",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Capability-related error with Display impl.",
+      "tags": [
+        "capability",
+        "rbac",
+        "security",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 181-194."
+    },
+    {
+      "id": "function:src/capability/mod.rs::from_str",
+      "type": "function",
+      "name": "from_str",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Parses a Capability from string form.",
+      "tags": [
+        "capability",
+        "rbac",
+        "security",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 35-47."
+    },
+    {
+      "id": "function:src/capability/mod.rs::domain",
+      "type": "function",
+      "name": "domain",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Returns the domain this capability is restricted to.",
+      "tags": [
+        "capability",
+        "rbac",
+        "security",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 50-61."
+    },
+    {
+      "id": "function:src/capability/mod.rs::from_env",
+      "type": "function",
+      "name": "from_env",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Loads a CapabilitySet (or McpConfig) from environment variables.",
+      "tags": [
+        "capability",
+        "rbac",
+        "security",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 75-96."
+    },
+    {
+      "id": "function:src/capability/mod.rs::permits_method",
+      "type": "function",
+      "name": "permits_method",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Tests whether a (capability, method) pair is permitted.",
+      "tags": [
+        "capability",
+        "rbac",
+        "security",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 105-119."
+    },
+    {
+      "id": "function:src/capability/mod.rs::permits_with_plugin",
+      "type": "function",
+      "name": "permits_with_plugin",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Capability check that consults the plugin registry too.",
+      "tags": [
+        "capability",
+        "rbac",
+        "security",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 128-176."
+    },
+    {
+      "id": "function:src/capability/mod.rs::fmt",
+      "type": "function",
+      "name": "fmt",
+      "filePath": "src/capability/mod.rs",
+      "summary": "Function in src/capability/mod.rs (lines 197-214).",
+      "tags": [
+        "capability",
+        "rbac",
+        "security",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 197-214."
+    },
+    {
+      "id": "file:src/capability/plugin.rs",
+      "type": "file",
+      "name": "plugin.rs",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Capability plugin runtime: rate limiting (token bucket), CIDR/IP matching, capability definitions, persisted plugin config and TTL/revoke helpers.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Densely populated with token-bucket rate limiter and a serde-driven plugin config struct with inheritance resolution."
+    },
+    {
+      "id": "class:src/capability/plugin.rs::RateLimiter",
+      "type": "class",
+      "name": "RateLimiter",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "In-memory token-bucket rate limiter per principal.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 21-28."
+    },
+    {
+      "id": "class:src/capability/plugin.rs::CapabilityDef",
+      "type": "class",
+      "name": "CapabilityDef",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Plugin capability definition (name + description + methods).",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 113-121."
+    },
+    {
+      "id": "class:src/capability/plugin.rs::CapabilityPlugin",
+      "type": "class",
+      "name": "CapabilityPlugin",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Plugin state: loaded config, capabilities, rate limiters and inheritance resolution.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 148-159."
+    },
+    {
+      "id": "function:src/capability/plugin.rs::check",
+      "type": "function",
+      "name": "check",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Consumes a token from the rate limiter.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 40-53."
+    },
+    {
+      "id": "function:src/capability/plugin.rs::matches",
+      "type": "function",
+      "name": "matches",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Tests whether an IP entry matches a peer address.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 79-101."
+    },
+    {
+      "id": "function:src/capability/plugin.rs::new",
+      "type": "function",
+      "name": "new",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Constructor.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 172-180."
+    },
+    {
+      "id": "function:src/capability/plugin.rs::load",
+      "type": "function",
+      "name": "load",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Loads the config (or plugin config) from disk if it exists.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 183-199."
+    },
+    {
+      "id": "function:src/capability/plugin.rs::save",
+      "type": "function",
+      "name": "save",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Atomically writes the ConfigFile (or plugin config) to disk.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 202-213."
+    },
+    {
+      "id": "function:src/capability/plugin.rs::resolve_inheritance",
+      "type": "function",
+      "name": "resolve_inheritance",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Resolves inherited capability grants across plugins.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 216-279."
+    },
+    {
+      "id": "function:src/capability/plugin.rs::permits_domain",
+      "type": "function",
+      "name": "permits_domain",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Tests whether the plugin permits a domain.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 298-314."
+    },
+    {
+      "id": "function:src/capability/plugin.rs::check_rate_limit",
+      "type": "function",
+      "name": "check_rate_limit",
+      "filePath": "src/capability/plugin.rs",
+      "summary": "Enforces a rate limit and returns the verdict.",
+      "tags": [
+        "plugin",
+        "capability",
+        "rate-limit",
+        "ip-filter",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 326-340."
+    },
+    {
+      "id": "file:src/command_log.rs",
+      "type": "file",
+      "name": "command_log.rs",
+      "filePath": "src/command_log.rs",
+      "summary": "Two-line helper module exposing a resolved log path and a synchronous command-log writer used by startup and dispatch.",
+      "tags": [
+        "logging",
+        "helpers"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "function:src/command_log.rs::log_path",
+      "type": "function",
+      "name": "log_path",
+      "filePath": "src/command_log.rs",
+      "summary": "Returns the resolved on-disk command-log file path.",
+      "tags": [
+        "logging",
+        "helpers",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 10-14."
+    },
+    {
+      "id": "function:src/command_log.rs::log_command",
+      "type": "function",
+      "name": "log_command",
+      "filePath": "src/command_log.rs",
+      "summary": "Appends a CLI invocation record to the command log.",
+      "tags": [
+        "logging",
+        "helpers",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 16-27."
+    },
+    {
+      "id": "file:src/commands/init.rs",
+      "type": "file",
+      "name": "init.rs",
+      "filePath": "src/commands/init.rs",
+      "summary": "Project initialization command: scaffolds config, directories and skill discovery into a fresh workspace.",
+      "tags": [
+        "init",
+        "command",
+        "setup"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "function:src/commands/init.rs::run",
+      "type": "function",
+      "name": "run",
+      "filePath": "src/commands/init.rs",
+      "summary": "Function in src/commands/init.rs (lines 57-92).",
+      "tags": [
+        "init",
+        "command",
+        "setup",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 57-92."
+    },
+    {
+      "id": "file:src/config_file.rs",
+      "type": "file",
+      "name": "config_file.rs",
+      "filePath": "src/config_file.rs",
+      "summary": "Strongly-typed TOML config file abstraction with key/file/envar resolution, source tracking, schema validation, and atomic save.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Layered config resolution: env-var precedence > file > default; every get returns source location via `FileLoc`."
+    },
+    {
+      "id": "class:src/config_file.rs::Scalar",
+      "type": "class",
+      "name": "Scalar",
+      "filePath": "src/config_file.rs",
+      "summary": "Typed wrapper for a TOML scalar (string/int/bool/float).",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 74-79."
+    },
+    {
+      "id": "class:src/config_file.rs::ConfigFile",
+      "type": "class",
+      "name": "ConfigFile",
+      "filePath": "src/config_file.rs",
+      "summary": "Loaded config with get/set/has/save and source tracking.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 133-138."
+    },
+    {
+      "id": "function:src/config_file.rs::from_toml",
+      "type": "function",
+      "name": "from_toml",
+      "filePath": "src/config_file.rs",
+      "summary": "Builds a Scalar from a toml::Value.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 104-113."
+    },
+    {
+      "id": "function:src/config_file.rs::load",
+      "type": "function",
+      "name": "load",
+      "filePath": "src/config_file.rs",
+      "summary": "Loads the config (or plugin config) from disk if it exists.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 145-154."
+    },
+    {
+      "id": "function:src/config_file.rs::parse",
+      "type": "function",
+      "name": "parse",
+      "filePath": "src/config_file.rs",
+      "summary": "Parses a config file string into a ConfigFile.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 157-211."
+    },
+    {
+      "id": "function:src/config_file.rs::get_with_loc",
+      "type": "function",
+      "name": "get_with_loc",
+      "filePath": "src/config_file.rs",
+      "summary": "Like `get` but also returns the source FileLoc.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 239-280."
+    },
+    {
+      "id": "function:src/config_file.rs::has",
+      "type": "function",
+      "name": "has",
+      "filePath": "src/config_file.rs",
+      "summary": "Returns whether a dotted key is present.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 290-308."
+    },
+    {
+      "id": "function:src/config_file.rs::remove",
+      "type": "function",
+      "name": "remove",
+      "filePath": "src/config_file.rs",
+      "summary": "Removes a dotted key.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 321-332."
+    },
+    {
+      "id": "function:src/config_file.rs::to_toml_string",
+      "type": "function",
+      "name": "to_toml_string",
+      "filePath": "src/config_file.rs",
+      "summary": "Serializes the ConfigFile back to a TOML document.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 340-358."
+    },
+    {
+      "id": "function:src/config_file.rs::save",
+      "type": "function",
+      "name": "save",
+      "filePath": "src/config_file.rs",
+      "summary": "Atomically writes the ConfigFile (or plugin config) to disk.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 361-373."
+    },
+    {
+      "id": "function:src/config_file.rs::kind_of",
+      "type": "function",
+      "name": "kind_of",
+      "filePath": "src/config_file.rs",
+      "summary": "Returns the value kind of a config value.",
+      "tags": [
+        "config",
+        "toml",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 377-387."
+    },
+    {
+      "id": "file:src/exit_codes.rs",
+      "type": "file",
+      "name": "exit_codes.rs",
+      "filePath": "src/exit_codes.rs",
+      "summary": "Process exit-code constants used across binaries for consistent CLI error reporting.",
+      "tags": [
+        "constants"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "file:src/history.rs",
+      "type": "file",
+      "name": "history.rs",
+      "filePath": "src/history.rs",
+      "summary": "JSONL-backed history of skill invocations and CLI commands with append, tail and load helpers under an inter-process lock.",
+      "tags": [
+        "history",
+        "jsonl",
+        "persistence"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "function:src/history.rs::write_jsonl_line",
+      "type": "function",
+      "name": "write_jsonl_line",
+      "filePath": "src/history.rs",
+      "summary": "Appends one JSONL-encoded entry to a history file.",
+      "tags": [
+        "history",
+        "jsonl",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 36-44."
+    },
+    {
+      "id": "function:src/history.rs::append_skill",
+      "type": "function",
+      "name": "append_skill",
+      "filePath": "src/history.rs",
+      "summary": "Appends a SkillEntry to the skill history log.",
+      "tags": [
+        "history",
+        "jsonl",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 46-58."
+    },
+    {
+      "id": "function:src/history.rs::append_cmd",
+      "type": "function",
+      "name": "append_cmd",
+      "filePath": "src/history.rs",
+      "summary": "Appends a CmdEntry to the command history log.",
+      "tags": [
+        "history",
+        "jsonl",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 60-73."
+    },
+    {
+      "id": "function:src/history.rs::load_skill",
+      "type": "function",
+      "name": "load_skill",
+      "filePath": "src/history.rs",
+      "summary": "Reads back the recent skill history entries.",
+      "tags": [
+        "history",
+        "jsonl",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 82-90."
+    },
+    {
+      "id": "function:src/history.rs::load_cmd",
+      "type": "function",
+      "name": "load_cmd",
+      "filePath": "src/history.rs",
+      "summary": "Reads back the recent command history entries.",
+      "tags": [
+        "history",
+        "jsonl",
+        "persistence",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 92-102."
+    },
+    {
+      "id": "file:src/lib.rs",
+      "type": "file",
+      "name": "lib.rs",
+      "filePath": "src/lib.rs",
+      "summary": "Library crate root that re-exports the full module tree for binary and integration-test consumers.",
+      "tags": [
+        "library",
+        "root",
+        "module"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "file:src/main.rs",
+      "type": "file",
+      "name": "main.rs",
+      "filePath": "src/main.rs",
+      "summary": "CLI entry point and clap-derived command surface: top-level dispatch, key=value parsing, and per-command routers for tunnel, config, profile, target, skill, simulation, schematic, window and RPC commands.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Largest file in the crate: clap derive macros generate most class-like enums; per-command dispatch functions follow a `dispatch_<name>` convention."
+    },
+    {
+      "id": "class:src/main.rs::Cli",
+      "type": "class",
+      "name": "Cli",
+      "filePath": "src/main.rs",
+      "summary": "Clap-derived top-level CLI argument struct.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 56-91."
+    },
+    {
+      "id": "class:src/main.rs::Commands",
+      "type": "class",
+      "name": "Commands",
+      "filePath": "src/main.rs",
+      "summary": "Clap enum of every vcli subcommand variant.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 100-233."
+    },
+    {
+      "id": "class:src/main.rs::SymbolCmd",
+      "type": "class",
+      "name": "SymbolCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand for symbol library operations.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 236-259."
+    },
+    {
+      "id": "class:src/main.rs::ProfileCmd",
+      "type": "class",
+      "name": "ProfileCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: profile show/set/edit/delete/list.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 267-333."
+    },
+    {
+      "id": "class:src/main.rs::ConfigCmd",
+      "type": "class",
+      "name": "ConfigCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: config get/set/unset/list/path/show.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 336-358."
+    },
+    {
+      "id": "class:src/main.rs::TargetCmd",
+      "type": "class",
+      "name": "TargetCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: target bind/list/show/clear.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 377-437."
+    },
+    {
+      "id": "class:src/main.rs::TunnelCmd",
+      "type": "class",
+      "name": "TunnelCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand for SSH/local TCP tunnels to a daemon.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 440-522."
+    },
+    {
+      "id": "class:src/main.rs::SkillCmd",
+      "type": "class",
+      "name": "SkillCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand for skill discovery, call and registration.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 525-707."
+    },
+    {
+      "id": "class:src/main.rs::CellCmd",
+      "type": "class",
+      "name": "CellCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand for cell CRUD over the RPC bridge.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 710-746."
+    },
+    {
+      "id": "class:src/main.rs::SimCmd",
+      "type": "class",
+      "name": "SimCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand for Spectre/MAESTRO/Ocean simulation drivers.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 749-964."
+    },
+    {
+      "id": "class:src/main.rs::ProcessCmd",
+      "type": "class",
+      "name": "ProcessCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand for process kit / PDK inspection.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 967-1034."
+    },
+    {
+      "id": "class:src/main.rs::DesignCmd",
+      "type": "class",
+      "name": "DesignCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand for design-level operations.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 1037-1081."
+    },
+    {
+      "id": "class:src/main.rs::MaestroCmd",
+      "type": "class",
+      "name": "MaestroCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: maestro run/status/abort for batched flows.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 1084-1297."
+    },
+    {
+      "id": "class:src/main.rs::SchematicCmd",
+      "type": "class",
+      "name": "SchematicCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: schematic edit/create netlist queries.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 1300-1476."
+    },
+    {
+      "id": "class:src/main.rs::SessionCmd",
+      "type": "class",
+      "name": "SessionCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: session open/list/close/history.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 1479-1526."
+    },
+    {
+      "id": "class:src/main.rs::TxCmd",
+      "type": "class",
+      "name": "TxCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: transaction begin/commit/rollback/list.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 1529-1560."
+    },
+    {
+      "id": "class:src/main.rs::WindowCmd",
+      "type": "class",
+      "name": "WindowCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: GUI window manipulation (raise/hide/snapshot).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 1563-1720."
+    },
+    {
+      "id": "class:src/main.rs::DiagCmd",
+      "type": "class",
+      "name": "DiagCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: doctor/diagnose/self-check.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 1723-1736."
+    },
+    {
+      "id": "class:src/main.rs::RpcCmd",
+      "type": "class",
+      "name": "RpcCmd",
+      "filePath": "src/main.rs",
+      "summary": "Clap subcommand: raw RPC passthrough.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 1739-1757."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_tunnel",
+      "type": "function",
+      "name": "dispatch_tunnel",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 1768-1784).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 1768-1784."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_config",
+      "type": "function",
+      "name": "dispatch_config",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 1786-1800).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 1786-1800."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_profile",
+      "type": "function",
+      "name": "dispatch_profile",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 1802-1900).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 1802-1900."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_target",
+      "type": "function",
+      "name": "dispatch_target",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 1902-2095).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 1902-2095."
+    },
+    {
+      "id": "function:src/main.rs::parse_bind_scope",
+      "type": "function",
+      "name": "parse_bind_scope",
+      "filePath": "src/main.rs",
+      "summary": "Parses a scope spec like `lib:cell:view` for target binding.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 2097-2121."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_skill",
+      "type": "function",
+      "name": "dispatch_skill",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2123-2150).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 2123-2150."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_cell",
+      "type": "function",
+      "name": "dispatch_cell",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2152-2168).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 2152-2168."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_sim",
+      "type": "function",
+      "name": "dispatch_sim",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2170-2267).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 2170-2267."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_process",
+      "type": "function",
+      "name": "dispatch_process",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2269-2335).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 2269-2335."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_design",
+      "type": "function",
+      "name": "dispatch_design",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2337-2349).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 2337-2349."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_maestro",
+      "type": "function",
+      "name": "dispatch_maestro",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2351-2423).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 2351-2423."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_schematic",
+      "type": "function",
+      "name": "dispatch_schematic",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2425-2480).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 2425-2480."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_symbol",
+      "type": "function",
+      "name": "dispatch_symbol",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2482-2508).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 2482-2508."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_window",
+      "type": "function",
+      "name": "dispatch_window",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2510-2602).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 2510-2602."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_tx",
+      "type": "function",
+      "name": "dispatch_tx",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2613-2629).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 2613-2629."
+    },
+    {
+      "id": "function:src/main.rs::dispatch_rpc",
+      "type": "function",
+      "name": "dispatch_rpc",
+      "filePath": "src/main.rs",
+      "summary": "Function in src/main.rs (lines 2636-2661).",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 2636-2661."
+    },
+    {
+      "id": "function:src/main.rs::main",
+      "type": "function",
+      "name": "main",
+      "filePath": "src/main.rs",
+      "summary": "Process entry point: parse args, dispatch subcommand, return exit code.",
+      "tags": [
+        "cli",
+        "binary",
+        "clap",
+        "dispatch",
+        "entry-point",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 2663-2945."
+    },
+    {
+      "id": "file:src/mcp/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/mcp/mod.rs",
+      "summary": "MCP protocol data model and server struct: request/response/error envelopes plus a request dispatch loop over registered tools.",
+      "tags": [
+        "mcp",
+        "protocol",
+        "rpc"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "class:src/mcp/mod.rs::McpResponse",
+      "type": "class",
+      "name": "McpResponse",
+      "filePath": "src/mcp/mod.rs",
+      "summary": "Outgoing MCP JSON-RPC success/error envelope.",
+      "tags": [
+        "mcp",
+        "protocol",
+        "rpc",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 41-47."
+    },
+    {
+      "id": "class:src/mcp/mod.rs::McpServer",
+      "type": "class",
+      "name": "McpServer",
+      "filePath": "src/mcp/mod.rs",
+      "summary": "MCP server with registered tools and a request loop.",
+      "tags": [
+        "mcp",
+        "protocol",
+        "rpc",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 81-88."
+    },
+    {
+      "id": "function:src/mcp/mod.rs::error",
+      "type": "function",
+      "name": "error",
+      "filePath": "src/mcp/mod.rs",
+      "summary": "Builds an error McpResponse.",
+      "tags": [
+        "mcp",
+        "protocol",
+        "rpc",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 66-77."
+    },
+    {
+      "id": "function:src/mcp/mod.rs::run",
+      "type": "function",
+      "name": "run",
+      "filePath": "src/mcp/mod.rs",
+      "summary": "Function in src/mcp/mod.rs (lines 101-129).",
+      "tags": [
+        "mcp",
+        "protocol",
+        "rpc",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 101-129."
+    },
+    {
+      "id": "function:src/mcp/mod.rs::handle_request",
+      "type": "function",
+      "name": "handle_request",
+      "filePath": "src/mcp/mod.rs",
+      "summary": "Routes an incoming McpRequest to its handler.",
+      "tags": [
+        "mcp",
+        "protocol",
+        "rpc",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 131-187."
+    },
+    {
+      "id": "function:src/mcp/mod.rs::call_tool",
+      "type": "function",
+      "name": "call_tool",
+      "filePath": "src/mcp/mod.rs",
+      "summary": "Invokes a named tool and returns the response.",
+      "tags": [
+        "mcp",
+        "protocol",
+        "rpc",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 189-202."
+    },
+    {
+      "id": "file:src/mcp/server.rs",
+      "type": "file",
+      "name": "server.rs",
+      "filePath": "src/mcp/server.rs",
+      "summary": "stdio-line MCP server bootstrap that runs the protocol loop on stdin/stdout.",
+      "tags": [
+        "mcp",
+        "server",
+        "stdio"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "function:src/mcp/server.rs::run",
+      "type": "function",
+      "name": "run",
+      "filePath": "src/mcp/server.rs",
+      "summary": "Function in src/mcp/server.rs (lines 9-26).",
+      "tags": [
+        "mcp",
+        "server",
+        "stdio",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 9-26."
+    },
+    {
+      "id": "file:src/mcp/tools.rs",
+      "type": "file",
+      "name": "tools.rs",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "MCP tool registry covering schematic, maestro, window, cell, transaction, file, util and skill families with capability-aware filtering.",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Tool definitions are produced by category-grouped builder functions; `all_tools` applies capability filtering at the registry level."
+    },
+    {
+      "id": "class:src/mcp/tools.rs::McpTool",
+      "type": "class",
+      "name": "McpTool",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "A single MCP tool descriptor with name, description, schema and handler.",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "type"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust struct/enum spanning lines 10-22."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::new",
+      "type": "function",
+      "name": "new",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Constructor.",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 26-40."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::all_tools",
+      "type": "function",
+      "name": "all_tools",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Returns all tools filtered by capabilities.",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 49-68."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "type": "function",
+      "name": "all_tools_unfiltered",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Returns all tools without capability filtering.",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 72-83."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::schematic_tools",
+      "type": "function",
+      "name": "schematic_tools",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Function in src/mcp/tools.rs (lines 85-184).",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 85-184."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::maestro_tools",
+      "type": "function",
+      "name": "maestro_tools",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Function in src/mcp/tools.rs (lines 186-330).",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 186-330."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::window_tools",
+      "type": "function",
+      "name": "window_tools",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Function in src/mcp/tools.rs (lines 332-358).",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 332-358."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::cell_tools",
+      "type": "function",
+      "name": "cell_tools",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Function in src/mcp/tools.rs (lines 360-409).",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 360-409."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::tx_tools",
+      "type": "function",
+      "name": "tx_tools",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Function in src/mcp/tools.rs (lines 411-470).",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 411-470."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::file_tools",
+      "type": "function",
+      "name": "file_tools",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Function in src/mcp/tools.rs (lines 472-503).",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 472-503."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::util_tools",
+      "type": "function",
+      "name": "util_tools",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Function in src/mcp/tools.rs (lines 505-541).",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 505-541."
+    },
+    {
+      "id": "function:src/mcp/tools.rs::skill_tools",
+      "type": "function",
+      "name": "skill_tools",
+      "filePath": "src/mcp/tools.rs",
+      "summary": "Function in src/mcp/tools.rs (lines 543-618).",
+      "tags": [
+        "mcp",
+        "tools",
+        "registry",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 543-618."
+    },
+    {
+      "id": "file:src/ocean/corner.rs",
+      "type": "file",
+      "name": "corner.rs",
+      "filePath": "src/ocean/corner.rs",
+      "summary": "Compact data model for Ocean corner/analysis runs: corner config, design target, analysis config, corner set, and measure structs.",
+      "tags": [
+        "ocean",
+        "corner",
+        "simulation",
+        "data-model"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "function:src/ocean/corner.rs::default_view",
+      "type": "function",
+      "name": "default_view",
+      "filePath": "src/ocean/corner.rs",
+      "summary": "Returns the default schematic view name.",
+      "tags": [
+        "ocean",
+        "corner",
+        "simulation",
+        "data-model",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 21-23."
+    },
+    {
+      "id": "file:src/ocean/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/ocean/mod.rs",
+      "summary": "Ocean (Spectre/MAESTRO) corner and sweep skill builders plus a small parser for skill list/parameter syntax.",
+      "tags": [
+        "ocean",
+        "skill-builder",
+        "simulation"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Builders emit long OCCTcl/Spectre skill strings; the parser is a minimal list-of-pairs reader."
+    },
+    {
+      "id": "function:src/ocean/mod.rs::setup_skill",
+      "type": "function",
+      "name": "setup_skill",
+      "filePath": "src/ocean/mod.rs",
+      "summary": "Builds an Ocean setup script for a given corner.",
+      "tags": [
+        "ocean",
+        "skill-builder",
+        "simulation",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 8-18."
+    },
+    {
+      "id": "function:src/ocean/mod.rs::analysis_skill",
+      "type": "function",
+      "name": "analysis_skill",
+      "filePath": "src/ocean/mod.rs",
+      "summary": "Builds a Spectre analysis skill (tran/dc/ac).",
+      "tags": [
+        "ocean",
+        "skill-builder",
+        "simulation",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 20-33."
+    },
+    {
+      "id": "function:src/ocean/mod.rs::analysis_skill_simple",
+      "type": "function",
+      "name": "analysis_skill_simple",
+      "filePath": "src/ocean/mod.rs",
+      "summary": "Compact analysis skill builder for common cases.",
+      "tags": [
+        "ocean",
+        "skill-builder",
+        "simulation",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 35-47."
+    },
+    {
+      "id": "function:src/ocean/mod.rs::sweep_skill",
+      "type": "function",
+      "name": "sweep_skill",
+      "filePath": "src/ocean/mod.rs",
+      "summary": "Builds a parametric sweep skill.",
+      "tags": [
+        "ocean",
+        "skill-builder",
+        "simulation",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 49-82."
+    },
+    {
+      "id": "function:src/ocean/mod.rs::corner_skill",
+      "type": "function",
+      "name": "corner_skill",
+      "filePath": "src/ocean/mod.rs",
+      "summary": "Builds a multi-corner run script.",
+      "tags": [
+        "ocean",
+        "skill-builder",
+        "simulation",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 84-177."
+    },
+    {
+      "id": "function:src/ocean/mod.rs::parse_skill_list",
+      "type": "function",
+      "name": "parse_skill_list",
+      "filePath": "src/ocean/mod.rs",
+      "summary": "Parses an OCCTcl-style (key value ...) list.",
+      "tags": [
+        "ocean",
+        "skill-builder",
+        "simulation",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 180-250."
+    },
+    {
+      "id": "file:src/plugins/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/plugins/mod.rs",
+      "summary": "Plugins module root re-exporting registry and schema submodules.",
+      "tags": [
+        "plugins",
+        "module"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "file:src/plugins/registry.rs",
+      "type": "file",
+      "name": "registry.rs",
+      "filePath": "src/plugins/registry.rs",
+      "summary": "Plugin registry: on-disk discovery, per-plugin dispatch, MCP tool enumeration, and schema method exposure.",
+      "tags": [
+        "plugins",
+        "registry",
+        "dispatch",
+        "discovery"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust module using serde for persistence and thiserror/anyhow for error handling."
+    },
+    {
+      "id": "class:src/plugins/registry.rs::PluginRegistry",
+      "type": "class",
+      "name": "PluginRegistry",
+      "filePath": "src/plugins/registry.rs",
+      "summary": "In-memory registry of discovered plugins and their tools.",
+      "tags": [
+        "plugins",
+        "registry",
+        "dispatch",
+        "discovery",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 18-20."
+    },
+    {
+      "id": "function:src/plugins/registry.rs::discover",
+      "type": "function",
+      "name": "discover",
+      "filePath": "src/plugins/registry.rs",
+      "summary": "Discovers on-disk plugins and loads them into the registry.",
+      "tags": [
+        "plugins",
+        "registry",
+        "dispatch",
+        "discovery",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 24-50."
+    },
+    {
+      "id": "function:src/plugins/registry.rs::load_plugin",
+      "type": "function",
+      "name": "load_plugin",
+      "filePath": "src/plugins/registry.rs",
+      "summary": "Loads a single plugin file/module into the registry.",
+      "tags": [
+        "plugins",
+        "registry",
+        "dispatch",
+        "discovery",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 53-72."
+    },
+    {
+      "id": "function:src/plugins/registry.rs::dispatch",
+      "type": "function",
+      "name": "dispatch",
+      "filePath": "src/plugins/registry.rs",
+      "summary": "Top-level command dispatcher invoked from main (or plugin registry).",
+      "tags": [
+        "plugins",
+        "registry",
+        "dispatch",
+        "discovery",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 83-116."
+    },
+    {
+      "id": "function:src/plugins/registry.rs::mcp_tools",
+      "type": "function",
+      "name": "mcp_tools",
+      "filePath": "src/plugins/registry.rs",
+      "summary": "Returns MCP tool descriptors for all plugin methods.",
+      "tags": [
+        "plugins",
+        "registry",
+        "dispatch",
+        "discovery",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 119-133."
+    },
+    {
+      "id": "function:src/plugins/registry.rs::schema_methods",
+      "type": "function",
+      "name": "schema_methods",
+      "filePath": "src/plugins/registry.rs",
+      "summary": "Returns the JSON schemas for plugin method arguments.",
+      "tags": [
+        "plugins",
+        "registry",
+        "dispatch",
+        "discovery",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 137-156."
+    },
+    {
+      "id": "file:src/plugins/schema.rs",
+      "type": "file",
+      "name": "schema.rs",
+      "filePath": "src/plugins/schema.rs",
+      "summary": "Plugin schema model with parameter definitions, JSON Schema emission, and skill-bridge helpers to expose plugin methods to the Skill API.",
+      "tags": [
+        "plugins",
+        "schema",
+        "json-schema",
+        "skill-bridge"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Generates JSON Schema documents at runtime for tool parameter validation and produces Skill-bridge metadata."
+    },
+    {
+      "id": "class:src/plugins/schema.rs::PluginTool",
+      "type": "class",
+      "name": "PluginTool",
+      "filePath": "src/plugins/schema.rs",
+      "summary": "Type defined in src/plugins/schema.rs (lines 21-30).",
+      "tags": [
+        "plugins",
+        "schema",
+        "json-schema",
+        "skill-bridge",
+        "type"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust struct/enum spanning lines 21-30."
+    },
+    {
+      "id": "function:src/plugins/schema.rs::input_schema",
+      "type": "function",
+      "name": "input_schema",
+      "filePath": "src/plugins/schema.rs",
+      "summary": "Builds a JSON Schema document for a method signature.",
+      "tags": [
+        "plugins",
+        "schema",
+        "json-schema",
+        "skill-bridge",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 46-77."
+    },
+    {
+      "id": "function:src/plugins/schema.rs::render_skill",
+      "type": "function",
+      "name": "render_skill",
+      "filePath": "src/plugins/schema.rs",
+      "summary": "Function in src/plugins/schema.rs (lines 80-104).",
+      "tags": [
+        "plugins",
+        "schema",
+        "json-schema",
+        "skill-bridge",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 80-104."
+    },
+    {
+      "id": "function:src/plugins/schema.rs::validate",
+      "type": "function",
+      "name": "validate",
+      "filePath": "src/plugins/schema.rs",
+      "summary": "Validates an API key against the configured auth state.",
+      "tags": [
+        "plugins",
+        "schema",
+        "json-schema",
+        "skill-bridge",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 109-118."
+    },
+    {
+      "id": "function:src/plugins/schema.rs::render_template",
+      "type": "function",
+      "name": "render_template",
+      "filePath": "src/plugins/schema.rs",
+      "summary": "Function in src/plugins/schema.rs (lines 123-188).",
+      "tags": [
+        "plugins",
+        "schema",
+        "json-schema",
+        "skill-bridge",
+        "fn"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust function spanning lines 123-188."
+    },
+    {
+      "id": "function:src/plugins/schema.rs::serialize_param",
+      "type": "function",
+      "name": "serialize_param",
+      "filePath": "src/plugins/schema.rs",
+      "summary": "Function in src/plugins/schema.rs (lines 190-204).",
+      "tags": [
+        "plugins",
+        "schema",
+        "json-schema",
+        "skill-bridge",
+        "fn"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust function spanning lines 190-204."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/async_runtime.rs",
+      "target": "function:src/async_runtime.rs::runtime",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/async_runtime.rs",
+      "target": "function:src/async_runtime.rs::multi_threaded_runtime",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/async_runtime.rs",
+      "target": "function:src/async_runtime.rs::block_on",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/auth.rs",
+      "target": "class:src/auth.rs::Auth",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/auth.rs",
+      "target": "class:src/auth.rs::AuditEntry",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/auth.rs",
+      "target": "function:src/auth.rs::init",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/auth.rs",
+      "target": "function:src/auth.rs::validate",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/auth.rs",
+      "target": "function:src/auth.rs::constant_time_eq",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/auth.rs",
+      "target": "function:src/auth.rs::new",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/auth.rs",
+      "target": "function:src/auth.rs::check_auth",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "class:src/capability/mod.rs::Capability",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "class:src/capability/mod.rs::CapabilitySet",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "class:src/capability/mod.rs::CapabilityError",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "function:src/capability/mod.rs::from_str",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "function:src/capability/mod.rs::domain",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "function:src/capability/mod.rs::from_env",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "function:src/capability/mod.rs::permits_method",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "function:src/capability/mod.rs::permits_with_plugin",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "function:src/capability/mod.rs::fmt",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "class:src/capability/plugin.rs::RateLimiter",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "class:src/capability/plugin.rs::CapabilityDef",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "class:src/capability/plugin.rs::CapabilityPlugin",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "function:src/capability/plugin.rs::check",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "function:src/capability/plugin.rs::matches",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "function:src/capability/plugin.rs::new",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "function:src/capability/plugin.rs::load",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "function:src/capability/plugin.rs::save",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "function:src/capability/plugin.rs::resolve_inheritance",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "function:src/capability/plugin.rs::permits_domain",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/capability/plugin.rs",
+      "target": "function:src/capability/plugin.rs::check_rate_limit",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/command_log.rs",
+      "target": "function:src/command_log.rs::log_path",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/command_log.rs",
+      "target": "function:src/command_log.rs::log_command",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/commands/init.rs",
+      "target": "function:src/commands/init.rs::run",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "class:src/config_file.rs::Scalar",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "class:src/config_file.rs::ConfigFile",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "function:src/config_file.rs::from_toml",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "function:src/config_file.rs::load",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "function:src/config_file.rs::parse",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "function:src/config_file.rs::get_with_loc",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "function:src/config_file.rs::has",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "function:src/config_file.rs::remove",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "function:src/config_file.rs::to_toml_string",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "function:src/config_file.rs::save",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "function:src/config_file.rs::kind_of",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/history.rs",
+      "target": "function:src/history.rs::write_jsonl_line",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/history.rs",
+      "target": "function:src/history.rs::append_skill",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/history.rs",
+      "target": "function:src/history.rs::append_cmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/history.rs",
+      "target": "function:src/history.rs::load_skill",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/history.rs",
+      "target": "function:src/history.rs::load_cmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::Cli",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::Commands",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::SymbolCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::ProfileCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::ConfigCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::TargetCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::TunnelCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::SkillCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::CellCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::SimCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::ProcessCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::DesignCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::MaestroCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::SchematicCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::SessionCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::TxCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::WindowCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::DiagCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "class:src/main.rs::RpcCmd",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_tunnel",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_config",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_profile",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_target",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::parse_bind_scope",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_skill",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_cell",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_sim",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_process",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_design",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_maestro",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_schematic",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_symbol",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_window",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_tx",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::dispatch_rpc",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "function:src/main.rs::main",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/mod.rs",
+      "target": "class:src/mcp/mod.rs::McpResponse",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/mod.rs",
+      "target": "class:src/mcp/mod.rs::McpServer",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/mod.rs",
+      "target": "function:src/mcp/mod.rs::error",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/mod.rs",
+      "target": "function:src/mcp/mod.rs::run",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/mod.rs",
+      "target": "function:src/mcp/mod.rs::handle_request",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/mod.rs",
+      "target": "function:src/mcp/mod.rs::call_tool",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/server.rs",
+      "target": "function:src/mcp/server.rs::run",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "class:src/mcp/tools.rs::McpTool",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::new",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::all_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::schematic_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::maestro_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::window_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::cell_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::tx_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::file_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::util_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "function:src/mcp/tools.rs::skill_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/ocean/corner.rs",
+      "target": "function:src/ocean/corner.rs::default_view",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "function:src/ocean/mod.rs::setup_skill",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "function:src/ocean/mod.rs::analysis_skill",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "function:src/ocean/mod.rs::analysis_skill_simple",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "function:src/ocean/mod.rs::sweep_skill",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "function:src/ocean/mod.rs::corner_skill",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "function:src/ocean/mod.rs::parse_skill_list",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/registry.rs",
+      "target": "class:src/plugins/registry.rs::PluginRegistry",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/registry.rs",
+      "target": "function:src/plugins/registry.rs::discover",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/registry.rs",
+      "target": "function:src/plugins/registry.rs::load_plugin",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/registry.rs",
+      "target": "function:src/plugins/registry.rs::dispatch",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/registry.rs",
+      "target": "function:src/plugins/registry.rs::mcp_tools",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/registry.rs",
+      "target": "function:src/plugins/registry.rs::schema_methods",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/schema.rs",
+      "target": "class:src/plugins/schema.rs::PluginTool",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/schema.rs",
+      "target": "function:src/plugins/schema.rs::input_schema",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/schema.rs",
+      "target": "function:src/plugins/schema.rs::render_skill",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/schema.rs",
+      "target": "function:src/plugins/schema.rs::validate",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/schema.rs",
+      "target": "function:src/plugins/schema.rs::render_template",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/plugins/schema.rs",
+      "target": "function:src/plugins/schema.rs::serialize_param",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:src/auth.rs",
+      "target": "file:src/capability/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/capability/mod.rs",
+      "target": "file:src/capability/plugin.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/commands/init.rs",
+      "target": "file:src/config_file.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/async_runtime.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/auth.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/capability/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/command_log.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/config_file.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/exit_codes.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/history.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/mcp/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/ocean/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib.rs",
+      "target": "file:src/plugins/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/async_runtime.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/auth.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/capability/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/command_log.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/config_file.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/exit_codes.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/history.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/mcp/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/ocean/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.rs",
+      "target": "file:src/plugins/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/mcp/mod.rs",
+      "target": "file:src/mcp/server.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/mcp/mod.rs",
+      "target": "file:src/mcp/tools.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/mcp/tools.rs",
+      "target": "file:src/capability/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "file:src/ocean/corner.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/plugins/mod.rs",
+      "target": "file:src/plugins/registry.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/plugins/mod.rs",
+      "target": "file:src/plugins/schema.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/plugins/registry.rs",
+      "target": "file:src/mcp/tools.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "function:src/async_runtime.rs::block_on",
+      "target": "function:src/async_runtime.rs::runtime",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/auth.rs::validate",
+      "target": "function:src/auth.rs::constant_time_eq",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/auth.rs::write",
+      "target": "function:src/auth.rs::audit_path",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/auth.rs::check_auth",
+      "target": "function:src/auth.rs::auth",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::from_env",
+      "target": "function:src/config_file.rs::set",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::permits_library_methods",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::permits_method",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::permits_tx_methods",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::permits_file_methods",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::permits_util_methods",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::skill_methods_require_admin",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::admin_allows_everything",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::permits_with_plugin_rate_limit",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::permits_with_plugin_ip_whitelist",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::permits_with_plugin_expiration",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/mod.rs::permits_with_plugin_not_permitted",
+      "target": "function:src/capability/mod.rs::CapabilitySet",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/plugin.rs::matches",
+      "target": "function:src/capability/plugin.rs::to_ipv4",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/plugin.rs::load",
+      "target": "function:src/config_file.rs::path",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/capability/plugin.rs::permits_domain",
+      "target": "function:src/capability/mod.rs::domain",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/command_log.rs::log_command",
+      "target": "function:src/command_log.rs::log_path",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/commands/init.rs::run",
+      "target": "function:src/config_file.rs::path",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::load",
+      "target": "function:src/config_file.rs::path",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::get_with_loc",
+      "target": "function:src/config_file.rs::file_key",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::get_with_loc",
+      "target": "function:src/config_file.rs::env_var_for",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::has",
+      "target": "function:src/config_file.rs::file_key",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::has",
+      "target": "function:src/config_file.rs::env_var_for",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::save",
+      "target": "function:src/config_file.rs::path",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::global_keys_are_readable",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::profile_section_beats_global",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::missing_key_is_absent_not_empty",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::non_string_scalars_render_as_text",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::broken_toml_is_an_error_naming_the_file",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::array_value_is_an_error_not_a_skip",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::nested_table_outside_profile_is_an_error",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::profile_that_is_not_a_table_is_an_error",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::profile_entry_that_is_not_a_table_is_an_error",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::special_characters_survive_a_round_trip",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::env_var_key_maps_to_friendly_file_key",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::legacy_upper_case_file_key_is_also_accepted",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::friendly_query_finds_upper_case_file_key",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::remove_falls_through_to_the_next_layer",
+      "target": "function:src/config_file.rs::parse",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/config_file.rs::path_honours_vb_config_dir",
+      "target": "function:src/config_file.rs::path",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::append_skill",
+      "target": "function:src/history.rs::history_dir",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::append_skill",
+      "target": "function:src/history.rs::write_jsonl_line",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::append_cmd",
+      "target": "function:src/history.rs::cmd_lock",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::append_cmd",
+      "target": "function:src/history.rs::history_dir",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::append_cmd",
+      "target": "function:src/history.rs::write_jsonl_line",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::load_skill",
+      "target": "function:src/history.rs::history_dir",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::load_skill",
+      "target": "function:src/history.rs::tail",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::load_cmd",
+      "target": "function:src/history.rs::cmd_lock",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::load_cmd",
+      "target": "function:src/history.rs::history_dir",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/history.rs::load_cmd",
+      "target": "function:src/history.rs::tail",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::dispatch_profile",
+      "target": "function:src/main.rs::parse_bind_scope",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::parse_bind_scope",
+      "target": "function:src/config_file.rs::set",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::dispatch_sim",
+      "target": "function:src/config_file.rs::path",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_config",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_target",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_tunnel",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_profile",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_skill",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_cell",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_sim",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_process",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_design",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_maestro",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_schematic",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_symbol",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_tx",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_rpc",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_window",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/main.rs::main",
+      "target": "function:src/main.rs::dispatch_diag",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools",
+      "target": "function:src/mcp/tools.rs::schematic_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools",
+      "target": "function:src/mcp/tools.rs::maestro_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools",
+      "target": "function:src/mcp/tools.rs::window_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools",
+      "target": "function:src/mcp/tools.rs::cell_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools",
+      "target": "function:src/mcp/tools.rs::tx_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools",
+      "target": "function:src/mcp/tools.rs::file_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools",
+      "target": "function:src/mcp/tools.rs::util_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools",
+      "target": "function:src/mcp/tools.rs::skill_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "target": "function:src/mcp/tools.rs::schematic_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "target": "function:src/mcp/tools.rs::maestro_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "target": "function:src/mcp/tools.rs::window_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "target": "function:src/mcp/tools.rs::cell_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "target": "function:src/mcp/tools.rs::tx_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "target": "function:src/mcp/tools.rs::file_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "target": "function:src/mcp/tools.rs::util_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/mcp/tools.rs::all_tools_unfiltered",
+      "target": "function:src/mcp/tools.rs::skill_tools",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/ocean/mod.rs::corner_skill",
+      "target": "function:src/ocean/mod.rs::analysis_skill",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/ocean/mod.rs::corner_skill",
+      "target": "function:src/capability/plugin.rs::config",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/ocean/mod.rs::setup_skill_format",
+      "target": "function:src/ocean/mod.rs::setup_skill",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/ocean/mod.rs::setup_skill_escapes_lib",
+      "target": "function:src/ocean/mod.rs::setup_skill",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/ocean/mod.rs::analysis_skill_simple_boolean_unquoted",
+      "target": "function:src/ocean/mod.rs::analysis_skill_simple",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/ocean/mod.rs::analysis_skill_simple_string_quoted",
+      "target": "function:src/ocean/mod.rs::analysis_skill_simple",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/ocean/mod.rs::sweep_skill_uses_desvar",
+      "target": "function:src/ocean/mod.rs::sweep_skill",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/ocean/mod.rs::parse_skill_list_nested",
+      "target": "function:src/ocean/mod.rs::parse_skill_list",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/ocean/mod.rs::parse_skill_list_single_value",
+      "target": "function:src/ocean/mod.rs::parse_skill_list",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/plugins/registry.rs::discover",
+      "target": "function:src/config_file.rs::path",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/plugins/schema.rs::input_schema",
+      "target": "function:src/plugins/schema.rs::json_schema_type",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/plugins/schema.rs::validate",
+      "target": "function:src/plugins/schema.rs::is_parameter_identifier",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/plugins/schema.rs::render_template",
+      "target": "function:src/plugins/schema.rs::is_placeholder_start",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/plugins/schema.rs::render_template",
+      "target": "function:src/plugins/schema.rs::is_placeholder_continue",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "function:src/plugins/schema.rs::is_parameter_identifier",
+      "target": "function:src/plugins/schema.rs::is_placeholder_start",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "file:tests/ocean.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "file:tests/spectre.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "file:tests/config.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "file:src/commands/init.rs",
+      "target": "file:tests/config.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "file:tests/config_check.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "file:src/config_file.rs",
+      "target": "file:tests/config_check_cli.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "file:src/commands/init.rs",
+      "target": "file:tests/config_check_cli.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "file:src/ocean/mod.rs",
+      "target": "file:tests/maestro_csv.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "file:src/ocean/corner.rs",
+      "target": "file:tests/ocean.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    },
+    {
+      "source": "file:src/ocean/corner.rs",
+      "target": "file:tests/spectre.rs",
+      "type": "tested_by",
+      "weight": 0.4
+    }
+  ]
+}

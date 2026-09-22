@@ -1,0 +1,1240 @@
+{
+  "batchIndex": 36,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:.claude/skills/maestro/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/maestro/SKILL.md",
+      "summary": "Quick-reference skill for Cadence ADE Assembler (Maestro) session management via vcli maestro commands: AC sweeps, design-variable updates, ensure-maestro-view workflow, and IC23/IC25 API compatibility notes.",
+      "tags": [
+        "documentation",
+        "skill",
+        "maestro",
+        "ade-assembler"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/ocean-netlist-regen/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/ocean-netlist-regen/SKILL.md",
+      "summary": "Diagnostic skill that catalogs Ocean SKILL run() failure modes (resultsDir binding trap, OSSHNL-109 stale netlist, library-not-registered) and the direct-spectre bypass used to recover from broken ADE sessions.",
+      "tags": [
+        "documentation",
+        "skill",
+        "ocean",
+        "diagnostic",
+        "recovery"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/porting-skill/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/porting-skill/SKILL.md",
+      "summary": "Workflow for migrating Virtuoso simulation setups between PDKs or process nodes — six-phase audit → remap → verify pipeline covering model paths, corner names, and IC version differences.",
+      "tags": [
+        "documentation",
+        "skill",
+        "migration",
+        "pdk"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/schematic-gen/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/schematic-gen/SKILL.md",
+      "summary": "Skill that wraps vcli schematic commands for atomic cell construction (open/place/wire/conn/label/pin/save) plus JSON-spec batch builds for OTA, current mirror, and other analog topologies.",
+      "tags": [
+        "documentation",
+        "skill",
+        "schematic"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/sim-measure/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/sim-measure/SKILL.md",
+      "summary": "Catalog of virtuoso sim measure expressions for extracting voltages, currents, gm, gds, vth, and other op-point parameters from DC, transient, AC, and corner results.",
+      "tags": [
+        "documentation",
+        "skill",
+        "simulation"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/sim-plot/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/sim-plot/SKILL.md",
+      "summary": "Skill that pipes sim-sweep / sim-corner / sim-measure JSON output through plot_sim.py to produce matplotlib charts — sweep line, corner bar, measure bar, Bode, and gm/Id lookup plots.",
+      "tags": [
+        "documentation",
+        "skill",
+        "simulation"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "file",
+      "name": "plot_sim.py",
+      "filePath": ".claude/skills/sim-plot/scripts/plot_sim.py",
+      "summary": "Matplotlib script with auto-detect chart dispatcher: sweep line, corner grouped bar, measure horizontal bar, AC Bode (mag + phase), and gm/Id lookup curves, all consuming JSON from stdin/file.",
+      "tags": [
+        "python",
+        "script",
+        "simulation"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python 3 script; uses matplotlib + numpy for plotting (plot_sim.py) or stdlib regex + argparse for netlist parsing (inject_stimulus.py)."
+    },
+    {
+      "id": "document:.claude/skills/sim-run/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/sim-run/SKILL.md",
+      "summary": "Skill that executes Spectre simulations through virtuoso sim run (DC, AC, transient) with saveOppoint, timeout, and JSON-output handling.",
+      "tags": [
+        "documentation",
+        "skill",
+        "simulation"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/sim-setup/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/sim-setup/SKILL.md",
+      "summary": "Skill for Ocean SKILL sim setup — configuring simulator, design target, model files, design variables, and resultsDir before a simulation run.",
+      "tags": [
+        "documentation",
+        "skill",
+        "simulation"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/sim-sweep/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/sim-sweep/SKILL.md",
+      "summary": "Skill that runs parameter sweeps and PVT corner analyses via virtuoso sim sweep, consuming corners.json for batched corner characterization.",
+      "tags": [
+        "documentation",
+        "skill",
+        "simulation"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/skill-exec/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/skill-exec/SKILL.md",
+      "summary": "Skill for executing ad-hoc SKILL expressions through vcli skill exec — listing libraries, cells, views, evaluating expressions, and parsing JSON results.",
+      "tags": [
+        "documentation",
+        "skill",
+        "skill-exec"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/skill-review/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/skill-review/SKILL.md",
+      "summary": "Auditor skill that scores a SKILL.md against the official skills spec — checks frontmatter, line budget, reference.md existence, structural quality, and emits PASS/WARN/FAIL report.",
+      "tags": [
+        "documentation",
+        "skill",
+        "audit",
+        "meta-skill"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/skill-shell-gotchas/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/skill-shell-gotchas/SKILL.md",
+      "summary": "Skill cataloging SKILL↔shell integration traps: sh() not returning stdout, ipcBeginProcess 127, fprintf 0-byte output, and getpid() undefined errors.",
+      "tags": [
+        "documentation",
+        "skill",
+        "gotchas"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/spec-driven-circuit-design/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/spec-driven-circuit-design/SKILL.md",
+      "summary": "Methodology skill for spec-driven analog design — five-stage flow (capture → sanity-check → decompose → feasibility → size) from system requirements down to transistor sizing.",
+      "tags": [
+        "documentation",
+        "skill",
+        "design-flow"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/spectre-netlist-gotchas/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/spectre-netlist-gotchas/SKILL.md",
+      "summary": "Skill collecting Spectre standalone-mode traps: vsource mag vs ac, oprobe element-vs-node, PSF ASCII parsing, inverting-topology PM calculation, and oa/ model path ADE-only caveat.",
+      "tags": [
+        "documentation",
+        "skill",
+        "spectre"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/spectre-netlist-template/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/spectre-netlist-template/SKILL.md",
+      "summary": "Skill that auto-classifies bare Spectre subcircuit netlists (OTA / LDO / bandgap / VCO / …) and injects stimulus + analysis testbench blocks from canonical templates.",
+      "tags": [
+        "documentation",
+        "skill",
+        "spectre"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "file",
+      "name": "inject_stimulus.py",
+      "filePath": ".claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "summary": "Python tool that parses a bare Spectre subcircuit, detects its type from ports/devices, and prepends a complete stimulus + analysis testbench (DUT instantiation, sources, parameters, analyses).",
+      "tags": [
+        "python",
+        "script",
+        "spectre"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python 3 script; uses matplotlib + numpy for plotting (plot_sim.py) or stdlib regex + argparse for netlist parsing (inject_stimulus.py)."
+    },
+    {
+      "id": "document:.claude/skills/tunnel-connect/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/tunnel-connect/SKILL.md",
+      "summary": "Skill for connecting the Virtuoso CLI bridge via SSH tunnel or local-bridge mode — covers banner parsing, vcli session list, and version diagnostics.",
+      "tags": [
+        "documentation",
+        "skill",
+        "connectivity"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/veriloga/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/veriloga/SKILL.md",
+      "summary": "Skill for designing, compiling, and debugging Verilog-A behavioral models — covers ideal vsrc, cmirror, opamp, bandgap, LDO, VCO, PFD templates and Spectre convergence debugging.",
+      "tags": [
+        "documentation",
+        "skill",
+        "verilog-a",
+        "behavioral"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "document:.claude/skills/veriloga/reference.md",
+      "type": "document",
+      "name": "reference.md",
+      "filePath": ".claude/skills/veriloga/reference.md",
+      "summary": "Companion reference of 12 ready-to-paste Verilog-A module templates (ideal_vsrc, cmirror, opamp, bandgap, tb_stimulus, comparator, RLC, VCCS/VCVS, LDO, PFD, VCO, S/H).",
+      "tags": [
+        "documentation",
+        "skill",
+        "verilog-a",
+        "behavioral"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Claude Code SKILL.md format — YAML frontmatter (name/description/argument-hint/allowed-tools), H1 quick-ref, H2/H3 sections, mostly Chinese-language prose with English shell/code blocks."
+    },
+    {
+      "id": "config:.claude/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "type": "config",
+      "name": "rsi_share.json",
+      "filePath": ".claude/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "summary": "Exported RSI knowledge base — canonical synonyms, snippet inventory, error history, parameter examples, and verified-function signatures consumed by virtuoso-gui-debug.",
+      "tags": [
+        "json",
+        "config",
+        "gui-debug",
+        "x11"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Static JSON data file; top-level keys: version, exported, synonyms, snippets, error_history, param_examples, verified_functions (rsi_share.json) or version, virtuoso_versions, manual_functions (skill_db_backup.json)."
+    },
+    {
+      "id": "config:.claude/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "type": "config",
+      "name": "skill_db_backup.json",
+      "filePath": ".claude/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "summary": "JSON mirror of the skill_db SQLite contents — manual function signatures, virtuoso version coverage, and per-function category metadata for offline inspection.",
+      "tags": [
+        "json",
+        "config",
+        "gui-debug",
+        "x11"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Static JSON data file; top-level keys: version, exported, synonyms, snippets, error_history, param_examples, verified_functions (rsi_share.json) or version, virtuoso_versions, manual_functions (skill_db_backup.json)."
+    },
+    {
+      "id": "data:.claude/skills/spectre-netlist-gotchas/memory/error_log.jsonl",
+      "type": "data",
+      "name": "error_log.jsonl",
+      "filePath": ".claude/skills/spectre-netlist-gotchas/memory/error_log.jsonl",
+      "summary": "Persistent error-log memory file for the spectre-netlist-gotchas skill — appended JSONL entries recording past failures and resolutions (currently empty).",
+      "tags": [
+        "jsonl",
+        "log",
+        "spectre"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Empty JSONL log file (0 bytes); placeholder for append-only error history consumed by the parent skill."
+    },
+    {
+      "id": "data:.claude/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "data",
+      "name": "skill_db.sqlite3",
+      "filePath": ".claude/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "summary": "Binary SQLite knowledge store (RSI skill database) used at runtime by virtuoso-gui-debug for fast snippet/error lookup.",
+      "tags": [
+        "sqlite",
+        "database",
+        "gui-debug",
+        "x11"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Binary SQLite 3 database (~14 MB); not text-parseable, queried at runtime by the virtuoso-gui-debug runner."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "type": "file",
+      "name": "vcli_snippets.il",
+      "filePath": ".claude/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "summary": "Virtuoso SKILL snippet library auto-promoted from the RSI knowledge base — wraps dbCreateRect / dbCreatePolygon / vcliDraw* helpers for in-editor use.",
+      "tags": [
+        "skill",
+        "virtuoso",
+        "gui-debug",
+        "x11"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Cadence Virtuoso SKILL (.il) procedure library — auto-loaded wrappers around dbCreate* primitives."
+    },
+    {
+      "id": "document:.claude/skills/maestro",
+      "type": "document",
+      "name": "maestro",
+      "filePath": ".claude/skills/maestro",
+      "summary": "Skill directory .claude/skills/maestro — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/ocean-netlist-regen",
+      "type": "document",
+      "name": "ocean-netlist-regen",
+      "filePath": ".claude/skills/ocean-netlist-regen",
+      "summary": "Skill directory .claude/skills/ocean-netlist-regen — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/porting-skill",
+      "type": "document",
+      "name": "porting-skill",
+      "filePath": ".claude/skills/porting-skill",
+      "summary": "Skill directory .claude/skills/porting-skill — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/schematic-gen",
+      "type": "document",
+      "name": "schematic-gen",
+      "filePath": ".claude/skills/schematic-gen",
+      "summary": "Skill directory .claude/skills/schematic-gen — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/sim-measure",
+      "type": "document",
+      "name": "sim-measure",
+      "filePath": ".claude/skills/sim-measure",
+      "summary": "Skill directory .claude/skills/sim-measure — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/sim-plot",
+      "type": "document",
+      "name": "sim-plot",
+      "filePath": ".claude/skills/sim-plot",
+      "summary": "Skill directory .claude/skills/sim-plot — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/sim-run",
+      "type": "document",
+      "name": "sim-run",
+      "filePath": ".claude/skills/sim-run",
+      "summary": "Skill directory .claude/skills/sim-run — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/sim-setup",
+      "type": "document",
+      "name": "sim-setup",
+      "filePath": ".claude/skills/sim-setup",
+      "summary": "Skill directory .claude/skills/sim-setup — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/sim-sweep",
+      "type": "document",
+      "name": "sim-sweep",
+      "filePath": ".claude/skills/sim-sweep",
+      "summary": "Skill directory .claude/skills/sim-sweep — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/skill-exec",
+      "type": "document",
+      "name": "skill-exec",
+      "filePath": ".claude/skills/skill-exec",
+      "summary": "Skill directory .claude/skills/skill-exec — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/skill-review",
+      "type": "document",
+      "name": "skill-review",
+      "filePath": ".claude/skills/skill-review",
+      "summary": "Skill directory .claude/skills/skill-review — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/skill-shell-gotchas",
+      "type": "document",
+      "name": "skill-shell-gotchas",
+      "filePath": ".claude/skills/skill-shell-gotchas",
+      "summary": "Skill directory .claude/skills/skill-shell-gotchas — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/spec-driven-circuit-design",
+      "type": "document",
+      "name": "spec-driven-circuit-design",
+      "filePath": ".claude/skills/spec-driven-circuit-design",
+      "summary": "Skill directory .claude/skills/spec-driven-circuit-design — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/spectre-netlist-gotchas",
+      "type": "document",
+      "name": "spectre-netlist-gotchas",
+      "filePath": ".claude/skills/spectre-netlist-gotchas",
+      "summary": "Skill directory .claude/skills/spectre-netlist-gotchas — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/spectre-netlist-template",
+      "type": "document",
+      "name": "spectre-netlist-template",
+      "filePath": ".claude/skills/spectre-netlist-template",
+      "summary": "Skill directory .claude/skills/spectre-netlist-template — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/tunnel-connect",
+      "type": "document",
+      "name": "tunnel-connect",
+      "filePath": ".claude/skills/tunnel-connect",
+      "summary": "Skill directory .claude/skills/tunnel-connect — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    },
+    {
+      "id": "document:.claude/skills/veriloga",
+      "type": "document",
+      "name": "veriloga",
+      "filePath": ".claude/skills/veriloga",
+      "summary": "Skill directory .claude/skills/veriloga — container node grouping the SKILL.md and any scripts/data files inside it.",
+      "tags": [
+        "container",
+        "skill-directory"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Virtual container node (directory), not an actual on-disk file."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.claude/skills/maestro",
+      "target": "document:.claude/skills/maestro/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/ocean-netlist-regen",
+      "target": "document:.claude/skills/ocean-netlist-regen/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/porting-skill",
+      "target": "document:.claude/skills/porting-skill/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/schematic-gen",
+      "target": "document:.claude/skills/schematic-gen/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/sim-measure",
+      "target": "document:.claude/skills/sim-measure/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/sim-plot",
+      "target": "document:.claude/skills/sim-plot/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/sim-plot/scripts",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/sim-run",
+      "target": "document:.claude/skills/sim-run/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/sim-setup",
+      "target": "document:.claude/skills/sim-setup/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/sim-sweep",
+      "target": "document:.claude/skills/sim-sweep/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/skill-exec",
+      "target": "document:.claude/skills/skill-exec/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/skill-review",
+      "target": "document:.claude/skills/skill-review/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/skill-shell-gotchas",
+      "target": "document:.claude/skills/skill-shell-gotchas/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/spec-driven-circuit-design",
+      "target": "document:.claude/skills/spec-driven-circuit-design/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/spectre-netlist-gotchas",
+      "target": "document:.claude/skills/spectre-netlist-gotchas/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/spectre-netlist-template",
+      "target": "document:.claude/skills/spectre-netlist-template/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/spectre-netlist-template/scripts",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/tunnel-connect",
+      "target": "document:.claude/skills/tunnel-connect/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/veriloga",
+      "target": "document:.claude/skills/veriloga/SKILL.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/veriloga",
+      "target": "document:.claude/skills/veriloga/reference.md",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/virtuoso-gui-debug/data",
+      "target": "config:.claude/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/virtuoso-gui-debug/data",
+      "target": "config:.claude/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/spectre-netlist-gotchas/memory",
+      "target": "data:.claude/skills/spectre-netlist-gotchas/memory/error_log.jsonl",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/virtuoso-gui-debug/data",
+      "target": "data:.claude/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills/virtuoso-gui-debug/data",
+      "target": "file:.claude/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/maestro",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/ocean-netlist-regen",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/porting-skill",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/schematic-gen",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/sim-measure",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/sim-plot",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/sim-run",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/sim-setup",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/sim-sweep",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/skill-exec",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/skill-review",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/skill-shell-gotchas",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/spec-driven-circuit-design",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/spectre-netlist-gotchas",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/spectre-netlist-template",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/tunnel-connect",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "document:.claude/skills",
+      "target": "document:.claude/skills/veriloga",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "plot_sweep → _shorten @ L79"
+    },
+    {
+      "source": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "plot_corner → _shorten @ L112"
+    },
+    {
+      "source": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "plot_measure → _shorten @ L131"
+    },
+    {
+      "source": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "main → detect_chart_type @ L262"
+    },
+    {
+      "source": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "main → plot_sweep @ L269"
+    },
+    {
+      "source": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "main → plot_corner @ L271"
+    },
+    {
+      "source": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "main → plot_measure @ L274"
+    },
+    {
+      "source": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "main → plot_bode @ L276"
+    },
+    {
+      "source": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "target": "file:.claude/skills/sim-plot/scripts/plot_sim.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "main → plot_lookup @ L280"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "detect_type → normalize @ L114"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "infer_supply_ports → find_port @ L176"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "infer_supply_ports → find_port @ L177"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_ota → infer_supply_ports @ L200"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_ota → find_port @ L201"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_ota → find_port @ L202"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_ota → find_port @ L203"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_ota → _header @ L205"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_diff_ota → infer_supply_ports @ L234"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_diff_ota → find_port @ L235"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_diff_ota → find_port @ L236"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_diff_ota → find_port @ L237"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_diff_ota → find_port @ L238"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_diff_ota → find_port @ L239"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_diff_ota → _header @ L241"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_ldo → infer_supply_ports @ L268"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_ldo → find_port @ L269"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_ldo → find_port @ L270"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_ldo → _header @ L272"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_comparator → infer_supply_ports @ L306"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_comparator → find_port @ L307"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_comparator → find_port @ L308"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_comparator → find_port @ L309"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_comparator → find_port @ L310"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_comparator → _header @ L312"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_bandgap → infer_supply_ports @ L354"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_bandgap → find_port @ L355"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_bandgap → _header @ L357"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_mirror → infer_supply_ports @ L390"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_mirror → find_port @ L391"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_mirror → find_port @ L392"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_mirror → _header @ L394"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_filter → infer_supply_ports @ L419"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_filter → find_port @ L420"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_filter → find_port @ L421"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_filter → _header @ L423"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_vco → infer_supply_ports @ L450"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_vco → find_port @ L451"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_vco → find_port @ L452"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_vco → _header @ L454"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_lna → infer_supply_ports @ L477"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_lna → find_port @ L478"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_lna → find_port @ L479"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_lna → find_port @ L480"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "gen_lna → _header @ L482"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "main → parse_subcircuits @ L551"
+    },
+    {
+      "source": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "target": "file:.claude/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "type": "calls",
+      "weight": 0.5,
+      "note": "main → detect_type @ L576"
+    },
+    {
+      "source": "document:.claude/skills/veriloga/SKILL.md",
+      "target": "document:.claude/skills/veriloga/reference.md",
+      "type": "documents",
+      "weight": 0.7
+    }
+  ]
+}

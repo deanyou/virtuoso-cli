@@ -1,0 +1,264 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "src/client/bridge.rs",
+      "language": "rust",
+      "sizeLines": 1600,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/editor.rs",
+      "language": "rust",
+      "sizeLines": 125,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/layout_ops.rs",
+      "language": "rust",
+      "sizeLines": 230,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/library_ops.rs",
+      "language": "rust",
+      "sizeLines": 20,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/maestro_ops.rs",
+      "language": "rust",
+      "sizeLines": 1159,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/mod.rs",
+      "language": "rust",
+      "sizeLines": 12,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/schematic_ops.rs",
+      "language": "rust",
+      "sizeLines": 432,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/skill_runtime.rs",
+      "language": "rust",
+      "sizeLines": 149,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/skill_sexp.rs",
+      "language": "rust",
+      "sizeLines": 272,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/symbol_ops.rs",
+      "language": "rust",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/whitelist.rs",
+      "language": "rust",
+      "sizeLines": 244,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/client/window_ops.rs",
+      "language": "rust",
+      "sizeLines": 444,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/cell.rs",
+      "language": "rust",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/library.rs",
+      "language": "rust",
+      "sizeLines": 26,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/maestro.rs",
+      "language": "rust",
+      "sizeLines": 2987,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/mod.rs",
+      "language": "rust",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/process.rs",
+      "language": "rust",
+      "sizeLines": 358,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/schema.rs",
+      "language": "rust",
+      "sizeLines": 184,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/schematic.rs",
+      "language": "rust",
+      "sizeLines": 548,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/symbol.rs",
+      "language": "rust",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/commands/transaction.rs",
+      "language": "rust",
+      "sizeLines": 56,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/version.rs",
+      "language": "rust",
+      "sizeLines": 114,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "src/client/bridge.rs": [
+      "src/capability/mod.rs",
+      "src/client/layout_ops.rs",
+      "src/client/maestro_ops.rs",
+      "src/client/schematic_ops.rs",
+      "src/client/whitelist.rs",
+      "src/client/window_ops.rs",
+      "src/config.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/transport/contract.rs",
+      "src/transport/tunnel.rs",
+      "src/version.rs"
+    ],
+    "src/client/editor.rs": [
+      "src/client/bridge.rs",
+      "src/client/layout_ops.rs",
+      "src/client/schematic_ops.rs",
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/client/layout_ops.rs": [
+      "src/client/bridge.rs"
+    ],
+    "src/client/library_ops.rs": [],
+    "src/client/maestro_ops.rs": [
+      "src/client/bridge.rs",
+      "src/version.rs"
+    ],
+    "src/client/mod.rs": [
+      "src/client/bridge.rs",
+      "src/client/editor.rs",
+      "src/client/layout_ops.rs",
+      "src/client/library_ops.rs",
+      "src/client/maestro_ops.rs",
+      "src/client/schematic_ops.rs",
+      "src/client/skill_loading.rs",
+      "src/client/skill_runtime.rs",
+      "src/client/skill_sexp.rs",
+      "src/client/symbol_ops.rs",
+      "src/client/whitelist.rs",
+      "src/client/window_ops.rs"
+    ],
+    "src/client/schematic_ops.rs": [
+      "src/client/bridge.rs"
+    ],
+    "src/client/skill_runtime.rs": [
+      "src/error.rs",
+      "src/models.rs"
+    ],
+    "src/client/skill_sexp.rs": [
+      "src/error.rs"
+    ],
+    "src/client/symbol_ops.rs": [
+      "src/client/bridge.rs"
+    ],
+    "src/client/whitelist.rs": [],
+    "src/client/window_ops.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ],
+    "src/commands/cell.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ],
+    "src/commands/library.rs": [
+      "src/client/bridge.rs",
+      "src/client/library_ops.rs",
+      "src/client/skill_sexp.rs",
+      "src/error.rs"
+    ],
+    "src/commands/maestro.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_runtime.rs",
+      "src/commands/schematic.rs",
+      "src/config.rs",
+      "src/error.rs",
+      "src/transport/contract.rs",
+      "src/transport/ssh.rs"
+    ],
+    "src/commands/mod.rs": [
+      "src/commands/cell.rs",
+      "src/commands/config.rs",
+      "src/commands/design.rs",
+      "src/commands/diag.rs",
+      "src/commands/init.rs",
+      "src/commands/library.rs",
+      "src/commands/maestro.rs",
+      "src/commands/process.rs",
+      "src/commands/schema.rs",
+      "src/commands/schematic.rs",
+      "src/commands/session.rs",
+      "src/commands/sim.rs",
+      "src/commands/skill.rs",
+      "src/commands/symbol.rs",
+      "src/commands/transaction.rs",
+      "src/commands/transport_daemon.rs",
+      "src/commands/tunnel.rs",
+      "src/commands/window.rs"
+    ],
+    "src/commands/process.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_runtime.rs",
+      "src/error.rs"
+    ],
+    "src/commands/schema.rs": [],
+    "src/commands/schematic.rs": [
+      "src/client/bridge.rs",
+      "src/client/editor.rs",
+      "src/error.rs"
+    ],
+    "src/commands/symbol.rs": [
+      "src/client/bridge.rs",
+      "src/client/skill_sexp.rs",
+      "src/client/symbol_ops.rs",
+      "src/error.rs"
+    ],
+    "src/commands/transaction.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ],
+    "src/version.rs": [
+      "src/client/bridge.rs",
+      "src/error.rs"
+    ]
+  }
+}

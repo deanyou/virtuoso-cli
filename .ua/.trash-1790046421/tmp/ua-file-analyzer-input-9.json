@@ -1,0 +1,61 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "src/transport/ipc/daemon.rs",
+      "language": "rust",
+      "sizeLines": 864,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ipc/framing.rs",
+      "language": "rust",
+      "sizeLines": 334,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ipc/messages.rs",
+      "language": "rust",
+      "sizeLines": 652,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ipc/mod.rs",
+      "language": "rust",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/transport/ipc/server.rs",
+      "language": "rust",
+      "sizeLines": 1459,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "src/transport/ipc/daemon.rs": [
+      "src/transport/contract.rs",
+      "src/transport/ipc/framing.rs",
+      "src/transport/ipc/messages.rs",
+      "src/transport/ipc/server.rs"
+    ],
+    "src/transport/ipc/framing.rs": [],
+    "src/transport/ipc/messages.rs": [
+      "src/transport/contract.rs"
+    ],
+    "src/transport/ipc/mod.rs": [
+      "src/transport/ipc/daemon.rs",
+      "src/transport/ipc/framing.rs",
+      "src/transport/ipc/messages.rs",
+      "src/transport/ipc/server.rs"
+    ],
+    "src/transport/ipc/server.rs": [
+      "src/transport/contract.rs",
+      "src/transport/ipc/framing.rs",
+      "src/transport/ipc/messages.rs",
+      "src/transport/lifecycle.rs",
+      "src/transport/pool.rs",
+      "src/transport/scheduler.rs"
+    ]
+  }
+}

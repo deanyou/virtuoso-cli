@@ -1,0 +1,182 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".pensieve/knowledge/smic-pdk-transistor-w-skill/content.md",
+      "language": "markdown",
+      "sizeLines": 110,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/smic-rhrpo-netlist-terminals/content.md",
+      "language": "markdown",
+      "sizeLines": 106,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-ade-model-path/content.md",
+      "language": "markdown",
+      "sizeLines": 93,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-bandgap-dc-convergence/content.md",
+      "language": "markdown",
+      "sizeLines": 104,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-cmi-2116-ade-netlist/content.md",
+      "language": "markdown",
+      "sizeLines": 119,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-vacomp-2259-bound-step/content.md",
+      "language": "markdown",
+      "sizeLines": 68,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-vsource-ac-parameter/content.md",
+      "language": "markdown",
+      "sizeLines": 77,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/taste-review/content.md",
+      "language": "markdown",
+      "sizeLines": 198,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/vcli-bridge-cli-name/content.md",
+      "language": "markdown",
+      "sizeLines": 72,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/vcli-multi-session-concurrency/content.md",
+      "language": "markdown",
+      "sizeLines": 76,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/vcli-session-history-layout/content.md",
+      "language": "markdown",
+      "sizeLines": 82,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/knowledge/virtuoso-daemon-install-feature-flag/content.md",
+      "language": "markdown",
+      "sizeLines": 76,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/signals/latest.json",
+      "language": "json",
+      "sizeLines": 19,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".pensieve/state.md",
+      "language": "markdown",
+      "sizeLines": 14,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/skills/pr-review-hardening/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 97,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/skills/pr-review-hardening/references/workflow.md",
+      "language": "markdown",
+      "sizeLines": 150,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "cds.lib",
+      "language": "lib",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "examples/pasc_callbacks.ils",
+      "language": "ils",
+      "sizeLines": 473,
+      "fileCategory": "code"
+    },
+    {
+      "path": "examples/vttype_update.ils",
+      "language": "ils",
+      "sizeLines": 365,
+      "fileCategory": "code"
+    },
+    {
+      "path": "libManager.log.cdslck",
+      "language": "cdslck",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/.env_template",
+      "language": "config",
+      "sizeLines": 16,
+      "fileCategory": "config"
+    },
+    {
+      "path": "resources/daemons/ramic_bridge_daemon_27.py",
+      "language": "python",
+      "sizeLines": 263,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/daemons/ramic_bridge_daemon_3.py",
+      "language": "python",
+      "sizeLines": 176,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/daemons/virtuoso-daemon-aarch64",
+      "language": "unknown",
+      "sizeLines": 2536,
+      "fileCategory": "code"
+    },
+    {
+      "path": "resources/daemons/virtuoso-daemon-x86_64",
+      "language": "unknown",
+      "sizeLines": 920,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    ".pensieve/knowledge/smic-pdk-transistor-w-skill/content.md": [],
+    ".pensieve/knowledge/smic-rhrpo-netlist-terminals/content.md": [],
+    ".pensieve/knowledge/spectre-ade-model-path/content.md": [],
+    ".pensieve/knowledge/spectre-bandgap-dc-convergence/content.md": [],
+    ".pensieve/knowledge/spectre-cmi-2116-ade-netlist/content.md": [],
+    ".pensieve/knowledge/spectre-vacomp-2259-bound-step/content.md": [],
+    ".pensieve/knowledge/spectre-vsource-ac-parameter/content.md": [],
+    ".pensieve/knowledge/taste-review/content.md": [],
+    ".pensieve/knowledge/vcli-bridge-cli-name/content.md": [],
+    ".pensieve/knowledge/vcli-multi-session-concurrency/content.md": [],
+    ".pensieve/knowledge/vcli-session-history-layout/content.md": [],
+    ".pensieve/knowledge/virtuoso-daemon-install-feature-flag/content.md": [],
+    ".pensieve/signals/latest.json": [],
+    ".pensieve/state.md": [],
+    ".workbuddy/skills/pr-review-hardening/SKILL.md": [],
+    ".workbuddy/skills/pr-review-hardening/references/workflow.md": [],
+    "cds.lib": [],
+    "examples/pasc_callbacks.ils": [],
+    "examples/vttype_update.ils": [],
+    "libManager.log.cdslck": [],
+    "resources/.env_template": [],
+    "resources/daemons/ramic_bridge_daemon_27.py": [],
+    "resources/daemons/ramic_bridge_daemon_3.py": [],
+    "resources/daemons/virtuoso-daemon-aarch64": [],
+    "resources/daemons/virtuoso-daemon-x86_64": []
+  }
+}

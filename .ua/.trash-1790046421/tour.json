@@ -1,0 +1,214 @@
+[
+  {
+    "order": 1,
+    "title": "Project Overview & Manifest",
+    "description": "Start at the top: README.md frames the project's three-binary split (vcli, vtui, virtuoso-daemon) and the analog-IC scope. CLAUDE.md and AGENTS.md lay down the contributor/agent conventions. Cargo.toml declares the workspace members, dependency policy, and feature flags that gate the daemon.",
+    "nodeIds": [
+      "document:README.md",
+      "document:CLAUDE.md",
+      "document:AGENTS.md",
+      "config:Cargo.toml"
+    ],
+    "languageLesson": "Cargo workspace layout — three [[bin]] entries share one [lib] target so internal modules can be reused across the CLI, TUI, and daemon."
+  },
+  {
+    "order": 2,
+    "title": "Binary Entry Points",
+    "description": "Three thin main() entry points hand off to the shared library: src/main.rs is the vcli front door (arg parsing → command dispatch), src/vtui.rs boots the ratatui app, and src/daemon/main.rs is the feature-gated bridge relay that fronts a running Virtuoso instance. Reading these first shows you the contract each binary has with the rest of the codebase.",
+    "nodeIds": [
+      "file:src/main.rs",
+      "file:src/vtui.rs",
+      "file:src/daemon/main.rs",
+      "file:src/lib.rs"
+    ],
+    "languageLesson": "Each main.rs is intentionally minimal (truncation and dispatch only). All reusable logic lives in src/lib.rs so the TUI and daemon can pull from the same modules as the CLI."
+  },
+  {
+    "order": 3,
+    "title": "CLI Subcommand Layer",
+    "description": "src/commands/mod.rs is the clap dispatch hub — each sibling (session, maestro, library, schematic, sim, skill, tunnel, transport_daemon, etc.) is a self-contained subcommand module that delegates into the client/ bridge. Scan this layer to learn what user-facing verbs exist before diving into how they are implemented.",
+    "nodeIds": [
+      "file:src/commands/mod.rs",
+      "file:src/commands/session.rs",
+      "file:src/commands/maestro.rs",
+      "file:src/commands/library.rs",
+      "file:src/commands/schematic.rs",
+      "file:src/commands/sim.rs",
+      "file:src/commands/skill.rs",
+      "file:src/commands/tunnel.rs",
+      "file:src/commands/transport_daemon.rs"
+    ],
+    "languageLesson": "Each commands/*.rs file is a flat `pub fn handle(matches: &ArgMatches, ctx: &Context) -> Result<...>` entry point — easy to skim and to add new verbs to."
+  },
+  {
+    "order": 4,
+    "title": "Virtuoso Bridge (TCP/SKILL Transport Client)",
+    "description": "src/client/bridge.rs is the protocol client: it speaks SKILL/TCP to a running Virtuoso and dispatches requests to the specialised ops modules — maestro_ops.rs for Analog Design Environment flows, layout_ops.rs / schematic_ops.rs / library_ops.rs / window_ops.rs / editor_ops.rs for cell-level work, and skill_runtime.rs / skill_sexp.rs / whitelist.rs for sandboxed SKILL execution. Together they are the seam between the CLI and Cadence.",
+    "nodeIds": [
+      "file:src/client/bridge.rs",
+      "file:src/client/mod.rs",
+      "file:src/client/maestro_ops.rs",
+      "file:src/client/layout_ops.rs",
+      "file:src/client/schematic_ops.rs",
+      "file:src/client/library_ops.rs",
+      "file:src/client/skill_runtime.rs"
+    ],
+    "languageLesson": "Bridge ops are kept narrow on purpose — each *ops.rs is one concern (maestro vs. layout vs. library) so reviewers can find SKILL-call surface area quickly. The whitelist gates which SKILL forms are allowed to cross the trust boundary."
+  },
+  {
+    "order": 5,
+    "title": "Transport Layer (SSH / Native-SSH / Tunnels)",
+    "description": "src/transport/mod.rs is the facade over a small selection of backends — openssh.rs, native.rs (russh), ssh.rs — all sharing a common contract.rs. tunnel.rs / daemon_lifecycle.rs orchestrate port forwarding and long-lived remote sessions, while pool.rs, scheduler.rs, session_discovery.rs, host_keys.rs, auth.rs, identity.rs, and lifecycle.rs cover concurrent reuse, host-key policy, and identity file plumbing. This is how the CLI reaches a remote Cadence host.",
+    "nodeIds": [
+      "file:src/transport/mod.rs",
+      "file:src/transport/contract.rs",
+      "file:src/transport/openssh.rs",
+      "file:src/transport/native.rs",
+      "file:src/transport/ssh.rs",
+      "file:src/transport/tunnel.rs",
+      "file:src/transport/daemon_lifecycle.rs",
+      "file:src/transport/pool.rs",
+      "file:src/transport/scheduler.rs"
+    ],
+    "languageLesson": "The `Backend` trait in contract.rs lets the CLI swap between system `ssh` (openssh.rs) and a pure-Rust russh backend (native.rs) without touching upstream call sites."
+  },
+  {
+    "order": 6,
+    "title": "Daemon IPC Layer",
+    "description": "src/transport/ipc/* is the local Unix-socket protocol used between vcli and the long-running virtuoso-daemon: messages.rs defines the wire format, framing.rs handles length-prefixed I/O, server.rs hosts incoming connections, and daemon.rs is the IPC-side bridge. This sublayer is the only way the bridge is reachable from multiple vcli processes without re-spawning SSH.",
+    "nodeIds": [
+      "file:src/transport/ipc/mod.rs",
+      "file:src/transport/ipc/messages.rs",
+      "file:src/transport/ipc/framing.rs",
+      "file:src/transport/ipc/server.rs",
+      "file:src/transport/ipc/daemon.rs"
+    ],
+    "languageLesson": "Length-prefixed (bincode or similar) framing over a Unix-domain socket keeps the daemon IPC both fast and trivial to fuzz — see framing.rs for the codec."
+  },
+  {
+    "order": 7,
+    "title": "Domain Modules — Spectre & Ocean",
+    "description": "src/spectre/* covers the simulator side: runner.rs spawns Spectre, parsers.rs ingests raw output, jobs.rs is the persistent job tracker (with kill -0 probes and process-group cancellation), maestro_csv.rs reads ADE results, and mod.rs ties them together. src/ocean/* is the Ocean expression-language evaluator used for skill evaluation and corner sweeps. These are the simulation-domain modules the rest of the CLI plugs into.",
+    "nodeIds": [
+      "file:src/spectre/mod.rs",
+      "file:src/spectre/runner.rs",
+      "file:src/spectre/parsers.rs",
+      "file:src/spectre/jobs.rs",
+      "file:src/spectre/maestro_csv.rs",
+      "file:src/ocean/mod.rs",
+      "file:src/ocean/corner.rs"
+    ],
+    "languageLesson": "Job persistence is plain JSON on disk under the runtime cache — deliberately simple so that `vcli sim jobs` works without a daemon."
+  },
+  {
+    "order": 8,
+    "title": "TUI Layer (ratatui)",
+    "description": "src/tui/mod.rs boots the event loop. tui/app/{mod,state,event,action,data,overlay}.rs implement the Elm-style model (state + actions + event routing) and src/tui/ui/* draws chrome, content, jobs, sessions, config, footer and overlay widgets. theme.rs and shared.rs hold styling primitives. This is the screen a power user lives in.",
+    "nodeIds": [
+      "file:src/tui/mod.rs",
+      "file:src/tui/app/mod.rs",
+      "file:src/tui/app/state.rs",
+      "file:src/tui/app/event.rs",
+      "file:src/tui/app/action.rs",
+      "file:src/tui/ui/mod.rs",
+      "file:src/tui/theme.rs"
+    ],
+    "languageLesson": "TUI follows an Elm-style architecture: events in → actions → state → frame draw — keeping side effects localised and the UI testable."
+  },
+  {
+    "order": 9,
+    "title": "Cross-Cutting Infrastructure",
+    "description": "The plumbing shared by every layer: src/error.rs is the unified error type, src/config.rs and src/config_file.rs handle layered config (defaults, files, CLI flags), src/models.rs defines the serialisable data shapes, src/output.rs controls CLI rendering (JSON, table, plain), and src/lib.rs re-exports the public API. Read these to understand how the rest of the code is glued together.",
+    "nodeIds": [
+      "file:src/lib.rs",
+      "file:src/error.rs",
+      "file:src/config.rs",
+      "file:src/config_file.rs",
+      "file:src/models.rs",
+      "file:src/output.rs"
+    ],
+    "languageLesson": "Errors flow through a single `thiserror`-derived enum; the `Context` type threaded through every command handler carries config, paths, and runtime paths in one place."
+  },
+  {
+    "order": 10,
+    "title": "Plugin, Profile & Capability System",
+    "description": "src/capability/{mod,plugin}.rs defines the capability tokens that gate privileged SKILL calls. src/plugins/{mod,registry,schema}.rs loads third-party plugin manifests at runtime, and src/profile.rs handles named session profiles (think: named Cadence library + transport combinations). Together they let users extend the CLI without forking it.",
+    "nodeIds": [
+      "file:src/capability/mod.rs",
+      "file:src/capability/plugin.rs",
+      "file:src/plugins/mod.rs",
+      "file:src/plugins/registry.rs",
+      "file:src/plugins/schema.rs",
+      "file:src/profile.rs"
+    ],
+    "languageLesson": "Capabilities are explicit allow/deny tokens attached to each SKILL call — the bridge refuses anything not on the whitelist."
+  },
+  {
+    "order": 11,
+    "title": "RPC, Session & Transaction Internals",
+    "description": "Beyond commands/, three supporting layers coordinate state: src/rpc/{mod,dispatcher,schema}.rs is the internal RPC dispatch used by the daemon, src/session/{mod,heartbeat}.rs tracks live bridge sessions and liveness probes, and src/transaction/{mod,diff,snapshot}.rs handles diffing cell/skill transactions before commit. Reading them last in the architecture section reveals how state is kept coherent across processes.",
+    "nodeIds": [
+      "file:src/rpc/mod.rs",
+      "file:src/rpc/dispatcher.rs",
+      "file:src/rpc/schema.rs",
+      "file:src/session/mod.rs",
+      "file:src/session/heartbeat.rs",
+      "file:src/transaction/mod.rs",
+      "file:src/transaction/diff.rs",
+      "file:src/transaction/snapshot.rs"
+    ],
+    "languageLesson": "Transactions are first-class — the diff/snapshot pair is how multi-step library edits stay consistent if the daemon dies mid-flight."
+  },
+  {
+    "order": 12,
+    "title": "Integration Tests",
+    "description": "The tests/ directory exercises the public surface end-to-end: ocean.rs and spectre.rs pin domain behaviour, skill_load.rs and skill_escape.rs gate the SKILL sandbox, maestro_csv.rs covers ADE output parsing, config.rs / config_check.rs / config_check_cli.rs verify layered config, error_handling.rs / daemon_user_guard.rs / tunnel_profile.rs / tunnel_hostname_check.rs lock down the messy bits (permission checks, SSH guardrails). These tell you what the maintainers consider sacred.",
+    "nodeIds": [
+      "file:tests/ocean.rs",
+      "file:tests/spectre.rs",
+      "file:tests/maestro_csv.rs",
+      "file:tests/skill_load.rs",
+      "file:tests/skill_escape.rs",
+      "file:tests/config.rs",
+      "file:tests/error_handling.rs",
+      "file:tests/daemon_user_guard.rs",
+      "file:tests/tunnel_profile.rs"
+    ],
+    "languageLesson": "Integration tests are kept thin and pure — they read fixtures from disk and assert on parsed/serialised output rather than spawning live tools."
+  },
+  {
+    "order": 13,
+    "title": "CI/CD Pipeline",
+    "description": ".github/workflows/* codifies the contract: ci.yml runs the rust toolchain checks, integration.yml exercises the heavier end-to-end suite, release.yml ships binaries, security-audit.yml runs cargo-audit, and skill-tests.yml validates the analog design skill catalog. Reading these tells you the policy floor: what must pass before any merge.",
+    "nodeIds": [
+      "file:.github/workflows/ci.yml",
+      "file:.github/workflows/integration.yml",
+      "file:.github/workflows/release.yml",
+      "file:.github/workflows/security-audit.yml",
+      "file:.github/workflows/skill-tests.yml"
+    ],
+    "languageLesson": "Skill tests are a separate workflow — they're checked in alongside the Rust tests but use a different runner (Python fixtures)."
+  },
+  {
+    "order": 14,
+    "title": "Analog Design Skill Catalog",
+    "description": "The skill catalog is the project's secret weapon: each .claude/skills/<name>/SKILL.md is a guided workflow for an analog IC design task. Read sim-setup for end-to-end simulation setup, maestro for ADE/maestro orchestration, and spectre-netlist-template for hand-tuned Spectre netlist patterns. Together they show how the CLI is meant to be used by an LLM agent.",
+    "nodeIds": [
+      "document:.claude/skills/sim-setup/SKILL.md",
+      "document:.claude/skills/maestro/SKILL.md",
+      "document:.claude/skills/spectre-netlist-template/SKILL.md"
+    ],
+    "languageLesson": "SKILL.md files follow a shared convention — frontmatter declares name/description, body is the workflow steps. Read .claude/skills/_shared/convention.md first if you plan to add one."
+  },
+  {
+    "order": 15,
+    "title": "CAD Knowledge Base (.pensieve/decisions)",
+    "description": "The .pensieve/decisions/*.md are architectural decision records — each captures a concrete 'why we did it this way' note. Read 2026-04-19-virtuoso-bridge-lite-adoption.md for the bridge topology, 2026-04-11-session-vs-profile.md for the session-vs-profile split, and 2026-05-07-async-deferred.md for the reasoning behind the synchronous-first design. These explain the trade-offs the code itself hides.",
+    "nodeIds": [
+      "document:.pensieve/decisions/2026-04-19-virtuoso-bridge-lite-adoption.md",
+      "document:.pensieve/decisions/2026-04-11-session-vs-profile.md",
+      "document:.pensieve/decisions/2026-05-07-async-deferred.md"
+    ],
+    "languageLesson": "Decision files are dated YYYY-MM-DD-<slug>.md and read top-down: context → options → decision → consequences. Treat them as load-bearing context before proposing major refactors."
+  }
+]

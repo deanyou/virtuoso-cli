@@ -1,0 +1,2238 @@
+{
+  "batchIndex": 8,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "type": "file",
+      "name": "gui_runner.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "summary": "CLI entrypoint for the Virtuoso GUI runner skill. Parses args, validates or executes JSON scenario files against fake/live/local executors, emits one compact JSON line per invocation, and reports structured PASSED/FAILED or validation errors via exit codes.",
+      "tags": [
+        "cli",
+        "skill-script",
+        "virtuoso-gui-debug",
+        "json-output",
+        "subprocess-driver"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python 3 script that re-execs the vgui_runner package; uses sys.path manipulation to locate the sibling package. argparser, lazy imports for optional executors."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "type": "file",
+      "name": "test_command_runner.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "summary": "unittest suite for command_runner. Covers LocalRunner env cleanup and timeouts, SshRunner host validation (NUL/newline/regex), SshRunner argv construction enforcing the fixed vcli argv[0] rule, and CommandResult dataclass shape. All tests inject fakes; no real subprocess or ssh is invoked.",
+      "tags": [
+        "unittest",
+        "command-runner",
+        "security-tests",
+        "virtuoso-gui-debug",
+        "test"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Tests use unittest.TestCase plus unittest.mock.patch on subprocess.run and os.environ."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "type": "file",
+      "name": "test_engine.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "unittest suite for engine. Covers FakeExecutor per-phase outcomes, Runner happy path, precheck/baseline/execute/verify/rollback failures, no-retry-when-max_retries=0, atomic task.json write, output_dir creation, and final FAILED trace event.",
+      "tags": [
+        "unittest",
+        "state-machine",
+        "fake-executor",
+        "runner",
+        "virtuoso-gui-debug",
+        "test"
+      ],
+      "complexity": "complex",
+      "languageNotes": "unittest TestCase classes; tempfile + monkeypatched os.replace for atomic write tests."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "type": "file",
+      "name": "test_live_executor.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Large unittest suite for LiveExecutor. Covers construction, precheck (session/port/PID/DISPLAY/window-id/lock), baseline sanitization, DSL→vcli argv mapping, verify predicate flow, recover rollback allowlist, typed-text sanitization, lock lifecycle, new operations (SCROLL etc.), new verifier predicates, window-id disambiguation, session-aware argv, and dynamic CIW coordinates. No real ssh/vcli/X11 invoked — all I/O goes through an injected FakeRunner.",
+      "tags": [
+        "unittest",
+        "live-executor",
+        "sanitization",
+        "mocked-io",
+        "virtuoso-gui-debug",
+        "test"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Heavy use of unittest.mock; builds FakeRunner that records call args; parameterized scenarios via dict literals."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "type": "file",
+      "name": "test_local_executor.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "summary": "unittest suite for LocalExecutor. Covers precheck (xdotool missing / DISPLAY unreachable / no window / window found), baseline screenshot, execute mapping for every DSL operation including SCROLL, verify predicates, recover rollback, and geometry/identity guards. subprocess.run is mocked throughout.",
+      "tags": [
+        "unittest",
+        "local-executor",
+        "xdotool-mock",
+        "virtuoso-gui-debug",
+        "test"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "unittest.mock.patch on subprocess.run; MappingProxyType arguments for step fixtures."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "type": "file",
+      "name": "test_model.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Extensive unittest suite for model. Covers Operation enum membership, CellView formatting, version/task_id rules, timeout/retry bounds, per-operation argument required/optional/type validation, strict-int (bool rejected), JSON deep immutability, non-JSON rejection, verifier predicate allowlist, window_wait state allowlist, rollback validation, and round-trip serialization.",
+      "tags": [
+        "unittest",
+        "model",
+        "validation",
+        "immutability",
+        "virtuoso-gui-debug",
+        "test"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Pure-Python unit tests; uses MappingProxyType to assert deep immutability; comprehensive parameterized TestCase classes."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "type": "file",
+      "name": "command_runner.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "summary": "Hardened subprocess transport for vcli. Provides CommandError/CommandResult dataclasses plus CommandRunner base, LocalRunner (shell=False, cleaned env), and SshRunner (fixed vcli argv only; argv[0] must be the configured vcli path; NUL/newline rejected; shell-quoted remote command).",
+      "tags": [
+        "subprocess",
+        "ssh",
+        "security",
+        "fixed-argv",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Uses subprocess.run with shell=False; regex allowlist for SSH host; env allowlist keeps PATH/LANG/HOME/XDG_CACHE_HOME/VB_PORT/VB_REMOTE_HOST plus VCLI_CAPABILITY=admin."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "type": "file",
+      "name": "engine.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "summary": "Scenario state machine and abstract Executor protocol. Defines RunState/StepPhase/StepOutcome enums, FakeExecutor (deterministic per-(step,phase,attempt) outcomes), and Runner that drives precheck → baseline → execute → verify → recover with bounded retries and appends atomic task.json + JSONL trace.",
+      "tags": [
+        "state-machine",
+        "executor-protocol",
+        "fake-executor",
+        "runner",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Abstract base Executor with precheck/baseline/execute/verify/recover hooks; dataclass RunSummary; Runner emits trace events and writes task.json atomically."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "type": "file",
+      "name": "live_executor.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "summary": "Real vcli/SSH executor implementing the Executor protocol. Precheck binds session/PID/DISPLAY/window-id; per-run flock serializes DISPLAY access; every GUI action routes through vcli window action-x11; typed input text is sanitized out of errors and argv logs.",
+      "tags": [
+        "live-executor",
+        "vcli",
+        "ssh",
+        "flock",
+        "sanitization",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Heavy module (~1k LOC); uses fcntl.flock, pathlib, errno, uuid; maps DSL operations to fixed vcli argv; supports --direct and action-x11-batch fast paths."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "type": "file",
+      "name": "local_executor.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "summary": "Direct xdotool Executor for local X11. No vcli indirection; binds the target window by PID; supports SCROLL via xdotool buttons 4/5/6/7; fails closed on geometry/identity mismatches.",
+      "tags": [
+        "xdotool",
+        "local-executor",
+        "x11",
+        "geometry-guard",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Wraps subprocess.run against xdotool key/type/click/drag/scroll; mocks cleanly via subprocess for tests."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "file",
+      "name": "model.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "summary": "Strict scenario DSL parser. Defines the Operation enum and per-operation required/optional argument schemas, integer/button/string/list/dict arg classifications, verifier predicate allowlist, deeply immutable dataclasses (CellView/Step/Scenario), and ScenarioValidationError raised with a JSON-pointer-style path.",
+      "tags": [
+        "dsl",
+        "validation",
+        "frozen-dataclasses",
+        "json-immutable",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": "dataclass(frozen=True) plus MappingProxyType/tuple freezing for deep immutability; reject-closed validation against explicit allowlists."
+    },
+    {
+      "id": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "type": "file",
+      "name": "trace.py",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "summary": "Append-only JSONL event log with immediate flush per emit. Event dataclass carries seq/timestamp/state/step/attempt/outcome/duration/details; Trace opens lazily and flushes after every line so logs survive crashes.",
+      "tags": [
+        "jsonl",
+        "event-log",
+        "trace",
+        "append-only",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Lightweight; uses dataclasses.asdict and datetime timezone-aware isoformat."
+    },
+    {
+      "id": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::parse_fake_outcomes",
+      "type": "function",
+      "name": "parse_fake_outcomes",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "summary": "Loads and validates the JSON array of fake outcomes, building a {(step_id, phase, attempt): StepOutcome} dict.",
+      "tags": [
+        "function",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::cmd_validate",
+      "type": "function",
+      "name": "cmd_validate",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "summary": "Loads a scenario and emits a \"valid\" JSON object; catches ScenarioValidationError and unexpected exceptions to emit a structured error.",
+      "tags": [
+        "function",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::build_executor",
+      "type": "function",
+      "name": "build_executor",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "summary": "Constructs a Fake/Local/LiveExecutor from CLI args, including fake-outcomes parsing, live window-id override, and direct-mode wiring.",
+      "tags": [
+        "function",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::cmd_run",
+      "type": "function",
+      "name": "cmd_run",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "summary": "Loads a scenario, builds the executor, runs it through the Runner, then emits a final JSON line and returns the exit code.",
+      "tags": [
+        "function",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::main",
+      "type": "function",
+      "name": "main",
+      "filePath": ".claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "summary": "argparse entrypoint: dispatches to cmd_validate or cmd_run, wraps unexpected exceptions into structured JSON errors with exit code 2.",
+      "tags": [
+        "function",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py::RecordingRunner",
+      "type": "class",
+      "name": "RecordingRunner",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "summary": "Class RecordingRunner spanning lines 39..53.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py::TestLocalRunner",
+      "type": "class",
+      "name": "TestLocalRunner",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "summary": "Class TestLocalRunner spanning lines 56..131.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py::TestSshRunnerValidation",
+      "type": "class",
+      "name": "TestSshRunnerValidation",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "summary": "Class TestSshRunnerValidation spanning lines 134..188.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py::TestSshRunnerExecution",
+      "type": "class",
+      "name": "TestSshRunnerExecution",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "summary": "Class TestSshRunnerExecution spanning lines 191..202.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestFakeExecutorPerPhase",
+      "type": "class",
+      "name": "TestFakeExecutorPerPhase",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestFakeExecutorPerPhase spanning lines 73..111.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestRunnerHappyPath",
+      "type": "class",
+      "name": "TestRunnerHappyPath",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestRunnerHappyPath spanning lines 114..211.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestPrecheckFailure",
+      "type": "class",
+      "name": "TestPrecheckFailure",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestPrecheckFailure spanning lines 214..232.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestBaselineFailure",
+      "type": "class",
+      "name": "TestBaselineFailure",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestBaselineFailure spanning lines 235..253.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestExecuteFailRecoverSuccess",
+      "type": "class",
+      "name": "TestExecuteFailRecoverSuccess",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestExecuteFailRecoverSuccess spanning lines 256..302.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestVerifyFailRecoverRetry",
+      "type": "class",
+      "name": "TestVerifyFailRecoverRetry",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestVerifyFailRecoverRetry spanning lines 305..334.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestRollbackFailure",
+      "type": "class",
+      "name": "TestRollbackFailure",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestRollbackFailure spanning lines 337..365.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestNoRetryWhenMaxRetriesZero",
+      "type": "class",
+      "name": "TestNoRetryWhenMaxRetriesZero",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestNoRetryWhenMaxRetriesZero spanning lines 368..388.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestVerifyFailureNoRollback",
+      "type": "class",
+      "name": "TestVerifyFailureNoRollback",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestVerifyFailureNoRollback spanning lines 391..415.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestAtomicTaskJson",
+      "type": "class",
+      "name": "TestAtomicTaskJson",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestAtomicTaskJson spanning lines 418..433.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestOutputDirExists",
+      "type": "class",
+      "name": "TestOutputDirExists",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestOutputDirExists spanning lines 436..455.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestFinalFailedEvent",
+      "type": "class",
+      "name": "TestFinalFailedEvent",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "summary": "Class TestFinalFailedEvent spanning lines 458..481.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::FakeRunner",
+      "type": "class",
+      "name": "FakeRunner",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class FakeRunner spanning lines 89..111.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestLiveExecutorConstruction",
+      "type": "class",
+      "name": "TestLiveExecutorConstruction",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestLiveExecutorConstruction spanning lines 153..177.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestPrecheck",
+      "type": "class",
+      "name": "TestPrecheck",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestPrecheck spanning lines 180..325.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestBaseline",
+      "type": "class",
+      "name": "TestBaseline",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestBaseline spanning lines 328..350.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestExecuteMapping",
+      "type": "class",
+      "name": "TestExecuteMapping",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestExecuteMapping spanning lines 353..459.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestVerify",
+      "type": "class",
+      "name": "TestVerify",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestVerify spanning lines 462..499.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestRecover",
+      "type": "class",
+      "name": "TestRecover",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestRecover spanning lines 502..564.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestSanitization",
+      "type": "class",
+      "name": "TestSanitization",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestSanitization spanning lines 567..595.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestLockLifecycle",
+      "type": "class",
+      "name": "TestLockLifecycle",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestLockLifecycle spanning lines 598..611.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestNewOperationsLive",
+      "type": "class",
+      "name": "TestNewOperationsLive",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestNewOperationsLive spanning lines 614..705.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestNewVerifierPredicatesLive",
+      "type": "class",
+      "name": "TestNewVerifierPredicatesLive",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestNewVerifierPredicatesLive spanning lines 708..755.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestWindowIdDisambiguation",
+      "type": "class",
+      "name": "TestWindowIdDisambiguation",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestWindowIdDisambiguation spanning lines 758..821.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestSessionAwareArgv",
+      "type": "class",
+      "name": "TestSessionAwareArgv",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestSessionAwareArgv spanning lines 824..851.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestDynamicCiwCoordinates",
+      "type": "class",
+      "name": "TestDynamicCiwCoordinates",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Class TestDynamicCiwCoordinates spanning lines 854..906.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::sessions_json",
+      "type": "function",
+      "name": "sessions_json",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Function sessions_json (17 lines) at .claude/skills/virtuoso-gui-debug/tests/test_live_executor.py.",
+      "tags": [
+        "function",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::make_step",
+      "type": "function",
+      "name": "make_step",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "summary": "Function make_step (12 lines) at .claude/skills/virtuoso-gui-debug/tests/test_live_executor.py.",
+      "tags": [
+        "function",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorPrecheck",
+      "type": "class",
+      "name": "TestLocalExecutorPrecheck",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "summary": "Class TestLocalExecutorPrecheck spanning lines 59..114.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorExecute",
+      "type": "class",
+      "name": "TestLocalExecutorExecute",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "summary": "Class TestLocalExecutorExecute spanning lines 117..213.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorVerify",
+      "type": "class",
+      "name": "TestLocalExecutorVerify",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "summary": "Class TestLocalExecutorVerify spanning lines 216..248.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorRecover",
+      "type": "class",
+      "name": "TestLocalExecutorRecover",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "summary": "Class TestLocalExecutorRecover spanning lines 251..286.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorBaseline",
+      "type": "class",
+      "name": "TestLocalExecutorBaseline",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "summary": "Class TestLocalExecutorBaseline spanning lines 289..307.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorGeometryGuard",
+      "type": "class",
+      "name": "TestLocalExecutorGeometryGuard",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "summary": "Class TestLocalExecutorGeometryGuard spanning lines 310..379.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestIsStrictInt",
+      "type": "class",
+      "name": "TestIsStrictInt",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestIsStrictInt spanning lines 47..59.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestOperationEnum",
+      "type": "class",
+      "name": "TestOperationEnum",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestOperationEnum spanning lines 68..80.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestValidScenario",
+      "type": "class",
+      "name": "TestValidScenario",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestValidScenario spanning lines 83..98.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestNonObjectRoot",
+      "type": "class",
+      "name": "TestNonObjectRoot",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestNonObjectRoot spanning lines 101..120.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestUnknownTopLevelField",
+      "type": "class",
+      "name": "TestUnknownTopLevelField",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestUnknownTopLevelField spanning lines 123..130.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestUnknownStepField",
+      "type": "class",
+      "name": "TestUnknownStepField",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestUnknownStepField spanning lines 133..140.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestUnknownOperation",
+      "type": "class",
+      "name": "TestUnknownOperation",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestUnknownOperation spanning lines 143..151.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestDuplicateStepId",
+      "type": "class",
+      "name": "TestDuplicateStepId",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestDuplicateStepId spanning lines 154..161.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestMissingVerifier",
+      "type": "class",
+      "name": "TestMissingVerifier",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestMissingVerifier spanning lines 164..171.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestInvalidSessionId",
+      "type": "class",
+      "name": "TestInvalidSessionId",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestInvalidSessionId spanning lines 174..187.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestInvalidPid",
+      "type": "class",
+      "name": "TestInvalidPid",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestInvalidPid spanning lines 190..210.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestInvalidDisplay",
+      "type": "class",
+      "name": "TestInvalidDisplay",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestInvalidDisplay spanning lines 213..219.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestEmptyCellViewComponent",
+      "type": "class",
+      "name": "TestEmptyCellViewComponent",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestEmptyCellViewComponent spanning lines 222..228.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestVersionValidation",
+      "type": "class",
+      "name": "TestVersionValidation",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestVersionValidation spanning lines 231..244.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestTaskIdValidation",
+      "type": "class",
+      "name": "TestTaskIdValidation",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestTaskIdValidation spanning lines 247..260.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestTimeoutBounds",
+      "type": "class",
+      "name": "TestTimeoutBounds",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestTimeoutBounds spanning lines 263..286.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestRetryBounds",
+      "type": "class",
+      "name": "TestRetryBounds",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestRetryBounds spanning lines 289..312.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestOperationArguments",
+      "type": "class",
+      "name": "TestOperationArguments",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestOperationArguments spanning lines 315..352.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestScenarioRoundTrip",
+      "type": "class",
+      "name": "TestScenarioRoundTrip",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestScenarioRoundTrip spanning lines 355..369.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestStrictVersion",
+      "type": "class",
+      "name": "TestStrictVersion",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestStrictVersion spanning lines 372..392.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestOperationArgumentTypes",
+      "type": "class",
+      "name": "TestOperationArgumentTypes",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestOperationArgumentTypes spanning lines 395..535.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestVerifierValidation",
+      "type": "class",
+      "name": "TestVerifierValidation",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestVerifierValidation spanning lines 538..605.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestWindowWaitStateValidation",
+      "type": "class",
+      "name": "TestWindowWaitStateValidation",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestWindowWaitStateValidation spanning lines 608..634.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestRollbackValidation",
+      "type": "class",
+      "name": "TestRollbackValidation",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestRollbackValidation spanning lines 637..701.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestDeepImmutability",
+      "type": "class",
+      "name": "TestDeepImmutability",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestDeepImmutability spanning lines 704..761.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestNonJsonValues",
+      "type": "class",
+      "name": "TestNonJsonValues",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestNonJsonValues spanning lines 764..783.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestNewOperations",
+      "type": "class",
+      "name": "TestNewOperations",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestNewOperations spanning lines 786..836.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestNewVerifierPredicates",
+      "type": "class",
+      "name": "TestNewVerifierPredicates",
+      "filePath": ".claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "summary": "Class TestNewVerifierPredicates spanning lines 839..871.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::CommandError",
+      "type": "class",
+      "name": "CommandError",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "summary": "Exception subclass raised when command_runner rejects an unsafe argv/ssh_host. Carries a sanitized reason string safe to log.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::CommandResult",
+      "type": "class",
+      "name": "CommandResult",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "summary": "Frozen dataclass describing the outcome of one fixed-argv command: exit_code, stdout, stderr, duration_ms, timed_out.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::CommandRunner",
+      "type": "class",
+      "name": "CommandRunner",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "summary": "Abstract base wrapping a vcli_path. Public run() validates argv then delegates to a subclass _run_validated.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::LocalRunner",
+      "type": "class",
+      "name": "LocalRunner",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "summary": "Runs the fixed argv locally with shell=False, a cleaned env, and a timeout that produces a structured timed_out CommandResult.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::SshRunner",
+      "type": "class",
+      "name": "SshRunner",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "summary": "Runs a fixed vcli argv on a remote host over ssh; argv[0] must equal the configured vcli_path and every element is shlex.quote()d into a single remote command.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::_validate_argv",
+      "type": "function",
+      "name": "_validate_argv",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "summary": "Rejects shell strings, NUL, and newlines in argv elements; returns a list copy safe for subprocess.run.",
+      "tags": [
+        "function",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::RunState",
+      "type": "class",
+      "name": "RunState",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "summary": "Top-level scenario state: PRECHECK, BASELINE, EXECUTE, VERIFY, RECOVER, PASSED, FAILED.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::StepPhase",
+      "type": "class",
+      "name": "StepPhase",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "summary": "Per-step phase: precheck, baseline, execute, verify, recover.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::Executor",
+      "type": "class",
+      "name": "Executor",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "summary": "Abstract base Executor with precheck/baseline/execute/verify/recover hooks; protocol for fake/live/local implementations.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::FakeExecutor",
+      "type": "class",
+      "name": "FakeExecutor",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "summary": "Deterministic Executor keyed by (step_id, phase, attempt); default outcome is SUCCESS.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::Runner",
+      "type": "class",
+      "name": "Runner",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "summary": "Drives scenarios through precheck → baseline → execute → verify → recover with bounded retries, writes atomic task.json, appends trace events.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py::_DisplayLock",
+      "type": "class",
+      "name": "_DisplayLock",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "summary": "fcntl.flock-based exclusive lock under ~/.cache/virtuoso_bridge/x11-locks/ serializing DISPLAY access across runs.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py::LiveExecutor",
+      "type": "class",
+      "name": "LiveExecutor",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "summary": "Real vcli/SSH Executor. Precheck binds session/PID/DISPLAY/window-id; every GUI op routes through vcli window action-x11; typed text is sanitized from errors.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py::LocalExecutor",
+      "type": "class",
+      "name": "LocalExecutor",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "summary": "xdotool-based Executor for local X11. PID-bound window discovery, geometry/identity guards, SCROLL via buttons 4/5/6/7.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::Operation",
+      "type": "class",
+      "name": "Operation",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "summary": "String-enum of every DSL operation: VCLI_LOAD, VCLI_CALL, WINDOW_*, DISMISS_DIALOG, CLOSE, KEY, TYPE, CLICK_*, DRAG_REL, SCROLL, MINIMIZE/MAXIMIZE, CIW_INPUT, SCREENSHOT, VERIFY, RECOVER.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::ScenarioValidationError",
+      "type": "class",
+      "name": "ScenarioValidationError",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "summary": "ValueError subclass carrying a JSON-pointer-style path for structured parse errors.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::CellView",
+      "type": "class",
+      "name": "CellView",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "summary": "Frozen dataclass (lib/cell/view) with __str__ returning \"lib/cell/view\".",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::Step",
+      "type": "class",
+      "name": "Step",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "summary": "Frozen dataclass for one DSL step: id, operation, frozen arguments/verifier/rollback, timeout_seconds, max_retries.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::Scenario",
+      "type": "class",
+      "name": "Scenario",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "summary": "Frozen dataclass for an entire scenario: version, task_id, session_id, pid, display, cellview, steps. Provides load/from_dict/round-trip serialization.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::_is_json_value",
+      "type": "function",
+      "name": "_is_json_value",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "summary": "Recursively validates that a value is a JSON-serializable primitive, list, or string-keyed dict.",
+      "tags": [
+        "function",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/trace.py::Event",
+      "type": "class",
+      "name": "Event",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "summary": "Frozen-ish dataclass for one JSONL trace line: seq, ts, state, step_id, attempt, outcome, duration_ms, details.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "simple",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/trace.py::Trace",
+      "type": "class",
+      "name": "Trace",
+      "filePath": ".claude/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "summary": "Append-only JSONL log opened lazily; flushes after every emit so logs survive crashes.",
+      "tags": [
+        "class",
+        "python",
+        "virtuoso-gui-debug"
+      ],
+      "complexity": "moderate",
+      "languageNotes": ""
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "target": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::parse_fake_outcomes",
+      "type": "contains",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "target": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::cmd_validate",
+      "type": "contains",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "target": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::build_executor",
+      "type": "contains",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "target": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::cmd_run",
+      "type": "contains",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "target": "function:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py::main",
+      "type": "contains",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py::RecordingRunner",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py::TestLocalRunner",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py::TestSshRunnerValidation",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py::TestSshRunnerExecution",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestFakeExecutorPerPhase",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestRunnerHappyPath",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestPrecheckFailure",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestBaselineFailure",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestExecuteFailRecoverSuccess",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestVerifyFailRecoverRetry",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestRollbackFailure",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestNoRetryWhenMaxRetriesZero",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestVerifyFailureNoRollback",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestAtomicTaskJson",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestOutputDirExists",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_engine.py::TestFinalFailedEvent",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::FakeRunner",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestLiveExecutorConstruction",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestPrecheck",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestBaseline",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestExecuteMapping",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestVerify",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestRecover",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestSanitization",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestLockLifecycle",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestNewOperationsLive",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestNewVerifierPredicatesLive",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestWindowIdDisambiguation",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestSessionAwareArgv",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::TestDynamicCiwCoordinates",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "function:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::sessions_json",
+      "type": "contains",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "function:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py::make_step",
+      "type": "contains",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorPrecheck",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorExecute",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorVerify",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorRecover",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorBaseline",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py::TestLocalExecutorGeometryGuard",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestIsStrictInt",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestOperationEnum",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestValidScenario",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestNonObjectRoot",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestUnknownTopLevelField",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestUnknownStepField",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestUnknownOperation",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestDuplicateStepId",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestMissingVerifier",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestInvalidSessionId",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestInvalidPid",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestInvalidDisplay",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestEmptyCellViewComponent",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestVersionValidation",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestTaskIdValidation",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestTimeoutBounds",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestRetryBounds",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestOperationArguments",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestScenarioRoundTrip",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestStrictVersion",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestOperationArgumentTypes",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestVerifierValidation",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestWindowWaitStateValidation",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestRollbackValidation",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestDeepImmutability",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestNonJsonValues",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestNewOperations",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/tests/test_model.py::TestNewVerifierPredicates",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::CommandError",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::CommandResult",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::CommandRunner",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::LocalRunner",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::SshRunner",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "target": "function:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py::_validate_argv",
+      "type": "contains",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::RunState",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::StepPhase",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::Executor",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::FakeExecutor",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py::Runner",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py::_DisplayLock",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py::LiveExecutor",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py::LocalExecutor",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::Operation",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::ScenarioValidationError",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::CellView",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::Step",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::Scenario",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "target": "function:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py::_is_json_value",
+      "type": "contains",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/trace.py::Event",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "target": "class:.claude/skills/virtuoso-gui-debug/vgui_runner/trace.py::Trace",
+      "type": "contains",
+      "weight": 0.9
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/virtuoso-gui-debug/tests/test_model.py",
+      "target": "file:.claude/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "type": "tested_by",
+      "weight": 0.6
+    }
+  ]
+}

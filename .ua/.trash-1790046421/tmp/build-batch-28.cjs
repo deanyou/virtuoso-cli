@@ -1,0 +1,183 @@
+const fs = require('fs');
+
+const out = {
+  batchIndex: 28,
+  projectRoot: '/Users/dean/Documents/git/virtuoso-cli',
+  nodes: [
+    {
+      id: 'document:AGENTS.md',
+      type: 'document',
+      name: 'AGENTS.md',
+      filePath: 'AGENTS.md',
+      summary: 'Top-level agent guide for the virtuoso-cli project. Documents build/test commands, source layout (src/main.rs, src/vtui.rs, src/lib.rs, commands/, client/, daemon/, transport/, spectre/, ocean/, tui/), three critical invariants (VirtuosoResult two-layer semantics requiring skill_ok(), VirtuosoError vs anyhow error propagation, security red lines around bridge::escape_skill_string), the procedure for adding a new command, binary-vs-script boundary rules, session file location (~/.cache/virtuoso_bridge/sessions), the three-host model (Local -> Jump -> Compute), and GUI debugging notes.',
+      tags: ['agent-guide', 'build', 'invariants', 'source-layout', 'security', 'three-host-model'],
+      complexity: 'moderate',
+      languageNotes: 'Markdown with Rust code blocks; 13 sections across 167 lines; written for AI agents and human contributors.'
+    },
+    {
+      id: 'document:CHANGELOG.md',
+      type: 'document',
+      name: 'CHANGELOG.md',
+      filePath: 'CHANGELOG.md',
+      summary: 'Version history for virtuoso-cli following Keep-a-Changelog format. Tracks 126 entries from 0.1.1 through Unreleased / 1.3.5. Most recent additions document a shared/multi-user installer (install.sh with --system/--user/--prefix), daemon path resolution fixes via RBResolveDaemonPath, and __DAEMON_PATH__ token restoration in ramic_bridge.il. Recent versions document .env file removal (RFC #83), ~/.vcli/profile migration, dotenvy dependency removal, and the ordered daemon search chain.',
+      tags: ['changelog', 'release-notes', 'versions', 'migration', 'deprecated'],
+      complexity: 'complex',
+      languageNotes: 'Markdown; 126 sections across 1022 lines; chronological release log; largest doc in the batch.'
+    },
+    {
+      id: 'document:CLAUDE.md',
+      type: 'document',
+      name: 'CLAUDE.md',
+      filePath: 'CLAUDE.md',
+      summary: 'Chinese-language developer guide for Claude Code sessions. Establishes Chinese answer language (with English IC terms like gm/Id, OTA, GBW, phase margin, oprobe, Vov), four-persona role definition (EDA automation engineer, Rust systems engineer, Spectre simulation expert, analog IC designer), mirrors the AGENTS.md critical invariants in Chinese, lists the skill delegation routing table mapping user questions to /gm-over-id, /amp-copilot, /sim-setup, /schematic-gen, /maestro, /tunnel-connect etc., and states the main-program-vs-skill ownership principle.',
+      tags: ['claude-code', 'chinese', 'persona', 'skill-delegation', 'routing'],
+      complexity: 'moderate',
+      languageNotes: 'Markdown mixed Chinese/English; 15 sections across 145 lines; IC terms preserved in English while prose is Chinese.'
+    },
+    {
+      id: 'config:Cargo.toml',
+      type: 'config',
+      name: 'Cargo.toml',
+      filePath: 'Cargo.toml',
+      summary: 'Rust workspace manifest for virtuoso-cli v1.3.5 (edition 2021, MIT). Declares vcli (src/main.rs), vtui (src/vtui.rs), and virtuoso-daemon (src/daemon/main.rs, required-features daemon) binaries. Defines the daemon and native-ssh feature flags; native-ssh pulls optional russh/russh-sftp deps for step 3 of the native transport sequence. Dependencies: clap derive, serde, serde_json, serde_yaml, glob, include_dir, tracing, sha2, hex, base64, tempfile, shlex, uuid, dirs, chrono, once_cell, lazy_static, libc, ratatui, crossterm, tokio, regex, toml, num_cpus. Dev-dependencies include serial_test and rand 0.10 for in-process SSH server harness. Release profile uses lto, strip, codegen-units=1.',
+      tags: ['cargo', 'rust', 'manifest', 'binaries', 'features', 'dependencies'],
+      complexity: 'moderate',
+      languageNotes: 'TOML with package, three [[bin]] tables, [features], [dependencies], [dev-dependencies], [profile.release]; 83 lines; 8 sections.'
+    },
+    {
+      id: 'document:README.md',
+      type: 'document',
+      name: 'README.md',
+      filePath: 'README.md',
+      summary: 'Main project README with bilingual English + Chinese content. Describes vcli as a Rust rewrite of virtuoso-bridge-lite. Covers multi-session support, dynamic port assignment, stale-daemon recovery, session history, native cross-arch tunnel deploy, four-verb tunnel model (start/stop destructive, attach/detach non-destructive), per-client scratch scoping, Skill Finder, admin capability gate (VCLI_CAPABILITY=admin), agent-native CLI, schematic operations, Spectre simulation, multi-profile support, ADE management, and installation. 45 sections across 1109 lines.',
+      tags: ['readme', 'overview', 'features', 'bilingual', 'installation'],
+      complexity: 'complex',
+      languageNotes: 'Markdown with HTML badge markup; 45 sections across 1109 lines; largest doc in the project; bilingual anchors via #english and #chinese.'
+    },
+    {
+      id: 'config:audit.toml',
+      type: 'config',
+      name: 'audit.toml',
+      filePath: 'audit.toml',
+      summary: 'cargo-audit configuration documenting the single accepted RUSTSEC-2023-0071 (Marvin Attack RSA timing side-channel) advisory ignore. Notes that cargo-audit 0.22.2 does NOT auto-read this file and the ignore is enforced via CLI flag. Explains that rsa enters transitively only via the native-ssh feature (russh -> ssh-key), no upstream fix exists, and exposure is nil because rsa is used for public-key SSH operations only. Forward-compatible config for future cargo-audit versions.',
+      tags: ['security', 'cargo-audit', 'advisory', 'rustsec', 'rsa', 'marvin-attack'],
+      complexity: 'simple',
+      languageNotes: 'TOML with [advisories] section; 34 lines; heavily commented rationale; document-style config.'
+    },
+    {
+      id: 'file:install.sh',
+      type: 'file',
+      name: 'install.sh',
+      filePath: 'install.sh',
+      summary: 'Shared/multi-user bash installer for virtuoso-cli. Supports --system (install to /opt/virtuoso-cli, needs sudo), --user (per-user ~/.local, default), --prefix DIR (custom), and --no-build (skip cargo). Resolves repo root from BASH_SOURCE, runs cargo build --release --features daemon, installs vcli/vtui/virtuoso-daemon to $PREFIX/bin, and installs ramic_bridge.il to $PREFIX/share/virtuoso-cli/ with __DAEMON_PATH__ substituted to the absolute daemon binary path so a single shared layout serves every user with no per-user setup.',
+      tags: ['installer', 'bash', 'multi-user', 'prefix', 'ramic-bridge'],
+      complexity: 'moderate',
+      languageNotes: 'Bash with set -euo pipefail; 133 lines; uses install(1), grep, mkdir, sed substitution; argument parser with --system/--user/--prefix/--no-build flags.'
+    },
+    {
+      id: 'file:setup-virtuoso-tmux.sh',
+      type: 'file',
+      name: 'setup-virtuoso-tmux.sh',
+      filePath: 'setup-virtuoso-tmux.sh',
+      summary: 'Tmux session creator for the Virtuoso TUI workflow. Builds a two-pane session (default name virtuoso-tui): left pane SSHes to a remote Docker host with X11 forwarding and sources cadence_env.sh; right pane is a local shell preloaded with VB_PORT (default 36539), VB_TIMEOUT (default 60), and a cd into $VIRTUOSO_CLI_DIR. Reads env vars VIRTUOSO_TMUX_SESSION, VIRTUOSO_SSH_KEY, VIRTUOSO_SSH_HOST, VIRTUOSO_SSH_USER, VIRTUOSO_SSH_PORT, VIRTUOSO_CADENCE_ENV, VIRTUOSO_DISPLAY, VB_PORT, VB_TIMEOUT, VIRTUOSO_CLI_DIR. Captures pane IDs via tmux -P -F #{pane_id} to avoid base-index assumptions.',
+      tags: ['tmux', 'ssh', 'x11-forwarding', 'virtuoso-tui', 'workflow'],
+      complexity: 'simple',
+      languageNotes: 'Bash with set -euo pipefail; 53 lines; tmux new-session/split-window/send-keys automation; env-driven defaults.'
+    }
+  ],
+  edges: [
+    {
+      source: 'document:README.md',
+      target: 'document:AGENTS.md',
+      type: 'documents',
+      weight: 0.6
+    },
+    {
+      source: 'document:README.md',
+      target: 'document:CLAUDE.md',
+      type: 'documents',
+      weight: 0.4
+    },
+    {
+      source: 'document:CLAUDE.md',
+      target: 'document:AGENTS.md',
+      type: 'documents',
+      weight: 0.7
+    },
+    {
+      source: 'document:AGENTS.md',
+      target: 'config:Cargo.toml',
+      type: 'configures',
+      weight: 0.6
+    },
+    {
+      source: 'document:CLAUDE.md',
+      target: 'config:Cargo.toml',
+      type: 'configures',
+      weight: 0.5
+    },
+    {
+      source: 'file:install.sh',
+      target: 'config:Cargo.toml',
+      type: 'configures',
+      weight: 0.7
+    },
+    {
+      source: 'file:install.sh',
+      target: 'config:audit.toml',
+      type: 'configures',
+      weight: 0.4
+    },
+    {
+      source: 'document:CHANGELOG.md',
+      target: 'config:Cargo.toml',
+      type: 'documents',
+      weight: 0.7
+    },
+    {
+      source: 'document:CHANGELOG.md',
+      target: 'file:install.sh',
+      type: 'documents',
+      weight: 0.6
+    },
+    {
+      source: 'document:CHANGELOG.md',
+      target: 'config:audit.toml',
+      type: 'documents',
+      weight: 0.4
+    },
+    {
+      source: 'file:setup-virtuoso-tmux.sh',
+      target: 'document:AGENTS.md',
+      type: 'documents',
+      weight: 0.3
+    },
+    {
+      source: 'document:AGENTS.md',
+      target: 'file:install.sh',
+      type: 'contains',
+      weight: 0.4
+    },
+    {
+      source: 'document:AGENTS.md',
+      target: 'file:setup-virtuoso-tmux.sh',
+      type: 'contains',
+      weight: 0.3
+    },
+    {
+      source: 'document:README.md',
+      target: 'file:install.sh',
+      type: 'contains',
+      weight: 0.5
+    },
+    {
+      source: 'document:README.md',
+      target: 'file:setup-virtuoso-tmux.sh',
+      type: 'contains',
+      weight: 0.4
+    }
+  ]
+};
+
+fs.writeFileSync('/Users/dean/Documents/git/virtuoso-cli/.ua/intermediate/batch-28.json', JSON.stringify(out, null, 2));
+console.log('wrote', out.nodes.length, 'nodes,', out.edges.length, 'edges');

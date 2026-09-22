@@ -1,0 +1,63 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "sizeLines": 167,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "language": "markdown",
+      "sizeLines": 1022,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 145,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "Cargo.toml",
+      "language": "toml",
+      "sizeLines": 83,
+      "fileCategory": "config"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "sizeLines": 1109,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "audit.toml",
+      "language": "toml",
+      "sizeLines": 34,
+      "fileCategory": "config"
+    },
+    {
+      "path": "install.sh",
+      "language": "shell",
+      "sizeLines": 133,
+      "fileCategory": "script"
+    },
+    {
+      "path": "setup-virtuoso-tmux.sh",
+      "language": "shell",
+      "sizeLines": 53,
+      "fileCategory": "script"
+    }
+  ],
+  "batchImportData": {
+    "AGENTS.md": [],
+    "CHANGELOG.md": [],
+    "CLAUDE.md": [],
+    "Cargo.toml": [],
+    "README.md": [],
+    "audit.toml": [],
+    "install.sh": [],
+    "setup-virtuoso-tmux.sh": []
+  }
+}

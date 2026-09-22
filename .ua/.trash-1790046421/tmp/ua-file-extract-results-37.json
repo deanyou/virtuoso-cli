@@ -1,0 +1,7580 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 24,
+  "filesSkipped": [
+    ".claude/skills/virtuoso-gui-debug/report/rsi_report.html"
+  ],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 24,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 20,
+      "failed": 0,
+      "skipped": 4
+    }
+  },
+  "results": [
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 238,
+      "nonEmptyLines": 192,
+      "sections": [
+        {
+          "heading": "Scenario JSON DSL Schema",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Top-Level Fields",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "CellView Object",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Step Object",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Allowed Operations",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "VCLI_LOAD",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "VCLI_CALL",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "WINDOW_WAIT",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "WINDOW_ACTIVATE",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "WINDOW_DISCOVER",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "DISMISS_DIALOG",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "CLOSE",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "KEY",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "TYPE",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "CLICK_REL",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "DRAG_REL",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "SCROLL",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "SCREENSHOT",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "VERIFY",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "RECOVER",
+          "level": 3,
+          "line": 105
+        },
+        {
+          "heading": "Verifier Object",
+          "level": 2,
+          "line": 109
+        },
+        {
+          "heading": "Rollback Object",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "Validation Rules",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "Complete Example",
+          "level": 2,
+          "line": 148
+        },
+        {
+          "heading": "Executor Semantics",
+          "level": 2,
+          "line": 186
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 25
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 73,
+      "nonEmptyLines": 60,
+      "sections": [
+        {
+          "heading": "xdotool 速查",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "常用命令",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Python 实现（推荐入口）",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "动作日志",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "坐标换算（重要）",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "已知陷阱",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "调试小技巧",
+          "level": 2,
+          "line": 69
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 76,
+      "nonEmptyLines": 68,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 385,
+      "nonEmptyLines": 346,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 121,
+      "nonEmptyLines": 100,
+      "functions": [
+        {
+          "name": "parse_fnd_file",
+          "startLine": 14,
+          "endLine": 46,
+          "params": [
+            "filepath",
+            "version",
+            "category"
+          ]
+        },
+        {
+          "name": "import_version",
+          "startLine": 48,
+          "endLine": 62,
+          "params": [
+            "version_dir",
+            "version_tag"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 64,
+          "endLine": 118,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "parse_fnd_file",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "import_version",
+          "line": 48,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 64,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parse_fnd_file",
+          "callee": "open",
+          "lineNumber": 16
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "f.read",
+          "lineNumber": 17
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "re.compile",
+          "lineNumber": 22
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "pattern.finditer",
+          "lineNumber": 27
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group",
+          "lineNumber": 28
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group(2).replace('\\n', ' ').strip",
+          "lineNumber": 29
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group(2).replace",
+          "lineNumber": 29
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group",
+          "lineNumber": 29
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group(3).replace('\\n', ' ').strip",
+          "lineNumber": 30
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group(3).replace",
+          "lineNumber": 30
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "m.group",
+          "lineNumber": 30
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "re.search",
+          "lineNumber": 33
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "args_match.group(1).strip",
+          "lineNumber": 34
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "args_match.group",
+          "lineNumber": 34
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "len",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "args_str.split",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "a.strip",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "a.strip().startswith",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "a.strip",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse_fnd_file",
+          "callee": "functions.append",
+          "lineNumber": 37
+        },
+        {
+          "caller": "import_version",
+          "callee": "sorted",
+          "lineNumber": 52
+        },
+        {
+          "caller": "import_version",
+          "callee": "version_dir.iterdir",
+          "lineNumber": 52
+        },
+        {
+          "caller": "import_version",
+          "callee": "subdir.is_dir",
+          "lineNumber": 53
+        },
+        {
+          "caller": "import_version",
+          "callee": "subdir.glob",
+          "lineNumber": 57
+        },
+        {
+          "caller": "import_version",
+          "callee": "parse_fnd_file",
+          "lineNumber": 58
+        },
+        {
+          "caller": "import_version",
+          "callee": "all_funcs.extend",
+          "lineNumber": 59
+        },
+        {
+          "caller": "import_version",
+          "callee": "print",
+          "lineNumber": 60
+        },
+        {
+          "caller": "import_version",
+          "callee": "len",
+          "lineNumber": 60
+        },
+        {
+          "caller": "main",
+          "callee": "sqlite3.connect",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 69
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 81
+        },
+        {
+          "caller": "main",
+          "callee": "import_version",
+          "lineNumber": 83
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 87
+        },
+        {
+          "caller": "main",
+          "callee": "import_version",
+          "lineNumber": 89
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 90
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 90
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 94
+        },
+        {
+          "caller": "main",
+          "callee": "conn.commit",
+          "lineNumber": 100
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 103
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 104
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 105
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 108
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 109
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 115
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 117
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 115,
+      "nonEmptyLines": 109,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 46,
+      "functions": [
+        {
+          "name": "main",
+          "startLine": 32,
+          "endLine": 47,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "main",
+          "line": 32,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "main",
+          "callee": "sqlite3.connect",
+          "lineNumber": 33
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 33
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 34
+        },
+        {
+          "caller": "main",
+          "callee": "SYNONYMS.items",
+          "lineNumber": 40
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 42
+        },
+        {
+          "caller": "main",
+          "callee": "conn.commit",
+          "lineNumber": 44
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM synonyms\").fetchone",
+          "lineNumber": 45
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 45
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 46
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/promote.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 102,
+      "nonEmptyLines": 85,
+      "functions": [
+        {
+          "name": "name_to_proc",
+          "startLine": 30,
+          "endLine": 33,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "generate_il",
+          "startLine": 36,
+          "endLine": 70,
+          "params": [
+            "snippets",
+            "conn"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 73,
+          "endLine": 98,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "name_to_proc",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "generate_il",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 73,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "name_to_proc",
+          "callee": "name.split",
+          "lineNumber": 32
+        },
+        {
+          "caller": "name_to_proc",
+          "callee": "\"\".join",
+          "lineNumber": 33
+        },
+        {
+          "caller": "name_to_proc",
+          "callee": "p.capitalize",
+          "lineNumber": 33
+        },
+        {
+          "caller": "generate_il",
+          "callee": "conn.execute(\"SELECT * FROM snippets WHERE name=?\", (db_name,)).fetchone",
+          "lineNumber": 44
+        },
+        {
+          "caller": "generate_il",
+          "callee": "conn.execute",
+          "lineNumber": 44
+        },
+        {
+          "caller": "generate_il",
+          "callee": "json.loads",
+          "lineNumber": 46
+        },
+        {
+          "caller": "generate_il",
+          "callee": "proc_body.replace",
+          "lineNumber": 53
+        },
+        {
+          "caller": "generate_il",
+          "callee": "proc_body.replace",
+          "lineNumber": 55
+        },
+        {
+          "caller": "generate_il",
+          "callee": "' '.join",
+          "lineNumber": 60
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 64
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 65
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 66
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 67
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 68
+        },
+        {
+          "caller": "generate_il",
+          "callee": "lines.append",
+          "lineNumber": 69
+        },
+        {
+          "caller": "generate_il",
+          "callee": "\"\\n\".join",
+          "lineNumber": 70
+        },
+        {
+          "caller": "main",
+          "callee": "sqlite3.connect",
+          "lineNumber": 74
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 74
+        },
+        {
+          "caller": "main",
+          "callee": "PROMOTE.items",
+          "lineNumber": 80
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 82
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\"SELECT * FROM snippets WHERE name=?\", (db_name,)).fetchone",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 86
+        },
+        {
+          "caller": "main",
+          "callee": "promoted.append",
+          "lineNumber": 87
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 88
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 90
+        },
+        {
+          "caller": "main",
+          "callee": "conn.commit",
+          "lineNumber": 92
+        },
+        {
+          "caller": "main",
+          "callee": "generate_il",
+          "lineNumber": 95
+        },
+        {
+          "caller": "main",
+          "callee": "IL_OUT.write_text",
+          "lineNumber": 96
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 97
+        },
+        {
+          "caller": "main",
+          "callee": "IL_OUT.stat",
+          "lineNumber": 97
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 59,
+      "nonEmptyLines": 53,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 664,
+      "nonEmptyLines": 610,
+      "functions": [
+        {
+          "name": "conn",
+          "startLine": 22,
+          "endLine": 25,
+          "params": []
+        },
+        {
+          "name": "_load_synonyms",
+          "startLine": 51,
+          "endLine": 62,
+          "params": [
+            "c"
+          ]
+        },
+        {
+          "name": "expand",
+          "startLine": 64,
+          "endLine": 77,
+          "params": [
+            "c",
+            "query"
+          ]
+        },
+        {
+          "name": "search",
+          "startLine": 79,
+          "endLine": 109,
+          "params": [
+            "c",
+            "query",
+            "version",
+            "limit"
+          ]
+        },
+        {
+          "name": "lookup",
+          "startLine": 113,
+          "endLine": 131,
+          "params": [
+            "c",
+            "name",
+            "version"
+          ]
+        },
+        {
+          "name": "record_failure",
+          "startLine": 135,
+          "endLine": 141,
+          "params": [
+            "c",
+            "func",
+            "err_type",
+            "message"
+          ]
+        },
+        {
+          "name": "record_param",
+          "startLine": 143,
+          "endLine": 151,
+          "params": [
+            "c",
+            "func",
+            "param",
+            "value"
+          ]
+        },
+        {
+          "name": "_handle_snippet",
+          "startLine": 157,
+          "endLine": 529,
+          "params": [
+            "c",
+            "argv"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 534,
+          "endLine": 659,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "conn",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "_load_synonyms",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "expand",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "search",
+          "line": 79,
+          "isDefault": false
+        },
+        {
+          "name": "lookup",
+          "line": 113,
+          "isDefault": false
+        },
+        {
+          "name": "record_failure",
+          "line": 135,
+          "isDefault": false
+        },
+        {
+          "name": "record_param",
+          "line": 143,
+          "isDefault": false
+        },
+        {
+          "name": "_handle_snippet",
+          "line": 157,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 534,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "conn",
+          "callee": "sqlite3.connect",
+          "lineNumber": 23
+        },
+        {
+          "caller": "conn",
+          "callee": "str",
+          "lineNumber": 23
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "c.execute",
+          "lineNumber": 57
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "cache.setdefault(variant, set()).add",
+          "lineNumber": 58
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "cache.setdefault",
+          "lineNumber": 58
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "set",
+          "lineNumber": 58
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "cache.setdefault(canon, set()).add",
+          "lineNumber": 59
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "cache.setdefault",
+          "lineNumber": 59
+        },
+        {
+          "caller": "_load_synonyms",
+          "callee": "set",
+          "lineNumber": 59
+        },
+        {
+          "caller": "expand",
+          "callee": "set",
+          "lineNumber": 65
+        },
+        {
+          "caller": "expand",
+          "callee": "_load_synonyms",
+          "lineNumber": 66
+        },
+        {
+          "caller": "expand",
+          "callee": "query.lower().split",
+          "lineNumber": 67
+        },
+        {
+          "caller": "expand",
+          "callee": "query.lower",
+          "lineNumber": 67
+        },
+        {
+          "caller": "expand",
+          "callee": "words.add",
+          "lineNumber": 68
+        },
+        {
+          "caller": "expand",
+          "callee": "t.rstrip",
+          "lineNumber": 69
+        },
+        {
+          "caller": "expand",
+          "callee": "words.add",
+          "lineNumber": 71
+        },
+        {
+          "caller": "expand",
+          "callee": "words.add",
+          "lineNumber": 74
+        },
+        {
+          "caller": "expand",
+          "callee": "words.update",
+          "lineNumber": 76
+        },
+        {
+          "caller": "search",
+          "callee": "expand",
+          "lineNumber": 80
+        },
+        {
+          "caller": "search",
+          "callee": "c.execute(\n                    \"SELECT name, syntax, description, category FROM fnd_functions \"\n                    \"WHERE version=? AND LOWER(name) LIKE LOWER(?) LIMIT 200\",\n                    (version, pattern)).fetchall",
+          "lineNumber": 86
+        },
+        {
+          "caller": "search",
+          "callee": "c.execute",
+          "lineNumber": 86
+        },
+        {
+          "caller": "search",
+          "callee": "dict",
+          "lineNumber": 91
+        },
+        {
+          "caller": "search",
+          "callee": "d['name'].lower",
+          "lineNumber": 92
+        },
+        {
+          "caller": "search",
+          "callee": "nl.find",
+          "lineNumber": 93
+        },
+        {
+          "caller": "search",
+          "callee": "max",
+          "lineNumber": 94
+        },
+        {
+          "caller": "search",
+          "callee": "bare.startswith",
+          "lineNumber": 98
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 99
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 104
+        },
+        {
+          "caller": "search",
+          "callee": "sorted",
+          "lineNumber": 108
+        },
+        {
+          "caller": "search",
+          "callee": "results.values",
+          "lineNumber": 108
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute(\n        \"SELECT name, syntax, description, category, confidence, last_verified_at FROM fnd_functions WHERE name=? AND version=?\",\n        (name, version)).fetchone",
+          "lineNumber": 114
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute",
+          "lineNumber": 114
+        },
+        {
+          "caller": "lookup",
+          "callee": "dict",
+          "lineNumber": 118
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute(\n        \"SELECT error_type, error_message FROM error_history WHERE function_name=? AND fixed=0 ORDER BY created_at DESC LIMIT 3\",\n        (name,)).fetchall",
+          "lineNumber": 120
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute",
+          "lineNumber": 120
+        },
+        {
+          "caller": "lookup",
+          "callee": "dict",
+          "lineNumber": 124
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute(\n        \"SELECT param_name, example_value, success_count FROM param_examples WHERE function_name=? ORDER BY success_count DESC\",\n        (name,)).fetchall",
+          "lineNumber": 126
+        },
+        {
+          "caller": "lookup",
+          "callee": "c.execute",
+          "lineNumber": 126
+        },
+        {
+          "caller": "lookup",
+          "callee": "dict",
+          "lineNumber": 130
+        },
+        {
+          "caller": "record_failure",
+          "callee": "c.execute",
+          "lineNumber": 136
+        },
+        {
+          "caller": "record_failure",
+          "callee": "c.execute",
+          "lineNumber": 139
+        },
+        {
+          "caller": "record_failure",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 140
+        },
+        {
+          "caller": "record_failure",
+          "callee": "datetime.now",
+          "lineNumber": 140
+        },
+        {
+          "caller": "record_failure",
+          "callee": "c.commit",
+          "lineNumber": 141
+        },
+        {
+          "caller": "record_param",
+          "callee": "c.execute",
+          "lineNumber": 144
+        },
+        {
+          "caller": "record_param",
+          "callee": "c.execute",
+          "lineNumber": 148
+        },
+        {
+          "caller": "record_param",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 150
+        },
+        {
+          "caller": "record_param",
+          "callee": "datetime.now",
+          "lineNumber": 150
+        },
+        {
+          "caller": "record_param",
+          "callee": "c.commit",
+          "lineNumber": 151
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 159
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT name, category, description, success_count, fail_count FROM snippets ORDER BY category, name\").fetchall",
+          "lineNumber": 165
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 165
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 166
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 166
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 170
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 174
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 177
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "\" \".join(argv[1:]).lower",
+          "lineNumber": 179
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "\" \".join",
+          "lineNumber": 179
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT name, category, description, success_count, fail_count FROM snippets\").fetchall",
+          "lineNumber": 180
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 180
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r[0].lower",
+          "lineNumber": 183
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r[1].lower",
+          "lineNumber": 183
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r[2].lower",
+          "lineNumber": 183
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "q.split",
+          "lineNumber": 185
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "matches.append",
+          "lineNumber": 190
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "matches.sort",
+          "lineNumber": 191
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 192
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 192
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 196
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 199
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM snippets WHERE name=?\", (argv[1],)).fetchone",
+          "lineNumber": 200
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 200
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 202
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 204
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 205
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 206
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 207
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 208
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.loads",
+          "lineNumber": 209
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 211
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 213
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "p.get",
+          "lineNumber": 213
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 214
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 215
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 218
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.startswith",
+          "lineNumber": 229
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.split",
+          "lineNumber": 230
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.startswith",
+          "lineNumber": 231
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a[2:].partition",
+          "lineNumber": 232
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM snippets WHERE name=?\", (name,)).fetchone",
+          "lineNumber": 234
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 234
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 236
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 238
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.loads",
+          "lineNumber": 240
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "overrides.get",
+          "lineNumber": 243
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "p.get",
+          "lineNumber": 243
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "fill.items",
+          "lineNumber": 244
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "code.replace",
+          "lineNumber": 245
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "d.get",
+          "lineNumber": 248
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "\" \".join",
+          "lineNumber": 250
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "str",
+          "lineNumber": 250
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 251
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 252
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 254
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 256
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now",
+          "lineNumber": 256
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "time.time",
+          "lineNumber": 259
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "code.replace",
+          "lineNumber": 264
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "str",
+          "lineNumber": 266
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "Path.home",
+          "lineNumber": 266
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "subprocess.run",
+          "lineNumber": 279
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 280
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "time.time",
+          "lineNumber": 280
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r.stdout.decode",
+          "lineNumber": 281
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "r.stderr.decode",
+          "lineNumber": 282
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "out.find",
+          "lineNumber": 283
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.loads",
+          "lineNumber": 285
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "data.get",
+          "lineNumber": 286
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "data.get",
+          "lineNumber": 287
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "data.get",
+          "lineNumber": 289
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 294
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "time.time",
+          "lineNumber": 294
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "str",
+          "lineNumber": 296
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 298
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 301
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 305
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 308
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.dumps",
+          "lineNumber": 309
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 311
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "fill.items",
+          "lineNumber": 314
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 316
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 320
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 324
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 327
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 331
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "fill.items",
+          "lineNumber": 336
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 338
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 342
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 344
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 345
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 348
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.startswith",
+          "lineNumber": 362
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.split",
+          "lineNumber": 363
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a.startswith",
+          "lineNumber": 364
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "a[2:].partition",
+          "lineNumber": 365
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "clean_names.append",
+          "lineNumber": 368
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 370
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "' -> '.join",
+          "lineNumber": 370
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM snippets WHERE name=?\", (snip_name,)).fetchone",
+          "lineNumber": 373
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 373
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 375
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 378
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.loads",
+          "lineNumber": 380
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "overrides.get",
+          "lineNumber": 383
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "p.get",
+          "lineNumber": 383
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "fill.items",
+          "lineNumber": 384
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "code.replace",
+          "lineNumber": 385
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 386
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 387
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 389
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 392
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "re.findall",
+          "lineNumber": 396
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "json.dumps",
+          "lineNumber": 397
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 398
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 400
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now",
+          "lineNumber": 400
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 401
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 402
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "', '.join",
+          "lineNumber": 402
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 406
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 409
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 410
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 413
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 416
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 419
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 420
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 420
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "datetime.now",
+          "lineNumber": 420
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT last_insert_rowid()\").fetchone",
+          "lineNumber": 421
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 421
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 422
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 423
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 424
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM recordings WHERE active=1 ORDER BY id DESC LIMIT 1\").fetchone",
+          "lineNumber": 426
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 426
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 428
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 431
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.commit",
+          "lineNumber": 432
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"\"\"SELECT snippet_name, success, duration_ms, executed_at\n                FROM snippet_executions WHERE executed_at >= ? ORDER BY id\"\"\",\n                (row[2],)).fetchall",
+          "lineNumber": 433
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 433
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 436
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 436
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "sum",
+          "lineNumber": 437
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 439
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 440
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 440
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 444
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "' '.join",
+          "lineNumber": 444
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 445
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 446
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT id, name, started_at, active FROM recordings ORDER BY id DESC LIMIT 10\").fetchall",
+          "lineNumber": 448
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 448
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 449
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 449
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 452
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 453
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 455
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 457
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM recordings WHERE id=?\", (rid,)).fetchone",
+          "lineNumber": 459
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 459
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 461
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"\"\"SELECT snippet_name, success, duration_ms, params_used\n                FROM snippet_executions WHERE executed_at >= ? ORDER BY id\"\"\",\n                (row[2],)).fetchall",
+          "lineNumber": 463
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 463
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 466
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 467
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 468
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 468
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "enumerate",
+          "lineNumber": 469
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 471
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 473
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "len",
+          "lineNumber": 474
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "int",
+          "lineNumber": 476
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 478
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT * FROM recordings WHERE id=?\", (rid,)).fetchone",
+          "lineNumber": 480
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 480
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 482
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"SELECT snippet_name FROM snippet_executions WHERE executed_at >= ? ORDER BY id\",\n                (row[2],)).fetchall",
+          "lineNumber": 484
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 484
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 487
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "' → '.join",
+          "lineNumber": 487
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 488
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 490
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"\"\"\n            SELECT name, success_count, fail_count,\n                   (success_count + fail_count) as total,\n                   ROUND(100.0 * success_count / (success_count + fail_count), 0) as rate\n            FROM snippets\n            WHERE success_count + fail_count >= 2\n            ORDER BY success_count DESC, rate DESC LIMIT 10\n        \"\"\").fetchall",
+          "lineNumber": 495
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 495
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 504
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 506
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 508
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 509
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 510
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute(\"\"\"\n                SELECT a.snippet_name, b.snippet_name, COUNT(*) as cnt\n                FROM snippet_executions a\n                JOIN snippet_executions b ON a.id = b.id + 1\n                WHERE a.success = 1 AND b.success = 1\n                GROUP BY a.snippet_name, b.snippet_name\n                HAVING cnt >= 1\n                ORDER BY cnt DESC LIMIT 5\n            \"\"\").fetchall",
+          "lineNumber": 513
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "c.execute",
+          "lineNumber": 513
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 523
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 525
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 526
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "\" \".join",
+          "lineNumber": 526
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "dict",
+          "lineNumber": 526
+        },
+        {
+          "caller": "_handle_snippet",
+          "callee": "print",
+          "lineNumber": 529
+        },
+        {
+          "caller": "main",
+          "callee": "conn",
+          "lineNumber": 540
+        },
+        {
+          "caller": "main",
+          "callee": "_handle_snippet",
+          "lineNumber": 541
+        },
+        {
+          "caller": "main",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 544
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 545
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 546
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 547
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 548
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 549
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 550
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 551
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 552
+        },
+        {
+          "caller": "main",
+          "callee": "ap.parse_args",
+          "lineNumber": 553
+        },
+        {
+          "caller": "main",
+          "callee": "conn",
+          "lineNumber": 555
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute(f\"SELECT COUNT(*) FROM {t}\").fetchone",
+          "lineNumber": 560
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute",
+          "lineNumber": 560
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 561
+        },
+        {
+          "caller": "main",
+          "callee": "record_failure",
+          "lineNumber": 568
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 569
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 571
+        },
+        {
+          "caller": "main",
+          "callee": "lookup",
+          "lineNumber": 575
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 577
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 580
+        },
+        {
+          "caller": "main",
+          "callee": "datetime.fromisoformat",
+          "lineNumber": 583
+        },
+        {
+          "caller": "main",
+          "callee": "datetime.now",
+          "lineNumber": 584
+        },
+        {
+          "caller": "main",
+          "callee": "timedelta",
+          "lineNumber": 584
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 585
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 587
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 588
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 589
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 590
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute(\n                \"SELECT version, syntax FROM fnd_functions WHERE name=? ORDER BY version\",\n                (parsed.function,)).fetchall",
+          "lineNumber": 592
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute",
+          "lineNumber": 592
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 595
+        },
+        {
+          "caller": "main",
+          "callee": "syns.get",
+          "lineNumber": 597
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 600
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 602
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 603
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 604
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 606
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 614
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 615
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 616
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 617
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 619
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 621
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 626
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 627
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 629
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 631
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 632
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 633
+        },
+        {
+          "caller": "main",
+          "callee": "parsed.query.lower",
+          "lineNumber": 636
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute(\"SELECT name, category, description, success_count, fail_count FROM snippets\").fetchall",
+          "lineNumber": 638
+        },
+        {
+          "caller": "main",
+          "callee": "c.execute",
+          "lineNumber": 638
+        },
+        {
+          "caller": "main",
+          "callee": "r[0].lower",
+          "lineNumber": 639
+        },
+        {
+          "caller": "main",
+          "callee": "r[1].lower",
+          "lineNumber": 639
+        },
+        {
+          "caller": "main",
+          "callee": "r[2].lower",
+          "lineNumber": 639
+        },
+        {
+          "caller": "main",
+          "callee": "q.split",
+          "lineNumber": 641
+        },
+        {
+          "caller": "main",
+          "callee": "snippet_matches.append",
+          "lineNumber": 646
+        },
+        {
+          "caller": "main",
+          "callee": "snippet_matches.sort",
+          "lineNumber": 647
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 650
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 650
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 654
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 655
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 656
+        },
+        {
+          "caller": "main",
+          "callee": "ap.print_help",
+          "lineNumber": 659
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 9,
+        "functionCount": 9,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 59,
+      "nonEmptyLines": 55,
+      "functions": [
+        {
+          "name": "export",
+          "startLine": 9,
+          "endLine": 32,
+          "params": [
+            "path"
+          ]
+        },
+        {
+          "name": "import_data",
+          "startLine": 34,
+          "endLine": 50,
+          "params": [
+            "path"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "export",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "import_data",
+          "line": 34,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "export",
+          "callee": "sqlite3.connect",
+          "lineNumber": 10
+        },
+        {
+          "caller": "export",
+          "callee": "str",
+          "lineNumber": 10
+        },
+        {
+          "caller": "export",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 14
+        },
+        {
+          "caller": "export",
+          "callee": "datetime.now",
+          "lineNumber": 14
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 15
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 15
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 16
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 16
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 18
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 18
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 20
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 20
+        },
+        {
+          "caller": "export",
+          "callee": "dict",
+          "lineNumber": 22
+        },
+        {
+          "caller": "export",
+          "callee": "conn.execute",
+          "lineNumber": 22
+        },
+        {
+          "caller": "export",
+          "callee": "conn.close",
+          "lineNumber": 25
+        },
+        {
+          "caller": "export",
+          "callee": "Path(path).write_text",
+          "lineNumber": 26
+        },
+        {
+          "caller": "export",
+          "callee": "Path",
+          "lineNumber": 26
+        },
+        {
+          "caller": "export",
+          "callee": "json.dumps",
+          "lineNumber": 26
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 27
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 28
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 28
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 29
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 29
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 30
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 30
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 31
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 31
+        },
+        {
+          "caller": "export",
+          "callee": "print",
+          "lineNumber": 32
+        },
+        {
+          "caller": "export",
+          "callee": "len",
+          "lineNumber": 32
+        },
+        {
+          "caller": "import_data",
+          "callee": "json.loads",
+          "lineNumber": 35
+        },
+        {
+          "caller": "import_data",
+          "callee": "Path(path).read_text",
+          "lineNumber": 35
+        },
+        {
+          "caller": "import_data",
+          "callee": "Path",
+          "lineNumber": 35
+        },
+        {
+          "caller": "import_data",
+          "callee": "sqlite3.connect",
+          "lineNumber": 36
+        },
+        {
+          "caller": "import_data",
+          "callee": "str",
+          "lineNumber": 36
+        },
+        {
+          "caller": "import_data",
+          "callee": "data.get",
+          "lineNumber": 38
+        },
+        {
+          "caller": "import_data",
+          "callee": "conn.execute",
+          "lineNumber": 39
+        },
+        {
+          "caller": "import_data",
+          "callee": "data.get",
+          "lineNumber": 42
+        },
+        {
+          "caller": "import_data",
+          "callee": "conn.execute",
+          "lineNumber": 43
+        },
+        {
+          "caller": "import_data",
+          "callee": "conn.commit",
+          "lineNumber": 46
+        },
+        {
+          "caller": "import_data",
+          "callee": "print",
+          "lineNumber": 47
+        },
+        {
+          "caller": "import_data",
+          "callee": "print",
+          "lineNumber": 48
+        },
+        {
+          "caller": "import_data",
+          "callee": "len",
+          "lineNumber": 48
+        },
+        {
+          "caller": "import_data",
+          "callee": "data.get",
+          "lineNumber": 48
+        },
+        {
+          "caller": "import_data",
+          "callee": "print",
+          "lineNumber": 49
+        },
+        {
+          "caller": "import_data",
+          "callee": "len",
+          "lineNumber": 49
+        },
+        {
+          "caller": "import_data",
+          "callee": "data.get",
+          "lineNumber": 49
+        },
+        {
+          "caller": "import_data",
+          "callee": "conn.close",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 255,
+      "nonEmptyLines": 233,
+      "functions": [
+        {
+          "name": "get_conn",
+          "startLine": 19,
+          "endLine": 22,
+          "params": []
+        },
+        {
+          "name": "search",
+          "startLine": 24,
+          "endLine": 144,
+          "params": [
+            "conn",
+            "query",
+            "version",
+            "limit"
+          ]
+        },
+        {
+          "name": "get_function",
+          "startLine": 146,
+          "endLine": 152,
+          "params": [
+            "conn",
+            "name",
+            "version"
+          ]
+        },
+        {
+          "name": "list_category",
+          "startLine": 154,
+          "endLine": 161,
+          "params": [
+            "conn",
+            "category",
+            "version",
+            "limit"
+          ]
+        },
+        {
+          "name": "prefix_search",
+          "startLine": 163,
+          "endLine": 170,
+          "params": [
+            "conn",
+            "prefix",
+            "version",
+            "limit"
+          ]
+        },
+        {
+          "name": "check_errors",
+          "startLine": 172,
+          "endLine": 179,
+          "params": [
+            "conn",
+            "name"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 181,
+          "endLine": 252,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "get_conn",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "search",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "get_function",
+          "line": 146,
+          "isDefault": false
+        },
+        {
+          "name": "list_category",
+          "line": 154,
+          "isDefault": false
+        },
+        {
+          "name": "prefix_search",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "check_errors",
+          "line": 172,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 181,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get_conn",
+          "callee": "sqlite3.connect",
+          "lineNumber": 20
+        },
+        {
+          "caller": "get_conn",
+          "callee": "str",
+          "lineNumber": 20
+        },
+        {
+          "caller": "search",
+          "callee": "query.strip().split",
+          "lineNumber": 26
+        },
+        {
+          "caller": "search",
+          "callee": "query.strip",
+          "lineNumber": 26
+        },
+        {
+          "caller": "search",
+          "callee": "set",
+          "lineNumber": 53
+        },
+        {
+          "caller": "search",
+          "callee": "t.lower",
+          "lineNumber": 55
+        },
+        {
+          "caller": "search",
+          "callee": "expanded.add",
+          "lineNumber": 56
+        },
+        {
+          "caller": "search",
+          "callee": "tl.rstrip",
+          "lineNumber": 58
+        },
+        {
+          "caller": "search",
+          "callee": "expanded.add",
+          "lineNumber": 60
+        },
+        {
+          "caller": "search",
+          "callee": "expanded.add",
+          "lineNumber": 64
+        },
+        {
+          "caller": "search",
+          "callee": "w.endswith",
+          "lineNumber": 67
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 68
+        },
+        {
+          "caller": "search",
+          "callee": "expanded.add",
+          "lineNumber": 70
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute(\"\"\"\n                    SELECT name, syntax, description, category, version\n                    FROM fnd_functions\n                    WHERE version=? AND LOWER(name) LIKE LOWER(?)\n                    LIMIT 200\n                \"\"\", (version, pattern)).fetchall",
+          "lineNumber": 78
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute",
+          "lineNumber": 78
+        },
+        {
+          "caller": "search",
+          "callee": "dict",
+          "lineNumber": 85
+        },
+        {
+          "caller": "search",
+          "callee": "d['name'].lower",
+          "lineNumber": 86
+        },
+        {
+          "caller": "search",
+          "callee": "name_lower.find",
+          "lineNumber": 88
+        },
+        {
+          "caller": "search",
+          "callee": "max",
+          "lineNumber": 90
+        },
+        {
+          "caller": "search",
+          "callee": "bare.startswith",
+          "lineNumber": 94
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 95
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 100
+        },
+        {
+          "caller": "search",
+          "callee": "\" OR \".join",
+          "lineNumber": 110
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute(\"\"\"\n            SELECT name, syntax, description, category, version, 1 as score\n            FROM fnd_functions_fts\n            WHERE fnd_functions_fts MATCH ? AND version = ?\n            LIMIT ?\n        \"\"\", (fts_terms, version, limit * 3)).fetchall",
+          "lineNumber": 112
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute",
+          "lineNumber": 112
+        },
+        {
+          "caller": "search",
+          "callee": "dict",
+          "lineNumber": 119
+        },
+        {
+          "caller": "search",
+          "callee": "len",
+          "lineNumber": 126
+        },
+        {
+          "caller": "search",
+          "callee": "list",
+          "lineNumber": 127
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute(\"\"\"\n                    SELECT name, syntax, description, category, version\n                    FROM fnd_functions\n                    WHERE version=? AND LOWER(description) LIKE LOWER(?)\n                    LIMIT ?\n                \"\"\", (version, f'%{word}%', limit)).fetchall",
+          "lineNumber": 129
+        },
+        {
+          "caller": "search",
+          "callee": "conn.execute",
+          "lineNumber": 129
+        },
+        {
+          "caller": "search",
+          "callee": "dict",
+          "lineNumber": 136
+        },
+        {
+          "caller": "search",
+          "callee": "sorted",
+          "lineNumber": 143
+        },
+        {
+          "caller": "search",
+          "callee": "results.values",
+          "lineNumber": 143
+        },
+        {
+          "caller": "search",
+          "callee": "x.get",
+          "lineNumber": 143
+        },
+        {
+          "caller": "get_function",
+          "callee": "conn.execute(\"\"\"\n        SELECT name, syntax, description, category, version\n        FROM fnd_functions WHERE name = ? AND version = ?\n    \"\"\", (name, version)).fetchone",
+          "lineNumber": 148
+        },
+        {
+          "caller": "get_function",
+          "callee": "conn.execute",
+          "lineNumber": 148
+        },
+        {
+          "caller": "get_function",
+          "callee": "dict",
+          "lineNumber": 152
+        },
+        {
+          "caller": "list_category",
+          "callee": "conn.execute(\"\"\"\n        SELECT name, syntax, description\n        FROM fnd_functions WHERE category = ? AND version = ?\n        ORDER BY name LIMIT ?\n    \"\"\", (category, version, limit)).fetchall",
+          "lineNumber": 156
+        },
+        {
+          "caller": "list_category",
+          "callee": "conn.execute",
+          "lineNumber": 156
+        },
+        {
+          "caller": "list_category",
+          "callee": "dict",
+          "lineNumber": 161
+        },
+        {
+          "caller": "prefix_search",
+          "callee": "conn.execute(\"\"\"\n        SELECT name, syntax, description\n        FROM fnd_functions WHERE name LIKE ? AND version = ?\n        ORDER BY name LIMIT ?\n    \"\"\", (prefix + \"%\", version, limit)).fetchall",
+          "lineNumber": 165
+        },
+        {
+          "caller": "prefix_search",
+          "callee": "conn.execute",
+          "lineNumber": 165
+        },
+        {
+          "caller": "prefix_search",
+          "callee": "dict",
+          "lineNumber": 170
+        },
+        {
+          "caller": "check_errors",
+          "callee": "conn.execute(\"\"\"\n        SELECT error_type, error_message, created_at\n        FROM error_history WHERE function_name = ? AND fixed = 0\n        ORDER BY created_at DESC LIMIT 5\n    \"\"\", (name,)).fetchall",
+          "lineNumber": 174
+        },
+        {
+          "caller": "check_errors",
+          "callee": "conn.execute",
+          "lineNumber": 174
+        },
+        {
+          "caller": "check_errors",
+          "callee": "dict",
+          "lineNumber": 179
+        },
+        {
+          "caller": "main",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 182
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 183
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 184
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 185
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 186
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 187
+        },
+        {
+          "caller": "main",
+          "callee": "parser.add_argument",
+          "lineNumber": 188
+        },
+        {
+          "caller": "main",
+          "callee": "parser.parse_args",
+          "lineNumber": 189
+        },
+        {
+          "caller": "main",
+          "callee": "get_conn",
+          "lineNumber": 191
+        },
+        {
+          "caller": "main",
+          "callee": "get_function",
+          "lineNumber": 195
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 197
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 198
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 199
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 200
+        },
+        {
+          "caller": "main",
+          "callee": "check_errors",
+          "lineNumber": 201
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 203
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 203
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 205
+        },
+        {
+          "caller": "main",
+          "callee": "get_param_examples",
+          "lineNumber": 208
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 210
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 212
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 214
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\"\"\"\n                SELECT DISTINCT version FROM fnd_functions WHERE name=?\n            \"\"\", (args.function,)).fetchall",
+          "lineNumber": 216
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 216
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 220
+        },
+        {
+          "caller": "main",
+          "callee": "', '.join",
+          "lineNumber": 220
+        },
+        {
+          "caller": "main",
+          "callee": "list_category",
+          "lineNumber": 223
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 224
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 224
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 226
+        },
+        {
+          "caller": "main",
+          "callee": "prefix_search",
+          "lineNumber": 229
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 230
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 230
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 232
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 235
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 236
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 236
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 238
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 239
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 240
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM fnd_functions WHERE version=?\", (args.version,)).fetchone",
+          "lineNumber": 244
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 244
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 245
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 246
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 247
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 248
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 249
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 250
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 252
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 7,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 172,
+      "nonEmptyLines": 164,
+      "functions": [
+        {
+          "name": "init",
+          "startLine": 144,
+          "endLine": 168,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "init",
+          "line": 144,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "init",
+          "callee": "sqlite3.connect",
+          "lineNumber": 145
+        },
+        {
+          "caller": "init",
+          "callee": "str",
+          "lineNumber": 145
+        },
+        {
+          "caller": "init",
+          "callee": "conn.execute",
+          "lineNumber": 146
+        },
+        {
+          "caller": "init",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 159
+        },
+        {
+          "caller": "init",
+          "callee": "datetime.now",
+          "lineNumber": 159
+        },
+        {
+          "caller": "init",
+          "callee": "conn.execute",
+          "lineNumber": 161
+        },
+        {
+          "caller": "init",
+          "callee": "json.dumps",
+          "lineNumber": 164
+        },
+        {
+          "caller": "init",
+          "callee": "conn.commit",
+          "lineNumber": 165
+        },
+        {
+          "caller": "init",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM snippets\").fetchone",
+          "lineNumber": 166
+        },
+        {
+          "caller": "init",
+          "callee": "conn.execute",
+          "lineNumber": 166
+        },
+        {
+          "caller": "init",
+          "callee": "print",
+          "lineNumber": 167
+        },
+        {
+          "caller": "init",
+          "callee": "conn.close",
+          "lineNumber": 168
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 78,
+      "nonEmptyLines": 65,
+      "functions": [
+        {
+          "name": "vcli",
+          "startLine": 14,
+          "endLine": 26,
+          "params": [
+            "skill_expr"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 28,
+          "endLine": 75,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "vcli",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "vcli",
+          "callee": "skill_expr.replace",
+          "lineNumber": 15
+        },
+        {
+          "caller": "vcli",
+          "callee": "subprocess.run",
+          "lineNumber": 20
+        },
+        {
+          "caller": "vcli",
+          "callee": "r.stdout.decode",
+          "lineNumber": 21
+        },
+        {
+          "caller": "vcli",
+          "callee": "out.find",
+          "lineNumber": 22
+        },
+        {
+          "caller": "vcli",
+          "callee": "json.loads",
+          "lineNumber": 25
+        },
+        {
+          "caller": "vcli",
+          "callee": "data.get",
+          "lineNumber": 26
+        },
+        {
+          "caller": "vcli",
+          "callee": "data.get",
+          "lineNumber": 26
+        },
+        {
+          "caller": "vcli",
+          "callee": "data.get",
+          "lineNumber": 26
+        },
+        {
+          "caller": "main",
+          "callee": "get_conn",
+          "lineNumber": 29
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 32
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 33
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 36
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 38
+        },
+        {
+          "caller": "main",
+          "callee": "enumerate",
+          "lineNumber": 39
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 40
+        },
+        {
+          "caller": "main",
+          "callee": "get_function",
+          "lineNumber": 43
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 44
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 45
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 48
+        },
+        {
+          "caller": "main",
+          "callee": "vcli",
+          "lineNumber": 50
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 51
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 53
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 56
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 57
+        },
+        {
+          "caller": "main",
+          "callee": "enumerate",
+          "lineNumber": 58
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 59
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 62
+        },
+        {
+          "caller": "main",
+          "callee": "search",
+          "lineNumber": 63
+        },
+        {
+          "caller": "main",
+          "callee": "enumerate",
+          "lineNumber": 64
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 68
+        },
+        {
+          "caller": "main",
+          "callee": "get_function",
+          "lineNumber": 70
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 72
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 74
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 91,
+      "nonEmptyLines": 72,
+      "functions": [
+        {
+          "name": "run",
+          "startLine": 10,
+          "endLine": 14,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "check",
+          "startLine": 16,
+          "endLine": 19,
+          "params": [
+            "round_num",
+            "name",
+            "condition",
+            "detail"
+          ]
+        },
+        {
+          "name": "test_round",
+          "startLine": 21,
+          "endLine": 74,
+          "params": [
+            "n"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "run",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "check",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "test_round",
+          "line": 21,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "run",
+          "callee": "time.time",
+          "lineNumber": 11
+        },
+        {
+          "caller": "run",
+          "callee": "subprocess.run",
+          "lineNumber": 12
+        },
+        {
+          "caller": "run",
+          "callee": "str",
+          "lineNumber": 12
+        },
+        {
+          "caller": "run",
+          "callee": "time.time",
+          "lineNumber": 13
+        },
+        {
+          "caller": "check",
+          "callee": "print",
+          "lineNumber": 18
+        },
+        {
+          "caller": "test_round",
+          "callee": "print",
+          "lineNumber": 22
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 26
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 27
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 27
+        },
+        {
+          "caller": "test_round",
+          "callee": "out.lower",
+          "lineNumber": 27
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 30
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 31
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 31
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 34
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 35
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 35
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 38
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 39
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 39
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 42
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 43
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 43
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 46
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 47
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 47
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 50
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 51
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 51
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 54
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 55
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 55
+        },
+        {
+          "caller": "test_round",
+          "callee": "out.lower",
+          "lineNumber": 55
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 58
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 59
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 59
+        },
+        {
+          "caller": "test_round",
+          "callee": "run",
+          "lineNumber": 62
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 63
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 63
+        },
+        {
+          "caller": "test_round",
+          "callee": "sqlite3.connect",
+          "lineNumber": 66
+        },
+        {
+          "caller": "test_round",
+          "callee": "str",
+          "lineNumber": 66
+        },
+        {
+          "caller": "test_round",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM fnd_functions\").fetchone",
+          "lineNumber": 67
+        },
+        {
+          "caller": "test_round",
+          "callee": "conn.execute",
+          "lineNumber": 67
+        },
+        {
+          "caller": "test_round",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM snippets\").fetchone",
+          "lineNumber": 68
+        },
+        {
+          "caller": "test_round",
+          "callee": "conn.execute",
+          "lineNumber": 68
+        },
+        {
+          "caller": "test_round",
+          "callee": "conn.close",
+          "lineNumber": 69
+        },
+        {
+          "caller": "test_round",
+          "callee": "results.append",
+          "lineNumber": 70
+        },
+        {
+          "caller": "test_round",
+          "callee": "check",
+          "lineNumber": 70
+        },
+        {
+          "caller": "test_round",
+          "callee": "sum",
+          "lineNumber": 72
+        },
+        {
+          "caller": "test_round",
+          "callee": "print",
+          "lineNumber": 73
+        },
+        {
+          "caller": "test_round",
+          "callee": "len",
+          "lineNumber": 73
+        },
+        {
+          "caller": "test_round",
+          "callee": "len",
+          "lineNumber": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 109,
+      "nonEmptyLines": 96,
+      "functions": [
+        {
+          "name": "vcli_exec",
+          "startLine": 16,
+          "endLine": 34,
+          "params": [
+            "skill_expr"
+          ]
+        },
+        {
+          "name": "function_exists",
+          "startLine": 36,
+          "endLine": 49,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 51,
+          "endLine": 106,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "vcli_exec",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "function_exists",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 51,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "vcli_exec",
+          "callee": "subprocess.run",
+          "lineNumber": 23
+        },
+        {
+          "caller": "vcli_exec",
+          "callee": "r.stdout.decode('utf-8', errors='replace').strip",
+          "lineNumber": 24
+        },
+        {
+          "caller": "vcli_exec",
+          "callee": "r.stdout.decode",
+          "lineNumber": 24
+        },
+        {
+          "caller": "vcli_exec",
+          "callee": "out.find",
+          "lineNumber": 26
+        },
+        {
+          "caller": "vcli_exec",
+          "callee": "json.loads",
+          "lineNumber": 29
+        },
+        {
+          "caller": "vcli_exec",
+          "callee": "data.get",
+          "lineNumber": 30
+        },
+        {
+          "caller": "vcli_exec",
+          "callee": "data.get",
+          "lineNumber": 30
+        },
+        {
+          "caller": "vcli_exec",
+          "callee": "data.get",
+          "lineNumber": 30
+        },
+        {
+          "caller": "vcli_exec",
+          "callee": "str",
+          "lineNumber": 34
+        },
+        {
+          "caller": "function_exists",
+          "callee": "vcli_exec",
+          "lineNumber": 40
+        },
+        {
+          "caller": "function_exists",
+          "callee": "\" \".join",
+          "lineNumber": 43
+        },
+        {
+          "caller": "function_exists",
+          "callee": "err_str.lower",
+          "lineNumber": 44
+        },
+        {
+          "caller": "main",
+          "callee": "sqlite3.connect",
+          "lineNumber": 52
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 52
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\"\"\"\n        SELECT name, syntax, category FROM fnd_functions\n        WHERE version='IC251'\n        AND (name LIKE 'db%' OR name LIKE 'le%' OR name LIKE 'ge%')\n        AND category IN ('Custom_Layout', 'DFII_SKILL')\n        ORDER BY name\n        LIMIT 50\n    \"\"\").fetchall",
+          "lineNumber": 56
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 56
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 66
+        },
+        {
+          "caller": "main",
+          "callee": "enumerate",
+          "lineNumber": 73
+        },
+        {
+          "caller": "main",
+          "callee": "function_exists",
+          "lineNumber": 75
+        },
+        {
+          "caller": "main",
+          "callee": "results.append",
+          "lineNumber": 86
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 87
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 87
+        },
+        {
+          "caller": "main",
+          "callee": "time.sleep",
+          "lineNumber": 90
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 92
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 93
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 94
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 98
+        },
+        {
+          "caller": "main",
+          "callee": "conn.commit",
+          "lineNumber": 104
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 105
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 106
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 103,
+      "nonEmptyLines": 86,
+      "functions": [
+        {
+          "name": "verify",
+          "startLine": 23,
+          "endLine": 99,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "verify",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "verify",
+          "callee": "DB_PATH.exists",
+          "lineNumber": 26
+        },
+        {
+          "caller": "verify",
+          "callee": "errors.append",
+          "lineNumber": 27
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 28
+        },
+        {
+          "caller": "verify",
+          "callee": "\"\\n\".join",
+          "lineNumber": 28
+        },
+        {
+          "caller": "verify",
+          "callee": "sqlite3.connect",
+          "lineNumber": 30
+        },
+        {
+          "caller": "verify",
+          "callee": "str",
+          "lineNumber": 30
+        },
+        {
+          "caller": "verify",
+          "callee": "JSON_PATH.exists",
+          "lineNumber": 34
+        },
+        {
+          "caller": "verify",
+          "callee": "errors.append",
+          "lineNumber": 35
+        },
+        {
+          "caller": "verify",
+          "callee": "set",
+          "lineNumber": 36
+        },
+        {
+          "caller": "verify",
+          "callee": "open",
+          "lineNumber": 38
+        },
+        {
+          "caller": "verify",
+          "callee": "json.load",
+          "lineNumber": 39
+        },
+        {
+          "caller": "verify",
+          "callee": "backup.get",
+          "lineNumber": 40
+        },
+        {
+          "caller": "verify",
+          "callee": "backup.get",
+          "lineNumber": 40
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 43
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute(\n        f\"SELECT version, {CONF_COL}, COUNT(*) as cnt FROM {TABLE} GROUP BY version, {CONF_COL} ORDER BY version, {CONF_COL}\"\n    ).fetchall",
+          "lineNumber": 44
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute",
+          "lineNumber": 44
+        },
+        {
+          "caller": "verify",
+          "callee": "versions.setdefault",
+          "lineNumber": 49
+        },
+        {
+          "caller": "verify",
+          "callee": "sorted",
+          "lineNumber": 50
+        },
+        {
+          "caller": "verify",
+          "callee": "sum",
+          "lineNumber": 52
+        },
+        {
+          "caller": "verify",
+          "callee": "v.values",
+          "lineNumber": 52
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 53
+        },
+        {
+          "caller": "verify",
+          "callee": "\" | \".join",
+          "lineNumber": 53
+        },
+        {
+          "caller": "verify",
+          "callee": "sorted",
+          "lineNumber": 53
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute(f\"SELECT COUNT(*) FROM {TABLE}\").fetchone",
+          "lineNumber": 55
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute",
+          "lineNumber": 55
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute(f\"SELECT COUNT(*) FROM {TABLE} WHERE {CONF_COL}='verified'\").fetchone",
+          "lineNumber": 56
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute",
+          "lineNumber": 56
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 57
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 58
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute(f\"SELECT COUNT(*) FROM {TABLE} WHERE {CONF_COL} IS NULL\").fetchone",
+          "lineNumber": 61
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute",
+          "lineNumber": 61
+        },
+        {
+          "caller": "verify",
+          "callee": "errors.append",
+          "lineNumber": 63
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute(f\"\"\"\n        SELECT name, version FROM {TABLE}\n        WHERE {CONF_COL}='verified' AND ({SIG_COL} IS NULL OR {SIG_COL}='')\n    \"\"\").fetchall",
+          "lineNumber": 66
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute",
+          "lineNumber": 66
+        },
+        {
+          "caller": "verify",
+          "callee": "errors.append",
+          "lineNumber": 72
+        },
+        {
+          "caller": "verify",
+          "callee": "JSON_PATH.exists",
+          "lineNumber": 75
+        },
+        {
+          "caller": "verify",
+          "callee": "json.load",
+          "lineNumber": 77
+        },
+        {
+          "caller": "verify",
+          "callee": "open",
+          "lineNumber": 77
+        },
+        {
+          "caller": "verify",
+          "callee": "errors.append",
+          "lineNumber": 79
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM snippets\").fetchone",
+          "lineNumber": 82
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute",
+          "lineNumber": 82
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM snippets WHERE promoted_to IS NOT NULL\").fetchone",
+          "lineNumber": 83
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute",
+          "lineNumber": 83
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 84
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM error_history\").fetchone",
+          "lineNumber": 87
+        },
+        {
+          "caller": "verify",
+          "callee": "conn.execute",
+          "lineNumber": 87
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 88
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 90
+        },
+        {
+          "caller": "verify",
+          "callee": "JSON_PATH.exists",
+          "lineNumber": 90
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 93
+        },
+        {
+          "caller": "verify",
+          "callee": "len",
+          "lineNumber": 93
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 95
+        },
+        {
+          "caller": "verify",
+          "callee": "print",
+          "lineNumber": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 70,
+      "nonEmptyLines": 63,
+      "functions": [
+        {
+          "name": "check_func",
+          "startLine": 18,
+          "endLine": 41,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 43,
+          "endLine": 67,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "check_func",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 43,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "check_func",
+          "callee": "full[-1].format",
+          "lineNumber": 22
+        },
+        {
+          "caller": "check_func",
+          "callee": "subprocess.run",
+          "lineNumber": 24
+        },
+        {
+          "caller": "check_func",
+          "callee": "r.stdout.decode",
+          "lineNumber": 25
+        },
+        {
+          "caller": "check_func",
+          "callee": "out.find",
+          "lineNumber": 26
+        },
+        {
+          "caller": "check_func",
+          "callee": "json.loads",
+          "lineNumber": 30
+        },
+        {
+          "caller": "check_func",
+          "callee": "data.get",
+          "lineNumber": 31
+        },
+        {
+          "caller": "check_func",
+          "callee": "data.get",
+          "lineNumber": 32
+        },
+        {
+          "caller": "check_func",
+          "callee": "output.lower",
+          "lineNumber": 33
+        },
+        {
+          "caller": "check_func",
+          "callee": "str(errors).lower",
+          "lineNumber": 33
+        },
+        {
+          "caller": "check_func",
+          "callee": "str",
+          "lineNumber": 33
+        },
+        {
+          "caller": "check_func",
+          "callee": "output.lower",
+          "lineNumber": 35
+        },
+        {
+          "caller": "check_func",
+          "callee": "output.lower",
+          "lineNumber": 35
+        },
+        {
+          "caller": "check_func",
+          "callee": "output.lower",
+          "lineNumber": 35
+        },
+        {
+          "caller": "check_func",
+          "callee": "data.get",
+          "lineNumber": 37
+        },
+        {
+          "caller": "check_func",
+          "callee": "str",
+          "lineNumber": 41
+        },
+        {
+          "caller": "main",
+          "callee": "sqlite3.connect",
+          "lineNumber": 44
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 44
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute(\n        \"SELECT name FROM fnd_functions WHERE version='IC251' \"\n        \"AND confidence='ported' ORDER BY name LIMIT 200\"\n    ).fetchall",
+          "lineNumber": 46
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 46
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 50
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 50
+        },
+        {
+          "caller": "main",
+          "callee": "enumerate",
+          "lineNumber": 53
+        },
+        {
+          "caller": "main",
+          "callee": "check_func",
+          "lineNumber": 54
+        },
+        {
+          "caller": "main",
+          "callee": "conn.execute",
+          "lineNumber": 56
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 60
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 60
+        },
+        {
+          "caller": "main",
+          "callee": "time.sleep",
+          "lineNumber": 61
+        },
+        {
+          "caller": "main",
+          "callee": "conn.commit",
+          "lineNumber": 62
+        },
+        {
+          "caller": "main",
+          "callee": "conn.close",
+          "lineNumber": 63
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "sum",
+          "lineNumber": 66
+        },
+        {
+          "caller": "main",
+          "callee": "stats.values",
+          "lineNumber": 66
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 67
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 379,
+      "nonEmptyLines": 315,
+      "functions": [
+        {
+          "name": "run",
+          "startLine": 36,
+          "endLine": 41,
+          "params": [
+            "cmd",
+            "**kw"
+          ]
+        },
+        {
+          "name": "log",
+          "startLine": 44,
+          "endLine": 49,
+          "params": [
+            "msg"
+          ]
+        },
+        {
+          "name": "die",
+          "startLine": 52,
+          "endLine": 54,
+          "params": [
+            "msg",
+            "code"
+          ]
+        },
+        {
+          "name": "require_env",
+          "startLine": 57,
+          "endLine": 64,
+          "params": []
+        },
+        {
+          "name": "load_wid",
+          "startLine": 67,
+          "endLine": 73,
+          "params": []
+        },
+        {
+          "name": "lock_wid",
+          "startLine": 76,
+          "endLine": 79,
+          "params": [
+            "wid"
+          ]
+        },
+        {
+          "name": "activate",
+          "startLine": 82,
+          "endLine": 88,
+          "params": [
+            "wid"
+          ]
+        },
+        {
+          "name": "window_geometry",
+          "startLine": 91,
+          "endLine": 99,
+          "params": [
+            "wid"
+          ]
+        },
+        {
+          "name": "screenshot",
+          "startLine": 102,
+          "endLine": 115,
+          "params": [
+            "out",
+            "window_id"
+          ]
+        },
+        {
+          "name": "cmd_env",
+          "startLine": 120,
+          "endLine": 124,
+          "params": [
+            "_a"
+          ]
+        },
+        {
+          "name": "get_window_name",
+          "startLine": 127,
+          "endLine": 142,
+          "params": [
+            "wid"
+          ]
+        },
+        {
+          "name": "cmd_state",
+          "startLine": 145,
+          "endLine": 156,
+          "params": [
+            "_a"
+          ]
+        },
+        {
+          "name": "cmd_find",
+          "startLine": 159,
+          "endLine": 176,
+          "params": [
+            "a"
+          ]
+        },
+        {
+          "name": "cmd_shot",
+          "startLine": 179,
+          "endLine": 182,
+          "params": [
+            "a"
+          ]
+        },
+        {
+          "name": "cmd_click",
+          "startLine": 185,
+          "endLine": 197,
+          "params": [
+            "a"
+          ]
+        },
+        {
+          "name": "cmd_drag",
+          "startLine": 200,
+          "endLine": 217,
+          "params": [
+            "a"
+          ]
+        },
+        {
+          "name": "cmd_scroll",
+          "startLine": 220,
+          "endLine": 230,
+          "params": [
+            "a"
+          ]
+        },
+        {
+          "name": "cmd_type",
+          "startLine": 233,
+          "endLine": 243,
+          "params": [
+            "a"
+          ]
+        },
+        {
+          "name": "cmd_key",
+          "startLine": 246,
+          "endLine": 255,
+          "params": [
+            "a"
+          ]
+        },
+        {
+          "name": "cmd_wait",
+          "startLine": 258,
+          "endLine": 272,
+          "params": [
+            "a"
+          ]
+        },
+        {
+          "name": "cmd_smoke",
+          "startLine": 275,
+          "endLine": 306,
+          "params": [
+            "_a"
+          ]
+        },
+        {
+          "name": "build_parser",
+          "startLine": 311,
+          "endLine": 367,
+          "params": []
+        },
+        {
+          "name": "main",
+          "startLine": 370,
+          "endLine": 375,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "run",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "log",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "die",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "require_env",
+          "line": 57,
+          "isDefault": false
+        },
+        {
+          "name": "load_wid",
+          "line": 67,
+          "isDefault": false
+        },
+        {
+          "name": "lock_wid",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "activate",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "window_geometry",
+          "line": 91,
+          "isDefault": false
+        },
+        {
+          "name": "screenshot",
+          "line": 102,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_env",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "get_window_name",
+          "line": 127,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_state",
+          "line": 145,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_find",
+          "line": 159,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_shot",
+          "line": 179,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_click",
+          "line": 185,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_drag",
+          "line": 200,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_scroll",
+          "line": 220,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_type",
+          "line": 233,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_key",
+          "line": 246,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_wait",
+          "line": 258,
+          "isDefault": false
+        },
+        {
+          "name": "cmd_smoke",
+          "line": 275,
+          "isDefault": false
+        },
+        {
+          "name": "build_parser",
+          "line": 311,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 370,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "run",
+          "callee": "kw.setdefault",
+          "lineNumber": 38
+        },
+        {
+          "caller": "run",
+          "callee": "kw.setdefault",
+          "lineNumber": 39
+        },
+        {
+          "caller": "run",
+          "callee": "kw.setdefault",
+          "lineNumber": 40
+        },
+        {
+          "caller": "run",
+          "callee": "subprocess.run",
+          "lineNumber": 41
+        },
+        {
+          "caller": "log",
+          "callee": "open",
+          "lineNumber": 46
+        },
+        {
+          "caller": "log",
+          "callee": "f.write",
+          "lineNumber": 47
+        },
+        {
+          "caller": "log",
+          "callee": "datetime.datetime.now",
+          "lineNumber": 47
+        },
+        {
+          "caller": "die",
+          "callee": "print",
+          "lineNumber": 53
+        },
+        {
+          "caller": "die",
+          "callee": "sys.exit",
+          "lineNumber": 54
+        },
+        {
+          "caller": "require_env",
+          "callee": "os.environ.get",
+          "lineNumber": 59
+        },
+        {
+          "caller": "require_env",
+          "callee": "die",
+          "lineNumber": 60
+        },
+        {
+          "caller": "require_env",
+          "callee": "os.environ.get",
+          "lineNumber": 61
+        },
+        {
+          "caller": "require_env",
+          "callee": "die",
+          "lineNumber": 62
+        },
+        {
+          "caller": "require_env",
+          "callee": "shutil.which",
+          "lineNumber": 63
+        },
+        {
+          "caller": "require_env",
+          "callee": "die",
+          "lineNumber": 64
+        },
+        {
+          "caller": "load_wid",
+          "callee": "os.path.exists",
+          "lineNumber": 69
+        },
+        {
+          "caller": "load_wid",
+          "callee": "open",
+          "lineNumber": 70
+        },
+        {
+          "caller": "load_wid",
+          "callee": "line.startswith",
+          "lineNumber": 71
+        },
+        {
+          "caller": "load_wid",
+          "callee": "line.strip().split",
+          "lineNumber": 72
+        },
+        {
+          "caller": "load_wid",
+          "callee": "line.strip",
+          "lineNumber": 72
+        },
+        {
+          "caller": "lock_wid",
+          "callee": "open",
+          "lineNumber": 77
+        },
+        {
+          "caller": "lock_wid",
+          "callee": "f.write",
+          "lineNumber": 78
+        },
+        {
+          "caller": "activate",
+          "callee": "run",
+          "lineNumber": 86
+        },
+        {
+          "caller": "activate",
+          "callee": "run",
+          "lineNumber": 87
+        },
+        {
+          "caller": "activate",
+          "callee": "time.sleep",
+          "lineNumber": 88
+        },
+        {
+          "caller": "window_geometry",
+          "callee": "run",
+          "lineNumber": 93
+        },
+        {
+          "caller": "window_geometry",
+          "callee": "r.stdout.splitlines",
+          "lineNumber": 95
+        },
+        {
+          "caller": "window_geometry",
+          "callee": "line.strip().split",
+          "lineNumber": 97
+        },
+        {
+          "caller": "window_geometry",
+          "callee": "line.strip",
+          "lineNumber": 97
+        },
+        {
+          "caller": "screenshot",
+          "callee": "shutil.which",
+          "lineNumber": 104
+        },
+        {
+          "caller": "screenshot",
+          "callee": "shutil.which",
+          "lineNumber": 107
+        },
+        {
+          "caller": "screenshot",
+          "callee": "die",
+          "lineNumber": 110
+        },
+        {
+          "caller": "screenshot",
+          "callee": "run",
+          "lineNumber": 111
+        },
+        {
+          "caller": "screenshot",
+          "callee": "die",
+          "lineNumber": 113
+        },
+        {
+          "caller": "screenshot",
+          "callee": "r.stderr.strip",
+          "lineNumber": 113
+        },
+        {
+          "caller": "screenshot",
+          "callee": "print",
+          "lineNumber": 114
+        },
+        {
+          "caller": "screenshot",
+          "callee": "log",
+          "lineNumber": 115
+        },
+        {
+          "caller": "cmd_env",
+          "callee": "require_env",
+          "lineNumber": 121
+        },
+        {
+          "caller": "cmd_env",
+          "callee": "run([\"xdotool\", \"--version\"]).stdout.strip",
+          "lineNumber": 122
+        },
+        {
+          "caller": "cmd_env",
+          "callee": "run",
+          "lineNumber": 122
+        },
+        {
+          "caller": "cmd_env",
+          "callee": "print",
+          "lineNumber": 123
+        },
+        {
+          "caller": "cmd_env",
+          "callee": "print",
+          "lineNumber": 124
+        },
+        {
+          "caller": "cmd_env",
+          "callee": "run(['xdotool', 'getdisplaygeometry']).stdout.strip",
+          "lineNumber": 124
+        },
+        {
+          "caller": "cmd_env",
+          "callee": "run",
+          "lineNumber": 124
+        },
+        {
+          "caller": "get_window_name",
+          "callee": "run([\"xdotool\", \"getwindowname\", wid]).stdout.strip",
+          "lineNumber": 130
+        },
+        {
+          "caller": "get_window_name",
+          "callee": "run",
+          "lineNumber": 130
+        },
+        {
+          "caller": "get_window_name",
+          "callee": "run",
+          "lineNumber": 134
+        },
+        {
+          "caller": "get_window_name",
+          "callee": "out.splitlines",
+          "lineNumber": 135
+        },
+        {
+          "caller": "get_window_name",
+          "callee": "line.split(\"=\", 1)[1].strip().strip",
+          "lineNumber": 137
+        },
+        {
+          "caller": "get_window_name",
+          "callee": "line.split(\"=\", 1)[1].strip",
+          "lineNumber": 137
+        },
+        {
+          "caller": "get_window_name",
+          "callee": "line.split",
+          "lineNumber": 137
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "require_env",
+          "lineNumber": 146
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "print",
+          "lineNumber": 147
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "run",
+          "lineNumber": 148
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "r.stdout.split",
+          "lineNumber": 149
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "get_window_name",
+          "lineNumber": 150
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "\" \".join",
+          "lineNumber": 151
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "run([\"xdotool\", \"getwindowgeometry\", wid]).stdout.split",
+          "lineNumber": 151
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "run",
+          "lineNumber": 151
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "print",
+          "lineNumber": 152
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "print",
+          "lineNumber": 153
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "run([\"xdotool\", \"getactivewindow\"]).stdout.strip",
+          "lineNumber": 154
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "run",
+          "lineNumber": 154
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "get_window_name",
+          "lineNumber": 155
+        },
+        {
+          "caller": "cmd_state",
+          "callee": "print",
+          "lineNumber": 156
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "require_env",
+          "lineNumber": 160
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "run",
+          "lineNumber": 161
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "r.stdout.split",
+          "lineNumber": 162
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "r.stdout.strip",
+          "lineNumber": 162
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "run",
+          "lineNumber": 164
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "r.stdout.split",
+          "lineNumber": 165
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "r.stdout.strip",
+          "lineNumber": 165
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "die",
+          "lineNumber": 167
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "len",
+          "lineNumber": 168
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "print",
+          "lineNumber": 169
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "len",
+          "lineNumber": 169
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "print",
+          "lineNumber": 171
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "get_window_name",
+          "lineNumber": 171
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "lock_wid",
+          "lineNumber": 173
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "get_window_name",
+          "lineNumber": 174
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "log",
+          "lineNumber": 175
+        },
+        {
+          "caller": "cmd_find",
+          "callee": "print",
+          "lineNumber": 176
+        },
+        {
+          "caller": "cmd_shot",
+          "callee": "require_env",
+          "lineNumber": 180
+        },
+        {
+          "caller": "cmd_shot",
+          "callee": "load_wid",
+          "lineNumber": 181
+        },
+        {
+          "caller": "cmd_shot",
+          "callee": "screenshot",
+          "lineNumber": 182
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "require_env",
+          "lineNumber": 186
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "load_wid",
+          "lineNumber": 187
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "activate",
+          "lineNumber": 188
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "run",
+          "lineNumber": 189
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "str",
+          "lineNumber": 189
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "str",
+          "lineNumber": 189
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "time.sleep",
+          "lineNumber": 190
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "run",
+          "lineNumber": 191
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "str",
+          "lineNumber": 191
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "str",
+          "lineNumber": 191
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "time.sleep",
+          "lineNumber": 192
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "shutil.which",
+          "lineNumber": 193
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "run",
+          "lineNumber": 194
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "print",
+          "lineNumber": 195
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "log",
+          "lineNumber": 196
+        },
+        {
+          "caller": "cmd_click",
+          "callee": "print",
+          "lineNumber": 197
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "require_env",
+          "lineNumber": 201
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "load_wid",
+          "lineNumber": 202
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "activate",
+          "lineNumber": 203
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "run",
+          "lineNumber": 204
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "str",
+          "lineNumber": 204
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "str",
+          "lineNumber": 204
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "time.sleep",
+          "lineNumber": 205
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "run",
+          "lineNumber": 206
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "str",
+          "lineNumber": 206
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "max",
+          "lineNumber": 207
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "range",
+          "lineNumber": 208
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "run",
+          "lineNumber": 211
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "str",
+          "lineNumber": 211
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "str",
+          "lineNumber": 211
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "time.sleep",
+          "lineNumber": 212
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "time.sleep",
+          "lineNumber": 213
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "run",
+          "lineNumber": 214
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "str",
+          "lineNumber": 214
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "time.sleep",
+          "lineNumber": 215
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "log",
+          "lineNumber": 216
+        },
+        {
+          "caller": "cmd_drag",
+          "callee": "print",
+          "lineNumber": 217
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "require_env",
+          "lineNumber": 221
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "{\"up\": 4, \"down\": 5, \"left\": 6, \"right\": 7}.get",
+          "lineNumber": 222
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "die",
+          "lineNumber": 224
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "run",
+          "lineNumber": 225
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "str",
+          "lineNumber": 225
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "str",
+          "lineNumber": 225
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "time.sleep",
+          "lineNumber": 226
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "run",
+          "lineNumber": 227
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "str",
+          "lineNumber": 227
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "str",
+          "lineNumber": 227
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "time.sleep",
+          "lineNumber": 228
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "log",
+          "lineNumber": 229
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "load_wid",
+          "lineNumber": 229
+        },
+        {
+          "caller": "cmd_scroll",
+          "callee": "print",
+          "lineNumber": 230
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "require_env",
+          "lineNumber": 234
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "load_wid",
+          "lineNumber": 235
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "run",
+          "lineNumber": 237
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "run",
+          "lineNumber": 238
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "time.sleep",
+          "lineNumber": 239
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "run",
+          "lineNumber": 241
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "str",
+          "lineNumber": 241
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "log",
+          "lineNumber": 242
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "len",
+          "lineNumber": 242
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "print",
+          "lineNumber": 243
+        },
+        {
+          "caller": "cmd_type",
+          "callee": "len",
+          "lineNumber": 243
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "require_env",
+          "lineNumber": 247
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "load_wid",
+          "lineNumber": 248
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "run",
+          "lineNumber": 250
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "run",
+          "lineNumber": 251
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "time.sleep",
+          "lineNumber": 252
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "run",
+          "lineNumber": 253
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "log",
+          "lineNumber": 254
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "' '.join",
+          "lineNumber": 254
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "print",
+          "lineNumber": 255
+        },
+        {
+          "caller": "cmd_key",
+          "callee": "' '.join",
+          "lineNumber": 255
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "require_env",
+          "lineNumber": 259
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "time.time",
+          "lineNumber": 260
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "time.time",
+          "lineNumber": 261
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "run",
+          "lineNumber": 262
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "len",
+          "lineNumber": 263
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "r.stdout.split",
+          "lineNumber": 263
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "print",
+          "lineNumber": 265
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "print",
+          "lineNumber": 268
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "time.sleep",
+          "lineNumber": 270
+        },
+        {
+          "caller": "cmd_wait",
+          "callee": "print",
+          "lineNumber": 271
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "require_env",
+          "lineNumber": 277
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "print",
+          "lineNumber": 278
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "cmd_env",
+          "lineNumber": 279
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "shutil.which",
+          "lineNumber": 280
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "print",
+          "lineNumber": 281
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "os.getpid",
+          "lineNumber": 283
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "print",
+          "lineNumber": 284
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "subprocess.Popen",
+          "lineNumber": 285
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "time.sleep",
+          "lineNumber": 286
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "print",
+          "lineNumber": 287
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "cmd_find",
+          "lineNumber": 288
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "SimpleNamespace",
+          "lineNumber": 288
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "load_wid",
+          "lineNumber": 289
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "window_geometry",
+          "lineNumber": 290
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "print",
+          "lineNumber": 291
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "screenshot",
+          "lineNumber": 292
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "print",
+          "lineNumber": 293
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "int",
+          "lineNumber": 294
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "geo.get",
+          "lineNumber": 294
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "int",
+          "lineNumber": 295
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "geo.get",
+          "lineNumber": 295
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "cmd_click",
+          "lineNumber": 296
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "SimpleNamespace",
+          "lineNumber": 296
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "time.sleep",
+          "lineNumber": 298
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "print",
+          "lineNumber": 299
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "run",
+          "lineNumber": 300
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "r.stdout.strip",
+          "lineNumber": 301
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "print",
+          "lineNumber": 302
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "proc.kill",
+          "lineNumber": 303
+        },
+        {
+          "caller": "cmd_smoke",
+          "callee": "print",
+          "lineNumber": 305
+        },
+        {
+          "caller": "build_parser",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 312
+        },
+        {
+          "caller": "build_parser",
+          "callee": "p.add_subparsers",
+          "lineNumber": 316
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser(\"env\", help=\"环境检查（X11/DISPLAY/xdotool）\").set_defaults",
+          "lineNumber": 318
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 318
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser(\"state\", help=\"窗口状态快照（可见窗口+焦点）\").set_defaults",
+          "lineNumber": 319
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 319
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 321
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 322
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.set_defaults",
+          "lineNumber": 323
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 325
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 326
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 327
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.set_defaults",
+          "lineNumber": 328
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 330
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 331
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 332
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 333
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 334
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 335
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.set_defaults",
+          "lineNumber": 336
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 338
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 339
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 339
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 340
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 340
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 341
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 342
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.set_defaults",
+          "lineNumber": 343
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 345
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 346
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 346
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 347
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 348
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.set_defaults",
+          "lineNumber": 349
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 351
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 352
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 353
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.set_defaults",
+          "lineNumber": 354
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 356
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 357
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.set_defaults",
+          "lineNumber": 358
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 360
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 361
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 362
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.add_argument",
+          "lineNumber": 363
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sp.set_defaults",
+          "lineNumber": 364
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser(\"smoke\", help=\"冒烟测试\").set_defaults",
+          "lineNumber": 366
+        },
+        {
+          "caller": "build_parser",
+          "callee": "sub.add_parser",
+          "lineNumber": 366
+        },
+        {
+          "caller": "main",
+          "callee": "build_parser().parse_args",
+          "lineNumber": 371
+        },
+        {
+          "caller": "main",
+          "callee": "build_parser",
+          "lineNumber": 371
+        },
+        {
+          "caller": "main",
+          "callee": "getattr",
+          "lineNumber": 372
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 373
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 374
+        },
+        {
+          "caller": "main",
+          "callee": "sys.exit",
+          "lineNumber": 375
+        },
+        {
+          "caller": "main",
+          "callee": "args.func",
+          "lineNumber": 375
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 23,
+        "functionCount": 23,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/__init__.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 9,
+      "nonEmptyLines": 8,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/fail.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 27,
+      "nonEmptyLines": 27,
+      "sections": [
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "task_id",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "session_id",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "pid",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "display",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "cellview",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "steps",
+          "level": 1,
+          "line": 12
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/pass.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 41,
+      "nonEmptyLines": 41,
+      "sections": [
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "task_id",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "session_id",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "pid",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "display",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "cellview",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "steps",
+          "level": 1,
+          "line": 12
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 370,
+      "nonEmptyLines": 331,
+      "functions": [
+        {
+          "name": "write_scenario",
+          "startLine": 14,
+          "endLine": 16,
+          "params": [
+            "path",
+            "data"
+          ]
+        },
+        {
+          "name": "write_outcomes",
+          "startLine": 19,
+          "endLine": 22,
+          "params": [
+            "path",
+            "outcomes_list"
+          ]
+        },
+        {
+          "name": "clean_env",
+          "startLine": 25,
+          "endLine": 30,
+          "params": []
+        },
+        {
+          "name": "run_cli",
+          "startLine": 33,
+          "endLine": 43,
+          "params": [
+            "*args",
+            "env"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "TestCliValidate",
+          "startLine": 64,
+          "endLine": 107,
+          "methods": [
+            "test_validate_returns_zero_on_valid",
+            "test_validate_returns_two_on_invalid",
+            "test_validate_version_2_rejected"
+          ],
+          "properties": []
+        },
+        {
+          "name": "TestCliRunFake",
+          "startLine": 110,
+          "endLine": 211,
+          "methods": [
+            "test_run_fake_returns_zero_on_pass",
+            "test_run_fake_returns_one_on_failure",
+            "test_run_refuses_non_fake_executor",
+            "test_run_returns_two_on_invalid_scenario",
+            "test_run_unknown_scenario_file"
+          ],
+          "properties": []
+        },
+        {
+          "name": "TestCliRunLive",
+          "startLine": 214,
+          "endLine": 313,
+          "methods": [
+            "_run_live",
+            "_write_scenario",
+            "test_live_requires_session",
+            "test_live_requires_vcli",
+            "test_live_rejects_scenario_session_mismatch",
+            "test_live_rejects_unsafe_ssh_host",
+            "test_live_fails_closed_on_missing_session_query"
+          ],
+          "properties": []
+        },
+        {
+          "name": "TestCliMachineReadableOutput",
+          "startLine": 316,
+          "endLine": 347,
+          "methods": [
+            "test_stdout_is_valid_json_on_pass",
+            "test_stdout_is_valid_json_on_invalid"
+          ],
+          "properties": []
+        },
+        {
+          "name": "TestNoOutputOutsideDir",
+          "startLine": 350,
+          "endLine": 366,
+          "methods": [
+            "test_no_files_outside_output_dir"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "write_scenario",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "write_outcomes",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "clean_env",
+          "line": 25,
+          "isDefault": false
+        },
+        {
+          "name": "run_cli",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "TestCliValidate",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "TestCliRunFake",
+          "line": 110,
+          "isDefault": false
+        },
+        {
+          "name": "TestCliRunLive",
+          "line": 214,
+          "isDefault": false
+        },
+        {
+          "name": "TestCliMachineReadableOutput",
+          "line": 316,
+          "isDefault": false
+        },
+        {
+          "name": "TestNoOutputOutsideDir",
+          "line": 350,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "write_scenario",
+          "callee": "open",
+          "lineNumber": 15
+        },
+        {
+          "caller": "write_scenario",
+          "callee": "json.dump",
+          "lineNumber": 16
+        },
+        {
+          "caller": "write_outcomes",
+          "callee": "open",
+          "lineNumber": 21
+        },
+        {
+          "caller": "write_outcomes",
+          "callee": "json.dump",
+          "lineNumber": 22
+        },
+        {
+          "caller": "clean_env",
+          "callee": "os.environ.copy",
+          "lineNumber": 27
+        },
+        {
+          "caller": "clean_env",
+          "callee": "env.pop",
+          "lineNumber": 29
+        },
+        {
+          "caller": "run_cli",
+          "callee": "clean_env",
+          "lineNumber": 36
+        },
+        {
+          "caller": "run_cli",
+          "callee": "subprocess.run",
+          "lineNumber": 37
+        },
+        {
+          "caller": "run_cli",
+          "callee": "str",
+          "lineNumber": 38
+        },
+        {
+          "caller": "run_cli",
+          "callee": "list",
+          "lineNumber": 38
+        },
+        {
+          "caller": "test_validate_returns_zero_on_valid",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 66
+        },
+        {
+          "caller": "test_validate_returns_zero_on_valid",
+          "callee": "write_scenario",
+          "lineNumber": 67
+        },
+        {
+          "caller": "test_validate_returns_zero_on_valid",
+          "callee": "run_cli",
+          "lineNumber": 70
+        },
+        {
+          "caller": "test_validate_returns_zero_on_valid",
+          "callee": "self.assertEqual",
+          "lineNumber": 71
+        },
+        {
+          "caller": "test_validate_returns_zero_on_valid",
+          "callee": "json.loads",
+          "lineNumber": 72
+        },
+        {
+          "caller": "test_validate_returns_zero_on_valid",
+          "callee": "self.assertEqual",
+          "lineNumber": 73
+        },
+        {
+          "caller": "test_validate_returns_zero_on_valid",
+          "callee": "self.assertEqual",
+          "lineNumber": 74
+        },
+        {
+          "caller": "test_validate_returns_zero_on_valid",
+          "callee": "os.unlink",
+          "lineNumber": 76
+        },
+        {
+          "caller": "test_validate_returns_two_on_invalid",
+          "callee": "dict",
+          "lineNumber": 79
+        },
+        {
+          "caller": "test_validate_returns_two_on_invalid",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 81
+        },
+        {
+          "caller": "test_validate_returns_two_on_invalid",
+          "callee": "write_scenario",
+          "lineNumber": 82
+        },
+        {
+          "caller": "test_validate_returns_two_on_invalid",
+          "callee": "run_cli",
+          "lineNumber": 85
+        },
+        {
+          "caller": "test_validate_returns_two_on_invalid",
+          "callee": "self.assertEqual",
+          "lineNumber": 86
+        },
+        {
+          "caller": "test_validate_returns_two_on_invalid",
+          "callee": "json.loads",
+          "lineNumber": 88
+        },
+        {
+          "caller": "test_validate_returns_two_on_invalid",
+          "callee": "self.assertEqual",
+          "lineNumber": 89
+        },
+        {
+          "caller": "test_validate_returns_two_on_invalid",
+          "callee": "self.assertIn",
+          "lineNumber": 90
+        },
+        {
+          "caller": "test_validate_returns_two_on_invalid",
+          "callee": "os.unlink",
+          "lineNumber": 92
+        },
+        {
+          "caller": "test_validate_version_2_rejected",
+          "callee": "dict",
+          "lineNumber": 95
+        },
+        {
+          "caller": "test_validate_version_2_rejected",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 97
+        },
+        {
+          "caller": "test_validate_version_2_rejected",
+          "callee": "write_scenario",
+          "lineNumber": 98
+        },
+        {
+          "caller": "test_validate_version_2_rejected",
+          "callee": "run_cli",
+          "lineNumber": 101
+        },
+        {
+          "caller": "test_validate_version_2_rejected",
+          "callee": "self.assertEqual",
+          "lineNumber": 102
+        },
+        {
+          "caller": "test_validate_version_2_rejected",
+          "callee": "json.loads",
+          "lineNumber": 103
+        },
+        {
+          "caller": "test_validate_version_2_rejected",
+          "callee": "self.assertEqual",
+          "lineNumber": 104
+        },
+        {
+          "caller": "test_validate_version_2_rejected",
+          "callee": "self.assertIn",
+          "lineNumber": 105
+        },
+        {
+          "caller": "test_validate_version_2_rejected",
+          "callee": "os.unlink",
+          "lineNumber": 107
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 112
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 113
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "Path",
+          "lineNumber": 114
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 116
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "write_scenario",
+          "lineNumber": 117
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "run_cli",
+          "lineNumber": 120
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "str",
+          "lineNumber": 120
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "self.assertEqual",
+          "lineNumber": 121
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "json.loads",
+          "lineNumber": 122
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "self.assertEqual",
+          "lineNumber": 123
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "os.unlink",
+          "lineNumber": 125
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "shutil.rmtree",
+          "lineNumber": 127
+        },
+        {
+          "caller": "test_run_fake_returns_zero_on_pass",
+          "callee": "shutil.rmtree",
+          "lineNumber": 128
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 131
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 132
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "Path",
+          "lineNumber": 133
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 135
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "write_scenario",
+          "lineNumber": 136
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "Path",
+          "lineNumber": 139
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "write_outcomes",
+          "lineNumber": 140
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "run_cli",
+          "lineNumber": 145
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "str",
+          "lineNumber": 147
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "str",
+          "lineNumber": 149
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "self.assertEqual",
+          "lineNumber": 151
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "json.loads",
+          "lineNumber": 152
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "self.assertEqual",
+          "lineNumber": 153
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "os.unlink",
+          "lineNumber": 155
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "os.unlink",
+          "lineNumber": 156
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "shutil.rmtree",
+          "lineNumber": 158
+        },
+        {
+          "caller": "test_run_fake_returns_one_on_failure",
+          "callee": "shutil.rmtree",
+          "lineNumber": 159
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 162
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 163
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "Path",
+          "lineNumber": 164
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 166
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "write_scenario",
+          "lineNumber": 167
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "run_cli",
+          "lineNumber": 170
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "str",
+          "lineNumber": 170
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "self.assertEqual",
+          "lineNumber": 171
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "json.loads",
+          "lineNumber": 172
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "self.assertEqual",
+          "lineNumber": 173
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "self.assertIn",
+          "lineNumber": 174
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "os.unlink",
+          "lineNumber": 176
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "shutil.rmtree",
+          "lineNumber": 178
+        },
+        {
+          "caller": "test_run_refuses_non_fake_executor",
+          "callee": "shutil.rmtree",
+          "lineNumber": 179
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 182
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 183
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "Path",
+          "lineNumber": 184
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "dict",
+          "lineNumber": 186
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 188
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "write_scenario",
+          "lineNumber": 189
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "run_cli",
+          "lineNumber": 192
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "str",
+          "lineNumber": 192
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "self.assertEqual",
+          "lineNumber": 193
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "json.loads",
+          "lineNumber": 194
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "self.assertEqual",
+          "lineNumber": 195
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "os.unlink",
+          "lineNumber": 197
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "shutil.rmtree",
+          "lineNumber": 199
+        },
+        {
+          "caller": "test_run_returns_two_on_invalid_scenario",
+          "callee": "shutil.rmtree",
+          "lineNumber": 200
+        },
+        {
+          "caller": "test_run_unknown_scenario_file",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 203
+        },
+        {
+          "caller": "test_run_unknown_scenario_file",
+          "callee": "Path",
+          "lineNumber": 204
+        },
+        {
+          "caller": "test_run_unknown_scenario_file",
+          "callee": "run_cli",
+          "lineNumber": 206
+        },
+        {
+          "caller": "test_run_unknown_scenario_file",
+          "callee": "str",
+          "lineNumber": 206
+        },
+        {
+          "caller": "test_run_unknown_scenario_file",
+          "callee": "self.assertEqual",
+          "lineNumber": 207
+        },
+        {
+          "caller": "test_run_unknown_scenario_file",
+          "callee": "json.loads",
+          "lineNumber": 208
+        },
+        {
+          "caller": "test_run_unknown_scenario_file",
+          "callee": "self.assertEqual",
+          "lineNumber": 209
+        },
+        {
+          "caller": "test_run_unknown_scenario_file",
+          "callee": "shutil.rmtree",
+          "lineNumber": 211
+        },
+        {
+          "caller": "_run_live",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 218
+        },
+        {
+          "caller": "_run_live",
+          "callee": "Path",
+          "lineNumber": 219
+        },
+        {
+          "caller": "_run_live",
+          "callee": "run_cli",
+          "lineNumber": 221
+        },
+        {
+          "caller": "_run_live",
+          "callee": "str",
+          "lineNumber": 222
+        },
+        {
+          "caller": "_run_live",
+          "callee": "shutil.rmtree",
+          "lineNumber": 227
+        },
+        {
+          "caller": "_write_scenario",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 230
+        },
+        {
+          "caller": "_write_scenario",
+          "callee": "dict",
+          "lineNumber": 231
+        },
+        {
+          "caller": "_write_scenario",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 233
+        },
+        {
+          "caller": "_write_scenario",
+          "callee": "write_scenario",
+          "lineNumber": 236
+        },
+        {
+          "caller": "test_live_requires_session",
+          "callee": "self._write_scenario",
+          "lineNumber": 240
+        },
+        {
+          "caller": "test_live_requires_session",
+          "callee": "self._run_live",
+          "lineNumber": 242
+        },
+        {
+          "caller": "test_live_requires_session",
+          "callee": "self.assertEqual",
+          "lineNumber": 243
+        },
+        {
+          "caller": "test_live_requires_session",
+          "callee": "json.loads",
+          "lineNumber": 244
+        },
+        {
+          "caller": "test_live_requires_session",
+          "callee": "self.assertEqual",
+          "lineNumber": 245
+        },
+        {
+          "caller": "test_live_requires_session",
+          "callee": "self.assertIn",
+          "lineNumber": 246
+        },
+        {
+          "caller": "test_live_requires_session",
+          "callee": "os.unlink",
+          "lineNumber": 248
+        },
+        {
+          "caller": "test_live_requires_session",
+          "callee": "shutil.rmtree",
+          "lineNumber": 249
+        },
+        {
+          "caller": "test_live_requires_vcli",
+          "callee": "self._write_scenario",
+          "lineNumber": 252
+        },
+        {
+          "caller": "test_live_requires_vcli",
+          "callee": "self._run_live",
+          "lineNumber": 254
+        },
+        {
+          "caller": "test_live_requires_vcli",
+          "callee": "self.assertEqual",
+          "lineNumber": 255
+        },
+        {
+          "caller": "test_live_requires_vcli",
+          "callee": "json.loads",
+          "lineNumber": 256
+        },
+        {
+          "caller": "test_live_requires_vcli",
+          "callee": "self.assertIn",
+          "lineNumber": 257
+        },
+        {
+          "caller": "test_live_requires_vcli",
+          "callee": "os.unlink",
+          "lineNumber": 259
+        },
+        {
+          "caller": "test_live_requires_vcli",
+          "callee": "shutil.rmtree",
+          "lineNumber": 260
+        },
+        {
+          "caller": "test_live_rejects_scenario_session_mismatch",
+          "callee": "self._write_scenario",
+          "lineNumber": 263
+        },
+        {
+          "caller": "test_live_rejects_scenario_session_mismatch",
+          "callee": "self._run_live",
+          "lineNumber": 265
+        },
+        {
+          "caller": "test_live_rejects_scenario_session_mismatch",
+          "callee": "self.assertEqual",
+          "lineNumber": 268
+        },
+        {
+          "caller": "test_live_rejects_scenario_session_mismatch",
+          "callee": "json.loads",
+          "lineNumber": 269
+        },
+        {
+          "caller": "test_live_rejects_scenario_session_mismatch",
+          "callee": "self.assertIn",
+          "lineNumber": 270
+        },
+        {
+          "caller": "test_live_rejects_scenario_session_mismatch",
+          "callee": "os.unlink",
+          "lineNumber": 272
+        },
+        {
+          "caller": "test_live_rejects_scenario_session_mismatch",
+          "callee": "shutil.rmtree",
+          "lineNumber": 273
+        },
+        {
+          "caller": "test_live_rejects_unsafe_ssh_host",
+          "callee": "self._write_scenario",
+          "lineNumber": 276
+        },
+        {
+          "caller": "test_live_rejects_unsafe_ssh_host",
+          "callee": "self._run_live",
+          "lineNumber": 278
+        },
+        {
+          "caller": "test_live_rejects_unsafe_ssh_host",
+          "callee": "self.assertEqual",
+          "lineNumber": 284
+        },
+        {
+          "caller": "test_live_rejects_unsafe_ssh_host",
+          "callee": "json.loads",
+          "lineNumber": 285
+        },
+        {
+          "caller": "test_live_rejects_unsafe_ssh_host",
+          "callee": "self.assertEqual",
+          "lineNumber": 286
+        },
+        {
+          "caller": "test_live_rejects_unsafe_ssh_host",
+          "callee": "os.unlink",
+          "lineNumber": 288
+        },
+        {
+          "caller": "test_live_rejects_unsafe_ssh_host",
+          "callee": "shutil.rmtree",
+          "lineNumber": 289
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "self._write_scenario",
+          "lineNumber": 294
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "Path",
+          "lineNumber": 295
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "stub.write_text",
+          "lineNumber": 296
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "stub.chmod",
+          "lineNumber": 300
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "self._run_live",
+          "lineNumber": 302
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "str",
+          "lineNumber": 305
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "self.assertEqual",
+          "lineNumber": 307
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "json.loads",
+          "lineNumber": 308
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "self.assertEqual",
+          "lineNumber": 309
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "self.assertEqual",
+          "lineNumber": 310
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "os.unlink",
+          "lineNumber": 312
+        },
+        {
+          "caller": "test_live_fails_closed_on_missing_session_query",
+          "callee": "shutil.rmtree",
+          "lineNumber": 313
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 318
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 319
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "Path",
+          "lineNumber": 320
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 322
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "write_scenario",
+          "lineNumber": 323
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "run_cli",
+          "lineNumber": 326
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "str",
+          "lineNumber": 326
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "json.loads",
+          "lineNumber": 327
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "self.assertIn",
+          "lineNumber": 328
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "self.assertEqual",
+          "lineNumber": 329
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "os.unlink",
+          "lineNumber": 331
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "shutil.rmtree",
+          "lineNumber": 333
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_pass",
+          "callee": "shutil.rmtree",
+          "lineNumber": 334
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_invalid",
+          "callee": "dict",
+          "lineNumber": 337
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_invalid",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 339
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_invalid",
+          "callee": "write_scenario",
+          "lineNumber": 340
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_invalid",
+          "callee": "run_cli",
+          "lineNumber": 343
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_invalid",
+          "callee": "json.loads",
+          "lineNumber": 344
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_invalid",
+          "callee": "self.assertEqual",
+          "lineNumber": 345
+        },
+        {
+          "caller": "test_stdout_is_valid_json_on_invalid",
+          "callee": "os.unlink",
+          "lineNumber": 347
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 352
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "tempfile.mkdtemp",
+          "lineNumber": 353
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "Path",
+          "lineNumber": 354
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "tempfile.NamedTemporaryFile",
+          "lineNumber": 356
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "write_scenario",
+          "lineNumber": 357
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "run_cli",
+          "lineNumber": 359
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "str",
+          "lineNumber": 359
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "os.listdir",
+          "lineNumber": 360
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "e.endswith",
+          "lineNumber": 361
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "self.assertEqual",
+          "lineNumber": 362
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "os.unlink",
+          "lineNumber": 363
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "shutil.rmtree",
+          "lineNumber": 365
+        },
+        {
+          "caller": "test_no_files_outside_output_dir",
+          "callee": "shutil.rmtree",
+          "lineNumber": 366
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 9,
+        "functionCount": 4,
+        "classCount": 5
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

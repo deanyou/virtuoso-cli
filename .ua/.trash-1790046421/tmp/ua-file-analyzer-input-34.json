@@ -1,0 +1,184 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".agents/skills/spec-driven-circuit-design/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 333,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/spectre-netlist-gotchas/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 251,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/spectre-netlist-template/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 499,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/spectre-netlist-template/scripts/inject_stimulus.py",
+      "language": "python",
+      "sizeLines": 593,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/tunnel-connect/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 39,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/veriloga/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 308,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/rsi_share.json",
+      "language": "json",
+      "sizeLines": 111258,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3",
+      "language": "sqlite3",
+      "sizeLines": 84605,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/skill_db_backup.json",
+      "language": "json",
+      "sizeLines": 257730,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/data/vcli_snippets.il",
+      "language": "il",
+      "sizeLines": 56,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "language": "markdown",
+      "sizeLines": 238,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "language": "markdown",
+      "sizeLines": 73,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "language": "html",
+      "sizeLines": 467,
+      "fileCategory": "markup"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "language": "python",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "language": "python",
+      "sizeLines": 385,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "language": "python",
+      "sizeLines": 121,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "language": "python",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "language": "python",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/promote.py",
+      "language": "python",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "language": "python",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "language": "python",
+      "sizeLines": 664,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "language": "python",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "language": "python",
+      "sizeLines": 255,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "language": "python",
+      "sizeLines": 172,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "language": "python",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    ".agents/skills/spec-driven-circuit-design/SKILL.md": [],
+    ".agents/skills/spectre-netlist-gotchas/SKILL.md": [],
+    ".agents/skills/spectre-netlist-template/SKILL.md": [],
+    ".agents/skills/spectre-netlist-template/scripts/inject_stimulus.py": [],
+    ".agents/skills/tunnel-connect/SKILL.md": [],
+    ".agents/skills/veriloga/SKILL.md": [],
+    ".agents/skills/virtuoso-gui-debug/data/rsi_share.json": [],
+    ".agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3": [],
+    ".agents/skills/virtuoso-gui-debug/data/skill_db_backup.json": [],
+    ".agents/skills/virtuoso-gui-debug/data/vcli_snippets.il": [],
+    ".agents/skills/virtuoso-gui-debug/references/scenario-schema.md": [],
+    ".agents/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md": [],
+    ".agents/skills/virtuoso-gui-debug/report/rsi_report.html": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/add_fts.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/generate_report.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/import_fnd.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/init_snippets.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/init_synonyms.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/promote.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/record_progress.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/rsi.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/rsi_export.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/rsi_query.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/snippet_library.py": [],
+    ".agents/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py": [
+      ".agents/skills/virtuoso-gui-debug/scripts/rsi_query.py"
+    ]
+  }
+}

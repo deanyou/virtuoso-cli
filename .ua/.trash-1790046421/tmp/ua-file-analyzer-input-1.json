@@ -1,0 +1,275 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "src/spectre/jobs.rs",
+      "language": "rust",
+      "sizeLines": 240,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/action.rs",
+      "language": "rust",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/data.rs",
+      "language": "rust",
+      "sizeLines": 133,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/event.rs",
+      "language": "rust",
+      "sizeLines": 220,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/mod.rs",
+      "language": "rust",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/overlay.rs",
+      "language": "rust",
+      "sizeLines": 141,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/app/state.rs",
+      "language": "rust",
+      "sizeLines": 164,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/mod.rs",
+      "language": "rust",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/theme.rs",
+      "language": "rust",
+      "sizeLines": 57,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/chrome.rs",
+      "language": "rust",
+      "sizeLines": 146,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/config.rs",
+      "language": "rust",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/content.rs",
+      "language": "rust",
+      "sizeLines": 39,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/footer.rs",
+      "language": "rust",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/jobs.rs",
+      "language": "rust",
+      "sizeLines": 170,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/mod.rs",
+      "language": "rust",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/confirm.rs",
+      "language": "rust",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/form.rs",
+      "language": "rust",
+      "sizeLines": 83,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/help.rs",
+      "language": "rust",
+      "sizeLines": 45,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/layout.rs",
+      "language": "rust",
+      "sizeLines": 170,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/log.rs",
+      "language": "rust",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/mod.rs",
+      "language": "rust",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/overlay/render.rs",
+      "language": "rust",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/sessions.rs",
+      "language": "rust",
+      "sizeLines": 131,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/tui/ui/shared.rs",
+      "language": "rust",
+      "sizeLines": 110,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "src/spectre/jobs.rs": [
+      "src/error.rs"
+    ],
+    "src/tui/app/action.rs": [
+      "src/spectre/jobs.rs",
+      "src/tui/app/overlay.rs",
+      "src/tui/app/state.rs"
+    ],
+    "src/tui/app/data.rs": [
+      "src/config_file.rs",
+      "src/error.rs",
+      "src/models.rs",
+      "src/spectre/jobs.rs",
+      "src/tui/app/state.rs"
+    ],
+    "src/tui/app/event.rs": [
+      "src/spectre/jobs.rs",
+      "src/tui/app/action.rs",
+      "src/tui/app/overlay.rs",
+      "src/tui/app/state.rs"
+    ],
+    "src/tui/app/mod.rs": [
+      "src/tui/app/action.rs",
+      "src/tui/app/data.rs",
+      "src/tui/app/event.rs",
+      "src/tui/app/overlay.rs",
+      "src/tui/app/state.rs"
+    ],
+    "src/tui/app/overlay.rs": [],
+    "src/tui/app/state.rs": [
+      "src/models.rs",
+      "src/spectre/jobs.rs",
+      "src/tui/app/overlay.rs"
+    ],
+    "src/tui/mod.rs": [
+      "src/error.rs",
+      "src/tui/app/mod.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/mod.rs"
+    ],
+    "src/tui/theme.rs": [],
+    "src/tui/ui/chrome.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/config.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/content.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/mod.rs"
+    ],
+    "src/tui/ui/footer.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs"
+    ],
+    "src/tui/ui/jobs.rs": [
+      "src/spectre/jobs.rs",
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/mod.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/chrome.rs",
+      "src/tui/ui/config.rs",
+      "src/tui/ui/content.rs",
+      "src/tui/ui/footer.rs",
+      "src/tui/ui/jobs.rs",
+      "src/tui/ui/overlay/mod.rs",
+      "src/tui/ui/sessions.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/confirm.rs": [
+      "src/tui/app/overlay.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/form.rs": [
+      "src/tui/app/overlay.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/help.rs": [
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/layout.rs": [],
+    "src/tui/ui/overlay/log.rs": [
+      "src/tui/app/overlay.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/overlay/mod.rs": [
+      "src/tui/ui/overlay/confirm.rs",
+      "src/tui/ui/overlay/form.rs",
+      "src/tui/ui/overlay/help.rs",
+      "src/tui/ui/overlay/layout.rs",
+      "src/tui/ui/overlay/log.rs",
+      "src/tui/ui/overlay/render.rs"
+    ],
+    "src/tui/ui/overlay/render.rs": [
+      "src/tui/app/overlay.rs",
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/overlay/mod.rs"
+    ],
+    "src/tui/ui/sessions.rs": [
+      "src/tui/app/state.rs",
+      "src/tui/theme.rs",
+      "src/tui/ui/shared.rs"
+    ],
+    "src/tui/ui/shared.rs": [
+      "src/tui/theme.rs"
+    ]
+  }
+}

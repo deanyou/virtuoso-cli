@@ -1,0 +1,91 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".workbuddy/memory/2026-08-29.md",
+      "language": "markdown",
+      "sizeLines": 408,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-08-30.md",
+      "language": "markdown",
+      "sizeLines": 423,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-08-31.md",
+      "language": "markdown",
+      "sizeLines": 270,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-01.md",
+      "language": "markdown",
+      "sizeLines": 378,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-02.md",
+      "language": "markdown",
+      "sizeLines": 480,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-03.md",
+      "language": "markdown",
+      "sizeLines": 302,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-04.md",
+      "language": "markdown",
+      "sizeLines": 120,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-05.md",
+      "language": "markdown",
+      "sizeLines": 132,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-07.md",
+      "language": "markdown",
+      "sizeLines": 260,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-08.md",
+      "language": "markdown",
+      "sizeLines": 105,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/2026-09-15.md",
+      "language": "markdown",
+      "sizeLines": 68,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".workbuddy/memory/MEMORY.md",
+      "language": "markdown",
+      "sizeLines": 86,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    ".workbuddy/memory/2026-08-29.md": [],
+    ".workbuddy/memory/2026-08-30.md": [],
+    ".workbuddy/memory/2026-08-31.md": [],
+    ".workbuddy/memory/2026-09-01.md": [],
+    ".workbuddy/memory/2026-09-02.md": [],
+    ".workbuddy/memory/2026-09-03.md": [],
+    ".workbuddy/memory/2026-09-04.md": [],
+    ".workbuddy/memory/2026-09-05.md": [],
+    ".workbuddy/memory/2026-09-07.md": [],
+    ".workbuddy/memory/2026-09-08.md": [],
+    ".workbuddy/memory/2026-09-15.md": [],
+    ".workbuddy/memory/MEMORY.md": []
+  }
+}

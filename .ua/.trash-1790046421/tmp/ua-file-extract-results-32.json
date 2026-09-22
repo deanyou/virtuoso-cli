@@ -1,0 +1,483 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 4,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 4
+    }
+  },
+  "results": [
+    {
+      "path": "docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 172,
+      "nonEmptyLines": 118,
+      "sections": [
+        {
+          "heading": "SKILL Runtime 深化设计",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "目标",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "兼容性约束",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Architecture",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Runtime Interface",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "String literal",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "`require_transport`",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "`require_non_nil`",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "`decode_json`",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "数据流",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "特殊语义",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "迁移范围",
+          "level": 2,
+          "line": 101
+        },
+        {
+          "heading": "`src/commands/sim.rs`",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "`src/commands/process.rs` 与 `src/ocean/mod.rs`",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "`src/commands/schematic.rs` 与 `src/commands/maestro.rs`",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "错误处理",
+          "level": 2,
+          "line": 121
+        },
+        {
+          "heading": "测试策略",
+          "level": 2,
+          "line": 128
+        },
+        {
+          "heading": "Runtime 单元测试",
+          "level": 3,
+          "line": 132
+        },
+        {
+          "heading": "OCEAN builder 回归测试",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "验证命令",
+          "level": 3,
+          "line": 150
+        },
+        {
+          "heading": "非目标",
+          "level": 2,
+          "line": 157
+        },
+        {
+          "heading": "完成标准",
+          "level": 2,
+          "line": 166
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 22
+      }
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-29-native-remote-transport-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 617,
+      "nonEmptyLines": 463,
+      "sections": [
+        {
+          "heading": "Native Remote Transport Design",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Status — ✅ Delivered, published as `v1.2.0` (stable)",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Per-step delivery",
+          "level": 3,
+          "line": 11
+        },
+        {
+          "heading": "Explicit deltas from this design",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Purpose and scope",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Terminology",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "Decisions",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "Architecture",
+          "level": 2,
+          "line": 80
+        },
+        {
+          "heading": "RemoteTransport",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "Concurrency and sharing",
+          "level": 4,
+          "line": 134
+        },
+        {
+          "heading": "Transport daemon",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "Commands affected by `DaemonUnavailable`",
+          "level": 4,
+          "line": 170
+        },
+        {
+          "heading": "Connection identity and sharing",
+          "level": 3,
+          "line": 199
+        },
+        {
+          "heading": "Lifecycle and data flow",
+          "level": 2,
+          "line": 213
+        },
+        {
+          "heading": "Start",
+          "level": 3,
+          "line": 215
+        },
+        {
+          "heading": "Interactive authentication",
+          "level": 3,
+          "line": 221
+        },
+        {
+          "heading": "Commands",
+          "level": 3,
+          "line": 233
+        },
+        {
+          "heading": "File transfer",
+          "level": 3,
+          "line": 237
+        },
+        {
+          "heading": "RAMIC forwarding",
+          "level": 3,
+          "line": 259
+        },
+        {
+          "heading": "Stop and crash recovery",
+          "level": 3,
+          "line": 276
+        },
+        {
+          "heading": "Channel scheduling",
+          "level": 2,
+          "line": 314
+        },
+        {
+          "heading": "Capacity invariant",
+          "level": 4,
+          "line": 327
+        },
+        {
+          "heading": "Reconnection and retry safety",
+          "level": 2,
+          "line": 348
+        },
+        {
+          "heading": "SKILL request retry policy",
+          "level": 2,
+          "line": 356
+        },
+        {
+          "heading": "Host-key and SSH configuration policy",
+          "level": 2,
+          "line": 394
+        },
+        {
+          "heading": "SOCKS5",
+          "level": 2,
+          "line": 411
+        },
+        {
+          "heading": "Local IPC protocol",
+          "level": 2,
+          "line": 419
+        },
+        {
+          "heading": "State-file versioning",
+          "level": 4,
+          "line": 449
+        },
+        {
+          "heading": "Configuration",
+          "level": 2,
+          "line": 467
+        },
+        {
+          "heading": "Backend-specific settings",
+          "level": 3,
+          "line": 486
+        },
+        {
+          "heading": "Feature-gated builds",
+          "level": 3,
+          "line": 494
+        },
+        {
+          "heading": "Error model",
+          "level": 2,
+          "line": 504
+        },
+        {
+          "heading": "Health and observability",
+          "level": 2,
+          "line": 536
+        },
+        {
+          "heading": "Dependency boundary",
+          "level": 2,
+          "line": 544
+        },
+        {
+          "heading": "Testing",
+          "level": 2,
+          "line": 550
+        },
+        {
+          "heading": "Shared contract tests",
+          "level": 3,
+          "line": 552
+        },
+        {
+          "heading": "Native integration topology",
+          "level": 3,
+          "line": 556
+        },
+        {
+          "heading": "Concurrency and isolation",
+          "level": 3,
+          "line": 560
+        },
+        {
+          "heading": "Fault injection",
+          "level": 3,
+          "line": 564
+        },
+        {
+          "heading": "Delivery sequence",
+          "level": 2,
+          "line": 570
+        },
+        {
+          "heading": "Out of scope",
+          "level": 2,
+          "line": 606
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 41
+      }
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-29-upstream-hardening-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 60,
+      "nonEmptyLines": 38,
+      "sections": [
+        {
+          "heading": "Upstream Hardening Design",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Scope",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Maestro command safety",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Clippy gate restoration",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Strict PSF access layer",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Validation",
+          "level": 2,
+          "line": 48
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 111,
+      "nonEmptyLines": 74,
+      "sections": [
+        {
+          "heading": "Virtuoso GUI 真实执行器设计",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "目标",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "当前探测结果",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "架构",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Rust 安全边界",
+          "level": 3,
+          "line": 18
+        },
+        {
+          "heading": "Python LiveExecutor",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "远端仓库与技能协作",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "状态与证据",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "失败策略",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "测试方案",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "范围",
+          "level": 2,
+          "line": 107
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    }
+  ]
+}

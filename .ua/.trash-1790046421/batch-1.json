@@ -1,0 +1,1618 @@
+{
+  "batchIndex": 1,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:src/spectre/jobs.rs",
+      "type": "file",
+      "name": "src/spectre/jobs.rs",
+      "filePath": "src/spectre/jobs.rs",
+      "summary": "Persistent job-tracker for spectre simulations: defines Job/JobStatus, persists them as JSON under the runtime cache, refreshes running jobs via local signal-0 / SSH kill -0 probes, cancels them by terminating the whole process group, and parses spectre.out to determine final status.",
+      "tags": [
+        "rust",
+        "spectre",
+        "job-tracker",
+        "persistence",
+        "process-management"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/app/action.rs",
+      "type": "file",
+      "name": "src/tui/app/action.rs",
+      "filePath": "src/tui/app/action.rs",
+      "summary": "Declares the Action enum (None, Quit, Refresh, CancelJob, SaveConfig, Status) emitted by the event handler and the handle_action dispatcher that mutates App state in response — keeping event-handling pure and pushing every data change through this funnel.",
+      "tags": [
+        "rust",
+        "tui",
+        "action-dispatcher",
+        "event-handling"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/app/data.rs",
+      "type": "file",
+      "name": "src/tui/app/data.rs",
+      "filePath": "src/tui/app/data.rs",
+      "summary": "Bridges the TUI App state and the rest of the CLI: loads session/job/tunnel lists, loads config.toml into editable ConfigField rows with VB_* env-override awareness, persists edited fields back to disk, and reads the command-log file for the log overlay.",
+      "tags": [
+        "rust",
+        "tui",
+        "data-loading",
+        "config",
+        "sessions"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/app/event.rs",
+      "type": "file",
+      "name": "src/tui/app/event.rs",
+      "filePath": "src/tui/app/event.rs",
+      "summary": "Terminal key-event cascade: routes keys with priority overlay → globals → tab content, drives vim-style nav (j/k, [/], Tab), opens the log/help/confirm/form overlays, and emits Action values; includes an emacs-style TextInput for the config form.",
+      "tags": [
+        "rust",
+        "tui",
+        "key-events",
+        "event-cascade",
+        "vim-style"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/app/mod.rs",
+      "type": "file",
+      "name": "src/tui/app/mod.rs",
+      "filePath": "src/tui/app/mod.rs",
+      "summary": "TUI app module root — re-exports the submodules and the two public entry points (handle_action, on_key) used by the event loop.",
+      "tags": [
+        "rust",
+        "tui",
+        "module-root"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/app/overlay.rs",
+      "type": "file",
+      "name": "src/tui/app/overlay.rs",
+      "filePath": "src/tui/app/overlay.rs",
+      "summary": "Overlay state types: single-variant Overlay enum (None/Log/Confirm/Form/Help) plus a UTF-8-safe TextInput cursor for the form. Active overlay suppresses global keys via the event cascade.",
+      "tags": [
+        "rust",
+        "tui",
+        "overlay-state",
+        "text-input",
+        "utf8-safe"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/app/state.rs",
+      "type": "file",
+      "name": "src/tui/app/state.rs",
+      "filePath": "src/tui/app/state.rs",
+      "summary": "App state container — sessions/jobs/config-fields lists, per-tab selection cursors, status toast with 3s expiry, spinner frame, and tab cycling helpers (Sessions / Jobs / Config).",
+      "tags": [
+        "rust",
+        "tui",
+        "app-state",
+        "tabs",
+        "selection"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/mod.rs",
+      "type": "file",
+      "name": "src/tui/mod.rs",
+      "filePath": "src/tui/mod.rs",
+      "summary": "TUI binary entry point: sets raw mode + alternate screen, runs the draw/poll/key loop with a 500 ms poll that drives the spinner and daemon-stats refresh, and tears down the terminal cleanly on exit.",
+      "tags": [
+        "rust",
+        "tui",
+        "event-loop",
+        "ratatui",
+        "crossterm"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/theme.rs",
+      "type": "file",
+      "name": "src/tui/theme.rs",
+      "filePath": "src/tui/theme.rs",
+      "summary": "Color palette struct (primary/accent/success/error/warning/text/borders/surfaces) with NO_COLOR auto-detection and a builder override for the --no-color flag; all UI styling goes through Theme so accessibility mode is centralized.",
+      "tags": [
+        "rust",
+        "tui",
+        "theming",
+        "accessibility",
+        "no-color"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/chrome.rs",
+      "type": "file",
+      "name": "src/tui/ui/chrome.rs",
+      "filePath": "src/tui/ui/chrome.rs",
+      "summary": "Header chrome: bold title, tab chips (active/inactive), and right-aligned status badges (tunnel state + session/job counts), with width-aware truncation that shrinks the status block before shrinking the tabs.",
+      "tags": [
+        "rust",
+        "tui",
+        "header",
+        "tabs",
+        "status-badges"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/config.rs",
+      "type": "file",
+      "name": "src/tui/ui/config.rs",
+      "filePath": "src/tui/ui/config.rs",
+      "summary": "Config-tab renderers: a left list of editable keys with selection highlight, a right detail pane showing key/hint/value plus an env-override warning when a VB_* variable outranks config.toml, and a shortcuts hint panel.",
+      "tags": [
+        "rust",
+        "tui",
+        "config-tab",
+        "env-override"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/content.rs",
+      "type": "file",
+      "name": "src/tui/ui/content.rs",
+      "filePath": "src/tui/ui/content.rs",
+      "summary": "Content router for the three tabs — splits the area into nav (26 cols) + detail (60/40 vertical) and delegates to sessions/jobs/config renderers based on the active Tab.",
+      "tags": [
+        "rust",
+        "tui",
+        "layout-router",
+        "tabs"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/footer.rs",
+      "type": "file",
+      "name": "src/tui/ui/footer.rs",
+      "filePath": "src/tui/ui/footer.rs",
+      "summary": "Single-row footer: optional status toast (color-coded by Info/Ok/Warn/Err) followed by the persistent keymap cheatsheet (j/k nav, Tab switch, r refresh, l log, ? help, q quit).",
+      "tags": [
+        "rust",
+        "tui",
+        "footer",
+        "status-toast",
+        "keymap"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/jobs.rs",
+      "type": "file",
+      "name": "src/tui/ui/jobs.rs",
+      "filePath": "src/tui/ui/jobs.rs",
+      "summary": "Jobs-tab renderers: list with spinner glyphs for running jobs and ✓/✗/⊘ for terminal statuses, detail pane (id/status/created/finished/error), and a running/completed/failed summary block.",
+      "tags": [
+        "rust",
+        "tui",
+        "jobs-tab",
+        "spinner"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/mod.rs",
+      "type": "file",
+      "name": "src/tui/ui/mod.rs",
+      "filePath": "src/tui/ui/mod.rs",
+      "summary": "Top-level TUI draw fn — splits the frame into header/content/footer rows and invokes the chrome/content/footer renderers, layering the overlay on top when one is active.",
+      "tags": [
+        "rust",
+        "tui",
+        "render-root",
+        "layout"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/overlay/confirm.rs",
+      "type": "file",
+      "name": "src/tui/ui/overlay/confirm.rs",
+      "filePath": "src/tui/ui/overlay/confirm.rs",
+      "summary": "Confirmation dialog renderer: centered compact rectangle with the wrapped message and a y/Enter=confirm · n/Esc=cancel hint line.",
+      "tags": [
+        "rust",
+        "tui",
+        "overlay",
+        "confirm-dialog"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/overlay/form.rs",
+      "type": "file",
+      "name": "src/tui/ui/overlay/form.rs",
+      "filePath": "src/tui/ui/overlay/form.rs",
+      "summary": "Config-field editor overlay: 64×9 centered box showing key/hint and a single-line input with a styled cursor (REVERSED in no-color, accent bg otherwise) plus Enter/Esc/arrow hints.",
+      "tags": [
+        "rust",
+        "tui",
+        "overlay",
+        "form",
+        "text-input"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/overlay/help.rs",
+      "type": "file",
+      "name": "src/tui/ui/overlay/help.rs",
+      "filePath": "src/tui/ui/overlay/help.rs",
+      "summary": "Static help-overlay renderer: 56×18 centered table of global key bindings and tab-specific shortcuts sourced from kv_line.",
+      "tags": [
+        "rust",
+        "tui",
+        "overlay",
+        "help",
+        "keymap"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/overlay/layout.rs",
+      "type": "file",
+      "name": "src/tui/ui/overlay/layout.rs",
+      "filePath": "src/tui/ui/overlay/layout.rs",
+      "summary": "Overlay geometry helpers — centered_rect / centered_rect_fixed, content-sized compact_message_overlay_rect, and Unicode-width-aware word wrap (CJK counted as 2 cols); covered by unit tests for ASCII, newlines, and CJK.",
+      "tags": [
+        "rust",
+        "tui",
+        "overlay",
+        "geometry",
+        "unicode-width",
+        "unit-tested"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/overlay/log.rs",
+      "type": "file",
+      "name": "src/tui/ui/overlay/log.rs",
+      "filePath": "src/tui/ui/overlay/log.rs",
+      "summary": "Command-log overlay renderer: 85% centered viewport showing a scrollable slice of the command log with per-line color (SKILL=primary, error/error=error, else dim).",
+      "tags": [
+        "rust",
+        "tui",
+        "overlay",
+        "log-viewer",
+        "scrollable"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/overlay/mod.rs",
+      "type": "file",
+      "name": "src/tui/ui/overlay/mod.rs",
+      "filePath": "src/tui/ui/overlay/mod.rs",
+      "summary": "Overlay submodule root — declares the confirm/form/help/layout/log/render submodules.",
+      "tags": [
+        "rust",
+        "tui",
+        "module-root"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/overlay/render.rs",
+      "type": "file",
+      "name": "src/tui/ui/overlay/render.rs",
+      "filePath": "src/tui/ui/overlay/render.rs",
+      "summary": "Single dispatcher that selects confirm/form/help/log rendering based on the active Overlay variant.",
+      "tags": [
+        "rust",
+        "tui",
+        "overlay",
+        "render-dispatcher"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/sessions.rs",
+      "type": "file",
+      "name": "src/tui/ui/sessions.rs",
+      "filePath": "src/tui/ui/sessions.rs",
+      "summary": "Sessions-tab renderers: list with green-dot glyphs, detail pane (id/port/PID/host/created + optional daemon calls/errors/uptime), and a tunnel-state panel (active vs local mode).",
+      "tags": [
+        "rust",
+        "tui",
+        "sessions-tab",
+        "tunnel-state"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/tui/ui/shared.rs",
+      "type": "file",
+      "name": "src/tui/ui/shared.rs",
+      "filePath": "src/tui/ui/shared.rs",
+      "summary": "Shared style helpers used by every pane: selection/active-chip/inactive-chip/border styles, kv_line renderer, and Unicode-width-aware truncation for tight layouts.",
+      "tags": [
+        "rust",
+        "tui",
+        "styles",
+        "helpers",
+        "unicode-width"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/spectre/jobs.rs::Job",
+      "type": "class",
+      "name": "Job",
+      "filePath": "src/spectre/jobs.rs",
+      "summary": "Persistent record of a spectre simulation run: id, status, netlist path, optional raw dir and pid, created/finished timestamps, error message, and optional remote host/dir for SSH-launched runs.",
+      "tags": [
+        "rust",
+        "spectre",
+        "job-state",
+        "persisted"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/spectre/jobs.rs::JobStatus",
+      "type": "class",
+      "name": "JobStatus",
+      "filePath": "src/spectre/jobs.rs",
+      "summary": "Enum of job outcomes — Running, Completed, Failed, Cancelled — serialized lowercase via serde.",
+      "tags": [
+        "rust",
+        "spectre",
+        "enum",
+        "serde"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/action.rs::Action",
+      "type": "class",
+      "name": "Action",
+      "filePath": "src/tui/app/action.rs",
+      "summary": "Intent produced by the event handler — None/Quit/Refresh/CancelJob(idx)/SaveConfig/Status(msg, kind). Event-handling must not mutate App state directly; handle_action is the single funnel.",
+      "tags": [
+        "rust",
+        "tui",
+        "intent-enum",
+        "dispatch"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/overlay.rs::Overlay",
+      "type": "class",
+      "name": "Overlay",
+      "filePath": "src/tui/app/overlay.rs",
+      "summary": "Single-variant overlay enum (None/Log/Confirm/Form/Help). At most one active at a time — push = assign a non-None variant, pop = assign None.",
+      "tags": [
+        "rust",
+        "tui",
+        "overlay-state",
+        "enum"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/overlay.rs::TextInput",
+      "type": "class",
+      "name": "TextInput",
+      "filePath": "src/tui/app/overlay.rs",
+      "summary": "UTF-8 byte-cursor over a String. move_left/right walk char boundaries; backspace, home, end, insert_char are all byte-safe for CJK input.",
+      "tags": [
+        "rust",
+        "tui",
+        "text-input",
+        "utf8-safe"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/overlay.rs::ConfirmOverlay",
+      "type": "class",
+      "name": "ConfirmOverlay",
+      "filePath": "src/tui/app/overlay.rs",
+      "summary": "Confirmation dialog state — title, message, and the ConfirmAction (currently CancelJob(idx)) the dialog commits to.",
+      "tags": [
+        "rust",
+        "tui",
+        "confirm-dialog"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/overlay.rs::ConfigFormState",
+      "type": "class",
+      "name": "ConfigFormState",
+      "filePath": "src/tui/app/overlay.rs",
+      "summary": "Config-form overlay state — selected field index, key, hint, and the active TextInput.",
+      "tags": [
+        "rust",
+        "tui",
+        "config-form"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/state.rs::App",
+      "type": "class",
+      "name": "App",
+      "filePath": "src/tui/app/state.rs",
+      "summary": "Top-level TUI App — current tab, active overlay, sessions/jobs/tunnel-state/config-fields, per-tab selection cursors, daemon-stats map, spinner frame, status toast, and quit flag.",
+      "tags": [
+        "rust",
+        "tui",
+        "app-state",
+        "core"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/state.rs::Tab",
+      "type": "class",
+      "name": "Tab",
+      "filePath": "src/tui/app/state.rs",
+      "summary": "Three-tab enum — Sessions, Jobs, Config — with label/next/prev/all helpers.",
+      "tags": [
+        "rust",
+        "tui",
+        "tab-enum"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/state.rs::StatusKind",
+      "type": "class",
+      "name": "StatusKind",
+      "filePath": "src/tui/app/state.rs",
+      "summary": "Toast severity — Info/Ok/Warn/Err — used to color the footer status line.",
+      "tags": [
+        "rust",
+        "tui",
+        "status-enum"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/state.rs::StatusToast",
+      "type": "class",
+      "name": "StatusToast",
+      "filePath": "src/tui/app/state.rs",
+      "summary": "Toast payload — message + StatusKind + Instant for 3s expiry.",
+      "tags": [
+        "rust",
+        "tui",
+        "toast"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/app/state.rs::ConfigField",
+      "type": "class",
+      "name": "ConfigField",
+      "filePath": "src/tui/app/state.rs",
+      "summary": "Single editable config field: key, value (what config.toml holds), hint, and optional env_override (var name + value) so the UI can flag when VB_* outranks the file.",
+      "tags": [
+        "rust",
+        "tui",
+        "config-field"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "class:src/tui/theme.rs::Theme",
+      "type": "class",
+      "name": "Theme",
+      "filePath": "src/tui/theme.rs",
+      "summary": "Color palette + no_color flag. Detected from NO_COLOR env var, overridable via with_no_color(true). All UI styling routes through this so accessibility mode is centralized.",
+      "tags": [
+        "rust",
+        "tui",
+        "theming",
+        "accessibility"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/spectre/jobs.rs::Job::refresh",
+      "type": "function",
+      "name": "Job::refresh",
+      "filePath": "src/spectre/jobs.rs",
+      "summary": "Updates the status of a running job by probing the process: local signal 0 (Unix) or `ssh kill -0` for remote jobs, with a log-based reaping fallback for zombie local jobs whose PID still answers.",
+      "tags": [
+        "rust",
+        "spectre",
+        "liveness-probe",
+        "ssh"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/spectre/jobs.rs::Job::finish_from_log",
+      "type": "function",
+      "name": "Job::finish_from_log",
+      "filePath": "src/spectre/jobs.rs",
+      "summary": "Reads spectre.out (locally or via SSH for remote jobs), inspects completion line / error lines, and marks the job Completed or Failed before persisting it back to JSON.",
+      "tags": [
+        "rust",
+        "spectre",
+        "log-parsing",
+        "completion"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/spectre/jobs.rs::Job::cancel",
+      "type": "function",
+      "name": "Job::cancel",
+      "filePath": "src/spectre/jobs.rs",
+      "summary": "Cancels a running job by terminating its whole process group (SIGTERM → 500 ms grace → SIGKILL on Unix; refuses on non-Unix) and persists the Cancelled status.",
+      "tags": [
+        "rust",
+        "spectre",
+        "process-group",
+        "cancellation"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/spectre/jobs.rs::Job::list_all",
+      "type": "function",
+      "name": "Job::list_all",
+      "filePath": "src/spectre/jobs.rs",
+      "summary": "Reads every *.json from the cache/jobs directory, deserializes them into Job structs, and returns them sorted by created timestamp.",
+      "tags": [
+        "rust",
+        "spectre",
+        "listing",
+        "persistence"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/app/data.rs::save_config",
+      "type": "function",
+      "name": "save_config",
+      "filePath": "src/tui/app/data.rs",
+      "summary": "Persists edited config fields back to config.toml via ConfigFile. Cleared values are removed rather than blanked so lookup falls through to the next config layer; refuses to overwrite a file that fails to parse.",
+      "tags": [
+        "rust",
+        "tui",
+        "config",
+        "persistence"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/app/data.rs::load_config_fields",
+      "type": "function",
+      "name": "load_config_fields",
+      "filePath": "src/tui/app/data.rs",
+      "summary": "Materializes the fixed config-key list (remote_host, port, ssh_key, …) into ConfigField rows with current values pulled from ConfigFile and env-override metadata for the UI to surface.",
+      "tags": [
+        "rust",
+        "tui",
+        "config",
+        "loading"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/app/data.rs::refresh",
+      "type": "function",
+      "name": "refresh",
+      "filePath": "src/tui/app/data.rs",
+      "summary": "Reloads sessions, jobs, and tunnel state into App, calling Job::refresh on each job so running simulations are updated before display.",
+      "tags": [
+        "rust",
+        "tui",
+        "data-refresh",
+        "polling"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/app/data.rs::initial_load",
+      "type": "function",
+      "name": "initial_load",
+      "filePath": "src/tui/app/data.rs",
+      "summary": "Called from App::new — runs the first refresh and loads the editable config-field set so the UI starts with live data.",
+      "tags": [
+        "rust",
+        "tui",
+        "bootstrap"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/app/action.rs::handle_action",
+      "type": "function",
+      "name": "handle_action",
+      "filePath": "src/tui/app/action.rs",
+      "summary": "Single dispatcher for the Action enum — Quit sets should_quit, Refresh reloads sessions/jobs/log and refreshes an open log overlay, CancelJob(idx) terminates the process group of a running job, SaveConfig writes config.toml via data::save_config, Status updates the toast.",
+      "tags": [
+        "rust",
+        "tui",
+        "dispatcher",
+        "side-effects"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/app/event.rs::on_key",
+      "type": "function",
+      "name": "on_key",
+      "filePath": "src/tui/app/event.rs",
+      "summary": "Top of the key-event cascade — active overlay wins, otherwise global bindings, otherwise tab-content handlers. Emits an Action for the dispatcher.",
+      "tags": [
+        "rust",
+        "tui",
+        "event-cascade",
+        "keymap"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/app/event.rs::global_key",
+      "type": "function",
+      "name": "global_key",
+      "filePath": "src/tui/app/event.rs",
+      "summary": "Global key bindings available across all tabs: q/Ctrl-C quits, r refreshes, l opens the log overlay, ? opens help, Tab/] and BackTab/[ cycle tabs.",
+      "tags": [
+        "rust",
+        "tui",
+        "global-keymap",
+        "tabs"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/app/event.rs::form_overlay_key",
+      "type": "function",
+      "name": "form_overlay_key",
+      "filePath": "src/tui/app/event.rs",
+      "summary": "Editor-mode key handler for the config-form overlay — character insertion, cursor motion (←/→/Home/End, Ctrl-A/E/U), backspace, Esc to cancel, Enter to commit and trigger Action::SaveConfig.",
+      "tags": [
+        "rust",
+        "tui",
+        "text-input",
+        "editor-mode"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/mod.rs::run_tui",
+      "type": "function",
+      "name": "run_tui",
+      "filePath": "src/tui/mod.rs",
+      "summary": "TUI binary entry point — enables raw mode and the alternate screen, runs the draw/poll loop, and restores the terminal on exit.",
+      "tags": [
+        "rust",
+        "tui",
+        "entry-point",
+        "terminal-setup"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/mod.rs::run_loop",
+      "type": "function",
+      "name": "run_loop",
+      "filePath": "src/tui/mod.rs",
+      "summary": "Inner loop: draws the frame, polls events with a 500 ms timeout that drives spinner/daemon-stats refresh, dispatches keys through on_key → handle_action, and breaks when should_quit.",
+      "tags": [
+        "rust",
+        "tui",
+        "event-loop",
+        "rendering"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/ui/chrome.rs::render_header",
+      "type": "function",
+      "name": "render_header",
+      "filePath": "src/tui/ui/chrome.rs",
+      "summary": "Renders the header row — title (left), tab chips (center), tunnel + counts status (right) — with width-aware truncation that shrinks status before tabs and never the title.",
+      "tags": [
+        "rust",
+        "tui",
+        "header",
+        "layout"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/ui/chrome.rs::truncate_status",
+      "type": "function",
+      "name": "truncate_status",
+      "filePath": "src/tui/ui/chrome.rs",
+      "summary": "Concatenates status spans into a single string and Unicode-width-truncates it to fit a narrow column.",
+      "tags": [
+        "rust",
+        "tui",
+        "truncation",
+        "unicode-width"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/ui/overlay/layout.rs::wrap_message_lines",
+      "type": "function",
+      "name": "wrap_message_lines",
+      "filePath": "src/tui/ui/overlay/layout.rs",
+      "summary": "Wraps a string to fit within a display-column budget, respecting explicit newlines and counting CJK / emoji as 2 cols via unicode-width.",
+      "tags": [
+        "rust",
+        "tui",
+        "word-wrap",
+        "unicode-width"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/ui/overlay/layout.rs::compact_message_overlay_rect",
+      "type": "function",
+      "name": "compact_message_overlay_rect",
+      "filePath": "src/tui/ui/overlay/layout.rs",
+      "summary": "Sizes a centered overlay rectangle to fit a title + wrapped message, clamped between a 36-col minimum and a 80-col / container-width maximum.",
+      "tags": [
+        "rust",
+        "tui",
+        "overlay-geometry"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/ui/overlay/log.rs::render",
+      "type": "function",
+      "name": "render",
+      "filePath": "src/tui/ui/overlay/log.rs",
+      "summary": "Renders the command-log overlay: 85% centered viewport, scroll-position title `[n/m]`, per-line color (SKILL=primary, error/Error=error, else dim), and Wrap { trim: false }.",
+      "tags": [
+        "rust",
+        "tui",
+        "log-viewer",
+        "scrollable"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/ui/sessions.rs::render_detail",
+      "type": "function",
+      "name": "render_detail",
+      "filePath": "src/tui/ui/sessions.rs",
+      "summary": "Renders the session detail pane — id/port/PID/host/created plus optional daemon stats (calls/errors/uptime formatted as s/m+s/h+m).",
+      "tags": [
+        "rust",
+        "tui",
+        "sessions",
+        "daemon-stats"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "function:src/tui/ui/overlay/form.rs::render",
+      "type": "function",
+      "name": "render",
+      "filePath": "src/tui/ui/overlay/form.rs",
+      "summary": "Renders the config-form overlay — fixed 64×9 box, key/hint/blank/input-line/blank/hint pattern, with a styled cursor (REVERSED in no-color, accent bg otherwise) split around the cursor index.",
+      "tags": [
+        "rust",
+        "tui",
+        "form",
+        "cursor"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Rust source — uses serde for job persistence, ratatui/crossterm for the TUI rendering and key-event cascade, libc for unix process-group signalling, and chrono for RFC3339 timestamps. All async-free; pure sync code with file I/O on std::fs."
+    },
+    {
+      "id": "file:src/error.rs",
+      "type": "file",
+      "name": "src/error.rs",
+      "filePath": "src/error.rs",
+      "summary": "External dependency referenced from this batch's import graph. Source file lives in another analysis batch.",
+      "tags": [
+        "rust",
+        "external-batch"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Stub node — full analysis lives in another batch."
+    },
+    {
+      "id": "file:src/config_file.rs",
+      "type": "file",
+      "name": "src/config_file.rs",
+      "filePath": "src/config_file.rs",
+      "summary": "External dependency referenced from this batch's import graph. Source file lives in another analysis batch.",
+      "tags": [
+        "rust",
+        "external-batch"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Stub node — full analysis lives in another batch."
+    },
+    {
+      "id": "file:src/models.rs",
+      "type": "file",
+      "name": "src/models.rs",
+      "filePath": "src/models.rs",
+      "summary": "External dependency referenced from this batch's import graph. Source file lives in another analysis batch.",
+      "tags": [
+        "rust",
+        "external-batch"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Stub node — full analysis lives in another batch."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/spectre/jobs.rs",
+      "target": "class:src/spectre/jobs.rs::Job",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/spectre/jobs.rs",
+      "target": "class:src/spectre/jobs.rs::JobStatus",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/action.rs",
+      "target": "class:src/tui/app/action.rs::Action",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/overlay.rs",
+      "target": "class:src/tui/app/overlay.rs::Overlay",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/overlay.rs",
+      "target": "class:src/tui/app/overlay.rs::TextInput",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/overlay.rs",
+      "target": "class:src/tui/app/overlay.rs::ConfirmOverlay",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/overlay.rs",
+      "target": "class:src/tui/app/overlay.rs::ConfigFormState",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/state.rs",
+      "target": "class:src/tui/app/state.rs::App",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/state.rs",
+      "target": "class:src/tui/app/state.rs::Tab",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/state.rs",
+      "target": "class:src/tui/app/state.rs::StatusKind",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/state.rs",
+      "target": "class:src/tui/app/state.rs::StatusToast",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/state.rs",
+      "target": "class:src/tui/app/state.rs::ConfigField",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/theme.rs",
+      "target": "class:src/tui/theme.rs::Theme",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/spectre/jobs.rs",
+      "target": "function:src/spectre/jobs.rs::Job::refresh",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/spectre/jobs.rs",
+      "target": "function:src/spectre/jobs.rs::Job::finish_from_log",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/spectre/jobs.rs",
+      "target": "function:src/spectre/jobs.rs::Job::cancel",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/spectre/jobs.rs",
+      "target": "function:src/spectre/jobs.rs::Job::list_all",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/data.rs",
+      "target": "function:src/tui/app/data.rs::save_config",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/data.rs",
+      "target": "function:src/tui/app/data.rs::load_config_fields",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/data.rs",
+      "target": "function:src/tui/app/data.rs::refresh",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/data.rs",
+      "target": "function:src/tui/app/data.rs::initial_load",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/action.rs",
+      "target": "function:src/tui/app/action.rs::handle_action",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/event.rs",
+      "target": "function:src/tui/app/event.rs::on_key",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/event.rs",
+      "target": "function:src/tui/app/event.rs::global_key",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/app/event.rs",
+      "target": "function:src/tui/app/event.rs::form_overlay_key",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/mod.rs",
+      "target": "function:src/tui/mod.rs::run_tui",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/mod.rs",
+      "target": "function:src/tui/mod.rs::run_loop",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/ui/chrome.rs",
+      "target": "function:src/tui/ui/chrome.rs::render_header",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/ui/chrome.rs",
+      "target": "function:src/tui/ui/chrome.rs::truncate_status",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/ui/overlay/layout.rs",
+      "target": "function:src/tui/ui/overlay/layout.rs::wrap_message_lines",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/ui/overlay/layout.rs",
+      "target": "function:src/tui/ui/overlay/layout.rs::compact_message_overlay_rect",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/ui/overlay/log.rs",
+      "target": "function:src/tui/ui/overlay/log.rs::render",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/ui/sessions.rs",
+      "target": "function:src/tui/ui/sessions.rs::render_detail",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/tui/ui/overlay/form.rs",
+      "target": "function:src/tui/ui/overlay/form.rs::render",
+      "type": "contains",
+      "weight": 1
+    },
+    {
+      "source": "file:src/spectre/jobs.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/action.rs",
+      "target": "file:src/spectre/jobs.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/action.rs",
+      "target": "file:src/tui/app/overlay.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/action.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/data.rs",
+      "target": "file:src/config_file.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/data.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/data.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/data.rs",
+      "target": "file:src/spectre/jobs.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/data.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/event.rs",
+      "target": "file:src/spectre/jobs.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/event.rs",
+      "target": "file:src/tui/app/action.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/event.rs",
+      "target": "file:src/tui/app/overlay.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/event.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/mod.rs",
+      "target": "file:src/tui/app/action.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/mod.rs",
+      "target": "file:src/tui/app/data.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/mod.rs",
+      "target": "file:src/tui/app/event.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/mod.rs",
+      "target": "file:src/tui/app/overlay.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/mod.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/state.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/state.rs",
+      "target": "file:src/spectre/jobs.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/app/state.rs",
+      "target": "file:src/tui/app/overlay.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/mod.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/mod.rs",
+      "target": "file:src/tui/app/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/mod.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/mod.rs",
+      "target": "file:src/tui/ui/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/chrome.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/chrome.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/chrome.rs",
+      "target": "file:src/tui/ui/shared.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/config.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/config.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/config.rs",
+      "target": "file:src/tui/ui/shared.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/content.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/content.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/content.rs",
+      "target": "file:src/tui/ui/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/footer.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/footer.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/jobs.rs",
+      "target": "file:src/spectre/jobs.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/jobs.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/jobs.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/jobs.rs",
+      "target": "file:src/tui/ui/shared.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/ui/chrome.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/ui/config.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/ui/content.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/ui/footer.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/ui/jobs.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/ui/overlay/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/ui/sessions.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/mod.rs",
+      "target": "file:src/tui/ui/shared.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/confirm.rs",
+      "target": "file:src/tui/app/overlay.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/confirm.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/confirm.rs",
+      "target": "file:src/tui/ui/overlay/layout.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/confirm.rs",
+      "target": "file:src/tui/ui/shared.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/form.rs",
+      "target": "file:src/tui/app/overlay.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/form.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/form.rs",
+      "target": "file:src/tui/ui/overlay/layout.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/form.rs",
+      "target": "file:src/tui/ui/shared.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/help.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/help.rs",
+      "target": "file:src/tui/ui/overlay/layout.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/help.rs",
+      "target": "file:src/tui/ui/shared.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/log.rs",
+      "target": "file:src/tui/app/overlay.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/log.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/log.rs",
+      "target": "file:src/tui/ui/overlay/layout.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/log.rs",
+      "target": "file:src/tui/ui/shared.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/mod.rs",
+      "target": "file:src/tui/ui/overlay/confirm.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/mod.rs",
+      "target": "file:src/tui/ui/overlay/form.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/mod.rs",
+      "target": "file:src/tui/ui/overlay/help.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/mod.rs",
+      "target": "file:src/tui/ui/overlay/layout.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/mod.rs",
+      "target": "file:src/tui/ui/overlay/log.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/mod.rs",
+      "target": "file:src/tui/ui/overlay/render.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/render.rs",
+      "target": "file:src/tui/app/overlay.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/render.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/render.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/overlay/render.rs",
+      "target": "file:src/tui/ui/overlay/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/sessions.rs",
+      "target": "file:src/tui/app/state.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/sessions.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/sessions.rs",
+      "target": "file:src/tui/ui/shared.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/tui/ui/shared.rs",
+      "target": "file:src/tui/theme.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "function:src/tui/app/action.rs::handle_action",
+      "target": "function:src/tui/app/data.rs::refresh",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tui/app/action.rs::handle_action",
+      "target": "function:src/tui/app/data.rs::save_config",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/tui/app/data.rs::refresh",
+      "target": "function:src/spectre/jobs.rs::Job::list_all",
+      "type": "calls",
+      "weight": 0.8
+    }
+  ]
+}

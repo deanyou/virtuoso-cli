@@ -1,0 +1,1854 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 18,
+  "filesSkipped": [
+    "cds.lib",
+    "examples/pasc_callbacks.ils",
+    "examples/vttype_update.ils",
+    "libManager.log.cdslck",
+    "resources/.env_template",
+    "resources/daemons/virtuoso-daemon-aarch64",
+    "resources/daemons/virtuoso-daemon-x86_64"
+  ],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 18,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 2,
+      "failed": 0,
+      "skipped": 16
+    }
+  },
+  "results": [
+    {
+      "path": ".pensieve/knowledge/smic-pdk-transistor-w-skill/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 110,
+      "nonEmptyLines": 86,
+      "sections": [
+        {
+          "heading": "SMIC PDK Transistor Width via SKILL: CDF Chain & Working Path",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "The CDF Chain",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "What DOESN'T Work",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "What WORKS",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Parameter Mapping Reference (n12/p12)",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "Diagnostic SKILL (read `propMapping`)",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "Symptoms of Wrong Path",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 108
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/smic-rhrpo-netlist-terminals/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 106,
+      "nonEmptyLines": 82,
+      "sections": [
+        {
+          "heading": "SMIC rhrpo_3t_ckt PCells: Missing Terminal Connections in Ocean-Generated Netlist",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "What Ocean Generates (Broken)",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Fix: LLM-Assisted Inline Repair",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "Known PCells in FT0001A_SH/Bandgap (as of 2026-04-19)",
+          "level": 3,
+          "line": 79
+        },
+        {
+          "heading": "Alternative: Run Spectre Standalone on Patched Netlist",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 103
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-ade-model-path/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 93,
+      "nonEmptyLines": 72,
+      "sections": [
+        {
+          "heading": "Spectre Model Path: ADE OA Indirection vs Direct Invocation",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "The Broken Path Pattern",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Why It Works in ADE",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "Fix: Use the Absolute Direct Path",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Note: This Breaks on ADE Re-Netlist",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "Also Note: `run()` Reports Success Even When Spectre Fails",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 87
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 92
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-bandgap-dc-convergence/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 104,
+      "nonEmptyLines": 82,
+      "sections": [
+        {
+          "heading": "Spectre Bandgap DC Convergence: homotopy=all for Multi-Stable Circuits",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Symptom of Wrong Solution",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Why Nodesets Fail",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "Fix: homotopy=all",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Also Required: Explicit dcop Analysis Statement",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "Verified DC Operating Point (FT0001A_SH/Bandgap, SMIC 0.13µm, TT/27°C)",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "PSRR Results (same netlist, ac1 with mag=1 on VVDDA)",
+          "level": 3,
+          "line": 83
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 101
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-cmi-2116-ade-netlist/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 119,
+      "nonEmptyLines": 90,
+      "sections": [
+        {
+          "heading": "Spectre CMI-2116: ADE Netlist MOSFET Terminals Missing",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Error Pattern",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "Fix: Build Topology-Complete Standalone Netlist",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Body Terminals (e.g. SUB1)",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "Testbench VDD Wiring",
+          "level": 3,
+          "line": 102
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 111
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 116
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-vacomp-2259-bound-step/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 68,
+      "nonEmptyLines": 49,
+      "sections": [
+        {
+          "heading": "Verilog-A `bound_step()` Unsupported in SPECTRE231 / IC23.1",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "Verification",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Version note",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 66
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/spectre-vsource-ac-parameter/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 77,
+      "nonEmptyLines": 58,
+      "sections": [
+        {
+          "heading": "Spectre vsource: AC Stimulus Parameter is `mag`, not `ac`",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Symptom",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Root Cause",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "Fix",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Verification",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "Also required: explicit `ac` analysis statement",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/taste-review/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 198,
+      "nonEmptyLines": 139,
+      "sections": [
+        {
+          "heading": "Code Taste Review Knowledge Base",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Sources",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Supporting Materials",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Applicable Scenarios",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "Core Principles",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "1) Linus: Good Taste",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "2) Ousterhout: Complexity Management",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "3) Google: Code Health First",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "Warning Signal Checklist",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "Structural Warnings",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "Error Handling Warnings",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "Module & Interface Warnings",
+          "level": 3,
+          "line": 105
+        },
+        {
+          "heading": "Classic Quotes (Original)",
+          "level": 2,
+          "line": 115
+        },
+        {
+          "heading": "Linus Torvalds",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "John Ousterhout",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "Google Code Review",
+          "level": 3,
+          "line": 128
+        },
+        {
+          "heading": "Classic Examples",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "1) Linked List Deletion: Eliminating Special Branches",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "2) Defensive Defaults vs. Fail Fast",
+          "level": 3,
+          "line": 169
+        },
+        {
+          "heading": "Review Execution Recommendations",
+          "level": 2,
+          "line": 193
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 21
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/vcli-bridge-cli-name/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 72,
+      "nonEmptyLines": 55,
+      "sections": [
+        {
+          "heading": "vcli is the Bridge CLI — `virtuoso` in PATH is Cadence's Application Binary",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Binary Locations",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Symptom of Wrong Binary",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "Why the Confusion",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "Connect to an Existing Session",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 70
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/vcli-multi-session-concurrency/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 76,
+      "nonEmptyLines": 56,
+      "sections": [
+        {
+          "heading": "vcli Multi-Session Concurrency Patterns",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Session targeting mechanism",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Mechanism 1: `vcli skill broadcast`",
+          "level": 3,
+          "line": 30
+        },
+        {
+          "heading": "Mechanism 2: Main agent + parallel subagents",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "Verified behavior (2026-05-07)",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/vcli-session-history-layout/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 82,
+      "nonEmptyLines": 64,
+      "sections": [
+        {
+          "heading": "vcli Session History — File Layout and Test Pollution",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "File Locations",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Entry Formats",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "Test Pollution in cmd.jsonl",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "vcli CLI Commands",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "Multi-Session Context",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 81
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/knowledge/virtuoso-daemon-install-feature-flag/content.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 76,
+      "nonEmptyLines": 56,
+      "sections": [
+        {
+          "heading": "virtuoso-daemon Requires `--features daemon` for cargo install",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Source",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Content",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Correct Installation Commands",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Symptom of Missing Feature Flag",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "Why It's Easy to Miss",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "Verification",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Which Binary is Running",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Context Links",
+          "level": 2,
+          "line": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": ".pensieve/signals/latest.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 19,
+      "nonEmptyLines": 19,
+      "sections": [
+        {
+          "heading": "generated",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "recommended_skills",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "promotion_candidates",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "summary",
+          "level": 1,
+          "line": 15
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": ".pensieve/state.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 14,
+      "nonEmptyLines": 10,
+      "sections": [
+        {
+          "heading": "Pensieve Project State",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Lifecycle State",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Project Paths",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Graph",
+          "level": 2,
+          "line": 12
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": ".workbuddy/skills/pr-review-hardening/SKILL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 97,
+      "nonEmptyLines": 78,
+      "sections": [
+        {
+          "heading": "PR Review Hardening",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "Overview",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "When to Use",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Workflow",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Phase 1 — Verify review accuracy before touching code",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "Phase 2 — Fix one seam per commit",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "Phase 3 — Confirm with the real CI run (never local-green alone)",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "Environment Gotchas",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "Resources",
+          "level": 2,
+          "line": 94
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": ".workbuddy/skills/pr-review-hardening/references/workflow.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 150,
+      "nonEmptyLines": 114,
+      "sections": [
+        {
+          "heading": "PR Review Hardening — Workflow Reference",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Phase 1 — Corrected-review template",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Phase 2 — Single-seam fix commands",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "Phase 3 — Real-CI verification commands",
+          "level": 2,
+          "line": 84
+        },
+        {
+          "heading": "Common clippy `-D warnings` traps",
+          "level": 2,
+          "line": 115
+        },
+        {
+          "heading": "Git-session safety (concurrent automation)",
+          "level": 2,
+          "line": 125
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "resources/daemons/ramic_bridge_daemon_27.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 264,
+      "nonEmptyLines": 229,
+      "functions": [
+        {
+          "name": "watchdog_callback",
+          "startLine": 78,
+          "endLine": 86,
+          "params": []
+        },
+        {
+          "name": "read_until_delimiter",
+          "startLine": 88,
+          "endLine": 143,
+          "params": [
+            "start_ok",
+            "start_err",
+            "end"
+          ]
+        },
+        {
+          "name": "handle_external_connection",
+          "startLine": 145,
+          "endLine": 233,
+          "params": [
+            "conn",
+            "addr"
+          ]
+        },
+        {
+          "name": "start_server",
+          "startLine": 235,
+          "endLine": 260,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "watchdog_callback",
+          "line": 78,
+          "isDefault": false
+        },
+        {
+          "name": "read_until_delimiter",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "handle_external_connection",
+          "line": 145,
+          "isDefault": false
+        },
+        {
+          "name": "start_server",
+          "line": 235,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "open",
+          "lineNumber": 44
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "f.read().split",
+          "lineNumber": 45
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "f.read",
+          "lineNumber": 45
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "int",
+          "lineNumber": 47
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "open",
+          "lineNumber": 50
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "'/proc/{0}/stat'.format",
+          "lineNumber": 50
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "f2.read().split",
+          "lineNumber": 51
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "f2.read",
+          "lineNumber": 51
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "int",
+          "lineNumber": 53
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "Exception",
+          "lineNumber": 57
+        },
+        {
+          "caller": "watchdog_callback",
+          "callee": "os.kill",
+          "lineNumber": 84
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "bytearray",
+          "lineNumber": 90
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "sys.stdin.read",
+          "lineNumber": 95
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "time.sleep",
+          "lineNumber": 103
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "isinstance",
+          "lineNumber": 112
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "result.extend",
+          "lineNumber": 113
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "ch.encode",
+          "lineNumber": 113
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "result.extend",
+          "lineNumber": 115
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "sys.stdin.read",
+          "lineNumber": 120
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "isinstance",
+          "lineNumber": 129
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "result.extend",
+          "lineNumber": 130
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "ch.encode",
+          "lineNumber": 130
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "result.extend",
+          "lineNumber": 132
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "time.sleep",
+          "lineNumber": 138
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.recv",
+          "lineNumber": 153
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "chunks.append",
+          "lineNumber": 156
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "b\"\".join",
+          "lineNumber": 157
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "json.loads",
+          "lineNumber": 159
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "hasattr",
+          "lineNumber": 169
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "skill_code.encode",
+          "lineNumber": 170
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "sys.stdin.read",
+          "lineNumber": 176
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "sys.stdout.write",
+          "lineNumber": 185
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "sys.stdout.flush",
+          "lineNumber": 186
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "threading.Timer",
+          "lineNumber": 189
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "watchdog_timer.start",
+          "lineNumber": 191
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "read_until_delimiter",
+          "lineNumber": 194
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "watchdog_timer.cancel",
+          "lineNumber": 201
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "isinstance",
+          "lineNumber": 204
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.sendall",
+          "lineNumber": 205
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "str",
+          "lineNumber": 205
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "hasattr",
+          "lineNumber": 206
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.sendall",
+          "lineNumber": 207
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "returnData.encode",
+          "lineNumber": 207
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.sendall",
+          "lineNumber": 209
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "\"\\x15JSONDecodeError: {0}\".format",
+          "lineNumber": 213
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "str",
+          "lineNumber": 213
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "hasattr",
+          "lineNumber": 214
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "error_msg.encode",
+          "lineNumber": 215
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.sendall",
+          "lineNumber": 216
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "traceback.print_exc",
+          "lineNumber": 219
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "\"\\x15{0}\".format",
+          "lineNumber": 220
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "str",
+          "lineNumber": 220
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "hasattr",
+          "lineNumber": 221
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "error_msg.encode",
+          "lineNumber": 222
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.sendall",
+          "lineNumber": 223
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "watchdog_timer.cancel",
+          "lineNumber": 228
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.shutdown",
+          "lineNumber": 230
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.close",
+          "lineNumber": 233
+        },
+        {
+          "caller": "start_server",
+          "callee": "socket.socket",
+          "lineNumber": 238
+        },
+        {
+          "caller": "start_server",
+          "callee": "s.setsockopt",
+          "lineNumber": 243
+        },
+        {
+          "caller": "start_server",
+          "callee": "s.bind",
+          "lineNumber": 247
+        },
+        {
+          "caller": "start_server",
+          "callee": "sys.stderr.write",
+          "lineNumber": 250
+        },
+        {
+          "caller": "start_server",
+          "callee": "\"ERROR: Port {0} is already in use. Another daemon may be running.\\n\".format",
+          "lineNumber": 250
+        },
+        {
+          "caller": "start_server",
+          "callee": "sys.exit",
+          "lineNumber": 251
+        },
+        {
+          "caller": "start_server",
+          "callee": "s.listen",
+          "lineNumber": 255
+        },
+        {
+          "caller": "start_server",
+          "callee": "s.accept",
+          "lineNumber": 257
+        },
+        {
+          "caller": "start_server",
+          "callee": "handle_external_connection",
+          "lineNumber": 258
+        },
+        {
+          "caller": "start_server",
+          "callee": "s.close",
+          "lineNumber": 260
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "resources/daemons/ramic_bridge_daemon_3.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 176,
+      "nonEmptyLines": 150,
+      "functions": [
+        {
+          "name": "get_grandparent_pid",
+          "startLine": 21,
+          "endLine": 28,
+          "params": []
+        },
+        {
+          "name": "watchdog_callback",
+          "startLine": 43,
+          "endLine": 50,
+          "params": []
+        },
+        {
+          "name": "read_until_delimiter",
+          "startLine": 52,
+          "endLine": 100,
+          "params": [
+            "start_ok",
+            "start_err",
+            "end"
+          ]
+        },
+        {
+          "name": "handle_external_connection",
+          "startLine": 102,
+          "endLine": 158,
+          "params": [
+            "conn",
+            "addr"
+          ]
+        },
+        {
+          "name": "start_server",
+          "startLine": 160,
+          "endLine": 173,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "get_grandparent_pid",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "watchdog_callback",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "read_until_delimiter",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "handle_external_connection",
+          "line": 102,
+          "isDefault": false
+        },
+        {
+          "name": "start_server",
+          "line": 160,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "open",
+          "lineNumber": 23
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "int",
+          "lineNumber": 24
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "f.read().split",
+          "lineNumber": 24
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "f.read",
+          "lineNumber": 24
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "open",
+          "lineNumber": 25
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "int",
+          "lineNumber": 26
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "f.read().split",
+          "lineNumber": 26
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "f.read",
+          "lineNumber": 26
+        },
+        {
+          "caller": "get_grandparent_pid",
+          "callee": "Exception",
+          "lineNumber": 28
+        },
+        {
+          "caller": "watchdog_callback",
+          "callee": "os.kill",
+          "lineNumber": 48
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "bytearray",
+          "lineNumber": 54
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "sys.stdin.buffer.read",
+          "lineNumber": 59
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "time.sleep",
+          "lineNumber": 63
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "result.extend",
+          "lineNumber": 66
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "time.sleep",
+          "lineNumber": 72
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "sys.stdin.buffer.read",
+          "lineNumber": 81
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "time.sleep",
+          "lineNumber": 85
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "result.extend",
+          "lineNumber": 89
+        },
+        {
+          "caller": "read_until_delimiter",
+          "callee": "time.sleep",
+          "lineNumber": 94
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.recv",
+          "lineNumber": 108
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "chunks.append",
+          "lineNumber": 111
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "b\"\".join",
+          "lineNumber": 112
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "json.loads",
+          "lineNumber": 113
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "data.decode",
+          "lineNumber": 113
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "sys.stdin.buffer.read",
+          "lineNumber": 123
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "sys.stdout.buffer.write",
+          "lineNumber": 129
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "skill_code.encode",
+          "lineNumber": 129
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "sys.stdout.buffer.flush",
+          "lineNumber": 130
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "threading.Timer",
+          "lineNumber": 133
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "watchdog_timer.start",
+          "lineNumber": 135
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "read_until_delimiter",
+          "lineNumber": 137
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "watchdog_timer.cancel",
+          "lineNumber": 141
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.sendall",
+          "lineNumber": 143
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.sendall",
+          "lineNumber": 146
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "f\"\\x15JSONDecodeError: {e}\".encode",
+          "lineNumber": 146
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "traceback.print_exc",
+          "lineNumber": 148
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.sendall",
+          "lineNumber": 149
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "f\"\\x15{e}\".encode",
+          "lineNumber": 149
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "watchdog_timer.cancel",
+          "lineNumber": 153
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.shutdown",
+          "lineNumber": 155
+        },
+        {
+          "caller": "handle_external_connection",
+          "callee": "conn.close",
+          "lineNumber": 158
+        },
+        {
+          "caller": "start_server",
+          "callee": "socket.socket",
+          "lineNumber": 161
+        },
+        {
+          "caller": "start_server",
+          "callee": "s.setsockopt",
+          "lineNumber": 162
+        },
+        {
+          "caller": "start_server",
+          "callee": "s.bind",
+          "lineNumber": 164
+        },
+        {
+          "caller": "start_server",
+          "callee": "sys.stderr.write",
+          "lineNumber": 167
+        },
+        {
+          "caller": "start_server",
+          "callee": "sys.exit",
+          "lineNumber": 168
+        },
+        {
+          "caller": "start_server",
+          "callee": "s.listen",
+          "lineNumber": 170
+        },
+        {
+          "caller": "start_server",
+          "callee": "s.accept",
+          "lineNumber": 172
+        },
+        {
+          "caller": "start_server",
+          "callee": "handle_external_connection",
+          "lineNumber": 173
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 5,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    }
+  ]
+}

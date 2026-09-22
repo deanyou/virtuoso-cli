@@ -1,0 +1,506 @@
+{
+  "batchIndex": 38,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/workflows/ade-regression.md",
+      "type": "document",
+      "name": "ade-regression.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/workflows/ade-regression.md",
+      "summary": "Workflow playbook for ADE corner regression: open/create a Maestro session, drive a batch corner sweep via `vcli sim corner --file corners.json`, parse PSF results with `/maestro-read-results`, and aggregate pass/fail into a grouped bar chart via `/sim-plot`. Includes a sample tt/ss_hot/ff_cold corners.json with AC analysis and three measures (gain_dc, gbw, pm).",
+      "tags": [
+        "workflow",
+        "ade",
+        "regression",
+        "corners",
+        "vcli",
+        "maestro",
+        "ocean",
+        "playbook"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown with YAML frontmatter (name/description/trigger) and a JSON code block example."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/workflows/analog-design-flow.md",
+      "type": "document",
+      "name": "analog-design-flow.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/workflows/analog-design-flow.md",
+      "summary": "End-to-end analog design closed-loop workflow: derive gm from GBW/CL and sweep L for a W/L lookup table (`/gm-over-id`), generate the schematic cellview (`/schematic-gen`), configure Ocean modelFile/desVar/resultsDir (`/sim-setup`), run DC/AC/Tran analyses (`/sim-run`), extract measures (`/sim-measure`), and visualize with matplotlib (`/sim-plot`). Documents the iterative loop when specs are not met.",
+      "tags": [
+        "workflow",
+        "analog",
+        "gm-over-id",
+        "ocean",
+        "matplotlib",
+        "playbook"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Short markdown playbook with YAML frontmatter; lists six slash-command steps plus iteration back to sizing."
+    },
+    {
+      "id": "config:/Users/dean/Documents/git/virtuoso-cli/.codex/hooks.json",
+      "type": "config",
+      "name": "hooks.json",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.codex/hooks.json",
+      "summary": "Codex CLI hooks manifest wiring PostToolUse handlers: after Write/Edit runs `rust_check.sh`, and after Bash runs `auto_plot.sh` and `eda_error_capture.sh`. Each hook is a shell command declared inline.",
+      "tags": [
+        "config",
+        "codex",
+        "hooks",
+        "post-tool-use",
+        "rust",
+        "eda"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Single JSON object with a `hooks.PostToolUse` array of `{matcher, hooks: [{type:\"command\", command:\"...\"}]}` entries; hook paths are absolute."
+    },
+    {
+      "id": "config:/Users/dean/Documents/git/virtuoso-cli/.github/dependabot.yml",
+      "type": "config",
+      "name": "dependabot.yml",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.github/dependabot.yml",
+      "summary": "Dependabot v2 config enabling weekly PRs for the Rust Cargo manifest (root directory, ignores Cargo.lock per repo gitignore) and for GitHub Actions workflow pins (actions/* and reusable workflows). Each updater caps open PRs at 10 and tags with `dependencies` plus ecosystem-specific labels.",
+      "tags": [
+        "config",
+        "dependabot",
+        "cargo",
+        "github-actions",
+        "dependency-updates"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Dependabot v2 manifest with two `updates` blocks (cargo + github-actions); weekly cadence."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.github/scripts/run-skill-tests.sh",
+      "type": "file",
+      "name": "run-skill-tests.sh",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.github/scripts/run-skill-tests.sh",
+      "summary": "CI script invoked by .github/workflows/skill-tests.yml that (1) AST-parses every .claude/skills/**/*.py without writing __pycache__ (repo tracks bytecode under .claude), and (2) runs each skill's unittest discover suite, requiring at least one test actually executed and refusing to pass when no `tests/` directory exists. Exits non-zero on any syntax error, suite failure, zero-test discover, or missing suite set.",
+      "tags": [
+        "shell",
+        "ci",
+        "unittest",
+        "ast",
+        "skills",
+        "syntax-check"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "bash with `set -euo pipefail`; uses `python3 -m unittest discover tests`, AST parse via `python3 -c` snippet, and `grep -E \"^Ran [1-9][0-9]* tests?\"` for positive-test enforcement."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/async-job-lazy-refresh/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/async-job-lazy-refresh/content.md",
+      "summary": "Pensieve knowledge note covering async job lazy refresh. Captures the rule that async job status in vcli is fetched lazily on the next API call rather than polled by a monitor thread, and documents a critical caveat: a leaked / orphaned child process can re-acquire the DB lock and corrupt state. Recommends cleanup of zombies on session teardown and defines when this rule applies.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "async-job-lazy-refresh"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-ade-window-title/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-ade-window-title/content.md",
+      "summary": "Pensieve knowledge note covering cadence ic23 ade window title. Records the exact Cadence IC23.1 ADE window title grammar (`Library - Cell - View - Simulator [Mode] [state]`), the official mode tokens (spectre/spectreAPS/ultrasim/ams), and the regex used by the window-titler to parse corner and state out of the title bar.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "cadence-ic23-ade-window-title"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-dbopencellviewbytype/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-dbopencellviewbytype/content.md",
+      "summary": "Pensieve knowledge note covering cadence ic23 dbopencellviewbytype. Documents working and broken `dbOpenCellViewByType` calling forms in IC23: nil returns for already-held handles, `setof` multi-condition pitfalls that swallow rows, listing all open CVs, behavior of `dbSave` on an already-open cv, and the safe read-only pattern for vcli bridge exploration (with explicit warning against write-mode over the bridge).",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "cadence-ic23-dbopencellviewbytype"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-schcreateinst/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-schcreateinst/content.md",
+      "summary": "Pensieve knowledge note covering cadence ic23 schcreateinst. Documents the correct IC23 `schCreateInst` signature (libName, cellName, viewName, instName, l, t, orient), a full worked example, common mistakes (wrong arg order, missing orient, wrong view), and the post-deletion housekeeping required to reconnect gate labels and run `schCheck` before save.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "cadence-ic23-schcreateinst"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-osshnl-109/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-osshnl-109/content.md",
+      "summary": "Pensieve knowledge note covering cadence osshnl 109. Captures the OSSHNL-109 \"schematic modified since last extraction\" failure mode: triggers, symptoms (err_count == -1), root cause, fix workflow, and how vcli implements the probe. Also disambiguates OSSHNL-109 from the library-not-registered failure that produces the same err_count signature.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "cadence-osshnl-109"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-virtuoso-library-not-registered/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-virtuoso-library-not-registered/content.md",
+      "summary": "Pensieve knowledge note covering cadence virtuoso library not registered. Documents the library-not-registered-in-session failure: trigger condition, how to diagnose by reading CDS.log, probe via `ddGetLibList` from vcli/bridge, the correct-startup-directory fix, and the vcli error message wording that surfaces after the ddGetLibList probe.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "cadence-virtuoso-library-not-registered"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/claude-code-skill-variable-expansion/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/claude-code-skill-variable-expansion/content.md",
+      "summary": "Pensieve knowledge note covering claude code skill variable expansion. Documents that Claude Code skill variables (`$ARGUMENTS`, `${CLAUDE_SKILL_DIR}`, etc.) expand globally across the skill body, so a literal `$X` inside a fenced code block or table column will be replaced. Provides the recommended pattern (escape via concatenation or backslash) and the anti-pattern that corrupts tables.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "claude-code-skill-variable-expansion"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ic23-design-variable-namespaces/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ic23-design-variable-namespaces/content.md",
+      "summary": "Pensieve knowledge note covering ic23 design variable namespaces. Documents the two-layer IC23 design-variable namespace (cellview vs tool/session), the symptom of mismatched scope, the correct pattern for replacing a single variable, the IC23.1 functions that are NOT defined and must not be used, the verification method, and the related CMI-2441 PMOS-width-out-of-range failure.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "ic23-design-variable-namespaces"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-ensure-view-bootstrap/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-ensure-view-bootstrap/content.md",
+      "summary": "Pensieve knowledge note covering maestro ensure view bootstrap. Documents the Maestro view-bootstrap fix: a missing maestro view requires `maeOpenSetup` followed by `maeSaveSetup` (both idempotent SKILL calls). Captures the symptom (Ocean createNetlist returns empty), the root cause (no saved view state), and the two-call recovery.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "maestro-ensure-view-bootstrap"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "summary": "Pensieve knowledge note covering maestro netlist standalone workflow. Step-by-step recipe for going from a Maestro netlist to a standalone Spectre run on a standard CMOS n12/p12 PDK: get the netlist path, verify freshness, scrub `oa/.../../` model paths, inject parameter values and analysis commands, invoke spectre, and parse PSF results. Includes a validated 5T OTA reference run (W34=8u, Iref=100µA, VDD=1.2V).",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "maestro-netlist-standalone-workflow"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-session-types/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-session-types/content.md",
+      "summary": "Pensieve knowledge note covering maestro session types. Distinguishes Maestro session names from Ocean session names and records the rule that the Ocean `session()` call needs the Ocean-format identifier (not the Maestro display name). Lists an anti-pattern that causes silent failure.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "maestro-session-types"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-simulator-mode-api/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-simulator-mode-api/content.md",
+      "summary": "Pensieve knowledge note covering maestro simulator mode api. Documents that Maestro simulator mode is set via `asiSetHighPerformanceOptionVal` (not legacy mode-switching calls), provides the mode table, the verification step, and IC23-specific notes. Captures the symptom of using the wrong API.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "maestro-simulator-mode-api"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ocean-createnetlist-prerequisites/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ocean-createnetlist-prerequisites/content.md",
+      "summary": "Pensieve knowledge note covering ocean createnetlist prerequisites. Catalogs every Ocean variable that gates `createNetlist` (modelFile, desVar, stimFile, corner, includePath, etc.), the syntax for each, how to recover values from a backup netlist, the verification-before-netlisting checklist, the full setup sequence, and how to call spectre directly after netlisting.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "ocean-createnetlist-prerequisites"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ocean-design-cell-switch/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ocean-design-cell-switch/content.md",
+      "summary": "Pensieve knowledge note covering ocean design cell switch. Documents that switching target cell in Ocean requires an explicit `design(lib cell view)` call before netlisting: the previous design's desVar() state is per-design, so a fresh session may return nil. Includes the verification step and the failure mode where `design()` returns nil after vcli sim setup on a fresh session.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "ocean-design-cell-switch"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ramic-bridge-callback-file-ipc/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ramic-bridge-callback-file-ipc/content.md",
+      "summary": "Pensieve knowledge note covering ramic bridge callback file ipc. Documents the RAMIC bridge callback-file IPC protocol used to send async callbacks from the SKILL/RAMIC side to the Rust daemon: a platform bug forces file-based IPC instead of TCP; the file must use the actual listening port (not the registration port) for `cb_port`. Pinpoints the Rust daemon location and the trap that bricks callbacks.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "ramic-bridge-callback-file-ipc"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ratatui-tui-architecture/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ratatui-tui-architecture/content.md",
+      "summary": "Pensieve knowledge note covering ratatui tui architecture. Records the ratatui TUI architecture pattern adopted by vtui: module layout (app.rs, ui.rs, state.rs, input.rs — explicitly NOT event.rs to avoid ratatui name shadowing), the event loop, the rule against refreshing data on idle tick (refetch only when stale), a `kv_line` helper for detail panels, and CLI integration.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "ratatui-tui-architecture"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/rust-bin-vs-lib-crate-attrs/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/rust-bin-vs-lib-crate-attrs/content.md",
+      "summary": "Pensieve knowledge note covering rust bin vs lib crate attrs. Notes that `#![allow(...)]` attributes set on a bin crate (e.g. vcli, virtuoso-daemon) do NOT propagate to the lib crate sharing the same Cargo.toml. The two crates must each declare their own allow attributes — a gotcha when tightening warnings.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "rust-bin-vs-lib-crate-attrs"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/skill-instterms-cons-reversal/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/skill-instterms-cons-reversal/content.md",
+      "summary": "Pensieve knowledge note covering skill instterms cons reversal. Documents the trap in SKILL `instTerms`: `cons` / `foreach` traversal reverses terminal order, which silently produces wrong connections. Recommends the name-based lookup pattern, lists alternative correct approaches, and provides a verification step.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "skill-instterms-cons-reversal"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/skill-sprintf-float-coords/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/skill-sprintf-float-coords/content.md",
+      "summary": "Pensieve knowledge note covering skill sprintf float coords. Documents the SKILL `sprintf` bug where the `%d` format silently emits nothing for float coordinates, producing truncated pin labels. Recommends `%g` / `%.3f` for layout coordinates.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "skill-sprintf-float-coords"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/smic-mosfet-terminal-order/content.md",
+      "type": "document",
+      "name": "content.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/smic-mosfet-terminal-order/content.md",
+      "summary": "Pensieve knowledge note covering smic mosfet terminal order. Documents the SMIC 0.13µm mmRF PDK discrepancy between the schematic CDF terminal order and the Spectre netlist order, the diagnosis path, the fix workflow for standalone netlists, and the warning that ADE re-netlisting overwrites any manual fix.",
+      "tags": [
+        "knowledge",
+        "pensieve",
+        "smic-mosfet-terminal-order"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown knowledge artifact with Source / Summary / Content / When to Use / Context Links sections."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-osshnl-109/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-dbopencellviewbytype/content.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-osshnl-109/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-virtuoso-library-not-registered/content.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-dbopencellviewbytype/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-schcreateinst/content.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-ade-window-title/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ic23-design-variable-namespaces/content.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/cadence-ic23-schcreateinst/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/skill-instterms-cons-reversal/content.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ic23-design-variable-namespaces/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/skill-sprintf-float-coords/content.md",
+      "type": "documents",
+      "weight": 0.4
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ocean-createnetlist-prerequisites/content.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ocean-design-cell-switch/content.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-ensure-view-bootstrap/content.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-simulator-mode-api/content.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-session-types/content.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/smic-mosfet-terminal-order/content.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ocean-createnetlist-prerequisites/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ocean-design-cell-switch/content.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ramic-bridge-callback-file-ipc/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/async-job-lazy-refresh/content.md",
+      "type": "documents",
+      "weight": 0.4
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ratatui-tui-architecture/content.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/rust-bin-vs-lib-crate-attrs/content.md",
+      "type": "documents",
+      "weight": 0.4
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/workflows/ade-regression.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-netlist-standalone-workflow/content.md",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/workflows/ade-regression.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/maestro-simulator-mode-api/content.md",
+      "type": "documents",
+      "weight": 0.5
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/workflows/analog-design-flow.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ocean-createnetlist-prerequisites/content.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/workflows/analog-design-flow.md",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/ic23-design-variable-namespaces/content.md",
+      "type": "documents",
+      "weight": 0.4
+    },
+    {
+      "source": "config:/Users/dean/Documents/git/virtuoso-cli/.github/dependabot.yml",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.github/scripts/run-skill-tests.sh",
+      "type": "configures",
+      "weight": 0.3
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.github/scripts/run-skill-tests.sh",
+      "target": "config:/Users/dean/Documents/git/virtuoso-cli/.codex/hooks.json",
+      "type": "configures",
+      "weight": 0.3
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.pensieve/knowledge/claude-code-skill-variable-expansion/content.md",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.github/scripts/run-skill-tests.sh",
+      "type": "documents",
+      "weight": 0.4
+    }
+  ]
+}

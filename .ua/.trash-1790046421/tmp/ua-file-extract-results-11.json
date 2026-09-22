@@ -1,0 +1,895 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 3,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 3,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": [
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/enumerate_functions.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 157,
+      "nonEmptyLines": 126,
+      "functions": [
+        {
+          "name": "build_candidates",
+          "startLine": 53,
+          "endLine": 59,
+          "params": []
+        },
+        {
+          "name": "test_function",
+          "startLine": 62,
+          "endLine": 109,
+          "params": [
+            "vcli",
+            "session",
+            "name"
+          ]
+        },
+        {
+          "name": "run_enumeration",
+          "startLine": 112,
+          "endLine": 143,
+          "params": [
+            "vcli",
+            "session",
+            "prefix_filter"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "build_candidates",
+          "line": 53,
+          "isDefault": false
+        },
+        {
+          "name": "test_function",
+          "line": 62,
+          "isDefault": false
+        },
+        {
+          "name": "run_enumeration",
+          "line": 112,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "build_candidates",
+          "callee": "set",
+          "lineNumber": 55
+        },
+        {
+          "caller": "build_candidates",
+          "callee": "candidates.add",
+          "lineNumber": 58
+        },
+        {
+          "caller": "build_candidates",
+          "callee": "sorted",
+          "lineNumber": 59
+        },
+        {
+          "caller": "test_function",
+          "callee": "subprocess.run",
+          "lineNumber": 72
+        },
+        {
+          "caller": "test_function",
+          "callee": "result.stdout.decode('utf-8', errors='replace').strip",
+          "lineNumber": 75
+        },
+        {
+          "caller": "test_function",
+          "callee": "result.stdout.decode",
+          "lineNumber": 75
+        },
+        {
+          "caller": "test_function",
+          "callee": "result.stderr.decode('utf-8', errors='replace').strip",
+          "lineNumber": 76
+        },
+        {
+          "caller": "test_function",
+          "callee": "result.stderr.decode",
+          "lineNumber": 76
+        },
+        {
+          "caller": "test_function",
+          "callee": "json.loads",
+          "lineNumber": 82
+        },
+        {
+          "caller": "test_function",
+          "callee": "data.get",
+          "lineNumber": 86
+        },
+        {
+          "caller": "test_function",
+          "callee": "data.get",
+          "lineNumber": 87
+        },
+        {
+          "caller": "test_function",
+          "callee": "data.get",
+          "lineNumber": 88
+        },
+        {
+          "caller": "test_function",
+          "callee": "(out + \" \" + \" \".join(errors)).lower",
+          "lineNumber": 89
+        },
+        {
+          "caller": "test_function",
+          "callee": "\" \".join",
+          "lineNumber": 89
+        },
+        {
+          "caller": "test_function",
+          "callee": "str",
+          "lineNumber": 109
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "get_db",
+          "lineNumber": 114
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "build_candidates",
+          "lineNumber": 115
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "c.startswith",
+          "lineNumber": 118
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "print",
+          "lineNumber": 120
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "len",
+          "lineNumber": 120
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "enumerate",
+          "lineNumber": 124
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "test_function",
+          "lineNumber": 125
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "record_function",
+          "lineNumber": 128
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "print",
+          "lineNumber": 130
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "len",
+          "lineNumber": 130
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "record_function",
+          "lineNumber": 132
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "print",
+          "lineNumber": 140
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "len",
+          "lineNumber": 140
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "print",
+          "lineNumber": 142
+        },
+        {
+          "caller": "run_enumeration",
+          "callee": "len",
+          "lineNumber": 142
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/probe_signatures.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 94,
+      "nonEmptyLines": 73,
+      "functions": [
+        {
+          "name": "probe_signature",
+          "startLine": 16,
+          "endLine": 57,
+          "params": [
+            "vcli",
+            "session",
+            "name"
+          ]
+        },
+        {
+          "name": "run_signature_probe",
+          "startLine": 60,
+          "endLine": 87,
+          "params": [
+            "vcli",
+            "session",
+            "limit"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "probe_signature",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "run_signature_probe",
+          "line": 60,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "probe_signature",
+          "callee": "range",
+          "lineNumber": 24
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "\", \".join",
+          "lineNumber": 25
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "subprocess.Popen",
+          "lineNumber": 30
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "r.communicate",
+          "lineNumber": 31
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "out.decode",
+          "lineNumber": 32
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "json.loads",
+          "lineNumber": 37
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "data.get",
+          "lineNumber": 41
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "data.get",
+          "lineNumber": 42
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "data.get",
+          "lineNumber": 43
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "\" \".join",
+          "lineNumber": 44
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "re.search",
+          "lineNumber": 48
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "int",
+          "lineNumber": 50
+        },
+        {
+          "caller": "probe_signature",
+          "callee": "match.group",
+          "lineNumber": 50
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "get_db",
+          "lineNumber": 61
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "get_known_functions",
+          "lineNumber": 62
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "print",
+          "lineNumber": 66
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "len",
+          "lineNumber": 66
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "enumerate",
+          "lineNumber": 68
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "probe_signature",
+          "lineNumber": 70
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "sorted",
+          "lineNumber": 74
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "results.keys",
+          "lineNumber": 74
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "sig_parts.append",
+          "lineNumber": 76
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "\" | \".join",
+          "lineNumber": 78
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "record_function",
+          "lineNumber": 81
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "print",
+          "lineNumber": 84
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "len",
+          "lineNumber": 84
+        },
+        {
+          "caller": "run_signature_probe",
+          "callee": "print",
+          "lineNumber": 86
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": ".claude/skills/virtuoso-gui-debug/scripts/skill_db.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 215,
+      "nonEmptyLines": 188,
+      "functions": [
+        {
+          "name": "get_db",
+          "startLine": 19,
+          "endLine": 66,
+          "params": []
+        },
+        {
+          "name": "record_function",
+          "startLine": 69,
+          "endLine": 85,
+          "params": [
+            "conn",
+            "name",
+            "exists",
+            "signature",
+            "description",
+            "notes"
+          ]
+        },
+        {
+          "name": "record_failure",
+          "startLine": 88,
+          "endLine": 94,
+          "params": [
+            "conn",
+            "function_name",
+            "error_type",
+            "error_message"
+          ]
+        },
+        {
+          "name": "has_known_failure",
+          "startLine": 97,
+          "endLine": 104,
+          "params": [
+            "conn",
+            "function_name"
+          ]
+        },
+        {
+          "name": "get_known_functions",
+          "startLine": 107,
+          "endLine": 116,
+          "params": [
+            "conn",
+            "category"
+          ]
+        },
+        {
+          "name": "get_function",
+          "startLine": 119,
+          "endLine": 122,
+          "params": [
+            "conn",
+            "name"
+          ]
+        },
+        {
+          "name": "record_layer",
+          "startLine": 125,
+          "endLine": 133,
+          "params": [
+            "conn",
+            "layer",
+            "purpose",
+            "drawable"
+          ]
+        },
+        {
+          "name": "record_shape_property",
+          "startLine": 136,
+          "endLine": 146,
+          "params": [
+            "conn",
+            "obj_type",
+            "prop",
+            "works",
+            "example"
+          ]
+        },
+        {
+          "name": "record_param_example",
+          "startLine": 149,
+          "endLine": 168,
+          "params": [
+            "conn",
+            "function_name",
+            "param_name",
+            "example_value"
+          ]
+        },
+        {
+          "name": "get_param_examples",
+          "startLine": 171,
+          "endLine": 188,
+          "params": [
+            "conn",
+            "function_name"
+          ]
+        },
+        {
+          "name": "stats",
+          "startLine": 191,
+          "endLine": 207,
+          "params": [
+            "conn"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "get_db",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "record_function",
+          "line": 69,
+          "isDefault": false
+        },
+        {
+          "name": "record_failure",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "has_known_failure",
+          "line": 97,
+          "isDefault": false
+        },
+        {
+          "name": "get_known_functions",
+          "line": 107,
+          "isDefault": false
+        },
+        {
+          "name": "get_function",
+          "line": 119,
+          "isDefault": false
+        },
+        {
+          "name": "record_layer",
+          "line": 125,
+          "isDefault": false
+        },
+        {
+          "name": "record_shape_property",
+          "line": 136,
+          "isDefault": false
+        },
+        {
+          "name": "record_param_example",
+          "line": 149,
+          "isDefault": false
+        },
+        {
+          "name": "get_param_examples",
+          "line": 171,
+          "isDefault": false
+        },
+        {
+          "name": "stats",
+          "line": 191,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get_db",
+          "callee": "sqlite3.connect",
+          "lineNumber": 21
+        },
+        {
+          "caller": "get_db",
+          "callee": "str",
+          "lineNumber": 21
+        },
+        {
+          "caller": "get_db",
+          "callee": "conn.execute",
+          "lineNumber": 23
+        },
+        {
+          "caller": "get_db",
+          "callee": "conn.execute",
+          "lineNumber": 35
+        },
+        {
+          "caller": "get_db",
+          "callee": "conn.execute",
+          "lineNumber": 44
+        },
+        {
+          "caller": "get_db",
+          "callee": "conn.execute",
+          "lineNumber": 55
+        },
+        {
+          "caller": "get_db",
+          "callee": "conn.commit",
+          "lineNumber": 65
+        },
+        {
+          "caller": "record_function",
+          "callee": "name.split",
+          "lineNumber": 71
+        },
+        {
+          "caller": "record_function",
+          "callee": "conn.execute",
+          "lineNumber": 72
+        },
+        {
+          "caller": "record_function",
+          "callee": "int",
+          "lineNumber": 83
+        },
+        {
+          "caller": "record_function",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 84
+        },
+        {
+          "caller": "record_function",
+          "callee": "datetime.now",
+          "lineNumber": 84
+        },
+        {
+          "caller": "record_function",
+          "callee": "conn.commit",
+          "lineNumber": 85
+        },
+        {
+          "caller": "record_failure",
+          "callee": "conn.execute",
+          "lineNumber": 90
+        },
+        {
+          "caller": "record_failure",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 93
+        },
+        {
+          "caller": "record_failure",
+          "callee": "datetime.now",
+          "lineNumber": 93
+        },
+        {
+          "caller": "record_failure",
+          "callee": "conn.commit",
+          "lineNumber": 94
+        },
+        {
+          "caller": "has_known_failure",
+          "callee": "conn.execute(\"\"\"\n        SELECT error_type, error_message, created_at\n        FROM error_history WHERE function_name = ? AND fixed = 0\n        ORDER BY created_at DESC LIMIT 1\n    \"\"\", (function_name,)).fetchone",
+          "lineNumber": 99
+        },
+        {
+          "caller": "has_known_failure",
+          "callee": "conn.execute",
+          "lineNumber": 99
+        },
+        {
+          "caller": "has_known_failure",
+          "callee": "dict",
+          "lineNumber": 104
+        },
+        {
+          "caller": "get_known_functions",
+          "callee": "conn.execute(\n            \"SELECT * FROM functions WHERE category=? AND func_exists=1 ORDER BY name\",\n            (category,)).fetchall",
+          "lineNumber": 110
+        },
+        {
+          "caller": "get_known_functions",
+          "callee": "conn.execute",
+          "lineNumber": 110
+        },
+        {
+          "caller": "get_known_functions",
+          "callee": "conn.execute(\n            \"SELECT * FROM functions WHERE func_exists=1 ORDER BY category, name\").fetchall",
+          "lineNumber": 114
+        },
+        {
+          "caller": "get_known_functions",
+          "callee": "conn.execute",
+          "lineNumber": 114
+        },
+        {
+          "caller": "get_known_functions",
+          "callee": "dict",
+          "lineNumber": 116
+        },
+        {
+          "caller": "get_function",
+          "callee": "conn.execute(\"SELECT * FROM functions WHERE name=?\", (name,)).fetchone",
+          "lineNumber": 121
+        },
+        {
+          "caller": "get_function",
+          "callee": "conn.execute",
+          "lineNumber": 121
+        },
+        {
+          "caller": "get_function",
+          "callee": "dict",
+          "lineNumber": 122
+        },
+        {
+          "caller": "record_layer",
+          "callee": "conn.execute",
+          "lineNumber": 127
+        },
+        {
+          "caller": "record_layer",
+          "callee": "int",
+          "lineNumber": 132
+        },
+        {
+          "caller": "record_layer",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 132
+        },
+        {
+          "caller": "record_layer",
+          "callee": "datetime.now",
+          "lineNumber": 132
+        },
+        {
+          "caller": "record_layer",
+          "callee": "conn.commit",
+          "lineNumber": 133
+        },
+        {
+          "caller": "record_shape_property",
+          "callee": "conn.execute",
+          "lineNumber": 138
+        },
+        {
+          "caller": "record_shape_property",
+          "callee": "int",
+          "lineNumber": 145
+        },
+        {
+          "caller": "record_shape_property",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 145
+        },
+        {
+          "caller": "record_shape_property",
+          "callee": "datetime.now",
+          "lineNumber": 145
+        },
+        {
+          "caller": "record_shape_property",
+          "callee": "conn.commit",
+          "lineNumber": 146
+        },
+        {
+          "caller": "record_param_example",
+          "callee": "conn.execute",
+          "lineNumber": 151
+        },
+        {
+          "caller": "record_param_example",
+          "callee": "conn.execute",
+          "lineNumber": 161
+        },
+        {
+          "caller": "record_param_example",
+          "callee": "datetime.now().isoformat",
+          "lineNumber": 167
+        },
+        {
+          "caller": "record_param_example",
+          "callee": "datetime.now",
+          "lineNumber": 167
+        },
+        {
+          "caller": "record_param_example",
+          "callee": "conn.commit",
+          "lineNumber": 168
+        },
+        {
+          "caller": "get_param_examples",
+          "callee": "conn.execute",
+          "lineNumber": 173
+        },
+        {
+          "caller": "get_param_examples",
+          "callee": "conn.execute(\"\"\"\n        SELECT param_name, example_value, success_count\n        FROM param_examples WHERE function_name = ?\n        ORDER BY success_count DESC\n    \"\"\", (function_name,)).fetchall",
+          "lineNumber": 183
+        },
+        {
+          "caller": "get_param_examples",
+          "callee": "conn.execute",
+          "lineNumber": 183
+        },
+        {
+          "caller": "get_param_examples",
+          "callee": "dict",
+          "lineNumber": 188
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM functions\").fetchone",
+          "lineNumber": 193
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute",
+          "lineNumber": 193
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM functions WHERE func_exists=1\").fetchone",
+          "lineNumber": 194
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute",
+          "lineNumber": 194
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM layers WHERE drawable=1\").fetchone",
+          "lineNumber": 195
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute",
+          "lineNumber": 195
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM shapes WHERE works=1\").fetchone",
+          "lineNumber": 196
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute",
+          "lineNumber": 196
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM fnd_functions\").fetchone",
+          "lineNumber": 197
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute",
+          "lineNumber": 197
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute(\"SELECT COUNT(*) FROM error_history WHERE fixed=0\").fetchone",
+          "lineNumber": 198
+        },
+        {
+          "caller": "stats",
+          "callee": "conn.execute",
+          "lineNumber": 198
+        },
+        {
+          "caller": "stats",
+          "callee": "str",
+          "lineNumber": 206
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 11,
+        "functionCount": 11,
+        "classCount": 0
+      }
+    }
+  ]
+}

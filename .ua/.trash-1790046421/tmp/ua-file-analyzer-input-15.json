@@ -1,0 +1,35 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/README.md",
+      "language": "markdown",
+      "sizeLines": 98,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 1105,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/test_full.json",
+      "language": "json",
+      "sizeLines": 66,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/test_scenario.json",
+      "language": "json",
+      "sizeLines": 58,
+      "fileCategory": "config"
+    }
+  ],
+  "batchImportData": {
+    ".agents/skills/virtuoso-gui-debug/README.md": [],
+    ".agents/skills/virtuoso-gui-debug/SKILL.md": [],
+    ".agents/skills/virtuoso-gui-debug/test_full.json": [],
+    ".agents/skills/virtuoso-gui-debug/test_scenario.json": []
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".pensieve/pipelines/run-when-committing.md",
+      "language": "markdown",
+      "sizeLines": 119,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/pipelines/run-when-reviewing-code.md",
+      "language": "markdown",
+      "sizeLines": 157,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".pensieve/pipelines/run-when-syncing-to-main.md",
+      "language": "markdown",
+      "sizeLines": 128,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    ".pensieve/pipelines/run-when-committing.md": [],
+    ".pensieve/pipelines/run-when-reviewing-code.md": [],
+    ".pensieve/pipelines/run-when-syncing-to-main.md": []
+  }
+}

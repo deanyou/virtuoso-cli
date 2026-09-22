@@ -1,0 +1,28 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".claude/hooks/auto_plot.sh",
+      "language": "shell",
+      "sizeLines": 68,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/hooks/eda_error_capture.sh",
+      "language": "shell",
+      "sizeLines": 50,
+      "fileCategory": "script"
+    },
+    {
+      "path": ".claude/hooks/rust_check.sh",
+      "language": "shell",
+      "sizeLines": 41,
+      "fileCategory": "script"
+    }
+  ],
+  "batchImportData": {
+    ".claude/hooks/auto_plot.sh": [],
+    ".claude/hooks/eda_error_capture.sh": [],
+    ".claude/hooks/rust_check.sh": []
+  }
+}

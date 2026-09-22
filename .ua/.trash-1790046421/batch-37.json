@@ -1,0 +1,509 @@
+{
+  "batchIndex": 37,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "type": "document",
+      "name": "scenario-schema.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "summary": "Strict JSON DSL schema for Virtuoso GUI Runner scenarios. Defines top-level fields (version=1.0, task_id, session_id, pid, display, cellview, steps), CellView/Step/Verifier/Rollback object shapes, and the full set of allowed operations (VCLI_LOAD, VCLI_CALL, WINDOW_*, DISMISS_DIALOG, CLOSE, KEY, TYPE, CLICK_REL, DRAG_REL, SCROLL, SCREENSHOT, VERIFY, RECOVER) plus executor semantics. Extra fields are rejected.",
+      "tags": [
+        "documentation",
+        "schema",
+        "dsl",
+        "gui-runner",
+        "virtuoso",
+        "scenario"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown reference doc with tables; describes JSON contract enforced by vgui_runner."
+    },
+    {
+      "id": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "type": "document",
+      "name": "xdotool-cheatsheet.md",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "summary": "Bilingual (Chinese-led) xdotool quick reference covering window search, geometry, activation, mouse/click/drag/scroll, typing, and key chord primitives. Documents the higher-level Python CLI wrapper at scripts/gui.py for env/state/find/shot/click/drag/scroll/type/key/wait/smoke subcommands.",
+      "tags": [
+        "documentation",
+        "xdotool",
+        "cheatsheet",
+        "gui-debugging",
+        "x11"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Markdown table-heavy reference; complements xdotool_cli.py."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "type": "file",
+      "name": "add_fts.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/add_fts.py",
+      "summary": "Adds SQLite FTS5 full-text search virtual table on top of the fnd_functions row set so that the RSI query path can do BM25 semantic search.",
+      "tags": [
+        "python",
+        "sqlite",
+        "fts5",
+        "rsi",
+        "search"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Short procedural script (no functions defined); uses sqlite3 stdlib only."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "type": "file",
+      "name": "generate_report.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "summary": "Regenerates the tabbed RSI status HTML report from the SQLite knowledge base. Aggregates fnd_functions counts by version, manual vs verified, IC251 confidence buckets, synonym/param/error stats, top categories, verified function list, param examples by function, recent errors, and full RSI progress history.",
+      "tags": [
+        "python",
+        "reporting",
+        "sqlite",
+        "rsi",
+        "html"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Top-level script body (no functions); aggregates SQLite rows and writes report/rsi_report.html."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "type": "file",
+      "name": "import_fnd.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "summary": "Parses Virtuoso .fnd documentation files (IC231/IC618) using a multi-line regex and inserts them into the RSI SQLite knowledge base as fnd_functions rows with name, syntax, description, args count, category and version.",
+      "tags": [
+        "python",
+        "importer",
+        "parser",
+        "fnd",
+        "rsi",
+        "virtuoso"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Functions: parse_fnd_file, import_version, main. Uses re, os, sqlite3, pathlib."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "type": "file",
+      "name": "init_snippets.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/init_snippets.py",
+      "summary": "Creates the snippets table (id, description, category, code, params, version, success_count, last_used) in skill_db.sqlite3 and seeds it with verified Virtuoso SKILL snippets (draw_rect, draw_polygon, draw_path, draw_line, save_cv, zoom_fit, etc.).",
+      "tags": [
+        "python",
+        "sqlite",
+        "seed",
+        "snippets",
+        "rsi"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Procedural script; uses sqlite3 + json + datetime."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "type": "file",
+      "name": "init_synonyms.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/init_synonyms.py",
+      "summary": "Initializes the synonyms table in the RSI database and seeds canonical→variant mappings (e.g., rect↔rectangle, instance↔inst, save↔write/store/commit, delete↔remove/rm/kill) used for query expansion.",
+      "tags": [
+        "python",
+        "sqlite",
+        "seed",
+        "synonyms",
+        "rsi"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Single main() entry point; uses sqlite3 + pathlib."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/promote.py",
+      "type": "file",
+      "name": "promote.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/promote.py",
+      "summary": "Promotes high-frequency snippet rows from the RSI knowledge base into a SKILL .il file (vcli_snippets.il) of named procedures (vcliDrawRect, vcliDrawPolygon, vcliDrawPath, vcliDrawLine, vcliSaveCv, vcliZoomFit, vcliSelectAll, vcliDeselectAll, vcliDeleteSelected, vcliListShapes) so they can be loaded into Virtuoso as vcli* commands.",
+      "tags": [
+        "python",
+        "code-gen",
+        "skill-il",
+        "rsi",
+        "promotion"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Functions: name_to_proc, generate_il, main. Uses sqlite3, json, re, pathlib."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "type": "file",
+      "name": "record_progress.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/record_progress.py",
+      "summary": "Creates the rsi_progress table and seeds a chronological list of milestone entries (date, phase, milestone, detail, functions_added, errors_recorded) used in the RSI HTML report.",
+      "tags": [
+        "python",
+        "sqlite",
+        "seed",
+        "rsi",
+        "progress"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Procedural; uses sqlite3 + datetime + pathlib."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "type": "file",
+      "name": "rsi.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "summary": "Main RSI (Recursive Self-Improvement) CLI for the Virtuoso SKILL knowledge base. Implements DB connection, synonym loading/query expansion, semantic search, exact function lookup with known params, function-call dispatch via vcli, auto-recording of results, knowledge-base status, and report regeneration. Command surface: 'rsi QUERY', 'rsi -f FUNC', 'rsi call FUNC ARGS', 'rsi record', 'rsi status', 'rsi report'.",
+      "tags": [
+        "python",
+        "cli",
+        "sqlite",
+        "skill",
+        "rsi",
+        "virtuoso",
+        "search",
+        "knowledge-base"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Nine exported functions (conn, _load_synonyms, expand, search, lookup, record_failure, record_param, _handle_snippet, main); uses argparse, json, sqlite3, subprocess, datetime, pathlib. Largest file in batch."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "type": "file",
+      "name": "rsi_export.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi_export.py",
+      "summary": "Exports and re-imports the RSI SQLite knowledge base as a single JSON file (synonyms, snippets, open errors, param examples, verified functions) for team sharing; imports validate and insert into the corresponding tables.",
+      "tags": [
+        "python",
+        "serialization",
+        "sqlite",
+        "json",
+        "rsi",
+        "sharing"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Functions: export, import_data. Uses sqlite3 + json + pathlib + datetime."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "type": "file",
+      "name": "rsi_query.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "summary": "RSI query CLI — semantic search, exact function lookup, prefix search, category listing, and error checking against the SQLite knowledge base. Implements an in-script synonym map for query expansion and runs against the fnd_functions_fts FTS5 virtual table.",
+      "tags": [
+        "python",
+        "cli",
+        "sqlite",
+        "fts5",
+        "search",
+        "rsi",
+        "virtuoso"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Seven exported functions (get_conn, search, get_function, list_category, prefix_search, check_errors, main); uses argparse + sqlite3 + pathlib."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "type": "file",
+      "name": "snippet_library.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "summary": "Catalog of verified, parameterized, composable SKILL snippets for Virtuoso (draw_rect, draw_polygon, draw_path, draw_line, save_cv, zoom_fit, select_all, deselect_all, delete_selected, list_shapes, etc.). init() persists them into the snippets table so promote.py can later emit a .il file.",
+      "tags": [
+        "python",
+        "library",
+        "snippets",
+        "skill",
+        "virtuoso",
+        "rsi"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Single init() entry point; large module-level SNIPPETS tuple list with {{param}} placeholders."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "type": "file",
+      "name": "test_rsi_e2e.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "summary": "End-to-end test for the RSI workflow: query → vcli call → record. Drives remote Virtuoso over SSH (user1@192.168.1.111) using the dean-user1-37749 vcli session, exercises rsi_query.get_conn + get_function, and validates the 'draw a path' scenario.",
+      "tags": [
+        "python",
+        "e2e",
+        "rsi",
+        "ssh",
+        "vcli",
+        "test"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Functions: vcli, main. Imports get_conn, get_function from local rsi_query."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "type": "file",
+      "name": "test_stability.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "summary": "Stability regression test that runs core RSI operations (status, search, exact lookup, snippet list, lookup of a known function, snippet invocation) three times in a row and asserts consistent output + exit codes.",
+      "tags": [
+        "python",
+        "stability",
+        "regression",
+        "rsi",
+        "subprocess"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Functions: run, check, test_round. Uses subprocess + sqlite3 + pathlib."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "type": "file",
+      "name": "validate_ic251.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "summary": "Live validation of fnd_functions against IC251 Virtuoso over SSH. For each candidate function calls `func(nil)` via vcli and interprets 'undefined function' vs argument errors to mark existence. Updates confidence column in the SQLite DB.",
+      "tags": [
+        "python",
+        "validator",
+        "virtuoso",
+        "ic251",
+        "ssh",
+        "vcli",
+        "rsi"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Functions: vcli_exec, function_exists, main. Uses sqlite3 + subprocess + json."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "type": "file",
+      "name": "verify_db.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "summary": "Integrity checks for the RSI SQLite DB: SQLite-vs-JSON backup consistency, presence of confidence on every record, signatures on verified functions, no orphan error_history rows, and per-version coverage stats.",
+      "tags": [
+        "python",
+        "sqlite",
+        "integrity",
+        "rsi",
+        "verification"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Single verify() entry point; uses sqlite3 + json + pathlib."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "type": "file",
+      "name": "verify_ic251.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "summary": "Batch-verifies IC251 fnd_functions against a live Virtuoso via SSH+vcli. For up to 200 'ported' functions, calls funcName() and classifies result as 'verified', 'exists', 'not_exist', or 'timeout'.",
+      "tags": [
+        "python",
+        "verification",
+        "virtuoso",
+        "ic251",
+        "ssh",
+        "vcli",
+        "rsi"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Functions: check_func, main. Uses sqlite3 + subprocess + json."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "type": "file",
+      "name": "xdotool_cli.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "summary": "Full-featured xdotool-backed GUI debugger CLI. Implements subcommands env/state/find/shot/click/drag/scroll/type/key/wait/smoke around X11 primitives, with a session-state file at /tmp/gui_session.env and an action log at /tmp/gui_actions.log. Enforces a hard DISPLAY/xdotool environment gate.",
+      "tags": [
+        "python",
+        "cli",
+        "xdotool",
+        "x11",
+        "gui-debug",
+        "virtuoso"
+      ],
+      "complexity": "complex",
+      "languageNotes": "23 exported functions including build_parser and per-cmd cmd_* functions; uses argparse, subprocess, time, datetime, shutil, os, sys, SimpleNamespace."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/__init__.py",
+      "summary": "Test package init for virtuoso-gui-debug. Injects the skill root (parent of tests/) into sys.path so 'from vgui_runner.model import …' resolves during unittest discovery (which only adds scripts/ and tests/).",
+      "tags": [
+        "python",
+        "test",
+        "sys-path",
+        "package-init"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Two-line import + sys.path tweak; documents the 2-level Skill packaging constraint."
+    },
+    {
+      "id": "config:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/fail.json",
+      "type": "config",
+      "name": "fail.json",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/fail.json",
+      "summary": "Negative-path scenario fixture used by the gui_runner test suite: a scenario with a nonexistent VCLI_LOAD command and an inverted verifier expectation (expected:false on window_exists). Drives TestCliRunFake failure path.",
+      "tags": [
+        "json",
+        "fixture",
+        "scenario",
+        "test",
+        "gui-runner"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Strict JSON matching scenario-schema.md v1.0; 7 top-level keys."
+    },
+    {
+      "id": "config:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/pass.json",
+      "type": "config",
+      "name": "pass.json",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/pass.json",
+      "summary": "Positive-path scenario fixture used by the gui_runner test suite: a two-step scenario (loadDesign + WINDOW_WAIT for the 'Virtuoso' window). Drives TestCliRunFake happy path.",
+      "tags": [
+        "json",
+        "fixture",
+        "scenario",
+        "test",
+        "gui-runner"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Strict JSON matching scenario-schema.md v1.0; 7 top-level keys."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "type": "file",
+      "name": "test_cli.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "summary": "unittest suite for the gui_runner.py CLI (not in this batch — invoked by SCRIPT_PATH). Five TestCase classes cover validate (valid/invalid/version), run with --executor=fake (pass/fail/refusal/invalid), run-live (skip-aware), machine-readable JSON-on-stdout contract, and a guard that the CLI never writes outside the explicit --output directory.",
+      "tags": [
+        "python",
+        "unittest",
+        "cli",
+        "test",
+        "gui-runner"
+      ],
+      "complexity": "complex",
+      "languageNotes": "5 classes (TestCliValidate, TestCliRunFake, TestCliRunLive, TestCliMachineReadableOutput, TestNoOutputOutsideDir) plus helpers (write_scenario, write_outcomes, clean_env, run_cli). Uses tempfile + subprocess heavily."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "summary": "Marker package init for vgui_runner — the offline Virtuoso GUI runner foundation. Single-line docstring; no runtime code.",
+      "tags": [
+        "python",
+        "package-init",
+        "vgui-runner"
+      ],
+      "complexity": "simple",
+      "languageNotes": "One-line module docstring."
+    },
+    {
+      "id": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "type": "file",
+      "name": "rsi_report.html",
+      "filePath": "/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "summary": "Tabbed HTML dashboard for the RSI knowledge base. Skipped by the extractor (rendered binary markup).",
+      "tags": [
+        "html",
+        "report",
+        "dashboard",
+        "rsi"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "HTML, generated by scripts/generate_report.py — file skipped during structure analysis."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/fail.json",
+      "type": "documents",
+      "weight": 0.8
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/pass.json",
+      "type": "documents",
+      "weight": 0.8
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/references/xdotool-cheatsheet.md",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "type": "documents",
+      "weight": 0.7
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/generate_report.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/report/rsi_report.html",
+      "type": "configures",
+      "weight": 0.8
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/test_rsi_e2e.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi_query.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/rsi.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/snippet_library.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/scripts/import_fnd.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/pass.json",
+      "type": "tested_by",
+      "weight": 0.7
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "target": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/fail.json",
+      "type": "tested_by",
+      "weight": 0.7
+    },
+    {
+      "source": "file:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "target": "document:/Users/dean/Documents/git/virtuoso-cli/.claude/skills/virtuoso-gui-debug/references/scenario-schema.md",
+      "type": "tested_by",
+      "weight": 0.6
+    }
+  ]
+}

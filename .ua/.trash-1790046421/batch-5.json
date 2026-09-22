@@ -1,0 +1,2049 @@
+{
+  "batchIndex": 5,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:src/profile.rs",
+      "type": "file",
+      "name": "profile.rs",
+      "filePath": "src/profile.rs",
+      "summary": "Profile (Virtuoso environment) resolution and binding across venv, user, and local scopes. Resolves profile from explicit flag / env var / venv / user config, and binds/clears it for child processes. Defines ProfileResolution, BindScope.",
+      "tags": [
+        "profile",
+        "env",
+        "config",
+        "binding",
+        "virtuoso"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Rust module with serde-free data structures, env::var probing, and Drop-side cleanup of env vars for spawned processes."
+    },
+    {
+      "id": "file:src/rpc/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/rpc/mod.rs",
+      "summary": "Module root for the typed RPC layer. Declares `dispatcher` and `schema` submodules; replaces raw SKILL strings with `{method, params}` calls that map to SKILL expressions and return typed JSON.",
+      "tags": [
+        "rpc",
+        "module",
+        "dispatcher",
+        "schema"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Trivial module-facade file (13 lines); purely submodule declarations plus documentation."
+    },
+    {
+      "id": "file:src/rpc/schema.rs",
+      "type": "file",
+      "name": "schema.rs",
+      "filePath": "src/rpc/schema.rs",
+      "summary": "RPC schema definitions: Method/Param/RpcSchema structs plus standard_schema() returning all built-in RPC methods (schematic, library, design, simulation, etc.) with JSON-Schema-like metadata. Drives discoverable, type-safe API for AI agents.",
+      "tags": [
+        "rpc",
+        "schema",
+        "method",
+        "param",
+        "json"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Large file (1216 lines) dominated by a single static-literal schema constructor; serde-derived Serialize/Deserialize types."
+    },
+    {
+      "id": "file:src/runtime_paths.rs",
+      "type": "file",
+      "name": "runtime_paths.rs",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "Centralized filesystem path resolution for the bridge runtime. Honours VB_CACHE_DIR / VB_LOG_DIR / VB_HOME / XDG_CACHE_HOME env vars, falls back to dirs::cache_dir(), and provides a legacy_cache_file API for pre-refactor state files.",
+      "tags": [
+        "paths",
+        "xdg",
+        "cache",
+        "env",
+        "compat"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pure-Path module adapted from virtuoso-bridge-lite (Python). Uses std::env::var_os and PathBuf exclusively; no I/O."
+    },
+    {
+      "id": "file:src/skill_finder/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "SKILL Finder client — query Cadence SKILL API docs from .fnd databases. Supports Fuzzy/Prefix/Suffix/Exact/Regex search modes, remote-host cache (~/.cache/virtuoso_bridge/skill_finder/<host>/), lazy sync, and refresh.",
+      "tags": [
+        "skill",
+        "finder",
+        "search",
+        "cache",
+        "cadence"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Module gated `#![allow(dead_code)]`; exports SearchMode enum, SKILLFinder struct, search/sync helpers, and re-exports parser types."
+    },
+    {
+      "id": "file:src/skill_finder/parser.rs",
+      "type": "file",
+      "name": "parser.rs",
+      "filePath": "src/skill_finder/parser.rs",
+      "summary": "Hand-rolled state-machine parser for Cadence .fnd SKILL Finder database files. Yields SkillEntry triples (name, syntax, description) tolerant of comments and trailing fields.",
+      "tags": [
+        "parser",
+        "skill",
+        "fnd",
+        "state-machine"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Recursive-descent-style lexer without regex; comment-aware, treats SKILL string literals across newlines."
+    },
+    {
+      "id": "file:src/spectre/maestro_csv.rs",
+      "type": "file",
+      "name": "maestro_csv.rs",
+      "filePath": "src/spectre/maestro_csv.rs",
+      "summary": "Parser for Cadence Maestro \"Detail\" CSV exports (maeExportOutputView). Produces MaestroResult/Point/Output structs with sweep parameters and per-point measurement data, including optional raw_csv passthrough.",
+      "tags": [
+        "maestro",
+        "csv",
+        "spectre",
+        "parser",
+        "sweep"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Serde-derived data model; CSV parsing helpers with HashMap-backed design variables and outputs."
+    },
+    {
+      "id": "file:src/spectre/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/spectre/mod.rs",
+      "summary": "Module root for Spectre-related types. Aggregates jobs, maestro_csv, parsers, runner submodules.",
+      "tags": [
+        "spectre",
+        "module"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Tiny (4-line) submodule facade."
+    },
+    {
+      "id": "file:src/streaming/job_progress.rs",
+      "type": "file",
+      "name": "job_progress.rs",
+      "filePath": "src/streaming/job_progress.rs",
+      "summary": "JobProgressTracker — polls a Spectre spectre.out log, parses progress lines (iteration count, time point), and emits JobEvent::Progress via a JobEventSink. Backs the streaming progress UI.",
+      "tags": [
+        "streaming",
+        "progress",
+        "spectre",
+        "log",
+        "events"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Uses std::fs, atomic byte-position tracking, periodic size checks; throttled reads via Instant elapsed check."
+    },
+    {
+      "id": "file:src/streaming/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/streaming/mod.rs",
+      "summary": "Streaming event primitives. Defines JobEvent (Started/Progress/Completed/Failed/Cancelled tagged enum), JobEventSink trait, StdoutSink/ChannelSink impls, and helpers for fan-out / throttling.",
+      "tags": [
+        "streaming",
+        "events",
+        "sink",
+        "channel"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Tagged enum with serde rename_all=\"snake_case\"; Arc<dyn JobEventSink> fan-out; tokio mpsc integration."
+    },
+    {
+      "id": "file:src/sys/linux_rename.rs",
+      "type": "file",
+      "name": "linux_rename.rs",
+      "filePath": "src/sys/linux_rename.rs",
+      "summary": "Cross-glibc wrapper for renameat2(..., RENAME_NOREPLACE). Tries dlsym, then raw SYS_renameat2 syscall, then a non-atomic lstat + renameat fallback for CentOS 7 / glibc 2.17.",
+      "tags": [
+        "linux",
+        "syscall",
+        "renameat2",
+        "compat",
+        "ffi"
+      ],
+      "complexity": "complex",
+      "languageNotes": "cfg(target_os=\"linux\")-gated FFI with libc::c_int / c_uint, raw pointers, and unsafe extern \"C\" function-pointer typedef."
+    },
+    {
+      "id": "file:src/sys/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/sys/mod.rs",
+      "summary": "Module root for platform compatibility shims. Currently exposes linux_rename on Linux only.",
+      "tags": [
+        "sys",
+        "module",
+        "compat"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Trivial (8 lines); only includes linux_rename under cfg(target_os = \"linux\")."
+    },
+    {
+      "id": "file:src/test_env.rs",
+      "type": "file",
+      "name": "test_env.rs",
+      "filePath": "src/test_env.rs",
+      "summary": "Sentinel module documenting that env-mutating tests must use #[serial] from serial_test. Empty body, exists only to give future env-aware test helpers an obvious home.",
+      "tags": [
+        "test",
+        "env",
+        "serial",
+        "docs"
+      ],
+      "complexity": "simple",
+      "languageNotes": "#![cfg(test)] only; no runtime code."
+    },
+    {
+      "id": "file:src/tests.rs",
+      "type": "file",
+      "name": "tests.rs",
+      "filePath": "src/tests.rs",
+      "summary": "Top-level in-module test suite for vcli. Configures Config / SSHRunner / SessionInfo, runs SSH command-construction tests, env-var validation, and JSON round-trips. No network or Virtuoso required.",
+      "tags": [
+        "tests",
+        "unit",
+        "config",
+        "ssh",
+        "session"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Large (2376 lines) file containing many #[cfg(test)] mod submodules; uses serial_test::serial for env-touching tests."
+    },
+    {
+      "id": "file:src/transaction/diff.rs",
+      "type": "file",
+      "name": "diff.rs",
+      "filePath": "src/transaction/diff.rs",
+      "summary": "SchematicDiff: structured diff between two SchematicSnapshots. Tracks instances added/removed/modified, nets added/removed, and pins added/removed with per-parameter old/new values.",
+      "tags": [
+        "transaction",
+        "diff",
+        "schematic",
+        "snapshot"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Serde-derived structs; computes diffs by HashMap lookup on instance/pin names."
+    },
+    {
+      "id": "file:src/transaction/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "src/transaction/mod.rs",
+      "summary": "Transaction system facade: Transaction / TransactionManager lifecycle over a single VirtuosoClient. Tracks the active tx plus committed history and supports begin/commit/rollback semantics.",
+      "tags": [
+        "transaction",
+        "manager",
+        "lifecycle",
+        "schematic"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "RefCell-backed interior mutability so tx_* methods take &self; HashMap of net assignments per tx."
+    },
+    {
+      "id": "file:src/transaction/snapshot.rs",
+      "type": "file",
+      "name": "snapshot.rs",
+      "filePath": "src/transaction/snapshot.rs",
+      "summary": "SchematicSnapshot: point-in-time capture of a cellview (lib/cell/view + instances, nets, pins, terminal connectivity). Round-trips through serde for diffing and persistence.",
+      "tags": [
+        "transaction",
+        "snapshot",
+        "schematic",
+        "serde"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Pure data types plus a capture async fn that talks to VirtuosoClient; uses HashMap for instance/pin lookups."
+    },
+    {
+      "id": "file:src/vtui.rs",
+      "type": "file",
+      "name": "vtui.rs",
+      "filePath": "src/vtui.rs",
+      "summary": "vtui binary entrypoint. Declares all library modules and re-exports the public surface (Capability/Set, standard_schema, SchematicDiff/Snapshot, TransactionManager); calls tui::run_tui() from main.",
+      "tags": [
+        "binary",
+        "vtui",
+        "entrypoint",
+        "module-root"
+      ],
+      "complexity": "simple",
+      "languageNotes": "44-line mod aggregator with `#![allow(dead_code)]`; thin main() that delegates to tui::run_tui."
+    },
+    {
+      "id": "function:src/profile.rs:clean_profile",
+      "type": "function",
+      "name": "clean_profile",
+      "filePath": "src/profile.rs",
+      "summary": "clean_profile — function defined at lines 52-59.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:venv_profile_path",
+      "type": "function",
+      "name": "venv_profile_path",
+      "filePath": "src/profile.rs",
+      "summary": "Computes the venv marker file path under VB_HOME / VIRTUAL_ENV / known venv roots.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:read_profile_file",
+      "type": "function",
+      "name": "read_profile_file",
+      "filePath": "src/profile.rs",
+      "summary": "read_profile_file — function defined at lines 116-129.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:read_profile_from_env_file",
+      "type": "function",
+      "name": "read_profile_from_env_file",
+      "filePath": "src/profile.rs",
+      "summary": "Parses a Cadence .env / virtEnv file into profile lines, normalizing comments and whitespace.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:resolve_profile_info",
+      "type": "function",
+      "name": "resolve_profile_info",
+      "filePath": "src/profile.rs",
+      "summary": "Resolves the active profile by consulting explicit flag, VB_PROFILE env, venv probe, and user config; returns ProfileResolution with source/path tags.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:bind_venv_profile",
+      "type": "function",
+      "name": "bind_venv_profile",
+      "filePath": "src/profile.rs",
+      "summary": "Writes the chosen profile name into the active virtualenv marker file (idempotent).",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:clear_venv_profile",
+      "type": "function",
+      "name": "clear_venv_profile",
+      "filePath": "src/profile.rs",
+      "summary": "Removes the venv-side profile binding if present.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:label",
+      "type": "function",
+      "name": "label",
+      "filePath": "src/profile.rs",
+      "summary": "label — function defined at lines 309-315.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:bind_user_profile_in",
+      "type": "function",
+      "name": "bind_user_profile_in",
+      "filePath": "src/profile.rs",
+      "summary": "Persists the chosen profile name in the user-level config under dir.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:clear_user_profile_in",
+      "type": "function",
+      "name": "clear_user_profile_in",
+      "filePath": "src/profile.rs",
+      "summary": "Removes the user-level profile binding for dir.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:clear_legacy_user_env_profile_in",
+      "type": "function",
+      "name": "clear_legacy_user_env_profile_in",
+      "filePath": "src/profile.rs",
+      "summary": "Deletes the legacy pre-refactor .env profile file under dir if present.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:bind_local_profile",
+      "type": "function",
+      "name": "bind_local_profile",
+      "filePath": "src/profile.rs",
+      "summary": "Writes a .vcli-profile marker in the cwd to bind the active profile for child processes.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/profile.rs:clear_local_profile",
+      "type": "function",
+      "name": "clear_local_profile",
+      "filePath": "src/profile.rs",
+      "summary": "Removes the local .vcli-profile marker.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/profile.rs:ProfileResolution",
+      "type": "class",
+      "name": "ProfileResolution",
+      "filePath": "src/profile.rs",
+      "summary": "ProfileResolution — type defined at lines 33-42; properties: profile, source, path; methods: profile.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/profile.rs:BindScope",
+      "type": "class",
+      "name": "BindScope",
+      "filePath": "src/profile.rs",
+      "summary": "BindScope — type defined at lines 302-306; properties: Venv, User, Local; methods: label.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/rpc/schema.rs:standard_schema",
+      "type": "function",
+      "name": "standard_schema",
+      "filePath": "src/rpc/schema.rs",
+      "summary": "standard_schema — function defined at lines 45-1216.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/rpc/schema.rs:RpcSchema",
+      "type": "class",
+      "name": "RpcSchema",
+      "filePath": "src/rpc/schema.rs",
+      "summary": "RpcSchema — type defined at lines 30-33; properties: version, methods; methods: new.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:env_path",
+      "type": "function",
+      "name": "env_path",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "env_path — function defined at lines 27-33.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:cache_root",
+      "type": "function",
+      "name": "cache_root",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "Returns the cache root honoring VB_CACHE_DIR, VB_HOME/cache, XDG_CACHE_HOME, then dirs::cache_dir().",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:log_root",
+      "type": "function",
+      "name": "log_root",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "log_root — function defined at lines 59-82.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:artifact_root",
+      "type": "function",
+      "name": "artifact_root",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "artifact_root — function defined at lines 89-100.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:tmp_root",
+      "type": "function",
+      "name": "tmp_root",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "tmp_root — function defined at lines 104-112.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:config_root",
+      "type": "function",
+      "name": "config_root",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "config_root — function defined at lines 116-127.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:config_subdir",
+      "type": "function",
+      "name": "config_subdir",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "config_subdir — function defined at lines 130-136.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:state_root",
+      "type": "function",
+      "name": "state_root",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "Returns the state root (session metadata) honoring VB_STATE_DIR / VB_HOME/state / XDG_STATE_HOME.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:cache_subdir",
+      "type": "function",
+      "name": "cache_subdir",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "cache_subdir — function defined at lines 158-164.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:legacy_cache_file",
+      "type": "function",
+      "name": "legacy_cache_file",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "Resolves a pre-refactor cache file at ~/.cache/virtuoso_bridge/<name>, optionally profile-scoped.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/runtime_paths.rs:legacy_state_file",
+      "type": "function",
+      "name": "legacy_state_file",
+      "filePath": "src/runtime_paths.rs",
+      "summary": "legacy_state_file — function defined at lines 187-194.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:fmt",
+      "type": "function",
+      "name": "fmt",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "fmt — function defined at lines 53-61.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:from_str",
+      "type": "function",
+      "name": "from_str",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "from_str — function defined at lines 67-76.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:new",
+      "type": "function",
+      "name": "new",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "new — function defined at lines 97-103.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:for_test",
+      "type": "function",
+      "name": "for_test",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "for_test — function defined at lines 111-117.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:load",
+      "type": "function",
+      "name": "load",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "load — function defined at lines 120-132.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:search",
+      "type": "function",
+      "name": "search",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "search — function defined at lines 159-188.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:search_with_description",
+      "type": "function",
+      "name": "search_with_description",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "search_with_description — function defined at lines 194-228.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:regex_match",
+      "type": "function",
+      "name": "regex_match",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "regex_match — function defined at lines 248-257.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:fuzzy_match",
+      "type": "function",
+      "name": "fuzzy_match",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "fuzzy_match — function defined at lines 259-265.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:format_results",
+      "type": "function",
+      "name": "format_results",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "format_results — function defined at lines 268-280.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:cache_file_count",
+      "type": "function",
+      "name": "cache_file_count",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "cache_file_count — function defined at lines 301-311.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:sync_from_remote",
+      "type": "function",
+      "name": "sync_from_remote",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "sync_from_remote — function defined at lines 328-430.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:find_remote_skill_finder_dir",
+      "type": "function",
+      "name": "find_remote_skill_finder_dir",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "find_remote_skill_finder_dir — function defined at lines 433-506.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:load_or_sync",
+      "type": "function",
+      "name": "load_or_sync",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "load_or_sync — function defined at lines 511-538.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:clear_cache",
+      "type": "function",
+      "name": "clear_cache",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "clear_cache — function defined at lines 541-548.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/mod.rs:cache_info",
+      "type": "function",
+      "name": "cache_info",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "cache_info — function defined at lines 551-570.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/skill_finder/mod.rs:SearchMode",
+      "type": "class",
+      "name": "SearchMode",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "SearchMode — type defined at lines 38-50; properties: Fuzzy, Prefix, Suffix, Exact, Regex; methods: fmt, from_str.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/skill_finder/mod.rs:SKILLFinder",
+      "type": "class",
+      "name": "SKILLFinder",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "SKILLFinder — type defined at lines 80-87; properties: source_dir, entries, loaded; methods: default, new, for_test, load, is_loaded, len, is_empty, search, search_with_description, exact_match, prefix_match, suffix_match, regex_match, fuzzy_match, format_results.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/skill_finder/mod.rs:CacheInfo",
+      "type": "class",
+      "name": "CacheInfo",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "CacheInfo — type defined at lines 574-581; properties: path, file_count, modified; methods: .",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/skill_finder/mod.rs:SearchOptions",
+      "type": "class",
+      "name": "SearchOptions",
+      "filePath": "src/skill_finder/mod.rs",
+      "summary": "SearchOptions — type defined at lines 585-592; properties: mode, limit, case_sensitive; methods: .",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/parser.rs:format",
+      "type": "function",
+      "name": "format",
+      "filePath": "src/skill_finder/parser.rs",
+      "summary": "format — function defined at lines 57-70.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/parser.rs:parse_fnd_content",
+      "type": "function",
+      "name": "parse_fnd_content",
+      "filePath": "src/skill_finder/parser.rs",
+      "summary": "parse_fnd_content — function defined at lines 85-155.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/parser.rs:skip_ws_and_comments",
+      "type": "function",
+      "name": "skip_ws_and_comments",
+      "filePath": "src/skill_finder/parser.rs",
+      "summary": "skip_ws_and_comments — function defined at lines 159-175.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/skill_finder/parser.rs:parse_fnd_directory",
+      "type": "function",
+      "name": "parse_fnd_directory",
+      "filePath": "src/skill_finder/parser.rs",
+      "summary": "parse_fnd_directory — function defined at lines 178-216.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/skill_finder/parser.rs:SkillEntry",
+      "type": "class",
+      "name": "SkillEntry",
+      "filePath": "src/skill_finder/parser.rs",
+      "summary": "SkillEntry — type defined at lines 42-53; properties: name, syntax, description, source_file; methods: format.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/maestro_csv.rs:parse_csv",
+      "type": "function",
+      "name": "parse_csv",
+      "filePath": "src/spectre/maestro_csv.rs",
+      "summary": "parse_csv — function defined at lines 75-244.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/maestro_csv.rs:get_scalar",
+      "type": "function",
+      "name": "get_scalar",
+      "filePath": "src/spectre/maestro_csv.rs",
+      "summary": "get_scalar — function defined at lines 248-254.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/maestro_csv.rs:all_pass",
+      "type": "function",
+      "name": "all_pass",
+      "filePath": "src/spectre/maestro_csv.rs",
+      "summary": "all_pass — function defined at lines 258-264.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/spectre/maestro_csv.rs:summary",
+      "type": "function",
+      "name": "summary",
+      "filePath": "src/spectre/maestro_csv.rs",
+      "summary": "summary — function defined at lines 274-293.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/spectre/maestro_csv.rs:MaestroResult",
+      "type": "class",
+      "name": "MaestroResult",
+      "filePath": "src/spectre/maestro_csv.rs",
+      "summary": "MaestroResult — type defined at lines 12-28; properties: history, tests, points, overall_spec, overall_yield, raw_csv; methods: parse_csv, get_scalar, all_pass, num_points, summary.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/spectre/maestro_csv.rs:MaestroPoint",
+      "type": "class",
+      "name": "MaestroPoint",
+      "filePath": "src/spectre/maestro_csv.rs",
+      "summary": "MaestroPoint — type defined at lines 33-40; properties: point, parameters, outputs; methods: .",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/spectre/maestro_csv.rs:MaestroOutput",
+      "type": "class",
+      "name": "MaestroOutput",
+      "filePath": "src/spectre/maestro_csv.rs",
+      "summary": "MaestroOutput — type defined at lines 45-57; properties: value, spec, weight, pass_fail; methods: .",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/streaming/job_progress.rs:new",
+      "type": "function",
+      "name": "new",
+      "filePath": "src/streaming/job_progress.rs",
+      "summary": "new — function defined at lines 21-29.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/streaming/job_progress.rs:poll",
+      "type": "function",
+      "name": "poll",
+      "filePath": "src/streaming/job_progress.rs",
+      "summary": "poll — function defined at lines 33-52.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/streaming/job_progress.rs:parse_log_content",
+      "type": "function",
+      "name": "parse_log_content",
+      "filePath": "src/streaming/job_progress.rs",
+      "summary": "parse_log_content — function defined at lines 54-134.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/streaming/job_progress.rs:spawn_progress_tracker",
+      "type": "function",
+      "name": "spawn_progress_tracker",
+      "filePath": "src/streaming/job_progress.rs",
+      "summary": "spawn_progress_tracker — function defined at lines 143-178.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/streaming/job_progress.rs:JobProgressTracker",
+      "type": "class",
+      "name": "JobProgressTracker",
+      "filePath": "src/streaming/job_progress.rs",
+      "summary": "JobProgressTracker — type defined at lines 12-18; properties: job_id, log_path, last_position, last_size_check, total_iterations; methods: new, poll, parse_log_content, set_total_iterations.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/streaming/mod.rs:fmt",
+      "type": "function",
+      "name": "fmt",
+      "filePath": "src/streaming/mod.rs",
+      "summary": "fmt — function defined at lines 39-66.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/streaming/mod.rs:JobEvent",
+      "type": "class",
+      "name": "JobEvent",
+      "filePath": "src/streaming/mod.rs",
+      "summary": "JobEvent — type defined at lines 12-36; properties: Started, Progress, Completed, Failed, Cancelled; methods: fmt.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/streaming/mod.rs:JobEventSink",
+      "type": "class",
+      "name": "JobEventSink",
+      "filePath": "src/streaming/mod.rs",
+      "summary": "JobEventSink — type defined at lines 70-72; properties: ; methods: emit.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/streaming/mod.rs:ConsoleSink",
+      "type": "class",
+      "name": "ConsoleSink",
+      "filePath": "src/streaming/mod.rs",
+      "summary": "ConsoleSink — type defined at lines 77-77; properties: ; methods: emit.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/streaming/mod.rs:NullSink",
+      "type": "class",
+      "name": "NullSink",
+      "filePath": "src/streaming/mod.rs",
+      "summary": "NullSink — type defined at lines 87-87; properties: ; methods: emit.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/streaming/mod.rs:BroadcastSink",
+      "type": "class",
+      "name": "BroadcastSink",
+      "filePath": "src/streaming/mod.rs",
+      "summary": "BroadcastSink — type defined at lines 95-97; properties: sinks; methods: new, add_sink, default, emit.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/streaming/mod.rs:ChannelSink",
+      "type": "class",
+      "name": "ChannelSink",
+      "filePath": "src/streaming/mod.rs",
+      "summary": "ChannelSink — type defined at lines 128-130; properties: tx; methods: new, subscribe, default, emit.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/streaming/mod.rs:Receiver",
+      "type": "class",
+      "name": "Receiver",
+      "filePath": "src/streaming/mod.rs",
+      "summary": "Receiver — type defined at lines 164-166; properties: rx; methods: try_recv, recv.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/sys/linux_rename.rs:rename_noreplace",
+      "type": "function",
+      "name": "rename_noreplace",
+      "filePath": "src/sys/linux_rename.rs",
+      "summary": "rename_noreplace — function defined at lines 48-108.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/sys/linux_rename.rs:negate_err",
+      "type": "function",
+      "name": "negate_err",
+      "filePath": "src/sys/linux_rename.rs",
+      "summary": "negate_err — function defined at lines 112-118.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/transaction/diff.rs:compute",
+      "type": "function",
+      "name": "compute",
+      "filePath": "src/transaction/diff.rs",
+      "summary": "compute — function defined at lines 36-135.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/transaction/diff.rs:is_empty",
+      "type": "function",
+      "name": "is_empty",
+      "filePath": "src/transaction/diff.rs",
+      "summary": "is_empty — function defined at lines 138-146.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/transaction/diff.rs:SchematicDiff",
+      "type": "class",
+      "name": "SchematicDiff",
+      "filePath": "src/transaction/diff.rs",
+      "summary": "SchematicDiff — type defined at lines 9-20; properties: before_id, after_id, instances_added, instances_removed, instances_modified, nets_added, nets_removed, pins_added, pins_removed; methods: compute, is_empty.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/transaction/mod.rs:new",
+      "type": "function",
+      "name": "new",
+      "filePath": "src/transaction/mod.rs",
+      "summary": "new — function defined at lines 26-32.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/transaction/mod.rs:begin",
+      "type": "function",
+      "name": "begin",
+      "filePath": "src/transaction/mod.rs",
+      "summary": "begin — function defined at lines 57-73.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/transaction/mod.rs:commit",
+      "type": "function",
+      "name": "commit",
+      "filePath": "src/transaction/mod.rs",
+      "summary": "commit — function defined at lines 76-84.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/transaction/mod.rs:rollback",
+      "type": "function",
+      "name": "rollback",
+      "filePath": "src/transaction/mod.rs",
+      "summary": "rollback — function defined at lines 88-116.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/transaction/mod.rs:diff",
+      "type": "function",
+      "name": "diff",
+      "filePath": "src/transaction/mod.rs",
+      "summary": "diff — function defined at lines 119-132.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/transaction/mod.rs:Transaction",
+      "type": "class",
+      "name": "Transaction",
+      "filePath": "src/transaction/mod.rs",
+      "summary": "Transaction — type defined at lines 17-23; properties: id, snapshot, net_assignments; methods: new.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/transaction/mod.rs:TransactionManager",
+      "type": "class",
+      "name": "TransactionManager",
+      "filePath": "src/transaction/mod.rs",
+      "summary": "TransactionManager — type defined at lines 37-40; properties: active, committed; methods: default, new, begin, commit, rollback, diff, status, is_active.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/transaction/snapshot.rs:capture",
+      "type": "function",
+      "name": "capture",
+      "filePath": "src/transaction/snapshot.rs",
+      "summary": "capture — function defined at lines 42-111.",
+      "tags": [],
+      "complexity": "complex",
+      "languageNotes": ""
+    },
+    {
+      "id": "function:src/transaction/snapshot.rs:save",
+      "type": "function",
+      "name": "save",
+      "filePath": "src/transaction/snapshot.rs",
+      "summary": "save — function defined at lines 114-122.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/transaction/snapshot.rs:SchematicSnapshot",
+      "type": "class",
+      "name": "SchematicSnapshot",
+      "filePath": "src/transaction/snapshot.rs",
+      "summary": "SchematicSnapshot — type defined at lines 11-20; properties: transaction_id, timestamp, lib, cell, view, instances, nets, pins; methods: capture, save, delete, path, path_for.",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    },
+    {
+      "id": "class:src/transaction/snapshot.rs:InstanceSnapshot",
+      "type": "class",
+      "name": "InstanceSnapshot",
+      "filePath": "src/transaction/snapshot.rs",
+      "summary": "InstanceSnapshot — type defined at lines 23-32; properties: name, lib, cell, x, y, orient, params; methods: .",
+      "tags": [],
+      "complexity": "moderate",
+      "languageNotes": ""
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:clean_profile",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:venv_profile_path",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:read_profile_file",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:read_profile_from_env_file",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:resolve_profile_info",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:bind_venv_profile",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:clear_venv_profile",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:label",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:bind_user_profile_in",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:clear_user_profile_in",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:clear_legacy_user_env_profile_in",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:bind_local_profile",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "function:src/profile.rs:clear_local_profile",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "class:src/profile.rs:ProfileResolution",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/profile.rs",
+      "target": "class:src/profile.rs:BindScope",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/schema.rs",
+      "target": "function:src/rpc/schema.rs:standard_schema",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/schema.rs",
+      "target": "class:src/rpc/schema.rs:RpcSchema",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:env_path",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:cache_root",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:log_root",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:artifact_root",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:tmp_root",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:config_root",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:config_subdir",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:state_root",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:cache_subdir",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:legacy_cache_file",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/runtime_paths.rs",
+      "target": "function:src/runtime_paths.rs:legacy_state_file",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:fmt",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:from_str",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:new",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:for_test",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:load",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:search",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:search_with_description",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:regex_match",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:fuzzy_match",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:format_results",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:cache_file_count",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:sync_from_remote",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:find_remote_skill_finder_dir",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:load_or_sync",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:clear_cache",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "function:src/skill_finder/mod.rs:cache_info",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "class:src/skill_finder/mod.rs:SearchMode",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "class:src/skill_finder/mod.rs:SKILLFinder",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "class:src/skill_finder/mod.rs:CacheInfo",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "class:src/skill_finder/mod.rs:SearchOptions",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/parser.rs",
+      "target": "function:src/skill_finder/parser.rs:format",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/parser.rs",
+      "target": "function:src/skill_finder/parser.rs:parse_fnd_content",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/parser.rs",
+      "target": "function:src/skill_finder/parser.rs:skip_ws_and_comments",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/parser.rs",
+      "target": "function:src/skill_finder/parser.rs:parse_fnd_directory",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/skill_finder/parser.rs",
+      "target": "class:src/skill_finder/parser.rs:SkillEntry",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/maestro_csv.rs",
+      "target": "function:src/spectre/maestro_csv.rs:parse_csv",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/maestro_csv.rs",
+      "target": "function:src/spectre/maestro_csv.rs:get_scalar",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/maestro_csv.rs",
+      "target": "function:src/spectre/maestro_csv.rs:all_pass",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/maestro_csv.rs",
+      "target": "function:src/spectre/maestro_csv.rs:summary",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/maestro_csv.rs",
+      "target": "class:src/spectre/maestro_csv.rs:MaestroResult",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/maestro_csv.rs",
+      "target": "class:src/spectre/maestro_csv.rs:MaestroPoint",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/spectre/maestro_csv.rs",
+      "target": "class:src/spectre/maestro_csv.rs:MaestroOutput",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/job_progress.rs",
+      "target": "function:src/streaming/job_progress.rs:new",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/job_progress.rs",
+      "target": "function:src/streaming/job_progress.rs:poll",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/job_progress.rs",
+      "target": "function:src/streaming/job_progress.rs:parse_log_content",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/job_progress.rs",
+      "target": "function:src/streaming/job_progress.rs:spawn_progress_tracker",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/job_progress.rs",
+      "target": "class:src/streaming/job_progress.rs:JobProgressTracker",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/mod.rs",
+      "target": "function:src/streaming/mod.rs:fmt",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/mod.rs",
+      "target": "class:src/streaming/mod.rs:JobEvent",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/mod.rs",
+      "target": "class:src/streaming/mod.rs:JobEventSink",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/mod.rs",
+      "target": "class:src/streaming/mod.rs:ConsoleSink",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/mod.rs",
+      "target": "class:src/streaming/mod.rs:NullSink",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/mod.rs",
+      "target": "class:src/streaming/mod.rs:BroadcastSink",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/mod.rs",
+      "target": "class:src/streaming/mod.rs:ChannelSink",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/streaming/mod.rs",
+      "target": "class:src/streaming/mod.rs:Receiver",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/sys/linux_rename.rs",
+      "target": "function:src/sys/linux_rename.rs:rename_noreplace",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/sys/linux_rename.rs",
+      "target": "function:src/sys/linux_rename.rs:negate_err",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/diff.rs",
+      "target": "function:src/transaction/diff.rs:compute",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/diff.rs",
+      "target": "function:src/transaction/diff.rs:is_empty",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/diff.rs",
+      "target": "class:src/transaction/diff.rs:SchematicDiff",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "function:src/transaction/mod.rs:new",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "function:src/transaction/mod.rs:begin",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "function:src/transaction/mod.rs:commit",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "function:src/transaction/mod.rs:rollback",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "function:src/transaction/mod.rs:diff",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "class:src/transaction/mod.rs:Transaction",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "class:src/transaction/mod.rs:TransactionManager",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/snapshot.rs",
+      "target": "function:src/transaction/snapshot.rs:capture",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/snapshot.rs",
+      "target": "function:src/transaction/snapshot.rs:save",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/snapshot.rs",
+      "target": "class:src/transaction/snapshot.rs:SchematicSnapshot",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/transaction/snapshot.rs",
+      "target": "class:src/transaction/snapshot.rs:InstanceSnapshot",
+      "type": "contains",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/rpc/mod.rs",
+      "target": "file:src/rpc/dispatcher.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/rpc/mod.rs",
+      "target": "file:src/rpc/schema.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/skill_finder/mod.rs",
+      "target": "file:src/skill_finder/parser.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/spectre/mod.rs",
+      "target": "file:src/spectre/jobs.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/spectre/mod.rs",
+      "target": "file:src/spectre/maestro_csv.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/spectre/mod.rs",
+      "target": "file:src/spectre/parsers.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/spectre/mod.rs",
+      "target": "file:src/spectre/runner.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/streaming/job_progress.rs",
+      "target": "file:src/streaming/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/sys/mod.rs",
+      "target": "file:src/sys/linux_rename.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/transaction/diff.rs",
+      "target": "file:src/transaction/snapshot.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "file:src/transaction/diff.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/transaction/mod.rs",
+      "target": "file:src/transaction/snapshot.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/transaction/snapshot.rs",
+      "target": "file:src/client/bridge.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/transaction/snapshot.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/async_runtime.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/auth.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/capability/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/client/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/command_log.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/commands/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/config.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/config_file.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/context.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/error.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/exit_codes.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/history.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/mcp/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/models.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/ocean/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/output.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/plugins/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/profile.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/rpc/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/runtime_paths.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/skill_finder/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/spectre/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/streaming/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/sys/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/test_env.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/transaction/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/transport/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/tui/mod.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/vtui.rs",
+      "target": "file:src/version.rs",
+      "type": "imports",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/config.rs",
+      "target": "file:src/profile.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/tunnel_profile.rs",
+      "target": "file:src/profile.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/config.rs",
+      "target": "file:src/runtime_paths.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/skill_finder_include_desc.rs",
+      "target": "file:src/skill_finder/mod.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/skill_load.rs",
+      "target": "file:src/skill_finder/mod.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/skill_finder_include_desc.rs",
+      "target": "file:src/skill_finder/parser.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/maestro_csv.rs",
+      "target": "file:src/spectre/maestro_csv.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/spectre.rs",
+      "target": "file:src/spectre/mod.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/linux_rename_compat.rs",
+      "target": "file:src/sys/linux_rename.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/ocean.rs",
+      "target": "file:src/transaction/mod.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/ocean.rs",
+      "target": "file:src/transaction/snapshot.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:tests/ocean.rs",
+      "target": "file:src/transaction/diff.rs",
+      "type": "tested_by",
+      "weight": 0.6
+    }
+  ]
+}

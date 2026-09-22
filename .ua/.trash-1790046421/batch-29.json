@@ -1,0 +1,133 @@
+{
+  "batchIndex": 29,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "document:docs/aarch64-cross-compile.md",
+      "type": "document",
+      "name": "aarch64 Cross-Compile Setup",
+      "filePath": "docs/aarch64-cross-compile.md",
+      "summary": "Technical notes on building a Rust cross-compile wrapper targeting aarch64 Linux from a non-aarch64 host. Covers the rationale for the wrapper, the libgcc_s / libgcc link mismatch when the host glibc differs from the target sysroot, and a from-scratch sysroot rebuild procedure that avoids the failure. Lists what was deliberately NOT needed (no custom cross toolchain, no glibc rebuild) and ends with the resulting build status.",
+      "tags": [
+        "rust",
+        "cross-compile",
+        "aarch64",
+        "sysroot",
+        "glibc",
+        "toolchain",
+        "build",
+        "docs"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Markdown documentation with 7 sections (1 H1 + 6 H2). Narrative/log style; no code blocks beyond a few shell snippets embedded in prose. ~113 lines."
+    },
+    {
+      "id": "file:docs/architecture-review-20260713-virtuoso-bridge-lite.html",
+      "type": "file",
+      "name": "Architecture Review 2026-07-13 — virtuoso-bridge-lite",
+      "filePath": "docs/architecture-review-20260713-virtuoso-bridge-lite.html",
+      "summary": "Standalone HTML page presenting a 2026-07-13 architecture review of the Python control plane (virtuoso-bridge-lite) for Cadence Virtuoso: VirtuosoClient, Domain Ops, SKILL builders, TCP/SKILL protocol, RAMIC daemon, SSHClient/SSHRunner, Spectre, and Maestro. Uses Tailwind CDN and Mermaid for an embedded flowchart of the current architecture plus per-candidate deep-module analysis sections. Quantifies scope as ~38k lines across 34 test files.",
+      "tags": [
+        "html",
+        "architecture-review",
+        "virtuoso-bridge-lite",
+        "mermaid",
+        "tailwind",
+        "python",
+        "docs",
+        "markup"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Static HTML with inline ES module import of mermaid@11 from jsdelivr CDN and Tailwind CSS via cdn.tailwindcss.com. Body in Simplified Chinese. ~117 lines, mermaid-heavy."
+    },
+    {
+      "id": "document:docs/p0a-config-callchain-inventory.md",
+      "type": "document",
+      "name": "P0-A · 配置调用链盘点 (Config Call-Chain Inventory)",
+      "filePath": "docs/p0a-config-callchain-inventory.md",
+      "summary": "Project planning document for the P0-A initiative tracking configuration re-read entry points on the production path and the migration to CommandContext. Catalogs the call-chain inventory of config-touching code, lists the refactor scope and ordering, and tracks 4 rounds of review fixes on the tunnel command family (local fallback, attach ownership, profile param, default port not constraint, forward-success proof, ControlMaster disabled, restart semantics, digest fields). Provides a 2026-09-08 status snapshot of merged / partially delivered / in-progress / pending work plus known local environment issues.",
+      "tags": [
+        "rust",
+        "config",
+        "call-chain",
+        "p0-a",
+        "tunnel",
+        "commandcontext",
+        "refactor",
+        "project-planning",
+        "docs"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Markdown with 17 sections (H1/H2/H3 mix), dense Chinese narrative. Includes status tables and review-fix checklists. ~173 lines."
+    },
+    {
+      "id": "document:docs/p0a-notes-env-evidence.md",
+      "type": "document",
+      "name": "P0-A · 环境问题证据记录 (Environment Issue Evidence, Inconclusive)",
+      "filePath": "docs/p0a-notes-env-evidence.md",
+      "summary": "Companion evidence log to the P0-A planning doc, collecting observed-but-unresolved local environment issues: intermittent failures in streaming pipeline tests using transport::ssh, file-descriptor limit headroom, and a recurring cargo fmt segmentation fault. Each item is recorded as raw evidence with reproduction context, intentionally not auto-fixed. Closes with non-binding follow-up suggestions.",
+      "tags": [
+        "rust",
+        "p0-a",
+        "environment",
+        "evidence",
+        "debug",
+        "ssh",
+        "cargo-fmt",
+        "docs"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Short Markdown document with 5 sections (1 H1 + 4 H2). Chinese prose with embedded shell/log snippets. ~70 lines."
+    },
+    {
+      "id": "file:docs/vcli-gui-debug-retrospective.html",
+      "type": "file",
+      "name": "vcli GUI 调试能力建设复盘",
+      "filePath": "docs/vcli-gui-debug-retrospective.html",
+      "summary": "Self-contained dark-themed HTML retrospective on building out vcli GUI debugging capabilities. Covers the timeline, capability matrix, pain points (priority-tagged P0/P1/P2), delivered features (tagged Done), and quantitative metrics rendered via inline CSS grid cards and tables. Pure static markup with no external CDN dependencies — all styling and layout is hand-rolled CSS targeting a GitHub-dark palette.",
+      "tags": [
+        "html",
+        "retrospective",
+        "gui-debug",
+        "vcli",
+        "dark-theme",
+        "docs",
+        "markup"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "HTML with extensive inline CSS (no JS, no external CDNs). Body in Simplified Chinese. ~363 lines; heavy use of grid/timeline/card patterns."
+    },
+    {
+      "id": "file:docs/virtuoso-gui-debug-architecture.html",
+      "type": "file",
+      "name": "virtuoso-gui-debug × vcli — GUI 调试协同架构",
+      "filePath": "docs/virtuoso-gui-debug-architecture.html",
+      "summary": "Light-themed HTML architecture document describing how the virtuoso-gui-debug tool cooperates with vcli to enable GUI-level debugging of Cadence Virtuoso. Presents the cooperative architecture, component boundaries, data flow between the GUI debugger and the vcli CLI, and deployment/integration considerations. Visually styled with a PingFang/Segoe UI system font stack and a soft blue accent palette.",
+      "tags": [
+        "html",
+        "architecture",
+        "gui-debug",
+        "vcli",
+        "virtuoso",
+        "docs",
+        "markup"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Large standalone HTML page (~758 lines) with extensive inline CSS using CSS custom properties for theming. No external JS/CSS dependencies. Body in Simplified Chinese."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/p0a-notes-env-evidence.md",
+      "target": "document:docs/p0a-config-callchain-inventory.md",
+      "type": "documents",
+      "weight": 0.6
+    },
+    {
+      "source": "file:docs/vcli-gui-debug-retrospective.html",
+      "target": "file:docs/virtuoso-gui-debug-architecture.html",
+      "type": "documents",
+      "weight": 0.5
+    }
+  ]
+}

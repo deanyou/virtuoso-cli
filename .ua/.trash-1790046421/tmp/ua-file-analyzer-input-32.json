@@ -1,0 +1,35 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": "docs/superpowers/specs/2026-07-13-skill-runtime-design.md",
+      "language": "markdown",
+      "sizeLines": 172,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-29-native-remote-transport-design.md",
+      "language": "markdown",
+      "sizeLines": 617,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-29-upstream-hardening-design.md",
+      "language": "markdown",
+      "sizeLines": 60,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md",
+      "language": "markdown",
+      "sizeLines": 111,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    "docs/superpowers/specs/2026-07-13-skill-runtime-design.md": [],
+    "docs/superpowers/specs/2026-08-29-native-remote-transport-design.md": [],
+    "docs/superpowers/specs/2026-08-29-upstream-hardening-design.md": [],
+    "docs/superpowers/specs/2026-09-01-virtuoso-gui-live-executor-design.md": []
+  }
+}

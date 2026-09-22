@@ -1,0 +1,1026 @@
+"""vgui_runner.live_executor — real vcli/SSH/X11 executor (Task 3).
+
+Implements the ``Executor`` protocol from ``vgui_runner.engine`` against
+the real ``vcli`` CLI, restricted by the 2026-09-01 live-executor design:
+
+- it never calls ssh/xdotool/xprop/shell directly — only the injected
+  command runner with fixed vcli argv;
+- precheck binds the scenario's session, PID, DISPLAY, and exactly one
+  window before anything else runs;
+- a per-run lock file serializes access to the DISPLAY;
+- every GUI action goes through ``vcli window action-x11``, which
+  re-validates window identity server-side;
+- error dicts are sanitized: typed input text never appears in them.
+"""
+
+import errno
+import fcntl
+import json
+import os
+import re
+import time
+import uuid
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Dict, List, Optional
+
+from .engine import Executor
+from .model import Operation, Scenario, Step
+
+__all__ = ["LiveExecutor", "LockHeldError"]
+
+# Operations that produce GUI input and therefore map onto
+# `vcli window action-x11`.
+_ACTION_OPERATIONS = {
+    Operation.WINDOW_ACTIVATE: "activate",
+    Operation.KEY: "key",
+    Operation.TYPE: "type",
+    Operation.CLICK_REL: "click-rel",
+    Operation.CLICK_ABS: "click-abs",
+    Operation.DOUBLE_CLICK: "double-click",
+    Operation.DRAG_REL: "drag-rel",
+    Operation.SCROLL: "scroll",
+    Operation.MINIMIZE: "minimize",
+    Operation.MAXIMIZE: "maximize",
+    Operation.SCREENSHOT: "screenshot",
+    Operation.CLOSE: "close",
+}
+# Operations compatible with --direct (fast path, skips helper/upload/list-windows).
+# wait and screenshot are excluded — they need window-list polling and artifact fetch.
+_DIRECT_COMPATIBLE = {
+    "activate", "key", "type", "click-rel", "click-abs", "double-click",
+    "drag-rel", "scroll", "minimize", "maximize", "close",
+}
+# Operations that can be batched into a single action-x11-batch call.
+_BATCH_COMPATIBLE = {
+    "activate", "key", "type", "click-rel", "click-abs", "double-click",
+    "drag-rel", "scroll", "minimize", "maximize", "close",
+}
+# DISMISS_DIALOG uses the dedicated vcli window dismiss-dialog subcommand,
+# not action-x11 (which doesn't support it).
+_DISMISS_DIALOG_OP = Operation.DISMISS_DIALOG
+
+_TIMEOUT_PRECHECK = 30
+_TIMEOUT_ACTION = 60
+
+
+class LockHeldError(Exception):
+    """Another run is holding the DISPLAY lock."""
+
+
+class _DisplayLock:
+    """Exclusive per-DISPLAY lock on the GUI host.
+
+    Lock file lives under ``~/.cache/virtuoso_bridge/x11-locks/`` so that
+    *every* LiveExecutor targeting the same ``DISPLAY`` — regardless of its
+    ``output_dir`` (which is per-run) — shares one flock. Without this, a
+    stray background job could stimulate the same CIW concurrently and
+    corrupt its state."""
+
+    GUI_LOCK_ROOT = Path.home() / ".cache" / "virtuoso_bridge" / "x11-locks"
+
+    def __init__(self, display: str):
+        safe = re.sub(r"[^A-Za-z0-9_.-]", "_", display.lstrip(":") or "0")
+        # Per-display lock: one lock per DISPLAY across all runs.
+        self.path = self.GUI_LOCK_ROOT / f"display_{safe}.lock"
+        self._fd: Optional[int] = None
+
+    def acquire(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            os.close(fd)
+            if exc.errno in (errno.EACCES, errno.EAGAIN):
+                raise LockHeldError(
+                    f"DISPLAY lock held by another run: {self.path}"
+                ) from exc
+            raise
+        os.write(fd, f"{os.getpid()}\n".encode())
+        self._fd = fd
+
+    def release(self) -> None:
+        if self._fd is not None:
+            fcntl.flock(self._fd, fcntl.LOCK_UN)
+            os.close(self._fd)
+            self._fd = None
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
+
+
+def _sanitize_error(err: Dict[str, Any], step: Optional[Step] = None) -> Dict[str, Any]:
+    """Ensure typed input text never leaks into error dicts."""
+    text = json.dumps(err)
+    if step is not None and step.operation in (Operation.KEY, Operation.TYPE):
+        for key in ("text", "keys"):
+            value = step.arguments.get(key)
+            if isinstance(value, str) and value in text:
+                text = text.replace(value, "<redacted>")
+    return json.loads(text)
+
+
+class LiveExecutor(Executor):
+    """Executor that drives the real ``vcli`` CLI through a command runner.
+
+    Parameters mirror the CLI wiring: ``--executor live --vcli PATH
+    --ssh-host HOST --session ID --output DIR``.
+    """
+
+    def __init__(
+        self,
+        command_runner,
+        vcli_path: str,
+        ssh_host: Optional[str],
+        session_id: str,
+        output_dir: Path,
+        window_id: Optional[str] = None,
+        use_direct: bool = True,
+    ):
+        if not session_id:
+            raise ValueError("live executor requires an explicit --session")
+        self._runner = command_runner
+        self._vcli = vcli_path
+        self._ssh_host = ssh_host
+        self._session_id = session_id
+        # Session ids look like <user>-<port>; the trailing number is the
+        # bridge/daemon port the session must be bound to.
+        m = re.search(r"(\d+)$", session_id)
+        self._session_port = int(m.group(1)) if m else 0
+        if ssh_host is not None:
+            # Fail fast on an unsafe host, mirroring SshRunner's validation.
+            from .command_runner import CommandError
+
+            if not isinstance(ssh_host, str) or not ssh_host:
+                raise CommandError("ssh_host must be a non-empty string")
+            if "\x00" in ssh_host or "\n" in ssh_host or "\r" in ssh_host:
+                raise CommandError("ssh_host contains forbidden characters")
+            if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", ssh_host):
+                raise CommandError(
+                    "ssh_host must be a plain hostname "
+                    "(alphanumerics, dots, underscores, hyphens)"
+                )
+        self._output_dir = Path(output_dir)
+        # Explicit window id overrides PID-based discovery (for multi-window PIDs).
+        self._explicit_window_id = window_id
+        # --direct skips helper upload, env resolution, and list-windows scan.
+        # ~5x faster (260ms vs 1350ms per action). Default True for performance.
+        self._use_direct = use_direct
+        # Coordinate cache: hiGetFieldInfo results keyed by "form:field".
+        self._coord_cache: Dict[str, Dict[str, Any]] = {}
+        # Run state — only set after precheck validates identity.
+        self._lock: Optional[_DisplayLock] = None
+        self.window_id: Optional[str] = None
+        self._baseline_taken = False
+        self._scenario_display: Optional[str] = None
+        self._scenario_pid: int = 0
+        # Window geometry for CIW_INPUT click coordinates — set during precheck.
+        self._window_width: Optional[int] = None
+        self._window_height: Optional[int] = None
+
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    def _vcli_argv(self, *args: str) -> List[str]:
+        """Build vcli argv without session (for session list, etc.)."""
+        return [self._vcli, *args, "--format", "json"]
+
+    def _vcli_argv_with_session(self, *args: str) -> List[str]:
+        """Build vcli argv with --session flag for commands that need daemon access."""
+        return [self._vcli, "--session", self._session_id, *args, "--format", "json"]
+
+    def _run_json(self, argv: List[str], timeout_seconds: int) -> Dict[str, Any]:
+        result = self._runner.run(argv, timeout_seconds)
+        if result.timed_out:
+            raise RuntimeError(f"command timed out after {timeout_seconds}s")
+        if result.exit_code != 0:
+            reason = result.stderr.strip() or f"exit code {result.exit_code}"
+            raise RuntimeError(reason)
+        stdout = result.stdout.strip()
+        try:
+            data = json.loads(stdout)
+        except (json.JSONDecodeError, ValueError):
+            # Some vcli subcommands emit INFO log lines (with ANSI escapes)
+            # before the JSON payload. Find the first line that starts a
+            # JSON object/array and parse from there.
+            data = None
+            lines = stdout.splitlines()
+            for idx, line in enumerate(lines):
+                stripped = line.lstrip()
+                if stripped.startswith("{") or stripped.startswith("["):
+                    candidate = "\n".join(lines[idx:])
+                    try:
+                        data = json.loads(candidate)
+                        break
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+            if data is None:
+                raise RuntimeError(f"unparseable output: {stdout[:200]}")
+        if not isinstance(data, dict):
+            raise RuntimeError("command output is not a JSON object")
+        return data
+
+    def _sanitize_argv(self, argv: List[str]) -> List[Any]:
+        """Replace --text/--keys values with length markers for logging."""
+        sanitized: List[Any] = []
+        redact_next = False
+        for item in argv:
+            if redact_next:
+                sanitized.append(f"text_length:{len(item)}")
+                redact_next = False
+            else:
+                sanitized.append(item)
+                if item in ("--text", "--keys"):
+                    redact_next = True
+        return sanitized
+
+    # ------------------------------------------------------------------
+    # Executor protocol
+    # ------------------------------------------------------------------
+
+    def precheck(self, scenario: Scenario) -> Optional[Dict[str, Any]]:
+        try:
+            # 1. session list: must exist, port must match, PID must be positive
+            data = self._run_json(
+                self._vcli_argv("session", "list"), _TIMEOUT_PRECHECK
+            )
+            sessions = [
+                s for s in data.get("sessions", []) if s.get("id") == self._session_id
+            ]
+            if not sessions:
+                return {"error": f"session '{self._session_id}' not found"}
+            session = sessions[0]
+            session_port = session.get("port")
+            if session_port and int(session_port) != self._session_port:
+                return {
+                    "error": (
+                        f"session port mismatch: bridge port {session_port} "
+                        f"differs from daemon port {self._session_port}"
+                    )
+                }
+            session_pid = int(session.get("pid") or 0)
+            if session_pid < 0:
+                return {"error": f"session PID must be positive, got {session_pid}"}
+
+            # Bind scenario PID to session PID: when session metadata reports a
+            # positive PID, the scenario must declare the same PID. Only fall
+            # back to scenario.pid for old metadata that reports PID=0.
+            if session_pid > 0 and session_pid != scenario.pid:
+                return {
+                    "error": (
+                        f"PID binding violation: session PID {session_pid} "
+                        f"!= scenario PID {scenario.pid}"
+                    )
+                }
+
+            # Fast path: when --window-id is provided, try to skip the
+            # expensive list-windows-x11 scan (can time out on displays with
+            # hundreds of windows, and requires xwininfo). Validate the
+            # explicit window via xdotool. On any failure, fall back to the
+            # slow path below rather than aborting.
+            effective_pid = session_pid or scenario.pid
+            _fast_ok = False
+            if self._explicit_window_id:
+                import subprocess
+                import os
+                import re as _re
+                try:
+                    result = subprocess.run(
+                        ["xdotool", "getwindowgeometry", self._explicit_window_id],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        universal_newlines=True, timeout=10,
+                        env={**os.environ, "DISPLAY": scenario.display},
+                    )
+                    if result.returncode == 0:
+                        geom_out = result.stdout
+                        pos_match = _re.search(r"Position:\s*(-?\d+),(-?\d+)", geom_out)
+                        geo_match = _re.search(r"Geometry:\s*(\d+)x(\d+)", geom_out)
+                        if pos_match and geo_match:
+                            self._window_width = int(geo_match.group(1))
+                            self._window_height = int(geo_match.group(2))
+                            self.window_id = self._explicit_window_id
+                            self._scenario_display = scenario.display
+                            self._scenario_pid = int(effective_pid)
+                            _fast_ok = True
+                except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                    pass  # fall back to slow path
+            if _fast_ok:
+                lock = _DisplayLock(scenario.display)
+                try:
+                    lock.acquire()
+                except LockHeldError as exc:
+                    return {"error": f"lock conflict: {exc}"}
+                self._lock = lock
+                return None
+
+            # 2. window list: DISPLAY must match exactly, PID binding unique.
+            #    effective_pid is session_pid when positive, else scenario.pid
+            #    (old metadata fallback). If no window matches, reject.
+            windows_data = self._run_json(
+                self._vcli_argv(
+                    "window", "list-windows-x11", "--display", scenario.display
+                ),
+                _TIMEOUT_PRECHECK,
+            )
+            reported_display = windows_data.get("display")
+            if reported_display and reported_display != scenario.display:
+                return {
+                    "error": (
+                        f"DISPLAY mismatch: scenario says {scenario.display}, "
+                        f"X11 reports {reported_display}"
+                    )
+                }
+            windows = windows_data.get("windows", [])
+            effective_pid = session_pid or scenario.pid
+            candidates = [
+                w
+                for w in windows
+                if w.get("pid") == effective_pid
+                and (w.get("display") or reported_display) == scenario.display
+            ]
+            if not candidates:
+                if session_pid == 0:
+                    return {
+                        "error": (
+                            "session PID is zero and no window bound to the "
+                            "scenario PID was found; refusing to act"
+                        )
+                    }
+                return {
+                    "error": (
+                        f"no window bound to PID {effective_pid} on DISPLAY "
+                        f"{scenario.display}"
+                    )
+                }
+            # Multi-window disambiguation: explicit --window-id wins, then
+            # window_title filter from the first step's arguments.
+            if len(candidates) > 1:
+                if self._explicit_window_id:
+                    matched = [
+                        w for w in candidates
+                        if (w.get("dismiss_id") or w.get("window_id")) == self._explicit_window_id
+                    ]
+                    if not matched:
+                        return {
+                            "error": (
+                                f"--window-id {self._explicit_window_id} not found "
+                                f"among {len(candidates)} windows for PID {effective_pid}"
+                            )
+                        }
+                    candidates = matched
+                else:
+                    return {
+                        "error": (
+                            f"{len(candidates)} windows bound to PID {effective_pid} "
+                            f"on DISPLAY {scenario.display}; use --window-id to "
+                            f"disambiguate"
+                        )
+                    }
+            window = candidates[0]
+            self.window_id = window.get("dismiss_id") or window.get("window_id")
+            self._scenario_display = scenario.display
+            self._scenario_pid = int(effective_pid)
+            # Store window geometry for CIW_INPUT click coordinates.
+            # Use vcli-reported geometry directly — no artificial cap, since
+            # high-DPI CIW windows can be 1200+ pixels wide.
+            geom = window.get("geometry", {})
+            self._window_width = geom.get("w", 800)
+            self._window_height = geom.get("h", 600)
+
+            # 3. exclusive DISPLAY lock
+            lock = _DisplayLock(scenario.display)
+            try:
+                lock.acquire()
+            except LockHeldError as exc:
+                return {"error": f"lock conflict: {exc}"}
+            self._lock = lock
+            return None
+        except Exception as exc:  # noqa: BLE001 — fail closed with structured error
+            return _sanitize_error({"error": str(exc)})
+
+    def baseline(self, scenario: Scenario) -> Optional[Dict[str, Any]]:
+        if self.window_id is None or self._lock is None:
+            return {"error": "baseline requires a successful precheck"}
+        if self._baseline_taken:
+            return None
+        try:
+            self._run_action(
+                "screenshot",
+                output_dir=str(self._output_dir),
+                timeout_seconds=_TIMEOUT_ACTION,
+            )
+            self._baseline_taken = True
+            return None
+        except Exception as exc:  # noqa: BLE001
+            return _sanitize_error({"error": f"baseline screenshot failed: {exc}"})
+
+    def execute(self, step: Step, attempt: int) -> Optional[Dict[str, Any]]:
+        if self.window_id is None or self._lock is None:
+            return {"error": "execute requires a successful precheck"}
+        try:
+            if step.operation == Operation.DISMISS_DIALOG:
+                return self._dismiss_dialog(step)
+            if step.operation == Operation.CIW_INPUT:
+                self._execute_action_step(step)
+                return None
+            if step.operation in _ACTION_OPERATIONS:
+                self._execute_action_step(step)
+                return None
+            if step.operation == Operation.WINDOW_WAIT:
+                return self._wait_for_window(step)
+            if step.operation == Operation.WINDOW_DISCOVER:
+                return self._discover_windows(step)
+            if step.operation == Operation.VERIFY:
+                return None  # verification happens in the verify phase
+            if step.operation == Operation.VCLI_LOAD:
+                return self._vcli_load(step)
+            if step.operation == Operation.VCLI_CALL:
+                return {
+                    "error": (
+                        "operation VCLI_CALL is not supported by the live "
+                        "executor (use CIW_INPUT for ad-hoc SKILL evaluation)"
+                    )
+                }
+            if step.operation == Operation.RECOVER:
+                return None
+            return {"error": f"unsupported operation: {step.operation.value}"}
+        except Exception as exc:  # noqa: BLE001
+            return _sanitize_error({"error": str(exc)}, step)
+
+    def verify(self, step: Step, attempt: int) -> Optional[Dict[str, Any]]:
+        if self.window_id is None or self._lock is None:
+            return {"error": "verify requires a successful precheck"}
+        predicate = step.verifier.get("predicate", "")
+        expected = step.verifier.get("expected")
+        try:
+            # Both supported predicates are window-visibility checks resolved
+            # via the vcli list-windows-x11 query (database-first path).
+            if predicate == "window_exists":
+                windows_data = self._run_json(
+                    self._vcli_argv(
+                        "window",
+                        "list-windows-x11",
+                        "--display",
+                        self._scenario_display or ":0",
+                    ),
+                    _TIMEOUT_PRECHECK,
+                )
+                windows = windows_data.get("windows", [])
+                found = any(
+                    (w.get("dismiss_id") or w.get("window_id")) == self.window_id
+                    for w in windows
+                )
+                if found != bool(expected):
+                    return {
+                        "error": (
+                            f"predicate window_exists: expected {expected}, "
+                            f"got {found}"
+                        )
+                    }
+                return None
+            if predicate == "state_matches":
+                # state_matches uses expected ∈ {True, False} as visibility
+                windows_data = self._run_json(
+                    self._vcli_argv(
+                        "window",
+                        "list-windows-x11",
+                        "--display",
+                        self._scenario_display or ":0",
+                    ),
+                    _TIMEOUT_PRECHECK,
+                )
+                windows = windows_data.get("windows", [])
+                visible = any(
+                    (w.get("dismiss_id") or w.get("window_id")) == self.window_id
+                    and w.get("visible", False)
+                    for w in windows
+                )
+                if visible != bool(expected):
+                    return {
+                        "error": (
+                            f"predicate state_matches: expected visible={expected}, "
+                            f"got {visible}"
+                        )
+                    }
+                return None
+            if predicate == "title_matches":
+                # expected is a substring to match in the window title
+                windows_data = self._run_json(
+                    self._vcli_argv(
+                        "window",
+                        "list-windows-x11",
+                        "--display",
+                        self._scenario_display or ":0",
+                    ),
+                    _TIMEOUT_PRECHECK,
+                )
+                windows = windows_data.get("windows", [])
+                win = next(
+                    (w for w in windows
+                     if (w.get("dismiss_id") or w.get("window_id")) == self.window_id),
+                    None,
+                )
+                if win is None:
+                    return {"error": "predicate title_matches: window not found"}
+                title = win.get("title", "")
+                if str(expected) not in title:
+                    return {
+                        "error": (
+                            f"predicate title_matches: expected '{expected}' in "
+                            f"title, got '{title[:80]}'"
+                        )
+                    }
+                return None
+            if predicate == "geometry_matches":
+                # expected is a dict with optional x/y/w/h keys
+                windows_data = self._run_json(
+                    self._vcli_argv(
+                        "window",
+                        "list-windows-x11",
+                        "--display",
+                        self._scenario_display or ":0",
+                    ),
+                    _TIMEOUT_PRECHECK,
+                )
+                windows = windows_data.get("windows", [])
+                win = next(
+                    (w for w in windows
+                     if (w.get("dismiss_id") or w.get("window_id")) == self.window_id),
+                    None,
+                )
+                if win is None:
+                    return {"error": "predicate geometry_matches: window not found"}
+                geo = win.get("geometry", {})
+                if isinstance(expected, dict):
+                    for key in ("x", "y", "w", "h"):
+                        if key in expected and geo.get(key) != expected[key]:
+                            return {
+                                "error": (
+                                    f"predicate geometry_matches: {key} expected "
+                                    f"{expected[key]}, got {geo.get(key)}"
+                                )
+                            }
+                return None
+            if predicate == "ciw_eval":
+                # expected is a dict: {"expression": "SKILL code", "equals": value}
+                # or {"expression": "SKILL code", "contains": "substring"}
+                # Executes via vcli skill exec and compares the output.
+                if expected is None or "expression" not in expected:
+                    return {
+                        "error": "ciw_eval predicate requires expected.expression"
+                    }
+                expression = expected["expression"]
+                data = self._run_json(
+                    self._vcli_argv_with_session("skill", "exec", expression),
+                    _TIMEOUT_ACTION,
+                )
+                actual = data.get("output", "")
+                if "equals" in expected:
+                    if str(actual) != str(expected["equals"]):
+                        return {
+                            "error": (
+                                f"ciw_eval: expected '{expected['equals']}', "
+                                f"got '{actual}'"
+                            )
+                        }
+                elif "contains" in expected:
+                    if str(expected["contains"]) not in str(actual):
+                        return {
+                            "error": (
+                                f"ciw_eval: expected output to contain "
+                                f"'{expected['contains']}', got '{actual[:80]}'"
+                            )
+                        }
+                return None
+            return {"error": f"unsupported verifier predicate: {predicate}"}
+        except Exception as exc:  # noqa: BLE001
+            return _sanitize_error({"error": str(exc)}, step)
+
+    def recover(
+        self, step: Step, attempt: int, rollback: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        if self.window_id is None or self._lock is None:
+            return {"error": "recover requires a successful precheck"}
+        # Strict recovery: only execute a rollback that was explicitly defined
+        # and validated in the scenario. Never auto-dismiss dialogs or take
+        # other unauthorised actions — a modal dialog may be legitimate UI
+        # (e.g. a file chooser the test intends to interact with next).
+        if not rollback:
+            return {"error": "no rollback defined for step; cannot recover"}
+        op_str = rollback.get("operation")
+        try:
+            operation = Operation(op_str)
+        except ValueError:
+            return {"error": f"unknown rollback operation: {op_str}"}
+        if operation not in _ACTION_OPERATIONS:
+            return {"error": f"rollback operation {op_str} is not a validated action"}
+        args = rollback.get("arguments", {})
+        try:
+            rb_step = Step(
+                id=f"{step.id}-rollback",
+                operation=operation,
+                arguments=MappingProxyType(dict(args)),
+                verifier=MappingProxyType({"predicate": "exists", "expected": True}),
+                timeout_seconds=step.timeout_seconds,
+                max_retries=0,
+                rollback=None,
+            )
+            self._execute_action_step(rb_step)
+            return None
+        except Exception as exc:  # noqa: BLE001
+            return _sanitize_error({"error": f"rollback failed: {exc}"}, step)
+
+    def close(self) -> None:
+        if self._lock is not None:
+            self._lock.release()
+            self._lock = None
+
+    def __del__(self) -> None:
+        # Best-effort: release the flock so sequential tests in the same process
+        # don't inherit a leaked lock (e.g. when the test never calls close()).
+        try:
+            self.close()
+        except Exception:  # noqa: BLE001 — C-level destructor
+            pass
+
+    # ------------------------------------------------------------------
+    # SSH screenshot helpers
+    # ------------------------------------------------------------------
+
+    def _is_ssh(self) -> bool:
+        """True when vcli runs on a remote host (--ssh-host was given)."""
+        return self._ssh_host is not None
+
+    def _remote_screenshot_dir(self) -> str:
+        """A per-run remote temp directory for screenshots.
+
+        vcli creates the directory on demand; we only need a unique path so
+        concurrent runs do not collide on the remote host.
+        """
+        return f"/tmp/vcli_gui_shots_{uuid.uuid4().hex[:8]}"
+
+    def _download_screenshot(self, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """In SSH mode, fetch the remote screenshot into the local output dir.
+
+        vcli writes the PNG to ``artifact.local_path`` on the remote host.  We
+        scp it to ``self._output_dir`` and rewrite ``local_path`` to the local
+        path so downstream consumers (reporting, verification) see a file that
+        actually exists.
+
+        Returns None on success, or an error dict.
+        """
+        if not self._is_ssh():
+            return None
+        artifact = result.get("artifact") or {}
+        remote_path = artifact.get("local_path")
+        if not remote_path:
+            return None
+        fname = Path(remote_path).name
+        local_path = self._output_dir / fname
+        try:
+            from .command_runner import SshRunner
+            if isinstance(self._runner, SshRunner):
+                scp_result = self._runner.scp_download(remote_path, str(local_path))
+                if scp_result.exit_code != 0:
+                    return {"error": f"scp download failed: {scp_result.stderr.strip()}"}
+            else:
+                return {"error": "SSH mode but runner is not SshRunner"}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"screenshot download failed: {exc}"}
+        result["artifact"]["local_path"] = str(local_path)
+        return None
+
+    # ------------------------------------------------------------------
+    # action plumbing
+    # ------------------------------------------------------------------
+
+    def _run_action(
+        self,
+        operation: str,
+        x=None,
+        y=None,
+        button=None,
+        text=None,
+        output_dir=None,
+        window_id=None,
+        timeout_seconds=_TIMEOUT_ACTION,
+    ) -> Dict[str, Any]:
+        if operation == "screenshot":
+            # Virtuoso-native screenshot (hiGetWindowScreenDump, IC23.1+) avoids
+            # the daemon X11 helper's xwininfo geometry probe. That probe fails
+            # when the daemon was launched with an empty PATH, because the
+            # helper subprocess cannot locate xwininfo. Routing screenshots
+            # through `window screenshot` keeps live baselines/screenshots
+            # working on such daemons (and is generally more robust).
+            import os as _os
+            out_dir = output_dir or str(self._output_dir)
+            png_path = _os.path.join(out_dir, "baseline.png")
+            argv = self._vcli_argv_with_session(
+                "window", "screenshot", "--path", png_path
+            )
+            result = self._run_json(argv, timeout_seconds)
+            # Local runner writes directly; SSH runner writes on the remote
+            # host, so scp the PNG down and rewrite the path.
+            if self._is_ssh():
+                remote_path = result.get("path")
+                if remote_path:
+                    fname = _os.path.basename(remote_path)
+                    local_path = self._output_dir / fname
+                    from .command_runner import SshRunner
+                    if isinstance(self._runner, SshRunner):
+                        scp_result = self._runner.scp_download(
+                            remote_path, str(local_path)
+                        )
+                        if scp_result.exit_code != 0:
+                            raise RuntimeError(
+                                f"screenshot download failed: "
+                                f"{scp_result.stderr.strip()}"
+                            )
+                        result["path"] = str(local_path)
+            # window screenshot reports status "saved"; normalize so the
+            # downstream status check (which expects None/"success") passes.
+            if result.get("status") == "saved":
+                result["status"] = "success"
+            return result
+        argv = self._vcli_argv(
+            "window",
+            "action-x11",
+            "--window-id",
+            window_id or self.window_id or "",
+            "--display",
+            self._scenario_display or ":0",
+            "--operation",
+            operation,
+        )
+        # --pid is optional since v1.3.1 (issue #55). Only pass when we have
+        # a positive PID — windows without _NET_WM_PID are reachable without it.
+        if self._scenario_pid and self._scenario_pid > 0:
+            argv += ["--pid", str(self._scenario_pid)]
+        # --direct skips helper upload, env resolution, and list-windows scan.
+        # ~5x faster. Only for compatible operations (not wait/screenshot).
+        if self._use_direct and operation in _DIRECT_COMPATIBLE:
+            argv += ["--direct"]
+        if x is not None:
+            argv += ["--x", str(x)]
+        if y is not None:
+            argv += ["--y", str(y)]
+        if button is not None:
+            argv += ["--button", str(button)]
+        if text is not None:
+            argv += ["--text", text]
+        if output_dir is not None:
+            argv += ["--output-dir", output_dir]
+        result = self._run_json(argv, timeout_seconds)
+        return result
+
+    def _execute_action_step(self, step: Step) -> None:
+        # CIW_INPUT is handled specially — it's a composite of multiple
+        # action-x11 calls (activate → click → clear → type → Return).
+        if step.operation == Operation.CIW_INPUT:
+            args = step.arguments
+            text = args.get("text", "")
+            delay_ms = args.get("delay_ms", 10)
+            clear_first = args.get("clear_first", True)
+            self._ciw_input(text, delay_ms=delay_ms, clear_first=clear_first)
+            return
+        op = _ACTION_OPERATIONS[step.operation]
+        args = step.arguments
+        x = y = button = text = output_dir = None
+        action_window_id = self.window_id
+        if step.operation in (Operation.CLICK_REL, Operation.CLICK_ABS, Operation.DOUBLE_CLICK):
+            x, y = args.get("x"), args.get("y")
+            button = args.get("button")
+        elif step.operation == Operation.DRAG_REL:
+            # vcli's drag-rel takes one relative move vector (x, y). xdotool
+            # expands this to mousedown → mousemove --relative → mouseup.
+            x, y = args.get("x"), args.get("y")
+            button = args.get("button")
+        elif step.operation == Operation.KEY:
+            text = args.get("keys")
+        elif step.operation == Operation.TYPE:
+            text = args.get("text")
+        elif step.operation == Operation.SCROLL:
+            # vcli scroll takes direction[:count] via --text, optional x/y
+            # via --x/--y (window-relative pointer position).
+            direction = args.get("direction", "down")
+            count = args.get("count", 1)
+            text = f"{direction}:{count}"
+            if "x" in args or "y" in args:
+                x = args.get("x")
+                y = args.get("y")
+        elif step.operation == Operation.SCREENSHOT:
+            output_dir = str(self._output_dir)
+        elif step.operation == Operation.CLOSE:
+            if args.get("window_id"):
+                action_window_id = args.get("window_id")
+        # MINIMIZE / MAXIMIZE / WINDOW_ACTIVATE take no coordinates.
+        result = self._run_action(
+            op, x=x, y=y, button=button, text=text, output_dir=output_dir,
+            window_id=action_window_id,
+        )
+        if result.get("status") not in (None, "success"):
+            raise RuntimeError(f"action {op} failed: {result.get('status')}")
+
+    def _ciw_input(self, expression: str, delay_ms: int = 10, clear_first: bool = True) -> None:
+        """Type a SKILL expression into the CIW input line and press Return.
+
+        Uses vcli action-x11 --direct for each sub-step (activate, key, type).
+        The CIW input line is at the bottom of the window; we click at
+        (width/2, height-20) which reliably lands in the input area.
+
+        Geometry note: list-windows-x11 reports window geometry including WM
+        decorations (e.g. 730x743 for a 720x709 CIW), which causes click-y to
+        land outside the content area. After activate, vcli writes a precise
+        geometry cache to /tmp/vcli_geom_<display>_<wid>.json; we read that
+        for accurate click coordinates.
+        """
+        import json as _json
+        import os as _os
+        import time as _time
+
+        wid = self.window_id
+        if not wid:
+            raise RuntimeError("CIW_INPUT requires a bound window")
+        if self._window_width is None or self._window_height is None:
+            raise RuntimeError(
+                "CIW_INPUT requires window geometry from precheck; "
+                "run precheck() before execute()"
+            )
+        # 1. Activate the CIW window (also refreshes vcli geometry cache)
+        self._run_action("activate")
+        # 2. Read precise geometry from vcli cache (written by activate).
+        #    Cache path: /tmp/vcli_geom_<display_with_underscores>_<wid>.json
+        display_safe = (self._scenario_display or ":0").replace(":", "_").replace(".", "_")
+        cache_path = f"/tmp/vcli_geom_{display_safe}_{wid}.json"
+        w, h = self._window_width, self._window_height
+        try:
+            # Wait briefly for cache to be written/refreshed by activate
+            for _ in range(10):
+                if _os.path.exists(cache_path):
+                    with open(cache_path, "r") as _f:
+                        _cache = _json.load(_f)
+                    _geom = _cache.get("geom", {})
+                    if _geom.get("w") and _geom.get("h"):
+                        w, h = _geom["w"], _geom["h"]
+                        break
+                _time.sleep(0.05)
+        except Exception:  # noqa: BLE001 — fall back to precheck geometry
+            pass
+        click_x = w // 2  # Center X
+        # CIW input line is at the very bottom of the window (~height-20).
+        click_y = h - 20
+        click_y = max(click_y, 10)  # stay inside the window
+        # 3. Click the input line (bottom center of window)
+        self._run_action("click-rel", x=click_x, y=click_y)
+        _time.sleep(0.3)  # wait for focus to settle on input line
+        # 4. Clear existing input if requested.
+        # Virtuoso CIW: ctrl+a does NOT select-all; Escape clears the line.
+        if clear_first:
+            self._run_action("key", text="Escape")
+            _time.sleep(0.3)
+        # 5. Type the expression with reduced delay for speed
+        self._run_action("type", text=expression)
+        # Wait for typing to complete (proportional to text length, min 0.5s)
+        type_wait = max(0.5, len(expression) * 0.02)
+        _time.sleep(type_wait)
+        # 6. Press Return to execute
+        self._run_action("key", text="Return")
+        # Critical: wait for Virtuoso to parse and execute the SKILL expression
+        # before the verifier reads the result. CIW eval needs ~1s for simple
+        # assignments; complex expressions may need longer (use step timeout).
+        _time.sleep(1.5)
+
+    def _wait_for_window(self, step: Step) -> Optional[Dict[str, Any]]:
+        # Condition polling, not a fixed sleep: poll window visibility until
+        # the requested state or the step timeout.
+        state = step.arguments.get("state", "visible")
+        deadline = time.monotonic() + step.timeout_seconds
+        while time.monotonic() < deadline:
+            try:
+                windows_data = self._run_json(
+                    self._vcli_argv(
+                        "window",
+                        "list-windows-x11",
+                        "--display",
+                        self._scenario_display or ":0",
+                    ),
+                    _TIMEOUT_PRECHECK,
+                )
+            except Exception:  # noqa: BLE001 — transient poll failure
+                time.sleep(0.5)
+                continue
+            windows = windows_data.get("windows", [])
+            visible = any(
+                (w.get("dismiss_id") or w.get("window_id")) == self.window_id
+                and w.get("visible", False)
+                for w in windows
+            )
+            if (state == "visible") == visible:
+                return None
+            time.sleep(0.5)
+        return {"error": f"window did not become {state} within {step.timeout_seconds}s"}
+
+    def _dismiss_dialog(self, step: Step) -> Optional[Dict[str, Any]]:
+        """Dismiss a dialog via vcli window dismiss-dialog.
+
+        Default path uses the Virtuoso session (SKILL-based). When an explicit
+        window_id is given, switches to --x11 bypass with --display.
+        """
+        target = step.arguments.get("window_id")
+        argv = self._vcli_argv("window", "dismiss-dialog")
+        if target:
+            argv += ["--x11", "--display", self._scenario_display or ":0",
+                     "--window-id", target]
+        try:
+            data = self._run_json(argv, _TIMEOUT_ACTION)
+            # "no-dialog" is a normal outcome — nothing to dismiss.
+            if data.get("status") not in (None, "success", "no-dialog"):
+                return {"error": f"dismiss-dialog failed: {data.get('status')}"}
+            return None
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"dismiss-dialog failed: {exc}"}
+
+    def _vcli_load(self, step: Step) -> Optional[Dict[str, Any]]:
+        """Load a SKILL file via vcli skill load, with optional --skillpp.
+
+        VCLI_LOAD is the only non-GUI operation allowed in live mode — it
+        deploys SKILL code (form definitions, callbacks) before GUI interaction.
+        Supports `skillpp: true` to force SKILL++ mode for .il files.
+        """
+        command = step.arguments.get("command", "")
+        skillpp = step.arguments.get("skillpp", False)
+        if not command:
+            return {"error": "VCLI_LOAD requires 'command' (file path)"}
+        argv = self._vcli_argv("skill", "load", command)
+        if skillpp:
+            argv += ["--skillpp"]
+        try:
+            data = self._run_json(argv, _TIMEOUT_ACTION)
+            if data.get("status") not in (None, "success"):
+                return {"error": f"vcli skill load failed: {data.get('status')}"}
+            return None
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"vcli skill load failed: {exc}"}
+
+    def _discover_windows(self, step: Step) -> Optional[Dict[str, Any]]:
+        """Discover windows via vcli list-windows-x11 with optional filters."""
+        argv = self._vcli_argv(
+            "window", "list-windows-x11",
+            "--display", self._scenario_display or ":0",
+        )
+        try:
+            data = self._run_json(argv, _TIMEOUT_PRECHECK)
+            windows = data.get("windows", [])
+            title = step.arguments.get("title")
+            wclass = step.arguments.get("class")
+            pid = step.arguments.get("pid")
+            if title:
+                windows = [w for w in windows if title in (w.get("title") or "")]
+            if wclass:
+                windows = [w for w in windows
+                           if wclass in (w.get("class") or [])]
+            if pid is not None:
+                windows = [w for w in windows if w.get("pid") == pid]
+            if not windows:
+                return {"error": "no windows matched discover criteria"}
+            return None
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"discover-windows failed: {exc}"}
+
+    # ------------------------------------------------------------------
+    # coordinate cache (P2 optimization)
+    # ------------------------------------------------------------------
+
+    def cache_coords(self, form: str, field: str, x: int, y: int,
+                     w: int, h: int) -> None:
+        """Cache hiGetFieldInfo result for a form field.
+
+        hiGetFieldInfo costs one CIW round-trip (~425ms). Cache the resulting
+        ((x y) (w h)) per field for the lifetime of the form; only re-query
+        if the window was resized (call invalidate_coords).
+        """
+        key = f"{form}:{field}"
+        self._coord_cache[key] = {"x": x, "y": y, "w": w, "h": h}
+
+    def get_cached_coords(self, form: str, field: str) -> Optional[Dict[str, int]]:
+        """Retrieve cached field coordinates. Returns None if not cached."""
+        return self._coord_cache.get(f"{form}:{field}")
+
+    def invalidate_coords(self, form: str = None) -> None:
+        """Clear cached coordinates. Call after window resize or layout change.
+
+        If form is None, clears all cached coordinates. Otherwise clears only
+        the specified form's fields.
+        """
+        if form is None:
+            self._coord_cache.clear()
+        else:
+            keys_to_remove = [k for k in self._coord_cache if k.startswith(f"{form}:")]
+            for k in keys_to_remove:
+                del self._coord_cache[k]

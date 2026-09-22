@@ -1,0 +1,28 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".claude/CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 29,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/settings.json",
+      "language": "json",
+      "sizeLines": 28,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/settings.local.json",
+      "language": "json",
+      "sizeLines": 7,
+      "fileCategory": "config"
+    }
+  ],
+  "batchImportData": {
+    ".claude/CLAUDE.md": [],
+    ".claude/settings.json": [],
+    ".claude/settings.local.json": []
+  }
+}

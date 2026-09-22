@@ -1,0 +1,119 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/scripts/gui_runner.py",
+      "language": "python",
+      "sizeLines": 287,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_command_runner.py",
+      "language": "python",
+      "sizeLines": 213,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_engine.py",
+      "language": "python",
+      "sizeLines": 485,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_live_executor.py",
+      "language": "python",
+      "sizeLines": 910,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_local_executor.py",
+      "language": "python",
+      "sizeLines": 383,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/tests/test_model.py",
+      "language": "python",
+      "sizeLines": 875,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      "language": "python",
+      "sizeLines": 302,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      "language": "python",
+      "sizeLines": 335,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      "language": "python",
+      "sizeLines": 1026,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      "language": "python",
+      "sizeLines": 451,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      "language": "python",
+      "sizeLines": 596,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/virtuoso-gui-debug/vgui_runner/trace.py",
+      "language": "python",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    ".agents/skills/virtuoso-gui-debug/scripts/gui_runner.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/tests/test_command_runner.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/tests/test_engine.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/tests/test_live_executor.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/live_executor.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/tests/test_local_executor.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/local_executor.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/tests/test_model.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/command_runner.py": [],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/trace.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/live_executor.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/local_executor.py": [
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/engine.py",
+      ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py"
+    ],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/model.py": [],
+    ".agents/skills/virtuoso-gui-debug/vgui_runner/trace.py": []
+  }
+}

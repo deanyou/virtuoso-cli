@@ -1,0 +1,182 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 3,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 3
+    }
+  },
+  "results": [
+    {
+      "path": ".pensieve/pipelines/run-when-committing.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 119,
+      "nonEmptyLines": 87,
+      "sections": [
+        {
+          "heading": "Commit Pipeline",
+          "level": 1,
+          "line": 16
+        },
+        {
+          "heading": "Signal Judgment Rules",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Task Blueprint (create tasks in order)",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "Task 1: Decide whether to capture -- determine if there are insights worth capturing",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "Task 2: Auto-capture -- extract insights and write them",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "Task 3: Atomic commits",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "Failure Fallback",
+          "level": 2,
+          "line": 115
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": ".pensieve/pipelines/run-when-reviewing-code.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 157,
+      "nonEmptyLines": 107,
+      "sections": [
+        {
+          "heading": "Code Review Pipeline",
+          "level": 1,
+          "line": 16
+        },
+        {
+          "heading": "Signal Judgment Rules",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "Task Blueprint (create tasks in order)",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Task 1: Baseline Exploration (commit history + actual code)",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "Task 2: Prepare Review Context",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "Task 3: Per-file Review with Evidence Recording",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "Task 4: Verify Candidate Issues and Filter False Positives",
+          "level": 3,
+          "line": 98
+        },
+        {
+          "heading": "Task 5: Generate Actionable Review Report",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "Task 6: Capture Reusable Conclusions (optional)",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "Failure Fallback",
+          "level": 2,
+          "line": 150
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": ".pensieve/pipelines/run-when-syncing-to-main.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 128,
+      "nonEmptyLines": 99,
+      "sections": [
+        {
+          "heading": "Sync to Main Pipeline",
+          "level": 1,
+          "line": 16
+        },
+        {
+          "heading": "Task 1: Confirm Scope",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "Task 2: Create Branch and Merge",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "Task 3: Translation",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "Task 4: PR and Merge",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "Failure Fallback",
+          "level": 2,
+          "line": 123
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    }
+  ]
+}

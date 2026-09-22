@@ -1,0 +1,626 @@
+{
+  "batchIndex": 35,
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "nodes": [
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "type": "file",
+      "name": "test_stability.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "summary": "Runs the rsi.py / rsi_query.py search and snippet commands three (originally five) times to confirm RSI returns consistent results; also sanity-checks skill_db.sqlite3 function/snippet counts.",
+      "tags": [
+        "rsi",
+        "stability",
+        "sqlite",
+        "subprocess",
+        "python"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 91
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "type": "file",
+      "name": "validate_ic251.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "summary": "Validates fnd_functions entries against a live IC251 Virtuoso over SSH by calling each function with nil and inspecting the resulting \"undefined function\" vs argument error.",
+      "tags": [
+        "ic251",
+        "virtuoso",
+        "ssh",
+        "validation",
+        "python"
+      ],
+      "languageNotes": "Hard-codes a Windows-style path r\"E:\\git\\virtuoso-cli\\...\" and an SSH target — designed for a specific dev machine.",
+      "complexity": "moderate",
+      "lineCount": 109
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "type": "file",
+      "name": "verify_db.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "summary": "Integrity checks for the RSI SQLite database: JSON-backup consistency, per-version coverage stats, missing confidence levels, verified-without-signature rows, snippet/error-history sanity.",
+      "tags": [
+        "sqlite",
+        "integrity",
+        "python",
+        "diagnostics"
+      ],
+      "languageNotes": "Targets the fnd_functions schema (not the older functions table) and inspects confidence/syntax columns.",
+      "complexity": "moderate",
+      "lineCount": 103
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "type": "file",
+      "name": "verify_ic251.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "summary": "Batch verifier that calls each ported IC251 function over SSH and updates the confidence column (verified/exists/not_exist/timeout) based on the error message returned.",
+      "tags": [
+        "ic251",
+        "virtuoso",
+        "ssh",
+        "batch",
+        "python"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 70
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "type": "file",
+      "name": "xdotool_cli.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "summary": "X11 GUI debugging CLI built on xdotool and (optional) ImageMagick/scrot: provides env/state/find/shot/click/drag/scroll/type/key/wait/smoke subcommands for observe-decide-act-verify loops on Virtuoso windows.",
+      "tags": [
+        "xdotool",
+        "x11",
+        "gui",
+        "automation",
+        "python"
+      ],
+      "languageNotes": "Chinese docstring headers; subcommands dispatched via argparse; X11-specific (Wayland rejected).",
+      "complexity": "complex",
+      "lineCount": 379
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/tests/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/tests/__init__.py",
+      "summary": "Test-package bootstrap that inserts the skill root onto sys.path so vgui_runner imports resolve from the 2-level Skill directory layout.",
+      "tags": [
+        "python",
+        "sys-path",
+        "test-setup"
+      ],
+      "languageNotes": "",
+      "complexity": "simple",
+      "lineCount": 9
+    },
+    {
+      "id": "config:.agents/skills/virtuoso-gui-debug/tests/fail.json",
+      "type": "config",
+      "name": "fail.json",
+      "filePath": ".agents/skills/virtuoso-gui-debug/tests/fail.json",
+      "summary": "Sample failure scenario: VCLI_LOAD with a non-existent command whose verifier expects window_exists=false.",
+      "tags": [
+        "test-fixture",
+        "scenario",
+        "json"
+      ],
+      "languageNotes": "",
+      "complexity": "simple",
+      "lineCount": 27
+    },
+    {
+      "id": "config:.agents/skills/virtuoso-gui-debug/tests/pass.json",
+      "type": "config",
+      "name": "pass.json",
+      "filePath": ".agents/skills/virtuoso-gui-debug/tests/pass.json",
+      "summary": "Sample passing scenario chaining VCLI_LOAD with a WINDOW_WAIT step that checks for the \"Virtuoso\" window in visible state.",
+      "tags": [
+        "test-fixture",
+        "scenario",
+        "json"
+      ],
+      "languageNotes": "",
+      "complexity": "simple",
+      "lineCount": 41
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "type": "file",
+      "name": "test_cli.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "summary": "unittest suite for gui_runner.py covering the validate subcommand (return codes 0/2, JSON error contract, version rejection) and the run subcommand with the fake executor.",
+      "tags": [
+        "unittest",
+        "cli",
+        "validation",
+        "python"
+      ],
+      "languageNotes": "",
+      "complexity": "complex",
+      "lineCount": 370
+    },
+    {
+      "id": "file:.agents/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": ".agents/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "summary": "Package marker for the offline Virtuoso GUI runner foundation that production code expects to be importable.",
+      "tags": [
+        "package",
+        "python"
+      ],
+      "languageNotes": "",
+      "complexity": "simple",
+      "lineCount": 1
+    },
+    {
+      "id": "document:.claude/agents/code-reviewer/agent.md",
+      "type": "document",
+      "name": "agent.md",
+      "filePath": ".claude/agents/code-reviewer/agent.md",
+      "summary": "Sub-agent specification for code reviews focused on Rust + CLI tooling; defines correctness/security/performance/style/API review buckets and a structured output template with severity-tagged issues.",
+      "tags": [
+        "agent",
+        "code-review",
+        "rust",
+        "cli"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 67
+    },
+    {
+      "id": "document:.claude/agents/unit-test-agent/agent.md",
+      "type": "document",
+      "name": "agent.md",
+      "filePath": ".claude/agents/unit-test-agent/agent.md",
+      "summary": "Sub-agent specification that runs the full Rust test suite (unit + integration against a live Virtuoso session), clippy with -D warnings, and cargo fmt --check, then reports pass/fail counts.",
+      "tags": [
+        "agent",
+        "testing",
+        "rust",
+        "ci"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 51
+    },
+    {
+      "id": "file:.claude/skills/_shared/scripts/eda_auto_evolve.py",
+      "type": "file",
+      "name": "eda_auto_evolve.py",
+      "filePath": ".claude/skills/_shared/scripts/eda_auto_evolve.py",
+      "summary": "Aggregates per-skill error_log.jsonl entries, surfaces patterns above a 3-occurrence threshold, generates auto-*.md memory files, syncs new entries to the Tier2 MEMORY.md, and refreshes .pensieve/signals/latest.json.",
+      "tags": [
+        "eda",
+        "error-patterns",
+        "memory",
+        "automation",
+        "python"
+      ],
+      "languageNotes": "English code, Chinese descriptive strings in generated memory files; couples to signal_matcher.py via subprocess.",
+      "complexity": "moderate",
+      "lineCount": 186
+    },
+    {
+      "id": "file:.claude/skills/_shared/scripts/eda_memory_saver.py",
+      "type": "file",
+      "name": "eda_memory_saver.py",
+      "filePath": ".claude/skills/_shared/scripts/eda_memory_saver.py",
+      "summary": "Hook-callable error sink: classifies EDA tool output by SFE/OSSHNL/bridge/NAK regex routes, appends deduplicated entries to .claude/skills/<skill>/memory/error_log.jsonl, and triggers eda_auto_evolve.",
+      "tags": [
+        "eda",
+        "error-capture",
+        "hook",
+        "memory",
+        "python"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 193
+    },
+    {
+      "id": "file:.claude/skills/_shared/scripts/signal_matcher.py",
+      "type": "file",
+      "name": "signal_matcher.py",
+      "filePath": ".claude/skills/_shared/scripts/signal_matcher.py",
+      "summary": "Reads every skill's memory log, ranks hot skills and auto-memory files ready to be lifted into SKILL.md, then emits .pensieve/signals/latest.json as the project-wide signal dashboard.",
+      "tags": [
+        "eda",
+        "signals",
+        "recommendation",
+        "pensieve",
+        "python"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 207
+    },
+    {
+      "id": "document:.claude/skills/amp-copilot/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/amp-copilot/SKILL.md",
+      "summary": "Amplifier design copilot skill: spec capture → topology selection → gm/Id sizing → simulation → PVT validation flow, inspired by Amplifier-Copilot.",
+      "tags": [
+        "skill",
+        "amplifier",
+        "analog",
+        "gm-id",
+        "design-flow"
+      ],
+      "languageNotes": "Structured front-matter with argument-hint and allowed-tools scoping.",
+      "complexity": "complex",
+      "lineCount": 341
+    },
+    {
+      "id": "document:.claude/skills/cell-explore/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/cell-explore/SKILL.md",
+      "summary": "Skill that walks Virtuoso cellviews via SKILL — list libs/cells/views, inspect instances/nets/layers/hierarchy with read-only mode and highlights the v~>name vs viewName gotcha.",
+      "tags": [
+        "skill",
+        "cellview",
+        "skill-language",
+        "read-only"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 62
+    },
+    {
+      "id": "document:.claude/skills/circuit-optimizer/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/circuit-optimizer/SKILL.md",
+      "summary": "Bayesian optimization skill where Claude is the surrogate model: defines parameter ranges (gm/Id, L, comp), per-spec measurement expressions, and phased PVT corner plans that drive virtuoso-cli.",
+      "tags": [
+        "skill",
+        "bayesian-optimization",
+        "analog",
+        "pvt"
+      ],
+      "languageNotes": "Bilingual (zh/en) headings; references an external design plan document.",
+      "complexity": "complex",
+      "lineCount": 467
+    },
+    {
+      "id": "file:.claude/skills/circuit-optimizer/scripts/run_bandgap_sweep.py",
+      "type": "file",
+      "name": "run_bandgap_sweep.py",
+      "filePath": ".claude/skills/circuit-optimizer/scripts/run_bandgap_sweep.py",
+      "summary": "Bandgap CLI: load spec YAML, expand parameter combinations, render netlist template, drive Spectre, persist optim state to ~/.cache/virtuoso_bridge/optim/<id>.json, and emit markdown reports.",
+      "tags": [
+        "bandgap",
+        "spectre",
+        "sweep",
+        "python",
+        "yaml"
+      ],
+      "languageNotes": "Requires PyYAML; graceful ImportError produces a JSON error on stderr.",
+      "complexity": "complex",
+      "lineCount": 269
+    },
+    {
+      "id": "document:.claude/skills/diag/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/diag/SKILL.md",
+      "summary": "Read-only vcli diag skill for stuck Virtuoso state: enumerates .cdslck holders, surfaces a workflow to check if the holder is still alive, never mutates anything.",
+      "tags": [
+        "skill",
+        "diagnostics",
+        "readonly",
+        "cdslck"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 98
+    },
+    {
+      "id": "document:.claude/skills/digital-import/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/digital-import/SKILL.md",
+      "summary": "Four-step P&R import pipeline: strmin GDS → ihdl Verilog → SKILL power labels → SKILL label restyle, all driven from vcli skill exec with a cds.lib prerequisite note.",
+      "tags": [
+        "skill",
+        "digital-import",
+        "gds",
+        "verilog",
+        "strmin",
+        "ihdl"
+      ],
+      "languageNotes": "Long-form bilingual (zh/en) prose; step tables with tool invocations.",
+      "complexity": "complex",
+      "lineCount": 362
+    },
+    {
+      "id": "document:.claude/skills/gm-over-id/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/gm-over-id/SKILL.md",
+      "summary": "Analog IC gm/Id methodology skill: derives gm from GBW+CL, maps gain/bandwidth/swing/noise trade-offs to gm/Id regions, and uses lookup tables to compute transistor W.",
+      "tags": [
+        "skill",
+        "analog",
+        "gm-id",
+        "sizing"
+      ],
+      "languageNotes": "Bilingual (zh/en); tables of inversion regions and gm/Id trade-offs.",
+      "complexity": "moderate",
+      "lineCount": 229
+    },
+    {
+      "id": "document:.claude/skills/history-evolve/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/history-evolve/SKILL.md",
+      "summary": "Skill evolution driver: mines vcli cmd.jsonl + per-session SKILL logs for hard-failure/correction/gap signals and writes concrete improvements back into the relevant .claude/skills/* docs.",
+      "tags": [
+        "skill",
+        "history-mining",
+        "skill-evolution",
+        "retrofit"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 196
+    },
+    {
+      "id": "document:.claude/skills/maestro-read-results/SKILL.md",
+      "type": "document",
+      "name": "SKILL.md",
+      "filePath": ".claude/skills/maestro-read-results/SKILL.md",
+      "summary": "Off-GUI Maestro output evaluator: parses maestro.sdb / active.state XML, resolves the PSF dir from history.sdb, runs the Cadence psf tool, and evaluates Ocean expressions into JSON results.",
+      "tags": [
+        "skill",
+        "maestro",
+        "psf",
+        "ocean",
+        "offline"
+      ],
+      "languageNotes": "",
+      "complexity": "moderate",
+      "lineCount": 159
+    },
+    {
+      "id": "file:.claude/skills/maestro-read-results/scripts/read_results.py",
+      "type": "file",
+      "name": "read_results.py",
+      "filePath": ".claude/skills/maestro-read-results/scripts/read_results.py",
+      "summary": "Parses maestro.sdb and active.state XML, locates PSF directories via history.sdb, converts PSF binaries through the psf tool, and implements an Ocean-like expression evaluator (getData/dB20/phaseDeg/bandwidth/ymax/VF/VT) returning structured JSON.",
+      "tags": [
+        "maestro",
+        "psf",
+        "xml",
+        "python",
+        "expression-evaluator"
+      ],
+      "languageNotes": "",
+      "complexity": "complex",
+      "lineCount": 657
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/scripts",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/test_stability.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/scripts",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/validate_ic251.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/scripts",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/verify_db.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/scripts",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/verify_ic251.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/scripts",
+      "target": "file:.agents/skills/virtuoso-gui-debug/scripts/xdotool_cli.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/tests",
+      "target": "file:.agents/skills/virtuoso-gui-debug/tests/__init__.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/tests",
+      "target": "config:.agents/skills/virtuoso-gui-debug/tests/fail.json",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/tests",
+      "target": "config:.agents/skills/virtuoso-gui-debug/tests/pass.json",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/tests",
+      "target": "file:.agents/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.agents/skills/virtuoso-gui-debug/vgui_runner",
+      "target": "file:.agents/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/agents/code-reviewer",
+      "target": "document:.claude/agents/code-reviewer/agent.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/agents/unit-test-agent",
+      "target": "document:.claude/agents/unit-test-agent/agent.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/_shared/scripts",
+      "target": "file:.claude/skills/_shared/scripts/eda_auto_evolve.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/_shared/scripts",
+      "target": "file:.claude/skills/_shared/scripts/eda_memory_saver.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/_shared/scripts",
+      "target": "file:.claude/skills/_shared/scripts/signal_matcher.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/amp-copilot",
+      "target": "document:.claude/skills/amp-copilot/SKILL.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/cell-explore",
+      "target": "document:.claude/skills/cell-explore/SKILL.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/circuit-optimizer",
+      "target": "document:.claude/skills/circuit-optimizer/SKILL.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/circuit-optimizer/scripts",
+      "target": "file:.claude/skills/circuit-optimizer/scripts/run_bandgap_sweep.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/diag",
+      "target": "document:.claude/skills/diag/SKILL.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/digital-import",
+      "target": "document:.claude/skills/digital-import/SKILL.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/gm-over-id",
+      "target": "document:.claude/skills/gm-over-id/SKILL.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/history-evolve",
+      "target": "document:.claude/skills/history-evolve/SKILL.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/maestro-read-results",
+      "target": "document:.claude/skills/maestro-read-results/SKILL.md",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/maestro-read-results/scripts",
+      "target": "file:.claude/skills/maestro-read-results/scripts/read_results.py",
+      "type": "contains",
+      "weight": 0.6
+    },
+    {
+      "source": "document:.claude/skills/circuit-optimizer/SKILL.md",
+      "target": "file:.claude/skills/circuit-optimizer/scripts/run_bandgap_sweep.py",
+      "type": "documents",
+      "weight": 0.8
+    },
+    {
+      "source": "document:.claude/skills/maestro-read-results/SKILL.md",
+      "target": "file:.claude/skills/maestro-read-results/scripts/read_results.py",
+      "type": "documents",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/tests/__init__.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "type": "configures",
+      "weight": 0.7
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "target": "file:.agents/skills/virtuoso-gui-debug/vgui_runner/__init__.py",
+      "type": "tested_by",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "target": "config:.agents/skills/virtuoso-gui-debug/tests/pass.json",
+      "type": "configures",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.agents/skills/virtuoso-gui-debug/tests/test_cli.py",
+      "target": "config:.agents/skills/virtuoso-gui-debug/tests/fail.json",
+      "type": "configures",
+      "weight": 0.6
+    },
+    {
+      "source": "file:.claude/skills/_shared/scripts/eda_memory_saver.py",
+      "target": "file:.claude/skills/_shared/scripts/eda_auto_evolve.py",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/_shared/scripts/eda_auto_evolve.py",
+      "target": "file:.claude/skills/_shared/scripts/signal_matcher.py",
+      "type": "calls",
+      "weight": 0.8
+    },
+    {
+      "source": "file:.claude/skills/_shared/scripts/signal_matcher.py",
+      "target": "file:.claude/skills/_shared/scripts/eda_memory_saver.py",
+      "type": "calls",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.claude/skills/_shared/scripts/eda_auto_evolve.py",
+      "target": "file:.claude/skills/_shared/scripts/eda_memory_saver.py",
+      "type": "calls",
+      "weight": 0.5
+    }
+  ]
+}

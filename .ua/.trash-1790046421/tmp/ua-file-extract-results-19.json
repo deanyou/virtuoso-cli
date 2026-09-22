@@ -1,0 +1,209 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 3,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 3
+    }
+  },
+  "results": [
+    {
+      "path": ".claude/skills/_shared/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 38,
+      "nonEmptyLines": 30,
+      "sections": [
+        {
+          "heading": "`_shared/` — the wrapper, conventions, and shared scripts",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "One-time install",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "Editing rules",
+          "level": 2,
+          "line": 30
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": ".claude/skills/_shared/convention.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 532,
+      "nonEmptyLines": 414,
+      "sections": [
+        {
+          "heading": "vcli ↔ virtuoso naming convention",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Why the corpus uses `virtuoso`",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "How the adapter works",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Install (one-time, per agent host)",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "When the name changes",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "SKILL.md hygiene rules (for skill authors)",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "Diagnostics",
+          "level": 2,
+          "line": 101
+        },
+        {
+          "heading": "Diagnostic playbook — general rules",
+          "level": 2,
+          "line": 107
+        },
+        {
+          "heading": "Rule: vcli's disk-cache writes are silent-on-failure",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "Rule: ramic_bridge.il is loaded once per CIW window",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "Rule: the RPC layer is split into two pools by the Admin gate",
+          "level": 3,
+          "line": 166
+        },
+        {
+          "heading": "Rule: RPC methods are snake_case with a mandatory subdomain prefix",
+          "level": 3,
+          "line": 196
+        },
+        {
+          "heading": "Rule: Maestro writes are split between UI bookkeeping and the simulator",
+          "level": 3,
+          "line": 212
+        },
+        {
+          "heading": "Rule: IC25 SKILL keyword arguments are strictly string-quoted",
+          "level": 3,
+          "line": 249
+        },
+        {
+          "heading": "Rule: `mae*` reads with implicit session resolution fail in ADE Editing mode",
+          "level": 3,
+          "line": 272
+        },
+        {
+          "heading": "Rule: bypass-mode `maestro.run` writes results to disk but not the Explorer history list",
+          "level": 3,
+          "line": 294
+        },
+        {
+          "heading": "Rule: IC25 PSF is compressed binary by default; raw waveforms are not greppable",
+          "level": 3,
+          "line": 313
+        },
+        {
+          "heading": "Rule: only sessions opened by this process can be closed programmatically",
+          "level": 3,
+          "line": 353
+        },
+        {
+          "heading": "Rule: IC25 `?session` keyword rejection with `~>name` is not enough",
+          "level": 3,
+          "line": 376
+        },
+        {
+          "heading": "Rule: `maestro.create_corner_netlist` requires `VB_REMOTE_HOST` plus an ssh-capable target",
+          "level": 3,
+          "line": 403
+        },
+        {
+          "heading": "Rule: name a Cadence-version before you cite a SKILL signature",
+          "level": 3,
+          "line": 442
+        },
+        {
+          "heading": "Maintenance contract — keep the playbook honest",
+          "level": 2,
+          "line": 458
+        },
+        {
+          "heading": "How to evolve a rule",
+          "level": 3,
+          "line": 478
+        },
+        {
+          "heading": "When to *not* edit convention.md",
+          "level": 3,
+          "line": 498
+        },
+        {
+          "heading": "What this conversation produced",
+          "level": 2,
+          "line": 511
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 26
+      }
+    },
+    {
+      "path": ".claude/skills/_shared/vcli.sh",
+      "language": "shell",
+      "fileCategory": "script",
+      "totalLines": 120,
+      "nonEmptyLines": 112,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

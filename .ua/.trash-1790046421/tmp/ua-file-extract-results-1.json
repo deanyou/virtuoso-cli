@@ -1,0 +1,6336 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 24,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 24,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 24,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": [
+    {
+      "path": "src/spectre/jobs.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 240,
+      "nonEmptyLines": 222,
+      "functions": [
+        {
+          "name": "local_process_alive",
+          "startLine": 40,
+          "endLine": 43,
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "local_process_alive",
+          "startLine": 48,
+          "endLine": 50,
+          "params": [
+            "_pid"
+          ]
+        },
+        {
+          "name": "terminate_process_group",
+          "startLine": 58,
+          "endLine": 69,
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "terminate_process_group",
+          "startLine": 78,
+          "endLine": 83,
+          "params": [
+            "pid"
+          ]
+        },
+        {
+          "name": "dir",
+          "startLine": 86,
+          "endLine": 90,
+          "params": []
+        },
+        {
+          "name": "path",
+          "startLine": 92,
+          "endLine": 94,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "save",
+          "startLine": 96,
+          "endLine": 103,
+          "params": []
+        },
+        {
+          "name": "load",
+          "startLine": 105,
+          "endLine": 111,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "list_all",
+          "startLine": 113,
+          "endLine": 130,
+          "params": []
+        },
+        {
+          "name": "refresh",
+          "startLine": 134,
+          "endLine": 176,
+          "params": []
+        },
+        {
+          "name": "finish_from_log",
+          "startLine": 179,
+          "endLine": 217,
+          "params": []
+        },
+        {
+          "name": "cancel",
+          "startLine": 219,
+          "endLine": 233,
+          "params": []
+        },
+        {
+          "name": "delete",
+          "startLine": 236,
+          "endLine": 239,
+          "params": [
+            "id"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "JobStatus",
+          "startLine": 8,
+          "endLine": 13,
+          "methods": [],
+          "properties": [
+            "Running",
+            "Completed",
+            "Failed",
+            "Cancelled"
+          ]
+        },
+        {
+          "name": "Job",
+          "startLine": 16,
+          "endLine": 29,
+          "methods": [
+            "dir",
+            "path",
+            "save",
+            "load",
+            "list_all",
+            "refresh",
+            "finish_from_log",
+            "cancel",
+            "delete"
+          ],
+          "properties": [
+            "id",
+            "status",
+            "netlist_path",
+            "raw_dir",
+            "pid",
+            "created",
+            "finished",
+            "error",
+            "remote_host",
+            "remote_dir"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "JobStatus",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "Job",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "save",
+          "line": 96,
+          "isDefault": false
+        },
+        {
+          "name": "load",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "list_all",
+          "line": 113,
+          "isDefault": false
+        },
+        {
+          "name": "refresh",
+          "line": 134,
+          "isDefault": false
+        },
+        {
+          "name": "cancel",
+          "line": 219,
+          "isDefault": false
+        },
+        {
+          "name": "delete",
+          "line": 236,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "local_process_alive",
+          "callee": "libc::kill",
+          "lineNumber": 42
+        },
+        {
+          "caller": "terminate_process_group",
+          "callee": "libc::kill",
+          "lineNumber": 62
+        },
+        {
+          "caller": "terminate_process_group",
+          "callee": "std::thread::sleep",
+          "lineNumber": 64
+        },
+        {
+          "caller": "terminate_process_group",
+          "callee": "std::time::Duration::from_millis",
+          "lineNumber": 64
+        },
+        {
+          "caller": "terminate_process_group",
+          "callee": "libc::kill",
+          "lineNumber": 66
+        },
+        {
+          "caller": "terminate_process_group",
+          "callee": "Ok",
+          "lineNumber": 68
+        },
+        {
+          "caller": "terminate_process_group",
+          "callee": "Err",
+          "lineNumber": 79
+        },
+        {
+          "caller": "terminate_process_group",
+          "callee": "VirtuosoError::Config",
+          "lineNumber": 79
+        },
+        {
+          "caller": "dir",
+          "callee": "crate::runtime_paths::cache_subdir",
+          "lineNumber": 87
+        },
+        {
+          "caller": "dir",
+          "callee": "fs::create_dir_all",
+          "lineNumber": 88
+        },
+        {
+          "caller": "path",
+          "callee": "Self::dir().join",
+          "lineNumber": 93
+        },
+        {
+          "caller": "path",
+          "callee": "Self::dir",
+          "lineNumber": 93
+        },
+        {
+          "caller": "save",
+          "callee": "serde_json::to_string_pretty(self).map_err",
+          "lineNumber": 97
+        },
+        {
+          "caller": "save",
+          "callee": "serde_json::to_string_pretty",
+          "lineNumber": 97
+        },
+        {
+          "caller": "save",
+          "callee": "VirtuosoError::Execution",
+          "lineNumber": 98
+        },
+        {
+          "caller": "save",
+          "callee": "e.to_string",
+          "lineNumber": 98
+        },
+        {
+          "caller": "save",
+          "callee": "Self::path",
+          "lineNumber": 99
+        },
+        {
+          "caller": "save",
+          "callee": "path.with_extension",
+          "lineNumber": 100
+        },
+        {
+          "caller": "save",
+          "callee": "fs::write(&tmp, json).map_err",
+          "lineNumber": 101
+        },
+        {
+          "caller": "save",
+          "callee": "fs::write",
+          "lineNumber": 101
+        },
+        {
+          "caller": "save",
+          "callee": "VirtuosoError::Execution",
+          "lineNumber": 101
+        },
+        {
+          "caller": "save",
+          "callee": "e.to_string",
+          "lineNumber": 101
+        },
+        {
+          "caller": "save",
+          "callee": "fs::rename(&tmp, &path).map_err",
+          "lineNumber": 102
+        },
+        {
+          "caller": "save",
+          "callee": "fs::rename",
+          "lineNumber": 102
+        },
+        {
+          "caller": "save",
+          "callee": "VirtuosoError::Execution",
+          "lineNumber": 102
+        },
+        {
+          "caller": "save",
+          "callee": "e.to_string",
+          "lineNumber": 102
+        },
+        {
+          "caller": "load",
+          "callee": "Self::path",
+          "lineNumber": 106
+        },
+        {
+          "caller": "load",
+          "callee": "fs::read_to_string(&path).map_err",
+          "lineNumber": 107
+        },
+        {
+          "caller": "load",
+          "callee": "fs::read_to_string",
+          "lineNumber": 107
+        },
+        {
+          "caller": "load",
+          "callee": "VirtuosoError::NotFound",
+          "lineNumber": 108
+        },
+        {
+          "caller": "load",
+          "callee": "serde_json::from_str(&json).map_err",
+          "lineNumber": 109
+        },
+        {
+          "caller": "load",
+          "callee": "serde_json::from_str",
+          "lineNumber": 109
+        },
+        {
+          "caller": "load",
+          "callee": "VirtuosoError::Execution",
+          "lineNumber": 110
+        },
+        {
+          "caller": "list_all",
+          "callee": "Self::dir",
+          "lineNumber": 114
+        },
+        {
+          "caller": "list_all",
+          "callee": "Vec::new",
+          "lineNumber": 115
+        },
+        {
+          "caller": "list_all",
+          "callee": "fs::read_dir",
+          "lineNumber": 116
+        },
+        {
+          "caller": "list_all",
+          "callee": "entries.flatten",
+          "lineNumber": 117
+        },
+        {
+          "caller": "list_all",
+          "callee": "entry.path",
+          "lineNumber": 118
+        },
+        {
+          "caller": "list_all",
+          "callee": "path.extension().is_some_and",
+          "lineNumber": 119
+        },
+        {
+          "caller": "list_all",
+          "callee": "path.extension",
+          "lineNumber": 119
+        },
+        {
+          "caller": "list_all",
+          "callee": "fs::read_to_string",
+          "lineNumber": 120
+        },
+        {
+          "caller": "list_all",
+          "callee": "serde_json::from_str::<Job>",
+          "lineNumber": 121
+        },
+        {
+          "caller": "list_all",
+          "callee": "jobs.push",
+          "lineNumber": 122
+        },
+        {
+          "caller": "list_all",
+          "callee": "jobs.sort_by",
+          "lineNumber": 128
+        },
+        {
+          "caller": "list_all",
+          "callee": "a.created.cmp",
+          "lineNumber": 128
+        },
+        {
+          "caller": "list_all",
+          "callee": "Ok",
+          "lineNumber": 129
+        },
+        {
+          "caller": "refresh",
+          "callee": "Ok",
+          "lineNumber": 136
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"])\n                    .arg(host)\n                    .arg(format!(\"kill -0 {pid}\"))\n                    .stdout(std::process::Stdio::null())\n                    .stderr(std::process::Stdio::null())\n                    .status()\n                    .map(|s| s.success()).unwrap_or",
+          "lineNumber": 141
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"])\n                    .arg(host)\n                    .arg(format!(\"kill -0 {pid}\"))\n                    .stdout(std::process::Stdio::null())\n                    .stderr(std::process::Stdio::null())\n                    .status().map",
+          "lineNumber": 141
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"])\n                    .arg(host)\n                    .arg(format!(\"kill -0 {pid}\"))\n                    .stdout(std::process::Stdio::null())\n                    .stderr(std::process::Stdio::null()).status",
+          "lineNumber": 141
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"])\n                    .arg(host)\n                    .arg(format!(\"kill -0 {pid}\"))\n                    .stdout(std::process::Stdio::null()).stderr",
+          "lineNumber": 141
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"])\n                    .arg(host)\n                    .arg(format!(\"kill -0 {pid}\")).stdout",
+          "lineNumber": 141
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"])\n                    .arg(host).arg",
+          "lineNumber": 141
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"]).arg",
+          "lineNumber": 141
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Command::new(\"ssh\").args",
+          "lineNumber": 141
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Command::new",
+          "lineNumber": 141
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Stdio::null",
+          "lineNumber": 145
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::process::Stdio::null",
+          "lineNumber": 146
+        },
+        {
+          "caller": "refresh",
+          "callee": "s.success",
+          "lineNumber": 148
+        },
+        {
+          "caller": "refresh",
+          "callee": "local_process_alive",
+          "lineNumber": 152
+        },
+        {
+          "caller": "refresh",
+          "callee": "self.finish_from_log",
+          "lineNumber": 156
+        },
+        {
+          "caller": "refresh",
+          "callee": "self.remote_host.is_none",
+          "lineNumber": 157
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::path::Path::new(&self.netlist_path)\n                    .parent().unwrap_or",
+          "lineNumber": 161
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::path::Path::new(&self.netlist_path).parent",
+          "lineNumber": 161
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::path::Path::new",
+          "lineNumber": 161
+        },
+        {
+          "caller": "refresh",
+          "callee": "std::path::Path::new",
+          "lineNumber": 163
+        },
+        {
+          "caller": "refresh",
+          "callee": "log_dir.join",
+          "lineNumber": 164
+        },
+        {
+          "caller": "refresh",
+          "callee": "log.exists",
+          "lineNumber": 165
+        },
+        {
+          "caller": "refresh",
+          "callee": "fs::read_to_string(&log).unwrap_or_default",
+          "lineNumber": 166
+        },
+        {
+          "caller": "refresh",
+          "callee": "fs::read_to_string",
+          "lineNumber": 166
+        },
+        {
+          "caller": "refresh",
+          "callee": "content.contains",
+          "lineNumber": 167
+        },
+        {
+          "caller": "refresh",
+          "callee": "content.contains",
+          "lineNumber": 168
+        },
+        {
+          "caller": "refresh",
+          "callee": "self.finish_from_log",
+          "lineNumber": 170
+        },
+        {
+          "caller": "refresh",
+          "callee": "Ok",
+          "lineNumber": 175
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::path::Path::new(&self.netlist_path)\n            .parent().unwrap_or",
+          "lineNumber": 180
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::path::Path::new(&self.netlist_path).parent",
+          "lineNumber": 180
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::path::Path::new",
+          "lineNumber": 180
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::path::Path::new",
+          "lineNumber": 182
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "log_dir.join",
+          "lineNumber": 183
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"])\n                    .arg(host)\n                    .arg(format!(\"cat {rdir}/spectre.out 2>/dev/null\"))\n                    .output().ok",
+          "lineNumber": 188
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"])\n                    .arg(host)\n                    .arg(format!(\"cat {rdir}/spectre.out 2>/dev/null\")).output",
+          "lineNumber": 188
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"])\n                    .arg(host).arg",
+          "lineNumber": 188
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::process::Command::new(\"ssh\")\n                    .args([\"-o\", \"BatchMode=yes\", \"-o\", \"ConnectTimeout=3\"]).arg",
+          "lineNumber": 188
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::process::Command::new(\"ssh\").args",
+          "lineNumber": 188
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "std::process::Command::new",
+          "lineNumber": 188
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default",
+          "lineNumber": 194
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "out.map",
+          "lineNumber": 194
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "String::from_utf8_lossy(&o.stdout).into_owned",
+          "lineNumber": 194
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "String::from_utf8_lossy",
+          "lineNumber": 194
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "log.exists",
+          "lineNumber": 196
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "fs::read_to_string(&log).unwrap_or_default",
+          "lineNumber": 197
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "fs::read_to_string",
+          "lineNumber": 197
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "String::new",
+          "lineNumber": 199
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "content.contains",
+          "lineNumber": 202
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "content.is_empty",
+          "lineNumber": 204
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "Some",
+          "lineNumber": 206
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "\"process exited, no log found\".into",
+          "lineNumber": 206
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "content\n                .lines()\n                .rev()\n                .find(|l| l.contains(\"Error\") || l.contains(\"error\")).map",
+          "lineNumber": 209
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "content\n                .lines()\n                .rev().find",
+          "lineNumber": 209
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "content\n                .lines().rev",
+          "lineNumber": 209
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "content.lines",
+          "lineNumber": 209
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "l.contains",
+          "lineNumber": 212
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "l.contains",
+          "lineNumber": 212
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "l.trim().to_string",
+          "lineNumber": 213
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "l.trim",
+          "lineNumber": 213
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "Some",
+          "lineNumber": 215
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "chrono::Local::now().to_rfc3339",
+          "lineNumber": 215
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "chrono::Local::now",
+          "lineNumber": 215
+        },
+        {
+          "caller": "finish_from_log",
+          "callee": "self.save",
+          "lineNumber": 216
+        },
+        {
+          "caller": "cancel",
+          "callee": "Err",
+          "lineNumber": 221
+        },
+        {
+          "caller": "cancel",
+          "callee": "VirtuosoError::Execution",
+          "lineNumber": 221
+        },
+        {
+          "caller": "cancel",
+          "callee": "terminate_process_group",
+          "lineNumber": 228
+        },
+        {
+          "caller": "cancel",
+          "callee": "Some",
+          "lineNumber": 231
+        },
+        {
+          "caller": "cancel",
+          "callee": "chrono::Local::now().to_rfc3339",
+          "lineNumber": 231
+        },
+        {
+          "caller": "cancel",
+          "callee": "chrono::Local::now",
+          "lineNumber": 231
+        },
+        {
+          "caller": "cancel",
+          "callee": "self.save",
+          "lineNumber": 232
+        },
+        {
+          "caller": "delete",
+          "callee": "Self::path",
+          "lineNumber": 237
+        },
+        {
+          "caller": "delete",
+          "callee": "fs::remove_file(&path).map_err",
+          "lineNumber": 238
+        },
+        {
+          "caller": "delete",
+          "callee": "fs::remove_file",
+          "lineNumber": 238
+        },
+        {
+          "caller": "delete",
+          "callee": "VirtuosoError::NotFound",
+          "lineNumber": 238
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 8,
+        "functionCount": 13,
+        "classCount": 2
+      }
+    },
+    {
+      "path": "src/tui/app/action.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 54,
+      "nonEmptyLines": 52,
+      "functions": [
+        {
+          "name": "handle_action",
+          "startLine": 17,
+          "endLine": 54,
+          "params": [
+            "app",
+            "action"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "Action",
+          "startLine": 8,
+          "endLine": 15,
+          "methods": [],
+          "properties": [
+            "None",
+            "Quit",
+            "Refresh",
+            "CancelJob",
+            "SaveConfig",
+            "Status"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Action",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "handle_action",
+          "line": 17,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "handle_action",
+          "callee": "crate::tui::app::data::refresh",
+          "lineNumber": 22
+        },
+        {
+          "caller": "handle_action",
+          "callee": "crate::tui::app::data::load_log_lines",
+          "lineNumber": 23
+        },
+        {
+          "caller": "handle_action",
+          "callee": "Overlay::Log",
+          "lineNumber": 27
+        },
+        {
+          "caller": "handle_action",
+          "callee": "LogOverlay::new",
+          "lineNumber": 27
+        },
+        {
+          "caller": "handle_action",
+          "callee": "app.set_status",
+          "lineNumber": 29
+        },
+        {
+          "caller": "handle_action",
+          "callee": "app.jobs.get_mut",
+          "lineNumber": 32
+        },
+        {
+          "caller": "handle_action",
+          "callee": "job.cancel",
+          "lineNumber": 34
+        },
+        {
+          "caller": "handle_action",
+          "callee": "job.id.clone",
+          "lineNumber": 35
+        },
+        {
+          "caller": "handle_action",
+          "callee": "app.set_status",
+          "lineNumber": 36
+        },
+        {
+          "caller": "handle_action",
+          "callee": "app.set_status",
+          "lineNumber": 38
+        },
+        {
+          "caller": "handle_action",
+          "callee": "crate::tui::app::data::save_config",
+          "lineNumber": 42
+        },
+        {
+          "caller": "handle_action",
+          "callee": "crate::config_file::path",
+          "lineNumber": 44
+        },
+        {
+          "caller": "handle_action",
+          "callee": "app.set_status",
+          "lineNumber": 45
+        },
+        {
+          "caller": "handle_action",
+          "callee": "app.set_status",
+          "lineNumber": 50
+        },
+        {
+          "caller": "handle_action",
+          "callee": "app.set_status",
+          "lineNumber": 52
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "src/tui/app/data.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 133,
+      "nonEmptyLines": 125,
+      "functions": [
+        {
+          "name": "initial_load",
+          "startLine": 8,
+          "endLine": 11,
+          "params": [
+            "app"
+          ]
+        },
+        {
+          "name": "refresh",
+          "startLine": 13,
+          "endLine": 21,
+          "params": [
+            "app"
+          ]
+        },
+        {
+          "name": "load_log_lines",
+          "startLine": 23,
+          "endLine": 27,
+          "params": []
+        },
+        {
+          "name": "save_config",
+          "startLine": 38,
+          "endLine": 62,
+          "params": [
+            "app"
+          ]
+        },
+        {
+          "name": "env_override",
+          "startLine": 70,
+          "endLine": 84,
+          "params": [
+            "key",
+            "profile"
+          ]
+        },
+        {
+          "name": "load_config_fields",
+          "startLine": 94,
+          "endLine": 133,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "initial_load",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "refresh",
+          "line": 13,
+          "isDefault": false
+        },
+        {
+          "name": "load_log_lines",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "save_config",
+          "line": 38,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "initial_load",
+          "callee": "refresh",
+          "lineNumber": 9
+        },
+        {
+          "caller": "initial_load",
+          "callee": "load_config_fields",
+          "lineNumber": 10
+        },
+        {
+          "caller": "refresh",
+          "callee": "SessionInfo::list().unwrap_or_default",
+          "lineNumber": 14
+        },
+        {
+          "caller": "refresh",
+          "callee": "SessionInfo::list",
+          "lineNumber": 14
+        },
+        {
+          "caller": "refresh",
+          "callee": "Job::list_all().unwrap_or_default",
+          "lineNumber": 15
+        },
+        {
+          "caller": "refresh",
+          "callee": "Job::list_all",
+          "lineNumber": 15
+        },
+        {
+          "caller": "refresh",
+          "callee": "j.refresh",
+          "lineNumber": 17
+        },
+        {
+          "caller": "refresh",
+          "callee": "TunnelState::load().ok().flatten",
+          "lineNumber": 20
+        },
+        {
+          "caller": "refresh",
+          "callee": "TunnelState::load().ok",
+          "lineNumber": 20
+        },
+        {
+          "caller": "refresh",
+          "callee": "TunnelState::load",
+          "lineNumber": 20
+        },
+        {
+          "caller": "load_log_lines",
+          "callee": "std::fs::read_to_string(command_log::log_path())\n        .map(|c| c.lines().map(|l| l.to_string()).collect()).unwrap_or_default",
+          "lineNumber": 24
+        },
+        {
+          "caller": "load_log_lines",
+          "callee": "std::fs::read_to_string(command_log::log_path()).map",
+          "lineNumber": 24
+        },
+        {
+          "caller": "load_log_lines",
+          "callee": "std::fs::read_to_string",
+          "lineNumber": 24
+        },
+        {
+          "caller": "load_log_lines",
+          "callee": "command_log::log_path",
+          "lineNumber": 24
+        },
+        {
+          "caller": "load_log_lines",
+          "callee": "c.lines().map(|l| l.to_string()).collect",
+          "lineNumber": 25
+        },
+        {
+          "caller": "load_log_lines",
+          "callee": "c.lines().map",
+          "lineNumber": 25
+        },
+        {
+          "caller": "load_log_lines",
+          "callee": "c.lines",
+          "lineNumber": 25
+        },
+        {
+          "caller": "load_log_lines",
+          "callee": "l.to_string",
+          "lineNumber": 25
+        },
+        {
+          "caller": "save_config",
+          "callee": "ConfigFile::load",
+          "lineNumber": 39
+        },
+        {
+          "caller": "save_config",
+          "callee": "ConfigFile::default",
+          "lineNumber": 41
+        },
+        {
+          "caller": "save_config",
+          "callee": "Err",
+          "lineNumber": 45
+        },
+        {
+          "caller": "save_config",
+          "callee": "crate::profile::resolve_profile_info",
+          "lineNumber": 47
+        },
+        {
+          "caller": "save_config",
+          "callee": "f.value.is_empty",
+          "lineNumber": 49
+        },
+        {
+          "caller": "save_config",
+          "callee": "file.remove",
+          "lineNumber": 50
+        },
+        {
+          "caller": "save_config",
+          "callee": "profile.as_deref",
+          "lineNumber": 50
+        },
+        {
+          "caller": "save_config",
+          "callee": "file.set",
+          "lineNumber": 52
+        },
+        {
+          "caller": "save_config",
+          "callee": "profile.as_deref",
+          "lineNumber": 52
+        },
+        {
+          "caller": "save_config",
+          "callee": "file.save",
+          "lineNumber": 55
+        },
+        {
+          "caller": "save_config",
+          "callee": "Ok",
+          "lineNumber": 61
+        },
+        {
+          "caller": "env_override",
+          "callee": "crate::config_file::env_var_for",
+          "lineNumber": 71
+        },
+        {
+          "caller": "env_override",
+          "callee": "std::env::var",
+          "lineNumber": 74
+        },
+        {
+          "caller": "env_override",
+          "callee": "v.is_empty",
+          "lineNumber": 75
+        },
+        {
+          "caller": "env_override",
+          "callee": "Some",
+          "lineNumber": 76
+        },
+        {
+          "caller": "env_override",
+          "callee": "std::env::var(&env_name)\n        .ok()\n        .filter(|v| !v.is_empty()).map",
+          "lineNumber": 80
+        },
+        {
+          "caller": "env_override",
+          "callee": "std::env::var(&env_name)\n        .ok().filter",
+          "lineNumber": 80
+        },
+        {
+          "caller": "env_override",
+          "callee": "std::env::var(&env_name).ok",
+          "lineNumber": 80
+        },
+        {
+          "caller": "env_override",
+          "callee": "std::env::var",
+          "lineNumber": 80
+        },
+        {
+          "caller": "env_override",
+          "callee": "v.is_empty",
+          "lineNumber": 82
+        },
+        {
+          "caller": "env_override",
+          "callee": "env_name.clone",
+          "lineNumber": 83
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "ConfigFile::load",
+          "lineNumber": 109
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "crate::profile::resolve_profile_info",
+          "lineNumber": 116
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "fields_def\n        .into_iter()\n        .map(|(key, hint)| {\n            let value = file\n                .as_ref()\n                .and_then(|f| f.get(key, profile.as_deref()))\n                .unwrap_or_default();\n            ConfigField {\n                key: key.to_string(),\n                value,\n                hint,\n                env_override: env_override(key, profile.as_deref()),\n            }\n        }).collect",
+          "lineNumber": 118
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "fields_def\n        .into_iter().map",
+          "lineNumber": 118
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "fields_def.into_iter",
+          "lineNumber": 118
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "file\n                .as_ref()\n                .and_then(|f| f.get(key, profile.as_deref())).unwrap_or_default",
+          "lineNumber": 121
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "file\n                .as_ref().and_then",
+          "lineNumber": 121
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "file.as_ref",
+          "lineNumber": 121
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "f.get",
+          "lineNumber": 123
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "profile.as_deref",
+          "lineNumber": 123
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "key.to_string",
+          "lineNumber": 126
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "env_override",
+          "lineNumber": 129
+        },
+        {
+          "caller": "load_config_fields",
+          "callee": "profile.as_deref",
+          "lineNumber": 129
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 4,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/app/event.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 220,
+      "nonEmptyLines": 207,
+      "functions": [
+        {
+          "name": "on_key",
+          "startLine": 12,
+          "endLine": 24,
+          "params": [
+            "app",
+            "key"
+          ]
+        },
+        {
+          "name": "global_key",
+          "startLine": 26,
+          "endLine": 48,
+          "params": [
+            "app",
+            "key"
+          ]
+        },
+        {
+          "name": "content_key",
+          "startLine": 50,
+          "endLine": 82,
+          "params": [
+            "app",
+            "key"
+          ]
+        },
+        {
+          "name": "cancel_job_prompt",
+          "startLine": 84,
+          "endLine": 100,
+          "params": [
+            "app"
+          ]
+        },
+        {
+          "name": "overlay_key",
+          "startLine": 102,
+          "endLine": 120,
+          "params": [
+            "app",
+            "key"
+          ]
+        },
+        {
+          "name": "log_overlay_key",
+          "startLine": 122,
+          "endLine": 141,
+          "params": [
+            "app",
+            "key"
+          ]
+        },
+        {
+          "name": "confirm_overlay_key",
+          "startLine": 143,
+          "endLine": 161,
+          "params": [
+            "app",
+            "key"
+          ]
+        },
+        {
+          "name": "form_overlay_key",
+          "startLine": 163,
+          "endLine": 220,
+          "params": [
+            "app",
+            "key"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "on_key",
+          "line": 12,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "on_key",
+          "callee": "app.overlay.is_active",
+          "lineNumber": 13
+        },
+        {
+          "caller": "on_key",
+          "callee": "overlay_key",
+          "lineNumber": 14
+        },
+        {
+          "caller": "on_key",
+          "callee": "global_key",
+          "lineNumber": 18
+        },
+        {
+          "caller": "on_key",
+          "callee": "content_key",
+          "lineNumber": 23
+        },
+        {
+          "caller": "global_key",
+          "callee": "Some",
+          "lineNumber": 28
+        },
+        {
+          "caller": "global_key",
+          "callee": "Some",
+          "lineNumber": 29
+        },
+        {
+          "caller": "global_key",
+          "callee": "Overlay::Log",
+          "lineNumber": 31
+        },
+        {
+          "caller": "global_key",
+          "callee": "LogOverlay::new",
+          "lineNumber": 31
+        },
+        {
+          "caller": "global_key",
+          "callee": "crate::tui::app::data::load_log_lines",
+          "lineNumber": 31
+        },
+        {
+          "caller": "global_key",
+          "callee": "Some",
+          "lineNumber": 32
+        },
+        {
+          "caller": "global_key",
+          "callee": "Some",
+          "lineNumber": 36
+        },
+        {
+          "caller": "global_key",
+          "callee": "app.tab.next",
+          "lineNumber": 39
+        },
+        {
+          "caller": "global_key",
+          "callee": "Some",
+          "lineNumber": 40
+        },
+        {
+          "caller": "global_key",
+          "callee": "app.tab.prev",
+          "lineNumber": 43
+        },
+        {
+          "caller": "global_key",
+          "callee": "Some",
+          "lineNumber": 44
+        },
+        {
+          "caller": "content_key",
+          "callee": "app.move_selection",
+          "lineNumber": 54
+        },
+        {
+          "caller": "content_key",
+          "callee": "app.move_selection",
+          "lineNumber": 58
+        },
+        {
+          "caller": "content_key",
+          "callee": "app.selected_config_field",
+          "lineNumber": 64
+        },
+        {
+          "caller": "content_key",
+          "callee": "Overlay::Form",
+          "lineNumber": 65
+        },
+        {
+          "caller": "content_key",
+          "callee": "field.key.clone",
+          "lineNumber": 67
+        },
+        {
+          "caller": "content_key",
+          "callee": "TextInput::new",
+          "lineNumber": 69
+        },
+        {
+          "caller": "content_key",
+          "callee": "cancel_job_prompt",
+          "lineNumber": 78
+        },
+        {
+          "caller": "cancel_job_prompt",
+          "callee": "app.jobs.get",
+          "lineNumber": 85
+        },
+        {
+          "caller": "cancel_job_prompt",
+          "callee": "Action::Status",
+          "lineNumber": 89
+        },
+        {
+          "caller": "cancel_job_prompt",
+          "callee": "\"Selected job is not running\".into",
+          "lineNumber": 90
+        },
+        {
+          "caller": "cancel_job_prompt",
+          "callee": "Overlay::Confirm",
+          "lineNumber": 94
+        },
+        {
+          "caller": "cancel_job_prompt",
+          "callee": "\"Cancel Job\".into",
+          "lineNumber": 95
+        },
+        {
+          "caller": "cancel_job_prompt",
+          "callee": "ConfirmAction::CancelJob",
+          "lineNumber": 97
+        },
+        {
+          "caller": "overlay_key",
+          "callee": "log_overlay_key",
+          "lineNumber": 116
+        },
+        {
+          "caller": "overlay_key",
+          "callee": "confirm_overlay_key",
+          "lineNumber": 117
+        },
+        {
+          "caller": "overlay_key",
+          "callee": "form_overlay_key",
+          "lineNumber": 118
+        },
+        {
+          "caller": "log_overlay_key",
+          "callee": "log.lines.len",
+          "lineNumber": 130
+        },
+        {
+          "caller": "log_overlay_key",
+          "callee": "log.scroll.saturating_sub",
+          "lineNumber": 134
+        },
+        {
+          "caller": "log_overlay_key",
+          "callee": "log.lines.len().saturating_sub",
+          "lineNumber": 137
+        },
+        {
+          "caller": "log_overlay_key",
+          "callee": "log.lines.len",
+          "lineNumber": 137
+        },
+        {
+          "caller": "confirm_overlay_key",
+          "callee": "Action::CancelJob",
+          "lineNumber": 150
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.as_str().to_string",
+          "lineNumber": 173
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.as_str",
+          "lineNumber": 173
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "app.config_fields.get_mut",
+          "lineNumber": 175
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.backspace",
+          "lineNumber": 182
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.move_left",
+          "lineNumber": 186
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.move_right",
+          "lineNumber": 190
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.home",
+          "lineNumber": 194
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.end",
+          "lineNumber": 198
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.home",
+          "lineNumber": 202
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.end",
+          "lineNumber": 206
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.value.drain",
+          "lineNumber": 210
+        },
+        {
+          "caller": "form_overlay_key",
+          "callee": "form.value.insert_char",
+          "lineNumber": 215
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 8,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/app/mod.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 8,
+      "nonEmptyLines": 7,
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/app/overlay.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 141,
+      "nonEmptyLines": 122,
+      "functions": [
+        {
+          "name": "is_active",
+          "startLine": 14,
+          "endLine": 16,
+          "params": []
+        },
+        {
+          "name": "new",
+          "startLine": 25,
+          "endLine": 28,
+          "params": [
+            "lines"
+          ]
+        },
+        {
+          "name": "new",
+          "startLine": 57,
+          "endLine": 62,
+          "params": [
+            "s"
+          ]
+        },
+        {
+          "name": "insert_char",
+          "startLine": 64,
+          "endLine": 67,
+          "params": [
+            "c"
+          ]
+        },
+        {
+          "name": "backspace",
+          "startLine": 69,
+          "endLine": 79,
+          "params": []
+        },
+        {
+          "name": "move_left",
+          "startLine": 81,
+          "endLine": 85,
+          "params": []
+        },
+        {
+          "name": "move_right",
+          "startLine": 87,
+          "endLine": 91,
+          "params": []
+        },
+        {
+          "name": "home",
+          "startLine": 93,
+          "endLine": 95,
+          "params": []
+        },
+        {
+          "name": "end",
+          "startLine": 97,
+          "endLine": 99,
+          "params": []
+        },
+        {
+          "name": "as_str",
+          "startLine": 101,
+          "endLine": 103,
+          "params": []
+        }
+      ],
+      "classes": [
+        {
+          "name": "Overlay",
+          "startLine": 5,
+          "endLine": 11,
+          "methods": [
+            "is_active"
+          ],
+          "properties": [
+            "None",
+            "Log",
+            "Confirm",
+            "Form",
+            "Help"
+          ]
+        },
+        {
+          "name": "LogOverlay",
+          "startLine": 19,
+          "endLine": 22,
+          "methods": [
+            "new"
+          ],
+          "properties": [
+            "lines",
+            "scroll"
+          ]
+        },
+        {
+          "name": "ConfirmAction",
+          "startLine": 31,
+          "endLine": 33,
+          "methods": [],
+          "properties": [
+            "CancelJob"
+          ]
+        },
+        {
+          "name": "ConfirmOverlay",
+          "startLine": 35,
+          "endLine": 39,
+          "methods": [],
+          "properties": [
+            "title",
+            "message",
+            "action"
+          ]
+        },
+        {
+          "name": "ConfigFormState",
+          "startLine": 41,
+          "endLine": 46,
+          "methods": [],
+          "properties": [
+            "field_idx",
+            "key",
+            "hint",
+            "value"
+          ]
+        },
+        {
+          "name": "TextInput",
+          "startLine": 51,
+          "endLine": 54,
+          "methods": [
+            "new",
+            "insert_char",
+            "backspace",
+            "move_left",
+            "move_right",
+            "home",
+            "end",
+            "as_str"
+          ],
+          "properties": [
+            "value",
+            "cursor"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Overlay",
+          "line": 5,
+          "isDefault": false
+        },
+        {
+          "name": "is_active",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "LogOverlay",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "new",
+          "line": 25,
+          "isDefault": false
+        },
+        {
+          "name": "ConfirmAction",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "ConfirmOverlay",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "ConfigFormState",
+          "line": 41,
+          "isDefault": false
+        },
+        {
+          "name": "TextInput",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "new",
+          "line": 57,
+          "isDefault": false
+        },
+        {
+          "name": "insert_char",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "backspace",
+          "line": 69,
+          "isDefault": false
+        },
+        {
+          "name": "move_left",
+          "line": 81,
+          "isDefault": false
+        },
+        {
+          "name": "move_right",
+          "line": 87,
+          "isDefault": false
+        },
+        {
+          "name": "home",
+          "line": 93,
+          "isDefault": false
+        },
+        {
+          "name": "end",
+          "line": 97,
+          "isDefault": false
+        },
+        {
+          "name": "as_str",
+          "line": 101,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "new",
+          "callee": "lines.len().saturating_sub",
+          "lineNumber": 26
+        },
+        {
+          "caller": "new",
+          "callee": "lines.len",
+          "lineNumber": 26
+        },
+        {
+          "caller": "new",
+          "callee": "s.to_string",
+          "lineNumber": 59
+        },
+        {
+          "caller": "new",
+          "callee": "s.len",
+          "lineNumber": 60
+        },
+        {
+          "caller": "insert_char",
+          "callee": "self.value.insert",
+          "lineNumber": 65
+        },
+        {
+          "caller": "insert_char",
+          "callee": "c.len_utf8",
+          "lineNumber": 66
+        },
+        {
+          "caller": "backspace",
+          "callee": "self.value[..self.cursor].chars().next_back",
+          "lineNumber": 73
+        },
+        {
+          "caller": "backspace",
+          "callee": "self.value[..self.cursor].chars",
+          "lineNumber": 73
+        },
+        {
+          "caller": "backspace",
+          "callee": "ch.len_utf8",
+          "lineNumber": 75
+        },
+        {
+          "caller": "backspace",
+          "callee": "self.value.drain",
+          "lineNumber": 76
+        },
+        {
+          "caller": "move_left",
+          "callee": "self.value[..self.cursor].chars().next_back",
+          "lineNumber": 82
+        },
+        {
+          "caller": "move_left",
+          "callee": "self.value[..self.cursor].chars",
+          "lineNumber": 82
+        },
+        {
+          "caller": "move_left",
+          "callee": "ch.len_utf8",
+          "lineNumber": 83
+        },
+        {
+          "caller": "move_right",
+          "callee": "self.value[self.cursor..].chars().next",
+          "lineNumber": 88
+        },
+        {
+          "caller": "move_right",
+          "callee": "self.value[self.cursor..].chars",
+          "lineNumber": 88
+        },
+        {
+          "caller": "move_right",
+          "callee": "ch.len_utf8",
+          "lineNumber": 89
+        },
+        {
+          "caller": "end",
+          "callee": "self.value.len",
+          "lineNumber": 98
+        },
+        {
+          "caller": "text_input_ascii_roundtrip",
+          "callee": "TextInput::default",
+          "lineNumber": 112
+        },
+        {
+          "caller": "text_input_ascii_roundtrip",
+          "callee": "ti.insert_char",
+          "lineNumber": 113
+        },
+        {
+          "caller": "text_input_ascii_roundtrip",
+          "callee": "ti.insert_char",
+          "lineNumber": 114
+        },
+        {
+          "caller": "text_input_ascii_roundtrip",
+          "callee": "ti.insert_char",
+          "lineNumber": 115
+        },
+        {
+          "caller": "text_input_ascii_roundtrip",
+          "callee": "ti.backspace",
+          "lineNumber": 118
+        },
+        {
+          "caller": "text_input_utf8_safe",
+          "callee": "TextInput::new",
+          "lineNumber": 124
+        },
+        {
+          "caller": "text_input_utf8_safe",
+          "callee": "ti.move_left",
+          "lineNumber": 126
+        },
+        {
+          "caller": "text_input_utf8_safe",
+          "callee": "ti.backspace",
+          "lineNumber": 128
+        },
+        {
+          "caller": "text_input_home_end",
+          "callee": "TextInput::new",
+          "lineNumber": 135
+        },
+        {
+          "caller": "text_input_home_end",
+          "callee": "ti.home",
+          "lineNumber": 136
+        },
+        {
+          "caller": "text_input_home_end",
+          "callee": "ti.end",
+          "lineNumber": 138
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 16,
+        "functionCount": 10,
+        "classCount": 6
+      }
+    },
+    {
+      "path": "src/tui/app/state.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 164,
+      "nonEmptyLines": 144,
+      "functions": [
+        {
+          "name": "label",
+          "startLine": 15,
+          "endLine": 21,
+          "params": []
+        },
+        {
+          "name": "next",
+          "startLine": 23,
+          "endLine": 29,
+          "params": []
+        },
+        {
+          "name": "prev",
+          "startLine": 31,
+          "endLine": 37,
+          "params": []
+        },
+        {
+          "name": "all",
+          "startLine": 39,
+          "endLine": 41,
+          "params": []
+        },
+        {
+          "name": "new",
+          "startLine": 92,
+          "endLine": 110,
+          "params": []
+        },
+        {
+          "name": "set_status",
+          "startLine": 112,
+          "endLine": 118,
+          "params": [
+            "message",
+            "kind"
+          ]
+        },
+        {
+          "name": "refresh_daemon_stats",
+          "startLine": 120,
+          "endLine": 126,
+          "params": []
+        },
+        {
+          "name": "clear_expired_status",
+          "startLine": 128,
+          "endLine": 134,
+          "params": []
+        },
+        {
+          "name": "selected_session_info",
+          "startLine": 136,
+          "endLine": 138,
+          "params": []
+        },
+        {
+          "name": "selected_config_field",
+          "startLine": 140,
+          "endLine": 142,
+          "params": []
+        },
+        {
+          "name": "move_selection",
+          "startLine": 145,
+          "endLine": 157,
+          "params": [
+            "delta"
+          ]
+        },
+        {
+          "name": "default",
+          "startLine": 161,
+          "endLine": 163,
+          "params": []
+        }
+      ],
+      "classes": [
+        {
+          "name": "Tab",
+          "startLine": 8,
+          "endLine": 12,
+          "methods": [
+            "label",
+            "next",
+            "prev",
+            "all"
+          ],
+          "properties": [
+            "Sessions",
+            "Jobs",
+            "Config"
+          ]
+        },
+        {
+          "name": "StatusKind",
+          "startLine": 45,
+          "endLine": 50,
+          "methods": [],
+          "properties": [
+            "Info",
+            "Ok",
+            "Warn",
+            "Err"
+          ]
+        },
+        {
+          "name": "StatusToast",
+          "startLine": 52,
+          "endLine": 56,
+          "methods": [],
+          "properties": [
+            "message",
+            "kind",
+            "at"
+          ]
+        },
+        {
+          "name": "ConfigField",
+          "startLine": 64,
+          "endLine": 70,
+          "methods": [],
+          "properties": [
+            "key",
+            "value",
+            "hint",
+            "env_override"
+          ]
+        },
+        {
+          "name": "App",
+          "startLine": 72,
+          "endLine": 89,
+          "methods": [
+            "new",
+            "set_status",
+            "refresh_daemon_stats",
+            "clear_expired_status",
+            "selected_session_info",
+            "selected_config_field",
+            "move_selection",
+            "default"
+          ],
+          "properties": [
+            "tab",
+            "overlay",
+            "sessions",
+            "jobs",
+            "tunnel_state",
+            "config_fields",
+            "daemon_stats",
+            "selected_session",
+            "selected_job",
+            "selected_config",
+            "spinner_frame",
+            "status",
+            "should_quit"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Tab",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "label",
+          "line": 15,
+          "isDefault": false
+        },
+        {
+          "name": "next",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "prev",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "all",
+          "line": 39,
+          "isDefault": false
+        },
+        {
+          "name": "StatusKind",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "StatusToast",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "ConfigField",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "App",
+          "line": 72,
+          "isDefault": false
+        },
+        {
+          "name": "new",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "set_status",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "refresh_daemon_stats",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "clear_expired_status",
+          "line": 128,
+          "isDefault": false
+        },
+        {
+          "name": "selected_session_info",
+          "line": 136,
+          "isDefault": false
+        },
+        {
+          "name": "selected_config_field",
+          "line": 140,
+          "isDefault": false
+        },
+        {
+          "name": "move_selection",
+          "line": 145,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "new",
+          "callee": "Vec::new",
+          "lineNumber": 96
+        },
+        {
+          "caller": "new",
+          "callee": "Vec::new",
+          "lineNumber": 97
+        },
+        {
+          "caller": "new",
+          "callee": "Vec::new",
+          "lineNumber": 99
+        },
+        {
+          "caller": "new",
+          "callee": "HashMap::new",
+          "lineNumber": 100
+        },
+        {
+          "caller": "new",
+          "callee": "crate::tui::app::data::initial_load",
+          "lineNumber": 108
+        },
+        {
+          "caller": "set_status",
+          "callee": "Some",
+          "lineNumber": 113
+        },
+        {
+          "caller": "set_status",
+          "callee": "message.into",
+          "lineNumber": 114
+        },
+        {
+          "caller": "set_status",
+          "callee": "Instant::now",
+          "lineNumber": 116
+        },
+        {
+          "caller": "refresh_daemon_stats",
+          "callee": "DaemonStats::load",
+          "lineNumber": 122
+        },
+        {
+          "caller": "refresh_daemon_stats",
+          "callee": "self.daemon_stats.insert",
+          "lineNumber": 123
+        },
+        {
+          "caller": "clear_expired_status",
+          "callee": "s.at.elapsed().as_secs",
+          "lineNumber": 130
+        },
+        {
+          "caller": "clear_expired_status",
+          "callee": "s.at.elapsed",
+          "lineNumber": 130
+        },
+        {
+          "caller": "selected_session_info",
+          "callee": "self.sessions.get",
+          "lineNumber": 137
+        },
+        {
+          "caller": "selected_config_field",
+          "callee": "self.config_fields.get",
+          "lineNumber": 141
+        },
+        {
+          "caller": "move_selection",
+          "callee": "self.sessions.len",
+          "lineNumber": 147
+        },
+        {
+          "caller": "move_selection",
+          "callee": "self.jobs.len",
+          "lineNumber": 148
+        },
+        {
+          "caller": "move_selection",
+          "callee": "self.config_fields.len",
+          "lineNumber": 149
+        },
+        {
+          "caller": "move_selection",
+          "callee": "(*cursor as i64 + delta).rem_euclid",
+          "lineNumber": 155
+        },
+        {
+          "caller": "default",
+          "callee": "Self::new",
+          "lineNumber": 162
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 16,
+        "functionCount": 12,
+        "classCount": 5
+      }
+    },
+    {
+      "path": "src/tui/mod.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 76,
+      "nonEmptyLines": 66,
+      "functions": [
+        {
+          "name": "err",
+          "startLine": 27,
+          "endLine": 29,
+          "params": [
+            "e"
+          ]
+        },
+        {
+          "name": "run_tui",
+          "startLine": 31,
+          "endLine": 45,
+          "params": []
+        },
+        {
+          "name": "run_loop",
+          "startLine": 47,
+          "endLine": 76,
+          "params": [
+            "terminal",
+            "app",
+            "theme"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "run_tui",
+          "line": 31,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "err",
+          "callee": "crate::error::VirtuosoError::Execution",
+          "lineNumber": 28
+        },
+        {
+          "caller": "err",
+          "callee": "e.to_string",
+          "lineNumber": 28
+        },
+        {
+          "caller": "run_tui",
+          "callee": "app::state::App::new",
+          "lineNumber": 32
+        },
+        {
+          "caller": "run_tui",
+          "callee": "theme::Theme::detect",
+          "lineNumber": 33
+        },
+        {
+          "caller": "run_tui",
+          "callee": "enable_raw_mode().map_err",
+          "lineNumber": 35
+        },
+        {
+          "caller": "run_tui",
+          "callee": "enable_raw_mode",
+          "lineNumber": 35
+        },
+        {
+          "caller": "run_tui",
+          "callee": "stdout().execute(EnterAlternateScreen).map_err",
+          "lineNumber": 36
+        },
+        {
+          "caller": "run_tui",
+          "callee": "stdout().execute",
+          "lineNumber": 36
+        },
+        {
+          "caller": "run_tui",
+          "callee": "stdout",
+          "lineNumber": 36
+        },
+        {
+          "caller": "run_tui",
+          "callee": "CrosstermBackend::new",
+          "lineNumber": 37
+        },
+        {
+          "caller": "run_tui",
+          "callee": "stdout",
+          "lineNumber": 37
+        },
+        {
+          "caller": "run_tui",
+          "callee": "Terminal::new(backend).map_err",
+          "lineNumber": 38
+        },
+        {
+          "caller": "run_tui",
+          "callee": "Terminal::new",
+          "lineNumber": 38
+        },
+        {
+          "caller": "run_tui",
+          "callee": "run_loop",
+          "lineNumber": 40
+        },
+        {
+          "caller": "run_tui",
+          "callee": "disable_raw_mode",
+          "lineNumber": 42
+        },
+        {
+          "caller": "run_tui",
+          "callee": "stdout().execute",
+          "lineNumber": 43
+        },
+        {
+          "caller": "run_tui",
+          "callee": "stdout",
+          "lineNumber": 43
+        },
+        {
+          "caller": "run_loop",
+          "callee": "terminal\n            .draw(|frame| ui::draw(frame, app, theme)).map_err",
+          "lineNumber": 53
+        },
+        {
+          "caller": "run_loop",
+          "callee": "terminal.draw",
+          "lineNumber": 53
+        },
+        {
+          "caller": "run_loop",
+          "callee": "ui::draw",
+          "lineNumber": 54
+        },
+        {
+          "caller": "run_loop",
+          "callee": "event::poll(Duration::from_millis(500)).map_err",
+          "lineNumber": 57
+        },
+        {
+          "caller": "run_loop",
+          "callee": "event::poll",
+          "lineNumber": 57
+        },
+        {
+          "caller": "run_loop",
+          "callee": "Duration::from_millis",
+          "lineNumber": 57
+        },
+        {
+          "caller": "run_loop",
+          "callee": "app.spinner_frame.wrapping_add",
+          "lineNumber": 58
+        },
+        {
+          "caller": "run_loop",
+          "callee": "app.clear_expired_status",
+          "lineNumber": 59
+        },
+        {
+          "caller": "run_loop",
+          "callee": "app.refresh_daemon_stats",
+          "lineNumber": 60
+        },
+        {
+          "caller": "run_loop",
+          "callee": "event::read().map_err",
+          "lineNumber": 64
+        },
+        {
+          "caller": "run_loop",
+          "callee": "event::read",
+          "lineNumber": 64
+        },
+        {
+          "caller": "run_loop",
+          "callee": "app::on_key",
+          "lineNumber": 68
+        },
+        {
+          "caller": "run_loop",
+          "callee": "app::handle_action",
+          "lineNumber": 69
+        },
+        {
+          "caller": "run_loop",
+          "callee": "Ok",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/theme.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 57,
+      "nonEmptyLines": 53,
+      "functions": [
+        {
+          "name": "default",
+          "startLine": 23,
+          "endLine": 38,
+          "params": []
+        },
+        {
+          "name": "detect",
+          "startLine": 43,
+          "endLine": 49,
+          "params": []
+        },
+        {
+          "name": "with_no_color",
+          "startLine": 53,
+          "endLine": 56,
+          "params": [
+            "no_color"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "Theme",
+          "startLine": 5,
+          "endLine": 20,
+          "methods": [
+            "default",
+            "detect",
+            "with_no_color"
+          ],
+          "properties": [
+            "no_color",
+            "primary",
+            "accent",
+            "success",
+            "error",
+            "warning",
+            "text",
+            "text_dim",
+            "border",
+            "bg",
+            "bg_selected",
+            "surface"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Theme",
+          "line": 5,
+          "isDefault": false
+        },
+        {
+          "name": "detect",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "with_no_color",
+          "line": 53,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 26
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 27
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 28
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 29
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 30
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 31
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 32
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 33
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 34
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 35
+        },
+        {
+          "caller": "default",
+          "callee": "Color::Rgb",
+          "lineNumber": 36
+        },
+        {
+          "caller": "detect",
+          "callee": "std::env::var_os(\"NO_COLOR\").is_some",
+          "lineNumber": 44
+        },
+        {
+          "caller": "detect",
+          "callee": "std::env::var_os",
+          "lineNumber": 44
+        },
+        {
+          "caller": "detect",
+          "callee": "Self::default",
+          "lineNumber": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "src/tui/ui/chrome.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 146,
+      "nonEmptyLines": 131,
+      "functions": [
+        {
+          "name": "render_header",
+          "startLine": 13,
+          "endLine": 77,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        },
+        {
+          "name": "build_tabs",
+          "startLine": 79,
+          "endLine": 98,
+          "params": [
+            "active",
+            "theme"
+          ]
+        },
+        {
+          "name": "build_status",
+          "startLine": 100,
+          "endLine": 129,
+          "params": [
+            "app",
+            "theme"
+          ]
+        },
+        {
+          "name": "truncate_status",
+          "startLine": 134,
+          "endLine": 146,
+          "params": [
+            "spans",
+            "available"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render_header",
+          "line": 13,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render_header",
+          "callee": "Block::default()\n        .borders(Borders::BOTTOM).border_style",
+          "lineNumber": 14
+        },
+        {
+          "caller": "render_header",
+          "callee": "Block::default().borders",
+          "lineNumber": 14
+        },
+        {
+          "caller": "render_header",
+          "callee": "Block::default",
+          "lineNumber": 14
+        },
+        {
+          "caller": "render_header",
+          "callee": "Style::default",
+          "lineNumber": 17
+        },
+        {
+          "caller": "render_header",
+          "callee": "Style::default().fg",
+          "lineNumber": 19
+        },
+        {
+          "caller": "render_header",
+          "callee": "Style::default",
+          "lineNumber": 19
+        },
+        {
+          "caller": "render_header",
+          "callee": "block.inner",
+          "lineNumber": 21
+        },
+        {
+          "caller": "render_header",
+          "callee": "frame.render_widget",
+          "lineNumber": 22
+        },
+        {
+          "caller": "render_header",
+          "callee": "build_tabs",
+          "lineNumber": 25
+        },
+        {
+          "caller": "render_header",
+          "callee": "build_status",
+          "lineNumber": 27
+        },
+        {
+          "caller": "render_header",
+          "callee": "Style::default().add_modifier",
+          "lineNumber": 30
+        },
+        {
+          "caller": "render_header",
+          "callee": "Style::default",
+          "lineNumber": 30
+        },
+        {
+          "caller": "render_header",
+          "callee": "Style::default()\n            .fg(Color::White).add_modifier",
+          "lineNumber": 32
+        },
+        {
+          "caller": "render_header",
+          "callee": "Style::default().fg",
+          "lineNumber": 32
+        },
+        {
+          "caller": "render_header",
+          "callee": "Style::default",
+          "lineNumber": 32
+        },
+        {
+          "caller": "render_header",
+          "callee": "UnicodeWidthStr::width",
+          "lineNumber": 36
+        },
+        {
+          "caller": "render_header",
+          "callee": "title_width.min",
+          "lineNumber": 42
+        },
+        {
+          "caller": "render_header",
+          "callee": "total.saturating_sub",
+          "lineNumber": 50
+        },
+        {
+          "caller": "render_header",
+          "callee": "total.saturating_sub",
+          "lineNumber": 53
+        },
+        {
+          "caller": "render_header",
+          "callee": "status_start.saturating_sub(gutter).max",
+          "lineNumber": 55
+        },
+        {
+          "caller": "render_header",
+          "callee": "status_start.saturating_sub",
+          "lineNumber": 55
+        },
+        {
+          "caller": "render_header",
+          "callee": "Rect::new",
+          "lineNumber": 57
+        },
+        {
+          "caller": "render_header",
+          "callee": "title_width.min",
+          "lineNumber": 57
+        },
+        {
+          "caller": "render_header",
+          "callee": "Rect::new",
+          "lineNumber": 58
+        },
+        {
+          "caller": "render_header",
+          "callee": "tabs_end.saturating_sub",
+          "lineNumber": 58
+        },
+        {
+          "caller": "render_header",
+          "callee": "Rect::new",
+          "lineNumber": 59
+        },
+        {
+          "caller": "render_header",
+          "callee": "frame.render_widget",
+          "lineNumber": 61
+        },
+        {
+          "caller": "render_header",
+          "callee": "Paragraph::new(Line::from(Span::styled(TITLE, title_style))).alignment",
+          "lineNumber": 62
+        },
+        {
+          "caller": "render_header",
+          "callee": "Paragraph::new",
+          "lineNumber": 62
+        },
+        {
+          "caller": "render_header",
+          "callee": "Line::from",
+          "lineNumber": 62
+        },
+        {
+          "caller": "render_header",
+          "callee": "Span::styled",
+          "lineNumber": 62
+        },
+        {
+          "caller": "render_header",
+          "callee": "frame.render_widget",
+          "lineNumber": 65
+        },
+        {
+          "caller": "render_header",
+          "callee": "Paragraph::new(Line::from(tabs_spans)).alignment",
+          "lineNumber": 66
+        },
+        {
+          "caller": "render_header",
+          "callee": "Paragraph::new",
+          "lineNumber": 66
+        },
+        {
+          "caller": "render_header",
+          "callee": "Line::from",
+          "lineNumber": 66
+        },
+        {
+          "caller": "render_header",
+          "callee": "frame.render_widget",
+          "lineNumber": 69
+        },
+        {
+          "caller": "render_header",
+          "callee": "Paragraph::new(Line::from(truncate_status(\n            status_spans,\n            available_for_status,\n        ))).alignment",
+          "lineNumber": 70
+        },
+        {
+          "caller": "render_header",
+          "callee": "Paragraph::new",
+          "lineNumber": 70
+        },
+        {
+          "caller": "render_header",
+          "callee": "Line::from",
+          "lineNumber": 70
+        },
+        {
+          "caller": "render_header",
+          "callee": "truncate_status",
+          "lineNumber": 70
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "Vec::with_capacity",
+          "lineNumber": 80
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "Tab::all().len",
+          "lineNumber": 80
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "Tab::all",
+          "lineNumber": 80
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "Tab::all().iter().enumerate",
+          "lineNumber": 82
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "Tab::all().iter",
+          "lineNumber": 82
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "Tab::all",
+          "lineNumber": 82
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "spans.push",
+          "lineNumber": 84
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "Span::raw",
+          "lineNumber": 84
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "UnicodeWidthStr::width",
+          "lineNumber": 88
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "label.as_str",
+          "lineNumber": 88
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "active_chip_style",
+          "lineNumber": 90
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "inactive_chip_style",
+          "lineNumber": 92
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "spans.push",
+          "lineNumber": 94
+        },
+        {
+          "caller": "build_tabs",
+          "callee": "Span::styled",
+          "lineNumber": 94
+        },
+        {
+          "caller": "build_status",
+          "callee": "Vec::new",
+          "lineNumber": 101
+        },
+        {
+          "caller": "build_status",
+          "callee": "UnicodeWidthStr::width",
+          "lineNumber": 110
+        },
+        {
+          "caller": "build_status",
+          "callee": "tunnel_text.as_str",
+          "lineNumber": 110
+        },
+        {
+          "caller": "build_status",
+          "callee": "Style::default",
+          "lineNumber": 112
+        },
+        {
+          "caller": "build_status",
+          "callee": "Style::default().fg",
+          "lineNumber": 114
+        },
+        {
+          "caller": "build_status",
+          "callee": "Style::default",
+          "lineNumber": 114
+        },
+        {
+          "caller": "build_status",
+          "callee": "spans.push",
+          "lineNumber": 116
+        },
+        {
+          "caller": "build_status",
+          "callee": "Span::styled",
+          "lineNumber": 116
+        },
+        {
+          "caller": "build_status",
+          "callee": "UnicodeWidthStr::width",
+          "lineNumber": 120
+        },
+        {
+          "caller": "build_status",
+          "callee": "counts.as_str",
+          "lineNumber": 120
+        },
+        {
+          "caller": "build_status",
+          "callee": "Style::default",
+          "lineNumber": 122
+        },
+        {
+          "caller": "build_status",
+          "callee": "Style::default().fg",
+          "lineNumber": 124
+        },
+        {
+          "caller": "build_status",
+          "callee": "Style::default",
+          "lineNumber": 124
+        },
+        {
+          "caller": "build_status",
+          "callee": "spans.push",
+          "lineNumber": 126
+        },
+        {
+          "caller": "build_status",
+          "callee": "Span::styled",
+          "lineNumber": 126
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "spans\n        .iter()\n        .map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum",
+          "lineNumber": 135
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "spans\n        .iter().map",
+          "lineNumber": 135
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "spans.iter",
+          "lineNumber": 135
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "UnicodeWidthStr::width",
+          "lineNumber": 137
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "s.content.as_ref",
+          "lineNumber": 137
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "spans.iter().map(|s| s.content.as_ref()).collect",
+          "lineNumber": 143
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "spans.iter().map",
+          "lineNumber": 143
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "spans.iter",
+          "lineNumber": 143
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "s.content.as_ref",
+          "lineNumber": 143
+        },
+        {
+          "caller": "truncate_status",
+          "callee": "truncate_to_display_width",
+          "lineNumber": 144
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/config.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 91,
+      "nonEmptyLines": 81,
+      "functions": [
+        {
+          "name": "render_list",
+          "startLine": 10,
+          "endLine": 34,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        },
+        {
+          "name": "render_detail",
+          "startLine": 36,
+          "endLine": 71,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        },
+        {
+          "name": "render_hint",
+          "startLine": 73,
+          "endLine": 91,
+          "params": [
+            "frame",
+            "_app",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render_list",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "render_detail",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "render_hint",
+          "line": 73,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render_list",
+          "callee": "Block::default()\n        .title(\" Config \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default()\n        .title(\" Config \").borders",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default().title",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_list",
+          "callee": "pane_border_style",
+          "lineNumber": 14
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .config_fields\n        .iter()\n        .enumerate()\n        .map(|(i, f)| {\n            let display = f.key.strip_prefix(\"VB_\").unwrap_or(&f.key);\n            let row_style = if i == app.selected_config {\n                selection_style(theme)\n            } else if theme.no_color {\n                Style::default()\n            } else {\n                Style::default().fg(theme.text_dim)\n            };\n            ListItem::new(Line::from(Span::styled(format!(\" {display}\"), row_style)))\n        }).collect",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .config_fields\n        .iter()\n        .enumerate().map",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .config_fields\n        .iter().enumerate",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .config_fields.iter",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_list",
+          "callee": "f.key.strip_prefix(\"VB_\").unwrap_or",
+          "lineNumber": 21
+        },
+        {
+          "caller": "render_list",
+          "callee": "f.key.strip_prefix",
+          "lineNumber": 21
+        },
+        {
+          "caller": "render_list",
+          "callee": "selection_style",
+          "lineNumber": 23
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 25
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default().fg",
+          "lineNumber": 27
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 27
+        },
+        {
+          "caller": "render_list",
+          "callee": "ListItem::new",
+          "lineNumber": 29
+        },
+        {
+          "caller": "render_list",
+          "callee": "Line::from",
+          "lineNumber": 29
+        },
+        {
+          "caller": "render_list",
+          "callee": "Span::styled",
+          "lineNumber": 29
+        },
+        {
+          "caller": "render_list",
+          "callee": "frame.render_widget",
+          "lineNumber": 33
+        },
+        {
+          "caller": "render_list",
+          "callee": "List::new(items).block",
+          "lineNumber": 33
+        },
+        {
+          "caller": "render_list",
+          "callee": "List::new",
+          "lineNumber": 33
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default()\n        .title(\" Field \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 37
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default()\n        .title(\" Field \").borders",
+          "lineNumber": 37
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default().title",
+          "lineNumber": 37
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default",
+          "lineNumber": 37
+        },
+        {
+          "caller": "render_detail",
+          "callee": "pane_border_style",
+          "lineNumber": 40
+        },
+        {
+          "caller": "render_detail",
+          "callee": "app.selected_config_field",
+          "lineNumber": 42
+        },
+        {
+          "caller": "render_detail",
+          "callee": "frame.render_widget",
+          "lineNumber": 43
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new(\"\").block",
+          "lineNumber": 43
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new",
+          "lineNumber": 43
+        },
+        {
+          "caller": "render_detail",
+          "callee": "f.value.is_empty",
+          "lineNumber": 47
+        },
+        {
+          "caller": "render_detail",
+          "callee": "lines.push",
+          "lineNumber": 65
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Line::from",
+          "lineNumber": 65
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Span::styled",
+          "lineNumber": 65
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Style::default().fg",
+          "lineNumber": 67
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Style::default",
+          "lineNumber": 67
+        },
+        {
+          "caller": "render_detail",
+          "callee": "frame.render_widget",
+          "lineNumber": 70
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new(lines).block",
+          "lineNumber": 70
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new",
+          "lineNumber": 70
+        },
+        {
+          "caller": "render_hint",
+          "callee": "Block::default()\n        .title(\" Shortcuts \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 74
+        },
+        {
+          "caller": "render_hint",
+          "callee": "Block::default()\n        .title(\" Shortcuts \").borders",
+          "lineNumber": 74
+        },
+        {
+          "caller": "render_hint",
+          "callee": "Block::default().title",
+          "lineNumber": 74
+        },
+        {
+          "caller": "render_hint",
+          "callee": "Block::default",
+          "lineNumber": 74
+        },
+        {
+          "caller": "render_hint",
+          "callee": "pane_border_style",
+          "lineNumber": 77
+        },
+        {
+          "caller": "render_hint",
+          "callee": "Style::default",
+          "lineNumber": 80
+        },
+        {
+          "caller": "render_hint",
+          "callee": "Style::default().fg",
+          "lineNumber": 82
+        },
+        {
+          "caller": "render_hint",
+          "callee": "Style::default",
+          "lineNumber": 82
+        },
+        {
+          "caller": "render_hint",
+          "callee": "frame.render_widget",
+          "lineNumber": 90
+        },
+        {
+          "caller": "render_hint",
+          "callee": "Paragraph::new(lines).block",
+          "lineNumber": 90
+        },
+        {
+          "caller": "render_hint",
+          "callee": "Paragraph::new",
+          "lineNumber": 90
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/content.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 39,
+      "nonEmptyLines": 35,
+      "functions": [
+        {
+          "name": "render_content",
+          "startLine": 7,
+          "endLine": 39,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render_content",
+          "line": 7,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render_content",
+          "callee": "Layout::default()\n        .direction(Direction::Horizontal)\n        .constraints([Constraint::Length(26), Constraint::Min(30)]).split",
+          "lineNumber": 9
+        },
+        {
+          "caller": "render_content",
+          "callee": "Layout::default()\n        .direction(Direction::Horizontal).constraints",
+          "lineNumber": 9
+        },
+        {
+          "caller": "render_content",
+          "callee": "Layout::default().direction",
+          "lineNumber": 9
+        },
+        {
+          "caller": "render_content",
+          "callee": "Layout::default",
+          "lineNumber": 9
+        },
+        {
+          "caller": "render_content",
+          "callee": "Constraint::Length",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_content",
+          "callee": "Constraint::Min",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_content",
+          "callee": "Layout::default()\n        .direction(Direction::Vertical)\n        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)]).split",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_content",
+          "callee": "Layout::default()\n        .direction(Direction::Vertical).constraints",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_content",
+          "callee": "Layout::default().direction",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_content",
+          "callee": "Layout::default",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_content",
+          "callee": "Constraint::Percentage",
+          "lineNumber": 18
+        },
+        {
+          "caller": "render_content",
+          "callee": "Constraint::Percentage",
+          "lineNumber": 18
+        },
+        {
+          "caller": "render_content",
+          "callee": "sessions::render_list",
+          "lineNumber": 24
+        },
+        {
+          "caller": "render_content",
+          "callee": "sessions::render_detail",
+          "lineNumber": 25
+        },
+        {
+          "caller": "render_content",
+          "callee": "sessions::render_tunnel",
+          "lineNumber": 26
+        },
+        {
+          "caller": "render_content",
+          "callee": "jobs::render_list",
+          "lineNumber": 29
+        },
+        {
+          "caller": "render_content",
+          "callee": "jobs::render_detail",
+          "lineNumber": 30
+        },
+        {
+          "caller": "render_content",
+          "callee": "jobs::render_summary",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render_content",
+          "callee": "config::render_list",
+          "lineNumber": 34
+        },
+        {
+          "caller": "render_content",
+          "callee": "config::render_detail",
+          "lineNumber": 35
+        },
+        {
+          "caller": "render_content",
+          "callee": "config::render_hint",
+          "lineNumber": 36
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/footer.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 46,
+      "nonEmptyLines": 42,
+      "functions": [
+        {
+          "name": "render_footer",
+          "startLine": 9,
+          "endLine": 46,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render_footer",
+          "line": 9,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render_footer",
+          "callee": "Vec::new",
+          "lineNumber": 10
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Style::default",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Style::default().fg",
+          "lineNumber": 22
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Style::default",
+          "lineNumber": 22
+        },
+        {
+          "caller": "render_footer",
+          "callee": "spans.push",
+          "lineNumber": 24
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Span::styled",
+          "lineNumber": 24
+        },
+        {
+          "caller": "render_footer",
+          "callee": "spans.push",
+          "lineNumber": 25
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Span::styled",
+          "lineNumber": 25
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Style::default",
+          "lineNumber": 28
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Style::default().fg",
+          "lineNumber": 30
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Style::default",
+          "lineNumber": 30
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Style::default",
+          "lineNumber": 36
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Style::default().fg",
+          "lineNumber": 38
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Style::default",
+          "lineNumber": 38
+        },
+        {
+          "caller": "render_footer",
+          "callee": "spans.push",
+          "lineNumber": 40
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Span::styled",
+          "lineNumber": 40
+        },
+        {
+          "caller": "render_footer",
+          "callee": "frame.render_widget",
+          "lineNumber": 45
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Paragraph::new",
+          "lineNumber": 45
+        },
+        {
+          "caller": "render_footer",
+          "callee": "Line::from",
+          "lineNumber": 45
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/jobs.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 170,
+      "nonEmptyLines": 155,
+      "functions": [
+        {
+          "name": "job_icon",
+          "startLine": 13,
+          "endLine": 20,
+          "params": [
+            "job",
+            "frame_idx"
+          ]
+        },
+        {
+          "name": "job_color",
+          "startLine": 22,
+          "endLine": 29,
+          "params": [
+            "status",
+            "theme"
+          ]
+        },
+        {
+          "name": "render_list",
+          "startLine": 31,
+          "endLine": 76,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        },
+        {
+          "name": "render_detail",
+          "startLine": 78,
+          "endLine": 115,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        },
+        {
+          "name": "render_summary",
+          "startLine": 117,
+          "endLine": 170,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render_list",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "render_detail",
+          "line": 78,
+          "isDefault": false
+        },
+        {
+          "name": "render_summary",
+          "line": 117,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "job_icon",
+          "callee": "SPINNERS.len",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default()\n        .title(\" Jobs \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 32
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default()\n        .title(\" Jobs \").borders",
+          "lineNumber": 32
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default().title",
+          "lineNumber": 32
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default",
+          "lineNumber": 32
+        },
+        {
+          "caller": "render_list",
+          "callee": "pane_border_style",
+          "lineNumber": 35
+        },
+        {
+          "caller": "render_list",
+          "callee": "app.jobs.is_empty",
+          "lineNumber": 37
+        },
+        {
+          "caller": "render_list",
+          "callee": "Paragraph::new(\" No jobs\")\n            .block(block).style",
+          "lineNumber": 38
+        },
+        {
+          "caller": "render_list",
+          "callee": "Paragraph::new(\" No jobs\").block",
+          "lineNumber": 38
+        },
+        {
+          "caller": "render_list",
+          "callee": "Paragraph::new",
+          "lineNumber": 38
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 41
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default().fg",
+          "lineNumber": 43
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 43
+        },
+        {
+          "caller": "render_list",
+          "callee": "frame.render_widget",
+          "lineNumber": 45
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .jobs\n        .iter()\n        .enumerate()\n        .map(|(i, j)| {\n            let icon = job_icon(j, app.spinner_frame);\n            let color = job_color(j.status, theme);\n            let icon_style = if theme.no_color {\n                Style::default()\n            } else {\n                Style::default().fg(color)\n            };\n            let row_style = if i == app.selected_job {\n                selection_style(theme)\n            } else if theme.no_color {\n                Style::default()\n            } else {\n                Style::default().fg(theme.text_dim)\n            };\n            ListItem::new(Line::from(vec![\n                Span::styled(format!(\" {icon} \"), icon_style),\n                Span::styled(j.id.clone(), row_style),\n            ]))\n        }).collect",
+          "lineNumber": 49
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .jobs\n        .iter()\n        .enumerate().map",
+          "lineNumber": 49
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .jobs\n        .iter().enumerate",
+          "lineNumber": 49
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .jobs.iter",
+          "lineNumber": 49
+        },
+        {
+          "caller": "render_list",
+          "callee": "job_icon",
+          "lineNumber": 54
+        },
+        {
+          "caller": "render_list",
+          "callee": "job_color",
+          "lineNumber": 55
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 57
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default().fg",
+          "lineNumber": 59
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 59
+        },
+        {
+          "caller": "render_list",
+          "callee": "selection_style",
+          "lineNumber": 62
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 64
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default().fg",
+          "lineNumber": 66
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 66
+        },
+        {
+          "caller": "render_list",
+          "callee": "ListItem::new",
+          "lineNumber": 68
+        },
+        {
+          "caller": "render_list",
+          "callee": "Line::from",
+          "lineNumber": 68
+        },
+        {
+          "caller": "render_list",
+          "callee": "frame.render_widget",
+          "lineNumber": 75
+        },
+        {
+          "caller": "render_list",
+          "callee": "List::new(items).block",
+          "lineNumber": 75
+        },
+        {
+          "caller": "render_list",
+          "callee": "List::new",
+          "lineNumber": 75
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default()\n        .title(\" Detail \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 79
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default()\n        .title(\" Detail \").borders",
+          "lineNumber": 79
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default().title",
+          "lineNumber": 79
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default",
+          "lineNumber": 79
+        },
+        {
+          "caller": "render_detail",
+          "callee": "pane_border_style",
+          "lineNumber": 82
+        },
+        {
+          "caller": "render_detail",
+          "callee": "app.jobs.get",
+          "lineNumber": 84
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new(\"  No job selected\")\n            .block(block).style",
+          "lineNumber": 85
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new(\"  No job selected\").block",
+          "lineNumber": 85
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new",
+          "lineNumber": 85
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Style::default",
+          "lineNumber": 88
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Style::default().fg",
+          "lineNumber": 90
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Style::default",
+          "lineNumber": 90
+        },
+        {
+          "caller": "render_detail",
+          "callee": "frame.render_widget",
+          "lineNumber": 92
+        },
+        {
+          "caller": "render_detail",
+          "callee": "lines.push",
+          "lineNumber": 109
+        },
+        {
+          "caller": "render_detail",
+          "callee": "kv_line",
+          "lineNumber": 109
+        },
+        {
+          "caller": "render_detail",
+          "callee": "lines.push",
+          "lineNumber": 112
+        },
+        {
+          "caller": "render_detail",
+          "callee": "kv_line",
+          "lineNumber": 112
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Some",
+          "lineNumber": 112
+        },
+        {
+          "caller": "render_detail",
+          "callee": "frame.render_widget",
+          "lineNumber": 114
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new(lines).block",
+          "lineNumber": 114
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new",
+          "lineNumber": 114
+        },
+        {
+          "caller": "render_summary",
+          "callee": "Block::default()\n        .title(\" Summary \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 118
+        },
+        {
+          "caller": "render_summary",
+          "callee": "Block::default()\n        .title(\" Summary \").borders",
+          "lineNumber": 118
+        },
+        {
+          "caller": "render_summary",
+          "callee": "Block::default().title",
+          "lineNumber": 118
+        },
+        {
+          "caller": "render_summary",
+          "callee": "Block::default",
+          "lineNumber": 118
+        },
+        {
+          "caller": "render_summary",
+          "callee": "pane_border_style",
+          "lineNumber": 121
+        },
+        {
+          "caller": "render_summary",
+          "callee": "app\n        .jobs\n        .iter()\n        .filter(|j| j.status == JobStatus::Running).count",
+          "lineNumber": 123
+        },
+        {
+          "caller": "render_summary",
+          "callee": "app\n        .jobs\n        .iter().filter",
+          "lineNumber": 123
+        },
+        {
+          "caller": "render_summary",
+          "callee": "app\n        .jobs.iter",
+          "lineNumber": 123
+        },
+        {
+          "caller": "render_summary",
+          "callee": "app\n        .jobs\n        .iter()\n        .filter(|j| j.status == JobStatus::Completed).count",
+          "lineNumber": 128
+        },
+        {
+          "caller": "render_summary",
+          "callee": "app\n        .jobs\n        .iter().filter",
+          "lineNumber": 128
+        },
+        {
+          "caller": "render_summary",
+          "callee": "app\n        .jobs.iter",
+          "lineNumber": 128
+        },
+        {
+          "caller": "render_summary",
+          "callee": "app\n        .jobs\n        .iter()\n        .filter(|j| j.status == JobStatus::Failed).count",
+          "lineNumber": 133
+        },
+        {
+          "caller": "render_summary",
+          "callee": "app\n        .jobs\n        .iter().filter",
+          "lineNumber": 133
+        },
+        {
+          "caller": "render_summary",
+          "callee": "app\n        .jobs.iter",
+          "lineNumber": 133
+        },
+        {
+          "caller": "render_summary",
+          "callee": "frame.render_widget",
+          "lineNumber": 169
+        },
+        {
+          "caller": "render_summary",
+          "callee": "Paragraph::new(lines).block",
+          "lineNumber": 169
+        },
+        {
+          "caller": "render_summary",
+          "callee": "Paragraph::new",
+          "lineNumber": 169
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 3,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/mod.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 33,
+      "nonEmptyLines": 29,
+      "functions": [
+        {
+          "name": "draw",
+          "startLine": 15,
+          "endLine": 33,
+          "params": [
+            "frame",
+            "app",
+            "theme"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "draw",
+          "line": 15,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "draw",
+          "callee": "frame.area",
+          "lineNumber": 16
+        },
+        {
+          "caller": "draw",
+          "callee": "Layout::default()\n        .direction(Direction::Vertical)\n        .constraints([\n            Constraint::Length(3), // header chrome\n            Constraint::Min(3),    // content\n            Constraint::Length(1), // footer status\n        ]).split",
+          "lineNumber": 17
+        },
+        {
+          "caller": "draw",
+          "callee": "Layout::default()\n        .direction(Direction::Vertical).constraints",
+          "lineNumber": 17
+        },
+        {
+          "caller": "draw",
+          "callee": "Layout::default().direction",
+          "lineNumber": 17
+        },
+        {
+          "caller": "draw",
+          "callee": "Layout::default",
+          "lineNumber": 17
+        },
+        {
+          "caller": "draw",
+          "callee": "Constraint::Length",
+          "lineNumber": 20
+        },
+        {
+          "caller": "draw",
+          "callee": "Constraint::Min",
+          "lineNumber": 21
+        },
+        {
+          "caller": "draw",
+          "callee": "Constraint::Length",
+          "lineNumber": 22
+        },
+        {
+          "caller": "draw",
+          "callee": "chrome::render_header",
+          "lineNumber": 26
+        },
+        {
+          "caller": "draw",
+          "callee": "content::render_content",
+          "lineNumber": 27
+        },
+        {
+          "caller": "draw",
+          "callee": "footer::render_footer",
+          "lineNumber": 28
+        },
+        {
+          "caller": "draw",
+          "callee": "app.overlay.is_active",
+          "lineNumber": 30
+        },
+        {
+          "caller": "draw",
+          "callee": "overlay::render::render_overlay",
+          "lineNumber": 31
+        }
+      ],
+      "metrics": {
+        "importCount": 10,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/overlay/confirm.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 38,
+      "nonEmptyLines": 33,
+      "functions": [
+        {
+          "name": "render",
+          "startLine": 11,
+          "endLine": 38,
+          "params": [
+            "frame",
+            "confirm",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render",
+          "line": 11,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render",
+          "callee": "compact_message_overlay_rect",
+          "lineNumber": 13
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 14
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default()\n        .title(title)\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default()\n        .title(title).borders",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default().title",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render",
+          "callee": "overlay_border_style",
+          "lineNumber": 19
+        },
+        {
+          "caller": "render",
+          "callee": "block.inner",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render",
+          "callee": "inner.height.saturating_sub",
+          "lineNumber": 22
+        },
+        {
+          "caller": "render",
+          "callee": "centered_message_lines",
+          "lineNumber": 23
+        },
+        {
+          "caller": "render",
+          "callee": "lines.push",
+          "lineNumber": 25
+        },
+        {
+          "caller": "render",
+          "callee": "Line::raw",
+          "lineNumber": 25
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default().add_modifier",
+          "lineNumber": 27
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 27
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default().fg",
+          "lineNumber": 29
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 29
+        },
+        {
+          "caller": "render",
+          "callee": "lines.push",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "Line::from",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "Span::styled",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 36
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 37
+        },
+        {
+          "caller": "render",
+          "callee": "Paragraph::new(lines).alignment",
+          "lineNumber": 37
+        },
+        {
+          "caller": "render",
+          "callee": "Paragraph::new",
+          "lineNumber": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/overlay/form.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 83,
+      "nonEmptyLines": 74,
+      "functions": [
+        {
+          "name": "render",
+          "startLine": 12,
+          "endLine": 83,
+          "params": [
+            "frame",
+            "form",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render",
+          "line": 12,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render",
+          "callee": "64.min",
+          "lineNumber": 14
+        },
+        {
+          "caller": "render",
+          "callee": "area.width.saturating_sub",
+          "lineNumber": 14
+        },
+        {
+          "caller": "render",
+          "callee": "9.min",
+          "lineNumber": 15
+        },
+        {
+          "caller": "render",
+          "callee": "area.height.saturating_sub",
+          "lineNumber": 15
+        },
+        {
+          "caller": "render",
+          "callee": "centered_rect_fixed",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 17
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default()\n        .title(title)\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default()\n        .title(title).borders",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default().title",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render",
+          "callee": "overlay_border_style",
+          "lineNumber": 23
+        },
+        {
+          "caller": "render",
+          "callee": "block.inner",
+          "lineNumber": 24
+        },
+        {
+          "caller": "render",
+          "callee": "form.value.as_str().split_at",
+          "lineNumber": 27
+        },
+        {
+          "caller": "render",
+          "callee": "form.value.as_str",
+          "lineNumber": 27
+        },
+        {
+          "caller": "render",
+          "callee": "after.is_empty",
+          "lineNumber": 28
+        },
+        {
+          "caller": "render",
+          "callee": "\" \".to_string",
+          "lineNumber": 29
+        },
+        {
+          "caller": "render",
+          "callee": "after.chars().next().unwrap().to_string",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "after.chars().next().unwrap",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "after.chars().next",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "after.chars",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "after.is_empty",
+          "lineNumber": 33
+        },
+        {
+          "caller": "render",
+          "callee": "String::new",
+          "lineNumber": 34
+        },
+        {
+          "caller": "render",
+          "callee": "after[cursor_char.len()..].to_string",
+          "lineNumber": 36
+        },
+        {
+          "caller": "render",
+          "callee": "cursor_char.len",
+          "lineNumber": 36
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 40
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default().fg",
+          "lineNumber": 42
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 42
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default().add_modifier",
+          "lineNumber": 45
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 45
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default()\n            .fg(theme.text)\n            .bg(theme.accent).add_modifier",
+          "lineNumber": 47
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default()\n            .fg(theme.text).bg",
+          "lineNumber": 47
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default().fg",
+          "lineNumber": 47
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 47
+        },
+        {
+          "caller": "render",
+          "callee": "Line::from",
+          "lineNumber": 53
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default().add_modifier",
+          "lineNumber": 61
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 61
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default().fg",
+          "lineNumber": 63
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 63
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 78
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 79
+        },
+        {
+          "caller": "render",
+          "callee": "Paragraph::new",
+          "lineNumber": 79
+        },
+        {
+          "caller": "render",
+          "callee": "UnicodeWidthStr::width",
+          "lineNumber": 82
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/overlay/help.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 45,
+      "nonEmptyLines": 41,
+      "functions": [
+        {
+          "name": "render",
+          "startLine": 9,
+          "endLine": 45,
+          "params": [
+            "frame",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render",
+          "line": 9,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render",
+          "callee": "56.min",
+          "lineNumber": 10
+        },
+        {
+          "caller": "render",
+          "callee": "area.width.saturating_sub",
+          "lineNumber": 10
+        },
+        {
+          "caller": "render",
+          "callee": "18.min",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render",
+          "callee": "area.height.saturating_sub",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render",
+          "callee": "centered_rect_fixed",
+          "lineNumber": 12
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 13
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default()\n        .title(\" Help \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 15
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default()\n        .title(\" Help \").borders",
+          "lineNumber": 15
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default().title",
+          "lineNumber": 15
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default",
+          "lineNumber": 15
+        },
+        {
+          "caller": "render",
+          "callee": "overlay_border_style",
+          "lineNumber": 18
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 36
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 37
+        },
+        {
+          "caller": "render",
+          "callee": "Paragraph::new",
+          "lineNumber": 37
+        },
+        {
+          "caller": "render",
+          "callee": "inner.width.saturating_sub",
+          "lineNumber": 41
+        },
+        {
+          "caller": "render",
+          "callee": "inner.height.saturating_sub",
+          "lineNumber": 42
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/overlay/layout.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 170,
+      "nonEmptyLines": 150,
+      "functions": [
+        {
+          "name": "centered_rect",
+          "startLine": 13,
+          "endLine": 31,
+          "params": [
+            "percent_x",
+            "percent_y",
+            "r"
+          ]
+        },
+        {
+          "name": "centered_rect_fixed",
+          "startLine": 34,
+          "endLine": 43,
+          "params": [
+            "width",
+            "height",
+            "r"
+          ]
+        },
+        {
+          "name": "compact_message_overlay_rect",
+          "startLine": 47,
+          "endLine": 50,
+          "params": [
+            "content_area",
+            "title",
+            "message"
+          ]
+        },
+        {
+          "name": "compact_lines_overlay_rect",
+          "startLine": 52,
+          "endLine": 76,
+          "params": [
+            "content_area",
+            "title",
+            "lines"
+          ]
+        },
+        {
+          "name": "wrap_message_lines",
+          "startLine": 82,
+          "endLine": 111,
+          "params": [
+            "message",
+            "width"
+          ]
+        },
+        {
+          "name": "centered_message_lines",
+          "startLine": 115,
+          "endLine": 124,
+          "params": [
+            "message",
+            "width",
+            "height"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "centered_rect",
+          "line": 13,
+          "isDefault": false
+        },
+        {
+          "name": "centered_rect_fixed",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "compact_message_overlay_rect",
+          "line": 47,
+          "isDefault": false
+        },
+        {
+          "name": "compact_lines_overlay_rect",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "wrap_message_lines",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "centered_message_lines",
+          "line": 115,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "centered_rect",
+          "callee": "Layout::default()\n        .direction(Direction::Vertical)\n        .constraints([\n            Constraint::Percentage((100 - percent_y) / 2),\n            Constraint::Percentage(percent_y),\n            Constraint::Percentage((100 - percent_y) / 2),\n        ]).split",
+          "lineNumber": 14
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Layout::default()\n        .direction(Direction::Vertical).constraints",
+          "lineNumber": 14
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Layout::default().direction",
+          "lineNumber": 14
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Layout::default",
+          "lineNumber": 14
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Constraint::Percentage",
+          "lineNumber": 17
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Constraint::Percentage",
+          "lineNumber": 18
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Constraint::Percentage",
+          "lineNumber": 19
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Layout::default()\n        .direction(Direction::Horizontal)\n        .constraints([\n            Constraint::Percentage((100 - percent_x) / 2),\n            Constraint::Percentage(percent_x),\n            Constraint::Percentage((100 - percent_x) / 2),\n        ]).split",
+          "lineNumber": 23
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Layout::default()\n        .direction(Direction::Horizontal).constraints",
+          "lineNumber": 23
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Layout::default().direction",
+          "lineNumber": 23
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Layout::default",
+          "lineNumber": 23
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Constraint::Percentage",
+          "lineNumber": 26
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Constraint::Percentage",
+          "lineNumber": 27
+        },
+        {
+          "caller": "centered_rect",
+          "callee": "Constraint::Percentage",
+          "lineNumber": 28
+        },
+        {
+          "caller": "centered_rect_fixed",
+          "callee": "width.min",
+          "lineNumber": 35
+        },
+        {
+          "caller": "centered_rect_fixed",
+          "callee": "height.min",
+          "lineNumber": 36
+        },
+        {
+          "caller": "centered_rect_fixed",
+          "callee": "r.width.saturating_sub",
+          "lineNumber": 38
+        },
+        {
+          "caller": "centered_rect_fixed",
+          "callee": "r.height.saturating_sub",
+          "lineNumber": 39
+        },
+        {
+          "caller": "compact_message_overlay_rect",
+          "callee": "message.lines().map(|l| l.to_string()).collect",
+          "lineNumber": 48
+        },
+        {
+          "caller": "compact_message_overlay_rect",
+          "callee": "message.lines().map",
+          "lineNumber": 48
+        },
+        {
+          "caller": "compact_message_overlay_rect",
+          "callee": "message.lines",
+          "lineNumber": 48
+        },
+        {
+          "caller": "compact_message_overlay_rect",
+          "callee": "l.to_string",
+          "lineNumber": 48
+        },
+        {
+          "caller": "compact_message_overlay_rect",
+          "callee": "compact_lines_overlay_rect",
+          "lineNumber": 49
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "content_area\n        .width\n        .saturating_sub(4).clamp",
+          "lineNumber": 53
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "content_area\n        .width.saturating_sub",
+          "lineNumber": 53
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "36.min",
+          "lineNumber": 57
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "lines\n        .iter()\n        .map(|line| UnicodeWidthStr::width(line.as_str()))\n        .max()\n        .unwrap_or(0).max",
+          "lineNumber": 58
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "lines\n        .iter()\n        .map(|line| UnicodeWidthStr::width(line.as_str()))\n        .max().unwrap_or",
+          "lineNumber": 58
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "lines\n        .iter()\n        .map(|line| UnicodeWidthStr::width(line.as_str())).max",
+          "lineNumber": 58
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "lines\n        .iter().map",
+          "lineNumber": 58
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "lines.iter",
+          "lineNumber": 58
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "UnicodeWidthStr::width",
+          "lineNumber": 60
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "line.as_str",
+          "lineNumber": 60
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "UnicodeWidthStr::width",
+          "lineNumber": 63
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "content_width.saturating_add(8).clamp",
+          "lineNumber": 64
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "content_width.saturating_add",
+          "lineNumber": 64
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "width.saturating_sub(2).max",
+          "lineNumber": 66
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "width.saturating_sub",
+          "lineNumber": 66
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "lines\n        .iter()\n        .map(|line| wrap_message_lines(line, inner_width).len().max(1) as u16)\n        .sum::<u16>().max",
+          "lineNumber": 67
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "lines\n        .iter()\n        .map(|line| wrap_message_lines(line, inner_width).len().max(1) as u16)\n        .sum::<u16>",
+          "lineNumber": 67
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "lines\n        .iter().map",
+          "lineNumber": 67
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "lines.iter",
+          "lineNumber": 67
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "wrap_message_lines(line, inner_width).len().max",
+          "lineNumber": 69
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "wrap_message_lines(line, inner_width).len",
+          "lineNumber": 69
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "wrap_message_lines",
+          "lineNumber": 69
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "content_area.height.saturating_sub(4).max",
+          "lineNumber": 72
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "content_area.height.saturating_sub",
+          "lineNumber": 72
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "wrapped_height.saturating_add(3).max(6).min",
+          "lineNumber": 73
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "wrapped_height.saturating_add(3).max",
+          "lineNumber": 73
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "wrapped_height.saturating_add",
+          "lineNumber": 73
+        },
+        {
+          "caller": "compact_lines_overlay_rect",
+          "callee": "centered_rect_fixed",
+          "lineNumber": 75
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "Vec::new",
+          "lineNumber": 88
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "String::new",
+          "lineNumber": 89
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "message.chars",
+          "lineNumber": 92
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "lines.push",
+          "lineNumber": 94
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "std::mem::take",
+          "lineNumber": 94
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "UnicodeWidthChar::width(ch).unwrap_or(0).max",
+          "lineNumber": 98
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "UnicodeWidthChar::width(ch).unwrap_or",
+          "lineNumber": 98
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "UnicodeWidthChar::width",
+          "lineNumber": 98
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "current.is_empty",
+          "lineNumber": 99
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "lines.push",
+          "lineNumber": 100
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "std::mem::take",
+          "lineNumber": 100
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "current.push",
+          "lineNumber": 103
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "current_width.saturating_add",
+          "lineNumber": 104
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "current.is_empty",
+          "lineNumber": 107
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "lines.is_empty",
+          "lineNumber": 107
+        },
+        {
+          "caller": "wrap_message_lines",
+          "callee": "lines.push",
+          "lineNumber": 108
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "wrap_message_lines",
+          "lineNumber": 116
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "height.saturating_sub",
+          "lineNumber": 117
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "wrapped.len",
+          "lineNumber": 117
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "Vec::with_capacity",
+          "lineNumber": 118
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "wrapped.len",
+          "lineNumber": 118
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "out.push",
+          "lineNumber": 120
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "Line::raw",
+          "lineNumber": 120
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "out.extend",
+          "lineNumber": 122
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "wrapped.into_iter().map",
+          "lineNumber": 122
+        },
+        {
+          "caller": "centered_message_lines",
+          "callee": "wrapped.into_iter",
+          "lineNumber": 122
+        },
+        {
+          "caller": "wrap_ascii_basic",
+          "callee": "wrap_message_lines",
+          "lineNumber": 132
+        },
+        {
+          "caller": "wrap_respects_newlines",
+          "callee": "wrap_message_lines",
+          "lineNumber": 141
+        },
+        {
+          "caller": "wrap_cjk_counts_2_cols",
+          "callee": "wrap_message_lines",
+          "lineNumber": 148
+        },
+        {
+          "caller": "wrap_cjk_counts_2_cols",
+          "callee": "wrap_message_lines",
+          "lineNumber": 151
+        },
+        {
+          "caller": "centered_rect_fixed_clamps",
+          "callee": "Rect::new",
+          "lineNumber": 157
+        },
+        {
+          "caller": "centered_rect_fixed_clamps",
+          "callee": "centered_rect_fixed",
+          "lineNumber": 158
+        },
+        {
+          "caller": "compact_overlay_min_width",
+          "callee": "Rect::new",
+          "lineNumber": 165
+        },
+        {
+          "caller": "compact_overlay_min_width",
+          "callee": "compact_message_overlay_rect",
+          "lineNumber": 166
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 6,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/overlay/log.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 59,
+      "nonEmptyLines": 55,
+      "functions": [
+        {
+          "name": "render",
+          "startLine": 11,
+          "endLine": 59,
+          "params": [
+            "frame",
+            "state",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render",
+          "line": 11,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render",
+          "callee": "centered_rect",
+          "lineNumber": 12
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 13
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default()\n        .title(title)\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default()\n        .title(title).borders",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default().title",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render",
+          "callee": "Block::default",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render",
+          "callee": "overlay_border_style",
+          "lineNumber": 23
+        },
+        {
+          "caller": "render",
+          "callee": "rect.height.saturating_sub",
+          "lineNumber": 25
+        },
+        {
+          "caller": "render",
+          "callee": "(start + visible_height).min",
+          "lineNumber": 27
+        },
+        {
+          "caller": "render",
+          "callee": "state.lines.len",
+          "lineNumber": 27
+        },
+        {
+          "caller": "render",
+          "callee": "state.lines.len",
+          "lineNumber": 28
+        },
+        {
+          "caller": "render",
+          "callee": "Vec::new",
+          "lineNumber": 29
+        },
+        {
+          "caller": "render",
+          "callee": "state.lines[start..end]\n            .iter()\n            .map(|l| {\n                let color = if theme.no_color {\n                    theme.text\n                } else if l.contains(\"[SKILL]\") {\n                    theme.primary\n                } else if l.contains(\"error\") || l.contains(\"Error\") {\n                    theme.error\n                } else {\n                    theme.text_dim\n                };\n                let style = if theme.no_color {\n                    Style::default()\n                } else {\n                    Style::default().fg(color)\n                };\n                Line::from(Span::styled(l.as_str().to_string(), style))\n            }).collect",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "state.lines[start..end]\n            .iter().map",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "state.lines[start..end].iter",
+          "lineNumber": 31
+        },
+        {
+          "caller": "render",
+          "callee": "l.contains",
+          "lineNumber": 36
+        },
+        {
+          "caller": "render",
+          "callee": "l.contains",
+          "lineNumber": 38
+        },
+        {
+          "caller": "render",
+          "callee": "l.contains",
+          "lineNumber": 38
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 44
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default().fg",
+          "lineNumber": 46
+        },
+        {
+          "caller": "render",
+          "callee": "Style::default",
+          "lineNumber": 46
+        },
+        {
+          "caller": "render",
+          "callee": "Line::from",
+          "lineNumber": 48
+        },
+        {
+          "caller": "render",
+          "callee": "Span::styled",
+          "lineNumber": 48
+        },
+        {
+          "caller": "render",
+          "callee": "l.as_str().to_string",
+          "lineNumber": 48
+        },
+        {
+          "caller": "render",
+          "callee": "l.as_str",
+          "lineNumber": 48
+        },
+        {
+          "caller": "render",
+          "callee": "frame.render_widget",
+          "lineNumber": 53
+        },
+        {
+          "caller": "render",
+          "callee": "Paragraph::new(visible)\n            .block(block).wrap",
+          "lineNumber": 54
+        },
+        {
+          "caller": "render",
+          "callee": "Paragraph::new(visible).block",
+          "lineNumber": 54
+        },
+        {
+          "caller": "render",
+          "callee": "Paragraph::new",
+          "lineNumber": 54
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/overlay/mod.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 6,
+      "nonEmptyLines": 6,
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/overlay/render.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 16,
+      "nonEmptyLines": 15,
+      "functions": [
+        {
+          "name": "render_overlay",
+          "startLine": 8,
+          "endLine": 16,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render_overlay",
+          "line": 8,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render_overlay",
+          "callee": "log::render",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_overlay",
+          "callee": "confirm::render",
+          "lineNumber": 12
+        },
+        {
+          "caller": "render_overlay",
+          "callee": "form::render",
+          "lineNumber": 13
+        },
+        {
+          "caller": "render_overlay",
+          "callee": "help::render",
+          "lineNumber": 14
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/sessions.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 131,
+      "nonEmptyLines": 121,
+      "functions": [
+        {
+          "name": "render_list",
+          "startLine": 10,
+          "endLine": 53,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        },
+        {
+          "name": "render_detail",
+          "startLine": 55,
+          "endLine": 107,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        },
+        {
+          "name": "render_tunnel",
+          "startLine": 109,
+          "endLine": 131,
+          "params": [
+            "frame",
+            "app",
+            "theme",
+            "area"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "render_list",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "render_detail",
+          "line": 55,
+          "isDefault": false
+        },
+        {
+          "name": "render_tunnel",
+          "line": 109,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "render_list",
+          "callee": "Block::default()\n        .title(\" Sessions \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default()\n        .title(\" Sessions \").borders",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default().title",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_list",
+          "callee": "Block::default",
+          "lineNumber": 11
+        },
+        {
+          "caller": "render_list",
+          "callee": "pane_border_style",
+          "lineNumber": 14
+        },
+        {
+          "caller": "render_list",
+          "callee": "app.sessions.is_empty",
+          "lineNumber": 16
+        },
+        {
+          "caller": "render_list",
+          "callee": "Paragraph::new(\" No sessions\")\n            .block(block).style",
+          "lineNumber": 17
+        },
+        {
+          "caller": "render_list",
+          "callee": "Paragraph::new(\" No sessions\").block",
+          "lineNumber": 17
+        },
+        {
+          "caller": "render_list",
+          "callee": "Paragraph::new",
+          "lineNumber": 17
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 20
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default().fg",
+          "lineNumber": 22
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 22
+        },
+        {
+          "caller": "render_list",
+          "callee": "frame.render_widget",
+          "lineNumber": 24
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .sessions\n        .iter()\n        .enumerate()\n        .map(|(i, s)| {\n            let icon_style = if theme.no_color {\n                Style::default()\n            } else {\n                Style::default().fg(theme.success)\n            };\n            let row_style = if i == app.selected_session {\n                selection_style(theme)\n            } else if theme.no_color {\n                Style::default()\n            } else {\n                Style::default().fg(theme.text_dim)\n            };\n            ListItem::new(Line::from(vec![\n                Span::styled(\" ● \", icon_style),\n                Span::styled(s.id.clone(), row_style),\n            ]))\n        }).collect",
+          "lineNumber": 28
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .sessions\n        .iter()\n        .enumerate().map",
+          "lineNumber": 28
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .sessions\n        .iter().enumerate",
+          "lineNumber": 28
+        },
+        {
+          "caller": "render_list",
+          "callee": "app\n        .sessions.iter",
+          "lineNumber": 28
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 34
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default().fg",
+          "lineNumber": 36
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 36
+        },
+        {
+          "caller": "render_list",
+          "callee": "selection_style",
+          "lineNumber": 39
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 41
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default().fg",
+          "lineNumber": 43
+        },
+        {
+          "caller": "render_list",
+          "callee": "Style::default",
+          "lineNumber": 43
+        },
+        {
+          "caller": "render_list",
+          "callee": "ListItem::new",
+          "lineNumber": 45
+        },
+        {
+          "caller": "render_list",
+          "callee": "Line::from",
+          "lineNumber": 45
+        },
+        {
+          "caller": "render_list",
+          "callee": "frame.render_widget",
+          "lineNumber": 52
+        },
+        {
+          "caller": "render_list",
+          "callee": "List::new(items).block",
+          "lineNumber": 52
+        },
+        {
+          "caller": "render_list",
+          "callee": "List::new",
+          "lineNumber": 52
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default()\n        .title(\" Detail \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 56
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default()\n        .title(\" Detail \").borders",
+          "lineNumber": 56
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default().title",
+          "lineNumber": 56
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Block::default",
+          "lineNumber": 56
+        },
+        {
+          "caller": "render_detail",
+          "callee": "pane_border_style",
+          "lineNumber": 59
+        },
+        {
+          "caller": "render_detail",
+          "callee": "app.selected_session_info",
+          "lineNumber": 61
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new(\"  Select a session\")\n            .block(block).style",
+          "lineNumber": 62
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new(\"  Select a session\").block",
+          "lineNumber": 62
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new",
+          "lineNumber": 62
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Style::default",
+          "lineNumber": 65
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Style::default().fg",
+          "lineNumber": 67
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Style::default",
+          "lineNumber": 67
+        },
+        {
+          "caller": "render_detail",
+          "callee": "frame.render_widget",
+          "lineNumber": 69
+        },
+        {
+          "caller": "render_detail",
+          "callee": "app.daemon_stats.get",
+          "lineNumber": 80
+        },
+        {
+          "caller": "render_detail",
+          "callee": "lines.push",
+          "lineNumber": 92
+        },
+        {
+          "caller": "render_detail",
+          "callee": "kv_line",
+          "lineNumber": 92
+        },
+        {
+          "caller": "render_detail",
+          "callee": "stats.calls.to_string",
+          "lineNumber": 94
+        },
+        {
+          "caller": "render_detail",
+          "callee": "lines.push",
+          "lineNumber": 98
+        },
+        {
+          "caller": "render_detail",
+          "callee": "kv_line",
+          "lineNumber": 98
+        },
+        {
+          "caller": "render_detail",
+          "callee": "stats.errors.to_string",
+          "lineNumber": 100
+        },
+        {
+          "caller": "render_detail",
+          "callee": "lines.push",
+          "lineNumber": 104
+        },
+        {
+          "caller": "render_detail",
+          "callee": "kv_line",
+          "lineNumber": 104
+        },
+        {
+          "caller": "render_detail",
+          "callee": "frame.render_widget",
+          "lineNumber": 106
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new(lines).block",
+          "lineNumber": 106
+        },
+        {
+          "caller": "render_detail",
+          "callee": "Paragraph::new",
+          "lineNumber": 106
+        },
+        {
+          "caller": "render_tunnel",
+          "callee": "Block::default()\n        .title(\" Tunnel \")\n        .borders(Borders::ALL).border_style",
+          "lineNumber": 110
+        },
+        {
+          "caller": "render_tunnel",
+          "callee": "Block::default()\n        .title(\" Tunnel \").borders",
+          "lineNumber": 110
+        },
+        {
+          "caller": "render_tunnel",
+          "callee": "Block::default().title",
+          "lineNumber": 110
+        },
+        {
+          "caller": "render_tunnel",
+          "callee": "Block::default",
+          "lineNumber": 110
+        },
+        {
+          "caller": "render_tunnel",
+          "callee": "pane_border_style",
+          "lineNumber": 113
+        },
+        {
+          "caller": "render_tunnel",
+          "callee": "frame.render_widget",
+          "lineNumber": 130
+        },
+        {
+          "caller": "render_tunnel",
+          "callee": "Paragraph::new(lines).block",
+          "lineNumber": 130
+        },
+        {
+          "caller": "render_tunnel",
+          "callee": "Paragraph::new",
+          "lineNumber": 130
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/tui/ui/shared.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 110,
+      "nonEmptyLines": 103,
+      "functions": [
+        {
+          "name": "selection_style",
+          "startLine": 6,
+          "endLine": 15,
+          "params": [
+            "theme"
+          ]
+        },
+        {
+          "name": "active_chip_style",
+          "startLine": 17,
+          "endLine": 26,
+          "params": [
+            "theme"
+          ]
+        },
+        {
+          "name": "inactive_chip_style",
+          "startLine": 28,
+          "endLine": 34,
+          "params": [
+            "theme"
+          ]
+        },
+        {
+          "name": "pane_border_style",
+          "startLine": 36,
+          "endLine": 50,
+          "params": [
+            "theme",
+            "focused"
+          ]
+        },
+        {
+          "name": "overlay_border_style",
+          "startLine": 52,
+          "endLine": 62,
+          "params": [
+            "theme",
+            "attention"
+          ]
+        },
+        {
+          "name": "kv_line",
+          "startLine": 64,
+          "endLine": 84,
+          "params": [
+            "label",
+            "value",
+            "theme",
+            "value_color"
+          ]
+        },
+        {
+          "name": "truncate_to_display_width",
+          "startLine": 89,
+          "endLine": 110,
+          "params": [
+            "s",
+            "max_width"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "selection_style",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "active_chip_style",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "inactive_chip_style",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "pane_border_style",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "overlay_border_style",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "kv_line",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "truncate_to_display_width",
+          "line": 89,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "selection_style",
+          "callee": "Style::default().add_modifier",
+          "lineNumber": 8
+        },
+        {
+          "caller": "selection_style",
+          "callee": "Style::default",
+          "lineNumber": 8
+        },
+        {
+          "caller": "selection_style",
+          "callee": "Style::default()\n            .fg(theme.text)\n            .bg(theme.bg_selected).add_modifier",
+          "lineNumber": 10
+        },
+        {
+          "caller": "selection_style",
+          "callee": "Style::default()\n            .fg(theme.text).bg",
+          "lineNumber": 10
+        },
+        {
+          "caller": "selection_style",
+          "callee": "Style::default().fg",
+          "lineNumber": 10
+        },
+        {
+          "caller": "selection_style",
+          "callee": "Style::default",
+          "lineNumber": 10
+        },
+        {
+          "caller": "active_chip_style",
+          "callee": "Style::default().add_modifier",
+          "lineNumber": 19
+        },
+        {
+          "caller": "active_chip_style",
+          "callee": "Style::default",
+          "lineNumber": 19
+        },
+        {
+          "caller": "active_chip_style",
+          "callee": "Style::default()\n            .fg(Color::Black)\n            .bg(theme.accent).add_modifier",
+          "lineNumber": 21
+        },
+        {
+          "caller": "active_chip_style",
+          "callee": "Style::default()\n            .fg(Color::Black).bg",
+          "lineNumber": 21
+        },
+        {
+          "caller": "active_chip_style",
+          "callee": "Style::default().fg",
+          "lineNumber": 21
+        },
+        {
+          "caller": "active_chip_style",
+          "callee": "Style::default",
+          "lineNumber": 21
+        },
+        {
+          "caller": "inactive_chip_style",
+          "callee": "Style::default",
+          "lineNumber": 30
+        },
+        {
+          "caller": "inactive_chip_style",
+          "callee": "Style::default().fg(theme.text_dim).bg",
+          "lineNumber": 32
+        },
+        {
+          "caller": "inactive_chip_style",
+          "callee": "Style::default().fg",
+          "lineNumber": 32
+        },
+        {
+          "caller": "inactive_chip_style",
+          "callee": "Style::default",
+          "lineNumber": 32
+        },
+        {
+          "caller": "pane_border_style",
+          "callee": "Style::default().add_modifier",
+          "lineNumber": 39
+        },
+        {
+          "caller": "pane_border_style",
+          "callee": "Style::default",
+          "lineNumber": 39
+        },
+        {
+          "caller": "pane_border_style",
+          "callee": "Style::default",
+          "lineNumber": 41
+        },
+        {
+          "caller": "pane_border_style",
+          "callee": "Style::default()\n            .fg(theme.primary).add_modifier",
+          "lineNumber": 44
+        },
+        {
+          "caller": "pane_border_style",
+          "callee": "Style::default().fg",
+          "lineNumber": 44
+        },
+        {
+          "caller": "pane_border_style",
+          "callee": "Style::default",
+          "lineNumber": 44
+        },
+        {
+          "caller": "pane_border_style",
+          "callee": "Style::default().fg",
+          "lineNumber": 48
+        },
+        {
+          "caller": "pane_border_style",
+          "callee": "Style::default",
+          "lineNumber": 48
+        },
+        {
+          "caller": "overlay_border_style",
+          "callee": "Style::default().add_modifier",
+          "lineNumber": 54
+        },
+        {
+          "caller": "overlay_border_style",
+          "callee": "Style::default",
+          "lineNumber": 54
+        },
+        {
+          "caller": "overlay_border_style",
+          "callee": "Style::default()\n            .fg(theme.accent).add_modifier",
+          "lineNumber": 56
+        },
+        {
+          "caller": "overlay_border_style",
+          "callee": "Style::default().fg",
+          "lineNumber": 56
+        },
+        {
+          "caller": "overlay_border_style",
+          "callee": "Style::default",
+          "lineNumber": 56
+        },
+        {
+          "caller": "overlay_border_style",
+          "callee": "Style::default().fg",
+          "lineNumber": 60
+        },
+        {
+          "caller": "overlay_border_style",
+          "callee": "Style::default",
+          "lineNumber": 60
+        },
+        {
+          "caller": "kv_line",
+          "callee": "Style::default",
+          "lineNumber": 71
+        },
+        {
+          "caller": "kv_line",
+          "callee": "Style::default().fg",
+          "lineNumber": 73
+        },
+        {
+          "caller": "kv_line",
+          "callee": "Style::default",
+          "lineNumber": 73
+        },
+        {
+          "caller": "kv_line",
+          "callee": "value_color.unwrap_or",
+          "lineNumber": 73
+        },
+        {
+          "caller": "kv_line",
+          "callee": "Style::default().add_modifier",
+          "lineNumber": 76
+        },
+        {
+          "caller": "kv_line",
+          "callee": "Style::default",
+          "lineNumber": 76
+        },
+        {
+          "caller": "kv_line",
+          "callee": "Style::default().fg",
+          "lineNumber": 78
+        },
+        {
+          "caller": "kv_line",
+          "callee": "Style::default",
+          "lineNumber": 78
+        },
+        {
+          "caller": "kv_line",
+          "callee": "Line::from",
+          "lineNumber": 80
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "UnicodeWidthStr::width",
+          "lineNumber": 90
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "s.to_string",
+          "lineNumber": 91
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "String::new",
+          "lineNumber": 94
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "max_width.saturating_sub",
+          "lineNumber": 97
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "String::new",
+          "lineNumber": 98
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "s.chars",
+          "lineNumber": 100
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "unicode_width::UnicodeWidthChar::width(ch).unwrap_or",
+          "lineNumber": 101
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "unicode_width::UnicodeWidthChar::width",
+          "lineNumber": 101
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "out.push",
+          "lineNumber": 105
+        },
+        {
+          "caller": "truncate_to_display_width",
+          "callee": "out.push",
+          "lineNumber": 108
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 7,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    }
+  ]
+}

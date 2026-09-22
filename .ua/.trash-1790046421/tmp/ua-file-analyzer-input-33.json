@@ -1,0 +1,182 @@
+{
+  "projectRoot": "/Users/dean/Documents/git/virtuoso-cli",
+  "batchFiles": [
+    {
+      "path": ".agents/skills/_shared/scripts/eda_auto_evolve.py",
+      "language": "python",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/_shared/scripts/eda_memory_saver.py",
+      "language": "python",
+      "sizeLines": 193,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/_shared/scripts/signal_matcher.py",
+      "language": "python",
+      "sizeLines": 207,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/amp-copilot/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 340,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/cell-explore/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 60,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/circuit-optimizer/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 294,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/diag/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 98,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/digital-import/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 362,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/gm-over-id/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 228,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/history-evolve/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 196,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/maestro-read-results/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 159,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/maestro-read-results/scripts/read_results.py",
+      "language": "python",
+      "sizeLines": 657,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/maestro/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 60,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/ocean-netlist-regen/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 187,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/porting-skill/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 213,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/schematic-gen/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 171,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-measure/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 134,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-plot/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 197,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-plot/scripts/plot_sim.py",
+      "language": "python",
+      "sizeLines": 292,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".agents/skills/sim-run/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 84,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-setup/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 81,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/sim-sweep/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 64,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/skill-exec/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 48,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/skill-review/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 94,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".agents/skills/skill-shell-gotchas/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 148,
+      "fileCategory": "docs"
+    }
+  ],
+  "batchImportData": {
+    ".agents/skills/_shared/scripts/eda_auto_evolve.py": [],
+    ".agents/skills/_shared/scripts/eda_memory_saver.py": [],
+    ".agents/skills/_shared/scripts/signal_matcher.py": [],
+    ".agents/skills/amp-copilot/SKILL.md": [],
+    ".agents/skills/cell-explore/SKILL.md": [],
+    ".agents/skills/circuit-optimizer/SKILL.md": [],
+    ".agents/skills/diag/SKILL.md": [],
+    ".agents/skills/digital-import/SKILL.md": [],
+    ".agents/skills/gm-over-id/SKILL.md": [],
+    ".agents/skills/history-evolve/SKILL.md": [],
+    ".agents/skills/maestro-read-results/SKILL.md": [],
+    ".agents/skills/maestro-read-results/scripts/read_results.py": [],
+    ".agents/skills/maestro/SKILL.md": [],
+    ".agents/skills/ocean-netlist-regen/SKILL.md": [],
+    ".agents/skills/porting-skill/SKILL.md": [],
+    ".agents/skills/schematic-gen/SKILL.md": [],
+    ".agents/skills/sim-measure/SKILL.md": [],
+    ".agents/skills/sim-plot/SKILL.md": [],
+    ".agents/skills/sim-plot/scripts/plot_sim.py": [],
+    ".agents/skills/sim-run/SKILL.md": [],
+    ".agents/skills/sim-setup/SKILL.md": [],
+    ".agents/skills/sim-sweep/SKILL.md": [],
+    ".agents/skills/skill-exec/SKILL.md": [],
+    ".agents/skills/skill-review/SKILL.md": [],
+    ".agents/skills/skill-shell-gotchas/SKILL.md": []
+  }
+}
