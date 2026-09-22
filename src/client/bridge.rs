@@ -38,6 +38,17 @@ const MAX_RESPONSE_SIZE: usize = 100 * 1024 * 1024; // 100MB
 /// can close it, and a human stays locked out of that cell until someone calls
 /// `cell.close`. Masters pulled in by the netlister show up as `"r"` and are
 /// harmless.
+///
+/// The `window` field uses `exists` where its siblings use `car(setof(...))`,
+/// because the question here is only *whether* some window shows this cellview:
+/// `exists` stops at the first match, `setof` walks the whole list to build one
+/// we would throw away. `exists` is a syntax form that binds the elements of
+/// the list to the formal variable **one at a time** — SKILL Language
+/// Reference, IC23.1: *"l_valueList: List of elements that are bound to
+/// s_formalVar, one at a time"*, with the worked example
+/// `exists( x '(1 2 3 4) (x > 1) ) => (2 3 4)`. It returns the first matching
+/// tail, or `nil` if nothing matches, which is exactly the truthiness `if`
+/// wants here. It does not bind the list as a whole.
 pub(crate) const OPEN_CELLVIEWS: &str = r#"let((out sep) out = "[" sep = "" foreach(c dbGetOpenCellViews() out = strcat(out sep sprintf(nil "{\"lib\":\"%s\",\"cell\":\"%s\",\"view\":\"%s\",\"mode\":\"%s\",\"window\":%s}" c~>libName c~>cellName c~>viewName c~>mode if(exists(w hiGetWindowList() w->cellView == c) "true" "false"))) sep = ",") strcat(out "]"))"#;
 
 pub struct VirtuosoClient {
