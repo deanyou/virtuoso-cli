@@ -1419,13 +1419,22 @@ enum SchematicCmd {
     Pin {
         #[arg(long)]
         net: String,
-        /// Pin direction: input, output, inputOutput
+        /// Pin direction: input, output, inputOutput, switch, jumper
         #[arg(long)]
         dir: String,
         #[arg(long, default_value = "0")]
         x: f64,
         #[arg(long, default_value = "0")]
         y: f64,
+        /// Pin orientation: R0 (default), R90, R180, R270, MY, MYR90, MX, MXR90.
+        /// Decides which direction the wire reaches the pin from, not just how
+        /// it looks.
+        #[arg(long)]
+        orient: Option<String>,
+        /// Terminal signal type: analog, clock, ground, power, reset, scan,
+        /// signal, tieHi, tieLo, tieOff. Omit to inherit from a same-named wire.
+        #[arg(long)]
+        sigtype: Option<String>,
     },
 
     /// Run schematic check (schCheck)
@@ -2529,7 +2538,14 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
         SchematicCmd::Wire { net, points } => commands::schematic::wire_from_strings(&net, &points),
         SchematicCmd::Conn { net, from, to } => commands::schematic::conn(&net, &from, &to),
         SchematicCmd::Label { net, x, y } => commands::schematic::label(&net, x, y),
-        SchematicCmd::Pin { net, dir, x, y } => commands::schematic::pin(&net, &dir, x, y),
+        SchematicCmd::Pin {
+            net,
+            dir,
+            x,
+            y,
+            orient,
+            sigtype,
+        } => commands::schematic::pin(&net, &dir, x, y, orient.as_deref(), sigtype.as_deref()),
         SchematicCmd::Check => commands::schematic::check(),
         SchematicCmd::Save => commands::schematic::save(),
         SchematicCmd::Build { spec } => commands::schematic::build(&spec),

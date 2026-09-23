@@ -225,7 +225,7 @@ pub fn standard_schema() -> RpcSchema {
                 Param {
                     name: "direction".into(),
                     ptype: "string".into(),
-                    description: "Pin direction: input, output, inputOutput".into(),
+                    description: "Pin direction: input, output, inputOutput, switch, jumper".into(),
                     required: true,
                 },
                 Param {
@@ -240,8 +240,31 @@ pub fn standard_schema() -> RpcSchema {
                     description: "Y coordinate".into(),
                     required: false,
                 },
+                Param {
+                    name: "orient".into(),
+                    ptype: "string".into(),
+                    description: "Pin orientation, default R0. One of R0, R90, R180, R270, \
+                                  MY, MYR90, MX, MXR90. The pin symbol's box sits to one side \
+                                  of its origin, so this decides which direction the wire \
+                                  reaches the pin from — R0 leaves to the right, R270 downward."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "sigtype".into(),
+                    ptype: "string".into(),
+                    description: "Signal type recorded on the terminal: analog, clock, ground, \
+                                  power, reset, scan, signal, tieHi, tieLo, tieOff. Left out, \
+                                  the pin inherits the sigType of an existing wire of the same \
+                                  name and falls back to signal — that inheritance, not a fixed \
+                                  default, is what omitting it means. Set it to match the \
+                                  symbol's terminal or schCheck reports a signal type mismatch \
+                                  that never clears."
+                        .into(),
+                    required: false,
+                },
             ],
-            returns: "null on success".into(),
+            returns: "{status, net, direction, orient, sigtype}".into(),
         },
         Method {
             name: "schematic.assign_net".into(),

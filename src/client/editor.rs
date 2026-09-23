@@ -102,14 +102,21 @@ impl<'a> SchematicEditor<'a> {
         self.commands.push(ops.create_wire_label(net_name, origin));
     }
 
-    /// Fallible where its siblings are not: an unknown pin direction is
-    /// rejected by [`SchematicOps::create_pin`] instead of defaulting, so a bad
-    /// direction in a batch spec stops the batch rather than silently building
-    /// an `inputOutput` pin.
-    pub fn add_pin(&mut self, net_name: &str, pin_type: &str, origin: (f64, f64)) -> Result<()> {
+    /// Fallible where its siblings are not: an unknown pin direction, orient or
+    /// sigtype is rejected by [`SchematicOps::create_pin`] instead of
+    /// defaulting, so a bad value in a batch spec stops the batch rather than
+    /// silently building an `inputOutput` pin pointing the wrong way.
+    pub fn add_pin(
+        &mut self,
+        net_name: &str,
+        pin_type: &str,
+        origin: (f64, f64),
+        orient: Option<&str>,
+        sigtype: Option<&str>,
+    ) -> Result<()> {
         let ops = SchematicOps;
         self.commands
-            .push(ops.create_pin(net_name, pin_type, origin)?);
+            .push(ops.create_pin(net_name, pin_type, origin, orient, sigtype)?);
         Ok(())
     }
 

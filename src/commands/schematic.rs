@@ -132,13 +132,24 @@ pub fn label(net: &str, x: f64, y: f64) -> Result<Value> {
     }))
 }
 
-pub fn pin(net: &str, pin_type: &str, x: f64, y: f64) -> Result<Value> {
+pub fn pin(
+    net: &str,
+    pin_type: &str,
+    x: f64,
+    y: f64,
+    orient: Option<&str>,
+    sigtype: Option<&str>,
+) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    let skill = client.schematic.create_pin(net, pin_type, (x, y))?;
+    let skill = client
+        .schematic
+        .create_pin(net, pin_type, (x, y), orient, sigtype)?;
     let r = client.execute_skill(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
-        "net": net, "type": pin_type, "output": r.output,
+        "net": net, "type": pin_type,
+        "orient": orient.unwrap_or("R0"), "sigtype": sigtype,
+        "output": r.output,
     }))
 }
 
@@ -303,6 +314,13 @@ pub struct SpecPin {
     pub x: f64,
     #[serde(default)]
     pub y: f64,
+    /// Absent means R0, the same default the RPC and the CLI use.
+    #[serde(default)]
+    pub orient: Option<String>,
+    /// Absent means the argument is not passed at all, so the terminal
+    /// inherits a same-named wire's sigType — see `SchematicOps::create_pin`.
+    #[serde(default)]
+    pub sigtype: Option<String>,
 }
 
 pub fn build(spec_path: &str) -> Result<Value> {
@@ -435,7 +453,13 @@ pub fn build(spec_path: &str) -> Result<Value> {
     if !spec.pins.is_empty() {
         let mut ed = SchematicEditor::new(&client);
         for p in &spec.pins {
-            ed.add_pin(&p.net, &p.pin_type, (p.x, p.y))?;
+            ed.add_pin(
+                &p.net,
+                &p.pin_type,
+                (p.x, p.y),
+                p.orient.as_deref(),
+                p.sigtype.as_deref(),
+            )?;
         }
         let r = ed.execute()?;
         if !r.skill_ok() {
