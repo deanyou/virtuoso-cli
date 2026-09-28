@@ -1,0 +1,35 @@
+{
+  "task_id": "task_021_nil_check",
+  "question": "My virtuoso skill exec returns nil but the command seems correct - how do I debug?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "skill_nil",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "skill_nil",
+          "execution failed",
+          "nil returned"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "SKILL returns nil for failures. Always check skill_ok() not just ok(). Use skill_ok() when checking SKILL function results.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.838462+00:00"
+}

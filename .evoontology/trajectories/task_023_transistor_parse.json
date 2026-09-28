@@ -1,0 +1,35 @@
+{
+  "task_id": "task_023_transistor_parse",
+  "question": "How do I extract transistor parameters like gm and Vth from simulation results?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "extract transistor",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "extract transistor",
+          "get mos parameters",
+          "M0 M1 naming"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Transistor operating points are in PSF STRUCT/OP blocks with format <instance>:gm, <instance>:vth. M0, M1 are instance names.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.839645+00:00"
+}

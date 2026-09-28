@@ -1,0 +1,35 @@
+{
+  "task_id": "task_030_corner_sweep",
+  "question": "How do I run simulations across all process corners (tt, ff, ss, fs, sf)?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "corner",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "corner",
+          "process corner",
+          "Monte Carlo"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Corner analysis sweeps modelFile sections (tt, ff, ss) and temperature. Use sweeptemp option or multi-run setup.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.842603+00:00"
+}

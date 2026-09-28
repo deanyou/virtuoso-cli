@@ -1,0 +1,121 @@
+[
+  {
+    "id": "simulation_result",
+    "name": "Simulation Result",
+    "type": "entity",
+    "definition": "Output data from a circuit simulation run, including waveform data, operating points, and diagnostic messages",
+    "scope": "Spectre simulation output in virtuoso-cli"
+  },
+  {
+    "id": "transistor_operating_point",
+    "name": "Transistor Operating Point",
+    "type": "entity",
+    "definition": "DC bias conditions for a transistor including drain current, transconductance, threshold voltage, and region of operation",
+    "scope": "PSF STRUCT/OP blocks from Spectre simulation"
+  },
+  {
+    "id": "transconductance",
+    "name": "Transconductance",
+    "type": "metric",
+    "definition": "Ratio of drain current change to gate voltage change (gm = dId/dVgs), a key figure of merit for analog transistors",
+    "scope": "Analog circuit design, OTA characterization"
+  },
+  {
+    "id": "gm_over_id",
+    "name": "gm/Id Ratio",
+    "type": "metric",
+    "definition": "Transconductance efficiency metric (gm/Id), used for transistor sizing in weak/moderate inversion using the gm/Id methodology",
+    "scope": "CMOS analog circuit design using gm/Id methodology"
+  },
+  {
+    "id": "overdrive_voltage",
+    "name": "Overdrive Voltage",
+    "type": "metric",
+    "definition": "Gate-source voltage minus threshold voltage (Vov = Vgs - Vth), determines transistor inversion level",
+    "scope": "Transistor biasing, inversion region characterization"
+  },
+  {
+    "id": "threshold_voltage",
+    "name": "Threshold Voltage",
+    "type": "metric",
+    "definition": "Gate voltage at which transistor begins to conduct (Vth), extracted from simulation operating points",
+    "scope": "Transistor modeling, process corner analysis"
+  },
+  {
+    "id": "session",
+    "name": "Virtuoso Session",
+    "type": "entity",
+    "definition": "An active Virtuoso instance with a unique ID, port, and process identifier that can receive SKILL commands",
+    "scope": "vcli session management"
+  },
+  {
+    "id": "ssh_tunnel",
+    "name": "SSH Tunnel",
+    "type": "entity",
+    "definition": "An SSH port forwarding connection that enables vcli to communicate with a remote Virtuoso daemon",
+    "scope": "Remote Virtuoso access via vcli tunnel"
+  },
+  {
+    "id": "skill_result",
+    "name": "SKILL Result",
+    "type": "entity",
+    "definition": "Response from a SKILL function call, containing status, output, errors, and execution metadata",
+    "scope": "vcli skill execution"
+  },
+  {
+    "id": "virtuoso_error",
+    "name": "Virtuoso Error",
+    "type": "entity",
+    "definition": "An error condition from VirtuosoError enum, with type, exit code, retryable flag, and suggestion",
+    "scope": "vcli error handling and diagnostics"
+  },
+  {
+    "id": "maestro_session",
+    "name": "Maestro ADE Session",
+    "type": "entity",
+    "definition": "An ADE (Analog Design Environment) session managed through Maestro, containing setups, variables, and analyses",
+    "scope": "Maestro ADE Explorer operations"
+  },
+  {
+    "id": "schematic_cellview",
+    "name": "Schematic Cellview",
+    "type": "entity",
+    "definition": "A Virtuoso schematic view containing instances, nets, and parameters for a circuit design",
+    "scope": "Schematic editing operations"
+  },
+  {
+    "id": "psf_data",
+    "name": "PSF Data",
+    "type": "entity",
+    "definition": "Spectre simulation output format containing waveform data and operating points",
+    "scope": "Spectre simulation results parsing"
+  },
+  {
+    "id": "corner_analysis",
+    "name": "Corner Analysis",
+    "type": "entity",
+    "definition": "A multi-corner simulation that sweeps model parameters across process, voltage, and temperature variations",
+    "scope": "Monte Carlo and corner simulations"
+  },
+  {
+    "id": "transient_response",
+    "name": "Transient Response",
+    "type": "entity",
+    "definition": "Time-domain simulation output showing circuit behavior over a specified time period",
+    "scope": "Tran analysis results"
+  },
+  {
+    "id": "ac_response",
+    "name": "AC Response",
+    "type": "entity",
+    "definition": "Frequency-domain simulation output showing gain and phase versus frequency",
+    "scope": "AC analysis results, frequency compensation"
+  },
+  {
+    "id": "dc_operating_point",
+    "name": "DC Operating Point",
+    "type": "entity",
+    "definition": "Static DC bias voltages and currents at all nodes in a circuit",
+    "scope": "DC analysis results, bias circuit design"
+  }
+]

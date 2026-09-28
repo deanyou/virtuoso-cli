@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "mode": "rolling_trajectory",
+  "data_source": "virtuoso-cli codebase: src/, .claude/skills/, resources/, tests/",
+  "workload_source": "IC design automation: circuit simulation, schematic operations, Maestro ADE, SSH tunnel management, Spectre parsing",
+  "evaluation": {
+    "type": "llm_judge"
+  },
+  "boundary": {
+    "strategy": "rolling_trajectory"
+  }
+}

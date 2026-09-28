@@ -1,0 +1,39 @@
+{
+  "task_id": "task_012_net_connectivity",
+  "question": "How do I find all nets connected to a specific pin?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "net",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "net"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "net",
+          "connectivity",
+          "pin"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Use schematic_ops listNets() to get all nets, then filter by connectivity to the target pin",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.672474+00:00"
+}

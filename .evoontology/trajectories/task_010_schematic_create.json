@@ -1,0 +1,39 @@
+{
+  "task_id": "task_010_schematic_create",
+  "question": "How do I create a new schematic cell in Virtuoso?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "schematic",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "schematic"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "schematic",
+          "create cell",
+          "dbCreateCellView"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Use dbCreateCellView() or Maestro schematic_ops to create new schematic with library/cell/view structure",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.671591+00:00"
+}

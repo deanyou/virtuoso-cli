@@ -1,0 +1,44 @@
+{
+  "task_id": "seed_task_004_noise",
+  "question": "My noise analysis gives absurd values - what's wrong?",
+  "ontology_version": "ontology_v0",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "noise analysis",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "simulation_result"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "noise",
+          "oprobe"
+        ]
+      },
+      "result": {
+        "terms": {
+          "simulation_result": {
+            "constraints": [
+              "constraint_noise_oprobe_parallel"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Noise oprobe must be parallel resistor to ground, not series",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:32:37.519877+00:00"
+}

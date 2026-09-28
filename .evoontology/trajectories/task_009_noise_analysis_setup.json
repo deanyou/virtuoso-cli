@@ -1,0 +1,39 @@
+{
+  "task_id": "task_009_noise_analysis_setup",
+  "question": "How should I set up noise analysis for an operational amplifier?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "noise",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "noise"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "noise",
+          "opamp",
+          "input referred"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Noise analysis with iprobe at amplifier input, oprobe at output. Total noise = sqrt(sum of all contributor²)",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.671195+00:00"
+}

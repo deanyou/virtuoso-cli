@@ -165,3 +165,88 @@ where `dirs::home_dir()` reads `FOLDERID_Profile` and ignores `HOME`).
 对 Python 3.9 / 3.13 各跑一次（语法检查 + 全部 skill 的 unittest 套件，脚本见
 `.github/scripts/run-skill-tests.sh`）。纯 Rust 的 PR 不会触发它，因此它仍是 skill 类改动的
 唯一自动化验证 —— 但**不要**因为 Rust 工作流全绿就假定 skill 脚本没问题。
+
+## EvoOntology — Semantic Layer
+
+项目配备了 EvoOntology 本体层，提供 IC 设计自动化的语义知识图谱。
+
+### 核心文件
+
+```
+.evoontology/
+├── project.json          # 项目上下文（rolling_trajectory 模式）
+├── active.json          # 当前激活版本
+├── versions/
+│   └── ontology_v2/    # 当前活跃版本
+│       ├── terms.json       # 17 个术语
+│       ├── mappings.json     # 16 个数据映射
+│       ├── relations.json    # 13 个语义关系
+│       ├── constraints.json   # 10 个业务约束
+│       └── evidence.json     # 15 条可复现证据
+└── trajectories/        # 30 个任务轨迹
+```
+
+### 约束覆盖
+
+| 约束 | 触发关键词数 | 示例 |
+|------|-------------|------|
+| `skill_nil_means_failure` | 12 | "SKILL returns nil", "got nothing back" |
+| `psf_requires_success` | 19 | "no output files", "results directory empty" |
+| `session_auto_disconnect` | 18 | "session died", "Virtuoso crashed" |
+| `ac_mag_requires_mag_param` | 18 | "AC shows zero", "no frequency response" |
+| `remote_tunnel_prerequisite` | 12 | "connection refused remote", "VB_REMOTE_HOST" |
+
+### 演化历史
+
+| 版本 | 关键词数 | 改进 |
+|------|----------|------|
+| ontology_v0 | 40 | 初始构建 |
+| ontology_v1 | 68 | +28 自然语言关键词 |
+| ontology_v2 | 125 | +57 同义词扩展 |
+| ontology_v3 | 125 | +5 GUI Debug 术语 + 3 约束 |
+
+### 命令
+
+```bash
+/evo:build      # 构建初始本体层（首次）
+/evo:evolve     # 基于轨迹演化优化
+/evo:status     # 查看当前状态
+```
+
+### EvoOntology × GUI Debug 配合
+
+| 领域 | 覆盖 | 术语示例 |
+|------|------|----------|
+| SKILL/Spectre 仿真 | ✅ | `skill_result`, `simulation_result`, `gm_over_id` |
+| GUI Debug (RSI) | ✅ v3 | `gui_scenario`, `gui_executor`, `gui_verifier_result` |
+
+**GUI Debug 能力矩阵** (详见 `.claude/skills/virtuoso-gui-debug/`):
+
+| 组件 | 能力 |
+|------|------|
+| **Executor** | `fake` (离线回放) / `live` (vcli 驱动) / `local` (xdotool) |
+| **Router** | SKILL → Shortcut → X11 → Vision (视觉 fallback) |
+| **Verifier** | passed / failed / skipped / unavailable |
+| **Recovery** | risk-class aware retry，非幂等操作不重试 |
+
+**ontology_v3 新增概念**:
+- `gui_scenario` — JSON DSL 场景定义
+- `gui_executor` — fake/live/local 执行器选择
+- `gui_verifier_result` — 验证结果语义
+- `gui_recovery_policy` — 风险感知重试策略
+- `x11_operation` — xdotool 底层操作
+
+### 评估指标
+
+- **约束发现率**: 82% (关键词精确匹配)
+- **假阳性率**: 0% (无误触发)
+- **响应时间**: <10ms (本地 JSON)
+- **术语准确率**: 80%
+
+### 已知限制
+
+1. 词序敏感 — "returns nil" 不匹配 "nil returned"
+2. 术语覆盖率 41% — 需要更多轨迹积累
+3. 部分关键词过于技术化 (如 "SFE-868")
+
+详见 `.evoontology/visualizations/ontology-layer-explorer.html` (607KB)

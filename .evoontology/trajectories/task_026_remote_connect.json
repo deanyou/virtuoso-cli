@@ -1,0 +1,35 @@
+{
+  "task_id": "task_026_remote_connect",
+  "question": "Connection refused when trying to connect to remote Virtuoso - what am I missing?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "remote session",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "remote session",
+          "connection refused",
+          "tunnel start"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Remote sessions require vcli tunnel start first. Daemon must be running on remote host.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.840597+00:00"
+}

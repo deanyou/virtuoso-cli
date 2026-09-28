@@ -1,0 +1,40 @@
+{
+  "task_id": "task_015_results_export",
+  "question": "How do I export simulation results to CSV?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "export",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "export"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "export",
+          "CSV",
+          "results",
+          "maestro"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Maestro export via maeExportResults() or parse PSF files and write to CSV manually",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.673654+00:00"
+}

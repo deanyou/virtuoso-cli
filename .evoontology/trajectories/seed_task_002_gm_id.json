@@ -1,0 +1,50 @@
+{
+  "task_id": "seed_task_002_gm_id",
+  "question": "What is gm/Id and how do I extract it from simulation?",
+  "ontology_version": "ontology_v0",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "gm/Id",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "gm_over_id",
+            "name": "gm/Id Ratio"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "gm/Id",
+          "transistor"
+        ]
+      },
+      "result": {
+        "terms": {
+          "gm_over_id": {
+            "mappings": {
+              "mapping_gm_over_id": {
+                "column": "Derived: gm / Id from <instance>:gm"
+              }
+            },
+            "constraints": [
+              "constraint_transistor_op_valid_region"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "gm/Id = gm/Id derived from PSF <instance>:gm and <instance>:id, valid in saturation",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:32:37.518547+00:00"
+}

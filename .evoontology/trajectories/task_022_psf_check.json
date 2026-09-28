@@ -1,0 +1,35 @@
+{
+  "task_id": "task_022_psf_check",
+  "question": "The simulation ran without errors but I don't see any output files - did it succeed?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "no output files",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "no output files",
+          "check simulation",
+          "results directory empty"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Verify PSF files exist in resultsDir/psf/. run() returning non-nil is NOT sufficient proof of success.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.839197+00:00"
+}

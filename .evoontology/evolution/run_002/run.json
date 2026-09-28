@@ -1,0 +1,10 @@
+{
+  "run_id": "run_002",
+  "parent_version": "ontology_v1",
+  "accepted_version": "ontology_v2",
+  "profile": "quick",
+  "adapter": "llm_judge",
+  "max_rounds": 3,
+  "created": "2026-09-28T09:00:00Z",
+  "status": "completed"
+}

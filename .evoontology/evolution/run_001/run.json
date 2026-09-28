@@ -1,0 +1,21 @@
+{
+  "run_id": "run_001",
+  "parent_version": "ontology_v0",
+  "candidate_version": "v0-c1",
+  "profile": "quick",
+  "adapter": "llm_judge",
+  "max_rounds": 3,
+  "min_rejects_before_incomplete": 2,
+  "created": "2026-09-28T08:35:00Z",
+  "evolution_pool": [
+    "seed_task_001_ac_setup",
+    "seed_task_002_gm_id",
+    "seed_task_003_skill_error"
+  ],
+  "validation_reserve": [
+    "seed_task_004_noise",
+    "seed_task_005_remote"
+  ],
+  "status": "completed",
+  "accepted_version": "ontology_v1"
+}

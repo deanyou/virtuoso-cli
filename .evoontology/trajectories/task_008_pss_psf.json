@@ -1,0 +1,39 @@
+{
+  "task_id": "task_008_pss_psf",
+  "question": "My PSS analysis produces no output - what could be wrong?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "PSS",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "PSS"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "PSS",
+          "periodic steady state",
+          "no output"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "PSS requires fundamental frequency (fundfreq), may need tstab for convergence. Check spectre.out for tstab warnings.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.670845+00:00"
+}

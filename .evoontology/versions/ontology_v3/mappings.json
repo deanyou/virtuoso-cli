@@ -1,0 +1,182 @@
+[
+  {
+    "id": "mapping_simulation_result",
+    "term_id": "simulation_result",
+    "database_source": "virtuoso-cli",
+    "table": "src/models.rs",
+    "column": "SimulationResult struct",
+    "semantic_filter": "Only valid when status indicates success and PSF data files exist",
+    "aggregation_semantics": "N/A - individual simulation results, not aggregated",
+    "grain": "per simulation run"
+  },
+  {
+    "id": "mapping_transistor_op",
+    "term_id": "transistor_operating_point",
+    "database_source": "virtuoso-cli",
+    "table": "PSF STRUCT/OP blocks",
+    "column": "M0:gm, M0:vth, M0:region, etc.",
+    "semantic_filter": "Only for M<X> named transistors in schematic",
+    "aggregation_semantics": "Extracted per-transistor from PSF operating point blocks",
+    "grain": "per transistor instance"
+  },
+  {
+    "id": "mapping_gm",
+    "term_id": "transconductance",
+    "database_source": "virtuoso-cli",
+    "table": "PSF STRUCT/OP",
+    "column": "<instance>:gm",
+    "semantic_filter": "Only valid for MOS transistors in saturation",
+    "aggregation_semantics": "Not typically aggregated; used per-instance",
+    "grain": "per transistor instance"
+  },
+  {
+    "id": "mapping_gm_over_id",
+    "term_id": "gm_over_id",
+    "database_source": "virtuoso-cli",
+    "table": "Computed from PSF",
+    "column": "Derived: gm / Id from <instance>:gm and <instance>:id",
+    "semantic_filter": "Requires both gm and Id operating points",
+    "aggregation_semantics": "Computed ratio, not directly stored",
+    "grain": "per transistor instance"
+  },
+  {
+    "id": "mapping_vov",
+    "term_id": "overdrive_voltage",
+    "database_source": "virtuoso-cli",
+    "table": "PSF STRUCT/OP",
+    "column": "Derived: Vgs - Vth from <instance>:vgs and <instance>:vth",
+    "semantic_filter": "Requires Vgs and Vth operating points",
+    "aggregation_semantics": "Computed difference, not directly stored",
+    "grain": "per transistor instance"
+  },
+  {
+    "id": "mapping_vth",
+    "term_id": "threshold_voltage",
+    "database_source": "virtuoso-cli",
+    "table": "PSF STRUCT/OP",
+    "column": "<instance>:vth",
+    "semantic_filter": "Model-dependent extraction method",
+    "aggregation_semantics": "Not aggregated; model-specific value",
+    "grain": "per transistor instance"
+  },
+  {
+    "id": "mapping_session",
+    "term_id": "session",
+    "database_source": "virtuoso-cli",
+    "table": "~/.cache/virtuoso_bridge/sessions/",
+    "column": "<id>.json SessionInfo",
+    "semantic_filter": "Only alive sessions marked by ipcIsAliveProcess",
+    "aggregation_semantics": "N/A - discrete session records",
+    "grain": "per session"
+  },
+  {
+    "id": "mapping_ssh_tunnel",
+    "term_id": "ssh_tunnel",
+    "database_source": "virtuoso-cli",
+    "table": "~/.cache/virtuoso_bridge/tunnels/",
+    "column": "tunnel_<profile>.json",
+    "semantic_filter": "Only active tunnels with open local port",
+    "aggregation_semantics": "N/A - discrete tunnel records",
+    "grain": "per tunnel"
+  },
+  {
+    "id": "mapping_skill_result",
+    "term_id": "skill_result",
+    "database_source": "virtuoso-cli",
+    "table": "src/models.rs",
+    "column": "VirtuosoResult struct",
+    "semantic_filter": "status field indicates Success/Failure/Error",
+    "aggregation_semantics": "N/A - individual SKILL call results",
+    "grain": "per SKILL call"
+  },
+  {
+    "id": "mapping_virtuoso_error",
+    "term_id": "virtuoso_error",
+    "database_source": "virtuoso-cli",
+    "table": "src/error.rs",
+    "column": "VirtuosoError enum",
+    "semantic_filter": "All VirtuosoError instances",
+    "aggregation_semantics": "Error categorization by type",
+    "grain": "per error occurrence"
+  },
+  {
+    "id": "mapping_maestro_session",
+    "term_id": "maestro_session",
+    "database_source": "virtuoso-cli",
+    "table": "Maestro ADE Explorer",
+    "column": "SKILL maeGetSession() return value",
+    "semantic_filter": "Only active ADE sessions",
+    "aggregation_semantics": "N/A - discrete session records",
+    "grain": "per ADE session"
+  },
+  {
+    "id": "mapping_schematic",
+    "term_id": "schematic_cellview",
+    "database_source": "virtuoso-cli",
+    "table": "Virtuoso schematic",
+    "column": "SKILL dbOpenCellViewByType() return",
+    "semantic_filter": "Only schematic view type",
+    "aggregation_semantics": "N/A - discrete cellview records",
+    "grain": "per cellview"
+  },
+  {
+    "id": "mapping_psf_data",
+    "term_id": "psf_data",
+    "database_source": "Spectre output",
+    "table": "resultsDir/psf/",
+    "column": "tran.tran, ac.ac, dc_op.dc, noise_an.noise",
+    "semantic_filter": "Only after successful simulation run",
+    "aggregation_semantics": "Time/frequency series data",
+    "grain": "per signal per analysis"
+  },
+  {
+    "id": "mapping_transient",
+    "term_id": "transient_response",
+    "database_source": "Spectre output",
+    "table": "resultsDir/psf/",
+    "column": "tran.tran",
+    "semantic_filter": "Only from tran analysis",
+    "aggregation_semantics": "Time-series values",
+    "grain": "per signal per time point"
+  },
+  {
+    "id": "mapping_ac_response",
+    "term_id": "ac_response",
+    "database_source": "Spectre output",
+    "table": "resultsDir/psf/",
+    "column": "ac.ac",
+    "semantic_filter": "Only from ac analysis, complex values",
+    "aggregation_semantics": "Frequency-series complex values",
+    "grain": "per signal per frequency point"
+  },
+  {
+    "id": "mapping_dc_op",
+    "term_id": "dc_operating_point",
+    "database_source": "Spectre output",
+    "table": "resultsDir/psf/",
+    "column": "dc_op.dc",
+    "semantic_filter": "Only from dc_op analysis",
+    "aggregation_semantics": "Scalar node voltages and currents",
+    "grain": "per node"
+  },
+  {
+    "id": "mapping_gui_scenario",
+    "term_id": "gui_scenario",
+    "database_source": "virtuoso-gui-debug",
+    "table": ".claude/skills/virtuoso-gui-debug/scenarios/",
+    "column": "*.json (scenario DSL)",
+    "semantic_filter": "Only valid JSON scenario files with actions/verifications",
+    "aggregation_semantics": "N/A - discrete scenario records",
+    "grain": "per scenario"
+  },
+  {
+    "id": "mapping_x11_operation",
+    "term_id": "x11_operation",
+    "database_source": "virtuoso-gui-debug",
+    "table": "scripts/xdotool_cli.py",
+    "column": "click/type/key/drag/scroll commands",
+    "semantic_filter": "Only valid xdotool operations",
+    "aggregation_semantics": "Atomic operations, not aggregated",
+    "grain": "per operation"
+  }
+]

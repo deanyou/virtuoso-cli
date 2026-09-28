@@ -1,0 +1,35 @@
+{
+  "task_id": "task_027_saturation_check",
+  "question": "Why does my gm/Id calculation give unexpected values for some transistors?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "saturation region",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "saturation region",
+          "triode",
+          "transistor region"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "gm/Id methodology assumes saturation (region=2 in PSF). Triode or cutoff transistors have different gm/Id relationships.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.841036+00:00"
+}

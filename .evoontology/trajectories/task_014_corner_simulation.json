@@ -1,0 +1,40 @@
+{
+  "task_id": "task_014_corner_simulation",
+  "question": "How do I run corner analysis across process variations?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "corner",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "corner"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "corner",
+          "process",
+          "Monte Carlo",
+          "tt ff ss"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Use corner analysis with modelFile() specifying sections (tt, ff, ss), sweep temperature with temp()",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.673268+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "task_id": "task_013_maestro_setup",
+  "question": "How do I open an ADE session and set design variables?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "Maestro",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "Maestro"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "Maestro",
+          "ADE",
+          "design variables",
+          "desVar"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Maestro session via maeGetSession(), set variables with maeSetVar() or SKILL desVar()",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.672902+00:00"
+}

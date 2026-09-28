@@ -1,0 +1,39 @@
+{
+  "task_id": "task_018_netlisting_error",
+  "question": "Netlisting fails with 'cannot descend into views' - how to fix?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "netlisting",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "netlisting"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "netlisting",
+          "cannot descend",
+          "view"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Subcell missing spectre view. Either remove the instance or add a spectre view to the subcell.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.674831+00:00"
+}

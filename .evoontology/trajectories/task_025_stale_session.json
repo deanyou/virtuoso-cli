@@ -1,0 +1,36 @@
+{
+  "task_id": "task_025_stale_session",
+  "question": "I got a session error after my remote Virtuoso was restarted - how to recover?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "session lost",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "session lost",
+          "connection dropped",
+          "Virtuoso not responding",
+          "session died"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Sessions can become stale. Use vcli session list to check alive sessions, then reconnect via tunnel.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.840286+00:00"
+}

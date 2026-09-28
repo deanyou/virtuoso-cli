@@ -1,0 +1,112 @@
+[
+  {
+    "id": "constraint_psf_requires_success",
+    "target": "simulation_result",
+    "constraint_type": "scope",
+    "trigger_keywords": ["PSF data", "simulation output", "results directory", "tran.tran", "ac.ac"],
+    "severity": "block",
+    "scope": "Only valid when Spectre completes successfully",
+    "confidence": "high",
+    "description": "PSF data files only exist after a successful simulation run. A non-nil run() return is NOT sufficient proof of success - must verify PSF files exist and spectre.out shows no fatal errors.",
+    "evidence": "src/spectre/runner.rs:has_usable_output() checks data.is_empty() before accepting results"
+  },
+  {
+    "id": "constraint_transistor_op_valid_region",
+    "target": "transistor_operating_point",
+    "constraint_type": "business_rule",
+    "trigger_keywords": ["saturation", "region", "triode", "cutoff", "transistor operating point"],
+    "severity": "warning",
+    "scope": "gm/Id methodology assumes saturation region",
+    "confidence": "high",
+    "description": "gm/Id methodology is only valid when transistor is in saturation (region ≈ 2 in Spectre). Triode or cutoff transistors have different gm/Id relationships.",
+    "evidence": "PSF STRUCT/OP block contains region field: 0=off, 1=triode, 2=saturation, 3=subthreshold"
+  },
+  {
+    "id": "constraint_skill_nil_means_failure",
+    "target": "skill_result",
+    "constraint_type": "business_rule",
+    "trigger_keywords": ["nil returned", "SKILL failed", "execution failed"],
+    "severity": "block",
+    "scope": "All SKILL function calls",
+    "confidence": "high",
+    "description": "SKILL functions return nil to indicate failure, not an error message. The VirtuosoResult.status may be Success (STX received) while output is 'nil'. Always check skill_ok() not just ok().",
+    "evidence": "src/models.rs:VirtuosoResult.skill_ok() checks output.trim() != 'nil'"
+  },
+  {
+    "id": "constraint_session_auto_disconnect",
+    "target": "session",
+    "constraint_type": "scope",
+    "trigger_keywords": ["session stale", "Virtuoso crashed", "connection lost"],
+    "severity": "warning",
+    "scope": "Remote session access",
+    "confidence": "high",
+    "description": "Sessions can become stale if Virtuoso crashes or loses connection. ipcIsAliveProcess check determines if session is still alive. Stale sessions may still have cached port info.",
+    "evidence": "src/client/bridge.rs:session_is_stale() and SessionInfo::list_alive()"
+  },
+  {
+    "id": "constraint_resultsdir_binding",
+    "target": "maestro_session",
+    "constraint_type": "business_rule",
+    "trigger_keywords": ["resultsDir", "results directory", "run() broken", "ADE session"],
+    "severity": "block",
+    "scope": "Maestro/ADE simulation runs",
+    "confidence": "high",
+    "description": "The ADE session binds run() to the resultsDir established when the GUI session was created. Changing resultsDir breaks run() - it returns nil. Do not call sim setup after working ADE session exists.",
+    "evidence": ".claude/skills/sim-run/SKILL.md documents resultsDir binding"
+  },
+  {
+    "id": "constraint_spectre_error_not_fatal",
+    "target": "simulation_result",
+    "constraint_type": "data_quality",
+    "trigger_keywords": ["spectre errors", "spectre.out", "SFE-", "simulation failed"],
+    "severity": "warning",
+    "scope": "Spectre simulation logging",
+    "confidence": "medium",
+    "description": "Spectre may report errors in spectre.out without the simulation aborting. Always check tail of spectre.out, not just exit code. Spectre can terminate with fatal errors and run() still returns resultsDir.",
+    "evidence": "src/spectre/runner.rs:extract_error_messages() and has_readin_error()"
+  },
+  {
+    "id": "constraint_ac_mag_requires_mag_param",
+    "target": "ac_response",
+    "constraint_type": "business_rule",
+    "trigger_keywords": ["AC analysis zero", "mag=1", "vsource ac", "no AC response"],
+    "severity": "block",
+    "scope": "Spectre vsource for AC stimulus",
+    "confidence": "high",
+    "description": "Spectre vsource uses mag= for AC amplitude, NOT ac= (which is SPICE-compat only and causes SFE-30). Default mag=0 produces zero AC response. Must set mag=1 explicitly for AC analysis.",
+    "evidence": ".claude/skills/spectre-netlist-gotchas/SKILL.md documents vsource syntax"
+  },
+  {
+    "id": "constraint_noise_oprobe_parallel",
+    "target": "simulation_result",
+    "constraint_type": "business_rule",
+    "trigger_keywords": ["noise analysis", "oprobe", "megavolts noise", "wrong noise"],
+    "severity": "block",
+    "scope": "Noise analysis setup",
+    "confidence": "high",
+    "description": "Noise oprobe must be a parallel probe (resistor to ground), NOT a series probe. Series probes measure voltage across resistor (≈0 at low freq) causing wildly inflated input-referred noise.",
+    "evidence": ".claude/skills/spectre-netlist-gotchas/SKILL.md documents oprobe requirements"
+  },
+  {
+    "id": "constraint_remote_tunnel_prerequisite",
+    "target": "ssh_tunnel",
+    "constraint_type": "scope",
+    "trigger_keywords": ["remote session", "VB_REMOTE_HOST", "tunnel start", "connection failed"],
+    "severity": "block",
+    "scope": "Remote Virtuoso access",
+    "confidence": "high",
+    "description": "Remote sessions require active SSH tunnel. Tunnel must be started with vcli tunnel start before connecting to remote Virtuoso. Daemon must be deployed/attached on remote host.",
+    "evidence": "src/commands/tunnel.rs and memory/remote_ssh_222_211_247_16.md"
+  },
+  {
+    "id": "constraint_transistor_naming",
+    "target": "transistor_operating_point",
+    "constraint_type": "business_rule",
+    "trigger_keywords": ["M0:gm", "transistor name", "instance name", "operating point extraction"],
+    "severity": "warning",
+    "scope": "PSF operating point parsing",
+    "confidence": "medium",
+    "description": "Transistor operating points are named by instance, not device. M0, M1, etc. are schematic instance names. Parsing must handle both <instance>:<param> format.",
+    "evidence": "src/spectre/parsers.rs:parse_structured_op_blocks()"
+  }
+]

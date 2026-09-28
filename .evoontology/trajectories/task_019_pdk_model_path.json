@@ -1,0 +1,39 @@
+{
+  "task_id": "task_019_pdk_model_path",
+  "question": "How do I configure model files for a new PDK?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "model file",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "model_file"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "model file",
+          "PDK",
+          "modelFile"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Set modelFile in Maestro: modelFile('(\"/path/to/models.scs\" \"\") \"section_name\")",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.675312+00:00"
+}

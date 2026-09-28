@@ -1,0 +1,107 @@
+[
+  {
+    "id": "evidence_simulation_result_struct",
+    "source": "src/models.rs",
+    "query": "grep -n 'struct SimulationResult' src/models.rs",
+    "result": "SimulationResult { status, tool_version, data: HashMap<String, Vec<f64>>, operating_points, errors, warnings, metadata }",
+    "validation_method": "Source code inspection of VirtuosoResult and SimulationResult structs"
+  },
+  {
+    "id": "evidence_psf_parsers",
+    "source": "src/spectre/parsers.rs",
+    "query": "grep -n 'parse_psf\\|parse_sweep\\|parse_structured_op' src/spectre/parsers.rs",
+    "result": "parse_psf_ascii(), parse_sweep_psf_directory(), parse_structured_op_blocks() - three parsing functions for different PSF formats",
+    "validation_method": "Source code inspection of PSF parsing functions"
+  },
+  {
+    "id": "evidence_transistor_op_fields",
+    "source": "src/spectre/parsers.rs",
+    "query": "grep -n 'region\\|vth\\|gm\\|vgs' src/spectre/parsers.rs",
+    "result": "Transistor operating points include: region (0=off, 1=triode, 2=sat, 3=subthreshold), vth, gm, vgs, id, vds",
+    "validation_method": "Source code inspection of PSF STRUCT/OP parsing"
+  },
+  {
+    "id": "evidence_skill_ok_check",
+    "source": "src/models.rs:35-36",
+    "query": "cat src/models.rs | grep -A2 'skill_ok'",
+    "result": "skill_ok() returns self.status == Success AND self.output.trim() != 'nil'. Must use skill_ok() not ok() for SKILL results.",
+    "validation_method": "Source code inspection of VirtuosoResult::skill_ok() method"
+  },
+  {
+    "id": "evidence_session_info",
+    "source": "src/models.rs:193-210",
+    "query": "grep -A20 'struct SessionInfo' src/models.rs",
+    "result": "SessionInfo { id, port, pid, host, user, created } - stored at ~/.cache/virtuoso_bridge/sessions/<id>.json",
+    "validation_method": "Source code inspection of SessionInfo struct"
+  },
+  {
+    "id": "evidence_tunnel_state",
+    "source": "src/models.rs",
+    "query": "grep -n 'TunnelState' src/models.rs | head -20",
+    "result": "TunnelState stores remote host, port, profile. Loaded from ~/.cache/virtuoso_bridge/tunnels/tunnel_<profile>.json",
+    "validation_method": "Source code inspection of TunnelState struct and load methods"
+  },
+  {
+    "id": "evidence_virtuoso_error_types",
+    "source": "src/error.rs:5-57",
+    "query": "grep -A1 'VirtuosoError {' src/error.rs",
+    "result": "VirtuosoError variants: Connection, Execution, Ssh, Io, Json, Timeout, TimeoutWithContext, Config, NotFound, Conflict, Auth, OutcomeUnknown",
+    "validation_method": "Source code inspection of VirtuosoError enum"
+  },
+  {
+    "id": "evidence_maestro_ops",
+    "source": "src/client/maestro_ops.rs",
+    "query": "grep -n 'maeGet\\|maestro' src/client/maestro_ops.rs | head -30",
+    "result": "Maestro operations: maeGetSetup, maeGetSession, maeLoadSession, maeDeleteSession, maeSaveSession",
+    "validation_method": "Source code inspection of MaestroOps struct and methods"
+  },
+  {
+    "id": "evidence_schematic_ops",
+    "source": "src/client/schematic_ops.rs",
+    "query": "grep -n 'dbOpen\\|schematic\\|cellview' src/client/schematic_ops.rs | head -30",
+    "result": "Schematic operations: dbOpenCellViewByType, geGetSelSet for selection, listInstances, listNets, get_cellview_params",
+    "validation_method": "Source code inspection of SchematicOps struct and methods"
+  },
+  {
+    "id": "evidence_spectre_runner",
+    "source": "src/spectre/runner.rs:76-111",
+    "query": "grep -A10 'pub struct SpectreSimulator' src/spectre/runner.rs",
+    "result": "SpectreSimulator config: spectre_cmd, spectre_args, timeout, work_dir, output_format, remote, transport, max_workers, cadence_cshrc, spectre_bin, strict_psf",
+    "validation_method": "Source code inspection of SpectreSimulator struct"
+  },
+  {
+    "id": "evidence_resultsdir_binding",
+    "source": ".claude/skills/sim-run/SKILL.md:34-49",
+    "query": "cat .claude/skills/sim-run/SKILL.md | grep -A15 'resultsDir'",
+    "result": "resultsDir binding documented: ADE session binds run() to resultsDir established at session creation. Changing it breaks run() (returns nil).",
+    "validation_method": "Documentation in sim-run skill"
+  },
+  {
+    "id": "evidence_vsource_mag_param",
+    "source": ".claude/skills/spectre-netlist-gotchas/SKILL.md:44-57",
+    "query": "cat .claude/skills/spectre-netlist-gotchas/SKILL.md | grep -A10 'mag='",
+    "result": "Spectre vsource uses mag= for AC amplitude, NOT ac= (SPICE-compat). Default mag=0 produces zero AC response. Must set mag=1.",
+    "validation_method": "Documentation in spectre-netlist-gotchas skill"
+  },
+  {
+    "id": "evidence_noise_oprobe",
+    "source": ".claude/skills/spectre-netlist-gotchas/SKILL.md:84-95",
+    "query": "cat .claude/skills/spectre-netlist-gotchas/SKILL.md | grep -A10 'oprobe'",
+    "result": "Noise oprobe must be parallel resistor to ground, NOT series. Series probes measure near-zero voltage causing inflated input-referred noise.",
+    "validation_method": "Documentation in spectre-netlist-gotchas skill"
+  },
+  {
+    "id": "evidence_remote_tunnel_workflow",
+    "source": "src/commands/tunnel.rs and memory/remote_ssh_222_211_247_16.md",
+    "query": "grep -n 'tunnel start\\|attach\\|deploy' src/commands/tunnel.rs | head -20",
+    "result": "Remote tunnel workflow: vcli tunnel start → SSH connection → daemon deploy/attach → port forwarding → vcli connects to forwarded port",
+    "validation_method": "Source code inspection and memory documentation"
+  },
+  {
+    "id": "evidence_sweep_psf_format",
+    "source": "src/spectre/parsers.rs:130-180",
+    "query": "grep -A20 'parse_sweep_psf_directory' src/spectre/parsers.rs",
+    "result": "Sweep output in two formats: subdirectory-per-point (sw1.sweep1/1/tran.tran) and flat per-point files (sw1-000_tran.tran.tran)",
+    "validation_method": "Source code inspection of sweep parsing logic"
+  }
+]

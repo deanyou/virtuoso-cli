@@ -15,6 +15,7 @@ from .verifier_result import VerifierResult, VerifyStatus, from_legacy_error
 from .recovery import RecoveryPolicy, RecoveryRequest, RecoveryAction, ErrorCategory, decide_recovery
 from .router import RiskClass, Channel, ActionRequest, CapabilitySnapshot, RoutePolicy, route, emit_route_decision
 from .experience import init_schema, compile_run, write_experience
+from .empirical_calibration import empirical_to_dict, load_calibration
 
 
 def _op_risk_class(operation) -> RiskClass:
@@ -171,7 +172,8 @@ class Runner:
     """State machine runner that executes scenarios step-by-step."""
 
     def __init__(self, executor: Executor, recovery_policy: Optional[RecoveryPolicy] = None,
-                 caps: Optional[CapabilitySnapshot] = None, route_policy: Optional[RoutePolicy] = None):
+                 caps: Optional[CapabilitySnapshot] = None, route_policy: Optional[RoutePolicy] = None,
+                 calibration=None):
         self._executor = executor
         self._recovery_policy = recovery_policy or RecoveryPolicy()
         self._caps = caps or CapabilitySnapshot(
@@ -183,9 +185,19 @@ class Runner:
         self._caps_source = "executor_probe" if caps else "legacy_default"
         self._route_policy = route_policy or RoutePolicy()
         self._policy_mode = "strict" if caps else "compatibility"
+        # P0.5：经验校准。显式注入则直接使用；否则在 run() 时惰性加载，
+        # DB 缺失/损坏时降级为 None（trace 不加 empirical 字段，行为不变）。
+        self._calibration = calibration
+        self._cal = calibration
 
     def run(self, scenario: Scenario, output_dir: Path) -> RunSummary:
         output_dir.mkdir(parents=True, exist_ok=False)
+
+        if self._cal is None:
+            try:
+                self._cal = load_calibration()
+            except Exception:
+                self._cal = None
 
         task_path = output_dir / "task.json"
         tmp_task = output_dir / ".task.json.tmp"
@@ -274,7 +286,8 @@ class Runner:
                 # P1 Router: decide channel before execute
                 req = ActionRequest(operation=step.operation, step_id=step.id, arguments=dict(step.arguments))
                 decision = route(req, self._caps, self._route_policy)
-                emit_route_decision(trace, step.id, attempt, decision)
+                emit_route_decision(trace, step.id, attempt, decision,
+                                    extra_details=self._empirical_for(decision.channel, attempt))
                 # Augment trace with capability provenance
                 trace.emit("ROUTE_PROVENANCE", step_id=step.id, attempt=attempt,
                            details={"capability_source": self._caps_source, "policy_mode": self._policy_mode})
@@ -309,7 +322,7 @@ class Runner:
                     )
                     decision = decide_recovery(req, self._recovery_policy)
                     trace.emit("RECOVERY_DECIDED", step_id=step.id, attempt=attempt,
-                               details=decision.to_trace_details())
+                               details=self._recovery_details(decision, req))
 
                     if decision.action in (RecoveryAction.ROLLBACK, RecoveryAction.RETRY):
                         if step.rollback:
@@ -397,7 +410,7 @@ class Runner:
                         )
                         decision = decide_recovery(req, self._recovery_policy)
                         trace.emit("RECOVERY_DECIDED", step_id=step.id, attempt=attempt,
-                                   details=decision.to_trace_details())
+                                   details=self._recovery_details(decision, req))
 
                         if decision.action == RecoveryAction.MANUAL:
                             trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
@@ -452,7 +465,7 @@ class Runner:
                         )
                         decision = decide_recovery(req, self._recovery_policy)
                         trace.emit("RECOVERY_DECIDED", step_id=step.id, attempt=attempt,
-                                   details=decision.to_trace_details())
+                                   details=self._recovery_details(decision, req))
 
                         if decision.action == RecoveryAction.MANUAL:
                             trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
@@ -540,6 +553,26 @@ class Runner:
             pass  # Experience writeback must never break the run
 
         return summary
+
+    def _empirical_for(self, channel, attempt: int, failure: Optional[str] = None) -> Optional[dict]:
+        """查经验校准并序列化为 trace 附加字段；不可用返回 None（不破坏 run）。"""
+        cal = self._cal
+        if cal is None:
+            return None
+        try:
+            ch = channel.value if hasattr(channel, "value") else channel
+            est = cal.estimate(ch, failure or "", attempt)
+        except Exception:
+            return None
+        return {"empirical": empirical_to_dict(est)} if est is not None else None
+
+    def _recovery_details(self, decision, req) -> dict:
+        """RECOVERY_DECIDED details：规则决策 + 经验校准 support（附加，不覆盖既有键）。"""
+        details = decision.to_trace_details()
+        emp = self._empirical_for(req.current_channel, req.attempt, req.error_category.value)
+        if emp:
+            details = {**details, **emp}
+        return details
 
     def _write_summary(self, output_dir: Path, task_id: str, passed: bool, failed_step: Optional[str], error_code: Optional[str], phase: Optional[str]) -> None:
         summary_path = output_dir / "summary.json"

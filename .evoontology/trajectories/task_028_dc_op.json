@@ -1,0 +1,35 @@
+{
+  "task_id": "task_028_dc_op",
+  "question": "How do I extract all DC bias voltages from my circuit?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "dc operating point",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "dc operating point",
+          "DC bias",
+          "node voltages"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "DC operating point from dc_op.dc contains all node voltages and currents. Run dc analysis with saveOppoint=t.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.841562+00:00"
+}

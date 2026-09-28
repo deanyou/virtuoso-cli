@@ -169,19 +169,24 @@ def _reason_to_code(reason: str) -> str:
     return "other"
 
 
-def emit_route_decision(trace, step_id: str, attempt: int, decision: RouteDecision) -> None:
+def emit_route_decision(trace, step_id: str, attempt: int, decision: RouteDecision,
+                        extra_details: Optional[Dict[str, Any]] = None) -> None:
     """Emit a stable ROUTE_DECIDED event to trace.
 
     Called exactly once per (step_id, attempt).
     Rejected routes also emit (with rejected=true).
     Does NOT invoke any executor or fallback.
+    extra_details (P0.5): 经验校准 support 等附加字段，合并进 details，不覆盖既有键。
     """
+    details = decision.to_trace_details()
+    if extra_details:
+        details = {**details, **extra_details}
     trace.emit(
         state="ROUTE_DECIDED",
         step_id=step_id,
         attempt=attempt,
         outcome="rejected" if decision.rejected else "selected",
-        details=decision.to_trace_details(),
+        details=details,
     )
 
 

@@ -1,0 +1,49 @@
+{
+  "task_id": "seed_task_001_ac_setup",
+  "question": "How do I set up AC analysis in Spectre to measure frequency response?",
+  "ontology_version": "ontology_v0",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "AC analysis",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "ac_response",
+            "name": "AC Response",
+            "type": "entity"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "AC",
+          "frequency"
+        ]
+      },
+      "result": {
+        "terms": {
+          "ac_response": {
+            "mappings": {
+              "mapping_ac_response": {
+                "column": "ac.ac",
+                "table": "resultsDir/psf/"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "AC analysis requires mag=1 on vsource (not ac=), produces ac.ac in PSF output",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:32:37.517534+00:00"
+}

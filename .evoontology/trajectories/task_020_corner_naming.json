@@ -1,0 +1,39 @@
+{
+  "task_id": "task_020_corner_naming",
+  "question": "Corner names changed after PDK update - how to handle?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "corner",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "corner"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "corner",
+          "PDK update",
+          "model section"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Use porting skill to update modelFile paths and section names. Verify modelFile syntax matches new PDK.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.675838+00:00"
+}

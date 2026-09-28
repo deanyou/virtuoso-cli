@@ -1,0 +1,1 @@
+{"round": 1, "candidate": "v0-c1", "parent": "ontology_v0", "dimension": "content", "hypothesis": "Enhanced trigger keywords improve constraint discoverability", "changes": {"constraints_enhanced": 5, "keywords_added": 28}, "decision": "accept", "evaluation": {"parent_keywords": 40, "candidate_keywords": 68, "improvement": "+28 keywords"}}

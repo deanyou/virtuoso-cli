@@ -1,0 +1,47 @@
+{
+  "task_id": "seed_task_003_skill_error",
+  "question": "Why did my SKILL execution return nil?",
+  "ontology_version": "ontology_v0",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "nil error SKILL",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "skill_result"
+          },
+          {
+            "id": "virtuoso_error"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "nil",
+          "SKILL failed"
+        ]
+      },
+      "result": {
+        "terms": {
+          "skill_result": {
+            "constraints": [
+              "constraint_skill_nil_means_failure"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "SKILL returns nil to indicate failure, must check skill_ok() not just ok()",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:32:37.519007+00:00"
+}

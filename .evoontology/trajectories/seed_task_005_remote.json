@@ -1,0 +1,47 @@
+{
+  "task_id": "seed_task_005_remote",
+  "question": "How do I connect to a remote Virtuoso session?",
+  "ontology_version": "ontology_v0",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "remote SSH session",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "session"
+          },
+          {
+            "id": "ssh_tunnel"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "remote",
+          "tunnel"
+        ]
+      },
+      "result": {
+        "terms": {
+          "ssh_tunnel": {
+            "constraints": [
+              "constraint_remote_tunnel_prerequisite"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Remote sessions require vcli tunnel start before connecting",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:32:37.520471+00:00"
+}

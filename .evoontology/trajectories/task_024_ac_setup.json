@@ -1,0 +1,36 @@
+{
+  "task_id": "task_024_ac_setup",
+  "question": "My AC analysis shows zero gain at all frequencies - what's wrong with my setup?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "AC not working",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "AC not working",
+          "no frequency response",
+          "zero gain",
+          "flat response"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Spectre vsource uses mag= for AC amplitude (not ac=). Default mag=0 gives zero response. Must set mag=1 explicitly.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.839959+00:00"
+}

@@ -1,0 +1,106 @@
+[
+  {
+    "id": "rel_simulation_contains_transistor_op",
+    "source": "simulation_result",
+    "relation_type": "composition",
+    "target": "transistor_operating_point",
+    "connection_condition": "Operating points are extracted from simulation_result's PSF data files",
+    "description": "A simulation result contains multiple transistor operating points extracted from PSF STRUCT/OP blocks"
+  },
+  {
+    "id": "rel_gm_derived_from_op",
+    "source": "transistor_operating_point",
+    "relation_type": "derivation",
+    "target": "transconductance",
+    "connection_condition": "gm is directly stored in PSF as <instance>:gm",
+    "description": "Transconductance is extracted from transistor operating point, not computed from others"
+  },
+  {
+    "id": "rel_gm_over_id_derived",
+    "source": "transconductance",
+    "relation_type": "derivation",
+    "target": "gm_over_id",
+    "connection_condition": "gm_over_id = gm / Id where both values exist in operating point",
+    "description": "gm/Id is computed by dividing transconductance by drain current from the same operating point"
+  },
+  {
+    "id": "rel_vov_derived",
+    "source": "threshold_voltage",
+    "relation_type": "derivation",
+    "target": "overdrive_voltage",
+    "connection_condition": "Vov = Vgs - Vth, requires both values from operating point",
+    "description": "Overdrive voltage is derived from gate-source voltage minus threshold voltage"
+  },
+  {
+    "id": "rel_skill_result_indicates_simulation_status",
+    "source": "skill_result",
+    "relation_type": "association",
+    "target": "simulation_result",
+    "connection_condition": "SKILL run() function returns path to resultsDir, which contains simulation_result",
+    "description": "SKILL execution triggers simulation, and the result indicates success/failure of the simulation"
+  },
+  {
+    "id": "rel_error_during_skill",
+    "source": "virtuoso_error",
+    "relation_type": "association",
+    "target": "skill_result",
+    "connection_condition": "Errors occur during SKILL execution and are captured in skill_result",
+    "description": "Virtuoso errors may occur during SKILL execution and are captured in the result"
+  },
+  {
+    "id": "rel_session_manages_tunnel",
+    "source": "session",
+    "relation_type": "composition",
+    "target": "ssh_tunnel",
+    "connection_condition": "Tunnel must be active before session can connect to remote Virtuoso",
+    "description": "A session requires an active SSH tunnel when connecting to remote Virtuoso"
+  },
+  {
+    "id": "rel_session_holds_maestro",
+    "source": "session",
+    "relation_type": "composition",
+    "target": "maestro_session",
+    "connection_condition": "Maestro sessions are bound to Virtuoso sessions via ADE Explorer",
+    "description": "A Virtuoso session may contain multiple Maestro ADE sessions"
+  },
+  {
+    "id": "rel_maestro_contains_setup",
+    "source": "maestro_session",
+    "relation_type": "composition",
+    "target": "simulation_result",
+    "connection_condition": "Maestro runs simulation and produces simulation_result in resultsDir",
+    "description": "A Maestro session runs simulations that produce simulation results"
+  },
+  {
+    "id": "rel_schematic_generates_netlist",
+    "source": "schematic_cellview",
+    "relation_type": "derivation",
+    "target": "simulation_result",
+    "connection_condition": "Schematic is netlisted and simulated to produce results",
+    "description": "Schematic cellview is translated to netlist and simulated to produce results"
+  },
+  {
+    "id": "rel_psf_contains_transient",
+    "source": "psf_data",
+    "relation_type": "hierarchy",
+    "target": "transient_response",
+    "connection_condition": "tran.tran files are PSF format containing transient data",
+    "description": "Transient response is a specific type of PSF data from tran analysis"
+  },
+  {
+    "id": "rel_psf_contains_ac",
+    "source": "psf_data",
+    "relation_type": "hierarchy",
+    "target": "ac_response",
+    "connection_condition": "ac.ac files are PSF format containing frequency domain data",
+    "description": "AC response is a specific type of PSF data from ac analysis"
+  },
+  {
+    "id": "rel_psf_contains_dc",
+    "source": "psf_data",
+    "relation_type": "hierarchy",
+    "target": "dc_operating_point",
+    "connection_condition": "dc_op.dc files are PSF format containing DC bias values",
+    "description": "DC operating point is a specific type of PSF data from dc_op analysis"
+  }
+]

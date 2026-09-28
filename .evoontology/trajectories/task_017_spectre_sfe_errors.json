@@ -1,0 +1,39 @@
+{
+  "task_id": "task_017_spectre_sfe_errors",
+  "question": "What does SFE-868 error mean in Spectre?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "SFE-868",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "SFE-868"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "SFE-868",
+          "error",
+          "model file"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "SFE-868: Cannot open model file. Usually caused by relative path in ADE-generated netlist. Fix by using absolute path.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.674358+00:00"
+}

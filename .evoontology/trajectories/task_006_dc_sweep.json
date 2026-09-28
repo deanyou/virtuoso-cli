@@ -1,0 +1,39 @@
+{
+  "task_id": "task_006_dc_sweep",
+  "question": "How do I run a DC sweep to find the transfer curve of my OTA?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "dc",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "dc"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "dc",
+          "sweep",
+          "transfer curve"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "DC sweep via Maestro: set desVar for input voltage, run dc analysis, extract output from dc_op.dc",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.669499+00:00"
+}

@@ -1,0 +1,39 @@
+{
+  "task_id": "task_011_instance_params",
+  "question": "How can I read and modify transistor parameters (W, L) from a schematic?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "transistor parameters",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "transistor_parameters"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "transistor parameters",
+          "W L",
+          "CDF"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Use geGetSelSet() to get selected instances, then access property 'w' and 'l' or read CDF parameters",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.671994+00:00"
+}

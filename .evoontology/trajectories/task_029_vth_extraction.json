@@ -1,0 +1,35 @@
+{
+  "task_id": "task_029_vth_extraction",
+  "question": "How do I measure threshold voltage Vth from simulation?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "threshold voltage",
+        "limit": 3
+      },
+      "result": {
+        "terms": []
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "threshold voltage",
+          "Vth",
+          "vt"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Vth extracted from PSF STRUCT/OP block as <instance>:vth. Model-dependent extraction method.",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:39:09.842095+00:00"
+}

@@ -159,23 +159,161 @@ See [Configuration](#configuration) for all env vars and capability matrix.
 </details>
 
 <details>
-<summary><strong>GUI Debug Architecture</strong></summary>
+<summary><strong>System Architecture: EvoOntology ↔ GUI RSI</strong></summary>
 
 ```
-AI / Planner → Skill Intelligence → VCLI Runtime → Virtuoso
-                  │                      │
-            FTS5 Experience      Router → Executor → Verifier → Evidence → Recovery
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                              EVOONTOLOGY LAYER (v3)                                 │
+│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
+│  │  Semantics Graph                                                           │   │
+│  │  ├── Terms (22): skill_result, simulation_result, gm_over_id, gui_scenario... │   │
+│  │  ├── Mappings (18): PSF, Maestro, xdotool, scenario DSL                    │   │
+│  │  ├── Relations (13): derivation, hierarchy, composition                       │   │
+│  │  └── Constraints (13): trigger keywords for discovery                      │   │
+│  └──────────────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                               │
+│                          browse_semantics / resolve_semantics                        │
+│                                    ▼                                               │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                            AGENT / PLANNER                                         │
+│                        Natural language intent                                      │
+│                                    │                                               │
+│                                    ▼                                               │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                    GUI RSI (Reflexive Semantic Interface)                           │
+│                                                                                   │
+│  ┌────────────────────────────────────────────────────────────────────────────┐     │
+│  │                         SKILL Intelligence                                │     │
+│  │  Skill Finder (FTS5) → SKILL Exec → Maestro Ops → Schematic Ops        │     │
+│  └────────────────────────────────────────────────────────────────────────────┘     │
+│                                    │                                               │
+│                                    ▼                                               │
+│  ┌────────────────────────────────────────────────────────────────────────────┐     │
+│  │                            Action Router                                   │     │
+│  │                                                                             │     │
+│  │   SKILL ──→ Shortcut ──→ X11 (xdotool) ──→ Vision (last fallback)     │     │
+│  │     │           │              │                │                          │     │
+│  │     └───────────┴──────────────┴────────────────┘                          │     │
+│  │                              │                                             │     │
+│  │                         [fallback chain]                                   │     │
+│  └────────────────────────────────────────────────────────────────────────────┘     │
+│                                    │                                               │
+│                                    ▼                                               │
+│  ┌──────────────┐  ┌──────────┐  ┌─────────────┐  ┌──────────────┐            │
+│  │   Executor   │  │  Verifier │  │  Recovery   │  │  Evidence    │            │
+│  │─────────────│  │───────────│  │────────────│  │─────────────│            │
+│  │ fake        │  │ passed    │  │ risk-class │  │ screenshot   │            │
+│  │ live (vcli) │  │ failed    │  │ aware      │  │ metadata     │            │
+│  │ local (xdot)│  │ skipped   │  │ retry      │  │ timestamp    │            │
+│  └──────────────┘  └──────────┘  └─────────────┘  └──────────────┘            │
+│                                                                                   │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                              VCLI RUNTIME                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
+│  │   Bridge     │  │   Tunnel     │  │   Spectre    │  │    Ocean     │        │
+│  │─────────────│  │─────────────│  │─────────────│  │─────────────│        │
+│  │ TCP/STX-NAK│  │ SSH Control  │  │ PSF Parser  │  │ Expr Eval   │        │
+│  │ Multi-Sess  │  │ Cross-arch  │  │ Job Registry│  │ SKILL List  │        │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘        │
+│                                    │                                               │
+│                                    ▼                                               │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                           VIRTuoso + RAMIC Bridge                                  │
+│                                                                                   │
+│   ┌──────────────┐     ┌──────────────────────────────────────────────┐          │
+│   │   CIW CLI    │     │            virtuoso-daemon                      │          │
+│   │─────────────│     │──────────────────────────────────────────────│          │
+│   │ SKILL REPL  │ ←→  │ TCP Server │ IPC │ SKILL Runtime │ RSICmd │          │
+│   └──────────────┘     └──────────────────────────────────────────────┘          │
+│                                                                                   │
+│                              TCP Port (dynamic)                                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Strict JSON DSL** — replayable scenarios
-- **Three executors** — fake (offline) / live (vcli) / local (xdotool)
-- **Action Router** — SKILL → Shortcut → X11 → Vision (last fallback)
-- **Evidence-first** — VerifierResult: passed / failed / skipped / unavailable
-- **Bounded recovery** — risk-class aware retry, no non-idempotent replay
+### Layer Responsibilities
 
-[📊 Architecture v2.1](docs/architecture_v2_1.html) · [📈 Evolution Playbook](docs/evolution_playbook.md)
+| Layer | Component | Function |
+|-------|-----------|----------|
+| **EvoOntology** | Semantics Graph | Discover constraints, map concepts to data sources |
+| **Agent** | Planner | Natural language → semantic queries |
+| **GUI RSI** | Action Router | SKILL → Shortcut → X11 → Vision fallback chain |
+| **GUI RSI** | Executor | fake (offline) / live (vcli) / local (xdotool) |
+| **GUI RSI** | Verifier | Evidence-grounded: passed/failed/skipped/unavailable |
+| **VCLI** | Bridge | STX/NAK protocol, multi-session, SKILL exec |
+| **Virtuoso** | Daemon | IPC bridge, RSICmd handler |
+
+### Data Flow Example
+
+```
+User: "Run AC analysis and check if gain is correct"
+         │
+         ▼
+EvoOntology: discover constraint_ac_mag_requires_mag_param
+         │
+         ▼
+Agent: "Check vsource has mag=1 for AC"
+         │
+         ▼
+GUI RSI: Router selects SKILL path
+         │
+         ▼
+VCLI: virtuoso sim run --analysis ac
+         │
+         ▼
+Virtuoso: Spectre executes, PSF output
+         │
+         ▼
+Verifier: Compare gain vs expected, record evidence
+         │
+         ▼
+Result: Evidence + VerifierResult
+```
+
+[📊 Architecture v2.1](docs/architecture_v2_1.html) · [📈 Evolution Playbook](docs/evolution_playbook.md) · [🤖 AGENTS.md](AGENTS.md#evoontology)
 
 </details>
+
+### EvoOntology Roadmap
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│                        virtuoso-cli 知识域覆盖                           │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌─────────────────────────┐    ┌─────────────────────────┐        │
+│  │  EvoOntology ✅ 已覆盖   │    │  RAG 待集成 ⚙️         │        │
+│  ├─────────────────────────┤    ├─────────────────────────┤        │
+│  │ SKILL/Spectre 仿真      │    │ Design Guide 开放问答   │        │
+│  │ • skill_nil_means_fail │    │ • ESD 设计注意事项     │        │
+│  │ • psf_requires_success │    │ • 长尾工艺文档         │        │
+│  │ • ac_mag_requires_mag  │    │ • 旧版本文档差异       │        │
+│  │                          │    │                         │        │
+│  │ GUI Debug RSI           │    │                         │        │
+│  │ • executor selection    │    │                         │        │
+│  │ • verifier semantics   │    │                         │        │
+│  └─────────────────────────┘    └─────────────────────────┘        │
+│                                                                       │
+│  ────────────────────────────────────────────────────────────────   │
+│                                                                       │
+│  待扩展 (Gap)：                                                     │
+│  ┌─────────────────┬────────────────────────────────────┐        │
+│  │ PDK 版本差异    │ 需 PDK-specific mapping             │        │
+│  │                  │ TT/FF/SS corner 规则              │        │
+│  ├─────────────────┼────────────────────────────────────┤        │
+│  │ 电路拓扑结构    │ Schematic hierarchy modeling          │        │
+│  │                  │ Instance/net relationship          │        │
+│  ├─────────────────┼────────────────────────────────────┤        │
+│  │ 工具链兼容性    │ IC23 vs IC25 API 差异               │        │
+│  │                  │ Maestro/ADE 版本差异               │        │
+│  └─────────────────┴────────────────────────────────────┘        │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+**构建原则**（见 [AGENTS.md](AGENTS.md#evoontology)）：
+- 本体管「确定性事实」：约束、映射、规则断言
+- RAG 管「相似候选」：开放文本、长尾文档
+- 触发纪律：检索 miss → 先改 aliases/metadata；真实 miss 证据出现才上 vector
 
 ---
 

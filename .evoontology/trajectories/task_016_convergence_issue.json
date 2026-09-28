@@ -1,0 +1,39 @@
+{
+  "task_id": "task_016_convergence_issue",
+  "question": "My simulation won't converge - what are common causes?",
+  "ontology_version": "ontology_v1",
+  "split": "seed",
+  "semantic_calls": [
+    {
+      "tool": "browse_semantics",
+      "input": {
+        "query": "convergence",
+        "limit": 3
+      },
+      "result": {
+        "terms": [
+          {
+            "id": "convergence"
+          }
+        ]
+      }
+    },
+    {
+      "tool": "resolve_semantics",
+      "input": {
+        "mentions": [
+          "convergence",
+          "timestep",
+          "dc convergence"
+        ]
+      },
+      "result": {
+        "terms": {}
+      }
+    }
+  ],
+  "native_tool_calls": [],
+  "final_answer": "Convergence issues: increase relref, add cmin, check for undefined initial conditions, try gmethod",
+  "task_status": "completed",
+  "recorded_at": "2026-09-28T08:38:26.674030+00:00"
+}
