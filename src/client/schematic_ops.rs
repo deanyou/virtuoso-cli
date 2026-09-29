@@ -99,6 +99,38 @@ fn unknown_pin_direction(direction: &str) -> VirtuosoError {
     ))
 }
 
+/// The orientations `schCreatePin` accepts for `t_orientation`, verbatim from
+/// IC23.1 `doc/skcompref/chap2_re_schCreatePin.html`.
+///
+/// Compared case-sensitively on purpose: DFII spells them `R90` and `MXR90`,
+/// and a lowercase `r90` reaching SKILL is a typo worth reporting, not a value
+/// worth guessing at.
+pub const PIN_ORIENTS: [&str; 8] = ["R0", "R90", "R180", "R270", "MY", "MYR90", "MX", "MXR90"];
+
+/// The signal types `schCreatePin` accepts for `g_sigType`, from the same page.
+///
+/// The manual lists `nil` too; here that is spelled by *omitting* the argument
+/// — see [`SchematicOps::create_pin`]. `tristate` sounds like it belongs and
+/// does not: IC23.1 has no such signal type.
+pub const PIN_SIGTYPES: [&str; 10] = [
+    "analog", "clock", "ground", "power", "reset", "scan", "signal", "tieHi", "tieLo", "tieOff",
+];
+
+fn unknown_pin_orient(orient: &str) -> VirtuosoError {
+    VirtuosoError::Execution(format!(
+        "unknown pin orient '{orient}': expected one of {}",
+        PIN_ORIENTS.join(", ")
+    ))
+}
+
+fn unknown_pin_sigtype(sigtype: &str) -> VirtuosoError {
+    VirtuosoError::Execution(format!(
+        "unknown pin sigtype '{sigtype}': expected one of {}. Omit the parameter \
+         to let the pin inherit the sigType of a same-named wire",
+        PIN_SIGTYPES.join(", ")
+    ))
+}
+
 /// SKILL that resolves an instance name plus a terminal name to `pt` — that
 /// terminal's absolute point in the cellview.
 ///
@@ -375,15 +407,63 @@ impl SchematicOps {
     /// direction decides both the pin master and the terminal direction that
     /// `symbol.generate` later reads, so substituting one produces a wrong
     /// symbol with no error anywhere — and this is the one chokepoint all
-    /// three callers (RPC, CLI, batch builder) pass through.
-    pub fn create_pin(&self, net_name: &str, pin_type: &str, origin: (f64, f64)) -> Result<String> {
+    /// three callers (RPC, CLI, batch builder) pass through. `orient` and
+    /// `sigtype` are rejected in the same place for the same reason.
+    ///
+    /// `orient` is not cosmetic. `basic/ipin` at `R0` spans
+    /// (-0.35625, -0.1625)..(0, 0) — the box sits entirely to the *left* of the
+    /// origin with the terminal on its right edge — so the orientation decides
+    /// which direction a wire reaches the pin from: `R0` leaves to the right,
+    /// `R270` leaves downward. A hand-drawn sheet routinely mixes four of them,
+    /// which is why `None` still means `R0` but a caller can say otherwise.
+    ///
+    /// `sigtype: None` keeps the call at exactly seven arguments rather than
+    /// passing `nil` explicitly. The two are not the same: with the argument
+    /// omitted, `schCreatePin` gives the terminal the sigType of an existing
+    /// wire of the same name and falls back to `signal` only when there is
+    /// none. Setting it matters when the matching symbol terminal is `power` or
+    /// `ground` — a mismatch is a `schCheck` warning that never clears.
+    pub fn create_pin(
+        &self,
+        net_name: &str,
+        pin_type: &str,
+        origin: (f64, f64),
+        orient: Option<&str>,
+        sigtype: Option<&str>,
+    ) -> Result<String> {
         let (master, direction) =
             pin_master_for(pin_type).ok_or_else(|| unknown_pin_direction(pin_type))?;
+        let orient = orient.unwrap_or("R0");
+        if !PIN_ORIENTS.contains(&orient) {
+            return Err(unknown_pin_orient(orient));
+        }
+        if let Some(s) = sigtype {
+            if !PIN_SIGTYPES.contains(&s) {
+                return Err(unknown_pin_sigtype(s));
+            }
+        }
         let net_name = escape_skill_string(net_name);
         let (x, y) = origin;
         let guard = cv_guard();
+        // `orient` and `sigtype` are allowlisted just above, so neither can
+        // carry a quote. They still go through the escaper, because "checked
+        // somewhere else" is not a property the next editor of this line can
+        // see.
+        let orient = escape_skill_string(orient);
+        let (sig_arg, sig_json) = match sigtype {
+            Some(s) => {
+                let s = escape_skill_string(s);
+                // Arguments 8 and 9 are `g_powerSens` / `g_groundSens`; both are
+                // positional, so reaching `g_sigType` means spelling them out.
+                (
+                    format!(r#" nil nil "{s}""#),
+                    format!(r#",\"sigtype\":\"{s}\""#),
+                )
+            }
+            None => (String::new(), String::new()),
+        };
         Ok(format!(
-            r#"let((cv master pin) cv = {EDIT_CV} {guard} master = dbOpenCellViewByType("basic" "{master}" "symbol" nil "r") when(!master error("basic/{master}/symbol not found")) pin = schCreatePin(cv master "{net_name}" "{direction}" nil list({x} {y}) "R0") when(!pin error("schCreatePin failed for net {net_name}")) sprintf(nil "{{\"net\":\"%s\",\"direction\":\"{direction}\",\"master\":\"basic/{master}\"}}" "{net_name}"))"#
+            r#"let((cv master pin) cv = {EDIT_CV} {guard} master = dbOpenCellViewByType("basic" "{master}" "symbol" nil "r") when(!master error("basic/{master}/symbol not found")) pin = schCreatePin(cv master "{net_name}" "{direction}" nil list({x} {y}) "{orient}"{sig_arg}) when(!pin error("schCreatePin failed for net {net_name}")) sprintf(nil "{{\"net\":\"%s\",\"direction\":\"{direction}\",\"master\":\"basic/{master}\",\"orient\":\"{orient}\"{sig_json}}}" "{net_name}"))"#
         ))
     }
 
@@ -821,7 +901,9 @@ mod tests {
             ("switch", "iopin"),
             ("jumper", "iopin"),
         ] {
-            let s = ops().create_pin("VDD", dir, (1.0, 2.0)).expect("valid");
+            let s = ops()
+                .create_pin("VDD", dir, (1.0, 2.0), None, None)
+                .expect("valid");
             assert!(s.contains(&format!(r#""basic" "{master}""#)), "{dir}: {s}");
             assert!(s.contains(&format!(r#""{dir}" nil"#)), "{dir}: {s}");
         }
@@ -834,7 +916,7 @@ mod tests {
     #[test]
     fn create_pin_refuses_an_unknown_direction_instead_of_defaulting() {
         let e = ops()
-            .create_pin("VDD", "bidirectional", (0.0, 0.0))
+            .create_pin("VDD", "bidirectional", (0.0, 0.0), None, None)
             .expect_err("an unknown direction must not produce SKILL");
         let msg = e.to_string();
         assert!(msg.contains("bidirectional"), "{msg}");
@@ -842,6 +924,85 @@ mod tests {
             msg.contains("inputOutput"),
             "must list the accepted set: {msg}"
         );
+    }
+
+    /// Omitting the sigtype must keep the call at seven arguments, byte for
+    /// byte. Passing `nil` explicitly would look equivalent and is not: with
+    /// the argument absent, `schCreatePin` takes the sigType from a wire of the
+    /// same name, which is the behaviour every existing caller already relies on.
+    #[test]
+    fn create_pin_without_a_sigtype_keeps_the_seven_argument_form() {
+        let s = ops()
+            .create_pin("VDD", "inputOutput", (1.0, 2.0), None, None)
+            .expect("valid");
+        assert!(
+            s.contains(r#"schCreatePin(cv master "VDD" "inputOutput" nil list(1 2) "R0")"#),
+            "{s}"
+        );
+        assert!(!s.contains("sigtype"), "no sigtype key when unset: {s}");
+    }
+
+    /// `g_sigType` is the tenth positional argument, so reaching it means
+    /// spelling out `g_powerSens` and `g_groundSens` as `nil` first. Getting
+    /// that wrong would silently set the *power sensitivity* to "power".
+    #[test]
+    fn create_pin_with_a_sigtype_fills_the_two_positional_placeholders() {
+        let s = ops()
+            .create_pin("VDD", "inputOutput", (0.0, 0.0), None, Some("power"))
+            .expect("valid");
+        assert!(
+            s.contains(r#"list(0 0) "R0" nil nil "power")"#),
+            "powerSens/groundSens must be spelled nil: {s}"
+        );
+        assert!(s.contains(r#"\"sigtype\":\"power\""#), "{s}");
+    }
+
+    /// The orientation reaches `t_orientation` instead of the hardcoded "R0" it
+    /// used to be. `basic/ipin`'s box sits left of its origin, so this decides
+    /// which side the wire enters from — a pin drawn R0 where the sheet wants
+    /// R270 points away from the wire that is supposed to reach it.
+    #[test]
+    fn create_pin_passes_the_orient_through_and_defaults_to_r0() {
+        let s = ops()
+            .create_pin("IBIAS", "input", (0.0, 0.0), Some("R270"), None)
+            .expect("valid");
+        assert!(s.contains(r#"list(0 0) "R270")"#), "{s}");
+        assert!(s.contains(r#"\"orient\":\"R270\""#), "{s}");
+
+        let d = ops()
+            .create_pin("IBIAS", "input", (0.0, 0.0), None, None)
+            .expect("valid");
+        assert!(d.contains(r#"list(0 0) "R0")"#), "{d}");
+    }
+
+    /// Both lists are the manual's (IC23.1 `chap2_re_schCreatePin`), and the
+    /// comparison is case-sensitive. `tristate` is in neither — it is a
+    /// plausible-sounding signal type that IC23.1 does not define, and an
+    /// unvalidated one reaches SKILL as a bare symbol.
+    #[test]
+    fn create_pin_accepts_exactly_the_manuals_orients_and_sigtypes() {
+        for o in PIN_ORIENTS {
+            ops()
+                .create_pin("N", "input", (0.0, 0.0), Some(o), None)
+                .unwrap_or_else(|e| panic!("{o} must be accepted: {e}"));
+        }
+        for s in PIN_SIGTYPES {
+            ops()
+                .create_pin("N", "input", (0.0, 0.0), None, Some(s))
+                .unwrap_or_else(|e| panic!("{s} must be accepted: {e}"));
+        }
+        for bad in ["r0", "R45", "", "nil"] {
+            let e = ops()
+                .create_pin("N", "input", (0.0, 0.0), Some(bad), None)
+                .expect_err("must reject orient");
+            assert!(e.to_string().contains("MXR90"), "must list the set: {e}");
+        }
+        for bad in ["tristate", "Power", "bus", ""] {
+            let e = ops()
+                .create_pin("N", "input", (0.0, 0.0), None, Some(bad))
+                .expect_err("must reject sigtype");
+            assert!(e.to_string().contains("tieOff"), "must list the set: {e}");
+        }
     }
 
     #[test]

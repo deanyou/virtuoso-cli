@@ -361,13 +361,21 @@ impl RpcDispatcher {
                 let dir = json_str(params.get("direction"), "direction")?;
                 let x = json_coord_or(params.get("x"), "x", 0.0)?;
                 let y = json_coord_or(params.get("y"), "y", 0.0)?;
-                // The unknown-direction rejection lives in `create_pin`, which
-                // every caller reaches — the RPC layer, the CLI and the batch
-                // builder. A second copy here would be free to drift from the
-                // one that actually guards the SKILL.
-                let skill = ops.create_pin(&net, &dir, (x, y))?;
+                let orient = params.get("orient").and_then(|v| v.as_str());
+                let sigtype = params.get("sigtype").and_then(|v| v.as_str());
+                // The unknown-direction/orient/sigtype rejections live in
+                // `create_pin`, which every caller reaches — the RPC layer, the
+                // CLI and the batch builder. A second copy here would be free to
+                // drift from the one that actually guards the SKILL.
+                let skill = ops.create_pin(&net, &dir, (x, y), orient, sigtype)?;
                 execute_required_skill(client, &skill, "create pin")?;
-                Ok(serde_json::json!({ "status": "ok", "net": net, "direction": dir }))
+                Ok(serde_json::json!({
+                    "status": "ok",
+                    "net": net,
+                    "direction": dir,
+                    "orient": orient.unwrap_or("R0"),
+                    "sigtype": sigtype,
+                }))
             }
             "save" => {
                 let skill = ops.save();
@@ -2090,6 +2098,32 @@ mod tests {
         let required = |n: &str| m.params.iter().find(|p| p.name == n).unwrap().required;
         assert!(!required("view"), "view defaults to schematic");
         assert!(!required("simulator"), "simulator defaults to spectre");
+    }
+
+    #[test]
+    fn schema_pin_orient_and_sigtype_are_optional() {
+        let schema = standard_schema();
+        let m = schema
+            .methods
+            .iter()
+            .find(|m| m.name == "schematic.pin")
+            .unwrap();
+        let p = |n: &str| {
+            m.params
+                .iter()
+                .find(|p| p.name == n)
+                .unwrap_or_else(|| panic!("schematic.pin should accept {n}"))
+        };
+        assert!(!p("orient").required, "orient must keep defaulting to R0");
+        assert!(
+            !p("sigtype").required,
+            "sigtype must stay optional — omitting it is its own behaviour"
+        );
+        assert!(
+            p("sigtype").description.contains("inherits"),
+            "the description has to say what omitting it does, not claim a default: {}",
+            p("sigtype").description
+        );
     }
 
     #[test]
