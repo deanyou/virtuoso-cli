@@ -1,0 +1,4 @@
+interface:
+  display_name: "Schematic to Visio"
+  short_description: "Export Virtuoso schematic JSON to editable Visio VSDX"
+  default_prompt: "Convert a vcli schematic export JSON file into an editable Visio .vsdx diagram."

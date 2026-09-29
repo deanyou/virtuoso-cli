@@ -520,6 +520,28 @@ pub fn get_params(inst: &str) -> Result<Value> {
     Ok(json!({"instance": inst, "params": parse_skill_json(&r.output)?}))
 }
 
+/// Export the currently open schematic as a single, tool-friendly JSON document.
+///
+/// Keeping this as a composition of the existing read-only operations makes the
+/// export useful to external renderers (for example cadence_to_visio) without
+/// introducing a renderer or a file format dependency into vcli.
+pub fn export(output_path: Option<&str>) -> Result<Value> {
+    let document = json!({
+        "format": "virtuoso-cli.schematic-export",
+        "version": 1,
+        "instances": list_instances()?,
+        "nets": list_nets()?,
+        "pins": list_pins()?,
+    });
+
+    if let Some(path) = output_path {
+        let text = serde_json::to_string_pretty(&document).map_err(VirtuosoError::Json)?;
+        fs::write(path, text).map_err(VirtuosoError::Io)?;
+    }
+
+    Ok(document)
+}
+
 /// Polish net labels with cosmetic presets, auto-rotation, or offset repositioning.
 ///
 /// preset: "readable" (fontSize 0.125, centerCenter) or "compact" (fontSize 0.0625, centerLeft)

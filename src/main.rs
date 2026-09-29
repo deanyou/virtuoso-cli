@@ -1403,6 +1403,13 @@ enum SchematicCmd {
         inst: String,
     },
 
+    /// Export the open schematic as a renderer-neutral JSON document
+    Export {
+        /// Optional local path for the exported JSON file
+        #[arg(long)]
+        output: Option<String>,
+    },
+
     /// Polish net labels — cosmetic preset, auto-rotation, or repositioning
     PolishLabel {
         /// Net name whose labels to polish
@@ -2455,6 +2462,7 @@ fn dispatch_schematic(cmd: SchematicCmd) -> error::Result<serde_json::Value> {
         SchematicCmd::ListNets => commands::schematic::list_nets(),
         SchematicCmd::ListPins => commands::schematic::list_pins(),
         SchematicCmd::GetParams { inst } => commands::schematic::get_params(&inst),
+        SchematicCmd::Export { output } => commands::schematic::export(output.as_deref()),
         SchematicCmd::PolishLabel {
             net,
             preset,
