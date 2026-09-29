@@ -396,7 +396,8 @@ fn create_netlist_inner(
             return Err(VirtuosoError::Execution(format!(
                 "Library '{lib}' is not registered in the current Virtuoso session.{cwd_note} \
                  Start Virtuoso from the project directory whose cds.lib includes '{lib}', \
-                 or run hiLoadCDSLibDefs() in the CIW to register it at runtime."
+                 or add '{lib}' to a cds.lib on the search path and run ddUpdateLibList() \
+                 in the CIW to re-read the library list at runtime."
             )));
         }
         return Ok("t".into());

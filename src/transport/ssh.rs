@@ -176,6 +176,26 @@ fn run_streaming_pipeline(
     })
 }
 
+/// A one-shot `ssh`/`scp` for the documentation caches, carrying the identity
+/// from `VB_SSH_KEY`.
+///
+/// `libref` and `skill_finder` copy manual pages off the box; they shell out
+/// directly rather than go through [`SSHRunner`], which exists to hold a
+/// bridge open. They still have to pass the configured key: `VB_REMOTE_HOST`
+/// is usually a bare address, not an `~/.ssh/config` alias, and then nothing
+/// else supplies one — the probe comes back "Permission denied" on stderr and
+/// empty on stdout, which a caller reading only stdout reports as "no manual
+/// found near virtuoso" (2026-09-11, with the alias it had worked by accident).
+pub fn doc_transfer_command(program: &str, ssh_key: Option<&str>) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(["-o", "BatchMode=yes"]);
+    cmd.args(["-o", "ConnectTimeout=30"]);
+    if let Some(key) = ssh_key.filter(|k| !k.is_empty()) {
+        cmd.arg("-i").arg(key);
+    }
+    cmd
+}
+
 pub struct SSHRunner {
     pub host: String,
     pub user: Option<String>,
@@ -784,6 +804,39 @@ impl SSHRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn args_of(cmd: &std::process::Command) -> Vec<String> {
+        cmd.get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    // The doc caches used to spawn a bare `ssh <target>`, so a `VB_REMOTE_HOST`
+    // that is an address rather than an `~/.ssh/config` alias had no identity
+    // at all — the probe failed on authentication and got reported as "no
+    // Cadence manual found on the remote server".
+    #[test]
+    fn doc_transfer_command_passes_the_configured_identity() {
+        let cmd = doc_transfer_command("scp", Some("/home/u/.ssh/id_ed25519"));
+        assert_eq!(cmd.get_program().to_string_lossy(), "scp");
+        let args = args_of(&cmd);
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "-i" && w[1] == "/home/u/.ssh/id_ed25519"),
+            "{args:?}"
+        );
+        assert!(args.contains(&"BatchMode=yes".to_string()), "{args:?}");
+    }
+
+    // No key configured (or an empty one) means "let ssh decide" — an `-i` with
+    // an empty path is not the same thing, it is a file ssh cannot read.
+    #[test]
+    fn doc_transfer_command_omits_the_identity_when_there_is_none() {
+        for key in [None, Some("")] {
+            let args = args_of(&doc_transfer_command("ssh", key));
+            assert!(!args.contains(&"-i".to_string()), "{key:?}: {args:?}");
+        }
+    }
 
     #[test]
     fn download_dir_builds_streaming_ssh_and_local_tar_commands() {

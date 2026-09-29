@@ -380,6 +380,7 @@ mod ssh_runner_tests {
 #[cfg(test)]
 mod session_info_tests {
     use crate::models::SessionInfo;
+    use serial_test::serial;
     use std::fs;
     use tempfile::TempDir;
 
@@ -610,7 +611,14 @@ mod session_info_tests {
         assert!(found2, "second Virtuoso's session must appear in list");
     }
 
+    // Serialised against `live_session_not_removed_by_cleanup`: both write to
+    // the one real sessions directory and both call the global
+    // `session::cleanup()`. Run concurrently, the other test's cleanup() sweeps
+    // this one's stale file and reports it in *its* result, leaving this
+    // assertion looking at an empty list. `session_sorted_by_id` dodges the
+    // same race by binding real ports; a stale session has none to bind.
     #[test]
+    #[serial(session_cleanup)]
     fn stale_session_filtered_in_cleanup() {
         // Dead session files (port not bound) must be removed by session::cleanup()
         // Bind then drop to get a port we know is currently free.
@@ -645,6 +653,7 @@ mod session_info_tests {
     }
 
     #[test]
+    #[serial(session_cleanup)]
     fn live_session_not_removed_by_cleanup() {
         // A session whose port is actually bound must survive cleanup()
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1202,6 +1211,24 @@ mod virtuoso_result_tests {
         r.output = String::new();
         let e = r.ok_or_exec("fetch").unwrap_err();
         assert!(e.to_string().contains("*Error*"), "{e}");
+    }
+
+    // An empty list is a legitimate nil (a library with no cells): the caller
+    // gets it back to parse, rather than a "failed: nil" error.
+    #[test]
+    fn ok_or_exec_nil_ok_passes_nil_through_on_transport_success() {
+        let r = make_success("nil").ok_or_exec_nil_ok("list_cells").unwrap();
+        assert_eq!(r.output_unquoted(), "nil");
+        assert!(make_success("42").ok_or_exec_nil_ok("op").is_ok());
+    }
+
+    // ...but a SKILL raise arrives as NAK, and that is still a failure.
+    #[test]
+    fn ok_or_exec_nil_ok_still_errors_on_nak() {
+        let r = make_error(vec!["*Error* library.list_cells: no such library".into()]);
+        let e = r.ok_or_exec_nil_ok("list_cells").unwrap_err();
+        assert!(e.to_string().contains("list_cells failed"), "{e}");
+        assert!(e.to_string().contains("no such library"), "{e}");
     }
 
     #[test]

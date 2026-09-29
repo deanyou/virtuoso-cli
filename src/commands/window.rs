@@ -120,7 +120,10 @@ lazy_static::lazy_static! {
 ///   "Virtuoso Schematic Editor"
 pub fn list(ctx: &crate::context::CommandContext) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
-    let r = client.execute_skill(&client.window.list_windows(), None)?;
+    // Unchecked — see `symbol::inspect`. The SKILL is generated internally and
+    // the capability check already ran at RPC dispatch; re-checking here locks
+    // non-Admin users out of their own typed RPC (`window.list`).
+    let r = client.execute_skill_unchecked(&client.window.list_windows(), None)?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
             "failed to list windows: {}",
@@ -149,7 +152,7 @@ pub fn dismiss_dialog(
 ) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
     if dry_run {
-        let r = client.execute_skill(&client.window.get_dialog_info(), None)?;
+        let r = client.execute_skill_unchecked(&client.window.get_dialog_info(), None)?;
         let raw = r.output.trim_matches('"');
         let active = r.skill_ok() && raw != "no-dialog";
         return Ok(json!({
@@ -158,7 +161,7 @@ pub fn dismiss_dialog(
             "dry_run": true,
         }));
     }
-    let r = client.execute_skill(&client.window.dismiss_dialog(action), None)?;
+    let r = client.execute_skill_unchecked(&client.window.dismiss_dialog(action), None)?;
     let dismissed = r.skill_ok() && r.output.trim_matches('"') != "no-dialog";
     Ok(json!({
         "status": if dismissed { "dismissed" } else { "no-dialog" },

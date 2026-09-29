@@ -106,7 +106,7 @@ impl TransactionManager {
                 &inst.cell,
                 "symbol",
                 &inst.name,
-                (inst.x as i64, inst.y as i64),
+                (inst.x, inst.y),
                 &inst.orient,
             );
         }

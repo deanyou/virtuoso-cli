@@ -47,9 +47,9 @@ pub fn save(ctx: &crate::context::CommandContext) -> Result<Value> {
     }))
 }
 
-pub fn close(ctx: &crate::context::CommandContext) -> Result<Value> {
+pub fn close(ctx: &crate::context::CommandContext, save: bool) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
-    let result = client.close_current_cellview()?;
+    let result = client.close_current_cellview(save)?;
 
     Ok(json!({
         "status": if result.ok() { "success" } else { "error" },
