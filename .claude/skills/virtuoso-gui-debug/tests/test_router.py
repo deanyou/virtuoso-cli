@@ -1,6 +1,5 @@
 """Tests for vgui_runner.router - pure function routing decisions."""
 
-import pytest
 from vgui_runner.model import Operation
 from vgui_runner.router import (
     ActionRequest,
