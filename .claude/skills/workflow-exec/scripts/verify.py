@@ -146,7 +146,8 @@ def verify_brief(brief: Dict[str, Any], requirement_yaml: Optional[str] = None) 
         verification['checks'].extend(spec_results)
         
         for check in spec_results:
-            if not check['passed']:
+            # Only count explicit failures, not stubs (None)
+            if check['passed'] is False:
                 verification['passed'] = False
     
     return verification

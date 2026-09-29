@@ -162,7 +162,14 @@ def execute_command(command: Dict[str, Any], context: Dict[str, Any]) -> Dict[st
     }
 
 
-def execute_brief(brief: Dict[str, Any]) -> Dict[str, Any]:
+def get_brief_dir() -> Path:
+    """Get the directory for storing briefs."""
+    brief_dir = Path.home() / '.cache' / 'virtuoso_bridge' / 'workflow'
+    brief_dir.mkdir(parents=True, exist_ok=True)
+    return brief_dir
+
+
+def execute_brief(brief: Dict[str, Any], output_path: Optional[Path] = None) -> Dict[str, Any]:
     """
     Execute all commands in brief.
     
@@ -230,8 +237,9 @@ def main():
         brief = json.loads(path.read_text())
         brief = execute_brief(brief)
         
-        # Save updated brief
-        output_path = path.parent / f"{brief['id']}.json"
+        # Save updated brief to cache directory
+        brief_dir = get_brief_dir()
+        output_path = brief_dir / f"{brief['id']}.json"
         output_path.write_text(json.dumps(brief, indent=2))
         print(f"\nBrief saved to: {output_path}")
         
@@ -243,14 +251,15 @@ def main():
             print(f"Artifacts: {brief['artifacts']}")
     
     elif cmd == 'status':
-        # Load brief by ID
-        brief_dir = Path.home() / '.cache' / 'virtuoso_bridge' / 'workflow'
+        # Load brief by ID from cache directory
+        brief_dir = get_brief_dir()
         brief_path = list(brief_dir.glob(f"*{arg}*.json"))
         if brief_path:
             brief = json.loads(brief_path[0].read_text())
             print(json.dumps(brief, indent=2))
         else:
             print(f"Brief not found: {arg}")
+            print(f"Searched in: {brief_dir}")
             sys.exit(1)
     
     else:

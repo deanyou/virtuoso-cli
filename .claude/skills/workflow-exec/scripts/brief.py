@@ -20,10 +20,35 @@ except ImportError:
     yaml = None
 
 
+def _parse_value(value: str) -> Any:
+    """Parse string value to appropriate Python type (NO eval)."""
+    if not value:
+        return ''
+    # Boolean
+    if value.lower() == 'true':
+        return True
+    if value.lower() == 'false':
+        return False
+    if value.lower() == 'null' or value.lower() == '~':
+        return None
+    # Integer
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    # Float (including scientific notation like 10e6)
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    # String (keep as-is)
+    return value
+
+
 def simple_yaml_parse(s: str) -> Dict[str, Any]:
     """Simple YAML parser for basic requirement format (no PyYAML needed)."""
     if yaml is None:
-        # Fallback: parse key: value lines
+        # Fallback: parse key: value lines (NO eval for security)
         result = {}
         current_key = None
         current_list = None
@@ -42,16 +67,13 @@ def simple_yaml_parse(s: str) -> Dict[str, Any]:
                 key = key.strip()
                 value = value.strip()
                 
-                if not value:  # Multiline value
+                if not value:  # Multiline value or empty
                     current_key = key
                     current_list = None
                     result[key] = {}
                 else:
-                    # Try to parse value
-                    try:
-                        result[key] = eval(value) if value else ''
-                    except:
-                        result[key] = value
+                    # Safe type parsing (NO eval)
+                    result[key] = _parse_value(value)
         
         return result
     else:
