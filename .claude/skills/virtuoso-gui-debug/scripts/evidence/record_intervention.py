@@ -518,23 +518,28 @@ def verify_with_evidence(
     conn.close()
     
     # Derive verification status from ACTUAL evidence
+    has_passed = any(o.upper() == "PASSED" for o in verifier_outcomes)
+    has_failed = any(o.upper() == "FAILED" for o in verifier_outcomes)
+    is_conflict = has_passed and has_failed
+    
     if verifier_confirmed_count == 0:
         status = "UNKNOWN"  # No verifier evidence
         derived_from = "no_verifier_events"
+    elif is_conflict:
+        status = "CONFLICT"  # Both PASSED and FAILED
+        derived_from = "conflict_detected"
+    elif has_failed:
+        status = "FAILED"
+        derived_from = "actual_failed_outcome"
+    elif has_passed:
+        status = "VERIFIED"
+        derived_from = "actual_passed_outcome"
+    elif any(o.upper() == "UNAVAILABLE" for o in verifier_outcomes):
+        status = "UNKNOWN"
+        derived_from = "actual_unavailable_outcome"
     else:
-        # Check actual outcomes - FAILED evidence means FAILED, not VERIFIED
-        if any(o.upper() == "FAILED" for o in verifier_outcomes):
-            status = "FAILED"
-            derived_from = "actual_failed_outcome"
-        elif any(o.upper() == "PASSED" for o in verifier_outcomes):
-            status = "VERIFIED"
-            derived_from = "actual_passed_outcome"
-        elif any(o.upper() == "UNAVAILABLE" for o in verifier_outcomes):
-            status = "UNKNOWN"
-            derived_from = "actual_unavailable_outcome"
-        else:
-            status = "UNKNOWN"
-            derived_from = "no_distinct_outcome"
+        status = "UNKNOWN"
+        derived_from = "no_distinct_outcome"
     
     # Update intervention with evidence-derived status
     success = update_verification_status(

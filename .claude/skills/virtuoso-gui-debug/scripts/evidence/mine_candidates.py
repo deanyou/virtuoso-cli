@@ -1,272 +1,134 @@
 #!/usr/bin/env python3
-"""
-mine_candidates.py — Mine candidate rules from intervention data.
-
-This script analyzes interventions and their verification outcomes to identify
-patterns that could inform future automation decisions.
-
-P2 of the Evidence Loop Plan:
-https://github.com/deanyou/virtuoso-cli/blob/main/docs/vcli-evidence-loop-plan.html
-
-Key constraints enforced:
-1. Deterministic: Same data always produces same candidates (stable hash)
-2. Deduplicated: Support counted by unique followup run (shared verification counts once)
-3. Correct strength: Pass rate uses verified/failed counts; manual/override separate
-4. Specific grouping: Full reason + action + context values (not just keys)
-5. Traceable evidence: Include intervention/run/step references in output
-"""
+"""Mine candidate rules from intervention data."""
 
 import argparse
 import hashlib
 import json
-import sqlite3
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-# Add script to path
-_SCRIPT_DIR = Path(__file__).parent.resolve()  # scripts/evidence/
-_SKILL_ROOT = _SCRIPT_DIR.parent.parent  # virtuoso-gui-debug/
-
+_SCRIPT_DIR = Path(__file__).parent.resolve()
+_SKILL_ROOT = _SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(_SKILL_ROOT / "vgui_runner"))
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from record_intervention import init_db, get_default_db_path
 
-# Schema version for candidate schema
-CANDIDATE_SCHEMA_VERSION = "1.0"
-
-# Trusted verification sources (only these count as evidence)
+SCHEMA_VERSION = "1.0"
 TRUSTED_SOURCES = {"evidence"}
 
 
-def _normalize_step_id(step_id: Any) -> str:
-    """Normalize step_id for sorting, handling None and strings."""
+def norm_step(step_id):
     if step_id is None:
         return ""
     return str(step_id)
 
 
-def _strip_verification_metadata(details: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Strip verification metadata from details for grouping.
-    Only keeps non-verification context.
-    """
+def strip_verification(details):
     if not details:
         return {}
-    result = {}
-    for k, v in details.items():
-        if k == "_verification":
-            continue  # Skip verification metadata
-        result[k] = v
-    return result
+    return {k: v for k, v in details.items() if k != "_verification"}
 
 
-def _canonicalize_intervention(iv: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Canonicalize intervention for deterministic hashing.
-    Keeps all fields that affect conclusions, removes only timestamps.
-    """
+def canonical(iv):
     details = json.loads(iv.get("details") or "{}")
-    ver_info = details.get("_verification", {})
-    
+    ver = details.get("_verification", {})
     return {
-        "intervention_id": iv.get("intervention_id"),
-        "run_id": iv.get("run_id"),
-        "step_id": iv.get("step_id"),
+        "id": iv.get("intervention_id"),
+        "run": iv.get("run_id"),
+        "step": iv.get("step_id"),
         "reason": iv.get("reason"),
         "action": iv.get("action"),
-        # Include source and status that affect conclusions
         "source": iv.get("source"),
-        "verification_status": iv.get("verification_status"),
-        "followup_run_id": iv.get("followup_run_id"),
-        # Include source from verification if present
-        "ver_source": ver_info.get("source"),
-        # Include context values (not just keys)
-        "context": _strip_verification_metadata(details),
+        "status": iv.get("verification_status"),
+        "followup": iv.get("followup_run_id"),
+        "ver_source": ver.get("source"),
+        "context": strip_verification(details),
     }
 
 
-def _hash_snapshot(evidence_data: Dict[str, Any]) -> str:
-    """
-    Generate deterministic hash of evidence snapshot.
-    """
-    canonical = json.dumps(evidence_data, sort_keys=True, default=str)
-    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+def hash_snapshot(data):
+    return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
-def _make_group_signature(reason: str, action: str, context: Optional[Dict]) -> str:
-    """
-    Create a specific group signature from reason + action + context VALUES.
-    
-    Uses full text and actual context VALUES (not just keys).
-    Strips _verification metadata from context.
-    """
-    reason_sig = reason or "EMPTY_REASON"
-    action_sig = action or "EMPTY_ACTION"
-    
-    # Strip verification metadata and get sorted context
-    clean_context = _strip_verification_metadata(context or {})
-    # Sort by key for deterministic output
-    sorted_context = {k: clean_context[k] for k in sorted(clean_context.keys())}
-    
-    return json.dumps({
-        "reason": reason_sig,
-        "action": action_sig,
-        "context": sorted_context,
-    }, sort_keys=True, default=str)
+def group_sig(reason, action, context):
+    reason = reason or "EMPTY_REASON"
+    action = action or "EMPTY_ACTION"
+    ctx = {k: context[k] for k in sorted((context or {}).keys()) if k != "_verification"}
+    return json.dumps({"reason": reason, "action": action, "context": ctx}, sort_keys=True)
 
 
-def get_interventions(db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
-    """Get all interventions from database."""
+def get_interventions(db_path):
     conn = init_db(db_path)
-    
-    cursor = conn.execute("""
-        SELECT 
-            intervention_id,
-            run_id,
-            step_id,
-            reason,
-            action,
-            source,
-            verification_status,
-            followup_run_id,
-            details,
-            timestamp
-        FROM interventions
-        ORDER BY run_id, step_id, intervention_id
+    cur = conn.execute("""
+        SELECT intervention_id, run_id, step_id, reason, action, source,
+               verification_status, followup_run_id, details, timestamp
+        FROM interventions ORDER BY run_id, step_id, intervention_id
     """)
-    
-    columns = [desc[0] for desc in cursor.description]
-    interventions = [dict(zip(columns, row)) for row in cursor]
+    cols = [d[0] for d in cur.description]
+    result = [dict(zip(cols, row)) for row in cur]
     conn.close()
-    
-    return interventions
+    return result
 
 
-def _compute_group_stats(
-    signature: str,
-    interventions: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """
-    Compute statistics for a group of interventions.
+def compute_stats(sig, interventions):
+    fv = {}
+    ff = {}
+    rm = {}
+    ru = {}
     
-    Key principles:
-    1. Support deduplication: Same original run counts once.
-       When same run has multiple followups, count as 1 support.
-    2. Conflict resolution: If a followup has both PASSED and FAILED,
-       exclude from both.
-    3. Source filtering: Only TRUSTED_SOURCES count for verified/failed.
-    4. Unknown/manual use original run_id.
-    """
-    # Track by original run_id
-    run_verified: Dict[str, List[Dict]] = {}   # run_id -> VERIFIED refs
-    run_failed: Dict[str, List[Dict]] = {}    # run_id -> FAILED refs
-    run_unknown: Dict[str, List[Dict]] = {}  # run_id -> UNKNOWN refs
-    run_manual: Dict[str, List[Dict]] = {}     # run_id -> manual VERIFIED refs
-    
-    # All unique runs and followups
-    all_runs: Set[str] = set()
-    all_followups: Set[str] = set()
-    
-    # First pass: collect all data
     for iv in interventions:
         details = json.loads(iv.get("details") or "{}")
-        ver_info = details.get("_verification", {})
-        source = ver_info.get("source", iv.get("source", "unknown"))
-        status = iv.get("verification_status") or ver_info.get("status")
+        ver = details.get("_verification", {})
+        src = ver.get("source") or iv.get("source", "unknown")
+        status = iv.get("verification_status") or ver.get("status")
         run_id = iv.get("run_id")
-        followup_id = iv.get("followup_run_id")
-        
-        all_runs.add(run_id)
-        if followup_id:
-            all_followups.add(followup_id)
-        
-        iv_ref = {
-            "intervention_id": iv.get("intervention_id"),
-            "run_id": run_id,
-            "step_id": iv.get("step_id"),
-            "source": source,
+        fid = iv.get("followup_run_id")
+        ref = {
+            "id": iv.get("intervention_id"),
+            "run": run_id,
+            "step": iv.get("step_id"),
+            "src": src,
             "status": status,
-            "followup_run_id": followup_id,
+            "fid": fid,
         }
         
         if status == "VERIFIED":
-            if source in TRUSTED_SOURCES:
-                if run_id not in run_verified:
-                    run_verified[run_id] = []
-                run_verified[run_id].append(iv_ref)
+            if src in TRUSTED_SOURCES:
+                fid_key = fid or "local"
+                fv.setdefault(fid_key, []).append(ref)
             else:
-                if run_id not in run_manual:
-                    run_manual[run_id] = []
-                run_manual[run_id].append(iv_ref)
+                rm.setdefault(run_id, []).append(ref)
+        elif status == "CONFLICT":
+            # Track conflicts by followup
+            fid_key = fid or "local"
+            fv.setdefault(fid_key, []).append(ref)
+            ff.setdefault(fid_key, []).append(ref)
         elif status == "FAILED":
-            if source in TRUSTED_SOURCES:
-                if run_id not in run_failed:
-                    run_failed[run_id] = []
-                run_failed[run_id].append(iv_ref)
-        else:  # UNKNOWN or None
-            if run_id not in run_unknown:
-                run_unknown[run_id] = []
-            run_unknown[run_id].append(iv_ref)
+            if src in TRUSTED_SOURCES:
+                fid_key = fid or "local"
+                ff.setdefault(fid_key, []).append(ref)
+        else:
+            ru.setdefault(run_id, []).append(ref)
     
-    # Detect conflicting followups: appear in both verified and failed
-    conflicting_followups: Set[str] = set()
-    verified_followups: Set[str] = set()
-    failed_followups: Set[str] = set()
+    conflicts = set(fv.keys()) & set(ff.keys())
+    verified_followups = set(fv.keys()) - conflicts
+    verified_count = len(verified_followups)
+    failed_followups = set(ff.keys()) - conflicts
+    failed_count = len(failed_followups)
     
-    # Collect followup_ids from verified runs
-    for iv_refs in run_verified.values():
-        for ref in iv_refs:
-            fid = ref.get("followup_run_id")
-            if fid:
-                verified_followups.add(fid)
+    conflict_refs = []
+    for fid in conflicts:
+        conflict_refs.extend(fv.get(fid, []))
+        conflict_refs.extend(ff.get(fid, []))
     
-    # Collect from failed runs
-    for iv_refs in run_failed.values():
-        for ref in iv_refs:
-            fid = ref.get("followup_run_id")
-            if fid:
-                failed_followups.add(fid)
+    manual_count = len(rm)
+    unknown_count = len(ru)
     
-    # Find conflicts: followups in both verified and failed
-    conflicting_followups = verified_followups & failed_followups
+    total = verified_count + failed_count
+    pass_rate = verified_count / total if total > 0 else 0.0
     
-    # Count supports: same original run = 1 support (regardless of followup count)
-    # If run has conflicting followup, exclude it
-    verified_runs_supporting: Set[str] = set()
-    for run_id, iv_refs in run_verified.items():
-        has_conflict = any(
-            ref.get("followup_run_id") in conflicting_followups
-            for ref in iv_refs
-        )
-        if not has_conflict:
-            verified_runs_supporting.add(run_id)
-    
-    failed_runs: Set[str] = set()
-    for run_id, iv_refs in run_failed.items():
-        has_conflict = any(
-            ref.get("followup_run_id") in conflicting_followups
-            for ref in iv_refs
-        )
-        if not has_conflict:
-            failed_runs.add(run_id)
-    
-    # Deduplicated counts
-    verified_count = len(verified_runs_supporting)
-    failed_count = len(failed_runs)
-    manual_count = len(run_manual)
-    unknown_count = len(run_unknown)
-    
-    # Pass rate: verified / (verified + failed)
-    total_verifiable = verified_count + failed_count
-    if total_verifiable > 0:
-        pass_rate = verified_count / total_verifiable
-    else:
-        pass_rate = 0.0
-    
-    # Strength classification
     if verified_count >= 3 and pass_rate >= 0.8:
         strength = "strong"
     elif verified_count >= 1 and pass_rate >= 0.5:
@@ -278,205 +140,114 @@ def _compute_group_stats(
     else:
         strength = "insufficient"
     
-    # Flatten refs
-    verified_refs = [ref for refs in run_verified.values() for ref in refs]
-    failed_refs = [ref for refs in run_failed.values() for ref in refs]
-    unknown_refs = [ref for refs in run_unknown.values() for ref in refs]
-    manual_refs = [ref for refs in run_manual.values() for ref in refs]
+    vrefs = []
+    for fid in verified_followups:
+        vrefs.extend(fv[fid])
+    frefs = []
+    for fid in failed_followups:
+        frefs.extend(ff[fid])
+    mrefs = [r for refs in rm.values() for r in refs]
+    urefs = [r for refs in ru.values() for r in refs]
     
     return {
-        "signature": signature,
-        "total_interventions": len(interventions),
-        "unique_runs": len(all_runs),
+        "sig": sig,
+        "total": len(interventions),
         "stats": {
-            "verified_evidence_count": verified_count,
-            "verified_followups": sorted(verified_followups - conflicting_followups),
-            "verified_manual_count": manual_count,
+            "verified_count": verified_count,
+            "verified_fids": sorted(f for f in verified_followups if f != "local"),
+            "manual_count": manual_count,
             "failed_count": failed_count,
-            "failed_followups": sorted(failed_followups - conflicting_followups),
+            "failed_fids": sorted(f for f in failed_followups if f != "local"),
             "unknown_count": unknown_count,
-            "conflicting_followups": sorted(conflicting_followups),
+            "conflict_count": len(conflict_refs),
+            "conflicts": sorted(conflicts),
             "pass_rate": round(pass_rate, 3),
         },
         "strength": strength,
-        "verified_evidence_refs": verified_refs,
-        "failed_refs": failed_refs[:5],
-        "manual_refs": manual_refs,
-        "unknown_refs": unknown_refs[:5],
+        "vrefs": vrefs,
+        "frefs": frefs[:5],
+        "cref": conflict_refs[:10],
+        "mrefs": mrefs,
+        "urefs": urefs[:5],
     }
 
 
-def mine_candidates(
-    min_verified: int = 1,
-    db_path: Optional[Path] = None,
-) -> Dict[str, Any]:
-    """
-    Mine candidate rules from intervention data.
-    """
+def mine(min_verified=1, db_path=None):
     interventions = get_interventions(db_path)
     
-    # Group by full signature (reason + action + context VALUES)
-    groups: Dict[str, List[Dict]] = {}
+    groups = {}
     for iv in interventions:
         details = json.loads(iv.get("details") or "{}")
-        signature = _make_group_signature(
-            reason=iv.get("reason", ""),
-            action=iv.get("action", ""),
-            context=details,
-        )
-        
-        if signature not in groups:
-            groups[signature] = []
-        groups[signature].append(iv)
+        sig = group_sig(iv.get("reason", ""), iv.get("action", ""), details)
+        groups.setdefault(sig, []).append(iv)
     
-    # Compute stats for each group
-    group_stats = []
-    for sig, group_ivs in groups.items():
-        stats = _compute_group_stats(sig, group_ivs)
-        group_stats.append(stats)
+    all_stats = [compute_stats(sig, g) for sig, g in groups.items()]
+    all_stats.sort(key=lambda x: x["stats"]["verified_count"], reverse=True)
     
-    # Sort by verified evidence count, then pass rate
-    group_stats.sort(
-        key=lambda g: (g["stats"]["verified_evidence_count"], g["stats"]["pass_rate"]),
-        reverse=True
-    )
+    candidates = [s for s in all_stats if s["stats"]["verified_count"] >= min_verified]
     
-    # Filter by threshold
-    candidates = [
-        g for g in group_stats
-        if g["stats"]["verified_evidence_count"] >= min_verified
-    ]
+    canon = sorted([canonical(iv) for iv in interventions],
+                   key=lambda x: (x["run"], norm_step(x["step"]), x["id"]))
     
-    # Canonicalize interventions for deterministic snapshot
-    canonical_ivs = [_canonicalize_intervention(iv) for iv in interventions]
-    # Stable sort by normalized step_id
-    canonical_ivs.sort(key=lambda x: (
-        x["run_id"],
-        _normalize_step_id(x.get("step_id")),
-        x["intervention_id"]
-    ))
-    
-    # Build snapshot
-    evidence_snapshot = {
-        "schema_version": CANDIDATE_SCHEMA_VERSION,
-        "interventions": canonical_ivs,
-        "group_count": len(group_stats),
-        "candidate_count": len(candidates),
+    snap = {
+        "v": SCHEMA_VERSION,
+        "ivs": canon,
+        "gc": len(all_stats),
+        "cc": len(candidates),
     }
-    
-    snapshot_hash = _hash_snapshot(evidence_snapshot)
+    h = hash_snapshot(snap)
     
     return {
-        "candidate_id": f"candidate-{snapshot_hash}",
-        "schema_version": CANDIDATE_SCHEMA_VERSION,
-        "miner_version": "1.0",
-        "snapshot_hash": snapshot_hash,
-        "min_verified_threshold": min_verified,
-        "total_interventions_analyzed": len(interventions),
-        "total_candidates": len(candidates),
-        "total_groups": len(group_stats),
+        "id": "candidate-" + h,
+        "v": SCHEMA_VERSION,
+        "h": h,
+        "min_verified": min_verified,
+        "total_ivs": len(interventions),
+        "total_cands": len(candidates),
+        "total_groups": len(all_stats),
         "candidates": candidates,
-        "evidence_note": (
-            "Support deduplicated by followup_run_id (shared verification counts once). "
-            "Pass rate = verified_followups / (verified_followups + failed_followups). "
-            "Only TRUSTED_SOURCES count for verified/failed. "
-            "Manual-only records marked as 'manual_only' strength."
-        ),
+        "note": "Support by unique followup. Conflicts separate.",
     }
 
 
-def generate_report(candidates: Dict[str, Any]) -> str:
-    """Generate human-readable report from candidates."""
-    lines = [
-        "=" * 60,
-        "Intervention Candidate Analysis Report",
-        "=" * 60,
-        f"Candidate ID: {candidates['candidate_id']}",
-        f"Schema: v{candidates['schema_version']}",
-        f"Snapshot: {candidates['snapshot_hash']}",
-        "",
-        f"Total interventions: {candidates['total_interventions_analyzed']}",
-        f"Total groups: {candidates['total_groups']}",
-        f"Candidates: {candidates['total_candidates']}",
-        "",
-        "-" * 60,
-        "CANDIDATES",
-        "-" * 60,
-        "",
-    ]
-    
-    for i, cand in enumerate(candidates["candidates"], 1):
-        stats = cand["stats"]
+def report(cands):
+    lines = ["=" * 60, "Candidate Analysis", "=" * 60]
+    for i, c in enumerate(cands, 1):
+        s = c["stats"]
         lines.extend([
-            f"{i}. Strength: {cand['strength']}",
-            f"   Pass rate: {stats['pass_rate']:.1%}",
-            f"   VERIFIED (evidence): {stats['verified_evidence_count']}",
-            f"   FAILED: {stats['failed_count']}",
-            f"   Manual-only: {stats['verified_manual_count']}",
-            f"   UNKNOWN: {stats['unknown_count']}",
+            str(i) + ". " + c["strength"] + " | pass=" + str(round(s["pass_rate"] * 100)) + "%",
+            "   VER=" + str(s["verified_count"]) + " FAILED=" + str(s["failed_count"]) + " UNKNOWN=" + str(s["unknown_count"]),
             "",
         ])
-    
-    lines.extend([
-        "-" * 60,
-        candidates["evidence_note"],
-        "=" * 60,
-    ])
-    
     return "\n".join(lines)
 
 
-# ── CLI ─────────────────────────────────────────────────────────────────────
-
-def cmd_mine(args: argparse.Namespace) -> int:
-    """Handle 'mine' command."""
-    output = mine_candidates(
-        min_verified=args.min_verified,
-        db_path=Path(args.db) if getattr(args, 'db', None) else None,
-    )
-    
+def cmd_mine(args):
+    out = mine(min_verified=args.min_verified, db_path=Path(args.db) if args.db else None)
     if args.format == "report":
-        print(generate_report(output))
+        print(report(out["candidates"]))
     else:
-        print(json.dumps(output, indent=2, default=str))
-    
+        print(json.dumps(out, indent=2))
     return 0
 
 
-def cmd_stats(args: argparse.Namespace) -> int:
-    """Handle 'stats' command."""
-    interventions = get_interventions(
-        db_path=Path(args.db) if getattr(args, 'db', None) else None,
-    )
-    print(json.dumps({
-        "total_interventions": len(interventions),
-        "interventions": interventions,
-    }, indent=2, default=str))
+def cmd_stats(args):
+    ivs = get_interventions(Path(args.db) if args.db else None)
+    print(json.dumps({"total": len(ivs)}, indent=2))
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Mine candidate rules from intervention data.",
-    )
-    
-    parser.add_argument(
-        "--db",
-        help="Path to experience database (default: skill internal or ~/.cache)",
-    )
-    
-    subparsers = parser.add_subparsers(dest="command", required=True)
-    
-    p_mine = subparsers.add_parser("mine", help="Mine candidate rules")
-    p_mine.add_argument("--min-verified", type=int, default=1)
-    p_mine.add_argument("--format", choices=["json", "report"], default="json")
-    p_mine.set_defaults(func=cmd_mine)
-    
-    p_stats = subparsers.add_parser("stats", help="Get interventions")
-    p_stats.set_defaults(func=cmd_stats)
-    
-    args = parser.parse_args()
-    return args.func(args)
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--db")
+    subs = p.add_subparsers(required=True)
+    m = subs.add_parser("mine")
+    m.add_argument("--min-verified", type=int, default=1)
+    m.add_argument("--format", choices=["json", "report"], default="json")
+    m.set_defaults(func=cmd_mine)
+    s = subs.add_parser("stats")
+    s.set_defaults(func=cmd_stats)
+    return p.parse_args().func(p.parse_args())
 
 
 if __name__ == "__main__":
