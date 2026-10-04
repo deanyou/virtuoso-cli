@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="结合 VCLI 现有代码的最小演进方案：统一证据、记录人工干预、离线挖掘候选、人工评审。">
+  <title>VCLI · 从运行证据到可靠经验</title>
+  <style>
+    :root{color-scheme:light dark;--bg:light-dark(#f5f5f1,#121716);--surface:light-dark(#fff,#1c2421);--ink:light-dark(#182c25,#e4eee8);--muted:light-dark(#586b62,#a9bdb2);--line:light-dark(#dce3dc,#35443c);--accent:light-dark(#126c49,#8fe0b5);--soft:light-dark(#e7f2e9,#263e30);--amber:light-dark(#856215,#f0ce86);--amber-soft:light-dark(#faf2dd,#3a321f);--danger:light-dark(#9c4141,#f0abab);--danger-soft:light-dark(#f9eeee,#392525);--rail:light-dark(#e7ebe6,#2b3630);--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}button,select{font:inherit}button,a,summary{touch-action:manipulation}button{cursor:pointer}button:focus-visible,a:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:4px}a{color:var(--accent);text-underline-offset:4px}button{color:var(--ink)}[hidden]{display:none!important}h1,h2,h3,p{margin:0}h1{font-size:clamp(29px,4.5vw,51px);font-weight:600;letter-spacing:-.04em;line-height:1.22}h2{font-size:23px;font-weight:600;letter-spacing:-.025em}h3{font-size:17px;font-weight:600}strong{font-weight:600}code{font:12px/1.6 var(--mono);overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;background:var(--bg);padding:18px;border-radius:10px}ul{margin:9px 0 0;padding-left:20px}li+li{margin-top:5px}
+    .wrap{max-width:1160px;margin:auto;padding:30px 38px 45px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding-bottom:19px}.brand{display:flex;align-items:center;gap:11px;font-weight:600}.logo{display:grid;place-items:center;width:35px;height:35px;background:var(--ink);color:var(--bg);border-radius:10px;font:600 14px var(--mono)}.meta{font-size:12px;color:var(--muted);text-align:right}.hero{padding:45px 0 25px;display:grid;grid-template-columns:1.6fr 1fr;gap:42px;align-items:end}.eyebrow{font:12px var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}.lead{color:var(--muted);margin-top:16px;max-width:670px;font-size:16px}.choice{border-left:3px solid var(--accent);padding:1px 0 1px 22px}.choice p{margin-top:8px;color:var(--muted)}.badge{display:inline-block;background:var(--soft);color:var(--accent);border-radius:5px;padding:3px 8px;font-size:12px;white-space:nowrap}.badge.proposed{background:var(--amber-soft);color:var(--amber)}.badge.deferred{background:var(--rail);color:var(--muted)}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:10px 0 26px}.summary>div{padding:19px 22px}.summary>div:first-child{padding-left:0}.summary>div+div{border-left:1px solid var(--line)}.summary b{font-weight:600;font-size:19px;display:block}.summary span{display:block;color:var(--muted);font-size:13px;margin-top:5px}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:29px}.tab{padding:10px 18px;border:0;border-radius:8px;background:transparent;color:var(--muted)}.tab[aria-selected=true]{background:var(--ink);color:var(--bg)}.section-head{display:flex;align-items:start;justify-content:space-between;gap:20px;margin-bottom:21px}.section-head p{color:var(--muted);margin-top:5px}.legend{display:flex;gap:14px;align-items:center;color:var(--muted);font-size:12px;flex-wrap:wrap}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:var(--accent)}.legend .new{background:var(--amber)}.architecture{background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:25px}.lane-label{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--muted);margin-bottom:15px}.flow{display:grid;grid-template-columns:1fr 20px 1fr 20px 1fr 20px 1fr 20px 1fr;align-items:stretch;gap:7px}.node{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:18px 11px;text-align:left;min-width:0}.node[aria-pressed=true]{border-color:var(--accent);background:var(--soft);box-shadow:inset 0 0 0 1px var(--accent)}.node .number{font:11px var(--mono);color:var(--muted)}.node strong{display:block;font-size:16px;margin-top:8px}.node small{display:block;color:var(--muted);margin:5px 0 12px;font-size:12px}.node .badge{font-size:11px;padding:2px 6px}.arrow{display:grid;place-items:center;color:var(--muted);font-size:18px}.feedback{margin:14px 0 0;padding:10px 13px;background:var(--bg);border-radius:7px;color:var(--muted);font-size:13px;text-align:center}.boundary{margin-top:17px;padding-top:17px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--muted)}.boundary b{color:var(--ink)}.detail{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:24px}.detail p{color:var(--muted);margin-top:8px}.file-list{margin-top:12px;display:flex;flex-direction:column;gap:5px}.file-list a{font:12px/1.7 var(--mono);overflow-wrap:anywhere}.thin{border:0;border-top:1px solid var(--line);margin:27px 0}.micro-title{font-size:13px;color:var(--muted);margin-bottom:9px}.scenario{display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start}.scenario select{width:100%;margin-top:8px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}.scenario .explain{color:var(--muted);font-size:13px;margin-top:8px}.trace{display:grid;gap:9px}.trace-row{display:grid;grid-template-columns:18px 1fr;gap:9px}.dot{width:9px;height:9px;margin-top:8px;border-radius:50%;background:var(--accent)}.trace-row small{display:block;color:var(--muted);font-size:12px}.trace-row.unknown .dot{background:var(--amber)}.trace-row.failed .dot{background:var(--danger)}.trace-result{margin-top:12px;padding:12px 15px;background:var(--soft);border-radius:8px;font-size:13px}.trace-result.unknown{background:var(--amber-soft)}.trace-result.failed{background:var(--danger-soft)}.sample-note{font-size:12px;color:var(--muted);margin-top:9px}.phases{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.phase{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:21px 17px;position:relative}.phase .step{font:11px var(--mono);color:var(--accent)}.phase h3{margin-top:9px}.phase .effort{font-size:12px;color:var(--muted);margin:5px 0 15px}.phase p{font-size:13px;color:var(--muted)}.phase .deliverable{color:var(--ink);padding-top:15px;margin-top:15px;border-top:1px solid var(--line);font-size:13px}.phase .gate{margin-top:12px;font-size:12px;color:var(--accent)}.note{font-size:13px;color:var(--muted);margin-top:15px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:25px;margin-top:28px}.block{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px}.block p{margin-top:8px;color:var(--muted);font-size:13px}.block ul{font-size:13px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}th{font-weight:500;color:var(--muted);padding:13px 12px;border-bottom:1px solid var(--line)}td{padding:16px 12px;border-bottom:1px solid var(--line);vertical-align:top}th:first-child,td:first-child{padding-left:0}th:last-child,td:last-child{padding-right:0}td small{display:block;color:var(--muted);font-size:12px;margin-top:5px}.table-wrap table{min-width:530px}.audit-item{margin-top:13px;padding-top:13px;border-top:1px solid var(--line)}.audit-item b{font-size:13px}.audit-item p{margin-top:4px}.check-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.check{border-left:2px solid var(--accent);padding:4px 0 4px 17px}.check p{color:var(--muted);font-size:13px;margin-top:4px}.check .number{font:11px var(--mono);color:var(--muted)}.measure{margin-top:26px;padding:19px 22px;background:var(--soft);border-radius:10px}.measure h3{font-size:16px}.measure p{color:var(--muted);font-size:13px;margin-top:8px}.directions{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.direction{background:var(--surface);padding:20px;border:1px solid var(--line);border-radius:12px}.direction h3{margin:9px 0}.direction p{color:var(--muted);font-size:13px}.direction a{font-size:12px;display:inline-block;margin-top:12px}.sources{margin-top:28px}.sources summary{cursor:pointer;color:var(--muted);font-size:13px;padding:10px 0}.source-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;margin-top:10px;font-size:12px}.source-grid a{overflow-wrap:anywhere}.source-grid small{display:block;color:var(--muted)}.footer{display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:30px;padding-top:16px;color:var(--muted);font-size:12px}.subsection{margin-top:28px}.subsection>h3{margin-bottom:12px}.contract{margin-top:14px}.contract summary{font-size:13px;cursor:pointer;padding:12px 0;color:var(--accent)}.contract .note{margin:8px 0 12px}.callout{padding:17px 20px;border-left:3px solid var(--accent);background:var(--soft);margin-top:24px;font-size:14px}.callout p{color:var(--muted);font-size:13px;margin-top:5px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+    @media(max-width:900px){.wrap{padding:23px}.hero{grid-template-columns:1fr;gap:23px;padding-top:30px}.choice{max-width:750px}.phases{grid-template-columns:1fr 1fr}.directions{grid-template-columns:1fr 1fr}.flow{grid-template-columns:1fr 14px 1fr 14px 1fr 14px 1fr 14px 1fr;gap:3px}.node{padding:14px 7px}.node strong{font-size:14px}.node small{font-size:11px}.node .badge{font-size:10px}}
+    @media(max-width:620px){.wrap{padding:18px 16px 30px}.meta{font-size:11px}.hero{padding-top:28px}.lead{font-size:14px}.summary{grid-template-columns:1fr}.summary>div,.summary>div:first-child{padding:13px 0}.summary>div+div{border-left:0;border-top:1px solid var(--line)}.summary b{font-size:16px}.summary span{font-size:12px}.tabs{gap:3px}.tab{padding:9px 12px;font-size:13px}.section-head{flex-direction:column;gap:10px}.architecture{padding:18px 14px}.lane-label{flex-direction:column;gap:4px}.flow{grid-template-columns:1fr}.node{padding:11px 15px;display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:4px 9px}.node strong{font-size:15px;margin:0}.node small{grid-column:2;grid-row:2;font-size:12px;margin:0}.node .badge{grid-column:3;grid-row:1/3;font-size:11px}.node .number{grid-row:1/3}.arrow{height:16px;font-size:0}.arrow:after{content:'↓';font-size:16px}.detail,.pair,.scenario,.check-grid,.directions,.source-grid{grid-template-columns:1fr}.phases{grid-template-columns:1fr}.feedback{text-align:left}.trace{margin-top:2px}.node[aria-pressed=true]{box-shadow:inset 0 0 0 1px var(--accent)}.top{align-items:start}.brand{font-size:14px}.logo{width:30px;height:30px}.check-grid{gap:22px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body{background:#fff;color:#111}.wrap{max-width:none;padding:0}.tabs,.scenario,.footer a{display:none}[role=tabpanel][hidden]{display:block!important}[role=tabpanel]{break-before:page}.hero,.summary{break-inside:avoid}.flow{grid-template-columns:repeat(5,1fr)}.arrow{display:none}.phase,.block,.direction{break-inside:avoid}.sources details{display:block}a{color:#222}button{background:#fff;color:#111}.detail{display:block}}
+  </style>
+</head>
+<body>
+<main class="wrap" id="vcli-plan">
+  <header class="top">
+    <div class="brand"><span class="logo" aria-hidden="true">V/</span><span>VCLI / 演进方案</span></div>
+    <div class="meta">代码对照 · 2026.10.04<br>方案文档 · 尚未实现</div>
+  </header>
+  <section class="hero" aria-labelledby="page-title">
+    <div><div class="eyebrow">Evidence first · Minimal change</div><h1 id="page-title">让每次人工修正，<br>成为下一次的可靠经验。</h1><p class="lead">复用已有 Runner、Experience 和校准机制。补齐干预记录，离线产出候选规则，再用证据决定是否采纳。</p></div>
+    <aside class="choice"><span class="badge">当前推荐</span><h3 style="margin-top:10px">Python 先行，Rust 保持窄职责</h3><p>先完成已有 GUI / Runner 路径的闭环；通用 hook、Jev 和分支自调优，按真实缺口再扩展。</p></aside>
+  </section>
+  <div class="summary" aria-label="方案范围">
+    <div><b>3 个核心交付</b><span>事件契约与干预记录 / 候选挖掘 / 证据评审</span></div>
+    <div><b>复用已有存储与运行层</b><span>JSONL + SQLite + RSI 报告 + Verifier</span></div>
+    <div><b>人工决定规则生效</b><span>候选报告 → 回归验证 → 代码评审 → 可回滚发布</span></div>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="方案视图">
+    <button type="button" class="tab" id="tab-architecture" role="tab" aria-controls="panel-architecture" aria-selected="true">整体架构</button>
+    <button type="button" class="tab" id="tab-delivery" role="tab" aria-controls="panel-delivery" aria-selected="false" tabindex="-1">如何落地</button>
+    <button type="button" class="tab" id="tab-acceptance" role="tab" aria-controls="panel-acceptance" aria-selected="false" tabindex="-1">如何验收</button>
+    <button type="button" class="tab" id="tab-directions" role="tab" aria-controls="panel-directions" aria-selected="false" tabindex="-1">六个方向取舍</button>
+  </nav>
+
+  <section id="panel-architecture" role="tabpanel" aria-labelledby="tab-architecture">
+    <div class="section-head"><div><h2>一条主线，两个节奏</h2><p>运行时负责可靠执行；任务结束后分析证据。点选节点查看对应代码与最小增量。</p></div><div class="legend"><span><i></i>已有机制</span><span><i class="new"></i>拟新增</span></div></div>
+    <div class="architecture">
+      <div class="lane-label"><span>快环 / 实际任务 → 执行 → 验证 → 记录</span><span>慢环 / 离线分析 → 人工评审 → 验证采纳</span></div>
+      <div class="flow" aria-label="五步架构">
+        <button class="node" type="button" data-node="execute" aria-pressed="true"><span class="number">01</span><strong>执行与验证</strong><small>Runner / VCLI</small><span class="badge">已有</span></button><span class="arrow" aria-hidden="true">→</span>
+        <button class="node" type="button" data-node="record" aria-pressed="false"><span class="number">02</span><strong>证据与干预</strong><small>Trace / Experience</small><span class="badge proposed">补字段</span></button><span class="arrow" aria-hidden="true">→</span>
+        <button class="node" type="button" data-node="mine" aria-pressed="false"><span class="number">03</span><strong>挖掘候选</strong><small>离线 / 确定性</small><span class="badge proposed">新增脚本</span></button><span class="arrow" aria-hidden="true">→</span>
+        <button class="node" type="button" data-node="review" aria-pressed="false"><span class="number">04</span><strong>证据评审</strong><small>RSI / 人工确认</small><span class="badge proposed">扩展报告</span></button><span class="arrow" aria-hidden="true">→</span>
+        <button class="node" type="button" data-node="reuse" aria-pressed="false"><span class="number">05</span><strong>复用经验</strong><small>检索 / 受控采纳</small><span class="badge">已有＋改进</span></button>
+      </div>
+      <div class="feedback">已采纳的经验 → 下一次任务的建议 → 当前状态重查 → 独立 Verifier 确认</div>
+      <div class="boundary"><b>执行边界</b><span>候选、记忆与模型评分只提供建议；权限、风险、验收条件和非幂等操作重试规则由确定性策略约束。</span></div>
+    </div>
+    <div class="detail" id="node-detail" aria-live="polite">
+      <div><div class="micro-title" id="node-label">01 / 已有机制</div><h3 id="node-title">执行与验证</h3><p id="node-current">Runner 已连接 Router、Executor、Verifier、Recovery，并将产物编译写入 Experience。Rust 提供固定语义的命令、传输和作业事件。</p><div class="file-list" id="node-files"><a href="../.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py">vgui_runner/engine.py</a><a href="../src/streaming/mod.rs">src/streaming/mod.rs</a></div></div>
+      <div><div class="micro-title">最小增量</div><h3 id="node-change-title">复用实际语义边界</h3><p id="node-change">MVP 直接使用已有 Runner trace；先覆盖窗口 / cellview 工作流。后续发现仿真路径缺口，再为 Spectre 或 Maestro 加 adapter，不先建设通用事件总线。</p><p id="node-gate"><strong>验收：</strong>新增观察不发起设计修改，不增加 SSH 探测；记录失败可诊断，且不被当作任务成功证据。</p></div>
+    </div>
+    <details class="contract"><summary>展开最小事件契约（拟议接口，非现有 API）</summary><p class="note">沿用 run / task / step / attempt 标识。主 trace 的 seq 引用保持稳定；人工干预使用独立 event_id，并显式引用原 run。缺字段就显示“证据不足”。</p><pre><code>{
+  "schema_version": 1,
+  "event_id": "unique-event-id",
+  "run_id": "original-run-id",
+  "step_id": "original-step-id",
+  "event_type": "manual_intervention",
+  "value_source": "OBSERVED",
+  "verification_status": "UNKNOWN",
+  "context": {"target": "library/cell/view", "tool_version": "...", "scenario_version": "..."},
+  "details": {"reason": "...", "action": "...", "source": "human", "supersedes": null},
+  "evidence_refs": ["before-evidence-ref", "after-evidence-ref"],
+  "followup_run_id": "separate-verification-run-id"
+}</code></pre><p class="note">人工陈述属于 OBSERVED；只有独立验证才标为 VERIFIER_CONFIRMED。details 保留 context，不存完整 PDK / 原始环境；证据文件由 manifest 索引与哈希确认。</p></details>
+    <hr class="thin">
+    <div class="scenario">
+      <div><h3>一次修正，怎样进入经验？</h3><label for="scenario-select" class="micro-title" style="display:block;margin:10px 0 0">选择验证结果</label><select id="scenario-select"><option value="passed">人工修正后，独立验证通过</option><option value="unknown">人工修正后，验证不可用</option><option value="failed">人工修正后，独立验证失败</option></select><p class="explain">示例：窗口身份不明确，人工选择目标窗口。修正原因、证据和后续 run 相互关联。</p><p class="sample-note">交互演示使用示意事件，不代表生产统计；页面不连接 Virtuoso、不写入经验库。</p></div>
+      <div aria-live="polite"><div class="trace" id="scenario-trace"><div class="trace-row"><span class="dot"></span><div>记录原始阻塞<small>run / step / 窗口身份检查证据</small></div></div><div class="trace-row"><span class="dot"></span><div>记录人工干预<small>原因、动作、前后证据与 followup_run_id</small></div></div><div class="trace-row"><span class="dot"></span><div>独立 Verifier：PASSED<small>目标身份与操作后置条件确认</small></div></div></div><div class="trace-result" id="scenario-result">进入 GOLD 经验；仍需重复证据与反例检查，才能形成可评审的规则候选。</div></div>
+    </div>
+  </section>
+
+  <section id="panel-delivery" role="tabpanel" aria-labelledby="tab-delivery" hidden>
+    <div class="section-head"><div><h2>先打通已有路径，再扩覆盖</h2><p>四个串行关口，前一步交付可用后再进入下一步。Rust / 仿真工作流扩展放在真实缺口之后。</p></div><span class="badge proposed">投入估算：3–6 人日</span></div>
+    <div class="phases">
+      <article class="phase"><span class="step">P0 / 数据可信</span><h3>核对现有契约</h3><div class="effort">0.5–1 人日 · 数据审计</div><p>检查真值归属、通道过滤、写入错误和证据引用。已有数据库升级路径必须显式。</p><div class="deliverable"><strong>交付</strong><br>只读审计摘要＋最小修正建议</div><div class="gate">关口：可信样本与观察样本可区分</div></article>
+      <article class="phase"><span class="step">P1 / 记录完整</span><h3>补齐人工干预</h3><div class="effort">1–2 人日 · 核心交付 ①</div><p>统一 trace 标识；提供干预登记入口。关联原 run、原因、证据和后续验证，不重写旧记录。</p><div class="deliverable"><strong>交付</strong><br>事件契约＋可追溯干预记录</div><div class="gate">关口：原阻塞 → 修正 → 验证可回查</div></article>
+      <article class="phase"><span class="step">P2 / 候选可查</span><h3>离线挖掘规则</h3><div class="effort">1–2 人日 · 核心交付 ②</div><p>按条件、阻塞与干预模式分组，按独立 run 去重。统计支持、失败、未知和对照；不把相关性写成因果。</p><div class="deliverable"><strong>交付</strong><br>版本化 candidate JSON＋确定性报告</div><div class="gate">关口：同一快照产出相同候选</div></article>
+      <article class="phase"><span class="step">P3 / 评审可用</span><h3>展示证据与采纳</h3><div class="effort">0.5–1 人日 · 核心交付 ③</div><p>扩展已有 RSI 报告：候选、适用范围、证据链与反例。人工批准后，通过回归和代码评审采纳。</p><div class="deliverable"><strong>交付</strong><br>候选评审视图＋人工采纳流程</div><div class="gate">关口：能解释、能拒绝、能撤销</div></article>
+    </div>
+    <p class="note">估算基于单人、已有可用环境与现有数据；包含本地验证，不含生产仿真排障和采集周期。没有足够实际案例时停留在记录与分析阶段，不为凑样本执行生产操作。</p>
+    <div class="pair">
+      <article class="block"><h3>代码落点与改动范围</h3><div class="audit-item"><b>记录 / 已有文件</b><p><code>engine.py → experience.py</code><br>复用 event_type、details、evidence_refs；先用 details 存上下文，必要的索引字段再明确迁移。</p></div><div class="audit-item"><b>分析 / 拟新增文件</b><p><code>scripts/record_intervention.py</code><br><code>scripts/mine_candidates.py</code><br>前者写人工记录，后者只读关闭连接后的快照；输出报告，不写生产 Policy。</p></div><div class="audit-item"><b>呈现 / 已有文件</b><p><code>scripts/generate_report.py</code><br>在已有 Experience 报告旁增加 Candidates；评审结果存单独文件，不修改原证据。</p></div></article>
+      <article class="block"><h3>P0 已发现的核对点</h3><div class="audit-item"><b>路由拒绝与执行真值要区分</b><p><code>experience.py</code> 将 rejected 的路由标为 VERIFIER_CONFIRMED。审计与校准需排除这种策略判断，避免混入动作成功概率。</p></div><div class="audit-item"><b>通道过滤字段需要对齐</b><p><code>experience_retrieval.py</code> 对 case 查询使用 <code>channel</code>；当前 case DDL 未声明此列。需核对生产迁移或按 event_refs 关联事件。</p></div><div class="audit-item"><b>静默失败不能当作记录完整</b><p>经验写入存在吞掉异常的路径。补齐诊断与记录完整性标识；不完整 run 进入观察池，排除候选支持与经验校准。</p></div></article>
+    </div>
+    <div class="subsection"><h3>五类语义事件的覆盖顺序</h3><div class="table-wrap"><table><thead><tr><th>场景</th><th>实际观测位置</th><th>首期处理</th></tr></thead><tbody><tr><td>窗口 / cellview 打开</td><td>Runner 工作流与 cellview 命令</td><td>先覆盖；请求返回与目标身份确认分开</td></tr><tr><td>网表生成</td><td>网表工作流 / 命令边界</td><td>有实际缺口再加 adapter；产物存在与有效性独立检查</td></tr><tr><td>Spectre 起跑</td><td>现有 JobEvent / runner</td><td>复用作业事件；区分启动、完成、结果验收</td></tr><tr><td>Maestro 回放 / 运行</td><td>Maestro 编排入口</td><td>关联 session / history / job；未知结果不重复提交</td></tr><tr><td>版图修改</td><td>明确的修改命令＋数据库后置检查</td><td>延后；bridge 不天然覆盖用户 GUI 手工操作</td></tr></tbody></table></div></div>
+  </section>
+
+  <section id="panel-acceptance" role="tabpanel" aria-labelledby="tab-acceptance" hidden>
+    <div class="section-head"><div><h2>用证据验收，不用功能数量验收</h2><p>先证明闭环可信、建议相关、执行行为稳定，再讨论自动化程度。</p></div><span class="badge">固定验收条件</span></div>
+    <div class="check-grid">
+      <article class="check"><span class="number">01 / 证据链</span><h3>每条候选都能回到原事件</h3><p>run、step、干预、followup run、Verifier 与 manifest 可关联；丢失证据明确标记，不能晋升为可信支持。</p></article>
+      <article class="check"><span class="number">02 / 统计口径</span><h3>已验证与未知分开计数</h3><p>按独立 run / 干预 episode 去重；展示“通过 / 已验证”“未知 / 总尝试”。路由拒绝不是动作验证，未知不是失败。</p></article>
+      <article class="check"><span class="number">03 / 执行隔离</span><h3>observer 不改变任务行为</h3><p>禁用或启用记录时，任务命令、权限、重试与返回结果保持一致；不增加 SSH 调用，不在执行线程调用模型或挖掘脚本。</p></article>
+      <article class="check"><span class="number">04 / 候选确定性</span><h3>同一数据得到同一结论</h3><p>快照 hash、schema / miner 版本、参数与稳定排序留档。候选门槛属于报告配置，不控制 Runtime。</p></article>
+      <article class="check"><span class="number">05 / 建议相关性</span><h3>保留正例、反例与 NO_MATCH</h3><p>匹配工具 / scenario / 目标类型等适用条件。旧版本、条件不符和未知记录不被自动推荐；当前环境仍由实时探测确认。</p></article>
+      <article class="check"><span class="number">06 / 受控生效</span><h3>采纳不等于自动执行</h3><p>人工选择候选后，补代表性回归、独立评估和代码评审。保留原版本与采纳记录；撤销后恢复原建议或规则。</p></article>
+    </div>
+    <div class="measure"><h3>真实收益：重复干预率下降，误建议率不升</h3><p>先记录基线，再在相同条件的保留案例上对比：需要重复人工修正的 run / 可比 run；不适用建议 / 人工评审建议；实际任务完成与耗时作为辅助指标。没有基线就不填收益百分比。</p></div>
+    <div class="pair">
+      <article class="block"><h3>验证方式</h3><ul><li>契约、去重、过滤、证据缺失与确定排序：离线 fixture 验证。</li><li>记录开关前后：fake executor 对比命令与结果。</li><li>按时间 / 任务分离开发集与保留集；不在搜索案例上宣称泛化收益。</li><li>最终验收使用自然产生的真实任务；保留样本不足时报告不确定性。</li></ul></article>
+      <article class="block"><h3>项目检查要求</h3><p>Rust：<code>cargo test</code>、<code>cargo clippy -- -D warnings</code>、<code>cargo fmt --check</code>。</p><p>未来 skill 实现：GUI skill unittest＋<code>.github/scripts/run-skill-tests.sh</code>。兼容性覆盖 Python 3.9 / 3.13。</p><p>本轮交付仅为方案 HTML；这些实现验收项尚未执行上线。人工评审和页面演示不会触发命令执行。</p></article>
+    </div>
+    <p class="note">本轮文档检查：HTML 结构、21 个唯一 ID、本地引用与 JavaScript 交互逻辑通过。浏览器布局因本地 URL 策略未验证。工作区现有 Clippy / 格式问题未修改；全量测试在两个 macOS 进程测试停滞后中止，未确认通过。</p>
+    <details class="contract"><summary>候选报告应保留什么？</summary><pre><code>candidate_id / schema_version / miner_version / snapshot_hash
+适用条件：目标类型、工具版本、scenario 版本、通道、阻塞签名
+建议类型：检索别名 / 检查前置条件 / 操作流程 / Verifier 候选
+统计口径：独立 run 数、验证通过数、验证失败数、未知数
+证据：支持案例、反例、原事件引用、验证产物引用
+评审：pending / accepted / rejected，理由、评审人、时间
+采纳：对应回归、独立评估、代码版本、撤销路径</code></pre><p class="note">门槛由真实分布和评审能力确定；少样本候选可以展示，但不承诺有效，也不自动生效。Verifier 候选的采纳必须保持既定规格与真值来源。</p></details>
+  </section>
+
+  <section id="panel-directions" role="tabpanel" aria-labelledby="tab-directions" hidden>
+    <div class="section-head"><div><h2>六个方向，收敛成一个实施闭环</h2><p>原始材料提供机制参考；以下优先级来自 VCLI 当前代码与实施成本判断。</p></div></div>
+    <div class="directions">
+      <article class="direction"><span class="badge">纳入首期</span><h3>01 / Mods → 事件契约</h3><p>借鉴 typed events 与明确的扩展边界。先将已有 trace 标准化；新增 observer 只有读取权限。跨工作流 adapter 按实际覆盖缺口增加。</p><a href="https://github.com/anthropics/claude-code/tree/main/mods" target="_blank" rel="noopener noreferrer">官方 mods 源码 ↗</a></article>
+      <article class="direction"><span class="badge">核心价值</span><h3>02 / 日志 → 规则候选</h3><p>补人工干预、原因与后续验证，离线归纳重复模式。复用 Experience 和 RSI；首期使用确定性分组，模型只在难归类证据出现后评估。</p><a href="evolution_playbook.md">VCLI 演进约定 ↗</a></article>
+      <article class="direction"><span class="badge proposed">收益触发后</span><h3>03 / Jev → 决策辅助</h3><p>保留现有模型选型；先验证 FTS＋metadata 与经验校准的效果。记录真实误命中后，才做 Jev rerank 对照。服务超时或无匹配时回到现有策略。</p><a href="https://github.com/NicolasMontone/jev-memory" target="_blank" rel="noopener noreferrer">长期记忆结构参考 ↗</a></article>
+      <article class="direction"><span class="badge">纳入 P0</span><h3>04 / 七件套 → 边界审计</h3><p>检查循环、模型、工具、记忆、安全、编排、扩展的责任归属。审计 VCLI＋Python＋上层 Agent；允许外部承担模型与规划职责。</p><a href="https://arxiv.org/html/2609.00006v1" target="_blank" rel="noopener noreferrer">Wavestone 论文原文 ↗</a></article>
+      <article class="direction"><span class="badge deferred">研究储备</span><h3>05 / 分支搜索 → 独立评估</h3><p>借鉴多分支候选与保留集评估。当前先保存参数、版本和证据；有成熟候选与足够样本后再搜索。电路规格、权限和必需验证保持固定。</p><a href="https://arxiv.org/html/2609.37834v1" target="_blank" rel="noopener noreferrer">Meta / Duke 论文原文 ↗</a></article>
+      <article class="direction"><span class="badge deferred">交付原则</span><h3>06 / Skills → 可用包</h3><p>已有 skill 成为交付单位：依赖、版本、能力检查和回归案例随包提供。EDA 环境由现场配置；包装成熟工作流时再推进分发机制。</p><a href="../.agents/skills/">现有 VCLI skills 目录 ↗</a></article>
+    </div>
+    <div class="callout"><strong>为什么当前推荐这一版？</strong><p>已有执行、存储、检索与校准可复用；新增工作集中在缺失的干预证据和候选评审。每一阶段都有独立可用的交付，后续模型和平台扩展由真实问题触发。</p></div>
+    <div class="subsection"><h3>未来能力的启动条件</h3><div class="table-wrap"><table><thead><tr><th>能力</th><th>需要看到的证据</th><th>最小下一步</th></tr></thead><tbody><tr><td>Jev 选择 / 记忆门控</td><td>检索误命中或漏召回反复发生</td><td>保留集上比较现有检索与 rerank；只返回建议</td></tr><tr><td>Rust 语义 hooks</td><td>Runner 外的仿真 / 命令路径存在记录缺口</td><td>在真实命令边界加 adapter；保留原始作业语义</td></tr><tr><td>分支自调优</td><td>成熟候选足够多，人工参数选择成为瓶颈</td><td>先离线搜索检索参数；独立评估且固定验收</td></tr><tr><td>技能分发 / 打包</td><td>稳定工作流跨环境安装反复失败</td><td>版本约束与环境自检；先验证包的可用性</td></tr></tbody></table></div></div>
+  </section>
+
+  <details class="sources"><summary>代码依据与参考资料 · 已有 / 拟议严格区分</summary><div class="source-grid">
+    <div><a href="../src/history.rs">src/history.rs</a><small>命令与 SKILL JSONL 记录；输出有截断，不能充当完整证据。</small></div>
+    <div><a href="../src/streaming/mod.rs">src/streaming/mod.rs</a><small>作业生命周期事件与 sink 抽象；不假设所有 sink 实现都可直接复用。</small></div>
+    <div><a href="../.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py">vgui_runner/engine.py</a><small>执行、验证、人工接管与 Experience 写回连接。</small></div>
+    <div><a href="../.claude/skills/virtuoso-gui-debug/vgui_runner/experience.py">vgui_runner/experience.py</a><small>事件 / case schema、来源分类与经验编译。</small></div>
+    <div><a href="../.claude/skills/virtuoso-gui-debug/vgui_runner/experience_retrieval.py">vgui_runner/experience_retrieval.py</a><small>FTS 加权、结构化过滤、GOLD / NEGATIVE 分池。</small></div>
+    <div><a href="../.claude/skills/virtuoso-gui-debug/vgui_runner/empirical_calibration.py">vgui_runner/empirical_calibration.py</a><small>已实现分层经验校准、平滑、样本门槛与区间。</small></div>
+    <div><a href="../.claude/skills/virtuoso-gui-debug/scripts/generate_report.py">scripts/generate_report.py</a><small>已有 RSI Experience 报告；Candidates 为拟议扩展。</small></div>
+    <div><a href="evolution_playbook.md">docs/evolution_playbook.md</a><small>实际任务驱动、候选评审、回归与受控采纳原则。</small></div>
+    <div><a href="https://github.com/anthropics/claude-code/tree/main/mods" target="_blank" rel="noopener noreferrer">Anthropic / Mods</a><small>事件与函数 hook 结构参考；不直接复制其运行时。</small></div>
+    <div><a href="https://github.com/NicolasMontone/jev-memory" target="_blank" rel="noopener noreferrer">jev-memory</a><small>写入 / 检索 / 淘汰门控参考；不等同于 cc-mod-jev 上下文裁剪。</small></div>
+    <div><a href="https://arxiv.org/html/2609.00006v1" target="_blank" rel="noopener noreferrer">Harness Engineering / Wavestone</a><small>七个子系统的职责划分；不要求全部内置于 VCLI。</small></div>
+    <div><a href="https://arxiv.org/html/2609.37834v1" target="_blank" rel="noopener noreferrer">Mixture of Self-Improving Branches</a><small>分支搜索与部署路由；不直接证明 Verifier 阈值自调有效。</small></div>
+  </div></details>
+  <footer class="footer"><span>本地独立 HTML · 无第三方脚本依赖 · 交互仅用于方案演示</span><span>代码状态基于当前工作区 · 工期与收益均为待验证判断</span></footer>
+</main>
+<script>
+(() => {
+  'use strict';
+  const root = document.getElementById('vcli-plan');
+  const tabs = Array.from(root.querySelectorAll('[role="tab"]'));
+  function activateTab(tab, moveFocus = false) {
+    tabs.forEach(item => {
+      const selected = item === tab;
+      item.setAttribute('aria-selected', String(selected));
+      item.tabIndex = selected ? 0 : -1;
+      document.getElementById(item.getAttribute('aria-controls')).hidden = !selected;
+    });
+    if (moveFocus) tab.focus();
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => activateTab(tab));
+    tab.addEventListener('keydown', event => {
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+      if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = tabs.length - 1;
+      if (next !== undefined) { event.preventDefault(); activateTab(tabs[next], true); }
+    });
+  });
+  const nodes = {
+    execute: {label:'01 / 已有机制',title:'执行与验证',current:'Runner 已连接 Router、Executor、Verifier、Recovery，并将产物编译写入 Experience。Rust 提供固定语义的命令、传输和作业事件。',changeTitle:'复用实际语义边界',change:'MVP 直接使用已有 Runner trace；先覆盖窗口 / cellview 工作流。后续发现仿真路径缺口，再为 Spectre 或 Maestro 加 adapter，不先建设通用事件总线。',gate:'新增观察不发起设计修改，不增加 SSH 探测；记录失败可诊断，且不被当作任务成功证据。',files:[['../.claude/skills/virtuoso-gui-debug/vgui_runner/engine.py','vgui_runner/engine.py'],['../src/streaming/mod.rs','src/streaming/mod.rs']]},
+    record: {label:'02 / 已有存储＋拟新增干预',title:'证据与人工干预',current:'Experience 已有 run、step、attempt、value_source、details 与 evidence_refs。Runner 已记录 manual_required；缺的是人工后续做了什么，以及对应独立验证。',changeTitle:'补一个可回查的 intervention',change:'沿用现有事件结构；关联原因、动作、上下文与 followup_run_id。手工操作由登记入口记录，不推断未观测的 GUI 行为；上下文先放 details。',gate:'干预前后证据通过 manifest 引用可查。人工“成功”陈述仍属 OBSERVED，独立 Verifier 才能确认结果。',files:[['../.claude/skills/virtuoso-gui-debug/vgui_runner/experience.py','vgui_runner/experience.py'],['../src/history.rs','src/history.rs']]},
+    mine: {label:'03 / 拟新增离线能力',title:'离线挖掘候选',current:'现有 RSI 有 snippet 频次与序列建议，但这不等同于有条件、有反例、有验证来源的 Policy 候选。经验库已经提供原材料。',changeTitle:'确定性分组，先找重复干预',change:'新脚本只读一致快照，按上下文、阻塞与干预动作分组。按独立 run 去重，保留支持 / 反例 / 未知；对缺失上下文的旧记录只出调查项。',gate:'输出带版本的 candidate JSON。同一快照、配置与 miner 版本结果一致；没有支持证据就不生成有效性结论。',files:[['../.claude/skills/virtuoso-gui-debug/scripts/rsi.py','scripts/rsi.py / snippet suggest'],['../.claude/skills/virtuoso-gui-debug/vgui_runner/experience.py','vgui_runner/experience.py / 数据来源']]},
+    review: {label:'04 / 拟扩展既有报告',title:'证据评审与人工采纳',current:'RSI 报告已经有 Experience。最小方案是在其旁边展示候选及证据，不建设新的控制台或生产 Policy 管理器。',changeTitle:'人工确认具体、可验证的改进',change:'每条候选显示适用条件、独立 run 数、失败与未知、证据和反例。评审结果单独保存；采纳需回归、保留案例评估与代码评审。',gate:'从候选到证据能够逐级回查；拒绝理由保留。点击评审不会修改风险、权限、Verifier 或 Runtime。',files:[['../.claude/skills/virtuoso-gui-debug/scripts/generate_report.py','scripts/generate_report.py'],['evolution_playbook.md','docs/evolution_playbook.md']]},
+    reuse: {label:'05 / 已有检索＋收益驱动增强',title:'下一次任务复用经验',current:'已有 GOLD / NEGATIVE 检索、FTS 加权和经验校准。校准已包含样本量门槛、平滑与置信区间，应先复用并核对数据口径。',changeTitle:'先提高相关性，再评估 Jev',change:'先对齐通道与上下文过滤，记录 query / expected / top-5 的误命中。只有重复检索问题出现，才把 Jev 作为 rerank 对照；模型失败回到现有策略。',gate:'经验仅是建议，目标身份与状态重新探测。未知记录不自动推荐；模型评分不能覆盖权限或验收条件。',files:[['../.claude/skills/virtuoso-gui-debug/vgui_runner/experience_retrieval.py','vgui_runner/experience_retrieval.py'],['../.claude/skills/virtuoso-gui-debug/vgui_runner/empirical_calibration.py','vgui_runner/empirical_calibration.py']]}
+  };
+  root.querySelectorAll('[data-node]').forEach(button => button.addEventListener('click', () => {
+    const data = nodes[button.dataset.node];
+    root.querySelectorAll('[data-node]').forEach(node => node.setAttribute('aria-pressed', String(node === button)));
+    ['label','title','current','changeTitle','change'].forEach(key => {
+      const ids = {label:'node-label',title:'node-title',current:'node-current',changeTitle:'node-change-title',change:'node-change'};
+      root.querySelector('#' + ids[key]).textContent = data[key];
+    });
+    const gate = root.querySelector('#node-gate');
+    gate.replaceChildren();
+    const strong = document.createElement('strong'); strong.textContent = '验收：';
+    gate.append(strong, document.createTextNode(data.gate));
+    const files = root.querySelector('#node-files'); files.replaceChildren();
+    data.files.forEach(([href,label]) => { const a = document.createElement('a'); a.href = href; a.textContent = label; files.append(a); });
+  }));
+  const scenarios = {
+    passed:{status:'PASSED',description:'目标身份与操作后置条件确认',result:'进入 GOLD 经验；仍需重复证据与反例检查，才能形成可评审的规则候选。',className:''},
+    unknown:{status:'UNAVAILABLE → UNKNOWN',description:'无法独立确认最终结果；保留人工陈述与原证据',result:'进入观察池；不计入已验证成功 / 失败，不自动推荐、不据此重试。',className:'unknown'},
+    failed:{status:'FAILED',description:'独立验证确认后置条件未满足',result:'进入 NEGATIVE 经验；保留失败条件，防止再次推荐同一修正。失败不代表自动尝试另一动作。',className:'failed'}
+  };
+  root.querySelector('#scenario-select').addEventListener('change', event => {
+    const scenario = scenarios[event.target.value];
+    const trace = root.querySelector('#scenario-trace');
+    const row = trace.lastElementChild;
+    row.className = 'trace-row ' + scenario.className;
+    const content = row.lastElementChild;
+    content.replaceChildren(document.createTextNode('独立 Verifier：' + scenario.status));
+    const small = document.createElement('small'); small.textContent = scenario.description; content.append(small);
+    const result = root.querySelector('#scenario-result');
+    result.className = 'trace-result ' + scenario.className; result.textContent = scenario.result;
+  });
+})();
+</script>
+</body>
+</html>
