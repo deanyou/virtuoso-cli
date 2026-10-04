@@ -6,6 +6,7 @@ Usage:
     record_intervention.py record <run_id> <step_id> --reason <reason> --action <action>
     record_intervention.py list [--run-id <run_id>]
     record_intervention.py verify <intervention_id>
+    record_intervention.py trace <intervention_id>
 
 This module records human corrections that happen during GUI automation.
 Interventions are stored in the experience DB with provenance tracking.
@@ -16,31 +17,44 @@ https://github.com/deanyou/virtuoso-cli/blob/main/docs/vcli-evidence-loop-plan.h
 
 import argparse
 import json
-import sqlite3
+import os
 import sys
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# ── Schema Extensions for Interventions ─────────────────────────────────────
+# ── Add skill directory to Python path for imports ─────────────────────────────
+_SCRIPT_DIR = Path(__file__).parent.resolve()
+_SKILL_ROOT = _SCRIPT_DIR.parent.parent.parent  # scripts/evidence → vgui_runner → virtuoso-gui-debug
+if _SCRIPT_DIR.name == "evidence":  # Running from scripts/evidence/
+    _VGUIDIR = _SKILL_ROOT / "vgui_runner"
+else:  # Running from vgui_runner/
+    _VGUIDIR = _SCRIPT_DIR
+
+if str(_VGUIDIR) not in sys.path:
+    sys.path.insert(0, str(_VGUIDIR))
+
+
+# ── Schema Extensions for Interventions ────────────────────────────────────────
 
 INTERVENTION_SCHEMA = """
 CREATE TABLE IF NOT EXISTS interventions (
-    intervention_id  TEXT PRIMARY KEY,
-    run_id           TEXT NOT NULL,
-    step_id          TEXT,
-    attempt          INTEGER DEFAULT 0,
-    timestamp        TEXT NOT NULL,
-    reason           TEXT NOT NULL,
-    action           TEXT NOT NULL,
-    source           TEXT DEFAULT 'human',
-    followup_run_id  TEXT,
+    intervention_id     TEXT PRIMARY KEY,
+    run_id             TEXT NOT NULL,
+    step_id            TEXT,
+    attempt            INTEGER DEFAULT 0,
+    timestamp          TEXT NOT NULL,
+    reason             TEXT NOT NULL,
+    action             TEXT NOT NULL,
+    source             TEXT DEFAULT 'human',
+    followup_run_id    TEXT,
     verification_status TEXT,
-    evidence_before  TEXT,
-    evidence_after   TEXT,
-    details          TEXT,
-    superseded_by    TEXT,
-    created_at       TEXT DEFAULT (datetime('now')),
+    evidence_before    TEXT,
+    evidence_after     TEXT,
+    details            TEXT,
+    superseded_by      TEXT,
+    created_at         TEXT DEFAULT (datetime('now')),
     
     FOREIGN KEY (run_id) REFERENCES experience_events(run_id),
     FOREIGN KEY (step_id) REFERENCES experience_events(step_id)
@@ -52,22 +66,43 @@ CREATE INDEX IF NOT EXISTS idx_interventions_status ON interventions(verificatio
 """
 
 
-def get_db_path() -> Path:
-    """Get path to experience database."""
+def get_default_db_path() -> Path:
+    """
+    Get default database path.
+    
+    Priority:
+    1. VB_EXPERIENCE_DB env var
+    2. Skill internal db: <skill>/data/skill_db.sqlite3
+    3. Cache db: ~/.cache/virtuoso_bridge/experience.db
+    """
+    # Check environment variable
+    env_path = os.environ.get("VB_EXPERIENCE_DB")
+    if env_path:
+        return Path(env_path)
+    
+    # Check skill internal path
+    skill_db = _SKILL_ROOT / "data" / "skill_db.sqlite3"
+    if skill_db.exists():
+        return skill_db
+    
+    # Fallback to cache
     cache_dir = Path.home() / ".cache" / "virtuoso_bridge"
     return cache_dir / "experience.db"
 
 
 def init_db(db_path: Optional[Path] = None) -> sqlite3.Connection:
     """Initialize database with intervention schema."""
-    db_path = db_path or get_db_path()
+    db_path = db_path or get_default_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     
     conn = sqlite3.connect(db_path)
     
     # Initialize base experience schema (from experience.py)
-    from vgui_runner.experience import init_schema
-    init_schema(conn)
+    try:
+        from vgui_runner.experience import init_schema
+        init_schema(conn)
+    except ImportError:
+        pass  # Schema already exists or will be created
     
     # Add intervention table
     conn.executescript(INTERVENTION_SCHEMA)
@@ -84,6 +119,21 @@ def _generate_id(run_id: str, step_id: str, timestamp: str) -> str:
     return h.hexdigest()[:32]
 
 
+def validate_run_exists(run_id: str, db_path: Optional[Path] = None) -> bool:
+    """Check if run_id exists in experience_events."""
+    try:
+        conn = init_db(db_path)
+        cursor = conn.execute(
+            "SELECT 1 FROM experience_events WHERE run_id = ? LIMIT 1",
+            (run_id,)
+        )
+        exists = cursor.fetchone() is not None
+        conn.close()
+        return exists
+    except sqlite3.OperationalError:
+        return False  # Table doesn't exist yet
+
+
 def record_intervention(
     run_id: str,
     step_id: Optional[str],
@@ -95,6 +145,7 @@ def record_intervention(
     evidence_after: Optional[str] = None,
     details: Optional[Dict[str, Any]] = None,
     db_path: Optional[Path] = None,
+    validate_run: bool = False,
 ) -> Dict[str, Any]:
     """
     Record a manual intervention.
@@ -109,10 +160,20 @@ def record_intervention(
         evidence_before: Evidence before intervention (e.g., screenshot path)
         evidence_after: Evidence after intervention
         details: Additional context
+        db_path: Optional explicit database path
+        validate_run: If True, require run_id to exist in experience_events
     
     Returns:
         Intervention record with generated ID
+    
+    Raises:
+        ValueError: If validate_run=True but run_id doesn't exist
     """
+    # Validate run exists if required
+    if validate_run and not validate_run_exists(run_id, db_path):
+        raise ValueError(f"run_id '{run_id}' not found in experience_events. "
+                        "Use --force to skip validation.")
+    
     conn = init_db(db_path)
     
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -198,20 +259,25 @@ def update_verification_status(
     followup_run_id: Optional[str] = None,
     db_path: Optional[Path] = None,
 ) -> bool:
-    """Update verification status of an intervention."""
+    """
+    Update verification status of an intervention.
+    
+    Returns:
+        True if updated, False if intervention not found
+    """
     conn = init_db(db_path)
     
-    conn.execute("""
+    cursor = conn.execute("""
         UPDATE interventions
         SET verification_status = ?, followup_run_id = ?
         WHERE intervention_id = ?
     """, (verification_status, followup_run_id, intervention_id))
     
-    rows = conn.rowcount
     conn.commit()
+    rows_updated = cursor.rowcount
     conn.close()
     
-    return rows > 0
+    return rows_updated > 0
 
 
 def link_to_case(
@@ -252,7 +318,8 @@ def get_trace_for_intervention(
     Get full trace context for an intervention.
     
     Returns:
-        Dict with intervention, original events, and related cases
+        Dict with intervention, original events, followup events, and related cases
+        Empty dict if intervention not found
     """
     conn = init_db(db_path)
     
@@ -262,34 +329,134 @@ def get_trace_for_intervention(
         (intervention_id,)
     )
     columns = [desc[0] for desc in cursor.description]
-    intervention = dict(zip(columns, cursor.fetchone()))
+    intervention = cursor.fetchone()
     
     if not intervention:
         conn.close()
-        return {}
+        return {"error": f"Intervention not found: {intervention_id}"}
+    
+    intervention = dict(zip(columns, intervention))
     
     # Get original run events
-    cursor = conn.execute(
-        "SELECT * FROM experience_events WHERE run_id = ? ORDER BY timestamp",
-        (intervention["run_id"],)
-    )
-    columns = [desc[0] for desc in cursor.description]
-    events = [dict(zip(columns, row)) for row in cursor]
+    try:
+        cursor = conn.execute(
+            "SELECT * FROM experience_events WHERE run_id = ? ORDER BY timestamp",
+            (intervention["run_id"],)
+        )
+        columns = [desc[0] for desc in cursor.description]
+        events = [dict(zip(columns, row)) for row in cursor]
+    except sqlite3.OperationalError:
+        events = []
+    
+    # Get followup run events if present
+    followup_events = []
+    if intervention.get("followup_run_id"):
+        try:
+            cursor = conn.execute(
+                "SELECT * FROM experience_events WHERE run_id = ? ORDER BY timestamp",
+                (intervention["followup_run_id"],)
+            )
+            columns = [desc[0] for desc in cursor.description]
+            followup_events = [dict(zip(columns, row)) for row in cursor]
+        except sqlite3.OperationalError:
+            pass
     
     # Get related cases
-    cursor = conn.execute(
-        "SELECT * FROM experience_cases WHERE run_id = ?",
-        (intervention["run_id"],)
-    )
-    columns = [desc[0] for desc in cursor.description]
-    cases = [dict(zip(columns, row)) for row in cursor]
+    try:
+        cursor = conn.execute(
+            "SELECT * FROM experience_cases WHERE run_id = ?",
+            (intervention["run_id"],)
+        )
+        columns = [desc[0] for desc in cursor.description]
+        cases = [dict(zip(columns, row)) for row in cursor]
+    except sqlite3.OperationalError:
+        cases = []
     
     conn.close()
     
     return {
         "intervention": intervention,
         "original_events": events,
+        "followup_events": followup_events,
         "related_cases": cases,
+    }
+
+
+def verify_with_evidence(
+    intervention_id: str,
+    followup_run_id: str,
+    verification_outcome: str,
+    db_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """
+    Verify intervention with evidence from followup run.
+    
+    This closes the verification contract by:
+    1. Checking followup_run_id exists in experience_events
+    2. Checking followup run has VERIFIER_CONFIRMED outcome
+    3. Only then setting verification_status to VERIFIED
+    
+    Args:
+        intervention_id: Intervention to verify
+        followup_run_id: Run that verifies the correction
+        verification_outcome: PASSED, FAILED, or UNKNOWN from verifier
+    
+    Returns:
+        Dict with verification_result and evidence_refs
+    """
+    conn = init_db(db_path)
+    
+    # Check intervention exists
+    cursor = conn.execute(
+        "SELECT * FROM interventions WHERE intervention_id = ?",
+        (intervention_id,)
+    )
+    intervention = cursor.fetchone()
+    if not intervention:
+        conn.close()
+        return {"error": f"Intervention not found: {intervention_id}"}
+    
+    # Check followup run has VERIFIER_CONFIRMED events
+    cursor = conn.execute("""
+        SELECT COUNT(*) FROM experience_events
+        WHERE run_id = ? AND value_source = 'VERIFIER_CONFIRMED'
+    """, (followup_run_id,))
+    verifier_confirmed_count = cursor.fetchone()[0]
+    
+    # Check followup run status
+    cursor = conn.execute("""
+        SELECT outcome FROM experience_events
+        WHERE run_id = ? AND state = 'VERIFY'
+    """, (followup_run_id,))
+    verifier_outcomes = [row[0] for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    # Determine verification status based on evidence
+    if verifier_confirmed_count == 0:
+        status = "UNKNOWN"  # No verifier evidence
+    elif verification_outcome.upper() == "PASSED":
+        status = "VERIFIED"
+    elif verification_outcome.upper() == "FAILED":
+        status = "FAILED"
+    else:
+        status = "UNKNOWN"
+    
+    # Update intervention
+    success = update_verification_status(
+        intervention_id=intervention_id,
+        verification_status=status,
+        followup_run_id=followup_run_id,
+        db_path=db_path,
+    )
+    
+    return {
+        "intervention_id": intervention_id,
+        "followup_run_id": followup_run_id,
+        "verification_status": status,
+        "verifier_confirmed_count": verifier_confirmed_count,
+        "verifier_outcomes": verifier_outcomes,
+        "updated": success,
     }
 
 
@@ -297,28 +464,36 @@ def get_trace_for_intervention(
 
 def cmd_record(args: argparse.Namespace) -> int:
     """Handle 'record' command."""
-    record = record_intervention(
-        run_id=args.run_id,
-        step_id=args.step_id,
-        reason=args.reason,
-        action=args.action,
-        attempt=args.attempt or 0,
-        source=args.source or "human",
-        evidence_before=args.evidence_before,
-        evidence_after=args.evidence_after,
-        details={"cli": True} if args.details else None,
-    )
-    
-    print(json.dumps(record, indent=2))
-    print(f"\n✓ Intervention recorded: {record['intervention_id']}", file=sys.stderr)
-    return 0
+    try:
+        record = record_intervention(
+            run_id=args.run_id,
+            step_id=args.step_id,
+            reason=args.reason,
+            action=args.action,
+            attempt=args.attempt or 0,
+            source=args.source or "human",
+            evidence_before=args.evidence_before,
+            evidence_after=args.evidence_after,
+            details={"cli": True} if args.details else None,
+            db_path=Path(args.db) if getattr(args, 'db', None) else None,
+            validate_run=args.validate_run if hasattr(args, 'validate_run') else False,
+        )
+        
+        print(json.dumps(record, indent=2))
+        print(f"\n✓ Intervention recorded: {record['intervention_id']}", file=sys.stderr)
+        return 0
+    except ValueError as e:
+        print(f"✗ Validation error: {e}", file=sys.stderr)
+        return 1
 
 
 def cmd_list(args: argparse.Namespace) -> int:
     """Handle 'list' command."""
+    db_path = Path(args.db) if getattr(args, 'db', None) else None
     interventions = list_interventions(
         run_id=args.run_id,
         verification_status=args.status,
+        db_path=db_path,
     )
     
     if not interventions:
@@ -340,10 +515,29 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def cmd_verify(args: argparse.Namespace) -> int:
     """Handle 'verify' command."""
+    db_path = Path(args.db) if getattr(args, 'db', None) else None
+    
+    if args.verify_with_evidence:
+        # Use evidence-based verification
+        result = verify_with_evidence(
+            intervention_id=args.intervention_id,
+            followup_run_id=args.followup_run,
+            verification_outcome=args.outcome or "PASSED",
+            db_path=db_path,
+        )
+        print(json.dumps(result, indent=2, default=str))
+        if result.get("error"):
+            print(f"\n✗ {result['error']}", file=sys.stderr)
+            return 1
+        print(f"\n✓ Verification status: {result['verification_status']}", file=sys.stderr)
+        return 0
+    
+    # Simple status update
     success = update_verification_status(
         intervention_id=args.intervention_id,
         verification_status=args.status,
         followup_run_id=args.followup_run,
+        db_path=db_path,
     )
     
     if success:
@@ -356,10 +550,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 def cmd_trace(args: argparse.Namespace) -> int:
     """Handle 'trace' command."""
-    trace = get_trace_for_intervention(args.intervention_id)
+    db_path = Path(args.db) if getattr(args, 'db', None) else None
+    trace = get_trace_for_intervention(args.intervention_id, db_path=db_path)
     
-    if not trace:
-        print(f"✗ Intervention not found: {args.intervention_id}")
+    if trace.get("error"):
+        print(f"✗ {trace['error']}")
         return 1
     
     print(json.dumps(trace, indent=2, default=str))
@@ -372,22 +567,48 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Record a manual intervention
+  # Record a manual intervention (requires existing run_id)
   record_intervention.py record run-123 step-456 \\
       --reason "Window identity ambiguous" \\
       --action "Selected target window manually"
 
+  # Record with auto-validation (fail if run doesn't exist)
+  record_intervention.py record run-123 step-456 \\
+      --reason "Window identity ambiguous" \\
+      --action "Selected target window manually" \\
+      --validate-run
+
+  # Force record even if run doesn't exist (testing)
+  record_intervention.py record run-123 step-456 \\
+      --reason "Window identity ambiguous" \\
+      --action "Selected target window manually" \\
+      --force
+
   # List all interventions for a run
   record_intervention.py list --run-id run-123
 
-  # Verify an intervention with followup run
+  # Verify with evidence (checks followup run has verifier evidence)
+  record_intervention.py verify abc123def456 \\
+      --verify-with-evidence \\
+      --followup-run run-789 \\
+      --outcome PASSED
+
+  # Simple status update (no evidence validation)
   record_intervention.py verify abc123def456 \\
       --status VERIFIED \\
       --followup-run run-789
 
   # Get full trace for an intervention
   record_intervention.py trace abc123def456
+
+  # Use specific database
+  record_intervention.py list --db /path/to/experience.db
         """
+    )
+    
+    parser.add_argument(
+        "--db",
+        help="Path to experience database (default: skill internal or ~/.cache)",
     )
     
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -403,6 +624,16 @@ Examples:
     p_record.add_argument("--evidence-before", help="Evidence before (screenshot path)")
     p_record.add_argument("--evidence-after", help="Evidence after (screenshot path)")
     p_record.add_argument("--details", action="store_true", help="Include additional details")
+    p_record.add_argument(
+        "--validate-run",
+        action="store_true",
+        help="Require run_id to exist in experience_events",
+    )
+    p_record.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip validation (for testing or known new runs)",
+    )
     p_record.set_defaults(func=cmd_record)
     
     # list
@@ -414,10 +645,18 @@ Examples:
     # verify
     p_verify = subparsers.add_parser("verify", help="Update verification status")
     p_verify.add_argument("intervention_id", help="Intervention ID")
-    p_verify.add_argument("--status", "-s", required=True,
-                         choices=["VERIFIED", "FAILED", "UNKNOWN"],
-                         help="Verification status")
+    p_verify.add_argument("--status", "-s", help="Verification status (VERIFIED/FAILED/UNKNOWN)")
     p_verify.add_argument("--followup-run", help="Followup run ID")
+    p_verify.add_argument(
+        "--verify-with-evidence",
+        action="store_true",
+        help="Verify with evidence check from followup run",
+    )
+    p_verify.add_argument(
+        "--outcome",
+        choices=["PASSED", "FAILED", "UNKNOWN"],
+        help="Verification outcome from followup run",
+    )
     p_verify.set_defaults(func=cmd_verify)
     
     # trace
