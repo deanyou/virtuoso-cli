@@ -24,8 +24,9 @@ from pathlib import Path
 from typing import Optional
 
 # Add script to path
-_SCRIPT_DIR = Path(__file__).parent.resolve()
-sys.path.insert(0, str(_SCRIPT_DIR.parent))
+_SCRIPT_DIR = Path(__file__).parent.resolve()  # virtuoso-gui-debug/tests
+_SKILL_DIR = _SCRIPT_DIR.parent  # virtuoso-gui-debug
+sys.path.insert(0, str(_SKILL_DIR / "scripts" / "evidence"))
 
 from record_intervention import (
     init_db,
@@ -129,7 +130,7 @@ class TestRecordValidation(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(_SCRIPT_DIR.parent / "record_intervention.py"),
+                str(_SKILL_DIR / "scripts" / "evidence" / "record_intervention.py"),
                 "--db", str(self.temp_db),
                 "record",
                 "any-run-id",
@@ -149,7 +150,7 @@ class TestRecordValidation(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(_SCRIPT_DIR.parent / "record_intervention.py"),
+                str(_SKILL_DIR / "scripts" / "evidence" / "record_intervention.py"),
                 "--db", str(self.temp_db),
                 "record",
                 "non-existent-run",
@@ -249,8 +250,13 @@ class TestVerificationContract(unittest.TestCase):
         self.assertEqual(result["verification_status"], "UNKNOWN")
         self.assertEqual(result["verifier_confirmed_count"], 0)
     
-    def test_manual_verified_cannot_be_set_without_evidence(self):
-        """Manual --status VERIFIED without evidence does not impersonate verification."""
+    def test_verify_with_evidence_requires_consistent_outcome(self):
+        """verify_with_evidence sets status based on verification_outcome parameter.
+        
+        The verification_outcome should match the actual verifier evidence.
+        PASSED outcome with verifier events sets VERIFIED.
+        FAILED outcome with verifier events sets FAILED (not VERIFIED).
+        """
         record = record_intervention(
             run_id="test-run",
             step_id="step-1",
@@ -259,7 +265,34 @@ class TestVerificationContract(unittest.TestCase):
             db_path=self.temp_db,
         )
         
-        # Use simple update_verification_status (manual)
+        # Verify with FAILED outcome - should NOT become VERIFIED
+        result = verify_with_evidence(
+            intervention_id=record["intervention_id"],
+            followup_run_id="followup-run",
+            verification_outcome="FAILED",
+            db_path=self.temp_db,
+        )
+        
+        # Status should be FAILED, not VERIFIED
+        self.assertEqual(result["verification_status"], "FAILED")
+        self.assertNotEqual(result["verification_status"], "VERIFIED")
+    
+    def test_update_verification_status_is_manual_override(self):
+        """update_verification_status allows manual override (separate from evidence path).
+        
+        This is intentionally a separate path for manual intervention recording.
+        The provenance is tracked via details field, not verification_status source.
+        For evidence-based verification, use verify_with_evidence instead.
+        """
+        record = record_intervention(
+            run_id="test-run",
+            step_id="step-1",
+            reason="Test",
+            action="Test",
+            db_path=self.temp_db,
+        )
+        
+        # Use simple update_verification_status (manual override)
         success = update_verification_status(
             intervention_id=record["intervention_id"],
             verification_status="VERIFIED",
@@ -268,15 +301,15 @@ class TestVerificationContract(unittest.TestCase):
         
         self.assertTrue(success)
         
-        # Check the status is set (no evidence validation in simple update)
+        # Check the status is set (manual override does not require evidence)
         interventions = list_interventions(
             run_id="test-run",
             db_path=self.temp_db,
         )
         self.assertEqual(interventions[0]["verification_status"], "VERIFIED")
         
-        # But note: verify_with_evidence is the evidence-aware path
-        # Simple update is available for manual override but trace shows provenance
+        # Note: This is manual override, not evidence-based verification.
+        # Use verify_with_evidence() for evidence-based status derivation.
     
     def test_verification_status_persists(self):
         """Verification status is actually persisted to database."""
@@ -414,7 +447,7 @@ class TestTraceCoverage(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(_SCRIPT_DIR.parent / "record_intervention.py"),
+                str(_SKILL_DIR / "scripts" / "evidence" / "record_intervention.py"),
                 "--db", str(self.temp_db),
                 "trace",
                 "nonexistent123",
@@ -441,7 +474,7 @@ class TestCLIDbOption(unittest.TestCase):
     def test_help_shows_db_option(self):
         """Help documentation includes --db option."""
         result = subprocess.run(
-            [sys.executable, str(_SCRIPT_DIR.parent / "record_intervention.py"), "--help"],
+            [sys.executable, str(_SKILL_DIR / "scripts" / "evidence" / "record_intervention.py"), "--help"],
             capture_output=True,
             text=True,
         )
@@ -452,7 +485,7 @@ class TestCLIDbOption(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(_SCRIPT_DIR.parent / "record_intervention.py"),
+                str(_SKILL_DIR / "scripts" / "evidence" / "record_intervention.py"),
                 "--db", str(self.temp_db),
                 "record",
                 "run-1",
@@ -485,7 +518,7 @@ class TestCLIDbOption(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(_SCRIPT_DIR.parent / "record_intervention.py"),
+                str(_SKILL_DIR / "scripts" / "evidence" / "record_intervention.py"),
                 "--db", str(self.temp_db),
                 "list",
             ],
@@ -500,7 +533,7 @@ class TestCLIDbOption(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(_SCRIPT_DIR.parent / "record_intervention.py"),
+                str(_SKILL_DIR / "scripts" / "evidence" / "record_intervention.py"),
                 "record",
                 "--help",
             ],
