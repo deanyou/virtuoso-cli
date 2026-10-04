@@ -72,11 +72,22 @@ def get_interventions(db_path):
     return result
 
 
+def _ref_sort_key(r):
+    return (r["run"], r.get("fid") or "", r["id"])
+
+
 def compute_stats(sig, interventions):
-    fv = {}
-    ff = {}
-    rm = {}
-    ru = {}
+    # Separate by SOURCE first (trusted vs manual/other)
+    # Then track by ORIGINAL RUN for deduplication
+    trusted_verified = set()  # run_ids with trusted VERIFIED
+    trusted_failed = set()     # run_ids with trusted FAILED
+    trusted_conflict = set()   # run_ids with trusted CONFLICT
+    
+    manual_verified = {}       # run_id -> [refs]
+    manual_failed = {}         # run_id -> [refs]
+    manual_conflict = {}       # run_id -> [refs]
+    
+    unknown = {}               # run_id -> [refs]
     
     for iv in interventions:
         details = json.loads(iv.get("details") or "{}")
@@ -94,37 +105,38 @@ def compute_stats(sig, interventions):
             "fid": fid,
         }
         
+        is_trusted = src in TRUSTED_SOURCES
+        
         if status == "VERIFIED":
-            if src in TRUSTED_SOURCES:
-                fid_key = fid or "local"
-                fv.setdefault(fid_key, []).append(ref)
+            if is_trusted:
+                trusted_verified.add(run_id)
             else:
-                rm.setdefault(run_id, []).append(ref)
+                manual_verified.setdefault(run_id, []).append(ref)
         elif status == "CONFLICT":
-            # Track conflicts by followup
-            fid_key = fid or "local"
-            fv.setdefault(fid_key, []).append(ref)
-            ff.setdefault(fid_key, []).append(ref)
+            if is_trusted:
+                trusted_conflict.add(run_id)
+            else:
+                manual_conflict.setdefault(run_id, []).append(ref)
         elif status == "FAILED":
-            if src in TRUSTED_SOURCES:
-                fid_key = fid or "local"
-                ff.setdefault(fid_key, []).append(ref)
+            if is_trusted:
+                trusted_failed.add(run_id)
+            else:
+                manual_failed.setdefault(run_id, []).append(ref)
         else:
-            ru.setdefault(run_id, []).append(ref)
+            unknown.setdefault(run_id, []).append(ref)
     
-    conflicts = set(fv.keys()) & set(ff.keys())
-    verified_followups = set(fv.keys()) - conflicts
-    verified_count = len(verified_followups)
-    failed_followups = set(ff.keys()) - conflicts
-    failed_count = len(failed_followups)
+    # Detect conflicts: runs that appear in both verified and failed
+    verified_conflict_runs = trusted_verified & trusted_failed
+    trusted_conflict |= verified_conflict_runs
+    trusted_verified -= verified_conflict_runs
+    trusted_failed -= verified_conflict_runs
     
-    conflict_refs = []
-    for fid in conflicts:
-        conflict_refs.extend(fv.get(fid, []))
-        conflict_refs.extend(ff.get(fid, []))
-    
-    manual_count = len(rm)
-    unknown_count = len(ru)
+    # Counts by unique run_id (deduplication)
+    verified_count = len(trusted_verified)
+    failed_count = len(trusted_failed)
+    conflict_count = len(trusted_conflict)
+    manual_count = len(manual_verified) + len(manual_failed) + len(manual_conflict)
+    unknown_count = len(unknown)
     
     total = verified_count + failed_count
     pass_rate = verified_count / total if total > 0 else 0.0
@@ -140,34 +152,35 @@ def compute_stats(sig, interventions):
     else:
         strength = "insufficient"
     
-    vrefs = []
-    for fid in verified_followups:
-        vrefs.extend(fv[fid])
-    frefs = []
-    for fid in failed_followups:
-        frefs.extend(ff[fid])
-    mrefs = [r for refs in rm.values() for r in refs]
-    urefs = [r for refs in ru.values() for r in refs]
+    # Build refs with deterministic order
+    vrefs = sorted([], key=_ref_sort_key)  # No refs in new model (count by run)
+    frefs = sorted([], key=_ref_sort_key)
+    cref = sorted([], key=_ref_sort_key)
+    mrefs = sorted([r for refs in manual_verified.values() for r in refs] +
+                   [r for refs in manual_failed.values() for r in refs] +
+                   [r for refs in manual_conflict.values() for r in refs],
+                  key=_ref_sort_key)
+    urefs = sorted([r for refs in unknown.values() for r in refs], key=_ref_sort_key)
     
     return {
         "sig": sig,
         "total": len(interventions),
         "stats": {
             "verified_count": verified_count,
-            "verified_fids": sorted(f for f in verified_followups if f != "local"),
+            "verified_runs": sorted(trusted_verified),
             "manual_count": manual_count,
             "failed_count": failed_count,
-            "failed_fids": sorted(f for f in failed_followups if f != "local"),
+            "failed_runs": sorted(trusted_failed),
             "unknown_count": unknown_count,
-            "conflict_count": len(conflict_refs),
-            "conflicts": sorted(conflicts),
+            "conflict_count": conflict_count,
+            "conflict_runs": sorted(trusted_conflict),
             "pass_rate": round(pass_rate, 3),
         },
         "strength": strength,
         "vrefs": vrefs,
-        "frefs": frefs[:5],
-        "cref": conflict_refs[:10],
-        "mrefs": mrefs,
+        "frefs": frefs,
+        "cref": cref,
+        "mrefs": mrefs[:5],
         "urefs": urefs[:5],
     }
 

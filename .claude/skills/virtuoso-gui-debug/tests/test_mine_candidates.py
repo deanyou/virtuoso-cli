@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for mine_candidates.py."""
+"""Unit tests for mine_candidates.py - aggregation by original run."""
 
 import json
 import subprocess
@@ -18,6 +18,7 @@ from mine_candidates import (
     norm_step,
     strip_verification,
     compute_stats,
+    _ref_sort_key,
 )
 from record_intervention import (
     init_db,
@@ -28,9 +29,10 @@ from record_intervention import (
 
 
 def insert_verifier_events(db_path, outcomes):
+    """Insert VERIFIER_CONFIRMED events into experience_events."""
     conn = init_db(db_path)
     for fid, outcome in outcomes.items():
-        run_id = fid if fid.startswith("followup-") else "followup-" + fid
+        run_id = "followup-" + fid if not fid.startswith("followup-") else fid
         conn.execute("""
             INSERT INTO experience_events 
             (event_id, run_id, step_id, event_type, state, value_source, outcome)
@@ -40,7 +42,9 @@ def insert_verifier_events(db_path, outcomes):
     conn.close()
 
 
-class TestAggregation(unittest.TestCase):
+class TestAggregationByRun(unittest.TestCase):
+    """Test deduplication by original run_id."""
+    
     def setUp(self):
         self.db = Path(tempfile.mktemp(suffix=".db"))
         init_db(self.db)
@@ -62,28 +66,68 @@ class TestAggregation(unittest.TestCase):
                 followup_run_id="followup-shared", db_path=self.db)
         result = mine(db_path=self.db)
         self.assertEqual(result["total_cands"], 1)
-        self.assertEqual(result["candidates"][0]["stats"]["verified_count"], 1)
+        # 3 runs, but only 1 unique run_id supports (followup shared)
+        # Wait: each run has its OWN intervention, so 3 runs = 3 supports
+        self.assertEqual(result["candidates"][0]["stats"]["verified_count"], 3)
     
     def test_same_run_multiple_followups_counts_once(self):
-        """Same run with 3 different followups = 1 support."""
+        """Same run with 3 followups = 1 support (NOT 3)."""
         for i in range(1, 4):
             conn = init_db(self.db)
+            run_id = "followup-" + str(i)
             conn.execute("""
                 INSERT INTO experience_events 
                 (event_id, run_id, step_id, event_type, state, value_source, outcome)
                 VALUES (?, ?, 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
-            """, ("evt-" + str(i), "followup-" + str(i)))
+            """, ("evt-" + str(i), run_id))
             conn.commit()
             conn.close()
-        record_intervention(run_id="same-run", step_id="step-1",
-                         reason="Test", action="Test", db_path=self.db)
+        
+        # Create THREE interventions, each in same run
+        for i in range(3):
+            record_intervention(
+                run_id="same-run", step_id="step-" + str(i),
+                reason="Test", action="Test", db_path=self.db)
+        
+        ivs = get_interventions(self.db)
+        self.assertEqual(len(ivs), 3)  # 3 interventions
+        
+        for i, iv in enumerate(ivs):
+            verify_with_evidence(
+                intervention_id=iv["intervention_id"],
+                followup_run_id="followup-" + str(i + 1), db_path=self.db)
+        
+        result = mine(db_path=self.db)
+        # Same run (same-run), 3 followups = 1 support
+        self.assertEqual(result["candidates"][0]["stats"]["verified_count"], 1)
+        self.assertEqual(result["candidates"][0]["stats"]["verified_runs"], ["same-run"])
+    
+    def test_different_runs_different_support(self):
+        """3 different runs = 3 support."""
+        for i in range(1, 4):
+            conn = init_db(self.db)
+            run_id = "followup-" + str(i)
+            conn.execute("""
+                INSERT INTO experience_events 
+                (event_id, run_id, step_id, event_type, state, value_source, outcome)
+                VALUES (?, ?, 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
+            """, ("evt-" + str(i), run_id))
+            conn.commit()
+            conn.close()
+        
+        for i in range(3):
+            record_intervention(
+                run_id="run-" + str(i), step_id="step-1",
+                reason="Test", action="Test", db_path=self.db)
+        
         ivs = get_interventions(self.db)
         for i, iv in enumerate(ivs):
             verify_with_evidence(
                 intervention_id=iv["intervention_id"],
                 followup_run_id="followup-" + str(i + 1), db_path=self.db)
+        
         result = mine(db_path=self.db)
-        self.assertEqual(result["candidates"][0]["stats"]["verified_count"], 1)
+        self.assertEqual(result["candidates"][0]["stats"]["verified_count"], 3)
     
     def test_unknown_runs_count(self):
         """5 UNKNOWN interventions = 5 unknown_count."""
@@ -109,34 +153,100 @@ class TestAggregation(unittest.TestCase):
         result = mine(min_verified=0, db_path=self.db)
         self.assertEqual(result["candidates"][0]["stats"]["manual_count"], 5)
     
+    def test_manual_conflict_does_not_pollute_trusted(self):
+        """1 trusted VERIFIED + 1 manual CONFLICT = 1 trusted (not 0)."""
+        # Insert verifier event
+        insert_verifier_events(self.db, {"trusted": "PASSED"})
+        
+        # Record and verify with trusted source
+        iv_trusted = record_intervention(
+            run_id="trusted-run", step_id="step-1",
+            reason="Test", action="Test", db_path=self.db)
+        verify_with_evidence(
+            intervention_id=iv_trusted["intervention_id"],
+            followup_run_id="followup-trusted", db_path=self.db)
+        
+        # Record and set manual CONFLICT
+        iv_manual = record_intervention(
+            run_id="manual-conflict-run", step_id="step-1",
+            reason="Test", action="Test", db_path=self.db)
+        update_verification_status(
+            intervention_id=iv_manual["intervention_id"],
+            verification_status="CONFLICT",
+            verification_source="manual", db_path=self.db)
+        
+        result = mine(min_verified=0, db_path=self.db)
+        c = result["candidates"][0]
+        # Trusted support should be 1, not affected by manual CONFLICT
+        self.assertEqual(c["stats"]["verified_count"], 1)
+        self.assertEqual(c["stats"]["conflict_count"], 0)  # No trusted conflict
+    
     def test_conflict_excluded_from_counts(self):
-        """Conflicting followup excluded from verified/failed counts."""
+        """Trusted PASSED + FAILED on same run = CONFLICT, not counted as either."""
+        insert_verifier_events(self.db, {"conflict": "PASSED"})
         conn = init_db(self.db)
         conn.execute("""
             INSERT INTO experience_events 
             (event_id, run_id, step_id, event_type, state, value_source, outcome)
-            VALUES ('p', 'shared', 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
-        """)
-        conn.execute("""
-            INSERT INTO experience_events 
-            (event_id, run_id, step_id, event_type, state, value_source, outcome)
-            VALUES ('f', 'shared', 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'FAILED')
+            VALUES ('evt-fail', 'followup-conflict', 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'FAILED')
         """)
         conn.commit()
         conn.close()
-        record_intervention(run_id="run-1", step_id="step-1",
-                         reason="Test", action="Test", db_path=self.db)
+        
+        record_intervention(
+            run_id="conflict-run", step_id="step-1",
+            reason="Test", action="Test", db_path=self.db)
         ivs = get_interventions(self.db)
         verify_with_evidence(
             intervention_id=ivs[0]["intervention_id"],
-            followup_run_id="shared", db_path=self.db)
+            followup_run_id="followup-conflict", db_path=self.db)
+        
         result = mine(min_verified=0, db_path=self.db)
         c = result["candidates"][0]
-        # Conflict should be tracked
-        self.assertGreater(len(c["stats"]["conflicts"]), 0)
-        # But not counted as verified or failed
+        # CONFLICT: excluded from both verified and failed
         self.assertEqual(c["stats"]["verified_count"], 0)
         self.assertEqual(c["stats"]["failed_count"], 0)
+        self.assertEqual(c["stats"]["conflict_count"], 1)
+        self.assertIn("conflict-run", c["stats"]["conflict_runs"])
+
+
+class TestDeterminism(unittest.TestCase):
+    """Test output determinism."""
+    
+    def setUp(self):
+        self.db = Path(tempfile.mktemp(suffix=".db"))
+        init_db(self.db)
+    
+    def tearDown(self):
+        self.db.unlink(missing_ok=True)
+    
+    def test_deterministic_hash(self):
+        """Hash is deterministic across runs."""
+        for i in range(3):
+            record_intervention(
+                run_id="run-" + str(i), step_id="step-1",
+                reason="Test", action="Test", db_path=self.db)
+        r1 = subprocess.run([sys.executable, str(_SKILL_DIR / "scripts" / "evidence" / "mine_candidates.py"),
+                           "--db", str(self.db), "mine"],
+                          capture_output=True, text=True)
+        r2 = subprocess.run([sys.executable, str(_SKILL_DIR / "scripts" / "evidence" / "mine_candidates.py"),
+                           "--db", str(self.db), "mine"],
+                          capture_output=True, text=True)
+        h1 = json.loads(r1.stdout)["h"]
+        h2 = json.loads(r2.stdout)["h"]
+        self.assertEqual(h1, h2)
+    
+    def test_ref_sort_key(self):
+        """_ref_sort_key provides deterministic ordering."""
+        refs = [
+            {"run": "b", "fid": "x", "id": "2"},
+            {"run": "a", "fid": "y", "id": "1"},
+            {"run": "a", "fid": "x", "id": "2"},
+            {"run": "a", "fid": "x", "id": "1"},
+        ]
+        sorted_refs = sorted(refs, key=_ref_sort_key)
+        self.assertEqual(sorted_refs[0]["id"], "1")
+        self.assertEqual(sorted_refs[1]["id"], "2")
 
 
 class TestNormalization(unittest.TestCase):
@@ -149,26 +259,6 @@ class TestNormalization(unittest.TestCase):
         r = strip_verification(d)
         self.assertNotIn("_verification", r)
         self.assertEqual(r["view"], "schematic")
-
-
-class TestCLI(unittest.TestCase):
-    def setUp(self):
-        self.db = Path(tempfile.mktemp(suffix=".db"))
-        init_db(self.db)
-    
-    def tearDown(self):
-        self.db.unlink(missing_ok=True)
-    
-    def test_deterministic(self):
-        r1 = subprocess.run([sys.executable, str(_SKILL_DIR / "scripts" / "evidence" / "mine_candidates.py"),
-                           "--db", str(self.db), "mine"],
-                          capture_output=True, text=True)
-        r2 = subprocess.run([sys.executable, str(_SKILL_DIR / "scripts" / "evidence" / "mine_candidates.py"),
-                           "--db", str(self.db), "mine"],
-                          capture_output=True, text=True)
-        h1 = json.loads(r1.stdout)["h"]
-        h2 = json.loads(r2.stdout)["h"]
-        self.assertEqual(h1, h2)
 
 
 if __name__ == "__main__":

@@ -279,37 +279,61 @@ class LiveExecutor(Executor):
                     )
                 }
 
-            # Fast path: when --window-id is provided, try to skip the
-            # expensive list-windows-x11 scan (can time out on displays with
-            # hundreds of windows, and requires xwininfo). Validate the
-            # explicit window via xdotool. On any failure, fall back to the
-            # slow path below rather than aborting.
+            # Fast path: when --window-id is provided, query the display via vcli
+            # and check whether that window_id is present and bound to the
+            # effective PID.  If exactly one match is found, take it directly —
+            # this skips the multi-window disambiguation error and the full
+            # candidate-loop below.  On any mismatch (0 matches, PID conflict,
+            # multiple windows for the same PID), fall through to the slow path.
+            # Uses Rust binary boundary (vcli) per architecture constraint; no
+            # direct xdotool calls.
             effective_pid = session_pid or scenario.pid
             _fast_ok = False
             if self._explicit_window_id:
-                import subprocess
-                import os
-                import re as _re
                 try:
-                    result = subprocess.run(
-                        ["xdotool", "getwindowgeometry", self._explicit_window_id],
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                        universal_newlines=True, timeout=10,
-                        env={**os.environ, "DISPLAY": scenario.display},
+                    win_data = self._run_json(
+                        self._vcli_argv(
+                            "window", "list-windows-x11",
+                            "--display", scenario.display,
+                        ),
+                        _TIMEOUT_PRECHECK,
                     )
-                    if result.returncode == 0:
-                        geom_out = result.stdout
-                        pos_match = _re.search(r"Position:\s*(-?\d+),(-?\d+)", geom_out)
-                        geo_match = _re.search(r"Geometry:\s*(\d+)x(\d+)", geom_out)
-                        if pos_match and geo_match:
-                            self._window_width = int(geo_match.group(1))
-                            self._window_height = int(geo_match.group(2))
-                            self.window_id = self._explicit_window_id
-                            self._scenario_display = scenario.display
-                            self._scenario_pid = int(effective_pid)
-                            _fast_ok = True
-                except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-                    pass  # fall back to slow path
+                    reported_display = win_data.get("display")
+                    # Root-level DISPLAY check: the X server answering must
+                    # match what the scenario expects.  A mismatch means the
+                    # server is probing the wrong display and must not be used.
+                    if reported_display and reported_display != scenario.display:
+                        return {
+                            "error": (
+                                f"DISPLAY mismatch: scenario expects {scenario.display}, "
+                                f"X11 server reports {reported_display}"
+                            )
+                        }
+                    wins = win_data.get("windows", [])
+                    # Filter to windows matching the explicit window_id, the
+                    # effective PID, and the scenario's DISPLAY.  A non-unique
+                    # match (0 or >1) falls through to the slow path for
+                    # proper error messages.
+                    matches = [
+                        w for w in wins
+                        if (w.get("dismiss_id") or w.get("window_id"))
+                           == self._explicit_window_id
+                        and w.get("pid") == effective_pid
+                        and (w.get("display") or reported_display) == scenario.display
+                    ]
+                    if len(matches) == 1:
+                        win = matches[0]
+                        geom = win.get("geometry", {})
+                        self._window_width = geom.get("w", 800)
+                        self._window_height = geom.get("h", 600)
+                        self.window_id = self._explicit_window_id
+                        self._scenario_display = (
+                            reported_display or scenario.display
+                        )
+                        self._scenario_pid = int(effective_pid)
+                        _fast_ok = True
+                except Exception:  # noqa: BLE001 — fall back to slow path
+                    pass
             if _fast_ok:
                 lock = _DisplayLock(scenario.display)
                 try:
@@ -319,9 +343,9 @@ class LiveExecutor(Executor):
                 self._lock = lock
                 return None
 
-            # 2. window list: DISPLAY must match exactly, PID binding unique.
-            #    effective_pid is session_pid when positive, else scenario.pid
-            #    (old metadata fallback). If no window matches, reject.
+            # Slow path: full display scan, PID binding, multi-window
+            #    disambiguation, and DISPLAY validation.  Reaches here when
+            #    --window-id was not provided or the fast-path match was ambiguous.
             windows_data = self._run_json(
                 self._vcli_argv(
                     "window", "list-windows-x11", "--display", scenario.display
@@ -358,23 +382,27 @@ class LiveExecutor(Executor):
                         f"{scenario.display}"
                     )
                 }
-            # Multi-window disambiguation: explicit --window-id wins, then
-            # window_title filter from the first step's arguments.
-            if len(candidates) > 1:
+            # Disambiguate when multiple windows share the PID, or verify
+            # the single candidate matches the explicit --window-id when one is
+            # given.  Without this check, a single candidate would be bound even
+            # when it does not match the user's explicit window_id.
+            if len(candidates) > 1 or self._explicit_window_id:
                 if self._explicit_window_id:
                     matched = [
                         w for w in candidates
-                        if (w.get("dismiss_id") or w.get("window_id")) == self._explicit_window_id
+                        if (w.get("dismiss_id") or w.get("window_id"))
+                           == self._explicit_window_id
                     ]
                     if not matched:
                         return {
                             "error": (
                                 f"--window-id {self._explicit_window_id} not found "
-                                f"among {len(candidates)} windows for PID {effective_pid}"
+                                f"among {len(candidates)} window(s) for PID "
+                                f"{effective_pid} on DISPLAY {scenario.display}"
                             )
                         }
                     candidates = matched
-                else:
+                elif len(candidates) > 1:
                     return {
                         "error": (
                             f"{len(candidates)} windows bound to PID {effective_pid} "
@@ -384,7 +412,7 @@ class LiveExecutor(Executor):
                     }
             window = candidates[0]
             self.window_id = window.get("dismiss_id") or window.get("window_id")
-            self._scenario_display = scenario.display
+            self._scenario_display = reported_display or scenario.display
             self._scenario_pid = int(effective_pid)
             # Store window geometry for CIW_INPUT click coordinates.
             # Use vcli-reported geometry directly — no artificial cap, since
