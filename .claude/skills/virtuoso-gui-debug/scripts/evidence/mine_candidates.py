@@ -152,27 +152,25 @@ def _compute_group_stats(
     """
     Compute statistics for a group of interventions.
     
-    Key changes:
-    - Support counted by unique followup_run_id (shared verification counts once)
-    - Pass rate = verified_followups / (verified_followups + failed_followups)
-    - Manual/override followups tracked separately
-    - Unique runs counted as union of all run types
+    Key principles:
+    1. Support deduplication: Same original run counts once.
+       When same run has multiple followups, count as 1 support.
+    2. Conflict resolution: If a followup has both PASSED and FAILED,
+       exclude from both.
+    3. Source filtering: Only TRUSTED_SOURCES count for verified/failed.
+    4. Unknown/manual use original run_id.
     """
-    # Track by followup_run_id for deduplication
-    verified_followups: Set[str] = set()
-    failed_followups: Set[str] = set()
-    unknown_followups: Set[str] = set()
-    manual_followups: Set[str] = set()  # Manual VERIFIED followups
+    # Track by original run_id
+    run_verified: Dict[str, List[Dict]] = {}   # run_id -> VERIFIED refs
+    run_failed: Dict[str, List[Dict]] = {}    # run_id -> FAILED refs
+    run_unknown: Dict[str, List[Dict]] = {}  # run_id -> UNKNOWN refs
+    run_manual: Dict[str, List[Dict]] = {}     # run_id -> manual VERIFIED refs
     
-    # All runs
+    # All unique runs and followups
     all_runs: Set[str] = set()
+    all_followups: Set[str] = set()
     
-    # Evidence references
-    verified_refs: List[Dict] = []
-    failed_refs: List[Dict] = []
-    unknown_refs: List[Dict] = []
-    manual_refs: List[Dict] = []
-    
+    # First pass: collect all data
     for iv in interventions:
         details = json.loads(iv.get("details") or "{}")
         ver_info = details.get("_verification", {})
@@ -182,6 +180,8 @@ def _compute_group_stats(
         followup_id = iv.get("followup_run_id")
         
         all_runs.add(run_id)
+        if followup_id:
+            all_followups.add(followup_id)
         
         iv_ref = {
             "intervention_id": iv.get("intervention_id"),
@@ -193,31 +193,73 @@ def _compute_group_stats(
         }
         
         if status == "VERIFIED":
-            if source in TRUSTED_SOURCES and followup_id:
-                verified_followups.add(followup_id)
-                verified_refs.append(iv_ref)
+            if source in TRUSTED_SOURCES:
+                if run_id not in run_verified:
+                    run_verified[run_id] = []
+                run_verified[run_id].append(iv_ref)
             else:
-                manual_followups.add(followup_id or "manual-only")
-                manual_refs.append(iv_ref)
+                if run_id not in run_manual:
+                    run_manual[run_id] = []
+                run_manual[run_id].append(iv_ref)
         elif status == "FAILED":
-            # Only count failed from trusted sources in denominator
-            if source in TRUSTED_SOURCES and followup_id:
-                failed_followups.add(followup_id)
-                failed_refs.append(iv_ref)
-            else:
-                # Non-trusted failures tracked separately
-                unknown_refs.append(iv_ref)
+            if source in TRUSTED_SOURCES:
+                if run_id not in run_failed:
+                    run_failed[run_id] = []
+                run_failed[run_id].append(iv_ref)
         else:  # UNKNOWN or None
-            unknown_followups.add(followup_id or "unknown")
-            unknown_refs.append(iv_ref)
+            if run_id not in run_unknown:
+                run_unknown[run_id] = []
+            run_unknown[run_id].append(iv_ref)
+    
+    # Detect conflicting followups: appear in both verified and failed
+    conflicting_followups: Set[str] = set()
+    verified_followups: Set[str] = set()
+    failed_followups: Set[str] = set()
+    
+    # Collect followup_ids from verified runs
+    for iv_refs in run_verified.values():
+        for ref in iv_refs:
+            fid = ref.get("followup_run_id")
+            if fid:
+                verified_followups.add(fid)
+    
+    # Collect from failed runs
+    for iv_refs in run_failed.values():
+        for ref in iv_refs:
+            fid = ref.get("followup_run_id")
+            if fid:
+                failed_followups.add(fid)
+    
+    # Find conflicts: followups in both verified and failed
+    conflicting_followups = verified_followups & failed_followups
+    
+    # Count supports: same original run = 1 support (regardless of followup count)
+    # If run has conflicting followup, exclude it
+    verified_runs_supporting: Set[str] = set()
+    for run_id, iv_refs in run_verified.items():
+        has_conflict = any(
+            ref.get("followup_run_id") in conflicting_followups
+            for ref in iv_refs
+        )
+        if not has_conflict:
+            verified_runs_supporting.add(run_id)
+    
+    failed_runs: Set[str] = set()
+    for run_id, iv_refs in run_failed.items():
+        has_conflict = any(
+            ref.get("followup_run_id") in conflicting_followups
+            for ref in iv_refs
+        )
+        if not has_conflict:
+            failed_runs.add(run_id)
     
     # Deduplicated counts
-    verified_count = len(verified_followups)
-    failed_count = len(failed_followups)
-    manual_count = len(manual_followups)
-    unknown_count = len(unknown_followups)
+    verified_count = len(verified_runs_supporting)
+    failed_count = len(failed_runs)
+    manual_count = len(run_manual)
+    unknown_count = len(run_unknown)
     
-    # Pass rate: verified / (verified + failed) - only trusted sources
+    # Pass rate: verified / (verified + failed)
     total_verifiable = verified_count + failed_count
     if total_verifiable > 0:
         pass_rate = verified_count / total_verifiable
@@ -236,17 +278,24 @@ def _compute_group_stats(
     else:
         strength = "insufficient"
     
+    # Flatten refs
+    verified_refs = [ref for refs in run_verified.values() for ref in refs]
+    failed_refs = [ref for refs in run_failed.values() for ref in refs]
+    unknown_refs = [ref for refs in run_unknown.values() for ref in refs]
+    manual_refs = [ref for refs in run_manual.values() for ref in refs]
+    
     return {
         "signature": signature,
         "total_interventions": len(interventions),
         "unique_runs": len(all_runs),
         "stats": {
             "verified_evidence_count": verified_count,
-            "verified_followups": sorted(verified_followups),
+            "verified_followups": sorted(verified_followups - conflicting_followups),
             "verified_manual_count": manual_count,
             "failed_count": failed_count,
-            "failed_followups": sorted(failed_followups),
+            "failed_followups": sorted(failed_followups - conflicting_followups),
             "unknown_count": unknown_count,
+            "conflicting_followups": sorted(conflicting_followups),
             "pass_rate": round(pass_rate, 3),
         },
         "strength": strength,
