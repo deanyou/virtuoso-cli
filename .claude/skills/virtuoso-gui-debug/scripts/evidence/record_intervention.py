@@ -36,6 +36,54 @@ if str(_VGUIDIR) not in sys.path:
     sys.path.insert(0, str(_VGUIDIR))
 
 
+# ── Base Schema for experience_events (fallback if import fails) ──────────────────────────
+
+BASE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS experience_events (
+    event_id      TEXT PRIMARY KEY,
+    run_id        TEXT NOT NULL,
+    task_id       TEXT,
+    step_id       TEXT,
+    attempt       INTEGER DEFAULT 0,
+    event_type    TEXT NOT NULL,
+    timestamp     TEXT,
+    state         TEXT,
+    outcome       TEXT,
+    channel       TEXT,
+    risk_class    TEXT,
+    failure_type  TEXT,
+    action        TEXT,
+    duration_ms   INTEGER,
+    value_source  TEXT DEFAULT 'OBSERVED',
+    evidence_refs TEXT,
+    details       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS experience_cases (
+    case_id            TEXT PRIMARY KEY,
+    run_id             TEXT NOT NULL,
+    task_id            TEXT,
+    case_type          TEXT NOT NULL,
+    failure_type       TEXT,
+    problem_signature  TEXT,
+    initial_state      TEXT,
+    action_sequence    TEXT,
+    final_state        TEXT,
+    outcome            TEXT,
+    verification_status TEXT,
+    quality_score      REAL DEFAULT 0.0,
+    event_refs         TEXT,
+    provenance         TEXT,
+    created_at         TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_run ON experience_events(run_id);
+CREATE INDEX IF NOT EXISTS idx_events_step ON experience_events(step_id);
+CREATE INDEX IF NOT EXISTS idx_events_failure ON experience_events(failure_type);
+CREATE INDEX IF NOT EXISTS idx_cases_type ON experience_cases(case_type);
+CREATE INDEX IF NOT EXISTS idx_cases_failure ON experience_cases(failure_type);
+"""
+
 # ── Schema Extensions for Interventions ────────────────────────────────────────
 
 INTERVENTION_SCHEMA = """
@@ -97,12 +145,13 @@ def init_db(db_path: Optional[Path] = None) -> sqlite3.Connection:
     
     conn = sqlite3.connect(db_path)
     
-    # Initialize base experience schema (from experience.py)
+    # Initialize base experience schema
     try:
-        from vgui_runner.experience import init_schema
-        init_schema(conn)
+        from vgui_runner.experience import init_schema as exp_init_schema
+        exp_init_schema(conn)
     except ImportError:
-        pass  # Schema already exists or will be created
+        # Fallback: use local base schema
+        conn.executescript(BASE_SCHEMA)
     
     # Add intervention table
     conn.executescript(INTERVENTION_SCHEMA)
