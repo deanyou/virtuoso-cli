@@ -38,6 +38,7 @@ from record_intervention import (
     verify_with_evidence,
     validate_run_exists,
     INTERVENTION_SCHEMA,
+    _SKILL_ROOT,
 )
 
 
@@ -45,10 +46,18 @@ class TestDatabaseAndImports(unittest.TestCase):
     """Test 1: Default database and import path correct; new DB initializes fully."""
     
     def test_default_db_path_returns_path(self):
-        """Default database path is returned correctly."""
+        """Default database path is returned correctly.
+        
+        When skill internal database exists, it should be used.
+        Fallback is experience.db in cache directory.
+        """
         db_path = get_default_db_path()
         self.assertIsInstance(db_path, Path)
-        self.assertEqual(db_path.name, "experience.db")
+        # Should return skill internal db if exists, else cache
+        if (_SKILL_ROOT / "data" / "skill_db.sqlite3").exists():
+            self.assertEqual(db_path.name, "skill_db.sqlite3")
+        else:
+            self.assertEqual(db_path.name, "experience.db")
     
     def test_init_db_creates_schema(self):
         """New database initializes with intervention schema."""
@@ -173,24 +182,26 @@ class TestVerificationContract(unittest.TestCase):
         """Create temporary database with experience_events."""
         self.temp_db = Path(tempfile.mktemp(suffix=".db"))
         init_db(self.temp_db)
-        
-        # Insert mock experience_events with VERIFIER_CONFIRMED
-        conn = init_db(self.temp_db)
-        conn.execute("""
-            INSERT INTO experience_events 
-            (event_id, run_id, step_id, event_type, state, value_source, outcome)
-            VALUES ('evt-1', 'followup-run', 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
-        """)
-        conn.commit()
-        conn.close()
     
     def tearDown(self):
         """Clean up temporary database."""
         self.temp_db.unlink(missing_ok=True)
     
-    def test_verify_with_evidence_verified_on_passed(self):
+    def _insert_verifier_event(self, run_id: str, outcome: str):
+        """Insert a VERIFIER_CONFIRMED event."""
+        conn = init_db(self.temp_db)
+        conn.execute("""
+            INSERT INTO experience_events 
+            (event_id, run_id, step_id, event_type, state, value_source, outcome)
+            VALUES (?, ?, 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', ?)
+        """, (f"evt-{run_id}-{outcome}", run_id, outcome))
+        conn.commit()
+        conn.close()
+    
+    def test_verify_with_evidence_verified_on_passed_outcome(self):
         """verify_with_evidence sets VERIFIED when followup has VERIFIER_CONFIRMED PASSED."""
-        # Record intervention first
+        self._insert_verifier_event("followup-run", "PASSED")
+        
         record = record_intervention(
             run_id="test-run",
             step_id="step-1",
@@ -202,15 +213,17 @@ class TestVerificationContract(unittest.TestCase):
         result = verify_with_evidence(
             intervention_id=record["intervention_id"],
             followup_run_id="followup-run",
-            verification_outcome="PASSED",
             db_path=self.temp_db,
         )
         
         self.assertEqual(result["verification_status"], "VERIFIED")
+        self.assertEqual(result["derived_from"], "actual_passed_outcome")
         self.assertTrue(result["updated"])
     
     def test_verify_with_evidence_failed_on_failed_outcome(self):
-        """verify_with_evidence sets FAILED when outcome is FAILED."""
+        """verify_with_evidence sets FAILED when actual evidence has FAILED outcome."""
+        self._insert_verifier_event("followup-run", "FAILED")
+        
         record = record_intervention(
             run_id="test-run",
             step_id="step-1",
@@ -222,16 +235,15 @@ class TestVerificationContract(unittest.TestCase):
         result = verify_with_evidence(
             intervention_id=record["intervention_id"],
             followup_run_id="followup-run",
-            verification_outcome="FAILED",
             db_path=self.temp_db,
         )
         
         self.assertEqual(result["verification_status"], "FAILED")
+        self.assertEqual(result["derived_from"], "actual_failed_outcome")
         self.assertNotEqual(result["verification_status"], "VERIFIED")
     
     def test_verify_with_evidence_unknown_without_verifier(self):
         """verify_with_evidence sets UNKNOWN when followup has no VERIFIER_CONFIRMED."""
-        # Record intervention first
         record = record_intervention(
             run_id="test-run",
             step_id="step-1",
@@ -243,20 +255,21 @@ class TestVerificationContract(unittest.TestCase):
         result = verify_with_evidence(
             intervention_id=record["intervention_id"],
             followup_run_id="non-existent-followup",
-            verification_outcome="PASSED",
             db_path=self.temp_db,
         )
         
         self.assertEqual(result["verification_status"], "UNKNOWN")
         self.assertEqual(result["verifier_confirmed_count"], 0)
     
-    def test_verify_with_evidence_requires_consistent_outcome(self):
-        """verify_with_evidence sets status based on verification_outcome parameter.
+    def test_failed_evidence_cannot_become_verified(self):
+        """FAILED evidence must produce FAILED status, never VERIFIED.
         
-        The verification_outcome should match the actual verifier evidence.
-        PASSED outcome with verifier events sets VERIFIED.
-        FAILED outcome with verifier events sets FAILED (not VERIFIED).
+        This tests the critical invariant: actual FAILED outcome in verifier
+        events must result in FAILED status, regardless of any parameter.
         """
+        # Insert FAILED verifier event
+        self._insert_verifier_event("failed-followup", "FAILED")
+        
         record = record_intervention(
             run_id="test-run",
             step_id="step-1",
@@ -265,15 +278,13 @@ class TestVerificationContract(unittest.TestCase):
             db_path=self.temp_db,
         )
         
-        # Verify with FAILED outcome - should NOT become VERIFIED
         result = verify_with_evidence(
             intervention_id=record["intervention_id"],
-            followup_run_id="followup-run",
-            verification_outcome="FAILED",
+            followup_run_id="failed-followup",
             db_path=self.temp_db,
         )
         
-        # Status should be FAILED, not VERIFIED
+        # CRITICAL: FAILED evidence must NOT produce VERIFIED
         self.assertEqual(result["verification_status"], "FAILED")
         self.assertNotEqual(result["verification_status"], "VERIFIED")
     
@@ -339,6 +350,56 @@ class TestVerificationContract(unittest.TestCase):
         
         self.assertEqual(row[0], "VERIFIED")
         self.assertEqual(row[1], "followup-run")
+    
+    def test_manual_override_has_source_recorded(self):
+        """Manual override records verification source in details."""
+        record = record_intervention(
+            run_id="test-run",
+            step_id="step-1",
+            reason="Test",
+            action="Test",
+            db_path=self.temp_db,
+        )
+        
+        update_verification_status(
+            intervention_id=record["intervention_id"],
+            verification_status="VERIFIED",
+            verification_source="manual",
+            db_path=self.temp_db,
+        )
+        
+        # Check that source is recorded in details
+        interventions = list_interventions(db_path=self.temp_db)
+        details = json.loads(interventions[0]["details"] or "{}")
+        
+        self.assertIn("_verification", details)
+        self.assertEqual(details["_verification"]["source"], "manual")
+        self.assertEqual(details["_verification"]["status"], "VERIFIED")
+    
+    def test_evidence_verification_has_source_recorded(self):
+        """Evidence-based verification records source as 'evidence'."""
+        record = record_intervention(
+            run_id="test-run",
+            step_id="step-1",
+            reason="Test",
+            action="Test",
+            db_path=self.temp_db,
+        )
+        
+        result = verify_with_evidence(
+            intervention_id=record["intervention_id"],
+            followup_run_id="followup-run",
+            db_path=self.temp_db,
+        )
+        
+        self.assertEqual(result["verification_status"], "UNKNOWN")  # No verifier events
+        
+        # Check that source is recorded
+        interventions = list_interventions(db_path=self.temp_db)
+        details = json.loads(interventions[0]["details"] or "{}")
+        
+        self.assertIn("_verification", details)
+        self.assertEqual(details["_verification"]["source"], "evidence")
 
 
 class TestTraceCoverage(unittest.TestCase):

@@ -24,13 +24,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# ── Add skill directory to Python path for imports ─────────────────────────────
-_SCRIPT_DIR = Path(__file__).parent.resolve()
-_SKILL_ROOT = _SCRIPT_DIR.parent.parent.parent  # scripts/evidence → vgui_runner → virtuoso-gui-debug
-if _SCRIPT_DIR.name == "evidence":  # Running from scripts/evidence/
-    _VGUIDIR = _SKILL_ROOT / "vgui_runner"
-else:  # Running from vgui_runner/
-    _VGUIDIR = _SCRIPT_DIR
+# ── Skill root detection ─────────────────────────────────────────────────────────────
+# Detect skill root by finding the directory containing vgui_runner/
+_SCRIPT_DIR = Path(__file__).parent.resolve()  # scripts/evidence/
+
+# Navigate to skill root (virtuoso-gui-debug/)
+# _SCRIPT_DIR is scripts/evidence/, so:
+#   parent = scripts/
+#   parent.parent = virtuoso-gui-debug/
+_SKILL_ROOT = _SCRIPT_DIR.parent.parent
+
+# vgui_runner directory for imports
+_VGUIDIR = _SKILL_ROOT / "vgui_runner"
 
 if str(_VGUIDIR) not in sys.path:
     sys.path.insert(0, str(_VGUIDIR))
@@ -306,21 +311,53 @@ def update_verification_status(
     intervention_id: str,
     verification_status: str,
     followup_run_id: Optional[str] = None,
+    verification_source: str = "manual",
     db_path: Optional[Path] = None,
 ) -> bool:
     """
     Update verification status of an intervention.
     
+    Args:
+        intervention_id: Intervention to update
+        verification_status: New status (VERIFIED, FAILED, UNKNOWN)
+        followup_run_id: Optional followup run ID
+        verification_source: How status was determined ("evidence", "manual", "override")
+        db_path: Database path
+    
     Returns:
         True if updated, False if intervention not found
+    
+    Note:
+        Manual/override sources are marked and should be excluded from
+        trusted experience pool. Only "evidence" source is trusted.
     """
     conn = init_db(db_path)
     
+    # Get existing details to preserve provenance
+    cursor = conn.execute(
+        "SELECT details FROM interventions WHERE intervention_id = ?",
+        (intervention_id,)
+    )
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return False
+    
+    existing_details = json.loads(row[0] or "{}")
+    
+    # Add verification provenance
+    existing_details["_verification"] = {
+        "source": verification_source,
+        "status": verification_status,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "followup_run_id": followup_run_id,
+    }
+    
     cursor = conn.execute("""
         UPDATE interventions
-        SET verification_status = ?, followup_run_id = ?
+        SET verification_status = ?, followup_run_id = ?, details = ?
         WHERE intervention_id = ?
-    """, (verification_status, followup_run_id, intervention_id))
+    """, (verification_status, followup_run_id, json.dumps(existing_details), intervention_id))
     
     conn.commit()
     rows_updated = cursor.rowcount
@@ -434,7 +471,6 @@ def get_trace_for_intervention(
 def verify_with_evidence(
     intervention_id: str,
     followup_run_id: str,
-    verification_outcome: str,
     db_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
@@ -443,15 +479,15 @@ def verify_with_evidence(
     This closes the verification contract by:
     1. Checking followup_run_id exists in experience_events
     2. Checking followup run has VERIFIER_CONFIRMED outcome
-    3. Only then setting verification_status to VERIFIED
+    3. Deriving status from ACTUAL verifier outcomes, not caller parameter
     
     Args:
         intervention_id: Intervention to verify
         followup_run_id: Run that verifies the correction
-        verification_outcome: PASSED, FAILED, or UNKNOWN from verifier
+        db_path: Database path
     
     Returns:
-        Dict with verification_result and evidence_refs
+        Dict with verification_result, evidence_refs, and derived status
     """
     conn = init_db(db_path)
     
@@ -472,30 +508,40 @@ def verify_with_evidence(
     """, (followup_run_id,))
     verifier_confirmed_count = cursor.fetchone()[0]
     
-    # Check followup run status
+    # Get ACTUAL verifier outcomes from experience_events
     cursor = conn.execute("""
         SELECT outcome FROM experience_events
-        WHERE run_id = ? AND state = 'VERIFY'
+        WHERE run_id = ? AND state = 'VERIFY' AND value_source = 'VERIFIER_CONFIRMED'
     """, (followup_run_id,))
     verifier_outcomes = [row[0] for row in cursor.fetchall()]
     
     conn.close()
     
-    # Determine verification status based on evidence
+    # Derive verification status from ACTUAL evidence
     if verifier_confirmed_count == 0:
         status = "UNKNOWN"  # No verifier evidence
-    elif verification_outcome.upper() == "PASSED":
-        status = "VERIFIED"
-    elif verification_outcome.upper() == "FAILED":
-        status = "FAILED"
+        derived_from = "no_verifier_events"
     else:
-        status = "UNKNOWN"
+        # Check actual outcomes - FAILED evidence means FAILED, not VERIFIED
+        if any(o.upper() == "FAILED" for o in verifier_outcomes):
+            status = "FAILED"
+            derived_from = "actual_failed_outcome"
+        elif any(o.upper() == "PASSED" for o in verifier_outcomes):
+            status = "VERIFIED"
+            derived_from = "actual_passed_outcome"
+        elif any(o.upper() == "UNAVAILABLE" for o in verifier_outcomes):
+            status = "UNKNOWN"
+            derived_from = "actual_unavailable_outcome"
+        else:
+            status = "UNKNOWN"
+            derived_from = "no_distinct_outcome"
     
-    # Update intervention
+    # Update intervention with evidence-derived status
     success = update_verification_status(
         intervention_id=intervention_id,
         verification_status=status,
         followup_run_id=followup_run_id,
+        verification_source="evidence",
         db_path=db_path,
     )
     
@@ -503,6 +549,7 @@ def verify_with_evidence(
         "intervention_id": intervention_id,
         "followup_run_id": followup_run_id,
         "verification_status": status,
+        "derived_from": derived_from,
         "verifier_confirmed_count": verifier_confirmed_count,
         "verifier_outcomes": verifier_outcomes,
         "updated": success,
@@ -567,25 +614,25 @@ def cmd_verify(args: argparse.Namespace) -> int:
     db_path = Path(args.db) if getattr(args, 'db', None) else None
     
     if args.verify_with_evidence:
-        # Use evidence-based verification
+        # Use evidence-based verification (status derived from actual verifier outcomes)
         result = verify_with_evidence(
             intervention_id=args.intervention_id,
             followup_run_id=args.followup_run,
-            verification_outcome=args.outcome or "PASSED",
             db_path=db_path,
         )
         print(json.dumps(result, indent=2, default=str))
         if result.get("error"):
             print(f"\n✗ {result['error']}", file=sys.stderr)
             return 1
-        print(f"\n✓ Verification status: {result['verification_status']}", file=sys.stderr)
+        print(f"\n✓ Verification status: {result['verification_status']} (derived from evidence)", file=sys.stderr)
         return 0
     
-    # Simple status update
+    # Simple status update (manual override - tracked as non-evidence source)
     success = update_verification_status(
         intervention_id=args.intervention_id,
         verification_status=args.status,
         followup_run_id=args.followup_run,
+        verification_source="manual",
         db_path=db_path,
     )
     
