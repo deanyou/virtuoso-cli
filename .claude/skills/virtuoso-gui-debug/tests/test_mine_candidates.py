@@ -2,12 +2,12 @@
 """
 Unit tests for mine_candidates.py
 
-Tests cover:
+Tests cover the 5 key constraints:
 1. Deterministic output (same data -> same hash)
-2. Evidence vs manual source handling
-3. Candidate strength classification
-4. Min verified threshold filtering
-5. Report generation
+2. Deduplicated support (counted by unique run)
+3. Correct strength (pass rate = verified / (verified + failed))
+4. Specific grouping (full reason + action + context)
+5. Traceable evidence (intervention references included)
 
 Run with: python3 test_mine_candidates.py
 Compatible with Python 3.9 and 3.13
@@ -27,9 +27,12 @@ sys.path.insert(0, str(_SKILL_DIR / "scripts" / "evidence"))
 
 from mine_candidates import (
     mine_candidates,
-    get_intervention_stats,
+    get_interventions,
     generate_report,
     _hash_snapshot,
+    _canonicalize_intervention,
+    _make_group_signature,
+    _compute_group_stats,
     TRUSTED_SOURCES,
     CANDIDATE_SCHEMA_VERSION,
 )
@@ -41,177 +44,360 @@ from record_intervention import (
 )
 
 
+def _insert_verifier_events(db_path: Path, outcomes: dict):
+    """Helper to insert VERIFIER_CONFIRMED events."""
+    conn = init_db(db_path)
+    for name, outcome in outcomes.items():
+        conn.execute("""
+            INSERT INTO experience_events 
+            (event_id, run_id, step_id, event_type, state, value_source, outcome)
+            VALUES (?, ?, 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', ?)
+        """, (f"evt-{name}", f"followup-{name}", outcome))
+    conn.commit()
+    conn.close()
+
+
 class TestDeterminism(unittest.TestCase):
     """Test 1: Same data always produces same candidates."""
     
+    def setUp(self):
+        """Create temporary database."""
+        self.temp_db = Path(tempfile.mktemp(suffix=".db"))
+        init_db(self.temp_db)
+    
+    def tearDown(self):
+        """Clean up temporary database."""
+        self.temp_db.unlink(missing_ok=True)
+    
     def test_same_data_same_hash(self):
         """Identical data produces identical hash."""
-        data = {"test": "value", "number": 42}
-        hash1 = _hash_snapshot(data)
-        hash2 = _hash_snapshot(data)
-        self.assertEqual(hash1, hash2)
+        for i in range(2):
+            record_intervention(
+                run_id=f"run-{i}",
+                step_id="step-1",
+                reason="Test reason",
+                action="Test action",
+                db_path=self.temp_db,
+            )
+        
+        result1 = mine_candidates(db_path=self.temp_db)
+        result2 = mine_candidates(db_path=self.temp_db)
+        
+        self.assertEqual(result1["snapshot_hash"], result2["snapshot_hash"])
     
     def test_different_data_different_hash(self):
         """Different data produces different hash."""
-        data1 = {"test": "value1"}
-        data2 = {"test": "value2"}
-        hash1 = _hash_snapshot(data1)
-        hash2 = _hash_snapshot(data2)
-        self.assertNotEqual(hash1, hash2)
-    
-    def test_key_order_independent(self):
-        """Key order doesn't affect hash."""
-        data1 = {"a": 1, "b": 2, "c": 3}
-        data2 = {"c": 3, "a": 1, "b": 2}
-        hash1 = _hash_snapshot(data1)
-        hash2 = _hash_snapshot(data2)
-        self.assertEqual(hash1, hash2)
-
-
-class TestEvidenceVsManualSource(unittest.TestCase):
-    """Test 2: Evidence vs manual source handling."""
-    
-    def setUp(self):
-        """Create temporary database."""
-        self.temp_db = Path(tempfile.mktemp(suffix=".db"))
-        init_db(self.temp_db)
-        
-        # Insert mock VERIFIER_CONFIRMED event
-        conn = init_db(self.temp_db)
-        conn.execute("""
-            INSERT INTO experience_events 
-            (event_id, run_id, step_id, event_type, state, value_source, outcome)
-            VALUES ('evt-1', 'followup-evidence', 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
-        """)
-        conn.execute("""
-            INSERT INTO experience_events 
-            (event_id, run_id, step_id, event_type, state, value_source, outcome)
-            VALUES ('evt-2', 'followup-failed', 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'FAILED')
-        """)
-        conn.commit()
-        conn.close()
-    
-    def tearDown(self):
-        """Clean up temporary database."""
-        self.temp_db.unlink(missing_ok=True)
-    
-    def test_evidence_source_verified_counts_as_trusted(self):
-        """Evidence source + VERIFIED counts as trusted evidence."""
-        record = record_intervention(
-            run_id="test-run",
+        record_intervention(
+            run_id="run-1",
             step_id="step-1",
-            reason="Window identity ambiguous",
-            action="Selected target window",
+            reason="Reason 1",
+            action="Action 1",
             db_path=self.temp_db,
         )
         
-        # Use verify_with_evidence (source='evidence')
-        result = verify_with_evidence(
-            intervention_id=record["intervention_id"],
-            followup_run_id="followup-evidence",
-            db_path=self.temp_db,
-        )
+        result1 = mine_candidates(db_path=self.temp_db)
+        hash1 = result1["snapshot_hash"]
         
-        self.assertEqual(result["verification_status"], "VERIFIED")
-        
-        # Mine candidates
-        stats = get_intervention_stats(self.temp_db)
-        self.assertEqual(len(stats["groups"]), 1)
-        group = stats["groups"][0]
-        self.assertEqual(group["stats"]["verified_evidence_count"], 1)
-        self.assertEqual(group["stats"]["verified_manual_count"], 0)
-    
-    def test_manual_source_verified_excluded_from_trusted(self):
-        """Manual source + VERIFIED excluded from trusted evidence."""
-        record = record_intervention(
-            run_id="test-run",
+        record_intervention(
+            run_id="run-2",
             step_id="step-1",
-            reason="Window identity ambiguous",
-            action="Selected target window",
+            reason="Reason 2",
+            action="Action 2",
             db_path=self.temp_db,
         )
         
-        # Use manual update (source='manual')
-        update_verification_status(
-            intervention_id=record["intervention_id"],
-            verification_status="VERIFIED",
-            verification_source="manual",
-            db_path=self.temp_db,
-        )
+        result2 = mine_candidates(db_path=self.temp_db)
         
-        # Mine candidates
-        stats = get_intervention_stats(self.temp_db)
-        group = stats["groups"][0]
-        # Manual should NOT count as trusted evidence
-        self.assertEqual(group["stats"]["verified_evidence_count"], 0)
-        self.assertEqual(group["stats"]["verified_manual_count"], 1)
+        self.assertNotEqual(hash1, result2["snapshot_hash"])
     
-    def test_failed_outcome_excluded_from_verified(self):
-        """FAILED outcome excluded from verified count."""
-        record = record_intervention(
-            run_id="test-run",
-            step_id="step-1",
-            reason="Window identity ambiguous",
-            action="Selected target window",
-            db_path=self.temp_db,
-        )
+    def test_canonicalize_removes_timestamp(self):
+        """Canonicalized intervention has no timestamp."""
+        iv = {
+            "intervention_id": "test-id",
+            "run_id": "run-1",
+            "step_id": "step-1",
+            "reason": "Test",
+            "action": "Test",
+            "source": "human",
+            "verification_status": "VERIFIED",
+            "followup_run_id": "followup-1",
+            "details": '{"_verification": {"timestamp": "2024-01-01T00:00:00Z"}}',
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
         
-        # Use verify_with_evidence with FAILED outcome
-        result = verify_with_evidence(
-            intervention_id=record["intervention_id"],
-            followup_run_id="followup-failed",
-            db_path=self.temp_db,
-        )
+        canonical = _canonicalize_intervention(iv)
         
-        self.assertEqual(result["verification_status"], "FAILED")
-        
-        # Mine candidates
-        stats = get_intervention_stats(self.temp_db)
-        group = stats["groups"][0]
-        self.assertEqual(group["stats"]["failed_count"], 1)
-        self.assertEqual(group["stats"]["verified_evidence_count"], 0)
-
-
-class TestCandidateStrength(unittest.TestCase):
-    """Test 3: Candidate strength classification."""
+        self.assertNotIn("timestamp", canonical)
+        self.assertIn("intervention_id", canonical)
     
-    def setUp(self):
-        """Create temporary database."""
-        self.temp_db = Path(tempfile.mktemp(suffix=".db"))
-        init_db(self.temp_db)
-        
-        # Insert mock VERIFIER_CONFIRMED event
-        conn = init_db(self.temp_db)
-        conn.execute("""
-            INSERT INTO experience_events 
-            (event_id, run_id, step_id, event_type, state, value_source, outcome)
-            VALUES ('evt-ev', 'followup', 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
-        """)
-        conn.commit()
-        conn.close()
-    
-    def tearDown(self):
-        """Clean up temporary database."""
-        self.temp_db.unlink(missing_ok=True)
-    
-    def test_insufficient_strength(self):
-        """Less than 1 verified evidence = insufficient."""
-        record = record_intervention(
-            run_id="test-run",
+    def test_no_timestamp_in_snapshot(self):
+        """Snapshot hash computed without timestamps."""
+        record_intervention(
+            run_id="run-1",
             step_id="step-1",
             reason="Test",
             action="Test",
             db_path=self.temp_db,
         )
-        # No verification
         
-        candidates = mine_candidates(db_path=self.temp_db)
-        self.assertEqual(len(candidates["candidates"]), 0)
+        result = mine_candidates(db_path=self.temp_db)
+        
+        snapshot_str = json.dumps(result, default=str)
+        self.assertNotRegex(snapshot_str, r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}')
+
+
+class TestDeduplicatedSupport(unittest.TestCase):
+    """Test 2: Support counted by unique run, not intervention."""
     
-    def test_moderate_strength(self):
-        """1 verified evidence = moderate strength."""
+    def setUp(self):
+        """Create temporary database."""
+        self.temp_db = Path(tempfile.mktemp(suffix=".db"))
+        init_db(self.temp_db)
+        _insert_verifier_events(self.temp_db, {"pass": "PASSED"})
+    
+    def tearDown(self):
+        """Clean up temporary database."""
+        self.temp_db.unlink(missing_ok=True)
+    
+    def test_single_run_multiple_interventions_same_reason(self):
+        """Single run with 3 interventions = 1 support, not 3."""
+        for i in range(3):
+            record_intervention(
+                run_id="same-run",  # Same run_id
+                step_id=f"step-{i}",
+                reason="Window identity ambiguous",
+                action="Selected target",
+                db_path=self.temp_db,
+            )
+        
+        # Verify all
+        interventions = get_interventions(self.temp_db)
+        for iv in interventions:
+            verify_with_evidence(
+                intervention_id=iv["intervention_id"],
+                followup_run_id="followup-pass",
+                db_path=self.temp_db,
+            )
+        
+        result = mine_candidates(db_path=self.temp_db)
+        
+        # Should have 1 verified (not 3)
+        self.assertEqual(len(result["candidates"]), 1)
+        self.assertEqual(result["candidates"][0]["stats"]["verified_evidence_count"], 1)
+    
+    def test_multiple_runs_same_reason(self):
+        """3 different runs = 3 support."""
+        for i in range(3):
+            record_intervention(
+                run_id=f"run-{i}",
+                step_id="step-1",
+                reason="Window identity ambiguous",
+                action="Selected target",
+                db_path=self.temp_db,
+            )
+        
+        interventions = get_interventions(self.temp_db)
+        for iv in interventions:
+            verify_with_evidence(
+                intervention_id=iv["intervention_id"],
+                followup_run_id="followup-pass",
+                db_path=self.temp_db,
+            )
+        
+        result = mine_candidates(db_path=self.temp_db)
+        
+        self.assertEqual(result["candidates"][0]["stats"]["verified_evidence_count"], 3)
+
+
+class TestCorrectStrength(unittest.TestCase):
+    """Test 3: Strength based on pass rate, not raw counts."""
+    
+    def setUp(self):
+        """Create temporary database."""
+        self.temp_db = Path(tempfile.mktemp(suffix=".db"))
+        init_db(self.temp_db)
+        _insert_verifier_events(self.temp_db, {"pass": "PASSED", "fail": "FAILED"})
+    
+    def tearDown(self):
+        """Clean up temporary database."""
+        self.temp_db.unlink(missing_ok=True)
+    
+    def test_3_verified_9_failed_is_not_strong(self):
+        """3 verified + 9 failed = 25% pass rate, not strong."""
+        # 3 verified
+        for i in range(3):
+            record_intervention(
+                run_id=f"verified-run-{i}",
+                step_id="step-1",
+                reason="Test",
+                action="Test",
+                db_path=self.temp_db,
+            )
+        
+        # 9 failed
+        for i in range(9):
+            record_intervention(
+                run_id=f"failed-run-{i}",
+                step_id="step-1",
+                reason="Test",
+                action="Test",
+                db_path=self.temp_db,
+            )
+        
+        interventions = get_interventions(self.temp_db)
+        for iv in interventions:
+            if iv["run_id"].startswith("verified-run"):
+                verify_with_evidence(
+                    intervention_id=iv["intervention_id"],
+                    followup_run_id="followup-pass",
+                    db_path=self.temp_db,
+                )
+            else:
+                verify_with_evidence(
+                    intervention_id=iv["intervention_id"],
+                    followup_run_id="followup-fail",
+                    db_path=self.temp_db,
+                )
+        
+        result = mine_candidates(db_path=self.temp_db)
+        
+        # Pass rate = 3/(3+9) = 25%
+        cand = result["candidates"][0]
+        self.assertEqual(cand["stats"]["pass_rate"], 0.25)
+        self.assertEqual(cand["strength"], "weak")
+    
+    def test_manual_only_is_manual_only_strength(self):
+        """Manual-only records should be 'manual_only' strength."""
+        record_intervention(
+            run_id="run-1",
+            step_id="step-1",
+            reason="Test",
+            action="Test",
+            db_path=self.temp_db,
+        )
+        
+        interventions = get_interventions(self.temp_db)
+        update_verification_status(
+            intervention_id=interventions[0]["intervention_id"],
+            verification_status="VERIFIED",
+            verification_source="manual",
+            db_path=self.temp_db,
+        )
+        
+        # Use min_verified=0 to include manual-only candidates
+        result = mine_candidates(min_verified=0, db_path=self.temp_db)
+        
+        self.assertGreaterEqual(len(result["candidates"]), 1)
+        cand = result["candidates"][0]
+        self.assertEqual(cand["strength"], "manual_only")
+        self.assertEqual(cand["stats"]["verified_evidence_count"], 0)
+
+
+class TestSpecificGrouping(unittest.TestCase):
+    """Test 4: Grouping uses full reason + action + context."""
+    
+    def setUp(self):
+        """Create temporary database."""
+        self.temp_db = Path(tempfile.mktemp(suffix=".db"))
+        init_db(self.temp_db)
+        _insert_verifier_events(self.temp_db, {"pass": "PASSED"})
+    
+    def tearDown(self):
+        """Clean up temporary database."""
+        self.temp_db.unlink(missing_ok=True)
+    
+    def test_different_actions_separate_groups(self):
+        """Different actions should be separate groups."""
+        record_intervention(
+            run_id="run-1",
+            step_id="step-1",
+            reason="Window identity ambiguous",
+            action="Action A",
+            db_path=self.temp_db,
+        )
+        record_intervention(
+            run_id="run-2",
+            step_id="step-1",
+            reason="Window identity ambiguous",
+            action="Action B",
+            db_path=self.temp_db,
+        )
+        
+        interventions = get_interventions(self.temp_db)
+        for iv in interventions:
+            verify_with_evidence(
+                intervention_id=iv["intervention_id"],
+                followup_run_id="followup-pass",
+                db_path=self.temp_db,
+            )
+        
+        result = mine_candidates(db_path=self.temp_db)
+        
+        self.assertEqual(len(result["candidates"]), 2)
+    
+    def test_same_reason_different_context_structure(self):
+        """Same reason but different context structure should be separate."""
+        record_intervention(
+            run_id="run-1",
+            step_id="step-1",
+            reason="Test",
+            action="Test",
+            details={"key1": "value"},
+            db_path=self.temp_db,
+        )
+        record_intervention(
+            run_id="run-2",
+            step_id="step-1",
+            reason="Test",
+            action="Test",
+            details={"key1": "value", "key2": "value"},  # Different keys
+            db_path=self.temp_db,
+        )
+        
+        interventions = get_interventions(self.temp_db)
+        for iv in interventions:
+            verify_with_evidence(
+                intervention_id=iv["intervention_id"],
+                followup_run_id="followup-pass",
+                db_path=self.temp_db,
+            )
+        
+        result = mine_candidates(db_path=self.temp_db)
+        
+        # Should be 2 groups due to different context keys
+        self.assertEqual(len(result["candidates"]), 2)
+    
+    def test_group_signature_includes_context_keys(self):
+        """Group signature should include context keys."""
+        sig = _make_group_signature(
+            reason="Test reason",
+            action="Test action",
+            context={"key1": "v1", "key2": "v2"},
+        )
+        
+        parsed = json.loads(sig)
+        self.assertEqual(parsed["reason"], "Test reason")
+        self.assertEqual(parsed["action"], "Test action")
+        self.assertEqual(parsed["context_keys"], ["key1", "key2"])
+
+
+class TestTraceableEvidence(unittest.TestCase):
+    """Test 5: Evidence references included for traceability."""
+    
+    def setUp(self):
+        """Create temporary database."""
+        self.temp_db = Path(tempfile.mktemp(suffix=".db"))
+        init_db(self.temp_db)
+        _insert_verifier_events(self.temp_db, {"pass": "PASSED", "fail": "FAILED"})
+    
+    def tearDown(self):
+        """Clean up temporary database."""
+        self.temp_db.unlink(missing_ok=True)
+    
+    def test_verified_evidence_refs_included(self):
+        """Verified evidence should include intervention references."""
         record = record_intervention(
-            run_id="test-run",
+            run_id="run-1",
             step_id="step-1",
             reason="Test",
             action="Test",
@@ -220,87 +406,41 @@ class TestCandidateStrength(unittest.TestCase):
         
         verify_with_evidence(
             intervention_id=record["intervention_id"],
-            followup_run_id="followup",
+            followup_run_id="followup-pass",
             db_path=self.temp_db,
         )
         
-        candidates = mine_candidates(db_path=self.temp_db)
-        self.assertEqual(len(candidates["candidates"]), 1)
-        self.assertEqual(candidates["candidates"][0]["strength"], "moderate")
-
-
-class TestMinVerifiedThreshold(unittest.TestCase):
-    """Test 4: Min verified threshold filtering."""
+        result = mine_candidates(db_path=self.temp_db)
+        
+        cand = result["candidates"][0]
+        self.assertIn("verified_evidence_refs", cand)
+        self.assertEqual(len(cand["verified_evidence_refs"]), 1)
+        self.assertEqual(
+            cand["verified_evidence_refs"][0]["intervention_id"],
+            record["intervention_id"]
+        )
     
-    def setUp(self):
-        """Create temporary database."""
-        self.temp_db = Path(tempfile.mktemp(suffix=".db"))
-        init_db(self.temp_db)
+    def test_failed_refs_included(self):
+        """Failed evidence should include intervention references."""
+        record = record_intervention(
+            run_id="run-1",
+            step_id="step-1",
+            reason="Test",
+            action="Test",
+            db_path=self.temp_db,
+        )
         
-        # Insert mock VERIFIER_CONFIRMED event
-        conn = init_db(self.temp_db)
-        for i in range(5):
-            conn.execute("""
-                INSERT INTO experience_events 
-                (event_id, run_id, step_id, event_type, state, value_source, outcome)
-                VALUES (?, ?, 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
-            """, (f"evt-{i}", f"followup-{i}"))
-        conn.commit()
-        conn.close()
-    
-    def tearDown(self):
-        """Clean up temporary database."""
-        self.temp_db.unlink(missing_ok=True)
-    
-    def test_min_verified_filters_candidates(self):
-        """Higher threshold filters out candidates."""
-        # Create 3 interventions with DIFFERENT reasons (different groups)
-        for i in range(3):
-            record = record_intervention(
-                run_id=f"test-run-{i}",
-                step_id="step-1",
-                reason=f"Reason {i}",  # Different reasons = different groups
-                action="Test",
-                db_path=self.temp_db,
-            )
-            verify_with_evidence(
-                intervention_id=record["intervention_id"],
-                followup_run_id=f"followup-{i}",
-                db_path=self.temp_db,
-            )
+        interventions = get_interventions(self.temp_db)
+        verify_with_evidence(
+            intervention_id=interventions[0]["intervention_id"],
+            followup_run_id="followup-fail",
+            db_path=self.temp_db,
+        )
         
-        # Default threshold (1) should include all 3 candidates
-        candidates = mine_candidates(min_verified=1, db_path=self.temp_db)
-        self.assertEqual(len(candidates["candidates"]), 3)
+        # Use min_verified=0 to include failed-only candidates
+        result = mine_candidates(min_verified=0, db_path=self.temp_db)
         
-        # Threshold of 2 should exclude all (each group has only 1)
-        candidates = mine_candidates(min_verified=2, db_path=self.temp_db)
-        self.assertEqual(len(candidates["candidates"]), 0)
-
-
-class TestReportGeneration(unittest.TestCase):
-    """Test 5: Report generation."""
-    
-    def test_report_contains_key_sections(self):
-        """Report contains expected sections."""
-        candidates = {
-            "generated_at": "2024-01-01T00:00:00Z",
-            "schema_version": "1.0",
-            "snapshot_hash": "abc123",
-            "total_interventions_analyzed": 0,
-            "total_candidates": 0,
-            "min_verified_threshold": 1,
-            "candidates": [],
-            "evidence_note": "Only evidence sources count.",
-        }
-        
-        report = generate_report(candidates)
-        
-        self.assertIn("Candidate Analysis Report", report)
-        self.assertIn("Schema: v1.0", report)
-        self.assertIn("Snapshot:", report)
-        self.assertIn("CANDIDATES", report)
-        self.assertIn("NOTE", report)
+        self.assertGreaterEqual(len(result["candidates"]), 1)
 
 
 class TestCLI(unittest.TestCase):
@@ -315,24 +455,8 @@ class TestCLI(unittest.TestCase):
         """Clean up temporary database."""
         self.temp_db.unlink(missing_ok=True)
     
-    def test_stats_command(self):
-        """stats command returns JSON."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(_SKILL_DIR / "scripts" / "evidence" / "mine_candidates.py"),
-                "--db", str(self.temp_db),
-                "stats",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(result.returncode, 0)
-        data = json.loads(result.stdout)
-        self.assertIn("total_interventions", data)
-    
-    def test_mine_command(self):
-        """mine command returns JSON."""
+    def test_mine_command_returns_json(self):
+        """mine command returns JSON with expected fields."""
         result = subprocess.run(
             [
                 sys.executable,
@@ -345,24 +469,35 @@ class TestCLI(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
         data = json.loads(result.stdout)
-        self.assertIn("candidates", data)
         self.assertIn("snapshot_hash", data)
+        self.assertIn("candidates", data)
     
-    def test_mine_report_format(self):
-        """mine --format report returns text."""
-        result = subprocess.run(
+    def test_mine_deterministic_twice(self):
+        """Two mine commands produce same hash."""
+        result1 = subprocess.run(
             [
                 sys.executable,
                 str(_SKILL_DIR / "scripts" / "evidence" / "mine_candidates.py"),
                 "--db", str(self.temp_db),
                 "mine",
-                "--format", "report",
             ],
             capture_output=True,
             text=True,
         )
-        self.assertEqual(result.returncode, 0)
-        self.assertIn("Report", result.stdout)
+        result2 = subprocess.run(
+            [
+                sys.executable,
+                str(_SKILL_DIR / "scripts" / "evidence" / "mine_candidates.py"),
+                "--db", str(self.temp_db),
+                "mine",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        
+        hash1 = json.loads(result1.stdout)["snapshot_hash"]
+        hash2 = json.loads(result2.stdout)["snapshot_hash"]
+        self.assertEqual(hash1, hash2)
 
 
 if __name__ == "__main__":

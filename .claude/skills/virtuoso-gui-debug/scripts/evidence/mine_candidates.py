@@ -8,10 +8,12 @@ patterns that could inform future automation decisions.
 P2 of the Evidence Loop Plan:
 https://github.com/deanyou/virtuoso-cli/blob/main/docs/vcli-evidence-loop-plan.html
 
-Key constraints:
-- Only VERIFIED interventions count as trusted evidence
-- Manual/override sources are excluded from support counts
-- Same snapshot always produces same candidates (deterministic)
+Key constraints enforced:
+1. Deterministic: Same data always produces same candidates (no timestamps in hash)
+2. Deduplicated: Support counted by unique run, not by intervention
+3. Correct strength: Pass rate uses verified/failed counts; manual/override separate
+4. Specific grouping: Full reason + action + context signature
+5. Traceable evidence: Include intervention/run/step references in output
 """
 
 import argparse
@@ -21,7 +23,7 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 # Add script to path
 _SCRIPT_DIR = Path(__file__).parent.resolve()  # scripts/evidence/
@@ -41,26 +43,60 @@ TRUSTED_SOURCES = {"evidence"}
 ALL_SOURCES = {"evidence", "manual", "override"}
 
 
+def _canonicalize_intervention(iv: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Canonicalize intervention for deterministic hashing.
+    Removes timestamps and non-deterministic fields.
+    """
+    return {
+        "intervention_id": iv.get("intervention_id"),
+        "run_id": iv.get("run_id"),
+        "step_id": iv.get("step_id"),
+        "reason": iv.get("reason"),
+        "action": iv.get("action"),
+        "source": iv.get("source"),
+        "verification_status": iv.get("verification_status"),
+        "followup_run_id": iv.get("followup_run_id"),
+        # Keep details but remove _verification.timestamp if present
+        "details_keys": sorted(json.loads(iv.get("details") or "{}").keys()),
+    }
+
+
 def _hash_snapshot(evidence_data: Dict[str, Any]) -> str:
-    """Generate deterministic hash of evidence snapshot."""
-    # Canonicalize for determinism
+    """
+    Generate deterministic hash of evidence snapshot.
+    
+    Uses canonicalized interventions (no timestamps) for determinism.
+    """
     canonical = json.dumps(evidence_data, sort_keys=True, default=str)
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
-def get_intervention_stats(db_path: Optional[Path] = None) -> Dict[str, Any]:
+def _make_group_signature(reason: str, action: str, context: Optional[Dict]) -> str:
     """
-    Get intervention statistics grouped by reason/action patterns.
+    Create a specific group signature from reason + action + context.
     
-    Returns stats broken down by:
-    - verification_status (VERIFIED, FAILED, UNKNOWN)
-    - verification_source (evidence, manual, override)
-    
-    Only TRUSTED sources contribute to VERIFIED counts.
+    Uses full text (not truncated), includes action and context.
+    Missing context is recorded as "MISSING_CONTEXT".
     """
+    # Use full reason text (not truncated)
+    reason_sig = reason or "EMPTY_REASON"
+    action_sig = action or "EMPTY_ACTION"
+    
+    # Include context if available
+    context_keys = sorted(context.keys()) if context else []
+    
+    return json.dumps({
+        "reason": reason_sig,
+        "action": action_sig,
+        "context_keys": context_keys,
+    }, sort_keys=True)
+
+
+def get_interventions(db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Get all interventions from database."""
     conn = init_db(db_path)
     
-    # Get all interventions with their details
     cursor = conn.execute("""
         SELECT 
             intervention_id,
@@ -74,172 +110,199 @@ def get_intervention_stats(db_path: Optional[Path] = None) -> Dict[str, Any]:
             details,
             timestamp
         FROM interventions
-        ORDER BY timestamp DESC
-    """)
+        ORDER BY run_id, step_id, intervention_id
+    """)  # Stable order: run_id, step_id, intervention_id
     
     columns = [desc[0] for desc in cursor.description]
     interventions = [dict(zip(columns, row)) for row in cursor]
     conn.close()
     
-    # Group by reason pattern (first 50 chars as signature)
-    reason_groups: Dict[str, List[Dict]] = {}
-    for iv in interventions:
-        reason = iv.get("reason", "") or ""
-        # Create reason signature (first 50 chars + hash if longer)
-        if len(reason) > 50:
-            reason_sig = reason[:47] + "..."
-        else:
-            reason_sig = reason
-        
-        if reason_sig not in reason_groups:
-            reason_groups[reason_sig] = []
-        reason_groups[reason_sig].append(iv)
-    
-    # Compute statistics per group
-    stats = {
-        "total_interventions": len(interventions),
-        "groups": []
-    }
-    
-    for reason_sig, group_ivs in reason_groups.items():
-        group_stats = _compute_group_stats(reason_sig, group_ivs)
-        stats["groups"].append(group_stats)
-    
-    # Sort by support count (VERIFIED evidence count)
-    stats["groups"].sort(key=lambda g: g["stats"]["verified_evidence_count"], reverse=True)
-    
-    return stats
+    return interventions
 
 
-def _compute_group_stats(reason_sig: str, interventions: List[Dict]) -> Dict[str, Any]:
-    """Compute statistics for a group of interventions."""
-    # Initialize counters
-    counters = {
-        "total": len(interventions),
-        "verified_evidence": 0,  # Only evidence source + VERIFIED status
-        "verified_manual": 0,    # Manual/override + VERIFIED status
-        "failed": 0,
-        "unknown": 0,
-        "by_run": set(),         # Unique run IDs
-        "by_followup": set(),    # Unique followup run IDs
-    }
+def _compute_group_stats(
+    signature: str,
+    interventions: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Compute statistics for a group of interventions.
     
-    failed_cases = []
+    Key changes:
+    - Deduplicated by unique run_id (not intervention count)
+    - Pass rate = verified_evidence / (verified_evidence + failed)
+    - Manual-only records marked as "manual_only" (insufficient)
+    """
+    # Track unique runs for support
+    verified_runs: Set[str] = set()
+    failed_runs: Set[str] = set()
+    unknown_runs: Set[str] = set()
+    manual_verified_runs: Set[str] = set()
+    
+    # Full intervention references for traceability
+    verified_interventions: List[Dict] = []
+    failed_interventions: List[Dict] = []
+    manual_interventions: List[Dict] = []
+    unknown_interventions: List[Dict] = []
     
     for iv in interventions:
         details = json.loads(iv.get("details") or "{}")
         ver_info = details.get("_verification", {})
-        source = ver_info.get("source", "unknown")
+        source = ver_info.get("source", iv.get("source", "unknown"))
         status = iv.get("verification_status") or ver_info.get("status")
+        run_id = iv.get("run_id")
         
-        counters["by_run"].add(iv.get("run_id"))
-        if iv.get("followup_run_id"):
-            counters["by_followup"].add(iv["followup_run_id"])
+        iv_ref = {
+            "intervention_id": iv.get("intervention_id"),
+            "run_id": run_id,
+            "step_id": iv.get("step_id"),
+            "source": source,
+            "status": status,
+            "followup_run_id": iv.get("followup_run_id"),
+        }
         
-        # Count based on source and status
         if status == "VERIFIED":
             if source in TRUSTED_SOURCES:
-                counters["verified_evidence"] += 1
+                verified_runs.add(run_id)
+                verified_interventions.append(iv_ref)
             else:
-                counters["verified_manual"] += 1
+                manual_verified_runs.add(run_id)
+                manual_interventions.append(iv_ref)
         elif status == "FAILED":
-            counters["failed"] += 1
-            failed_cases.append({
-                "intervention_id": iv["intervention_id"],
-                "run_id": iv["run_id"],
-                "reason": iv.get("reason"),
-                "action": iv.get("action"),
-            })
-        else:
-            counters["unknown"] += 1
+            failed_runs.add(run_id)
+            failed_interventions.append(iv_ref)
+        else:  # UNKNOWN or None
+            unknown_runs.add(run_id)
+            unknown_interventions.append(iv_ref)
     
-    # Determine candidate strength
-    total_verified = counters["verified_evidence"] + counters["verified_manual"]
-    evidence_ratio = counters["verified_evidence"] / max(1, total_verified)
+    # Deduplicated counts
+    verified_count = len(verified_runs)
+    manual_count = len(manual_verified_runs)
+    failed_count = len(failed_runs)
+    unknown_count = len(unknown_runs)
     
-    if counters["verified_evidence"] >= 3 and evidence_ratio >= 0.8:
+    # Pass rate: verified / (verified + failed)
+    # Manual-only records should not contribute to pass rate
+    total_verifiable = verified_count + failed_count
+    if total_verifiable > 0:
+        pass_rate = verified_count / total_verifiable
+    else:
+        pass_rate = 0.0  # No verifiable evidence
+    
+    # Strength classification
+    # Only evidence-source VERIFIED counts as strong
+    if verified_count >= 3 and pass_rate >= 0.8:
         strength = "strong"
-    elif counters["verified_evidence"] >= 1 and evidence_ratio >= 0.5:
+    elif verified_count >= 1 and pass_rate >= 0.5:
         strength = "moderate"
-    elif total_verified >= 1:
+    elif verified_count >= 1:
         strength = "weak"
+    elif manual_count >= 1 and verified_count == 0:
+        strength = "manual_only"  # Only manual records, no evidence
     else:
         strength = "insufficient"
     
     return {
-        "reason_signature": reason_sig,
-        "sample_count": len(interventions),
+        "signature": signature,
+        "total_interventions": len(interventions),
+        "unique_runs": verified_count + manual_count + failed_count + unknown_count,
         "stats": {
-            "verified_evidence_count": counters["verified_evidence"],
-            "verified_manual_count": counters["verified_manual"],
-            "failed_count": counters["failed"],
-            "unknown_count": counters["unknown"],
-            "unique_runs": len(counters["by_run"]),
-            "unique_followups": len(counters["by_followup"]),
+            "verified_evidence_count": verified_count,  # Deduplicated by run
+            "verified_evidence_runs": sorted(verified_runs),
+            "verified_manual_count": manual_count,
+            "verified_manual_runs": sorted(manual_verified_runs),
+            "failed_count": failed_count,
+            "failed_runs": sorted(failed_runs),
+            "unknown_count": unknown_count,
+            "unknown_runs": sorted(unknown_runs),
+            "pass_rate": round(pass_rate, 3),
         },
         "strength": strength,
-        "evidence_ratio": round(evidence_ratio, 2),
-        "failed_cases": failed_cases[:5],  # First 5 failed cases for analysis
+        # Evidence for traceability
+        "verified_evidence_refs": verified_interventions,
+        "failed_refs": failed_interventions[:5],  # Limit for output size
+        "manual_refs": manual_interventions,
+        "unknown_refs": unknown_interventions[:5],  # Limit for output size
     }
 
 
 def mine_candidates(
     min_verified: int = 1,
     db_path: Optional[Path] = None,
-    output_format: str = "json",
 ) -> Dict[str, Any]:
     """
     Mine candidate rules from intervention data.
     
-    Args:
-        min_verified: Minimum VERIFIED evidence count to include
-        db_path: Optional database path
-        output_format: Output format (json or report)
-    
-    Returns:
-        Candidate analysis with candidates and statistics
+    Key properties:
+    - Deterministic: Same data produces same hash (no timestamps)
+    - Deduplicated: Support counted by unique run_id
+    - Correct strength: Pass rate = verified / (verified + failed)
+    - Traceable: Full intervention references included
     """
-    # Get snapshot of intervention data
-    stats = get_intervention_stats(db_path)
+    interventions = get_interventions(db_path)
     
-    # Filter to candidates meeting threshold
-    candidates = []
-    for group in stats["groups"]:
-        if group["stats"]["verified_evidence_count"] >= min_verified:
-            candidates.append(group)
+    # Group by full signature (reason + action + context)
+    groups: Dict[str, List[Dict]] = {}
+    for iv in interventions:
+        details = json.loads(iv.get("details") or "{}")
+        signature = _make_group_signature(
+            reason=iv.get("reason", ""),
+            action=iv.get("action", ""),
+            context=details,
+        )
+        
+        if signature not in groups:
+            groups[signature] = []
+        groups[signature].append(iv)
     
-    # Build candidate records with provenance
+    # Compute stats for each group
+    group_stats = []
+    for sig, group_ivs in groups.items():
+        stats = _compute_group_stats(sig, group_ivs)
+        group_stats.append(stats)
+    
+    # Sort by verified evidence count, then pass rate
+    group_stats.sort(
+        key=lambda g: (g["stats"]["verified_evidence_count"], g["stats"]["pass_rate"]),
+        reverse=True
+    )
+    
+    # Filter by threshold
+    candidates = [
+        g for g in group_stats
+        if g["stats"]["verified_evidence_count"] >= min_verified
+    ]
+    
+    # Canonicalize interventions for deterministic snapshot
+    canonical_ivs = [_canonicalize_intervention(iv) for iv in interventions]
+    canonical_ivs.sort(key=lambda x: (x["run_id"], x["step_id"], x["intervention_id"]))
+    
+    # Build snapshot WITHOUT timestamp for determinism
     evidence_snapshot = {
         "schema_version": CANDIDATE_SCHEMA_VERSION,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "stats": {
-            "total_interventions": stats["total_interventions"],
-            "total_groups": len(stats["groups"]),
-            "candidates_meeting_threshold": len(candidates),
-        },
-        "groups": stats["groups"],
+        "interventions": canonical_ivs,
+        "group_count": len(group_stats),
+        "candidate_count": len(candidates),
     }
     
     snapshot_hash = _hash_snapshot(evidence_snapshot)
     
-    candidate_output = {
+    return {
         "candidate_id": f"candidate-{snapshot_hash}",
         "schema_version": CANDIDATE_SCHEMA_VERSION,
         "miner_version": "1.0",
         "snapshot_hash": snapshot_hash,
         "min_verified_threshold": min_verified,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "total_interventions_analyzed": stats["total_interventions"],
+        "total_interventions_analyzed": len(interventions),
         "total_candidates": len(candidates),
+        "total_groups": len(group_stats),
         "candidates": candidates,
         "evidence_note": (
-            "Only interventions with verification_source='evidence' and "
-            "verification_status='VERIFIED' count as trusted support. "
-            "Manual/override sources are excluded from evidence counts."
+            "Support deduplicated by run_id. "
+            "Strength based on verified_evidence_count and pass_rate. "
+            "Manual-only records are 'manual_only' strength (no evidence). "
+            "Pass rate = verified / (verified + failed)."
         ),
     }
-    
-    return candidate_output
 
 
 def generate_report(candidates: Dict[str, Any]) -> str:
@@ -248,11 +311,12 @@ def generate_report(candidates: Dict[str, Any]) -> str:
         "=" * 60,
         "Intervention Candidate Analysis Report",
         "=" * 60,
-        f"Generated: {candidates['generated_at']}",
+        f"Candidate ID: {candidates['candidate_id']}",
         f"Schema: v{candidates['schema_version']}",
         f"Snapshot: {candidates['snapshot_hash']}",
         "",
         f"Total interventions analyzed: {candidates['total_interventions_analyzed']}",
+        f"Total groups: {candidates['total_groups']}",
         f"Candidates meeting threshold: {candidates['total_candidates']}",
         f"Min verified threshold: {candidates['min_verified_threshold']}",
         "",
@@ -265,14 +329,15 @@ def generate_report(candidates: Dict[str, Any]) -> str:
     for i, cand in enumerate(candidates["candidates"], 1):
         stats = cand["stats"]
         lines.extend([
-            f"{i}. Reason: {cand['reason_signature']}",
-            f"   Sample count: {cand['sample_count']}",
+            f"{i}. {cand['signature'][:60]}..." if len(cand['signature']) > 60 else f"{i}. {cand['signature']}",
             f"   Strength: {cand['strength']}",
-            f"   Evidence ratio: {cand['evidence_ratio']:.0%}",
+            f"   Pass rate: {stats['pass_rate']:.1%}",
             f"   VERIFIED (evidence): {stats['verified_evidence_count']}",
-            f"   VERIFIED (manual): {stats['verified_manual_count']}",
             f"   FAILED: {stats['failed_count']}",
             f"   UNKNOWN: {stats['unknown_count']}",
+            f"   Manual-only: {stats['verified_manual_count']}",
+            "",
+            f"   Evidence runs: {', '.join(stats['verified_evidence_runs'][:5])}",
             "",
         ])
     
@@ -308,10 +373,13 @@ def cmd_mine(args: argparse.Namespace) -> int:
 
 def cmd_stats(args: argparse.Namespace) -> int:
     """Handle 'stats' command."""
-    stats = get_intervention_stats(
+    interventions = get_interventions(
         db_path=Path(args.db) if getattr(args, 'db', None) else None,
     )
-    print(json.dumps(stats, indent=2, default=str))
+    print(json.dumps({
+        "total_interventions": len(interventions),
+        "interventions": interventions,
+    }, indent=2, default=str))
     return 0
 
 
@@ -330,13 +398,15 @@ Examples:
   # Generate report format
   mine_candidates.py mine --format report
 
-  # Get intervention statistics
+  # Get intervention data
   mine_candidates.py stats
 
 Evidence Rules:
-  - Only verification_source='evidence' + status='VERIFIED' counts as trusted
-  - Manual/override sources excluded from evidence counts
-  - Same data always produces same candidates (deterministic)
+  - Support deduplicated by unique run_id
+  - Only verification_source='evidence' + status='VERIFIED' counts as evidence
+  - Pass rate = verified / (verified + failed)
+  - Manual-only records marked as 'manual_only' strength
+  - Same data always produces same snapshot hash (deterministic)
         """
     )
     
