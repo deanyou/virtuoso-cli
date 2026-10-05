@@ -76,18 +76,55 @@ def _ref_sort_key(r):
     return (r["run"], r.get("fid") or "", r["id"])
 
 
+class UnionFind:
+    """Union-Find for computing connected components in run↔followup graph."""
+    def __init__(self):
+        self.parent = {}
+    
+    def find(self, x):
+        if x not in self.parent:
+            self.parent[x] = x
+        elif self.parent[x] != x:
+            self.parent[x] = self.find(self.parent[x])
+        return self.parent[x]
+    
+    def union(self, x, y):
+        px, py = self.find(x), self.find(y)
+        if px != py:
+            self.parent[px] = py
+
+
 def compute_stats(sig, interventions):
-    # Separate by SOURCE first (trusted vs manual/other)
-    # Then track by ORIGINAL RUN for deduplication
-    trusted_verified = set()  # run_ids with trusted VERIFIED
-    trusted_failed = set()     # run_ids with trusted FAILED
-    trusted_conflict = set()   # run_ids with trusted CONFLICT
+    """
+    Compute statistics for a group of interventions.
     
-    manual_verified = {}       # run_id -> [refs]
-    manual_failed = {}         # run_id -> [refs]
-    manual_conflict = {}       # run_id -> [refs]
+    Deduplication model:
+    - attempts: total number of intervention records
+    - support: number of connected components (Union-Find on run↔followup graph)
     
-    unknown = {}               # run_id -> [refs]
+    Connectivity rules:
+    - Two runs are connected if they share a followup_run_id
+    - A run is connected to its followup_run_id
+    - Each connected component contributes at most 1 support
+    
+    Status per component:
+    - If any node in component has CONFLICT → entire component is conflict (0 support)
+    - If any node has VERIFIED → component contributes to verified_count
+    - If only FAILED → component contributes to failed_count
+    """
+    # Track runs and their followups
+    run_followups = {}  # run_id -> set[followup_run_id]
+    followup_runs = {}  # followup_run_id -> set[run_id]
+    
+    # Track refs and status per (run, fid) pair
+    run_fid_refs = {}   # (run_id, fid) -> list of refs
+    run_fid_status = {} # (run_id, fid) -> set of statuses
+    
+    # Manual/unknown tracking by run
+    manual_verified = {}   # run_id -> [refs]
+    manual_failed = {}     # run_id -> [refs]
+    manual_conflict = {}   # run_id -> [refs]
+    unknown = {}           # run_id -> [refs]
     
     for iv in interventions:
         details = json.loads(iv.get("details") or "{}")
@@ -95,7 +132,7 @@ def compute_stats(sig, interventions):
         src = ver.get("source") or iv.get("source", "unknown")
         status = iv.get("verification_status") or ver.get("status")
         run_id = iv.get("run_id")
-        fid = iv.get("followup_run_id")
+        fid = iv.get("followup_run_id") or None
         ref = {
             "id": iv.get("intervention_id"),
             "run": run_id,
@@ -107,34 +144,77 @@ def compute_stats(sig, interventions):
         
         is_trusted = src in TRUSTED_SOURCES
         
-        if status == "VERIFIED":
-            if is_trusted:
-                trusted_verified.add(run_id)
-            else:
-                manual_verified.setdefault(run_id, []).append(ref)
-        elif status == "CONFLICT":
-            if is_trusted:
-                trusted_conflict.add(run_id)
-            else:
-                manual_conflict.setdefault(run_id, []).append(ref)
-        elif status == "FAILED":
-            if is_trusted:
-                trusted_failed.add(run_id)
-            else:
-                manual_failed.setdefault(run_id, []).append(ref)
+        if is_trusted:
+            # Build connectivity graph
+            run_followups.setdefault(run_id, set())
+            if fid:
+                run_followups[run_id].add(fid)
+                followup_runs.setdefault(fid, set()).add(run_id)
+            
+            # Track ref and status
+            key = (run_id, fid)
+            run_fid_refs.setdefault(key, []).append(ref)
+            run_fid_status.setdefault(key, set()).add(status)
         else:
-            unknown.setdefault(run_id, []).append(ref)
+            # Manual/other sources - track separately
+            if status == "VERIFIED":
+                manual_verified.setdefault(run_id, []).append(ref)
+            elif status == "CONFLICT":
+                manual_conflict.setdefault(run_id, []).append(ref)
+            elif status == "FAILED":
+                manual_failed.setdefault(run_id, []).append(ref)
+            else:
+                unknown.setdefault(run_id, []).append(ref)
     
-    # Detect conflicts: runs that appear in both verified and failed
-    verified_conflict_runs = trusted_verified & trusted_failed
-    trusted_conflict |= verified_conflict_runs
-    trusted_verified -= verified_conflict_runs
-    trusted_failed -= verified_conflict_runs
+    # Build connected components using Union-Find
+    uf = UnionFind()
     
-    # Counts by unique run_id (deduplication)
-    verified_count = len(trusted_verified)
-    failed_count = len(trusted_failed)
-    conflict_count = len(trusted_conflict)
+    # Union runs that share a followup
+    for fid, runs in followup_runs.items():
+        runs_list = sorted(runs)  # Deterministic
+        for i in range(1, len(runs_list)):
+            uf.union(runs_list[0], runs_list[i])
+    
+    # Union runs with their followups (run_id connected to fid)
+    for run_id, fids in run_followups.items():
+        for fid in fids:
+            uf.union(run_id, fid)
+    
+    # Get connected components
+    components = {}  # root -> {run_id -> [refs], statuses: set, fids: set}
+    for (run_id, fid), refs in run_fid_refs.items():
+        root = uf.find(run_id)
+        if root not in components:
+            components[root] = {"runs": {}, "fids": set(), "statuses": set(), "refs": []}
+        if run_id not in components[root]["runs"]:
+            components[root]["runs"][run_id] = []
+        components[root]["runs"][run_id].extend(refs)
+        if fid:
+            components[root]["fids"].add(fid)
+        components[root]["refs"].extend(refs)
+        for status in run_fid_status.get((run_id, fid), set()):
+            components[root]["statuses"].add(status)
+    
+    # Classify components
+    verified_components = []
+    failed_components = []
+    conflict_components = []
+    
+    for root, comp in components.items():
+        statuses = comp["statuses"]
+        if "CONFLICT" in statuses:
+            conflict_components.append(comp)
+        elif "VERIFIED" in statuses:
+            verified_components.append(comp)
+        elif "FAILED" in statuses:
+            failed_components.append(comp)
+    
+    # Counts
+    verified_count = len(verified_components)
+    failed_count = len(failed_components)
+    conflict_count = len(conflict_components)
+    attempts = sum(len(c["refs"]) for c in components.values())
+    
     manual_count = len(manual_verified) + len(manual_failed) + len(manual_conflict)
     unknown_count = len(unknown)
     
@@ -152,36 +232,37 @@ def compute_stats(sig, interventions):
     else:
         strength = "insufficient"
     
-    # Build refs with deterministic order
-    vrefs = sorted([], key=_ref_sort_key)  # No refs in new model (count by run)
-    frefs = sorted([], key=_ref_sort_key)
-    cref = sorted([], key=_ref_sort_key)
+    # Build refs with deterministic ordering
+    vrefs = sorted([r for c in verified_components for r in c["refs"]], key=_ref_sort_key)[:5]
+    frefs = sorted([r for c in failed_components for r in c["refs"]], key=_ref_sort_key)[:5]
+    cref = sorted([r for c in conflict_components for r in c["refs"]], key=_ref_sort_key)[:10]
     mrefs = sorted([r for refs in manual_verified.values() for r in refs] +
                    [r for refs in manual_failed.values() for r in refs] +
                    [r for refs in manual_conflict.values() for r in refs],
-                  key=_ref_sort_key)
-    urefs = sorted([r for refs in unknown.values() for r in refs], key=_ref_sort_key)
+                  key=_ref_sort_key)[:5]
+    urefs = sorted([r for refs in unknown.values() for r in refs], key=_ref_sort_key)[:5]
     
     return {
         "sig": sig,
         "total": len(interventions),
         "stats": {
+            "attempts": attempts,
             "verified_count": verified_count,
-            "verified_runs": sorted(trusted_verified),
+            "verified_components": len(verified_components),
             "manual_count": manual_count,
             "failed_count": failed_count,
-            "failed_runs": sorted(trusted_failed),
+            "failed_components": len(failed_components),
             "unknown_count": unknown_count,
             "conflict_count": conflict_count,
-            "conflict_runs": sorted(trusted_conflict),
+            "conflict_components": len(conflict_components),
             "pass_rate": round(pass_rate, 3),
         },
         "strength": strength,
         "vrefs": vrefs,
         "frefs": frefs,
         "cref": cref,
-        "mrefs": mrefs[:5],
-        "urefs": urefs[:5],
+        "mrefs": mrefs,
+        "urefs": urefs,
     }
 
 
