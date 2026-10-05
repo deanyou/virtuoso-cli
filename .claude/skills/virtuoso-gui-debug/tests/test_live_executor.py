@@ -781,26 +781,30 @@ class TestWindowIdDisambiguation(unittest.TestCase):
 
     def test_multi_window_with_window_id_succeeds(self):
         import tempfile
-        windows_two = json.dumps({
+        # Fast path: display query returns window with matching window_id, PID,
+        # and DISPLAY. Slow path is skipped.  No --window-id flag is used —
+        # the filter selects on the returned window list directly.
+        window_b = json.dumps({
             "display": DISPLAY,
-            "count": 2,
+            "count": 1,
             "windows": [
-                {"window_id": "0x1", "dismiss_id": "0x1", "display": DISPLAY,
-                 "title": "Window A", "pid": PID, "visible": True,
-                 "geometry": {"x": 0, "y": 0, "w": 100, "h": 100}},
                 {"window_id": "0x2", "dismiss_id": "0x2", "display": DISPLAY,
                  "title": "Window B", "pid": PID, "visible": True,
                  "geometry": {"x": 0, "y": 0, "w": 200, "h": 200}},
             ],
         })
         with tempfile.TemporaryDirectory() as tmp:
-            runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=windows_two)])
+            runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=window_b)])
             ex = make_executor(runner, tmp, window_id="0x2")
             self.assertIsNone(ex.precheck(make_scenario()))
             self.assertEqual(ex.window_id, "0x2")
 
     def test_multi_window_with_bad_window_id_rejected(self):
         import tempfile
+        # Fast path filter finds 0 matches (wid 0xdead not in window list),
+        # falls through to slow path which scans the full display, finds two
+        # windows for the PID, and rejects because the explicit window_id does
+        # not match either.
         windows_two = json.dumps({
             "display": DISPLAY,
             "count": 2,
@@ -814,8 +818,74 @@ class TestWindowIdDisambiguation(unittest.TestCase):
             ],
         })
         with tempfile.TemporaryDirectory() as tmp:
-            runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=windows_two)])
+            # Mock sequence: session list, fast-path window-by-id (empty →
+            # wid mismatch), slow-path full display scan (both windows).
+            runner = FakeRunner([
+                res(stdout=SESSIONS_OK),
+                # Fast path: window "0xdead" does not exist on server.
+                res(stdout=json.dumps({"display": DISPLAY, "count": 0,
+                                       "windows": []})),
+                # Slow path: sees both windows for the PID; 0xdead is absent.
+                res(stdout=windows_two),
+            ])
             ex = make_executor(runner, tmp, window_id="0xdead")
+            err = ex.precheck(make_scenario())
+            self.assertIsNotNone(err)
+            self.assertIn("not found", err["error"])
+
+    def test_fast_path_display_mismatch_root_level(self):
+        """Root-level DISPLAY mismatch: server reports a different DISPLAY."""
+        import tempfile
+        # Server reports :9 while scenario expects :0. Fast path returns the
+        # mismatch error immediately; slow path is not reached.
+        server_display = ":9"
+        win_data = json.dumps({
+            "display": server_display,
+            "count": 1,
+            "windows": [
+                {"window_id": "0x2", "dismiss_id": "0x2",
+                 "display": server_display,
+                 "title": "Window B", "pid": PID, "visible": True,
+                 "geometry": {"x": 0, "y": 0, "w": 200, "h": 200}},
+            ],
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=win_data)])
+            ex = make_executor(runner, tmp, window_id="0x2")
+            err = ex.precheck(make_scenario())
+            self.assertIsNotNone(err)
+            self.assertIn("DISPLAY mismatch", err["error"])
+            self.assertIn(":0", err["error"])
+            self.assertIn(":9", err["error"])
+
+    def test_fast_path_display_mismatch_window_level(self):
+        """Window-level DISPLAY mismatch: window exists but on a different DISPLAY."""
+        import tempfile
+        # Server root display matches scenario (:0), but the window returned
+        # carries a different display field. Fast path filters it out (len=0),
+        # then falls back to slow path which detects the per-window mismatch.
+        win_data = json.dumps({
+            "display": DISPLAY,
+            "count": 2,
+            "windows": [
+                {"window_id": "0x1", "dismiss_id": "0x1",
+                 "display": DISPLAY,
+                 "title": "Window A", "pid": PID, "visible": True,
+                 "geometry": {"x": 0, "y": 0, "w": 100, "h": 100}},
+                {"window_id": "0x2", "dismiss_id": "0x2",
+                 "display": ":9",  # wrong display
+                 "title": "Window B", "pid": PID, "visible": True,
+                 "geometry": {"x": 0, "y": 0, "w": 200, "h": 200}},
+            ],
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            # Fast path: window 0x2 matches window_id+PID but fails the display
+            # check (is on :9 not :0), so filter yields 0 matches and falls back.
+            # Slow path: two windows for PID, explicit window_id matches neither
+            # because 0x2 is on :9, so reject with "not found".
+            runner = FakeRunner([res(stdout=SESSIONS_OK), res(stdout=win_data),
+                                 res(stdout=win_data)])
+            ex = make_executor(runner, tmp, window_id="0x2")
             err = ex.precheck(make_scenario())
             self.assertIsNotNone(err)
             self.assertIn("not found", err["error"])

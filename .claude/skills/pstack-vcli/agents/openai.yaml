@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pstack for vcli"
+  short_description: "Evidence-driven vcli development and review"
+  default_prompt: "Use $pstack-vcli to investigate or change vcli and verify the result."

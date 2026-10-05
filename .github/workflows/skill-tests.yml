@@ -35,5 +35,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install skill test dependencies
+        run: python3 -m pip install 'pytest>=8,<9'
+
       - name: Run skill test suites
         run: bash .github/scripts/run-skill-tests.sh

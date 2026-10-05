@@ -166,6 +166,18 @@ where `dirs::home_dir()` reads `FOLDERID_Profile` and ignores `HOME`).
 `.github/scripts/run-skill-tests.sh`）。纯 Rust 的 PR 不会触发它，因此它仍是 skill 类改动的
 唯一自动化验证 —— 但**不要**因为 Rust 工作流全绿就假定 skill 脚本没问题。
 
+## Project Engineering Workflow
+
+Use `$pstack-vcli` for evidence-driven investigation, design, bug fixing,
+refactoring, and review of this repository. The project-specific port of
+`backnotprop/pstack` lives in `.claude/skills/pstack-vcli/`; Codex discovers
+the same skill through `.agents/skills/pstack-vcli`.
+
+It preserves the vcli invariants above and delegates circuit methodology to
+existing EDA skills. Its reusable checker is
+`python3 .claude/skills/pstack-vcli/scripts/verify.py --scope all`.
+See `docs/pstack-vcli-assessment.md` for scope, provenance, and validation.
+
 ## EvoOntology — Semantic Layer
 
 项目配备了 EvoOntology 本体层，提供 IC 设计自动化的语义知识图谱。

@@ -464,7 +464,7 @@ fn prune_stale_cache<F>(
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if !path.extension().is_some_and(|ext| ext == "fnd") {
+        if path.extension().is_none_or(|ext| ext != "fnd") {
             continue;
         }
         let Some(name) = path.file_name() else {
