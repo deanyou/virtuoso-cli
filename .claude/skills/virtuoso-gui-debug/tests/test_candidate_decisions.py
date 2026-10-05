@@ -87,7 +87,7 @@ class TestCandidateDecisions(unittest.TestCase):
 
 
 class TestEndToEndPipeline(unittest.TestCase):
-    """End-to-end test: mine -> adopt/reject -> review."""
+    """End-to-end test: mine -> adopt/reject -> review -> list-decisions."""
     
     def setUp(self):
         self.db = Path(tempfile.mktemp(suffix=".db"))
@@ -96,9 +96,11 @@ class TestEndToEndPipeline(unittest.TestCase):
     def tearDown(self):
         self.db.unlink(missing_ok=True)
     
-    def test_mine_adopt_reject_review_pipeline(self):
-        """Real candidates mined -> decisions recorded -> review shows correct status."""
-        from record_intervention import verify_with_evidence
+    def test_mine_adopt_reject_review_show_correct_status(self):
+        """Real candidates -> decisions -> review shows ADOPTED/REJECTED correctly."""
+        from record_intervention import verify_with_evidence, cmd_review, cmd_list_decisions
+        from io import StringIO
+        import contextlib
         
         # Create 2 intervention groups (2 candidates)
         for i in range(2):
@@ -107,7 +109,6 @@ class TestEndToEndPipeline(unittest.TestCase):
                 reason=f"Test reason {i}", action=f"Test action {i}",
                 db_path=self.db
             )
-            # Verify both
             conn = init_db(self.db)
             conn.execute("""
                 INSERT INTO experience_events 
@@ -126,48 +127,50 @@ class TestEndToEndPipeline(unittest.TestCase):
         result = mine_candidates.mine(min_verified=0, db_path=self.db)
         self.assertEqual(result["total_cands"], 2)
         
-        # Get candidate IDs from each candidate
         cands = result["candidates"]
-        self.assertEqual(len(cands), 2)
+        cand_ids = [c["candidate_id"] for c in cands]
+        snapshot_hash = result["h"]
         
-        # Each candidate has its own sig/candidate_id
-        cand_ids = [c.get("candidate_id") or c.get("sig", "")[:28] for c in cands]
-        snapshot_hash = result.get("h", "")
+        # Adopt first, reject second
+        record_candidate_decision(cand_ids[0], snapshot_hash, "ADOPTED", db_path=self.db)
+        record_candidate_decision(cand_ids[1], snapshot_hash, "REJECTED", db_path=self.db)
         
-        self.assertIsNotNone(snapshot_hash)
-        for cid in cand_ids:
-            self.assertIsNotNone(cid)
+        # Test cmd_review output
+        class MockArgs:
+            def __init__(self):
+                self.min_verified = 0
+                self.db = str(self.db)
+            db = None
         
-        # Adopt first candidate
-        r1 = record_candidate_decision(
-            cand_ids[0], snapshot_hash, "ADOPTED",
-            reason="Good evidence", db_path=self.db
-        )
-        self.assertEqual(r1["decision"], "ADOPTED")
+        args = MockArgs()
+        args.db = str(self.db)
         
-        # Reject second candidate
-        r2 = record_candidate_decision(
-            cand_ids[1], snapshot_hash, "REJECTED",
-            reason="Insufficient", db_path=self.db
-        )
-        self.assertEqual(r2["decision"], "REJECTED")
+        # Capture stdout
+        f = StringIO()
+        with contextlib.redirect_stdout(f):
+            cmd_review(args)
+        output = f.getvalue()
         
-        # Verify decisions
-        decisions = list_candidate_decisions(include_revoked=True, db_path=self.db)
-        self.assertEqual(len(decisions), 2)
+        # Verify ADOPTED and REJECTED appear in output
+        self.assertIn("ADOPTED", output)
+        self.assertIn("REJECTED", output)
+        # Verify PENDING does NOT appear (both candidates have decisions)
+        self.assertNotIn("PENDING", output)
         
-        # Check adopted list has only one
-        adopted = get_adopted_candidates(db_path=self.db)
-        self.assertEqual(len(adopted), 1)
-        self.assertEqual(adopted[0]["decision"], "ADOPTED")
+        # Test cmd_list_decisions output
+        f2 = StringIO()
+        args2 = MockArgs()
+        args2.db = str(self.db)
+        args2.candidate_id = None
+        args2.decision = None
+        args2.include_revoked = False
+        with contextlib.redirect_stdout(f2):
+            cmd_list_decisions(args2)
+        output2 = f2.getvalue()
         
-        # Verify statuses
-        for d in decisions:
-            if d["decision"] == "ADOPTED":
-                self.assertEqual(d["candidate_id"], cand_ids[0])
-            else:
-                self.assertEqual(d["candidate_id"], cand_ids[1])
-                self.assertEqual(d["decision"], "REJECTED")
+        # Verify both statuses appear
+        self.assertIn("ADOPTED", output2)
+        self.assertIn("REJECTED", output2)
 
 
 if __name__ == "__main__":

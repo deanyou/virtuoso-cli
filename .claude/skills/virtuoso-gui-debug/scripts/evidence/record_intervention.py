@@ -797,7 +797,9 @@ def cmd_list_decisions(args) -> int:
         print("No decisions found."); return 0
     print(f"{len(decisions)} decision(s):")
     for d in decisions:
-        status = "ADOPTED" if not d.get("revoked_at") else f"SUPERSEDED@{d['revoked_at'][:10]}"
+        status = d["decision"]
+        if d.get("revoked_at"):
+            status += f" (SUPERSEDED@{d['revoked_at'][:10]})"
         print(f"  [{d['decision_id'][:16]}] {d['candidate_id']} → {status}")
         if d.get('reason'): print(f"    Reason: {d['reason']}")
     return 0
@@ -817,7 +819,7 @@ def cmd_review(args) -> int:
     print(f"\n{'Candidate':<28} {'Sup':>4} {'Strength':<10} {'Decision':<18}")
     print("-" * 66)
     for c in candidates.get("candidates", []):
-        cand_id = c.get("sig", "unknown")[:28]
+        cand_id = c.get("candidate_id", "")
         support = c.get("stats", {}).get("verified_count", 0)
         strength = c.get("strength", "?")[:10]
         dec = decision_map.get((cand_id, snapshot_hash), {})
