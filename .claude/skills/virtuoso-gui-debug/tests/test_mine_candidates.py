@@ -234,11 +234,15 @@ class TestTripleDeduplication(unittest.TestCase):
     
     def test_evidence_unknown_tracked(self):
         """Evidence source UNKNOWNs are tracked with unknown_count and urefs."""
-        # Create 3 interventions with no verifier events → UNKNOWN
+        # 3 interventions with no verifier events → UNKNOWN via verify_with_evidence
         for i in range(3):
-            record_intervention(
+            iv = record_intervention(
                 run_id="unknown-" + str(i), step_id="step-1",
                 reason="Test", action="Test", db_path=self.db)
+            # verify_with_evidence with no verifier events returns UNKNOWN
+            verify_with_evidence(
+                intervention_id=iv["intervention_id"],
+                followup_run_id="followup-unknown-" + str(i), db_path=self.db)
         
         result = mine(min_verified=0, db_path=self.db)
         c = result["candidates"][0]["stats"]

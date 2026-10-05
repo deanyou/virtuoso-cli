@@ -145,16 +145,20 @@ def compute_stats(sig, interventions):
         is_trusted = src in TRUSTED_SOURCES
         
         if is_trusted:
-            # Build connectivity graph
-            run_followups.setdefault(run_id, set())
-            if fid:
-                run_followups[run_id].add(fid)
-                followup_runs.setdefault(fid, set()).add(run_id)
+            # Build connectivity graph for VERIFIED/FAILED/CONFLICT
+            if status != "UNKNOWN":
+                run_followups.setdefault(run_id, set())
+                if fid:
+                    run_followups[run_id].add(fid)
+                    followup_runs.setdefault(fid, set()).add(run_id)
+                
+                key = (run_id, fid)
+                run_fid_refs.setdefault(key, []).append(ref)
+                run_fid_status.setdefault(key, set()).add(status)
             
-            # Track ref and status (including UNKNOWN)
-            key = (run_id, fid)
-            run_fid_refs.setdefault(key, []).append(ref)
-            run_fid_status.setdefault(key, set()).add(status)
+            # Track trusted UNKNOWNs in unknown dict (for count/refs, not connectivity)
+            if status == "UNKNOWN":
+                unknown.setdefault(run_id, []).append(ref)
         else:
             # Manual/other sources - track separately
             if status == "VERIFIED":
