@@ -144,6 +144,14 @@ pitfalls = [
 ]
 
 # P3: Candidate decisions for review
+import html
+
+def _esc(s):
+    """Escape HTML special characters."""
+    if s is None:
+        return ""
+    return html.escape(str(s), quote=True)
+
 candidates_data = {"candidates": [], "adopted": [], "total_cands": 0}
 try:
     from mine_candidates import mine
@@ -161,6 +169,10 @@ try:
     
     # Attach decision status to each candidate
     snapshot_hash = result.get("h", "")
+    
+    # Count adopted in CURRENT snapshot only
+    adopted_current = [d for d in adopted if d.get("snapshot_hash") == snapshot_hash]
+    
     for c in result.get("candidates", []):
         cand_id = c.get("candidate_id", "")
         dec = decision_map.get((cand_id, snapshot_hash), {})
@@ -175,9 +187,9 @@ try:
     
     candidates_data = {
         "candidates": result.get("candidates", []),
-        "adopted": adopted,
+        "adopted": adopted_current,  # Only current snapshot
         "total_cands": result.get("total_cands", 0),
-        "snapshot_hash": result.get("h", ""),
+        "snapshot_hash": snapshot_hash,
     }
 except Exception as e:
     candidates_data = {"error": str(e), "candidates": [], "adopted": [], "total_cands": 0}
@@ -253,6 +265,11 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
 .cand-stats span {{ color: #e4e4e7; font-weight: 600; }}
 .cand-refs {{ margin-top: 10px; font-size: 11px; color: #6b7280; }}
 .cand-refs code {{ color: #8b5cf6; }}
+
+/* Expandable candidate cards */
+details.cand-card {{ background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 14px; margin-bottom: 12px; }}
+details.cand-card summary {{ list-style: none; cursor: pointer; }}
+details.cand-card summary::-webkit-details-marker {{ display: none; }}
 </style></head><body>
 <div class="container">
 <h1>Virtuoso SKILL RSI</h1>
@@ -499,43 +516,52 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
 <div id="tab-candidates" class="tab-panel">
   <div class="stats">
     <div class="stat"><div class="n">{candidates_data["total_cands"]}</div><div class="l">Total Candidates</div></div>
-    <div class="stat"><div class="n green">{len(candidates_data.get("adopted", []))}</div><div class="l">Adopted</div></div>
+    <div class="stat"><div class="n green">{len(candidates_data.get("adopted", []))}</div><div class="l">Adopted (this snapshot)</div></div>
     <div class="stat"><div class="n yellow">{sum(1 for c in candidates_data.get("candidates", []) if c.get("decision_status") == "PENDING")}</div><div class="l">Pending</div></div>
     <div class="stat"><div class="n red">{sum(1 for c in candidates_data.get("candidates", []) if c.get("decision_status") == "REJECTED")}</div><div class="l">Rejected</div></div>
   </div>
   <div class="card">
-    <h2>Candidate Review</h2>
-    {candidates_data.get("error", "") and f'<p style="color:#ef4444">Error: {candidates_data["error"]}</p>' or ""}
-    {''.join(f'''<div class="cand-card">
-      <div class="cand-header">
-        <span class="cand-id">{c.get("candidate_id", "unknown")}</span>
-        <span class="cand-status {c.get("decision_status", "PENDING").lower()}">{c.get("decision_status", "PENDING")}</span>
-      </div>
+    <h2>Snapshot: <code>{_esc(candidates_data.get("snapshot_hash", ""))}</code></h2>
+    {f'<p style="color:#ef4444">Error: {_esc(str(candidates_data.get("error", "")))}</p>' if candidates_data.get("error") else ""}
+    {''.join(f'''<details class="cand-card">
+      <summary class="cand-header">
+        <span class="cand-id">{_esc(c.get("candidate_id", "unknown"))}</span>
+        <span class="cand-status {_esc(c.get("decision_status", "PENDING").lower())}">{_esc(c.get("decision_status", "PENDING"))}</span>
+      </summary>
       <div class="cand-stats">
-        <div>Attempts: <span>{c.get("stats", {{}}).get("attempts", 0)}</span></div>
-        <div>Support: <span>{c.get("stats", {{}}).get("verified_count", 0)}</span></div>
-        <div>Failed: <span>{c.get("stats", {{}}).get("failed_count", 0)}</span></div>
-        <div>Conflict: <span>{c.get("stats", {{}}).get("conflict_count", 0)}</span></div>
-        <div>Strength: <span>{c.get("strength", "unknown")}</span></div>
+        <div>Attempts: <span>{c.get("stats", {}).get("attempts", 0)}</span></div>
+        <div>Support: <span>{c.get("stats", {}).get("verified_count", 0)}</span></div>
+        <div>Failed: <span>{c.get("stats", {}).get("failed_count", 0)}</span></div>
+        <div>Conflict: <span>{c.get("stats", {}).get("conflict_count", 0)}</span></div>
+        <div>Strength: <span>{_esc(c.get("strength", "unknown"))}</span></div>
       </div>
       <div class="cand-refs">
-        vrefs: {len(c.get("vrefs", []))} | 
-        frefs: {len(c.get("frefs", []))} | 
-        cref: {len(c.get("cref", []))}
+        Evidence refs: vrefs={len(c.get("vrefs", []))} frefs={len(c.get("frefs", []))} cref={len(c.get("cref", []))}
       </div>
-      {f'<div class="cand-refs">Reason: {c.get("decision_reason", "")}</div>' if c.get("decision_reason") else ""}
-    </div>''' for c in candidates_data.get("candidates", [])) if candidates_data.get("candidates") else '<p style="color:#6b7280">No candidates yet. Run "python mine_candidates.py mine" to generate candidates.</p>'}
+      {f'<div class="cand-refs"><b>Decision reason:</b> {_esc(c.get("decision_reason", ""))}</div>' if c.get("decision_reason") else ""}
+      <details>
+        <summary style="cursor:pointer;color:#8b5cf6;font-size:11px;margin-top:8px">Show {len(c.get("vrefs", []))} verified / {len(c.get("frefs", []))} failed / {len(c.get("cref", []))} conflict refs</summary>
+        <div style="font-size:10px;color:#6b7280;margin-top:6px">
+          <div><b>VERIFIED ({len(c.get("vrefs", []))}):</b></div>
+          {''.join(f'<div style="margin-left:10px">run={_esc(r.get("run",""))} fid={_esc(r.get("fid",""))} id={_esc(r.get("id",""))}</div>' for r in c.get("vrefs", []))}
+          <div style="margin-top:6px"><b>FAILED ({len(c.get("frefs", []))}):</b></div>
+          {''.join(f'<div style="margin-left:10px">run={_esc(r.get("run",""))} fid={_esc(r.get("fid",""))} id={_esc(r.get("id",""))}</div>' for r in c.get("frefs", []))}
+          <div style="margin-top:6px"><b>CONFLICT ({len(c.get("cref", []))}):</b></div>
+          {''.join(f'<div style="margin-left:10px">run={_esc(r.get("run",""))} fid={_esc(r.get("fid",""))} id={_esc(r.get("id",""))}</div>' for r in c.get("cref", []))}
+        </div>
+      </details>
+    </details>''' for c in candidates_data.get("candidates", [])) if candidates_data.get("candidates") else '<p style="color:#6b7280">No candidates yet. Run "python mine_candidates.py mine" to generate candidates.</p>'}
   </div>
   <div class="card">
     <h2>CLI Commands for Review</h2>
-    <pre style="background:#0f1117;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto"># Review candidates
+    <pre style="background:#0f1117;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto"># Review candidates (current snapshot: {candidates_data.get("snapshot_hash", "N/A")})
 python scripts/evidence/record_intervention.py review --min-verified 1
 
-# Adopt a candidate
-python scripts/evidence/record_intervention.py adopt <candidate_id> <snapshot_hash> --reason "..."
+# Adopt a candidate (use IDs from above)
+python scripts/evidence/record_intervention.py adopt <candidate_id> {candidates_data.get("snapshot_hash", "<hash>")} --reason "..."
 
 # Reject a candidate
-python scripts/evidence/record_intervention.py reject <candidate_id> <snapshot_hash> --reason "..."
+python scripts/evidence/record_intervention.py reject <candidate_id> {candidates_data.get("snapshot_hash", "<hash>")} --reason "..."
 
 # List decisions
 python scripts/evidence/record_intervention.py list-decisions</pre>
