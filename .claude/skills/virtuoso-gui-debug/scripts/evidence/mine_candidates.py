@@ -151,7 +151,7 @@ def compute_stats(sig, interventions):
                 run_followups[run_id].add(fid)
                 followup_runs.setdefault(fid, set()).add(run_id)
             
-            # Track ref and status
+            # Track ref and status (including UNKNOWN)
             key = (run_id, fid)
             run_fid_refs.setdefault(key, []).append(ref)
             run_fid_status.setdefault(key, set()).add(status)
@@ -202,7 +202,8 @@ def compute_stats(sig, interventions):
     
     for root, comp in components.items():
         statuses = comp["statuses"]
-        if "CONFLICT" in statuses:
+        # CONFLICT if: explicit CONFLICT status OR mixed VERIFIED+FAILED
+        if "CONFLICT" in statuses or ({"VERIFIED", "FAILED"} <= statuses):
             conflict_components.append(comp)
         elif "VERIFIED" in statuses:
             verified_components.append(comp)
@@ -213,11 +214,17 @@ def compute_stats(sig, interventions):
     verified_count = len(verified_components)
     failed_count = len(failed_components)
     conflict_count = len(conflict_components)
+    # attempts = all intervention records (trusted + manual + unknown)
     attempts = sum(len(c["refs"]) for c in components.values())
+    attempts += sum(len(refs) for refs in manual_verified.values())
+    attempts += sum(len(refs) for refs in manual_failed.values())
+    attempts += sum(len(refs) for refs in manual_conflict.values())
+    attempts += sum(len(refs) for refs in unknown.values())
     
     manual_count = len(manual_verified) + len(manual_failed) + len(manual_conflict)
     unknown_count = len(unknown)
     
+    # pass_rate: exclude unknown and conflict from denominator
     total = verified_count + failed_count
     pass_rate = verified_count / total if total > 0 else 0.0
     

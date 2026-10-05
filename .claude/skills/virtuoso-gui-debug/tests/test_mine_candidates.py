@@ -199,6 +199,81 @@ class TestTripleDeduplication(unittest.TestCase):
         self.assertEqual(c["verified_count"], 1)
         self.assertEqual(c["conflict_count"], 0)
         self.assertEqual(c["manual_count"], 1)
+    
+    def test_verified_plus_failed_is_conflict(self):
+        """Component with both VERIFIED and FAILED = CONFLICT, 0 support.
+        
+        This tests: same run has PASSED + FAILED followups → 1 CONFLICT component.
+        """
+        # Insert PASSED event
+        insert_verifier_events(self.db, {"cf": "PASSED"})
+        # Add FAILED event
+        conn = init_db(self.db)
+        conn.execute("""
+            INSERT INTO experience_events 
+            (event_id, run_id, step_id, event_type, state, value_source, outcome)
+            VALUES ('evt-fail', 'followup-cf', 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'FAILED')
+        """)
+        conn.commit()
+        conn.close()
+        
+        record_intervention(
+            run_id="conflict-run", step_id="step-1",
+            reason="Test", action="Test", db_path=self.db)
+        ivs = get_interventions(self.db)
+        verify_with_evidence(
+            intervention_id=ivs[0]["intervention_id"],
+            followup_run_id="followup-cf", db_path=self.db)
+        
+        result = mine(min_verified=0, db_path=self.db)
+        c = result["candidates"][0]["stats"]
+        # Mixed VERIFIED+FAILED in same component = CONFLICT
+        self.assertEqual(c["verified_count"], 0)
+        self.assertEqual(c["failed_count"], 0)
+        self.assertEqual(c["conflict_count"], 1)
+    
+    def test_evidence_unknown_tracked(self):
+        """Evidence source UNKNOWNs are tracked with unknown_count and urefs."""
+        # Create 3 interventions with no verifier events → UNKNOWN
+        for i in range(3):
+            record_intervention(
+                run_id="unknown-" + str(i), step_id="step-1",
+                reason="Test", action="Test", db_path=self.db)
+        
+        result = mine(min_verified=0, db_path=self.db)
+        c = result["candidates"][0]["stats"]
+        self.assertEqual(c["unknown_count"], 3)
+        self.assertEqual(len(result["candidates"][0]["urefs"]), 3)
+    
+    def test_attempts_includes_all_records(self):
+        """attempts = all intervention records (trusted + manual + unknown)."""
+        # 2 trusted VERIFIED
+        insert_verifier_events(self.db, {"v1": "PASSED", "v2": "PASSED"})
+        for i, fid in enumerate(["v1", "v2"]):
+            iv = record_intervention(
+                run_id="trusted-" + str(i), step_id="step-1",
+                reason="Test", action="Test", db_path=self.db)
+            verify_with_evidence(intervention_id=iv["intervention_id"],
+                               followup_run_id="followup-" + fid, db_path=self.db)
+        
+        # 1 manual VERIFIED
+        iv = record_intervention(
+            run_id="manual-run", step_id="step-1",
+            reason="Test", action="Test", db_path=self.db)
+        update_verification_status(
+            intervention_id=iv["intervention_id"],
+            verification_status="VERIFIED",
+            verification_source="manual", db_path=self.db)
+        
+        # 1 unknown (no verifier events)
+        record_intervention(
+            run_id="unknown-run", step_id="step-1",
+            reason="Test", action="Test", db_path=self.db)
+        
+        result = mine(min_verified=0, db_path=self.db)
+        c = result["candidates"][0]["stats"]
+        # Total: 2 trusted + 1 manual + 1 unknown = 4 attempts
+        self.assertEqual(c["attempts"], 4)
 
 
 class TestEvidenceRefs(unittest.TestCase):
