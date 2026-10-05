@@ -704,7 +704,8 @@ def record_candidate_decision(
             WHERE candidate_id = ? AND decision = 'ADOPTED'
         """, (candidate_id,))
     
-    decision_id = f"dec-{candidate_id[:8]}-{snapshot_hash[:8]}"
+    # Use full IDs to avoid collision, truncate only for display
+    decision_id = f"dec-{candidate_id[:12]}-{snapshot_hash[:8]}" if len(candidate_id) > 12 else f"dec-{candidate_id}-{snapshot_hash[:8]}"
     
     try:
         conn.execute("""
@@ -810,19 +811,21 @@ def cmd_review(args) -> int:
     decisions = list_candidate_decisions(include_revoked=True, db_path=db_path)
     decision_map = {(d['candidate_id'], d['snapshot_hash']): d for d in decisions}
     
-    print(f"\n{'Candidate':<24} {'Sup':>4} {'Strength':<10} {'Decision':<18}")
-    print("-" * 62)
+    # Snapshot hash is at top level as 'h'
+    snapshot_hash = candidates.get("h", "")
+    
+    print(f"\n{'Candidate':<28} {'Sup':>4} {'Strength':<10} {'Decision':<18}")
+    print("-" * 66)
     for c in candidates.get("candidates", []):
-        cand_id = c.get("sig", "unknown")[:24]
+        cand_id = c.get("sig", "unknown")[:28]
         support = c.get("stats", {}).get("verified_count", 0)
         strength = c.get("strength", "?")[:10]
-        snap = candidates.get("snapshot_hash", "")
-        dec = decision_map.get((cand_id, snap), {})
+        dec = decision_map.get((cand_id, snapshot_hash), {})
         if dec:
             status = dec["decision"] + (" (revoked)" if dec.get("revoked_at") else "")
         else:
             status = "PENDING"
-        print(f"{cand_id:<24} {support:>4} {strength:<10} {status:<18}")
+        print(f"{cand_id:<28} {support:>4} {strength:<10} {status:<18}")
     
     adopted = get_adopted_candidates(db_path)
     print(f"\n{len(adopted)} adopted | {candidates.get('total_cands', 0)} total candidates")

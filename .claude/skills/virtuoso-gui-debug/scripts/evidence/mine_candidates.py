@@ -52,6 +52,11 @@ def hash_snapshot(data):
     return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
+def _hash_sig(sig):
+    """Create a stable short ID from signature."""
+    return hashlib.sha256(sig.encode()).hexdigest()[:12]
+
+
 def group_sig(reason, action, context):
     reason = reason or "EMPTY_REASON"
     action = action or "EMPTY_ACTION"
@@ -288,6 +293,10 @@ def mine(min_verified=1, db_path=None):
     
     all_stats = [compute_stats(sig, g) for sig, g in groups.items()]
     all_stats.sort(key=lambda x: x["stats"]["verified_count"], reverse=True)
+    
+    # Add stable candidate_id based on hash of sig
+    for stats in all_stats:
+        stats["candidate_id"] = _hash_sig(stats.get("sig", ""))
     
     candidates = [s for s in all_stats if s["stats"]["verified_count"] >= min_verified]
     
