@@ -718,8 +718,14 @@ def record_candidate_decision(
         return {"error": f"Decision already exists for {candidate_id}@{snapshot_hash}"}
     
     conn.close()
-    return {"decision_id": decision_id, "candidate_id": candidate_id,
-            "snapshot_hash": snapshot_hash, "decision": decision, "reason": reason}
+    return {
+        "decision_id": decision_id,
+        "candidate_id": candidate_id,
+        "snapshot_hash": snapshot_hash,
+        "decision": decision,
+        "reason": reason,
+        "decided_by": decided_by,
+    }
 
 
 def list_candidate_decisions(
