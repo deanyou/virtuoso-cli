@@ -116,6 +116,24 @@ CREATE TABLE IF NOT EXISTS interventions (
 CREATE INDEX IF NOT EXISTS idx_interventions_run ON interventions(run_id);
 CREATE INDEX IF NOT EXISTS idx_interventions_step ON interventions(step_id);
 CREATE INDEX IF NOT EXISTS idx_interventions_status ON interventions(verification_status);
+
+-- P3: Candidate decisions for human review workflow
+CREATE TABLE IF NOT EXISTS candidate_decisions (
+    decision_id         TEXT PRIMARY KEY,
+    candidate_id       TEXT NOT NULL,
+    snapshot_hash      TEXT NOT NULL,
+    decision           TEXT NOT NULL CHECK(decision IN ('ADOPTED', 'REJECTED', 'DEFERRED', 'SUPERSEDED')),
+    reason             TEXT,
+    decided_by         TEXT DEFAULT 'human',
+    decided_at         TEXT DEFAULT (datetime('now')),
+    revoked_at         TEXT,
+    revocation_reason   TEXT,
+    UNIQUE(candidate_id, snapshot_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_decisions_candidate ON candidate_decisions(candidate_id);
+CREATE INDEX IF NOT EXISTS idx_decisions_hash ON candidate_decisions(snapshot_hash);
+CREATE INDEX IF NOT EXISTS idx_decisions_status ON candidate_decisions(decision);
 """
 
 
@@ -662,6 +680,149 @@ def cmd_trace(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── P3: Candidate Decision Functions ─────────────────────────────────────────────
+
+def record_candidate_decision(
+    candidate_id: str,
+    snapshot_hash: str,
+    decision: str,
+    reason: Optional[str] = None,
+    decided_by: str = "human",
+    db_path: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Record a human decision on a candidate (ADOPTED/REJECTED/DEFERRED/SUPERSEDED)."""
+    if decision not in {"ADOPTED", "REJECTED", "DEFERRED", "SUPERSEDED"}:
+        raise ValueError(f"Invalid decision: {decision}")
+    
+    conn = init_db(db_path)
+    
+    # Auto-revoke previous ADOPTED if adopting new version
+    if decision == "ADOPTED":
+        conn.execute("""
+            UPDATE candidate_decisions
+            SET decision = 'SUPERSEDED', revoked_at = datetime('now')
+            WHERE candidate_id = ? AND decision = 'ADOPTED'
+        """, (candidate_id,))
+    
+    decision_id = f"dec-{candidate_id[:8]}-{snapshot_hash[:8]}"
+    
+    try:
+        conn.execute("""
+            INSERT INTO candidate_decisions
+            (decision_id, candidate_id, snapshot_hash, decision, reason, decided_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (decision_id, candidate_id, snapshot_hash, decision, reason, decided_by))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        return {"error": f"Decision already exists for {candidate_id}@{snapshot_hash}"}
+    
+    conn.close()
+    return {"decision_id": decision_id, "candidate_id": candidate_id,
+            "snapshot_hash": snapshot_hash, "decision": decision, "reason": reason}
+
+
+def list_candidate_decisions(
+    candidate_id: Optional[str] = None,
+    decision: Optional[str] = None,
+    include_revoked: bool = False,
+    db_path: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """List candidate decisions with optional filters."""
+    conn = init_db(db_path)
+    query = "SELECT * FROM candidate_decisions WHERE 1=1"
+    params = []
+    if candidate_id:
+        query += " AND candidate_id = ?"
+        params.append(candidate_id)
+    if decision:
+        query += " AND decision = ?"
+        params.append(decision)
+    if not include_revoked:
+        query += " AND revoked_at IS NULL"
+    query += " ORDER BY decided_at DESC"
+    cursor = conn.execute(query, params)
+    columns = [d[0] for d in cursor.description]
+    result = [dict(zip(columns, row)) for row in cursor]
+    conn.close()
+    return result
+
+
+def get_adopted_candidates(db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Get currently adopted candidates."""
+    conn = init_db(db_path)
+    cursor = conn.execute("""
+        SELECT * FROM candidate_decisions
+        WHERE decision = 'ADOPTED' AND revoked_at IS NULL
+        ORDER BY decided_at DESC
+    """)
+    columns = [d[0] for d in cursor.description]
+    result = [dict(zip(columns, row)) for row in cursor]
+    conn.close()
+    return result
+
+
+def cmd_adopt(args) -> int:
+    db_path = Path(args.db) if getattr(args, 'db', None) else None
+    result = record_candidate_decision(args.candidate_id, args.snapshot_hash,
+                                       "ADOPTED", args.reason, db_path=db_path)
+    if result.get("error"):
+        print(f"✗ {result['error']}"); return 1
+    print(f"✓ Candidate {args.candidate_id} adopted")
+    return 0
+
+
+def cmd_reject(args) -> int:
+    db_path = Path(args.db) if getattr(args, 'db', None) else None
+    result = record_candidate_decision(args.candidate_id, args.snapshot_hash,
+                                       "REJECTED", args.reason, db_path=db_path)
+    if result.get("error"):
+        print(f"✗ {result['error']}"); return 1
+    print(f"✓ Candidate {args.candidate_id} rejected")
+    return 0
+
+
+def cmd_list_decisions(args) -> int:
+    db_path = Path(args.db) if getattr(args, 'db', None) else None
+    decisions = list_candidate_decisions(args.candidate_id, args.decision,
+                                        args.include_revoked, db_path)
+    if not decisions:
+        print("No decisions found."); return 0
+    print(f"{len(decisions)} decision(s):")
+    for d in decisions:
+        status = "ADOPTED" if not d.get("revoked_at") else f"SUPERSEDED@{d['revoked_at'][:10]}"
+        print(f"  [{d['decision_id'][:16]}] {d['candidate_id']} → {status}")
+        if d.get('reason'): print(f"    Reason: {d['reason']}")
+    return 0
+
+
+def cmd_review(args) -> int:
+    """Show candidates with decision status."""
+    db_path = Path(args.db) if getattr(args, 'db', None) else None
+    import mine_candidates
+    candidates = mine_candidates.mine(min_verified=args.min_verified, db_path=db_path)
+    decisions = list_candidate_decisions(include_revoked=True, db_path=db_path)
+    decision_map = {(d['candidate_id'], d['snapshot_hash']): d for d in decisions}
+    
+    print(f"\n{'Candidate':<24} {'Sup':>4} {'Strength':<10} {'Decision':<18}")
+    print("-" * 62)
+    for c in candidates.get("candidates", []):
+        cand_id = c.get("sig", "unknown")[:24]
+        support = c.get("stats", {}).get("verified_count", 0)
+        strength = c.get("strength", "?")[:10]
+        snap = candidates.get("snapshot_hash", "")
+        dec = decision_map.get((cand_id, snap), {})
+        if dec:
+            status = dec["decision"] + (" (revoked)" if dec.get("revoked_at") else "")
+        else:
+            status = "PENDING"
+        print(f"{cand_id:<24} {support:>4} {strength:<10} {status:<18}")
+    
+    adopted = get_adopted_candidates(db_path)
+    print(f"\n{len(adopted)} adopted | {candidates.get('total_cands', 0)} total candidates")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Record and manage manual interventions for experience learning.",
@@ -764,6 +925,32 @@ Examples:
     p_trace = subparsers.add_parser("trace", help="Get full trace for intervention")
     p_trace.add_argument("intervention_id", help="Intervention ID")
     p_trace.set_defaults(func=cmd_trace)
+    
+    # adopt (P3)
+    p_adopt = subparsers.add_parser("adopt", help="Adopt a candidate (P3)")
+    p_adopt.add_argument("candidate_id", help="Candidate ID")
+    p_adopt.add_argument("snapshot_hash", help="Snapshot hash")
+    p_adopt.add_argument("--reason", "-r", help="Reason for adoption")
+    p_adopt.set_defaults(func=cmd_adopt)
+    
+    # reject (P3)
+    p_reject = subparsers.add_parser("reject", help="Reject a candidate (P3)")
+    p_reject.add_argument("candidate_id", help="Candidate ID")
+    p_reject.add_argument("snapshot_hash", help="Snapshot hash")
+    p_reject.add_argument("--reason", "-r", help="Reason for rejection")
+    p_reject.set_defaults(func=cmd_reject)
+    
+    # list-decisions (P3)
+    p_list_dec = subparsers.add_parser("list-decisions", help="List candidate decisions (P3)")
+    p_list_dec.add_argument("--candidate-id", help="Filter by candidate ID")
+    p_list_dec.add_argument("--decision", help="Filter by decision (ADOPTED/REJECTED)")
+    p_list_dec.add_argument("--include-revoked", action="store_true", help="Include revoked decisions")
+    p_list_dec.set_defaults(func=cmd_list_decisions)
+    
+    # review (P3)
+    p_review = subparsers.add_parser("review", help="Review candidates with decision status (P3)")
+    p_review.add_argument("--min-verified", type=int, default=1, help="Minimum verified count")
+    p_review.set_defaults(func=cmd_review)
     
     args = parser.parse_args()
     return args.func(args)
