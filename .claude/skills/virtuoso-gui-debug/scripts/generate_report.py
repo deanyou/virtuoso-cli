@@ -152,6 +152,29 @@ def _esc(s):
         return ""
     return html.escape(str(s), quote=True)
 
+def _parse_sig(sig):
+    """Parse signature JSON to extract reason/action/context."""
+    try:
+        data = json.loads(sig)
+        return {
+            "reason": data.get("reason", ""),
+            "action": data.get("action", ""),
+            "context": data.get("context", {}),
+        }
+    except:
+        return {"reason": sig[:50], "action": "", "context": {}}
+
+
+def _fmt_context(ctx, max_len=80):
+    """Format context dict as truncated string."""
+    if not ctx:
+        return ""
+    parts = [f"{k}={v}" for k, v in sorted(ctx.items())]
+    s = ", ".join(parts)
+    if len(s) > max_len:
+        s = s[:max_len-3] + "..."
+    return s
+
 candidates_data = {"candidates": [], "adopted": [], "total_cands": 0}
 try:
     from mine_candidates import mine
@@ -175,6 +198,15 @@ try:
     
     for c in result.get("candidates", []):
         cand_id = c.get("candidate_id", "")
+        
+        # Parse sig to extract reason/action/context
+        sig_data = _parse_sig(c.get("sig", ""))
+        c["reason"] = sig_data["reason"]
+        c["action"] = sig_data["action"]
+        c["context"] = sig_data["context"]
+        # Pre-compute context string for template
+        c["_context_str"] = _fmt_context(sig_data["context"])
+        
         dec = decision_map.get((cand_id, snapshot_hash), {})
         if dec:
             c["decision_status"] = dec["decision"]
@@ -265,6 +297,11 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
 .cand-stats span {{ color: #e4e4e7; font-weight: 600; }}
 .cand-refs {{ margin-top: 10px; font-size: 11px; color: #6b7280; }}
 .cand-refs code {{ color: #8b5cf6; }}
+.cand-reason {{ margin: 8px 0; font-size: 12px; }}
+.cand-reason b {{ color: #f87171; }}
+.cand-action {{ margin: 4px 0; font-size: 12px; }}
+.cand-action b {{ color: #52c41a; }}
+.cand-context {{ margin: 4px 0 8px; font-size: 11px; color: #6b7280; font-family: monospace; }}
 
 /* Expandable candidate cards */
 details.cand-card {{ background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 14px; margin-bottom: 12px; }}
@@ -528,6 +565,9 @@ details.cand-card summary::-webkit-details-marker {{ display: none; }}
         <span class="cand-id">{_esc(c.get("candidate_id", "unknown"))}</span>
         <span class="cand-status {_esc(c.get("decision_status", "PENDING").lower())}">{_esc(c.get("decision_status", "PENDING"))}</span>
       </summary>
+      {f'<div class="cand-reason"><b>Reason:</b> {_esc(c.get("reason", ""))}</div>' if c.get("reason") else ""}
+      {f'<div class="cand-action"><b>Action:</b> {_esc(c.get("action", ""))}</div>' if c.get("action") else ""}
+      <div class="cand-context">{_esc(c.get("_context_str", ""))}</div>
       <div class="cand-stats">
         <div>Attempts: <span>{c.get("stats", {}).get("attempts", 0)}</span></div>
         <div>Support: <span>{c.get("stats", {}).get("verified_count", 0)}</span></div>

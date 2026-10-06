@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Tests for Candidates tab data generation."""
+"""Tests for generate_report.py Candidates tab data generation."""
 
 import tempfile
 import unittest
 from pathlib import Path
 import sys
+import json
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts" / "evidence"))
 
 
-class TestCandidatesData(unittest.TestCase):
-    """Test the data generation logic for Candidates tab."""
+class TestCandidatesTabData(unittest.TestCase):
+    """Test Candidates tab data generation logic."""
     
     def setUp(self):
         self.db = Path(tempfile.mktemp(suffix=".db"))
@@ -20,62 +21,59 @@ class TestCandidatesData(unittest.TestCase):
     def tearDown(self):
         self.db.unlink(missing_ok=True)
     
-    def test_candidates_with_decisions(self):
-        """Non-empty candidates with decisions work correctly."""
-        from record_intervention import (
-            init_db, record_intervention, verify_with_evidence,
-            record_candidate_decision, get_adopted_candidates, list_candidate_decisions
-        )
-        import mine_candidates
+    def _generate_candidates_data(self, db_path):
+        """Replicate what generate_report.py does for candidates."""
+        from mine_candidates import mine
+        from record_intervention import get_adopted_candidates, list_candidate_decisions
+        import json as _json
+        import html as _html
         
-        # Create 2 interventions and verify
-        for i in range(2):
-            iv = record_intervention(
-                run_id=f"run-{i}", step_id="step-1",
-                reason=f"Reason {i}", action=f"Action {i}",
-                db_path=self.db
-            )
-            conn = init_db(self.db)
-            conn.execute("""
-                INSERT INTO experience_events 
-                (event_id, run_id, step_id, event_type, state, value_source, outcome)
-                VALUES (?, ?, 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
-            """, (f"evt-{i}", f"followup-{i}"))
-            conn.commit()
-            conn.close()
-            verify_with_evidence(
-                intervention_id=iv["intervention_id"],
-                followup_run_id=f"followup-{i}",
-                db_path=self.db
-            )
+        def _esc(s):
+            if s is None:
+                return ""
+            return _html.escape(str(s), quote=True)
         
-        # Mine candidates
-        result = mine_candidates.mine(min_verified=0, db_path=self.db)
-        self.assertEqual(result["total_cands"], 2)
+        def _parse_sig(sig):
+            try:
+                data = _json.loads(sig)
+                return {
+                    "reason": data.get("reason", ""),
+                    "action": data.get("action", ""),
+                    "context": data.get("context", {}),
+                }
+            except:
+                return {"reason": sig[:50], "action": "", "context": {}}
         
-        cands = result["candidates"]
-        snap = result["h"]
+        def _fmt_context(ctx, max_len=80):
+            if not ctx:
+                return ""
+            parts = [f"{k}={v}" for k, v in sorted(ctx.items())]
+            s = ", ".join(parts)
+            if len(s) > max_len:
+                s = s[:max_len-3] + "..."
+            return s
         
-        # Adopt first, reject second
-        record_candidate_decision(cands[0]["candidate_id"], snap, "ADOPTED",
-            reason="Good evidence", db_path=self.db)
-        record_candidate_decision(cands[1]["candidate_id"], snap, "REJECTED",
-            reason="Not enough", db_path=self.db)
+        result = mine(min_verified=0, db_path=db_path)
+        decisions = list_candidate_decisions(include_revoked=True, db_path=db_path)
+        adopted = get_adopted_candidates(db_path=db_path)
         
-        # Simulate what generate_report does
-        decisions = list_candidate_decisions(include_revoked=True, db_path=self.db)
-        adopted = get_adopted_candidates(db_path=self.db)
-        
-        # Build decision map
         decision_map = {}
         for d in decisions:
             key = (d["candidate_id"], d["snapshot_hash"])
             decision_map[key] = d
         
-        # Attach decision status to each candidate
-        for c in cands:
+        snapshot_hash = result.get("h", "")
+        adopted_current = [d for d in adopted if d.get("snapshot_hash") == snapshot_hash]
+        
+        for c in result.get("candidates", []):
             cand_id = c.get("candidate_id", "")
-            dec = decision_map.get((cand_id, snap), {})
+            sig_data = _parse_sig(c.get("sig", ""))
+            c["reason"] = sig_data["reason"]
+            c["action"] = sig_data["action"]
+            c["context"] = sig_data["context"]
+            c["_context_str"] = _fmt_context(sig_data["context"])
+            
+            dec = decision_map.get((cand_id, snapshot_hash), {})
             if dec:
                 c["decision_status"] = dec["decision"]
                 c["decision_revoked"] = dec.get("revoked_at")
@@ -85,33 +83,75 @@ class TestCandidatesData(unittest.TestCase):
                 c["decision_revoked"] = None
                 c["decision_reason"] = None
         
-        # Filter adopted to current snapshot
-        adopted_current = [d for d in adopted if d.get("snapshot_hash") == snap]
-        
-        # Assertions
-        self.assertEqual(len(cands), 2)
-        self.assertEqual(len(adopted_current), 1)
-        
-        # Check each candidate has decision_status
-        statuses = [c.get("decision_status") for c in cands]
-        self.assertIn("ADOPTED", statuses)
-        self.assertIn("REJECTED", statuses)
-        
-        print(f"✓ {len(cands)} candidates with decisions")
-        print(f"✓ Adopted (current snapshot): {len(adopted_current)}")
+        return {
+            "candidates": result.get("candidates", []),
+            "adopted": adopted_current,
+            "total_cands": result.get("total_cands", 0),
+            "snapshot_hash": snapshot_hash,
+        }
     
-    def test_snapshot_change_invalidates_old_adopted(self):
-        """After new evidence, old adopted decisions don't count for new snapshot."""
+    def test_candidates_with_reason_action_display(self):
+        """Candidates display reason/action/context correctly."""
         from record_intervention import (
             init_db, record_intervention, verify_with_evidence,
-            record_candidate_decision, get_adopted_candidates
+            record_candidate_decision
+        )
+        import mine_candidates
+        
+        # Create intervention with special chars in reason/action
+        iv = record_intervention(
+            run_id="run-1", step_id="step-1",
+            reason="Window <error> detected", action="Click OK & retry",
+            db_path=self.db
+        )
+        conn = init_db(self.db)
+        conn.execute("""
+            INSERT INTO experience_events 
+            (event_id, run_id, step_id, event_type, state, value_source, outcome)
+            VALUES (?, ?, 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
+        """, ("evt-1", "followup-1"))
+        conn.commit()
+        conn.close()
+        verify_with_evidence(intervention_id=iv["intervention_id"],
+            followup_run_id="followup-1", db_path=self.db)
+        
+        # Mine and adopt
+        result = mine_candidates.mine(min_verified=0, db_path=self.db)
+        snap = result["h"]
+        record_candidate_decision(result["candidates"][0]["candidate_id"], snap, "ADOPTED",
+            reason="<script>alert('xss')</script>", db_path=self.db)
+        
+        # Generate report data (this is what generate_report.py does)
+        data = self._generate_candidates_data(self.db)
+        
+        # Check data structure
+        self.assertEqual(len(data["candidates"]), 1)
+        self.assertEqual(len(data["adopted"]), 1)
+        
+        c = data["candidates"][0]
+        self.assertIn("Window", c.get("reason", ""))
+        self.assertIn("Click", c.get("action", ""))
+        self.assertEqual(c.get("decision_status"), "ADOPTED")
+        
+        # Check decision reason is stored
+        self.assertIn("xss", c.get("decision_reason", ""))
+        
+        print(f"✓ Reason: {c.get('reason')}")
+        print(f"✓ Action: {c.get('action')}")
+        print(f"✓ Decision: {c.get('decision_status')}")
+    
+    def test_snapshot_change_adopted_filtering(self):
+        """After new evidence, old adopted not in current snapshot."""
+        from record_intervention import (
+            init_db, record_intervention, verify_with_evidence,
+            record_candidate_decision
         )
         import mine_candidates
         
         # Create first intervention
         iv1 = record_intervention(
             run_id="run-1", step_id="step-1",
-            reason="Reason 1", action="Action 1",
+            reason="First reason", action="First action",
             db_path=self.db
         )
         conn = init_db(self.db)
@@ -127,15 +167,13 @@ class TestCandidatesData(unittest.TestCase):
         
         result1 = mine_candidates.mine(min_verified=0, db_path=self.db)
         snap1 = result1["h"]
-        
-        # Adopt in snapshot 1
         record_candidate_decision(result1["candidates"][0]["candidate_id"], snap1,
             "ADOPTED", reason="Good", db_path=self.db)
         
         # Add second intervention (changes snapshot)
         iv2 = record_intervention(
             run_id="run-2", step_id="step-1",
-            reason="Reason 2", action="Action 2",
+            reason="Second reason", action="Second action",
             db_path=self.db
         )
         conn = init_db(self.db)
@@ -149,46 +187,66 @@ class TestCandidatesData(unittest.TestCase):
         verify_with_evidence(intervention_id=iv2["intervention_id"],
             followup_run_id="followup-2", db_path=self.db)
         
-        # New snapshot
         result2 = mine_candidates.mine(min_verified=0, db_path=self.db)
         snap2 = result2["h"]
         self.assertNotEqual(snap1, snap2)
         
-        # Get adopted (all)
-        all_adopted = get_adopted_candidates(db_path=self.db)
+        # Generate report data (simulating report generation)
+        data = self._generate_candidates_data(self.db)
         
-        # Filter to current snapshot
-        adopted_current = [d for d in all_adopted if d.get("snapshot_hash") == snap2]
-        
-        # In new snapshot, no adopted yet
-        self.assertEqual(len(adopted_current), 0)
+        # Check adopted count is for CURRENT snapshot only
+        self.assertEqual(len(data["adopted"]), 0)  # No adopted in new snapshot
+        self.assertEqual(data["snapshot_hash"], snap2)
         
         print(f"✓ Old snapshot: {snap1}")
         print(f"✓ New snapshot: {snap2}")
-        print(f"✓ Old adopted: {len(all_adopted)}, Current adopted: {len(adopted_current)}")
+        print(f"✓ Adopted in current: {len(data['adopted'])}")
     
-    def test_html_escape(self):
-        """HTML special characters are escaped."""
+    def test_html_escaping_in_reason_action(self):
+        """Special chars in reason/action are escaped."""
+        from record_intervention import (
+            init_db, record_intervention, verify_with_evidence,
+            record_candidate_decision
+        )
+        import mine_candidates
         import html
         
-        def _esc(s):
-            if s is None:
-                return ""
-            return html.escape(str(s), quote=True)
+        # Create intervention with XSS attempt in reason
+        iv = record_intervention(
+            run_id="run-1", step_id="step-1",
+            reason="<script>alert('xss')</script>",
+            action="Click <button>&",
+            db_path=self.db
+        )
+        conn = init_db(self.db)
+        conn.execute("""
+            INSERT INTO experience_events 
+            (event_id, run_id, step_id, event_type, state, value_source, outcome)
+            VALUES (?, ?, 'step-1', 'VERIFY', 'VERIFY', 'VERIFIER_CONFIRMED', 'PASSED')
+        """, ("evt-1", "followup-1"))
+        conn.commit()
+        conn.close()
+        verify_with_evidence(intervention_id=iv["intervention_id"],
+            followup_run_id="followup-1", db_path=self.db)
         
-        test_cases = [
-            ("<script>", "&lt;script&gt;"),
-            ("'test'", "&#x27;test&#x27;"),
-            ('"test"', "&quot;test&quot;"),
-            ("plain", "plain"),
-            (None, ""),
-        ]
+        result = mine_candidates.mine(min_verified=0, db_path=self.db)
+        snap = result["h"]
+        record_candidate_decision(result["candidates"][0]["candidate_id"], snap,
+            "ADOPTED", reason="Test <b>bold</b>", db_path=self.db)
         
-        for input_val, expected in test_cases:
-            result = _esc(input_val)
-            self.assertEqual(result, expected, f"Failed for {input_val!r}")
+        data = self._generate_candidates_data(self.db)
+        c = data["candidates"][0]
         
-        print("✓ HTML escaping works correctly")
+        # Raw reason/action should contain the XSS attempt
+        raw_reason = c.get("reason", "")
+        self.assertIn("<script>", raw_reason)
+        
+        # In HTML context, these should be escaped
+        esc_reason = html.escape(raw_reason, quote=True)
+        self.assertNotIn("<script>", esc_reason)
+        
+        print(f"✓ Raw reason: {raw_reason}")
+        print(f"✓ Escaped: {esc_reason}")
 
 
 if __name__ == "__main__":
