@@ -23,7 +23,7 @@ class TestCandidateDecisions(unittest.TestCase):
         init_db(self.db)
     
     def tearDown(self):
-        self.db.unlink(missing_ok=True)
+        import os; os.unlink(str(self.db)) if os.path.exists(str(self.db)) else None
     
     def test_adopt_candidate(self):
         """ADOPTED decision is recorded and retrievable."""
@@ -94,7 +94,7 @@ class TestEndToEndPipeline(unittest.TestCase):
         init_db(self.db)
     
     def tearDown(self):
-        self.db.unlink(missing_ok=True)
+        import os; os.unlink(str(self.db)) if os.path.exists(str(self.db)) else None
     
     def test_mine_adopt_reject_review_show_correct_status(self):
         """Real candidates -> decisions -> review shows ADOPTED/REJECTED correctly."""

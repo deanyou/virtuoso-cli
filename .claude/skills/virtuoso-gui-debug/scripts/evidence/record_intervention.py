@@ -166,7 +166,7 @@ def init_db(db_path: Optional[Path] = None) -> sqlite3.Connection:
     db_path = db_path or get_default_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(str(db_path))
     
     # Initialize base experience schema
     try:

@@ -252,7 +252,7 @@ def run_generator(db_path, out_path):
     try:
         result = subprocess.run(
             [sys.executable, str(temp_script)],
-            capture_output=True, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
             cwd=scripts_dir,
             env=env
         )
@@ -272,7 +272,7 @@ class TestCandidatesTabData(unittest.TestCase):
         init_db(self.db)
 
     def tearDown(self):
-        self.db.unlink(missing_ok=True)
+        import os; os.unlink(str(self.db)) if os.path.exists(str(self.db)) else None
 
     def test_html_escaping_in_reason_action(self):
         """User input in reason/action is properly escaped at the data layer."""
@@ -344,8 +344,8 @@ class TestRealGenerator(unittest.TestCase):
         create_minimal_schema(self.db)
 
     def tearDown(self):
-        self.db.unlink(missing_ok=True)
-        self.out.unlink(missing_ok=True)
+        import os; os.unlink(str(self.db)) if os.path.exists(str(self.db)) else None
+        import os; os.unlink(str(self.out)) if os.path.exists(str(self.out)) else None
 
     def test_report_generates_html_file(self):
         """Generator creates an HTML file with candidate data."""
