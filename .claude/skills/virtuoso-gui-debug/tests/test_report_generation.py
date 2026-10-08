@@ -272,7 +272,10 @@ class TestCandidatesTabData(unittest.TestCase):
         init_db(self.db)
 
     def tearDown(self):
-        import os; os.unlink(str(self.db)) if os.path.exists(str(self.db)) else None
+        try:
+            self.db.unlink()
+        except (FileNotFoundError, PermissionError):
+            pass
 
     def test_html_escaping_in_reason_action(self):
         """User input in reason/action is properly escaped at the data layer."""
@@ -344,8 +347,14 @@ class TestRealGenerator(unittest.TestCase):
         create_minimal_schema(self.db)
 
     def tearDown(self):
-        import os; os.unlink(str(self.db)) if os.path.exists(str(self.db)) else None
-        import os; os.unlink(str(self.out)) if os.path.exists(str(self.out)) else None
+        try:
+            self.db.unlink()
+        except (FileNotFoundError, PermissionError):
+            pass
+        try:
+            self.out.unlink()
+        except (FileNotFoundError, PermissionError):
+            pass
 
     def test_report_generates_html_file(self):
         """Generator creates an HTML file with candidate data."""
