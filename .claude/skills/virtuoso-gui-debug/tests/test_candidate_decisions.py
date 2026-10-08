@@ -23,10 +23,7 @@ class TestCandidateDecisions(unittest.TestCase):
         init_db(self.db)
     
     def tearDown(self):
-        try:
-            self.db.unlink()
-        except (FileNotFoundError, PermissionError):
-            pass
+        import os; os.unlink(str(self.db)) if os.path.exists(str(self.db)) else None
     
     def test_adopt_candidate(self):
         """ADOPTED decision is recorded and retrievable."""
@@ -97,10 +94,7 @@ class TestEndToEndPipeline(unittest.TestCase):
         init_db(self.db)
     
     def tearDown(self):
-        try:
-            self.db.unlink()
-        except (FileNotFoundError, PermissionError):
-            pass
+        import os; os.unlink(str(self.db)) if os.path.exists(str(self.db)) else None
     
     def test_mine_adopt_reject_review_show_correct_status(self):
         """Real candidates -> decisions -> review shows ADOPTED/REJECTED correctly."""
