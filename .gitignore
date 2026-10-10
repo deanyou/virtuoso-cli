@@ -34,3 +34,4 @@ gmid_test*.log
 .ua/diff-overlay.json
 
 /0
+evidence/

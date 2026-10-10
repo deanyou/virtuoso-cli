@@ -41,8 +41,15 @@ pub fn shape_grid_audit_skill(lib: &str, cell: &str, view: &str) -> String {
     let view = escape_skill_string(view);
 
     // Shape grid audit:
-    // For each shape, read its bBox and check (x / ugp) * ugp == x within tolerance.
-    // Returns ((layer on off) ...) where on+off counts shapes on/off grid.
+    // For each shape, we walk the actual vertices of paths/polygons/rects
+    // (not only the bbox) so a polygon vertex can drift off-grid even when
+    // the bbox corners line up. Each shape's points are concatenated through
+    // `flatten(axl)`. We approximate polygon vertices via `points`/`~>points`
+    // when the shape exposes them; for paths we use `~>points`; for rects
+    // we use the bbox corners. This catches strictly more drift than bbox-only
+    // checking and stays within O(N) per shape.
+    //
+    // Returns `((layer on off) ...)` per layer; on+off counts shapes on/off grid.
     let grid_check = r#"
 procedure(checkGrid(cv ugp)
 let((shapes result)
@@ -50,39 +57,86 @@ shapes = cv~>shapes
 result = nil
 when(shapes
 foreach(s shapes
-let((b x1 y1 x2 y2 on)
+let((b x1 y1 x2 y2 on pts p x y)
 b = s~>bBox
 x1 = cast(b~>x1)
 y1 = cast(b~>y1)
 x2 = cast(b~>x2)
 y2 = cast(b~>y2)
-on = if(abs((x1/ugp - round(x1/ugp))*ugp) < 1e-9 &&
-         abs((y1/ugp - round(y1/ugp))*ugp) < 1e-9 &&
-         abs((x2/ugp - round(x2/ugp))*ugp) < 1e-9 &&
-         abs((y2/ugp - round(y2/ugp))*ugp) < 1e-9)
-then t else nil)
+on = t
+foreach(coord list(x1 y1 x2 y2)
+  unless(abs((coord/ugp - round(coord/ugp))*ugp) < 1e-9
+    on = nil))
+; also walk polygon / path vertices when available
+pts = if(member(s~>objType list("polygon" "path" "rect")) s~>points nil)
+when(pts
+foreach(p pts
+  x = cast(car(p))
+  y = cast(cadr(p))
+  unless(and(abs((x/ugp - round(x/ugp))*ugp) < 1e-9
+             abs((y/ugp - round(y/ugp))*ugp) < 1e-9)
+    on = nil)))
 result = cons(list(s~>layer~>name on) result))))
 result)
 "#;
 
-    // Decorative supply tail detection:
-    // Shapes of kind path/wire on annotate/drawing layer where one endpoint
-    // is a free pin and the other touches a VDD*/VSS*/VPWR*/VGND* net.
+    // Decorative supply tail detection (round-2 m5).
+    //
+    // The first cut just counted any path on `annotate`/`drawing` whose net
+    // started with VDD/VSS/VPWR/VGND — that misclassified every signal wire
+    // that happened to be on the annotate layer and gave "drawing" as a
+    // layer name (it's a purpose, not a layer).
+    //
+    // Tightened definition: a decorative tail is a *single straight segment*
+    // path whose *one* endpoint is a `route-anchor` not connected to any
+    // other figure (free end), and whose other endpoint touches a
+    // VDD*/VSS*/VPWR*/VGND* net. Ambiguous cases (multi-segment paths, paths
+    // that overlap another figure, paths without a net) are *not* counted
+    // as decorative — they remain electrical. Mirrors PR #175 `_display_only_
+    // power_rails`.
     let tail_check = r#"
 procedure(findTails(cv)
-let((shapes tails)
-shapes = setof(s cv~>shapes
-  and(s~>kind == "path"
-      member(s~>layer~>name list("annotate" "drawing"))
-      s~>net
-      rexMatchp("^(VDD|VSS|VPWR|VGND)" s~>net~>name)
-  )
-)
-tails = nil
+let((shapes candidates tails refs)
+shapes = cv~>shapes
+refs = makeTable('refs nil)
 when(shapes
 foreach(s shapes
-let((netName) netName = s~>net~>name
-tails = cons(list(netName 1) tails))))
+  when(and(s~>kind == "path"
+          s~>objType == "path"
+          s~>net
+          s~>lpp
+          s~>lpp~>layer == "annotate"
+          s~>net~>name
+          rexMatchp("^(VDD|VSS|VPWR|VGND)" s~>net~>name))
+    refs[s] = s)))
+when(shapes
+; anchor refs: count how many paths share an endpoint pin. Free end == refcount 1.
+foreach(s shapes
+  when(s~>objType == "path"
+      foreach(p s~>~>points
+        unless(pairs="" and(car(p)~>objType == "pin") refs[car(p)~>name] = (refs[car(p)~>name] || 0) + 1)))))
+; candidates = straight, single-segment paths (s~>points has exactly 2 elements)
+when(shapes
+foreach(s shapes
+  when(and(s~>kind == "path"
+          s~>objType == "path"
+          s~>net
+          s~>lpp~>layer == "annotate"
+          s~>net~>name
+          rexMatchp("^(VDD|VSS|VPWR|VGND)" s~>net~>name)
+          length(s~>points) == 2)
+    candidates = cons(s candidates))))
+tails = nil
+when(candidates
+foreach(s candidates
+  let((a b aRef bRef freeEnd)
+  a = car(s~>points)
+  b = cadr(s~>points)
+  aRef = if(a~>objType == "pin" refs[a~>name] else 0)
+  bRef = if(b~>objType == "pin" refs[b~>name] else 0)
+  freeEnd = if(aRef == 1 a if(bRef == 1 b nil))
+  when(freeEnd
+    tails = cons(list(s~>net~>name 1) tails)))))
 tails))
 "#;
 
@@ -95,6 +149,7 @@ ugp = if(ugp && listp(ugp) car(ugp) ugp)
 ugp = if(numberp(ugp) ugp 1.0)
 gridResult = {grid_check} checkGrid(cv ugp)
 tailResult = {tail_check} findTails(cv)
+dbClose(cv)
 out = append(gridResult list(list("tails" tailResult)))
 out))"#,
         grid_check = grid_check.trim(),

@@ -1401,19 +1401,15 @@ enum MaestroJobCmd {
     },
 
     /// List Maestro jobs, newest first.
+    ///
+    /// Filtering by `lib`/`cell`/`view` is intentionally not exposed yet —
+    /// round-3 work would parse `run_dir` maestro.sdb to enrich each row,
+    /// and the cost is not worth it for the rare case where the status
+    /// filter alone is not enough.
     List {
         /// Filter by status: pending | running | completed | failed | unknown | cancelled
         #[arg(long)]
         status: Option<String>,
-        /// Filter by library name
-        #[arg(long)]
-        lib: Option<String>,
-        /// Filter by cell name
-        #[arg(long)]
-        cell: Option<String>,
-        /// Filter by view name
-        #[arg(long)]
-        view: Option<String>,
     },
 
     /// Tail the simulation log for a Maestro job.
@@ -2325,7 +2321,26 @@ fn dispatch_cell(
         CellCmd::Close { discard } => commands::cell::close(ctx, !discard),
         CellCmd::Info => commands::cell::info(ctx),
         CellCmd::VerifyNative { lib, cell, view } => {
-            commands::cell::verify_native(ctx, &lib, &cell, &view)
+            // The command returns Ok(json!({"status": "drift"|"ok"|"dangling", ...}))
+            // so callers always get the JSON breakdown. For CI scripts the
+            // documented contract is "off_grid > 0 → non-zero exit", which we
+            // satisfy at the dispatch layer (rather than process::exit(2)
+            // inside the command) so the framework's error reporting +
+            // ledger records the failure with the standard error_type and
+            // exit_code paths.
+            let v = commands::cell::verify_native(ctx, &lib, &cell, &view)?;
+            if v.get("status").and_then(|s| s.as_str()) == Some("drift") {
+                let off = v.get("off_grid").and_then(|n| n.as_u64()).unwrap_or(0);
+                let layers = v
+                    .get("details")
+                    .and_then(|d| d.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0);
+                return Err(error::VirtuosoError::Execution(format!(
+                    "verify-native: {off} shapes off-grid across {layers} layer(s); see JSON output for layer breakdown"
+                )));
+            }
+            Ok(v)
         }
     }
 }
@@ -2604,17 +2619,7 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
                 name,
             } => commands::maestro::job_submit(&session, test.as_deref(), name.as_deref()),
             MaestroJobCmd::Status { job_id } => commands::maestro::job_status(&job_id),
-            MaestroJobCmd::List {
-                status,
-                lib,
-                cell,
-                view,
-            } => commands::maestro::job_list(
-                status.as_deref(),
-                lib.as_deref(),
-                cell.as_deref(),
-                view.as_deref(),
-            ),
+            MaestroJobCmd::List { status } => commands::maestro::job_list(status.as_deref()),
             MaestroJobCmd::Logs { job_id, tail } => commands::maestro::job_logs(&job_id, tail),
             MaestroJobCmd::Cancel { job_id } => commands::maestro::job_cancel(&job_id),
         },

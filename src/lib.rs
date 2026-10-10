@@ -36,5 +36,6 @@ pub mod version;
 
 pub use auth::{auth, check_auth, log_rpc, Auth};
 pub use capability::{Capability, CapabilitySet};
+pub use commands::cell::{parse_grid_audit_output, GridLayer, GridTail};
 pub use profile::{resolve_profile, resolve_profile_info, ProfileResolution};
 pub use transaction::{SchematicDiff, SchematicSnapshot, TransactionManager};

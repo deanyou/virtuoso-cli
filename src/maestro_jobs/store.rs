@@ -112,22 +112,75 @@ impl MaestroJobStore {
         Ok(Self { dir })
     }
 
-    /// Path for a given job id.
-    fn path(&self, job_id: &str) -> PathBuf {
-        self.dir.join(format!("{job_id}.json"))
+    /// Validate that `job_id` is safe to use as a filename.
+    ///
+    /// `job_id` is a UUIDv4 (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
+    /// Anything that escapes this shape is rejected so a caller cannot
+    /// smuggle `..` or `/` into a filename (defence against
+    /// `--job-id ../../something`). UUIDs are 36 chars: 32 hex digits
+    /// plus four dashes.
+    fn validate_job_id(job_id: &str) -> std::io::Result<()> {
+        if job_id.len() != 36 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "job_id must be 36 chars (UUIDv4 shape), got {}: {job_id:?}",
+                    job_id.len()
+                ),
+            ));
+        }
+        let bytes = job_id.as_bytes();
+        for (i, b) in bytes.iter().enumerate() {
+            let ok = match i {
+                8 | 13 | 18 | 23 => *b == b'-',
+                _ => b.is_ascii_hexdigit(),
+            };
+            if !ok {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("job_id not UUIDv4-shape (position {i}): {job_id:?}"),
+                ));
+            }
+        }
+        Ok(())
     }
 
-    /// Save a job to disk.
+    /// Path for a given job id.
+    ///
+    /// Returns an `InvalidInput` io::Error if `job_id` is not UUID-shaped.
+    fn path(&self, job_id: &str) -> std::io::Result<PathBuf> {
+        Self::validate_job_id(job_id)?;
+        Ok(self.dir.join(format!("{job_id}.json")))
+    }
+
+    /// Save a job to disk atomically.
+    ///
+    /// Writes to `<id>.json.tmp` first, then renames onto `<id>.json`.
+    /// `rename` is atomic on the same filesystem on both Linux and macOS
+    /// (and on Windows when the destination does not exist), so a torn
+    /// write never leaves a half-written JSON behind for `list()` to
+    /// silently skip — `load()` returns `InvalidData` and surfaces it
+    /// to the caller instead. Existing files are replaced.
     pub fn save(&self, job: &MaestroJob) -> std::io::Result<()> {
-        let path = self.path(&job.job_id);
+        let path = self.path(&job.job_id)?;
         let json = serde_json::to_string_pretty(job)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        fs::write(path, json)
+        let tmp = path.with_extension("json.tmp");
+        fs::write(&tmp, json)?;
+        // On Windows, rename fails if the destination exists. Remove first
+        // only when the destination is present; the gap is bounded by the
+        // tmp write having succeeded.
+        if path.exists() {
+            fs::remove_file(&path)?;
+        }
+        fs::rename(&tmp, &path)
     }
 
-    /// Load a job by id. Returns `None` if not found.
+    /// Load a job by id. Returns `None` if not found, `InvalidInput`
+    /// if `job_id` is not UUID-shaped (so callers cannot smuggle path
+    /// separators into `fs::read_to_string`).
     pub fn load(&self, job_id: &str) -> std::io::Result<Option<MaestroJob>> {
-        let path = self.path(job_id);
+        let path = self.path(job_id)?;
         if !path.exists() {
             return Ok(None);
         }
@@ -137,12 +190,12 @@ impl MaestroJobStore {
         Ok(Some(job))
     }
 
-    /// Delete a job.
+    /// Delete a job. Returns  if  is not UUID-shaped.
     #[allow(dead_code)]
     pub fn delete(&self, job_id: &str) -> std::io::Result<()> {
-        let path = self.path(job_id);
+        let path = self.path(job_id)?;
         if path.exists() {
-            fs::remove_file(path)?;
+            fs::remove_file(&path)?;
         }
         Ok(())
     }
@@ -166,12 +219,14 @@ impl MaestroJobStore {
     }
 
     /// List jobs filtered by status.
+    ///
+    /// Library/cell/view filtering was removed in round 2 — the previous
+    /// substring stub could match false positives in unrelated paths.
+    /// Round 3 should parse `run_dir/maestro.sdb` (or equivalent) to get
+    /// reliable per-row library / cell / view metadata.
     pub fn list_filtered(
         &self,
         status_filter: Option<MaestroJobStatus>,
-        lib: Option<&str>,
-        cell: Option<&str>,
-        view: Option<&str>,
     ) -> std::io::Result<Vec<MaestroJob>> {
         let all = self.list()?;
         Ok(all
@@ -182,14 +237,7 @@ impl MaestroJobStore {
                         return false;
                     }
                 }
-                // Filter by lib/cell/view from session name or run_dir — conservative:
-                // we don't parse session names, so we only filter on run_dir if present.
-                if let (Some(_), None, None) = (lib, cell, view) {
-                    // Conservative: don't filter by lib alone
-                    true
-                } else {
-                    true
-                }
+                true
             })
             .collect())
     }
@@ -206,30 +254,55 @@ impl MaestroJobStore {
         }))
     }
 
+    /// Whether a status is terminal (cannot transition further).
+    pub fn is_terminal(status: MaestroJobStatus) -> bool {
+        matches!(
+            status,
+            MaestroJobStatus::Completed | MaestroJobStatus::Failed | MaestroJobStatus::Cancelled
+        )
+    }
+
     /// Derive job status from the local run_dir filesystem.
     ///
-    /// - `Running`: `<run_dir>/psf` exists and `<run_dir>/spectre.out` does NOT exist
-    /// - `Completed`: both `<run_dir>/psf` and `<run_dir>/spectre.out` exist
-    /// - `Failed`: `<run_dir>/spectre.out` exists but `<run_dir>/psf` does NOT
-    /// - `Unknown`: run_dir not present or not accessible
+    /// Terminal states are **sticky**: once a job has reached `Completed`,
+    /// `Failed`, or `Cancelled` (operator action or explicit submit failure),
+    /// this function returns that persisted status unchanged. Filesystem
+    /// drift after cancellation cannot resurrect a `Cancelled` job into
+    /// `Completed`, and `updated_at` stays at the cancellation timestamp
+    /// until the next explicit write.
     ///
-    /// Returns the input status if run_dir is not set.
+    /// For non-terminal jobs (`Pending` / `Running` / `Unknown`):
+    /// - `Completed`: `<run_dir>/psf/spectre.out` exists (canonical end-of-run
+    ///   artefact — same path `job_logs` reads, so status and tail agree).
+    /// - `Failed`: psf/ never came up but a legacy `<run_dir>/spectre.out`
+    ///   exists (Spectre died before psf was materialised — preserves the
+    ///   pre-port signal).
+    /// - `Running`: `<run_dir>/psf` exists but `<run_dir>/psf/spectre.out`
+    ///   does NOT yet.
+    /// - `Unknown`: neither path is reachable (run_dir missing, deleted,
+    ///   permission denied, or remote share unavailable).
+    ///
+    /// Returns the input status if `run_dir` is not set.
     pub fn derive_status_from_run_dir(job: &MaestroJob) -> MaestroJobStatus {
+        if Self::is_terminal(job.status) {
+            return job.status;
+        }
         let run_dir = match &job.run_dir {
             Some(d) => d,
             None => return job.status,
         };
         let rd = Path::new(run_dir);
         let psf = rd.join("psf");
-        let spectre_out = rd.join("spectre.out");
+        let canonical = psf.join("spectre.out");
+        let legacy = rd.join("spectre.out");
 
-        if psf.exists() {
-            if spectre_out.exists() {
-                MaestroJobStatus::Completed
-            } else {
-                MaestroJobStatus::Running
-            }
-        } else if spectre_out.exists() {
+        if canonical.exists() {
+            MaestroJobStatus::Completed
+        } else if psf.exists() {
+            // psf directory is up but the log is not yet — mid-run.
+            MaestroJobStatus::Running
+        } else if legacy.exists() {
+            // psf never materialised; this is a real early failure.
             MaestroJobStatus::Failed
         } else {
             MaestroJobStatus::Unknown
@@ -279,7 +352,7 @@ mod tests {
         let mut job = job;
         job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
         std::fs::create_dir(tmp.path().join("psf")).unwrap();
-        std::fs::write(tmp.path().join("spectre.out"), "done").unwrap();
+        std::fs::write(tmp.path().join("psf").join("spectre.out"), "done").unwrap();
         assert_eq!(
             MaestroJobStore::derive_status_from_run_dir(&job),
             MaestroJobStatus::Completed
@@ -306,8 +379,9 @@ mod tests {
         let job = MaestroJob::new("s".into(), None, None);
         let mut job = job;
         job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
+        // Legacy signal: psf/ never came up, but a top-level spectre.out
+        // exists (Spectre died early). Canonical psf/spectre.out absent.
         std::fs::write(tmp.path().join("spectre.out"), "error").unwrap();
-        // psf absent, spectre.out present → failed
         assert_eq!(
             MaestroJobStore::derive_status_from_run_dir(&job),
             MaestroJobStatus::Failed
@@ -403,5 +477,139 @@ mod tests {
 
         // Failed jobs should not block resubmission
         assert!(store.find_by_run_id("run_xyz").unwrap().is_none());
+    }
+    // ---- M2: terminal status is sticky ------------------------------
+
+    #[test]
+    fn derive_status_terminal_cancelled_is_sticky() {
+        let tmp = TempDir::new().unwrap();
+        let mut job = MaestroJob::new("s".into(), None, None);
+        job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
+        // Cancel first.
+        job.status = MaestroJobStatus::Cancelled;
+        // Then the run completes on disk — terminal must win.
+        std::fs::create_dir(tmp.path().join("psf")).unwrap();
+        std::fs::write(tmp.path().join("psf").join("spectre.out"), "done").unwrap();
+        assert_eq!(
+            MaestroJobStore::derive_status_from_run_dir(&job),
+            MaestroJobStatus::Cancelled,
+            "Cancelled must NOT be overwritten by a Completed-shaped run_dir"
+        );
+    }
+
+    #[test]
+    fn derive_status_terminal_failed_is_sticky() {
+        let tmp = TempDir::new().unwrap();
+        let mut job = MaestroJob::new("s".into(), None, None);
+        job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
+        job.status = MaestroJobStatus::Failed;
+        // psf appears later; Failed must remain.
+        std::fs::create_dir(tmp.path().join("psf")).unwrap();
+        std::fs::write(tmp.path().join("psf").join("spectre.out"), "x").unwrap();
+        assert_eq!(
+            MaestroJobStore::derive_status_from_run_dir(&job),
+            MaestroJobStatus::Failed
+        );
+    }
+
+    #[test]
+    fn derive_status_terminal_completed_is_sticky() {
+        let tmp = TempDir::new().unwrap();
+        let mut job = MaestroJob::new("s".into(), None, None);
+        job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
+        job.status = MaestroJobStatus::Completed;
+        // Operator marks Completed; later removal of psf/ must not flip back.
+        assert_eq!(
+            MaestroJobStore::derive_status_from_run_dir(&job),
+            MaestroJobStatus::Completed
+        );
+    }
+
+    // ---- m7: atomic save --------------------------------------------
+
+    #[test]
+    fn save_is_atomic_no_tmp_file_remains_on_success() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("jobs");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = MaestroJobStore { dir: dir.clone() };
+        let job = MaestroJob::new("s".into(), None, None);
+        let id = job.job_id.clone();
+        store.save(&job).unwrap();
+        // The .json exists; the .tmp must NOT.
+        assert!(dir.join(format!("{id}.json")).exists());
+        assert!(!dir.join(format!("{id}.json.tmp")).exists());
+    }
+
+    #[test]
+    fn save_replaces_existing_file() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("jobs");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = MaestroJobStore { dir: dir.clone() };
+        let mut job = MaestroJob::new("s".into(), None, None);
+        job.name = Some("v1".into());
+        store.save(&job).unwrap();
+        // Roundtrip + overwrite + reload should yield the latest snapshot.
+        job.name = Some("v2".into());
+        store.save(&job).unwrap();
+        let reloaded = store.load(&job.job_id).unwrap().unwrap();
+        assert_eq!(reloaded.name.as_deref(), Some("v2"));
+    }
+
+    // ---- m9: job_id validation --------------------------------------
+
+    #[test]
+    fn path_rejects_non_uuid_shape() {
+        let store = MaestroJobStore {
+            dir: std::path::PathBuf::from("/tmp"),
+        };
+        // path traversal: 36 chars but not a UUID
+        let bad = "../../../tmp/evil"; // 20 chars
+        let res = store.path(bad);
+        assert!(res.is_err(), "must reject non-UUID job_id");
+        // 36 chars but bad characters
+        let bad36 = "x".repeat(36);
+        let res = store.path(&bad36);
+        assert!(res.is_err(), "must reject 36-char non-UUID job_id");
+        // Right shape but wrong dash positions
+        let bad_dash = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"; // dashes at 0,5,10,15
+        let res = store.path(bad_dash);
+        assert!(res.is_err(), "must reject wrong dash positions");
+    }
+
+    #[test]
+    fn path_accepts_real_uuid_shape() {
+        let store = MaestroJobStore {
+            dir: std::path::PathBuf::from("/tmp"),
+        };
+        let uuid = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+        let res = store.path(uuid);
+        assert!(res.is_ok());
+        assert_eq!(
+            res.unwrap(),
+            std::path::PathBuf::from("/tmp").join(format!("{uuid}.json"))
+        );
+    }
+
+    #[test]
+    fn load_rejects_non_uuid_shape() {
+        let store = MaestroJobStore {
+            dir: std::path::PathBuf::from("/tmp"),
+        };
+        let res = store.load("../etc/passwd");
+        assert!(res.is_err(), "must not even attempt to read relative paths");
+    }
+
+    // ---- is_terminal --------------------------------------------------
+
+    #[test]
+    fn is_terminal_classification() {
+        assert!(MaestroJobStore::is_terminal(MaestroJobStatus::Completed));
+        assert!(MaestroJobStore::is_terminal(MaestroJobStatus::Failed));
+        assert!(MaestroJobStore::is_terminal(MaestroJobStatus::Cancelled));
+        assert!(!MaestroJobStore::is_terminal(MaestroJobStatus::Pending));
+        assert!(!MaestroJobStore::is_terminal(MaestroJobStatus::Running));
+        assert!(!MaestroJobStore::is_terminal(MaestroJobStatus::Unknown));
     }
 }

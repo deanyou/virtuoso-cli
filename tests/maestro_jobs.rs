@@ -61,11 +61,12 @@ fn can_resubmit_only_when_failed_or_cancelled() {
 
 #[test]
 fn derive_status_completed() {
+    // Canonical end-state: <run_dir>/psf/spectre.out exists.
     let tmp = temp_dir();
     let mut job = MaestroJob::new("s".into(), None, None);
     job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
     std::fs::create_dir(tmp.path().join("psf")).unwrap();
-    std::fs::write(tmp.path().join("spectre.out"), "done").unwrap();
+    std::fs::write(tmp.path().join("psf").join("spectre.out"), "done").unwrap();
     assert_eq!(
         MaestroJobStore::derive_status_from_run_dir(&job),
         MaestroJobStatus::Completed
@@ -186,14 +187,12 @@ fn list_filtered_by_status() {
     store.save(&j2).unwrap();
 
     let running: Vec<_> = store
-        .list_filtered(Some(MaestroJobStatus::Running), None, None, None)
+        .list_filtered(Some(MaestroJobStatus::Running))
         .unwrap();
     assert_eq!(running.len(), 1);
     assert_eq!(running[0].session, "s1");
 
-    let failed: Vec<_> = store
-        .list_filtered(Some(MaestroJobStatus::Failed), None, None, None)
-        .unwrap();
+    let failed: Vec<_> = store.list_filtered(Some(MaestroJobStatus::Failed)).unwrap();
     assert_eq!(failed.len(), 1);
     assert_eq!(failed[0].session, "s2");
 }
@@ -203,4 +202,45 @@ fn job_id_is_unique() {
     let job1 = MaestroJob::new("s".into(), None, None);
     let job2 = MaestroJob::new("s".into(), None, None);
     assert_ne!(job1.job_id, job2.job_id);
+}
+
+// ---- additional m3/minor tests: list_filtered signature (no lib/cell/view) ---
+
+#[test]
+fn list_filtered_takes_only_status() {
+    // round 2 dropped the silent lib/cell/view no-op arguments from
+    // `job_list`; this test pins the new signature.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("jobs");
+    std::fs::create_dir_all(&dir).unwrap();
+    let store = virtuoso_cli::maestro_jobs::MaestroJobStore::with_dir(dir).unwrap();
+
+    let mut j1 = virtuoso_cli::maestro_jobs::MaestroJob::new("s1".into(), None, None);
+    j1.status = virtuoso_cli::maestro_jobs::MaestroJobStatus::Running;
+    let mut j2 = virtuoso_cli::maestro_jobs::MaestroJob::new("s2".into(), None, None);
+    j2.status = virtuoso_cli::maestro_jobs::MaestroJobStatus::Failed;
+    store.save(&j1).unwrap();
+    store.save(&j2).unwrap();
+
+    let running = store
+        .list_filtered(Some(virtuoso_cli::maestro_jobs::MaestroJobStatus::Running))
+        .unwrap();
+    assert_eq!(running.len(), 1);
+    assert_eq!(running[0].session, "s1");
+}
+
+// ---- m1: submit_skill + read_run_id_skill don't collide -----------------
+
+#[test]
+fn submit_skill_runs_mae_run_simulation_but_read_run_id_skill_does_not() {
+    use virtuoso_cli::client::maestro_ops::MaestroOps;
+
+    let submit = MaestroOps.submit_skill("fnxSession4");
+    assert!(submit.contains("maeRunSimulation"), "{submit}");
+
+    let read = MaestroOps.read_run_id_skill("fnxSession4");
+    assert!(
+        !read.contains("maeRunSimulation"),
+        "read_run_id_skill must NOT fire the simulation: {read}"
+    );
 }
