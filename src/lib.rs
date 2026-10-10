@@ -11,6 +11,7 @@ pub mod error;
 pub mod exit_codes;
 pub mod history;
 pub mod libref;
+pub mod maestro_jobs;
 pub mod mcp;
 pub mod models;
 pub mod ocean;

@@ -6,6 +6,21 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`vcli maestro job submit / status / list / logs / cancel`** — persistent Maestro
+  simulation job management. Jobs are stored as JSON in
+  `~/.cache/virtuoso_bridge/maestro/jobs/<id>.json`. Submit is fail-closed
+  (read-only session, profile mismatch, duplicate run_id are errors). Status
+  polling reads only the local run_dir filesystem, never contacts CIW. Persisted
+  from Arcadia-1/virtuoso-bridge-lite PR #173.
+- **`vcli cell verify-native <lib/cell/view>`** — read-only cellview grid audit
+  and decorative supply-rail tail detection. Reports per-layer on/off-grid
+  shape counts and VDD*/VSS*/VPWR*/VGND* decorative tails. Exits non-zero only
+  when `off_grid > 0`. Persisted from Arcadia-1/virtuoso-bridge-lite PR #175.
+- **`src/maestro_jobs/`** — `MaestroJob`, `MaestroJobStatus`, `MaestroJobStore`
+  (file-backed JSON) module for Rust-side job lifecycle management.
+- **`src/client/cell_ops.rs`** — SKILL builders for `tech_grid_precision_skill`
+  and `shape_grid_audit_skill` (read-only grid drift detection).
+
 - **`install.sh`** — shared/multi-user installer with `--system` (`/opt/virtuoso-cli`),
   `--user` (`~/.local`), `--prefix DIR` and `--no-build`. Installs `vcli`/`vtui`/
   `virtuoso-daemon` into `$PREFIX/bin` and `ramic_bridge.il` into
