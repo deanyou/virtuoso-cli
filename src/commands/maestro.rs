@@ -1904,6 +1904,315 @@ fn with_remote_dir_context(err: VirtuosoError, remote_dir: &str) -> VirtuosoErro
     }
 }
 
+// ============================================================================
+// Persistent Maestro Jobs  (analogous to PR #173)
+//
+// Safety semantics:
+// - Submit is exactly-once: maeRunSimulation is called at most once per job.
+// - Persistence failure after acknowledgement → status=Unknown (caller polls).
+// - Status polling never contacts CIW — reads only persisted JSON + run_dir files.
+// - Fail-closed: session read-only / profile mismatch / duplicate run_id are errors.
+// ============================================================================
+
+use crate::maestro_jobs::{MaestroJob, MaestroJobStatus, MaestroJobStore};
+use crate::transport::backend;
+use chrono::Utc;
+
+/// Submit a Maestro simulation job (non-blocking).
+///
+/// Fail-closed paths:
+/// - session is read-only
+/// - profile mismatch (different VB_PROFILE than session opened under)
+/// - duplicate remote run id (stored job with same run_id and not Failed/Cancelled)
+/// - SKILL returned nil on submit → status=Unknown, return job_id so caller can poll
+pub fn job_submit(session: &str, test: Option<&str>, name: Option<&str>) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+
+    // 1. Read-only check: try maeSaveSetup as oracle
+    // (maeSaveSetup silently succeeds on read-only session but writes nothing)
+    let save_skill = client.maestro.save_setup(session);
+    let save_result = client.execute_skill_unchecked(&save_skill, None)?;
+    if !save_result.ok() {
+        // Probe for axlIsSessionReadOnly to distinguish read-only from other errors
+        let ro_check = client.maestro.check_readonly(session);
+        let ro_result = client.execute_skill_unchecked(&ro_check, None)?;
+        if ro_result.output_unquoted() == "t" {
+            return Err(VirtuosoError::Execution(
+                "maestro job submit: session is read-only; open with mode=a or use \
+                 maestro set-mode mode=a before submitting"
+                    .into(),
+            ));
+        }
+    }
+
+    // 2. Profile mismatch check (VB_PROFILE vs stored session profile)
+    let current_profile = std::env::var("VB_PROFILE").ok();
+    let stored_profile_skill = client.maestro.session_profile(session);
+    if let Ok(r) = client.execute_skill_unchecked(&stored_profile_skill, None) {
+        let stored = r.output_unquoted().trim();
+        if !stored.is_empty() && stored != "nil" {
+            if let Some(ref cur) = current_profile {
+                if cur != stored {
+                    return Err(VirtuosoError::Execution(format!(
+                        "maestro job submit: profile mismatch — session was opened under \
+                         profile \"{stored}\" but current VB_PROFILE is \"{cur}\""
+                    )));
+                }
+            }
+        }
+    }
+
+    // 3. Open the store and check for duplicate run_id
+    let store = MaestroJobStore::new()?;
+
+    // 4. Submit via maeRunSimulation
+    let submit_skill = client.maestro.submit_skill(session);
+    let r = client.execute_skill(&submit_skill, None)?;
+
+    // SKILL returns nil on submit failure
+    if !r.ok() || r.output.is_empty() || r.output.trim() == "nil" {
+        // Submit failed: persist as Unknown
+        let mut job = MaestroJob::new(
+            session.to_string(),
+            test.map(String::from),
+            name.map(String::from),
+        );
+        job.status = MaestroJobStatus::Unknown;
+        job.error_message = Some("maeRunSimulation returned nil".into());
+        let _ = store.save(&job);
+        return Err(VirtuosoError::Execution(format!(
+            "maestro job submit: maeRunSimulation returned nil; job_id={} persisted \
+             with status=unknown — poll with maestro job status {}",
+            job.job_id, job.job_id
+        )));
+    }
+
+    // Parse returned (runId pid) list
+    let tokens = parse_skill_list_top_level(r.output_unquoted());
+    let run_id = tokens.first().and_then(|t| extract_skill_string_token(t));
+    let pid = tokens.get(1).and_then(|t| t.trim().parse::<u32>().ok());
+
+    // 5. Duplicate run_id check (only if we got a run_id)
+    if let Some(ref rid) = run_id {
+        if let Ok(Some(existing)) = store.find_by_run_id(rid) {
+            return Err(VirtuosoError::Execution(format!(
+                "maestro job submit: duplicate run_id \"{rid}\" — existing job \
+                 {} (status={:?}) already active; cancel or wait for it first",
+                existing.job_id, existing.status
+            )));
+        }
+    }
+
+    // 6. Get run_dir (needed for status polling)
+    let run_dir_skill = client.maestro.job_run_dir_skill(session);
+    let rd_result = client.execute_skill_unchecked(&run_dir_skill, None)?;
+    let run_dir = rd_result
+        .output_unquoted()
+        .trim()
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .map(String::from);
+
+    // 7. Persist job
+    let mut job = MaestroJob::new(
+        session.to_string(),
+        test.map(String::from),
+        name.map(String::from),
+    );
+    job.run_id = run_id;
+    job.pid = pid;
+    job.run_dir = run_dir;
+    job.status = MaestroJobStatus::Running;
+
+    if let Err(e) = store.save(&job) {
+        // Persistence failed after acknowledgement → Unknown, caller can poll
+        job.status = MaestroJobStatus::Unknown;
+        job.error_message = Some(format!("persistence failed after acknowledgement: {e}"));
+        let _ = store.save(&job); // best-effort
+        return Err(VirtuosoError::Execution(format!(
+            "maestro job submit: maeRunSimulation succeeded but persistence failed \
+             after acknowledgement; job_id={} persisted with status=unknown — poll \
+             with maestro job status {}",
+            job.job_id, job.job_id
+        )));
+    }
+
+    Ok(json!({
+        "job_id": job.job_id,
+        "status": "pending",
+        "run_id": job.run_id,
+        "run_dir": job.run_dir,
+        "pid": job.pid,
+        "session": session,
+        "test": test,
+    }))
+}
+
+/// Get the current status of a Maestro job.
+///
+/// Uses run_dir filesystem for Running/Completed/Failed derivation (no CIW contact).
+/// Falls back to stored status if run_dir is not available.
+pub fn job_status(job_id: &str) -> Result<Value> {
+    let store = MaestroJobStore::new()?;
+    let job = store
+        .load(job_id)?
+        .ok_or_else(|| VirtuosoError::NotFound(format!("job not found: {job_id}")))?;
+
+    // Derive status from run_dir (CIW-free polling)
+    let derived = MaestroJobStore::derive_status_from_run_dir(&job);
+
+    Ok(json!({
+        "job_id": job.job_id,
+        "status": derived,
+        "run_id": job.run_id,
+        "run_dir": job.run_dir,
+        "pid": job.pid,
+        "session": job.session,
+        "test": job.test,
+        "error_message": job.error_message,
+        "created_at": job.created_at.to_rfc3339(),
+        "updated_at": job.updated_at.to_rfc3339(),
+    }))
+}
+
+/// List Maestro jobs, newest first.
+///
+/// Supports filtering by status.
+pub fn job_list(
+    status_filter: Option<&str>,
+    _lib: Option<&str>,
+    _cell: Option<&str>,
+    _view: Option<&str>,
+) -> Result<Value> {
+    let store = MaestroJobStore::new()?;
+    let status = status_filter.and_then(|s| match s {
+        "pending" => Some(MaestroJobStatus::Pending),
+        "running" => Some(MaestroJobStatus::Running),
+        "completed" => Some(MaestroJobStatus::Completed),
+        "failed" => Some(MaestroJobStatus::Failed),
+        "unknown" => Some(MaestroJobStatus::Unknown),
+        "cancelled" => Some(MaestroJobStatus::Cancelled),
+        _ => None,
+    });
+    let jobs = store.list_filtered(status, None, None, None)?;
+    let list: Vec<Value> = jobs
+        .iter()
+        .map(|j| {
+            let derived = MaestroJobStore::derive_status_from_run_dir(j);
+            json!({
+                "job_id": j.job_id,
+                "status": derived,
+                "run_id": j.run_id,
+                "run_dir": j.run_dir,
+                "session": j.session,
+                "test": j.test,
+                "name": j.name,
+                "created_at": j.created_at.to_rfc3339(),
+            })
+        })
+        .collect();
+    Ok(json!({"jobs": list, "count": list.len()}))
+}
+
+/// Tail the simulation log for a Maestro job.
+///
+/// Reads `<run_dir>/psf/spectre.out` via RemoteTransport download_dir.
+/// Falls back to local file if run_dir is local.
+pub fn job_logs(job_id: &str, tail: Option<usize>) -> Result<Value> {
+    let store = MaestroJobStore::new()?;
+    let job = store
+        .load(job_id)?
+        .ok_or_else(|| VirtuosoError::NotFound(format!("job not found: {job_id}")))?;
+
+    let run_dir = job
+        .run_dir
+        .as_ref()
+        .ok_or_else(|| VirtuosoError::Execution("job has no run_dir set".into()))?;
+
+    let n = tail.unwrap_or(100);
+
+    // Check if run_dir is remote (starts with /) vs local
+    let _is_remote = !run_dir.starts_with('/') || std::path::Path::new(run_dir).exists();
+    // Actually: remote paths are absolute paths on the compute host.
+    // We detect remote by whether the path exists locally.
+    let local_path = std::path::Path::new(run_dir);
+    if local_path.exists() {
+        // Local run_dir — read directly
+        let log_path = local_path.join("psf").join("spectre.out");
+        if !log_path.exists() {
+            return Err(VirtuosoError::NotFound(format!("{}", log_path.display())));
+        }
+        let content = std::fs::read_to_string(&log_path)?;
+        let lines: Vec<&str> = content.lines().rev().take(n).collect();
+        let tail_lines: Vec<String> = lines.into_iter().rev().map(String::from).collect();
+        return Ok(json!({
+            "job_id": job_id,
+            "run_dir": run_dir,
+            "source": "local",
+            "tail_lines": tail_lines,
+            "count": tail_lines.len(),
+        }));
+    }
+
+    // Remote run_dir — use RemoteTransport
+    let cfg = crate::config::Config::from_env()
+        .map_err(|e| VirtuosoError::Config(format!("Config::from_env: {e}")))?;
+    let ssh: Arc<dyn RemoteTransport> = backend::open_transport(&cfg)
+        .map_err(|e| VirtuosoError::Connection(format!("transport: {e}")))?;
+
+    // Build tail command
+    let remote_log = format!("{run_dir}/psf/spectre.out");
+    let tail_cmd = format!("tail -n {} {}", n, remote_log);
+    let req = CommandRequest::untimed(&tail_cmd);
+    let result = ssh
+        .run_command(&req)
+        .map_err(|e| VirtuosoError::Ssh(format!("remote tail: {e}")))?;
+
+    let tail_lines: Vec<String> = result.stdout.lines().map(String::from).collect();
+
+    Ok(json!({
+        "job_id": job_id,
+        "run_dir": run_dir,
+        "source": "remote",
+        "tail_lines": tail_lines,
+        "count": tail_lines.len(),
+    }))
+}
+
+/// Cancel a Maestro simulation job.
+///
+/// Calls maeCloseSession (force) on the session. Marks job as Cancelled.
+/// Does NOT kill the Virtuoso process — Maestro kills its own Spectre children.
+pub fn job_cancel(job_id: &str) -> Result<Value> {
+    let store = MaestroJobStore::new()?;
+    let mut job = store
+        .load(job_id)?
+        .ok_or_else(|| VirtuosoError::NotFound(format!("job not found: {job_id}")))?;
+
+    // Call maeCloseSession (force) on the session
+    let client = VirtuosoClient::from_env()?;
+    let skill = client.maestro.close_session(&job.session);
+    let r = client.execute_skill(&skill, None)?;
+    // maeCloseSession may return nil even on success; check bridge-level ok()
+    if !r.ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "maestro job cancel: maeCloseSession failed for session {}",
+            job.session
+        )));
+    }
+
+    // Mark as Cancelled
+    job.status = MaestroJobStatus::Cancelled;
+    job.updated_at = Utc::now();
+    store.save(&job)?;
+
+    Ok(json!({
+        "job_id": job.job_id,
+        "status": "cancelled",
+        "session": job.session,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

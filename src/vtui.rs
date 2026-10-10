@@ -13,6 +13,7 @@ mod error;
 mod exit_codes;
 mod history;
 mod libref;
+mod maestro_jobs;
 mod mcp;
 mod models;
 mod ocean;
