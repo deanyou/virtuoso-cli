@@ -92,10 +92,22 @@ use crate::client::skill_sexp::{parse_sexp, SexpVal};
 /// - Missing `tails` key
 ///
 /// Returns `Vec<(layer, on_grid, off_grid)>` and `Vec<(net, count)>` for tails.
-type LayerEntry = (String, u32, u32);
-type TailEntry = (String, u32);
+/// One layer's grid audit result: (layer_name, on_grid_count, off_grid_count).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GridLayer(pub String, pub u32, pub u32);
 
-fn parse_grid_audit_output(raw: &str) -> (Vec<LayerEntry>, Vec<TailEntry>) {
+/// One detected decorative supply rail tail: (net_name, shape_count).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GridTail(pub String, pub u32);
+
+/// Parse the SKILL output of `shape_grid_audit_skill`.
+///
+/// Public for integration tests to exercise the real parser (round-2 M4:
+/// the test file used to ship a clone and never touched this code).
+/// Returns `(layers, tails)` — `tails` is empty for pure grid-audit
+/// outputs and populated when `shape_grid_audit_skill` also reports
+/// decorative rail tails.
+pub fn parse_grid_audit_output(raw: &str) -> (Vec<GridLayer>, Vec<GridTail>) {
     let parsed = match parse_sexp(raw) {
         Ok(v) => v,
         Err(_) => return (Vec::new(), Vec::new()),
@@ -120,7 +132,7 @@ fn parse_grid_audit_output(raw: &str) -> (Vec<LayerEntry>, Vec<TailEntry>) {
                                                 .as_str()
                                                 .and_then(|s| s.parse::<u32>().ok())
                                                 .unwrap_or(1);
-                                            tails.push((net, count));
+                                            tails.push(GridTail(net, count));
                                         }
                                     }
                                 }
@@ -140,7 +152,7 @@ fn parse_grid_audit_output(raw: &str) -> (Vec<LayerEntry>, Vec<TailEntry>) {
                             .as_str()
                             .and_then(|s| s.parse::<u32>().ok())
                             .unwrap_or(0);
-                        layers.push((layer, on, off));
+                        layers.push(GridLayer(layer, on, off));
                     } else {
                         // Flat form: (layerName count) — only 2 elements, off=0
                         let layer = sub[0].as_str().unwrap_or("").to_string();
@@ -148,7 +160,7 @@ fn parse_grid_audit_output(raw: &str) -> (Vec<LayerEntry>, Vec<TailEntry>) {
                             .as_str()
                             .and_then(|s| s.parse::<u32>().ok())
                             .unwrap_or(0);
-                        layers.push((layer, on, 0));
+                        layers.push(GridLayer(layer, on, 0));
                     }
                 }
             }
@@ -184,14 +196,15 @@ pub fn verify_native(
 
     let (layers, tails) = parse_grid_audit_output(r.output_unquoted());
 
-    let total_on: u32 = layers.iter().map(|(_, on, _)| on).sum();
-    let total_off: u32 = layers.iter().map(|(_, _, off)| off).sum();
-    let total_tails: u32 = tails.iter().map(|(_, c)| c).sum();
+    let total_on: u32 = layers.iter().map(|l| l.1).sum();
+    let total_off: u32 = layers.iter().map(|l| l.2).sum();
+    let total_tails: u32 = tails.iter().map(|t| t.1).sum();
 
-    // Build details per layer (sorted by worst off-grid rate)
+    // Build details per layer (already sorted by off_grid desc inside the parser).
     let details: Vec<Value> = layers
         .iter()
-        .map(|(layer, on, off)| {
+        .map(|layer| {
+            let GridLayer(name, on, off) = layer;
             let total = on + off;
             let off_rate = if total > 0 {
                 (*off as f64) / (total as f64)
@@ -199,7 +212,7 @@ pub fn verify_native(
                 0.0
             };
             json!({
-                "layer": layer,
+                "layer": name,
                 "on_grid": on,
                 "off_grid": off,
                 "off_grid_rate": format!("{:.2}", off_rate),
@@ -207,10 +220,11 @@ pub fn verify_native(
         })
         .collect();
 
-    // Decorative tail details
+    // Decorative tail details.
     let tail_details: Vec<Value> = tails
         .iter()
-        .map(|(net, count)| {
+        .map(|tail| {
+            let GridTail(net, count) = tail;
             json!({
                 "net": net,
                 "tail_count": count,
