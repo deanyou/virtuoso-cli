@@ -13,6 +13,7 @@ mod error;
 mod exit_codes;
 mod history;
 mod libref;
+mod maestro_jobs;
 mod mcp;
 mod models;
 mod ocean;
@@ -764,6 +765,26 @@ enum CellCmd {
 
     /// Get info about the currently open cellview
     Info,
+
+    /// Verify native grid fidelity and detect decorative supply tails.
+    ///
+    /// Read-only audit: opens the cellview, reads tech~>userGridPrecision,
+    /// checks every shape's bBox for grid drift, and detects decorative
+    /// supply rail tails (path/wire on annotate layer touching VDD*/VSS*).
+    ///
+    /// Returns structured JSON. Exits non-zero only when off_grid > 0
+    /// (real coordinate drift that breaks readback).
+    VerifyNative {
+        /// Library name
+        #[arg(long)]
+        lib: String,
+        /// Cell name
+        #[arg(long)]
+        cell: String,
+        /// View name
+        #[arg(long, default_value = "layout")]
+        view: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1347,6 +1368,69 @@ enum MaestroCmd {
         /// Local destination directory for downloaded netlist files
         #[arg(long)]
         output: String,
+    },
+
+    /// Persistent Maestro job management.
+    Job {
+        #[command(subcommand)]
+        cmd: MaestroJobCmd,
+    },
+}
+
+/// Subcommands for `maestro job`.
+#[derive(Subcommand)]
+enum MaestroJobCmd {
+    /// Submit a Maestro simulation job (non-blocking).
+    Submit {
+        /// Maestro session name (e.g. fnxSession4)
+        #[arg(long)]
+        session: String,
+        /// Test name within the session
+        #[arg(long)]
+        test: Option<String>,
+        /// Human-readable job name
+        #[arg(long)]
+        name: Option<String>,
+    },
+
+    /// Get current status of a Maestro job.
+    Status {
+        /// Job id (UUID)
+        #[arg(long)]
+        job_id: String,
+    },
+
+    /// List Maestro jobs, newest first.
+    List {
+        /// Filter by status: pending | running | completed | failed | unknown | cancelled
+        #[arg(long)]
+        status: Option<String>,
+        /// Filter by library name
+        #[arg(long)]
+        lib: Option<String>,
+        /// Filter by cell name
+        #[arg(long)]
+        cell: Option<String>,
+        /// Filter by view name
+        #[arg(long)]
+        view: Option<String>,
+    },
+
+    /// Tail the simulation log for a Maestro job.
+    Logs {
+        /// Job id (UUID)
+        #[arg(long)]
+        job_id: String,
+        /// Number of trailing lines (default: 100)
+        #[arg(long)]
+        tail: Option<usize>,
+    },
+
+    /// Cancel a Maestro simulation job.
+    Cancel {
+        /// Job id (UUID)
+        #[arg(long)]
+        job_id: String,
     },
 }
 
@@ -2240,6 +2324,9 @@ fn dispatch_cell(
         CellCmd::Save => commands::cell::save(ctx),
         CellCmd::Close { discard } => commands::cell::close(ctx, !discard),
         CellCmd::Info => commands::cell::info(ctx),
+        CellCmd::VerifyNative { lib, cell, view } => {
+            commands::cell::verify_native(ctx, &lib, &cell, &view)
+        }
     }
 }
 
@@ -2510,6 +2597,27 @@ fn dispatch_maestro(cmd: MaestroCmd) -> error::Result<serde_json::Value> {
             corner,
             output,
         } => commands::maestro::create_corner_netlist(&session, &test, &corner, &output),
+        MaestroCmd::Job { cmd } => match cmd {
+            MaestroJobCmd::Submit {
+                session,
+                test,
+                name,
+            } => commands::maestro::job_submit(&session, test.as_deref(), name.as_deref()),
+            MaestroJobCmd::Status { job_id } => commands::maestro::job_status(&job_id),
+            MaestroJobCmd::List {
+                status,
+                lib,
+                cell,
+                view,
+            } => commands::maestro::job_list(
+                status.as_deref(),
+                lib.as_deref(),
+                cell.as_deref(),
+                view.as_deref(),
+            ),
+            MaestroJobCmd::Logs { job_id, tail } => commands::maestro::job_logs(&job_id, tail),
+            MaestroJobCmd::Cancel { job_id } => commands::maestro::job_cancel(&job_id),
+        },
     }
 }
 
