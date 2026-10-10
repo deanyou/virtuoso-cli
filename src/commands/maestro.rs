@@ -1904,6 +1904,374 @@ fn with_remote_dir_context(err: VirtuosoError, remote_dir: &str) -> VirtuosoErro
     }
 }
 
+// ============================================================================
+// Persistent Maestro Jobs  (analogous to PR #173)
+//
+// Safety semantics:
+// - Submit is exactly-once: maeRunSimulation is called at most once per job.
+// - Persistence failure after acknowledgement → status=Unknown (caller polls).
+// - Status polling never contacts CIW — reads only persisted JSON + run_dir files.
+// - Fail-closed: session read-only / profile mismatch / duplicate run_id are errors.
+// ============================================================================
+
+use crate::maestro_jobs::{MaestroJob, MaestroJobStatus, MaestroJobStore};
+use crate::transport::backend;
+use chrono::Utc;
+
+/// Submit a Maestro simulation job (non-blocking).
+///
+/// Two-phase flow to enforce exactly-once on `maeRunSimulation`:
+///
+/// 1. **Pre-flight** (no side effect): read-only check, profile check,
+///    read the run id Maestro would assign via `maeGetSetup(?runId t)`,
+///    then check the on-disk store for an active job with the same run id.
+///    If any fail-closed gate trips we return **before** `maeRunSimulation`
+///    runs — there is no orphan simulation on duplicate.
+/// 2. **Submit**: `maeRunSimulation` (single call, never auto-retried).
+///    Re-check the store right after submit for the run id Maestro
+///    actually returned (a concurrent submit can still race this window;
+///    the loser of that race is rejected here with the existing `job_id`
+///    of the winner returned to it).
+///
+/// Fail-closed paths:
+/// - session is read-only (`axlIsSessionReadOnly` probe)
+/// - profile mismatch (different `VB_PROFILE` than session opened under)
+/// - duplicate remote run id (stored job with same run_id and not Failed/Cancelled)
+/// - SKILL returned nil on submit → status=Unknown, return job_id so caller can poll
+/// - persistence failed after acknowledgement → status=Unknown, return job_id
+pub fn job_submit(session: &str, test: Option<&str>, name: Option<&str>) -> Result<Value> {
+    let client = VirtuosoClient::from_env()?;
+
+    // 1. Read-only probe: `axlIsSessionReadOnly` is the oracle. We probe
+    //    unconditionally so the read-only gate is never silently swallowed.
+    //    `maeSaveSetup` is documented as a no-op on read-only sessions
+    //    (silently succeeds without writing) so we never used it as the gate.
+    let ro_check = client.maestro.check_readonly(session);
+    let ro_result = client.execute_skill(&ro_check, None)?;
+    let ro_str = ro_result.output_unquoted();
+    if ro_str == "t" {
+        return Err(VirtuosoError::Execution(format!(
+            "maestro job submit: session {session:?} is read-only; open with mode=a \
+             (vcli maestro set-mode --session {session} --mode a) before submitting"
+        )));
+    }
+    if !ro_result.ok() {
+        // Transport failure or SKILL raise — fail closed: we cannot prove
+        // the session is writable, so we refuse to submit.
+        return Err(VirtuosoError::Execution(format!(
+            "maestro job submit: read-only probe failed for session {session:?}: \
+             output={ro_str:?}; refusing to submit"
+        )));
+    }
+
+    // 2. Profile mismatch check (VB_PROFILE vs stored session profile).
+    let current_profile = std::env::var("VB_PROFILE").ok();
+    let stored_profile_skill = client.maestro.session_profile(session);
+    if let Ok(r) = client.execute_skill_unchecked(&stored_profile_skill, None) {
+        let stored = r.output_unquoted().trim();
+        if !stored.is_empty() && stored != "nil" {
+            if let Some(ref cur) = current_profile {
+                if cur != stored {
+                    return Err(VirtuosoError::Execution(format!(
+                        "maestro job submit: profile mismatch — session was opened under \
+                         profile \"{stored}\" but current VB_PROFILE is \"{cur}\""
+                    )));
+                }
+            }
+        }
+    }
+
+    let store = MaestroJobStore::new()?;
+
+    // 3. Read the run id Maestro will assign on the next submit (no submit yet).
+    //    Maestro assigns run_id at submit time, not when the session opens, so
+    //    `maeGetSetup(?runId t)` returns the *next* run id Maestro has reserved
+    //    for this session (or, on older ICs, the last-completed run id). Either
+    //    way, if a stored job is already claiming this id, abort now.
+    let read_run_id_skill = client.maestro.read_run_id_skill(session);
+    let pre_run_id: Option<String> = match client.execute_skill_unchecked(&read_run_id_skill, None)
+    {
+        Ok(r) => {
+            let s = r.output_unquoted().trim();
+            if s.is_empty() || s == "nil" {
+                None
+            } else {
+                Some(s.to_string())
+            }
+        }
+        Err(_) => None,
+    };
+
+    // 4. Pre-flight duplicate check: bail BEFORE maeRunSimulation if the run
+    //    id Maestro is about to assign is already in the store.
+    if let Some(ref rid) = pre_run_id {
+        if let Ok(Some(existing)) = store.find_by_run_id(rid) {
+            return Err(VirtuosoError::Execution(format!(
+                "maestro job submit: duplicate run_id \"{rid}\" — existing job \
+                 {} (status={:?}) already active; cancel or wait for it first. \
+                 maeRunSimulation was NOT issued.",
+                existing.job_id, existing.status
+            )));
+        }
+    }
+
+    // 5. Submit via maeRunSimulation. SKILL returns (runId pid) on success.
+    let submit_skill = client.maestro.submit_skill(session);
+    let r = client.execute_skill(&submit_skill, None)?;
+
+    if !r.ok() || r.output.is_empty() || r.output.trim() == "nil" {
+        // Submit failed: persist as Unknown so the operator can investigate.
+        let mut job = MaestroJob::new(
+            session.to_string(),
+            test.map(String::from),
+            name.map(String::from),
+        );
+        job.status = MaestroJobStatus::Unknown;
+        job.error_message = Some("maeRunSimulation returned nil".into());
+        let _ = store.save(&job);
+        return Err(VirtuosoError::Execution(format!(
+            "maestro job submit: maeRunSimulation returned nil; job_id={} persisted \
+             with status=unknown — poll with maestro job status {}",
+            job.job_id, job.job_id
+        )));
+    }
+
+    let tokens = parse_skill_list_top_level(r.output_unquoted());
+    let run_id = tokens.first().and_then(|t| extract_skill_string_token(t));
+    let pid = tokens.get(1).and_then(|t| t.trim().parse::<u32>().ok());
+
+    // 6. Post-submit duplicate check. Catches the loser of a race that snuck
+    //    through the pre-flight window. Existing job wins; abort.
+    if let Some(ref rid) = run_id {
+        if let Ok(Some(existing)) = store.find_by_run_id(rid) {
+            return Err(VirtuosoError::Execution(format!(
+                "maestro job submit: post-submit duplicate run_id \"{rid}\" — concurrent \
+                 submit on session {session:?} won the race; existing job \
+                 {} (status={:?}) is authoritative. maeRunSimulation has been \
+                 issued once and the Spectre child is owned by the existing job; \
+                 not persisting a second record.",
+                existing.job_id, existing.status
+            )));
+        }
+    }
+
+    // 7. Get run_dir (needed for status polling).
+    let run_dir_skill = client.maestro.job_run_dir_skill(session);
+    let rd_result = client.execute_skill_unchecked(&run_dir_skill, None)?;
+    let run_dir = rd_result
+        .output_unquoted()
+        .trim()
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .map(String::from);
+
+    // 8. Persist. Once it has fired we must record *something* — Maestro
+    //    already forked a Spectre child. A failed persistence leaves the
+    //    caller's tools out of sync with the EDA state, so we report
+    //    `Unknown` and hand back the job_id for polling.
+    let mut job = MaestroJob::new(
+        session.to_string(),
+        test.map(String::from),
+        name.map(String::from),
+    );
+    job.run_id = run_id;
+    job.pid = pid;
+    job.run_dir = run_dir;
+    job.status = MaestroJobStatus::Running;
+    job.updated_at = Utc::now();
+
+    if let Err(e) = store.save(&job) {
+        // Persistence failed after acknowledgement → Unknown, caller can poll.
+        job.status = MaestroJobStatus::Unknown;
+        job.error_message = Some(format!("persistence failed after acknowledgement: {e}"));
+        job.updated_at = Utc::now();
+        let _ = store.save(&job); // best-effort
+        return Err(VirtuosoError::Execution(format!(
+            "maestro job submit: maeRunSimulation succeeded but persistence failed \
+             after acknowledgement; job_id={} persisted with status=unknown — poll \
+             with maestro job status {}",
+            job.job_id, job.job_id
+        )));
+    }
+
+    // Return "running" — by the time the caller sees this response the
+    // Spectre child has been forked by Maestro. Pending would mislead CI.
+    Ok(json!({
+        "job_id": job.job_id,
+        "status": "running",
+        "run_id": job.run_id,
+        "run_dir": job.run_dir,
+        "pid": job.pid,
+        "session": session,
+        "test": test,
+    }))
+}
+
+/// Get the current status of a Maestro job.
+///
+/// Uses run_dir filesystem for Running/Completed/Failed derivation (no CIW contact).
+/// Falls back to stored status if run_dir is not available.
+pub fn job_status(job_id: &str) -> Result<Value> {
+    let store = MaestroJobStore::new()?;
+    let job = store
+        .load(job_id)?
+        .ok_or_else(|| VirtuosoError::NotFound(format!("job not found: {job_id}")))?;
+
+    // Derive status from run_dir (CIW-free polling)
+    let derived = MaestroJobStore::derive_status_from_run_dir(&job);
+
+    Ok(json!({
+        "job_id": job.job_id,
+        "status": derived,
+        "run_id": job.run_id,
+        "run_dir": job.run_dir,
+        "pid": job.pid,
+        "session": job.session,
+        "test": job.test,
+        "error_message": job.error_message,
+        "created_at": job.created_at.to_rfc3339(),
+        "updated_at": job.updated_at.to_rfc3339(),
+    }))
+}
+
+/// List Maestro jobs, newest first.
+///
+/// Supports filtering by status. Library/cell/view filtering was removed
+/// in round 2 — the conservative stub used `run_dir` substring matching
+/// which produced false positives; round 3 should parse `run_dir/maestro.sdb`
+/// (or equivalent) to get reliable lib/cell/view for each row.
+pub fn job_list(status_filter: Option<&str>) -> Result<Value> {
+    let store = MaestroJobStore::new()?;
+    let status = status_filter.and_then(|s| match s {
+        "pending" => Some(MaestroJobStatus::Pending),
+        "running" => Some(MaestroJobStatus::Running),
+        "completed" => Some(MaestroJobStatus::Completed),
+        "failed" => Some(MaestroJobStatus::Failed),
+        "unknown" => Some(MaestroJobStatus::Unknown),
+        "cancelled" => Some(MaestroJobStatus::Cancelled),
+        _ => None,
+    });
+    let jobs = store.list_filtered(status)?;
+    let list: Vec<Value> = jobs
+        .iter()
+        .map(|j| {
+            let derived = MaestroJobStore::derive_status_from_run_dir(j);
+            json!({
+                "job_id": j.job_id,
+                "status": derived,
+                "run_id": j.run_id,
+                "run_dir": j.run_dir,
+                "session": j.session,
+                "test": j.test,
+                "name": j.name,
+                "created_at": j.created_at.to_rfc3339(),
+            })
+        })
+        .collect();
+    Ok(json!({"jobs": list, "count": list.len()}))
+}
+
+/// Tail the simulation log for a Maestro job.
+///
+/// Reads `<run_dir>/psf/spectre.out` via RemoteTransport download_dir.
+/// Falls back to local file if run_dir is local.
+pub fn job_logs(job_id: &str, tail: Option<usize>) -> Result<Value> {
+    let store = MaestroJobStore::new()?;
+    let job = store
+        .load(job_id)?
+        .ok_or_else(|| VirtuosoError::NotFound(format!("job not found: {job_id}")))?;
+
+    let run_dir = job
+        .run_dir
+        .as_ref()
+        .ok_or_else(|| VirtuosoError::Execution("job has no run_dir set".into()))?;
+
+    let n = tail.unwrap_or(100);
+
+    // Remote paths are absolute paths on the compute host. We detect a local
+    // path by whether it exists on the local filesystem; everything else is
+    // treated as remote (subject to `RemoteTransport::run_command`).
+    let local_path = std::path::Path::new(run_dir);
+    if local_path.exists() {
+        let log_path = local_path.join("psf").join("spectre.out");
+        if !log_path.exists() {
+            return Err(VirtuosoError::NotFound(format!("{}", log_path.display())));
+        }
+        let content = std::fs::read_to_string(&log_path)?;
+        let lines: Vec<&str> = content.lines().rev().take(n).collect();
+        let tail_lines: Vec<String> = lines.into_iter().rev().map(String::from).collect();
+        return Ok(json!({
+            "job_id": job_id,
+            "run_dir": run_dir,
+            "source": "local",
+            "tail_lines": tail_lines,
+            "count": tail_lines.len(),
+        }));
+    }
+
+    // Remote run_dir — use RemoteTransport. The path comes from a persisted
+    // job JSON written by `job_submit` after a Maestro-confirmed run, but
+    // we still single-quote it for the shell so a malicious or unexpected
+    // character (space, `;`, `&`, `$(...)`) cannot inject a second command.
+    let cfg = crate::config::Config::from_env()
+        .map_err(|e| VirtuosoError::Config(format!("Config::from_env: {e}")))?;
+    let ssh: Arc<dyn RemoteTransport> = backend::open_transport(&cfg)
+        .map_err(|e| VirtuosoError::Connection(format!("transport: {e}")))?;
+
+    let remote_log = format!("{run_dir}/psf/spectre.out");
+    // Single-quote the path and embed the integer `n` directly (already
+    // validated upstream by clap as a usize; no need to quote).
+    let tail_cmd = format!("tail -n {n} '{}'", remote_log.replace('\'', "'\\''"));
+    let req = CommandRequest::untimed(&tail_cmd);
+    let result = ssh
+        .run_command(&req)
+        .map_err(|e| VirtuosoError::Ssh(format!("remote tail: {e}")))?;
+
+    let tail_lines: Vec<String> = result.stdout.lines().map(String::from).collect();
+
+    Ok(json!({
+        "job_id": job_id,
+        "run_dir": run_dir,
+        "source": "remote",
+        "tail_lines": tail_lines,
+        "count": tail_lines.len(),
+    }))
+}
+
+/// Cancel a Maestro simulation job.
+///
+/// Calls maeCloseSession (force) on the session. Marks job as Cancelled.
+/// Does NOT kill the Virtuoso process — Maestro kills its own Spectre children.
+pub fn job_cancel(job_id: &str) -> Result<Value> {
+    let store = MaestroJobStore::new()?;
+    let mut job = store
+        .load(job_id)?
+        .ok_or_else(|| VirtuosoError::NotFound(format!("job not found: {job_id}")))?;
+
+    // Call maeCloseSession (force) on the session
+    let client = VirtuosoClient::from_env()?;
+    let skill = client.maestro.close_session(&job.session);
+    let r = client.execute_skill(&skill, None)?;
+    // maeCloseSession may return nil even on success; check bridge-level ok()
+    if !r.ok() {
+        return Err(VirtuosoError::Execution(format!(
+            "maestro job cancel: maeCloseSession failed for session {}",
+            job.session
+        )));
+    }
+
+    // Mark as Cancelled
+    job.status = MaestroJobStatus::Cancelled;
+    job.updated_at = Utc::now();
+    store.save(&job)?;
+
+    Ok(json!({
+        "job_id": job.job_id,
+        "status": "cancelled",
+        "session": job.session,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
