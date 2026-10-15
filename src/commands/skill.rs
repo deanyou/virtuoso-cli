@@ -4,18 +4,67 @@ use crate::error::{Result, VirtuosoError};
 use crate::models::SessionInfo;
 use crate::skill_finder::{SKILLFinder, SearchMode};
 use serde_json::{json, Value};
+use std::io::Read;
+use std::path::Path;
+
+/// Resolve the SKILL text for `skill exec`.
+///
+/// Exactly one source: a positional expression, `-` (read `stdin`), or `file`.
+/// `-` and `--file` keep inner double quotes that PowerShell 5.x strips from
+/// native-exe arguments.
+pub(crate) fn resolve_skill_exec_code(
+    code: Option<&str>,
+    file: Option<&Path>,
+    stdin: &mut dyn Read,
+) -> Result<String> {
+    match (code, file) {
+        (Some(_), Some(_)) => Err(VirtuosoError::Config(
+            "pass SKILL via an argument, `-`, or --file, not more than one".into(),
+        )),
+        (None, None) => Err(VirtuosoError::Config(
+            "no SKILL expression provided; pass code, `-` for stdin, or --file <path>".into(),
+        )),
+        (Some("-"), None) => read_skill_text(stdin),
+        (Some(code), None) => nonempty_skill(code),
+        (None, Some(path)) => {
+            let text = std::fs::read_to_string(path).map_err(|e| {
+                VirtuosoError::Io(std::io::Error::new(
+                    e.kind(),
+                    format!("failed to read SKILL file {}: {e}", path.display()),
+                ))
+            })?;
+            nonempty_skill(&text)
+        }
+    }
+}
+
+fn read_skill_text(stdin: &mut dyn Read) -> Result<String> {
+    let mut text = String::new();
+    stdin.read_to_string(&mut text)?;
+    nonempty_skill(&text)
+}
+
+fn nonempty_skill(text: &str) -> Result<String> {
+    if text.trim().is_empty() {
+        Err(VirtuosoError::Config("empty SKILL expression".into()))
+    } else {
+        Ok(text.to_string())
+    }
+}
 
 pub fn exec(
     ctx: &crate::context::CommandContext,
-    code: &str,
+    code: Option<&str>,
+    file: Option<&Path>,
     timeout: u64,
     readonly: bool,
 ) -> Result<Value> {
+    let code = resolve_skill_exec_code(code, file, &mut std::io::stdin())?;
     let mut client = VirtuosoClient::from_context(ctx)?;
     if readonly {
         client = client.with_sandbox_mode();
     }
-    let result = client.execute_skill(code, Some(timeout))?;
+    let result = client.execute_skill(&code, Some(timeout))?;
 
     Ok(json!({
         "status": if result.ok() { "success" } else { "error" },
@@ -521,5 +570,56 @@ pub fn show_cache(
             "exists": false,
             "message": format!("No cache found for {}. Use 'vcli skill sync' to download.", target_host),
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn positional_code_is_returned_unchanged() {
+        let mut input = Cursor::new(b"");
+        let got = resolve_skill_exec_code(Some("1+1"), None, &mut input).unwrap();
+        assert_eq!(got, "1+1");
+    }
+
+    #[test]
+    fn dash_reads_stdin_and_keeps_inner_quotes() {
+        // PowerShell 5.x drops the quotes in `vcli skill exec 'getShellEnvVar("USER")'`.
+        // `vcli skill exec -` must deliver the expression bytes unchanged.
+        let raw = r#"getShellEnvVar("USER")"#;
+        let mut input = Cursor::new(raw.as_bytes());
+        let got = resolve_skill_exec_code(Some("-"), None, &mut input).unwrap();
+        assert_eq!(got, raw);
+    }
+
+    #[test]
+    fn file_reads_skill_and_keeps_inner_quotes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("expr.il");
+        let raw = r#"getShellEnvVar("USER")"#;
+        std::fs::write(&path, raw).unwrap();
+        let mut input = Cursor::new(b"");
+        let got = resolve_skill_exec_code(None, Some(&path), &mut input).unwrap();
+        assert_eq!(got, raw);
+    }
+
+    #[test]
+    fn rejects_code_and_file_together() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("expr.il");
+        std::fs::write(&path, "1+1").unwrap();
+        let mut input = Cursor::new(b"");
+        let result = resolve_skill_exec_code(Some("1+1"), Some(&path), &mut input);
+        assert!(matches!(result, Err(VirtuosoError::Config(_))));
+    }
+
+    #[test]
+    fn rejects_empty_stdin() {
+        let mut input = Cursor::new(b"   \n");
+        let result = resolve_skill_exec_code(Some("-"), None, &mut input);
+        assert!(matches!(result, Err(VirtuosoError::Config(_))));
     }
 }

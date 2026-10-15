@@ -44,5 +44,6 @@ virtuoso skill exec 'let((cv) cv=dbOpenCellViewByType("lib" "cell" "schematic" n
 - Use `--format json` for structured output (auto in pipe mode)
 - Use `--timeout N` for long-running operations (default 30s)
 - SKILL strings use `"`, escape with `\"` inside bash single quotes
+- Windows PowerShell 5.x strips inner double quotes from native-exe arguments. `vcli skill exec 'getShellEnvVar("USER")'` arrives as `getShellEnvVar(USER)`. Use `Get-Content -Raw expr.il | vcli skill exec -` or `vcli skill exec --file expr.il`. `--file` reads one SKILL expression, not a full `.il` load (`vcli skill load`).
 - `let` blocks work for local variables; Ocean functions (simulator, design, run) must be at top level
 - View names may not be standard `schematic` — check with `v~>name` not `v~>viewName`

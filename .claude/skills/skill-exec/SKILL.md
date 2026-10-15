@@ -72,6 +72,19 @@ vcli session list
 vcli --session meowu-meow-38371 skill exec 'getCurrentTime()'
 ```
 
+## Windows PowerShell quoting
+
+PowerShell 5.x strips inner double quotes when it starts a native exe, so
+`vcli skill exec 'getShellEnvVar("USER")'` reaches SKILL as `getShellEnvVar(USER)`.
+Read the expression from stdin or a file instead:
+
+```powershell
+Get-Content -Raw expr.il | vcli skill exec -
+vcli skill exec --file expr.il
+```
+
+`--file` reads one SKILL expression for `exec`. It does not load a full `.il` file; that is `vcli skill load`.
+
 ## Multi-line input — `skill eval --stdin`
 
 For snippets that span more than one line, or that contain characters painful to
@@ -97,7 +110,7 @@ ways that matter:
 
 | | `skill exec` | `skill eval` |
 |---|---|---|
-| Input | argv only (`<code>` positional) | argv OR `--stdin` |
+| Input | argv, `-` (stdin), or `--file` | argv OR `--stdin` |
 | Multi-statement | daemon `let((r) r=<code>)` — **single form only** | wrapped in `progn(\n<code>\n)` — **any number of forms** |
 | Trailing `; comment` | safe | safe (the `\n)` before `)` terminates the line comment) |
 | Return value | the daemon's `r` | the value of the **last form** inside `progn` |

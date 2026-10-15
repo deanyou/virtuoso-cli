@@ -379,6 +379,11 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VCLI_CAPABILITY` | `user` | Set `admin` to unlock broadcast/raw SKILL |
 | `VB_CLIENT_ID` | hostname | Per-client scratch isolation |
 
+Windows PowerShell 5.x strips inner double quotes passed to a native exe.
+`vcli skill exec 'getShellEnvVar("USER")'` arrives as `getShellEnvVar(USER)`.
+Use `vcli skill exec -` (stdin) or `vcli skill exec --file expr.il`.
+`--file` reads one SKILL expression. It does not load a full `.il` file; that is `vcli skill load`.
+
 ---
 
 ## 中文
