@@ -74,8 +74,8 @@ impl SshBackend {
 /// `feature_compiled` is the `native-ssh` Cargo feature. Windows release
 /// binaries turn that feature on (`release.yml`), but the client is still
 /// unix-only. Status must use this predicate, not the feature flag alone.
-pub(crate) fn native_backend_supported(feature_compiled: bool, _unix: bool) -> bool {
-    feature_compiled
+pub(crate) fn native_backend_supported(feature_compiled: bool, unix: bool) -> bool {
+    feature_compiled && unix
 }
 
 impl std::fmt::Display for SshBackend {
@@ -361,10 +361,9 @@ mod tests {
     #[test]
     fn openssh_backend_is_always_supported() {
         assert!(SshBackend::OpenSsh.supported_in_this_build());
-        // Native support tracks the compile-time feature.
         assert_eq!(
             SshBackend::Native.supported_in_this_build(),
-            cfg!(feature = "native-ssh")
+            native_backend_supported(cfg!(feature = "native-ssh"), cfg!(unix))
         );
     }
 

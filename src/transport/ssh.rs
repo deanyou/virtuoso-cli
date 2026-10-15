@@ -258,6 +258,10 @@ impl SSHRunner {
             || stderr.contains("Control socket connect")
             || stderr.contains("multiplexing not supported")
             || stderr.contains("mux_client_hello_exchange")
+            // Windows OpenSSH has no Unix-domain control socket and reports
+            // these instead of the mux_client / ControlPath strings above.
+            || stderr.contains("getsockname failed")
+            || stderr.contains("muxclient socket")
     }
 
     /// Build an SSHRunner from a Config. Empty host is allowed (will be caught
