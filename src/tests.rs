@@ -784,6 +784,29 @@ mod cm_tests {
     }
 
     #[test]
+    fn windows_openssh_controlmaster_rejection_is_a_cm_failure() {
+        // Windows system OpenSSH has no Unix-domain ControlMaster socket.
+        // vcli always passes ControlMaster=auto. These stderrs are what that
+        // client prints; none of the patterns above match, so `run_command`
+        // does not retry. `list_remote` then sees empty stdout and
+        // `tunnel attach` reports "no Virtuoso sessions found".
+        assert!(
+            SSHRunner::is_cm_failure("getsockname failed: Not a socket\r\n"),
+            "getsockname failed: Not a socket"
+        );
+        assert!(
+            SSHRunner::is_cm_failure(
+                "getsockname failed: Bad file descriptor\nchannel_send_open: channel 0: unexpected internal error"
+            ),
+            "getsockname failed: Bad file descriptor"
+        );
+        assert!(
+            SSHRunner::is_cm_failure("muxclient socket(): Unknown error"),
+            "muxclient socket(): Unknown error"
+        );
+    }
+
+    #[test]
     fn connection_refused_is_not_cm_failure() {
         assert!(!SSHRunner::is_cm_failure(
             "ssh: connect to host eda port 22: Connection refused"

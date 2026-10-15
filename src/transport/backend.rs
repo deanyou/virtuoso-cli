@@ -57,15 +57,25 @@ impl SshBackend {
         }
     }
 
-    /// Whether this *build* was compiled with support for the backend. Tracks
-    /// the `native-ssh` feature, which is the switch the design specifies.
+    /// Whether this build can open the backend.
     #[allow(dead_code)] // consumed by tests and the future `native-ssh` increment
     pub fn supported_in_this_build(&self) -> bool {
         match self {
             SshBackend::OpenSsh => true,
-            SshBackend::Native => cfg!(feature = "native-ssh"),
+            SshBackend::Native => {
+                native_backend_supported(cfg!(feature = "native-ssh"), cfg!(unix))
+            }
         }
     }
+}
+
+/// Whether `native` can actually be opened.
+///
+/// `feature_compiled` is the `native-ssh` Cargo feature. Windows release
+/// binaries turn that feature on (`release.yml`), but the client is still
+/// unix-only. Status must use this predicate, not the feature flag alone.
+pub(crate) fn native_backend_supported(feature_compiled: bool, _unix: bool) -> bool {
+    feature_compiled
 }
 
 impl std::fmt::Display for SshBackend {
@@ -355,6 +365,18 @@ mod tests {
         assert_eq!(
             SshBackend::Native.supported_in_this_build(),
             cfg!(feature = "native-ssh")
+        );
+    }
+
+    #[test]
+    fn windows_release_does_not_report_native_supported() {
+        // windows-x86_64 release builds pass `--features native-ssh`, then
+        // `open_transport` still returns UnsupportedBackend because IPC is a
+        // Unix-domain socket. `tunnel status` must not say
+        // `supported_in_build: true` for that combination.
+        assert!(
+            !native_backend_supported(true, false),
+            "native compiled for a non-unix target is not usable"
         );
     }
 
