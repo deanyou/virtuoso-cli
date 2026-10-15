@@ -39,8 +39,20 @@ fn validate_directory_download(
     Ok(())
 }
 
-fn should_retry_cm_failure(attempt_used_control_master: bool, stderr: &str) -> bool {
-    attempt_used_control_master && SSHRunner::is_cm_failure(stderr)
+/// One SSH attempt, for the ControlMaster retry decision.
+///
+/// `stdout` is `None` when this path did not capture it. Uncaptured output
+/// cannot prove the remote command never started.
+struct CmRetryEvidence<'a> {
+    attempt_used_control_master: bool,
+    exit_code: Option<i32>,
+    stdout: Option<&'a str>,
+    stderr: &'a str,
+}
+
+fn should_retry_cm_failure(evidence: &CmRetryEvidence<'_>) -> bool {
+    let _ = (evidence.exit_code, evidence.stdout);
+    evidence.attempt_used_control_master && SSHRunner::is_cm_failure(evidence.stderr)
 }
 
 #[derive(Debug)]
@@ -301,7 +313,12 @@ impl SSHRunner {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-            if should_retry_cm_failure(attempt_used_control_master, &stderr) {
+            if should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master,
+                exit_code: output.status.code(),
+                stdout: Some(""),
+                stderr: &stderr,
+            }) {
                 tracing::warn!(
                     "ControlMaster failure in test_connection, retrying without CM: {}",
                     stderr.lines().next().unwrap_or("")
@@ -331,7 +348,14 @@ impl SSHRunner {
     pub fn run_command(&self, command: &str, timeout: Option<u64>) -> Result<RemoteTaskResult> {
         let attempt_used_control_master = *self.use_control_master.lock().unwrap();
         let result = self.run_command_inner(command, timeout, attempt_used_control_master)?;
-        if !result.success && should_retry_cm_failure(attempt_used_control_master, &result.stderr) {
+        if !result.success
+            && should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master,
+                exit_code: Some(result.returncode),
+                stdout: Some(&result.stdout),
+                stderr: &result.stderr,
+            })
+        {
             tracing::warn!(
                 "ControlMaster failure detected, retrying without CM: {}",
                 result.stderr.lines().next().unwrap_or("")
@@ -354,7 +378,13 @@ impl SSHRunner {
         let output = attempt(attempt_used_control_master)?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if should_retry_cm_failure(attempt_used_control_master, &stderr) {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master,
+                exit_code: output.status.code(),
+                stdout: Some(&stdout),
+                stderr: &stderr,
+            }) {
                 tracing::warn!(
                     "ControlMaster failure in file transfer, retrying without CM: {}",
                     stderr.lines().next().unwrap_or("")
@@ -656,7 +686,12 @@ impl SSHRunner {
             )?;
             let ssh_stderr = String::from_utf8_lossy(&output.producer_stderr);
             if !output.producer_status.success()
-                && should_retry_cm_failure(attempt_used_control_master, &ssh_stderr)
+                && should_retry_cm_failure(&CmRetryEvidence {
+                    attempt_used_control_master,
+                    exit_code: output.producer_status.code(),
+                    stdout: None,
+                    stderr: &ssh_stderr,
+                })
             {
                 tracing::warn!(
                     "ControlMaster failure in directory download, retrying without CM: {}",
@@ -952,14 +987,64 @@ mod tests {
 
     #[test]
     fn cm_failure_retry_depends_on_attempt_snapshot_not_shared_flag() {
-        let attempt_used_control_master = true;
-        assert!(should_retry_cm_failure(
-            attempt_used_control_master,
-            "mux_client_request_session failed"
-        ));
-        assert!(!should_retry_cm_failure(
-            false,
-            "mux_client_request_session failed"
-        ));
+        assert!(should_retry_cm_failure(&CmRetryEvidence {
+            attempt_used_control_master: true,
+            exit_code: Some(255),
+            stdout: Some(""),
+            stderr: "mux_client_request_session failed",
+        }));
+        assert!(!should_retry_cm_failure(&CmRetryEvidence {
+            attempt_used_control_master: false,
+            exit_code: Some(255),
+            stdout: Some(""),
+            stderr: "mux_client_request_session failed",
+        }));
+    }
+
+    #[test]
+    fn windows_mux_text_does_not_replay_a_started_command() {
+        let stderr = "getsockname failed: Not a socket\nmuxclient socket(): Unknown error\n";
+        assert!(
+            !should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master: true,
+                exit_code: Some(1),
+                stdout: Some("partial"),
+                stderr,
+            }),
+            "stdout means the remote command already ran"
+        );
+        assert!(
+            !should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master: true,
+                exit_code: Some(1),
+                stdout: Some(""),
+                stderr,
+            }),
+            "exit 1 is the remote command, not ssh failing before it"
+        );
+        assert!(
+            !should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master: true,
+                exit_code: Some(255),
+                stdout: Some("partial"),
+                stderr,
+            }),
+            "command output means it started before ssh exited 255"
+        );
+        assert!(
+            !should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master: true,
+                exit_code: Some(255),
+                stdout: None,
+                stderr: "getsockname failed: Not a socket",
+            }),
+            "uncaptured stdout cannot prove the command never started"
+        );
+        assert!(should_retry_cm_failure(&CmRetryEvidence {
+            attempt_used_control_master: true,
+            exit_code: Some(255),
+            stdout: Some(""),
+            stderr: "getsockname failed: Not a socket\r\n",
+        }));
     }
 }
