@@ -534,12 +534,21 @@ enum TunnelCmd {
 enum SkillCmd {
     /// Execute a SKILL expression and return result
     #[command(long_about = "Send a SKILL expression to Virtuoso for evaluation.\n\n\
+            Windows PowerShell 5.x strips inner double quotes from native-exe arguments, \
+            so `skill exec 'getShellEnvVar(\"USER\")'` arrives as `getShellEnvVar(USER)`. \
+            Pass `-` to read the expression from stdin, or `--file <path>` to read a file.\n\n\
             Examples:\n  \
             virtuoso skill exec '1+1'\n  \
-            virtuoso skill exec 'geGetEditCellView()' --timeout 60")]
+            virtuoso skill exec 'geGetEditCellView()' --timeout 60\n  \
+            virtuoso skill exec --file expr.il\n  \
+            Get-Content -Raw expr.il | virtuoso skill exec -")]
     Exec {
-        /// SKILL expression to evaluate
-        code: String,
+        /// SKILL expression to evaluate. `-` reads the expression from stdin.
+        code: Option<String>,
+
+        /// Read the SKILL expression from a file instead of the positional argument.
+        #[arg(long, value_name = "PATH")]
+        file: Option<std::path::PathBuf>,
 
         /// Execution timeout in seconds
         #[arg(long, short, default_value = "30")]
@@ -2203,9 +2212,10 @@ fn dispatch_skill(
     match cmd {
         SkillCmd::Exec {
             code,
+            file,
             timeout,
             readonly,
-        } => commands::skill::exec(ctx, &code, timeout, readonly),
+        } => commands::skill::exec(ctx, code.as_deref(), file.as_deref(), timeout, readonly),
         SkillCmd::Load { file, skillpp } => commands::skill::load(ctx, &file, skillpp),
         SkillCmd::Broadcast { code, timeout } => commands::skill::broadcast(&code, timeout),
         SkillCmd::Eval { code, stdin } => commands::skill::eval(ctx, code, stdin),

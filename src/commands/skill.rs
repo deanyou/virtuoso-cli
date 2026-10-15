@@ -9,25 +9,57 @@ use std::path::Path;
 
 /// Resolve the SKILL text for `skill exec`.
 ///
-/// Positional `code` is used as-is. `-` and `--file` are not special yet:
-/// PowerShell 5.x strips inner double quotes before the process starts, so
-/// `getShellEnvVar("USER")` arrives as `getShellEnvVar(USER)`.
+/// Exactly one source: a positional expression, `-` (read `stdin`), or `file`.
+/// `-` and `--file` keep inner double quotes that PowerShell 5.x strips from
+/// native-exe arguments.
 pub(crate) fn resolve_skill_exec_code(
     code: Option<&str>,
     file: Option<&Path>,
     stdin: &mut dyn Read,
 ) -> Result<String> {
-    let _ = (file, stdin);
-    Ok(code.unwrap_or("").to_string())
+    match (code, file) {
+        (Some(_), Some(_)) => Err(VirtuosoError::Config(
+            "pass SKILL via an argument, `-`, or --file, not more than one".into(),
+        )),
+        (None, None) => Err(VirtuosoError::Config(
+            "no SKILL expression provided; pass code, `-` for stdin, or --file <path>".into(),
+        )),
+        (Some("-"), None) => read_skill_text(stdin),
+        (Some(code), None) => nonempty_skill(code),
+        (None, Some(path)) => {
+            let text = std::fs::read_to_string(path).map_err(|e| {
+                VirtuosoError::Io(std::io::Error::new(
+                    e.kind(),
+                    format!("failed to read SKILL file {}: {e}", path.display()),
+                ))
+            })?;
+            nonempty_skill(&text)
+        }
+    }
+}
+
+fn read_skill_text(stdin: &mut dyn Read) -> Result<String> {
+    let mut text = String::new();
+    stdin.read_to_string(&mut text)?;
+    nonempty_skill(&text)
+}
+
+fn nonempty_skill(text: &str) -> Result<String> {
+    if text.trim().is_empty() {
+        Err(VirtuosoError::Config("empty SKILL expression".into()))
+    } else {
+        Ok(text.to_string())
+    }
 }
 
 pub fn exec(
     ctx: &crate::context::CommandContext,
-    code: &str,
+    code: Option<&str>,
+    file: Option<&Path>,
     timeout: u64,
     readonly: bool,
 ) -> Result<Value> {
-    let code = resolve_skill_exec_code(Some(code), None, &mut std::io::empty())?;
+    let code = resolve_skill_exec_code(code, file, &mut std::io::stdin())?;
     let mut client = VirtuosoClient::from_context(ctx)?;
     if readonly {
         client = client.with_sandbox_mode();
