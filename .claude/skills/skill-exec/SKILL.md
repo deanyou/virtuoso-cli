@@ -83,6 +83,8 @@ Get-Content -Raw expr.il | vcli skill exec -
 vcli skill exec --file expr.il
 ```
 
+`--file` reads one SKILL expression for `exec`. It does not load a full `.il` file; that is `vcli skill load`.
+
 ## Multi-line input — `skill eval --stdin`
 
 For snippets that span more than one line, or that contain characters painful to

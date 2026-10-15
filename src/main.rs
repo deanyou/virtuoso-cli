@@ -536,7 +536,7 @@ enum SkillCmd {
     #[command(long_about = "Send a SKILL expression to Virtuoso for evaluation.\n\n\
             Windows PowerShell 5.x strips inner double quotes from native-exe arguments, \
             so `skill exec 'getShellEnvVar(\"USER\")'` arrives as `getShellEnvVar(USER)`. \
-            Pass `-` to read the expression from stdin, or `--file <path>` to read a file.\n\n\
+            Pass `-` to read one expression from stdin, or `--file <path>` to read one expression from a file (not a full .il load; use `skill load` for that).\n\n\
             Examples:\n  \
             virtuoso skill exec '1+1'\n  \
             virtuoso skill exec 'geGetEditCellView()' --timeout 60\n  \
@@ -546,7 +546,7 @@ enum SkillCmd {
         /// SKILL expression to evaluate. `-` reads the expression from stdin.
         code: Option<String>,
 
-        /// Read the SKILL expression from a file instead of the positional argument.
+        /// Read one SKILL expression from a file. Not a full .il load; use `skill load` for that.
         #[arg(long, value_name = "PATH")]
         file: Option<std::path::PathBuf>,
 

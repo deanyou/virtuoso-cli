@@ -382,6 +382,7 @@ vcli [--profile P] [--session S] [--format json|table]
 Windows PowerShell 5.x strips inner double quotes passed to a native exe.
 `vcli skill exec 'getShellEnvVar("USER")'` arrives as `getShellEnvVar(USER)`.
 Use `vcli skill exec -` (stdin) or `vcli skill exec --file expr.il`.
+`--file` reads one SKILL expression. It does not load a full `.il` file; that is `vcli skill load`.
 
 ---
 

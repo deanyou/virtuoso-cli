@@ -65,15 +65,18 @@ pub fn show(noun: Option<&str>, verb: Option<&str>) -> Value {
                     "exec": {
                         "description": "Execute a SKILL expression and return result",
                         "args": {
-                            "code": { "type": "string", "required": true, "description": "SKILL expression to evaluate" }
+                            "code": { "type": "string", "required": false, "description": "SKILL expression to evaluate. `-` reads one expression from stdin." }
                         },
                         "flags": {
+                            "--file": { "type": "path", "required": false, "description": "Read one SKILL expression from a file. Not a full .il load; use skill load for that." },
                             "--timeout": { "type": "u64", "default": 30, "description": "Execution timeout in seconds" },
                             "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
                         },
                         "examples": [
                             "virtuoso skill exec '1+1'",
                             "virtuoso skill exec 'geGetEditCellView()' --timeout 60",
+                            "virtuoso skill exec --file expr.il",
+                            "virtuoso skill exec -",
                         ]
                     },
                     "load": {
