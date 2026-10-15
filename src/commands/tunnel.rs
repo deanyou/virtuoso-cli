@@ -643,10 +643,9 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
 ///
 /// Returns `(config_backend_value, tunnel_backend_value, drift_warning)`:
 /// - `config_backend_value` reports what the running `Config` selected, plus
-///   whether the `native-ssh` Cargo feature is compiled into this build, so an
-///   operator asking for `native` on an OpenSSH-only binary gets an immediate,
-///   explicit error instead of an `UnsupportedBackend` only when they actually
-///   try to use the transport.
+///   whether this build can open that backend. The native client needs both
+///   the `native-ssh` feature and a unix target; a Windows release build
+///   compiles the feature and still cannot open it.
 /// - `tunnel_backend_value` is the backend recorded on the live `TunnelState`
 ///   file (`openssh` for v1 / legacy, `native` for native daemons). `None` for
 ///   the running-branch call means no state file is loaded — caller should
@@ -661,12 +660,11 @@ pub(crate) fn backend_diagnostics(
     let selected = cfg.ssh_backend.as_deref().unwrap_or("openssh");
     let config_backend_value = json!({
         "selected": selected,
-        "supported_in_build": match selected {
-            "native" => cfg!(feature = "native-ssh"),
-            "openssh" => true,
+        "supported_in_build": match crate::transport::backend::SshBackend::parse(selected) {
+            Some(backend) => backend.supported_in_this_build(),
             // Unknown values surface honestly rather than being silently
             // treated as openssh — the design forbids silent fallback.
-            _ => false,
+            None => false,
         },
     });
 
@@ -1139,8 +1137,8 @@ mod backend_diagnostics_tests {
         assert_eq!(config_value["selected"], "native");
         assert_eq!(
             config_value["supported_in_build"],
-            cfg!(feature = "native-ssh"),
-            "supported_in_build must mirror the compile-time feature"
+            crate::transport::backend::SshBackend::Native.supported_in_this_build(),
+            "supported_in_build must follow whether native can be opened"
         );
         assert!(warning.is_none());
     }
