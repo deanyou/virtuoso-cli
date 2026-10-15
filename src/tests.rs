@@ -2401,3 +2401,72 @@ mod profile_dispatch_tests {
         assert_eq!(out["source"], "environment");
     }
 }
+
+#[cfg(test)]
+mod skill_exec_schema_tests {
+    use clap::CommandFactory;
+
+    /// Input surface `vcli schema skill exec` must publish. Scoped to this
+    /// command: the hand-written schema is a subset of clap, so a tree-wide
+    /// compare would fail on commands this schema never claimed to list.
+    #[derive(Debug, PartialEq)]
+    struct SkillExecInput {
+        code_required: bool,
+        has_file_flag: bool,
+        dash_reads_stdin: bool,
+    }
+
+    fn from_clap() -> SkillExecInput {
+        let cmd = crate::Cli::command();
+        let exec = cmd
+            .find_subcommand("skill")
+            .and_then(|c| c.find_subcommand("exec"))
+            .expect("clap has skill exec");
+        let code = exec
+            .get_arguments()
+            .find(|a| a.get_id().as_str() == "code")
+            .expect("positional code");
+        let help = [
+            exec.get_long_about().map(|s| s.to_string()),
+            code.get_help().map(|s| s.to_string()),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n");
+        let code_required = code.is_required_set();
+        let has_file_flag = exec.get_arguments().any(|a| a.get_long() == Some("file"));
+        let dash_reads_stdin = help.contains("`-`") && help.to_lowercase().contains("stdin");
+        SkillExecInput {
+            code_required,
+            has_file_flag,
+            dash_reads_stdin,
+        }
+    }
+
+    fn from_schema() -> SkillExecInput {
+        let schema = crate::commands::schema::show(Some("skill"), Some("exec"));
+        let node = &schema["skill exec"];
+        let text = node.to_string();
+        SkillExecInput {
+            code_required: node["args"]["code"]["required"].as_bool().unwrap_or(true),
+            has_file_flag: node["flags"].get("--file").is_some(),
+            dash_reads_stdin: text.contains("`-`") && text.to_lowercase().contains("stdin"),
+        }
+    }
+
+    #[test]
+    fn skill_exec_schema_matches_clap() {
+        let clap_input = from_clap();
+        assert_eq!(
+            clap_input,
+            SkillExecInput {
+                code_required: false,
+                has_file_flag: true,
+                dash_reads_stdin: true,
+            },
+            "clap skill exec"
+        );
+        assert_eq!(from_schema(), clap_input, "vcli schema skill exec");
+    }
+}
