@@ -50,9 +50,34 @@ struct CmRetryEvidence<'a> {
     stderr: &'a str,
 }
 
+fn distinctive_ssh_mux_failure(stderr: &str) -> bool {
+    stderr.contains("mux_client_request_session")
+        || stderr.contains("could not create named pipe")
+        || stderr.contains("ControlPath")
+        || stderr.contains("Control socket connect")
+        || stderr.contains("multiplexing not supported")
+        || stderr.contains("mux_client_hello_exchange")
+}
+
+fn ambiguous_windows_mux_text(stderr: &str) -> bool {
+    stderr.contains("getsockname failed") || stderr.contains("muxclient socket")
+}
+
+/// OpenSSH exits 255 when the client fails before a remote status exists.
+/// Empty captured stdout means that command printed nothing.
+fn remote_command_never_started(exit_code: Option<i32>, stdout: Option<&str>) -> bool {
+    exit_code == Some(255) && stdout == Some("")
+}
+
 fn should_retry_cm_failure(evidence: &CmRetryEvidence<'_>) -> bool {
-    let _ = (evidence.exit_code, evidence.stdout);
-    evidence.attempt_used_control_master && SSHRunner::is_cm_failure(evidence.stderr)
+    if !evidence.attempt_used_control_master {
+        return false;
+    }
+    if distinctive_ssh_mux_failure(evidence.stderr) {
+        return true;
+    }
+    ambiguous_windows_mux_text(evidence.stderr)
+        && remote_command_never_started(evidence.exit_code, evidence.stdout)
 }
 
 #[derive(Debug)]
@@ -264,16 +289,7 @@ impl SSHRunner {
     /// These typically appear on Windows/WSL2 when the CM socket path contains
     /// non-ASCII characters or the named pipe cannot be created.
     pub fn is_cm_failure(stderr: &str) -> bool {
-        stderr.contains("mux_client_request_session")
-            || stderr.contains("could not create named pipe")
-            || stderr.contains("ControlPath")
-            || stderr.contains("Control socket connect")
-            || stderr.contains("multiplexing not supported")
-            || stderr.contains("mux_client_hello_exchange")
-            // Windows OpenSSH has no Unix-domain control socket and reports
-            // these instead of the mux_client / ControlPath strings above.
-            || stderr.contains("getsockname failed")
-            || stderr.contains("muxclient socket")
+        distinctive_ssh_mux_failure(stderr) || ambiguous_windows_mux_text(stderr)
     }
 
     /// Build an SSHRunner from a Config. Empty host is allowed (will be caught
@@ -316,6 +332,7 @@ impl SSHRunner {
             if should_retry_cm_failure(&CmRetryEvidence {
                 attempt_used_control_master,
                 exit_code: output.status.code(),
+                // stdout is discarded; the remote argv is `exit 0`.
                 stdout: Some(""),
                 stderr: &stderr,
             }) {
@@ -689,6 +706,7 @@ impl SSHRunner {
                 && should_retry_cm_failure(&CmRetryEvidence {
                     attempt_used_control_master,
                     exit_code: output.producer_status.code(),
+                    // ssh stdout is the tar stream and is not captured.
                     stdout: None,
                     stderr: &ssh_stderr,
                 })
