@@ -868,6 +868,26 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
             r#"let((sess status) sess = asiGetSession("{session}") status = if(sess sess~>status else "nil"))"#
         )
     }
+
+    /// Check if a Maestro session is read-only via axlIsSessionReadOnly.
+    /// Returns the string `"t"` if read-only, `"nil"` otherwise.
+    /// Wrapped in errset so it degrades gracefully on IC23.1 (no-op).
+    pub fn check_readonly(&self, session: &str) -> String {
+        let session = escape_skill_string(session);
+        format!(
+            r#"let((ro) ro = errset(axlIsSessionReadOnly("{session}")) if(ro && listp(ro) then if(car(ro) == t then "t" else "nil") else if(ro == t then "t" else "nil"))"#
+        )
+    }
+
+    /// Get the VB_PROFILE that was used when opening a Maestro session.
+    /// Reads the session's clientId field, which carries the profile name.
+    /// Returns the string value or "nil" if unavailable.
+    pub fn session_profile(&self, session: &str) -> String {
+        let session = escape_skill_string(session);
+        format!(
+            r#"let((sess prof) sess = errset(asiGetSession("{session}")) sess = if(sess && listp(sess) car(sess) sess) prof = errset(sess~>clientId) prof = if(prof && listp(prof) car(prof) prof) if(stringp(prof) prof "nil"))"#
+        )
+    }
 }
 
 /// Parse a SKILL alist string into individual pair strings like `["(list \"k1\" \"v1\")", "(list \"k2\" \"v2\")"]`.
@@ -977,10 +997,160 @@ pub(crate) fn json_to_skill_alist(json_str: &str) -> Result<String, String> {
     Ok(format!("({})", pairs.join(" ")))
 }
 
+// ============================================================================
+// Persistent Job Helpers  (analogous to PR #173 in virtuoso-bridge-lite)
+// ============================================================================
+
+impl MaestroOps {
+    /// Read the run id for an upcoming Maestro simulation, **without** running it.
+    ///
+    /// Maestro assigns a fresh `runId` at submit time (`maeRunSimulation`),
+    /// not when the session opens. To enforce exactly-once submission we
+    /// must either:
+    ///   * ask Maestro to reserve the run id first, then check it is free
+    ///     against the on-disk store, then issue the real submit; or
+    ///   * run the submit, snapshot the run id, persist, and treat a
+    ///     second submit's race as a duplicate.
+    ///
+    /// Maestro does not expose a reservation API, so the real submit still
+    /// races against concurrent submitters on the same session. This helper
+    /// reads `maeGetSetup(?session s ?runId ...)` (IC23.1+) or the session's
+    /// `~>runId` field for the **current** run-id assignment, which is
+    /// useful as a *consistency check* against a duplicate-store lookup of
+    /// the prior run id, but it is **not** a lock — see `submit_skill` for
+    /// the actual side-effecting call.
+    pub fn read_run_id_skill(&self, session: &str) -> String {
+        let session = escape_skill_string(session);
+        format!(
+            r#"let((runId) runId = let((setup) setup = errset(maeGetSetup(?session "{session}" ?runId t)) if(setup && listp(setup) car(setup) nil)) when(null(runId) let((sess) sess = asiGetSession("{session}") when(sess runId = sess~>runId))) if(runId runId else "nil")"#
+        )
+    }
+
+    /// Submit a Maestro simulation job and return run metadata.
+    ///
+    /// Side-effecting: calls `maeRunSimulation(?session ...)` once. Run id
+    /// is captured from `maeGetSetup(?session s ?runId ...)` if available,
+    /// otherwise from the session's `~>runId` field. Virtuoso PID via
+    /// `ipcGetProcessID()` or fallback to a shell probe.
+    ///
+    /// The job is NOT automatically persisted — callers must do so and
+    /// handle the `Unknown` status if persistence fails after
+    /// acknowledgement.
+    ///
+    /// Callers that need exactly-once semantics **must** call
+    /// `read_run_id_skill` first and check the on-disk store for an
+    /// existing entry with the same `run_id` before issuing this SKILL.
+    /// Maestro does not expose a reservation API, so a race between two
+    /// concurrent submitters is still possible; the dup check after this
+    /// SKILL returns catches the *losing* submission and aborts persistence.
+    pub fn submit_skill(&self, session: &str) -> String {
+        let session = escape_skill_string(session);
+        format!(
+            r#"let((runId pid) runId = let((setup) setup = errset(maeGetSetup(?session "{session}" ?runId t)) if(setup && listp(setup) car(setup) nil)) when(null(runId) let((sess) sess = asiGetSession("{session}") when(sess runId = sess~>runId))) pid = errset(ipcGetProcessID()) pid = if(pid && numberp(car(pid)) car(pid) nil) when(null(pid) pid = errset(execute("sh" "-c" "echo $PPID" nil)) pid = if(pid && listp(pid) then let((out) out = ipcGetStdin(car(pid)) when(out parseLong(out))) else nil)) maeRunSimulation(?session "{session}") list(runId pid))"#
+        )
+    }
+
+    /// Get the Virtuoso process ID for the current Maestro session.
+    /// Falls back to `echo $PPID` via shell if `ipcGetProcessID()` is unavailable.
+    pub fn pid_skill(&self, session: &str) -> String {
+        let session = escape_skill_string(session);
+        format!(
+            r#"let((pid) pid = errset(ipcGetProcessID()) pid = if(pid && listp(pid) && numberp(car(pid))) then car(pid) else nil) when(null(pid) let((sess) sess = asiGetSession("{session}") pid = if(sess && sess~>pid then sess~>pid else nil))) when(null(pid) pid = errset(execute("sh" "-c" "echo $PPID" nil)) pid = if(pid && listp(pid) then let((out) out = ipcGetStdin(car(pid)) when(out parseLong(out))) else nil) pid)"#
+        )
+    }
+
+    /// Get the Maestro run directory for a session (run_dir).
+    /// Same as `asiGetAnalogRunDir` wrapped in errset for degradation.
+    pub fn job_run_dir_skill(&self, session: &str) -> String {
+        let session = escape_skill_string(session);
+        format!(
+            r#"let((sess dir) sess = errset(asiGetSession("{session}")) sess = if(sess && listp(sess) car(sess) sess) dir = errset(asiGetAnalogRunDir(sess)) dir = if(dir && listp(dir) then car(dir) else dir) if(dir dir nil))"#
+        )
+    }
+}
+
 #[cfg(test)]
+mod job_tests {
+    use super::*;
+
+    #[allow(dead_code)]
+    fn ops() -> MaestroOps {
+        MaestroOps
+    }
+
+    #[test]
+    fn read_run_id_skill_does_not_run_simulation() {
+        let s = ops().read_run_id_skill("fnxSession4");
+        // must NOT contain maeRunSimulation — this is a read-only probe
+        assert!(!s.contains("maeRunSimulation"), "must be read-only: {s}");
+        assert!(s.contains("maeGetSetup"), "{s}");
+        assert!(s.contains("fnxSession4"), "{s}");
+    }
+
+    #[test]
+    fn read_run_id_skill_returns_string() {
+        let s = ops().read_run_id_skill("sess");
+        // Must include fallback path through asiGetSession
+        assert!(s.contains("asiGetSession"), "{s}");
+    }
+
+    #[test]
+    fn submit_skill_contains_mae_run_simulation() {
+        let s = ops().submit_skill("fnxSession4");
+        assert!(s.contains("maeRunSimulation"), "{s}");
+        assert!(s.contains("fnxSession4"), "{s}");
+    }
+
+    #[test]
+    fn submit_skill_reads_run_id() {
+        let s = ops().submit_skill("sess");
+        // Must try maeGetSetup for run id, then fall back to session~>runId
+        assert!(s.contains("maeGetSetup"), "{s}");
+        assert!(s.contains("runId"), "{s}");
+    }
+
+    #[test]
+    fn submit_skill_tries_ipc_get_process_id() {
+        let s = ops().submit_skill("sess");
+        assert!(s.contains("ipcGetProcessID"), "{s}");
+    }
+
+    #[test]
+    fn pid_skill_tries_ipc_first() {
+        let s = ops().pid_skill("fnxSession0");
+        assert!(s.contains("ipcGetProcessID"), "{s}");
+        assert!(s.contains("fnxSession0"), "{s}");
+    }
+
+    #[test]
+    fn pid_skill_falls_back_to_shell() {
+        let s = ops().pid_skill("sess");
+        assert!(s.contains("execute") || s.contains("PPID"), "{s}");
+    }
+
+    #[test]
+    fn job_run_dir_skill() {
+        let s = ops().job_run_dir_skill("sess");
+        assert!(s.contains("asiGetAnalogRunDir"), "{s}");
+    }
+
+    #[test]
+    fn check_readonly_uses_axl_is_session_read_only() {
+        let s = ops().check_readonly("fnxSession5");
+        assert!(s.contains("axlIsSessionReadOnly"), "{s}");
+        assert!(s.contains("fnxSession5"), "{s}");
+    }
+
+    #[test]
+    fn session_profile_reads_client_id() {
+        let s = ops().session_profile("sess");
+        assert!(s.contains("clientId"), "{s}");
+    }
+}
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     fn ops() -> MaestroOps {
         MaestroOps
     }
