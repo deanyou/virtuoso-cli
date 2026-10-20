@@ -239,5 +239,161 @@ class VirtuosoClassTests(unittest.TestCase):
         self.assertFalse(x11d._is_virtuoso_class([]))
 
 
+class HelperDisplayArgvContractTests(unittest.TestCase):
+    """End-to-end contract between the Rust builder and the real helper.
+
+    The vendored helper takes its display from a POSITIONAL argv argument
+    (`resources/x11_dismiss_dialog.py` parses argv and never reads
+    `os.environ["DISPLAY"]`), and it only consults its own `find_x11_env()`
+    probe when no positional display was given — in which case it also
+    OVERWRITES `os.environ["XAUTHORITY"]` with its own detected cookie.
+
+    These tests drive the real `main()` so a change to the helper's parsing
+    contract is caught here, not silently in production (review B1/B2/B3).
+    """
+
+    DETECTED_ENV = {"DISPLAY": ":0", "XAUTHORITY": "/auto/detected/cookie"}
+
+    def setUp(self):
+        # main() mutates os.environ["DISPLAY"] / ["XAUTHORITY"]; snapshot the
+        # values NOW and restore them afterwards so the tests stay
+        # order-independent and do not leak into the rest of the process.
+        for key in ("DISPLAY", "XAUTHORITY"):
+            self.addCleanup(self._restore_env, key, os.environ.get(key))
+
+    @staticmethod
+    def _restore_env(key, saved):
+        if saved is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = saved
+
+    def _run_helper(self, argv, env_display, env_xauthority, detected_env=None):
+        """Run the REAL helper main() with the X11 side effects stubbed.
+
+        Returns (displays_used, find_x11_env_calls) — `displays_used` is what
+        the helper actually passed down to its window enumeration.
+        """
+        import subprocess as sp
+
+        os.environ["DISPLAY"] = env_display
+        if env_xauthority is None:
+            os.environ.pop("XAUTHORITY", None)
+        else:
+            os.environ["XAUTHORITY"] = env_xauthority
+
+        original_check_output = sp.check_output
+        sp.check_output = lambda cmd, **kwargs: b""
+        self.addCleanup(setattr, sp, "check_output", original_check_output)
+
+        probe_calls = []
+
+        def fake_find_x11_env(*args, **kwargs):
+            probe_calls.append(True)
+            return dict(detected_env or self.DETECTED_ENV)
+
+        original_find_x11_env = x11d.find_x11_env
+        x11d.find_x11_env = fake_find_x11_env
+        self.addCleanup(setattr, x11d, "find_x11_env", original_find_x11_env)
+
+        # The helper reaches the display through two different entry points:
+        # find_dialogs() for --dismiss, discover_windows() for --list-windows.
+        displays_used = []
+        original_find_dialogs = x11d.find_dialogs
+        original_discover_windows = x11d.discover_windows
+
+        def spy_find_dialogs(display):
+            displays_used.append(display)
+            return original_find_dialogs(display)
+
+        def spy_discover_windows(display):
+            displays_used.append(display)
+            return original_discover_windows(display)
+
+        x11d.find_dialogs = spy_find_dialogs
+        x11d.discover_windows = spy_discover_windows
+        self.addCleanup(setattr, x11d, "find_dialogs", original_find_dialogs)
+        self.addCleanup(setattr, x11d, "discover_windows", original_discover_windows)
+
+        old_argv = sys.argv
+        sys.argv = [HELPER_PATH] + list(argv)
+        try:
+            with self.assertRaises(SystemExit):
+                x11d.main()
+        finally:
+            sys.argv = old_argv
+        return displays_used, probe_calls
+
+    def test_positional_display_is_the_display_the_helper_uses(self):
+        """The requested display must be the one the helper actually uses."""
+        displays_used, probe_calls = self._run_helper(
+            argv=[":99", "--dismiss", "--action", "enter"],
+            env_display=":99",
+            env_xauthority="/tmp/xauth-cookie",
+        )
+        self.assertEqual(
+            displays_used,
+            [":99"],
+            "helper must act on the requested display, not on one it picked itself",
+        )
+        self.assertEqual(os.environ["DISPLAY"], ":99")
+        self.assertEqual(
+            probe_calls,
+            [],
+            "helper must not fall back to its own DISPLAY probe when a display was given",
+        )
+
+    def test_injected_xauthority_is_not_overwritten(self):
+        """A cookie passed in via the env prefix must survive the helper run."""
+        self._run_helper(
+            argv=[":99", "--dismiss", "--action", "enter"],
+            env_display=":99",
+            env_xauthority="/tmp/xauth-cookie",
+        )
+        self.assertEqual(
+            os.environ["XAUTHORITY"],
+            "/tmp/xauth-cookie",
+            "helper must not replace the XAUTHORITY it was given",
+        )
+
+    def test_without_positional_display_the_helper_uses_its_own_probe(self):
+        """Characterizes the B1 failure mode the Rust side must avoid.
+
+        Without the positional display the helper consults find_x11_env() and
+        replaces both DISPLAY and XAUTHORITY — which is why the Rust builder
+        must pass the display positionally even though it also exports
+        DISPLAY through the env prefix.
+        """
+        displays_used, probe_calls = self._run_helper(
+            argv=["--dismiss", "--action", "enter"],
+            env_display=":99",
+            env_xauthority="/tmp/xauth-cookie",
+        )
+        self.assertEqual(
+            probe_calls,
+            [True],
+            "without a positional display the helper falls back to find_x11_env()",
+        )
+        self.assertEqual(displays_used, [":0"])
+        self.assertNotEqual(
+            displays_used[0], ":99", "the requested display must not be silently ignored"
+        )
+        self.assertEqual(
+            os.environ["XAUTHORITY"],
+            self.DETECTED_ENV["XAUTHORITY"],
+            "the helper's own cookie replaces the injected one on the fallback path",
+        )
+
+    def test_display_with_host_prefix_is_parsed_as_one_positional_arg(self):
+        """The Rust builder shell-escapes the display; the helper sees one arg."""
+        displays_used, probe_calls = self._run_helper(
+            argv=["host:10.0", "--list-windows"],
+            env_display="host:10.0",
+            env_xauthority=None,
+        )
+        self.assertEqual(displays_used, ["host:10.0"])
+        self.assertEqual(probe_calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
