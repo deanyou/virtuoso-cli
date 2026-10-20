@@ -56,7 +56,9 @@ fn failing_command_reports_the_error_on_stderr_and_exits_nonzero() {
     let port = closed_port();
 
     let output = vcli()
-        .args(["--format", "json", "cell", "open", "--lib", "demo", "--cell", "top"])
+        .args([
+            "--format", "json", "cell", "open", "--lib", "demo", "--cell", "top",
+        ])
         .env("VB_TARGETS_FILE", &targets)
         .env("VB_HOST", "127.0.0.1")
         .env("VB_PORT", port.to_string())

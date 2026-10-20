@@ -63,9 +63,7 @@ fn cli_version_matches_mcp_server_info_version() {
     {
         let mut stdin = child.stdin.take().expect("stdin");
         stdin
-            .write_all(
-                b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n",
-            )
+            .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n")
             .expect("write initialize request");
         // Dropping stdin closes the pipe so the server loop exits.
     }
