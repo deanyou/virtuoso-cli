@@ -7,6 +7,7 @@ in git — every offline replay dirtied the working tree.
 import hashlib
 import sys
 import tempfile
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, '.')
@@ -33,19 +34,26 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_fake_run_does_not_touch_the_tracked_skill_db():
-    before = _digest(SKILL_DB)
+class FakeRunIsolationTest(unittest.TestCase):
+    def test_fake_run_does_not_touch_the_tracked_skill_db(self):
+        before = _digest(SKILL_DB)
 
-    tmpdir = tempfile.mkdtemp()
-    outdir = Path(tmpdir) / "run"
-    Runner(FakeExecutor({})).run(Scenario.from_dict(VALID), outdir)
+        tmpdir = tempfile.mkdtemp()
+        outdir = Path(tmpdir) / "run"
+        Runner(FakeExecutor({})).run(Scenario.from_dict(VALID), outdir)
 
-    after = _digest(SKILL_DB)
-    assert before == after, (
-        f"fake run modified the tracked skill DB: {before} -> {after}"
-    )
+        after = _digest(SKILL_DB)
+        self.assertEqual(
+            before, after,
+            f"fake run modified the tracked skill DB: {before} -> {after}",
+        )
 
-    # The experience must still be captured — just not in the repo.
-    assert (outdir / "experience.db").exists(), (
-        "fake run should write its experience DB into the run output directory"
-    )
+        # The experience must still be captured — just not in the repo.
+        self.assertTrue(
+            (outdir / "experience.db").exists(),
+            "fake run should write its experience DB into the run output directory",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
