@@ -39,7 +39,7 @@ pub use auth::Auth;
 pub use rpc::schema::standard_schema;
 pub use transaction::{SchematicDiff, SchematicSnapshot, TransactionManager};
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use output::{print_json, OutputFormat};
 
 #[derive(Parser)]
@@ -2991,10 +2991,13 @@ fn main() {
         Commands::Window(cmd) => dispatch_window(cmd, ctx.as_ref().unwrap()),
         Commands::Diag(cmd) => dispatch_diag(cmd, ctx.as_ref().unwrap()),
         Commands::Schema { all, noun, verb } => {
+            // The schema is generated from the clap tree the parser uses, so
+            // `--all` always covers every command the binary exposes.
+            let cli_cmd = Cli::command();
             let schema = if all || noun.is_none() {
-                commands::schema::show(None, None)
+                commands::schema::show(&cli_cmd, None, None)
             } else {
-                commands::schema::show(noun.as_deref(), verb.as_deref())
+                commands::schema::show(&cli_cmd, noun.as_deref(), verb.as_deref())
             };
             print_json(&schema);
             std::process::exit(0);

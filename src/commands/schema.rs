@@ -1,164 +1,236 @@
-use serde_json::{json, Value};
+//! `vcli schema` — machine-readable description of the CLI surface.
+//!
+//! The schema is **derived from the clap command tree** the parser itself
+//! uses, so `--all` can never drift from the commands the binary actually
+//! exposes. It used to be a hand-written subset that covered 5 of the 22
+//! top-level commands while the help text claimed "the full command tree".
 
-pub fn show(noun: Option<&str>, verb: Option<&str>) -> Value {
-    let full_schema = json!({
+use clap::builder::ArgAction;
+use clap::{Arg, Command};
+use serde_json::{json, Map, Value};
+
+/// Exit codes the CLI can return — mirrors `src/exit_codes.rs`.
+fn exit_codes() -> Value {
+    json!({
+        "0": "success",
+        "1": "general error",
+        "2": "invalid arguments / usage error",
+        "3": "resource not found",
+        "4": "permission denied",
+        "5": "conflict / already exists",
+        "10": "dry-run passed",
+    })
+}
+
+/// Best-effort JSON type name for a clap argument.
+///
+/// clap does not expose the concrete Rust type of an argument, so this
+/// reports what an agent actually needs: whether the flag is a boolean
+/// switch, a closed set of values, or free-form text.
+fn arg_type(arg: &Arg) -> &'static str {
+    match arg.get_action() {
+        ArgAction::SetTrue | ArgAction::SetFalse => return "bool",
+        _ => {}
+    }
+    if !arg.get_possible_values().is_empty() {
+        return "enum";
+    }
+    "string"
+}
+
+/// Describe a single clap argument.
+fn arg_schema(arg: &Arg) -> Value {
+    let mut m = Map::new();
+    m.insert("type".into(), json!(arg_type(arg)));
+    m.insert("required".into(), json!(arg.is_required_set()));
+
+    if let Some(help) = arg.get_help() {
+        let text = help.to_string();
+        if !text.is_empty() {
+            m.insert("description".into(), json!(text));
+        }
+    }
+
+    let defaults: Vec<String> = arg
+        .get_default_values()
+        .iter()
+        .map(|v| v.to_string_lossy().into_owned())
+        .collect();
+    if !defaults.is_empty() {
+        m.insert("default".into(), json!(defaults[0]));
+    }
+
+    let possible: Vec<String> = arg
+        .get_possible_values()
+        .iter()
+        .map(|v| v.get_name().to_string())
+        .collect();
+    if !possible.is_empty() {
+        m.insert("values".into(), json!(possible));
+    }
+
+    if let Some(names) = arg.get_value_names() {
+        if let Some(name) = names.first() {
+            m.insert("value_name".into(), json!(name.to_string()));
+        }
+    }
+
+    Value::Object(m)
+}
+
+/// Key used for a flag in the schema map: `--long` when present, else `-short`.
+fn flag_key(arg: &Arg) -> Option<String> {
+    if let Some(long) = arg.get_long() {
+        return Some(format!("--{long}"));
+    }
+    arg.get_short().map(|c| format!("-{c}"))
+}
+
+/// Extract the `Examples:` block from a clap about/long_about text.
+fn examples_from_about(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut in_block = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.eq_ignore_ascii_case("examples:") {
+            in_block = true;
+            continue;
+        }
+        if !in_block {
+            continue;
+        }
+        if trimmed.is_empty() {
+            continue;
+        }
+        // Example lines are indented under the "Examples:" header; the first
+        // non-indented line ends the block.
+        if line.starts_with(' ') || line.starts_with('\t') {
+            out.push(trimmed.to_string());
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// Short one-line description for a command.
+fn command_description(cmd: &Command) -> String {
+    if let Some(about) = cmd.get_about() {
+        let text = about.to_string();
+        if !text.is_empty() {
+            return text;
+        }
+    }
+    if let Some(long) = cmd.get_long_about() {
+        let text = long.to_string();
+        if let Some(first) = text.lines().next() {
+            let first = first.trim();
+            if !first.is_empty() {
+                return first.to_string();
+            }
+        }
+    }
+    String::new()
+}
+
+/// Convert a clap command (and its subtree) into the schema JSON shape.
+fn command_schema(cmd: &Command) -> Value {
+    let mut m = Map::new();
+
+    let description = command_description(cmd);
+    if !description.is_empty() {
+        m.insert("description".into(), json!(description));
+    }
+
+    let mut flags = Map::new();
+    let mut args = Map::new();
+    for arg in cmd.get_arguments() {
+        // Implicit args clap adds for itself are not part of the user-facing
+        // contract, and hidden args are internal.
+        if arg.is_hide_set() {
+            continue;
+        }
+        let id = arg.get_id().as_str();
+        if id == "help" || id == "version" {
+            continue;
+        }
+        if arg.is_positional() {
+            args.insert(id.to_string(), arg_schema(arg));
+        } else if let Some(key) = flag_key(arg) {
+            flags.insert(key, arg_schema(arg));
+        }
+    }
+    if !flags.is_empty() {
+        m.insert("flags".into(), Value::Object(flags));
+    }
+    if !args.is_empty() {
+        m.insert("args".into(), Value::Object(args));
+    }
+
+    let mut subcommands = Map::new();
+    for sub in cmd.get_subcommands() {
+        if sub.is_hide_set() {
+            continue;
+        }
+        subcommands.insert(sub.get_name().to_string(), command_schema(sub));
+    }
+    if !subcommands.is_empty() {
+        m.insert("subcommands".into(), Value::Object(subcommands));
+    }
+
+    let examples = cmd
+        .get_long_about()
+        .map(|l| examples_from_about(&l.to_string()))
+        .unwrap_or_default();
+    if !examples.is_empty() {
+        m.insert("examples".into(), json!(examples));
+    }
+
+    Value::Object(m)
+}
+
+/// Build the full schema document from a clap command tree.
+pub fn build(cli: &Command) -> Value {
+    // `build()` propagates global args (--format, --session, ...) down to every
+    // subcommand, so the schema shows the flags a caller can actually pass.
+    let mut cli = cli.clone();
+    cli.build();
+
+    let mut commands = Map::new();
+    for sub in cli.get_subcommands() {
+        if sub.is_hide_set() {
+            continue;
+        }
+        commands.insert(sub.get_name().to_string(), command_schema(sub));
+    }
+
+    // Global flags are declared on the root and inherited everywhere.
+    let mut global_flags = Map::new();
+    for arg in cli.get_arguments() {
+        if !arg.is_global_set() || arg.is_hide_set() {
+            continue;
+        }
+        let id = arg.get_id().as_str();
+        if id == "help" || id == "version" {
+            continue;
+        }
+        if let Some(key) = flag_key(arg) {
+            global_flags.insert(key, arg_schema(arg));
+        }
+    }
+
+    json!({
         "name": "virtuoso",
         "version": env!("CARGO_PKG_VERSION"),
-        "commands": {
-            "init": {
-                "description": "Create a config.toml template with commented defaults",
-                "flags": {
-                    "--if-not-exists": { "type": "bool", "default": false, "description": "Skip if config.toml already exists" },
-                    "--format": { "type": "enum", "values": ["json", "table"], "default": "auto", "description": "Output format" },
-                }
-            },
-            "tunnel": {
-                "description": "Manage SSH tunnel to remote Virtuoso host",
-                "subcommands": {
-                    "start": {
-                        "description": "Start SSH tunnel and deploy daemon",
-                        "flags": {
-                            "--timeout": { "type": "u64", "default": 30, "description": "Connection timeout in seconds" },
-                            "--dry-run": { "type": "bool", "default": false, "description": "Preview without executing" },
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        },
-                        "examples": [
-                            "virtuoso tunnel start",
-                            "virtuoso tunnel start --timeout 60",
-                            "virtuoso tunnel start --dry-run --format json",
-                        ]
-                    },
-                    "stop": {
-                        "description": "Stop SSH tunnel and clean up remote files",
-                        "flags": {
-                            "--force": { "type": "bool", "default": false, "description": "Force kill even if PID mismatch" },
-                            "--dry-run": { "type": "bool", "default": false, "description": "Preview without executing" },
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        },
-                        "examples": [
-                            "virtuoso tunnel stop",
-                            "virtuoso tunnel stop --force",
-                        ]
-                    },
-                    "restart": {
-                        "description": "Restart SSH tunnel",
-                        "flags": {
-                            "--timeout": { "type": "u64", "default": 30, "description": "Connection timeout in seconds" },
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        }
-                    },
-                    "status": {
-                        "description": "Show tunnel, daemon, and connection status",
-                        "flags": {
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        },
-                        "examples": [
-                            "virtuoso tunnel status",
-                            "virtuoso tunnel status --format json",
-                        ]
-                    }
-                }
-            },
-            "skill": {
-                "description": "Execute SKILL code on connected Virtuoso instance",
-                "subcommands": {
-                    "exec": {
-                        "description": "Execute a SKILL expression and return result",
-                        "args": {
-                            "code": { "type": "string", "required": true, "description": "SKILL expression to evaluate" }
-                        },
-                        "flags": {
-                            "--timeout": { "type": "u64", "default": 30, "description": "Execution timeout in seconds" },
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        },
-                        "examples": [
-                            "virtuoso skill exec '1+1'",
-                            "virtuoso skill exec 'geGetEditCellView()' --timeout 60",
-                        ]
-                    },
-                    "load": {
-                        "description": "Upload and load an IL script file into Virtuoso",
-                        "args": {
-                            "file": { "type": "path", "required": true, "description": "Path to .il file" }
-                        },
-                        "flags": {
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        },
-                        "examples": [
-                            "virtuoso skill load my_script.il",
-                        ]
-                    }
-                }
-            },
-            "cell": {
-                "description": "Manage cellviews in Virtuoso",
-                "subcommands": {
-                    "open": {
-                        "description": "Open a cellview for editing",
-                        "flags": {
-                            "--lib": { "type": "string", "required": true, "description": "Library name" },
-                            "--cell": { "type": "string", "required": true, "description": "Cell name" },
-                            "--view": { "type": "string", "default": "layout", "description": "View name" },
-                            "--mode": { "type": "enum", "values": ["r", "o", "a"], "default": "a", "description": "Open mode: r(ead), o(verwrite), a(ppend)" },
-                            "--dry-run": { "type": "bool", "default": false, "description": "Preview without executing" },
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        },
-                        "examples": [
-                            "virtuoso cell open --lib myLib --cell myCell",
-                            "virtuoso cell open --lib myLib --cell myCell --view schematic --mode r",
-                        ]
-                    },
-                    "save": {
-                        "description": "Save the current cellview",
-                        "flags": {
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        }
-                    },
-                    "close": {
-                        "description": "Close the current cellview without saving",
-                        "flags": {
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        }
-                    },
-                    "info": {
-                        "description": "Get info about the currently open cellview",
-                        "flags": {
-                            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto" },
-                        }
-                    }
-                }
-            },
-            "schema": {
-                "description": "Show CLI command schema as JSON for agent introspection",
-                "flags": {
-                    "--all": { "type": "bool", "default": false, "description": "Show full command tree" },
-                },
-                "args": {
-                    "noun": { "type": "string", "required": false, "description": "Command noun (e.g. tunnel)" },
-                    "verb": { "type": "string", "required": false, "description": "Command verb (e.g. start)" },
-                },
-                "examples": [
-                    "virtuoso schema --all",
-                    "virtuoso schema tunnel start",
-                ]
-            }
-        },
-        "global_flags": {
-            "--format": { "type": "enum", "values": ["json", "table"], "default": "auto (table in TTY, json in pipe)" },
-            "--no-color": { "type": "bool", "default": false, "description": "Disable colored output" },
-            "--quiet": { "type": "bool", "default": false, "description": "Suppress non-essential output" },
-            "--verbose": { "type": "bool", "default": false, "description": "Enable debug logging" },
-        },
-        "exit_codes": {
-            "0": "success",
-            "1": "general error",
-            "2": "invalid arguments / usage error",
-            "3": "resource not found",
-            "4": "permission denied",
-            "5": "conflict / already exists",
-            "10": "dry-run passed",
-        }
-    });
+        "commands": Value::Object(commands),
+        "global_flags": Value::Object(global_flags),
+        "exit_codes": exit_codes(),
+    })
+}
+
+/// Render the schema for a specific noun / verb, or the whole tree.
+pub fn show(cli: &Command, noun: Option<&str>, verb: Option<&str>) -> Value {
+    let full_schema = build(cli);
 
     match (noun, verb) {
         (None, _) => full_schema,
