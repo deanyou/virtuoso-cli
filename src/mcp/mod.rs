@@ -11,6 +11,13 @@ use std::io::{self, BufRead, Write};
 pub mod server;
 pub mod tools;
 
+/// Version reported to MCP clients in `serverInfo`.
+///
+/// Derived from the crate version so it can never drift from what
+/// `vcli --version` prints (it used to be a hardcoded "0.3.18" while the CLI
+/// was at 1.3.5).
+pub const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// MCP server configuration.
 #[derive(Debug, Clone)]
 pub struct McpConfig {
@@ -138,7 +145,7 @@ impl McpServer {
                     },
                     "serverInfo": {
                         "name": "virtuoso-cli",
-                        "version": "0.3.18",
+                        "version": SERVER_VERSION,
                     }
                 }),
                 request.id,
@@ -199,5 +206,43 @@ impl McpServer {
             api_key,
         };
         crate::rpc::dispatcher::RpcDispatcher::new(self.ctx.clone()).dispatch(&client, request)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The MCP `initialize` response must advertise the same version the
+    /// CLI reports via `--version`. This pins the "single source of truth"
+    /// contract: both come from `CARGO_PKG_VERSION`.
+    #[test]
+    fn initialize_reports_the_crate_version() {
+        let ctx = crate::context::CommandContext::new(
+            crate::config::Config::from_env().expect("default config"),
+            None,
+        )
+        .expect("context");
+        let server = McpServer::new(McpConfig::from_env(), ctx);
+
+        let request = McpRequest {
+            jsonrpc: "2.0".into(),
+            method: "initialize".into(),
+            params: serde_json::json!({}),
+            id: Some(serde_json::json!(1)),
+        };
+        let response = server.handle_request(request);
+
+        let result = response.result.expect("initialize must succeed");
+        assert_eq!(
+            result["serverInfo"]["version"], env!("CARGO_PKG_VERSION"),
+            "MCP serverInfo.version must match the crate version"
+        );
+        assert_eq!(result["serverInfo"]["name"], "virtuoso-cli");
+    }
+
+    #[test]
+    fn server_version_constant_matches_crate_version() {
+        assert_eq!(SERVER_VERSION, env!("CARGO_PKG_VERSION"));
     }
 }
