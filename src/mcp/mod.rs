@@ -235,7 +235,8 @@ mod tests {
 
         let result = response.result.expect("initialize must succeed");
         assert_eq!(
-            result["serverInfo"]["version"], env!("CARGO_PKG_VERSION"),
+            result["serverInfo"]["version"],
+            env!("CARGO_PKG_VERSION"),
             "MCP serverInfo.version must match the crate version"
         );
         assert_eq!(result["serverInfo"]["name"], "virtuoso-cli");
