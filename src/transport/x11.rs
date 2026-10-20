@@ -2844,16 +2844,30 @@ fn append_still_mapped_errors(errors: &mut Vec<String>, dismissed: &[DialogInfo]
 
 /// Shared env-resolution: explicit display, else auto-detect from the running
 /// virtuoso process. Returns the resolved env and the display string.
+///
+/// On the explicit-display path the cookie is still sourced from a virtuoso
+/// process whose DISPLAY matches (mirror of upstream Arcadia #241): otherwise
+/// the helper would run on the requested display with no XAUTHORITY at all
+/// and xwininfo/xauth would fail. If no matching process is found we fall
+/// back to `xauthority: None` and let the existing error/help path surface
+/// the missing cookie.
 fn resolve_envs(
     runner: &dyn RemoteTransport,
     user: Option<&str>,
     explicit_display: Option<&str>,
 ) -> Result<Vec<X11Env>> {
     let envs = match explicit_display {
-        Some(d) => vec![X11Env {
-            display: Some(d.to_string()),
-            xauthority: None,
-        }],
+        Some(d) => {
+            let detected = detect_envs(runner, user)?;
+            let xauthority = detected
+                .iter()
+                .find(|e| e.display.as_deref() == Some(d))
+                .and_then(|e| e.xauthority.clone());
+            vec![X11Env {
+                display: Some(d.to_string()),
+                xauthority,
+            }]
+        }
         None => detect_envs(runner, user)?,
     };
     if envs.is_empty() {
@@ -2881,7 +2895,25 @@ fn build_helper_cmd(
     window_id: Option<&str>,
 ) -> String {
     // Quote the remote path with single quotes; the helper is ASCII so this is safe.
-    let mut s = format!("python3 '{}'", helper_remote_path);
+    // XAUTHORITY is set via the env-prefix form (mirrors lines 1436/2192) — the
+    // helper's argv parser has no XAUTHORITY= branch and would otherwise treat a
+    // trailing ' XAUTHORITY=/path' token as a positional DISPLAY arg, overwriting
+    // the real display with the literal "XAUTHORITY=/path" and making xwininfo fail.
+    //
+    // The env prefix ONLY carries the cookie: the helper selects its display
+    // from the POSITIONAL argv argument (resources/x11_dismiss_dialog.py parses
+    // argv and never reads os.environ["DISPLAY"]), so the display must still be
+    // passed positionally as well. Without it the helper falls back to its own
+    // find_x11_env() probe, silently ignoring the requested display.
+    let prefix = match xauthority {
+        Some(xa) => format!(
+            "env DISPLAY={} XAUTHORITY={} ",
+            shell_escape(display),
+            shell_escape(xa)
+        ),
+        None => format!("env DISPLAY={} ", shell_escape(display)),
+    };
+    let mut s = format!("{}python3 '{}'", prefix, helper_remote_path);
     s.push(' ');
     s.push_str(&shell_escape(display));
     if let Some(wid) = window_id {
@@ -2896,10 +2928,6 @@ fn build_helper_cmd(
         s.push_str(" --action ");
         s.push_str(action);
     }
-    if let Some(xa) = xauthority {
-        s.push_str(" XAUTHORITY=");
-        s.push_str(xa);
-    }
     s
 }
 
@@ -2909,14 +2937,22 @@ fn build_helper_cmd_list_windows(
     display: &str,
     xauthority: Option<&str>,
 ) -> String {
-    let mut s = format!("python3 '{}'", helper_remote_path);
+    // See build_helper_cmd: XAUTHORITY goes through the env-prefix form to
+    // avoid clobbering the positional DISPLAY in the helper's argv parser.
+    // The positional DISPLAY itself is mandatory — the helper takes the
+    // display from argv, not from the environment.
+    let prefix = match xauthority {
+        Some(xa) => format!(
+            "env DISPLAY={} XAUTHORITY={} ",
+            shell_escape(display),
+            shell_escape(xa)
+        ),
+        None => format!("env DISPLAY={} ", shell_escape(display)),
+    };
+    let mut s = format!("{}python3 '{}'", prefix, helper_remote_path);
     s.push(' ');
     s.push_str(&shell_escape(display));
     s.push_str(" --list-windows");
-    if let Some(xa) = xauthority {
-        s.push_str(" XAUTHORITY=");
-        s.push_str(xa);
-    }
     s
 }
 
@@ -2971,17 +3007,25 @@ fn build_helper_cmd_dismiss_window(
     window_id: &str,
     action: &str,
 ) -> String {
-    let mut s = format!("python3 '{}'", helper_remote_path);
+    // See build_helper_cmd: XAUTHORITY goes through the env-prefix form to
+    // avoid clobbering the positional DISPLAY in the helper's argv parser.
+    // The positional DISPLAY itself is mandatory — the helper takes the
+    // display from argv, not from the environment.
+    let prefix = match xauthority {
+        Some(xa) => format!(
+            "env DISPLAY={} XAUTHORITY={} ",
+            shell_escape(display),
+            shell_escape(xa)
+        ),
+        None => format!("env DISPLAY={} ", shell_escape(display)),
+    };
+    let mut s = format!("{}python3 '{}'", prefix, helper_remote_path);
     s.push(' ');
     s.push_str(&shell_escape(display));
     s.push_str(" --dismiss-window ");
     s.push_str(&shell_escape(window_id));
     s.push_str(" --action ");
     s.push_str(action);
-    if let Some(xa) = xauthority {
-        s.push_str(" XAUTHORITY=");
-        s.push_str(xa);
-    }
     s
 }
 
@@ -3761,6 +3805,406 @@ mod tests {
         assert!(cmd.contains("'0x a'"));
     }
 
+    // =============================================================================
+    // Regression tests: X11 cookie handling (defects fixed)
+    // =============================================================================
+    //
+    // Two related defects in the X11 helper command construction were fixed:
+    //
+    // (A) resolve_envs with explicit_display was skipping the detect_envs()
+    //     process-table scan entirely — the cookie was never sourced from the
+    //     Virtuoso process on the requested display.
+    //
+    // (B) build_helper_cmd* appended ` XAUTHORITY=<path>` as a TRAILING shell
+    //     token. But the vendored helper's argv parser has no XAUTHORITY= branch
+    //     and would treat such a token as a positional DISPLAY arg, overwriting
+    //     the real display with the literal "XAUTHORITY=/path" — xwininfo then
+    //     fails. Additionally the trailing form did not shell_escape the xa
+    //     value. The fix moves XAUTHORITY into the env-prefix form, mirroring
+    //     the established pattern at lines 1436 / 2192.
+
+    /// Helper command must place `XAUTHORITY=` BEFORE `python3` (env-prefix form),
+    /// and must never emit a trailing ` XAUTHORITY=...` argv token that the
+    /// helper's parser would misinterpret as a positional DISPLAY.
+    #[test]
+    fn build_helper_cmd_uses_env_prefix_for_xauthority() {
+        let cmd = build_helper_cmd(
+            "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py",
+            ":99",
+            Some("/tmp/xauth-cookie"),
+            true,
+            "enter",
+            None,
+        );
+        let xauth_pos = cmd
+            .find("XAUTHORITY=")
+            .expect("command must contain XAUTHORITY=");
+        let py_pos = cmd.find("python3").expect("command must contain python3");
+        assert!(
+            xauth_pos < py_pos,
+            "XAUTHORITY must precede python3 (env-prefix form); got: {cmd}"
+        );
+        assert!(
+            !cmd.contains("' XAUTHORITY="),
+            "XAUTHORITY must not appear as a trailing argv token; got: {cmd}"
+        );
+        // The existing presence-assertion must still hold.
+        assert!(cmd.contains("XAUTHORITY=/tmp/xauth-cookie"));
+        assert!(cmd.contains("--dismiss"));
+        assert!(cmd.contains("--action enter"));
+        assert!(cmd.contains("'/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py'"));
+    }
+
+    #[test]
+    fn build_helper_cmd_list_windows_uses_env_prefix_for_xauthority() {
+        let cmd = build_helper_cmd_list_windows(
+            "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py",
+            ":99",
+            Some("/tmp/xauth-cookie"),
+        );
+        let xauth_pos = cmd
+            .find("XAUTHORITY=")
+            .expect("XAUTHORITY= must be present");
+        let py_pos = cmd.find("python3").expect("python3 must be present");
+        assert!(
+            xauth_pos < py_pos,
+            "XAUTHORITY must precede python3; got: {cmd}"
+        );
+        assert!(
+            !cmd.contains("' XAUTHORITY="),
+            "no trailing XAUTHORITY token; got: {cmd}"
+        );
+        assert!(cmd.contains("--list-windows"));
+        assert!(cmd.contains("XAUTHORITY=/tmp/xauth-cookie"));
+    }
+
+    #[test]
+    fn build_helper_cmd_dismiss_window_uses_env_prefix_for_xauthority() {
+        let cmd = build_helper_cmd_dismiss_window(
+            "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py",
+            ":99",
+            Some("/tmp/xauth-cookie"),
+            "0x2600013",
+            "enter",
+        );
+        let xauth_pos = cmd
+            .find("XAUTHORITY=")
+            .expect("XAUTHORITY= must be present");
+        let py_pos = cmd.find("python3").expect("python3 must be present");
+        assert!(
+            xauth_pos < py_pos,
+            "XAUTHORITY must precede python3; got: {cmd}"
+        );
+        assert!(
+            !cmd.contains("' XAUTHORITY="),
+            "no trailing XAUTHORITY token; got: {cmd}"
+        );
+        assert!(cmd.contains("--dismiss-window 0x2600013"));
+        assert!(cmd.contains("--action enter"));
+        assert!(cmd.contains("XAUTHORITY=/tmp/xauth-cookie"));
+    }
+
+    /// Review B1: the helper selects its display from a POSITIONAL argv
+    /// argument — `resources/x11_dismiss_dialog.py` parses argv and never
+    /// reads `os.environ["DISPLAY"]`. The env prefix only carries the cookie,
+    /// so dropping the positional arg turns `--display` into a silent no-op:
+    /// the helper falls back to its own `find_x11_env()` probe and acts on a
+    /// different display than the one requested.
+    ///
+    /// Lock the contract: the first argv token after the script path must be
+    /// the display.
+    #[test]
+    fn build_helper_cmd_keeps_display_as_positional_arg_after_script_path() {
+        let helper = "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py";
+        let cmds = vec![
+            build_helper_cmd(helper, ":99", Some("/tmp/cookie"), true, "enter", None),
+            build_helper_cmd(helper, ":99", None, true, "enter", None),
+            build_helper_cmd_list_windows(helper, ":99", Some("/tmp/cookie")),
+            build_helper_cmd_list_windows(helper, ":99", None),
+            build_helper_cmd_dismiss_window(
+                helper,
+                ":99",
+                Some("/tmp/cookie"),
+                "0x2600013",
+                "enter",
+            ),
+            build_helper_cmd_dismiss_window(helper, ":99", None, "0x2600013", "enter"),
+        ];
+        for cmd in &cmds {
+            // The env prefix keeps carrying DISPLAY + the cookie.
+            assert!(
+                cmd.starts_with("env DISPLAY=:99 "),
+                "command must keep the env-prefix form; got: {cmd}"
+            );
+            // The helper argv starts after `python3 '<script>'`.
+            let after_python3 = cmd
+                .split_once("python3 '")
+                .unwrap_or_else(|| panic!("command must contain `python3 '<script>'`; got: {cmd}"))
+                .1;
+            let argv = after_python3
+                .split_once('\'')
+                .unwrap_or_else(|| panic!("script path must be single-quoted; got: {cmd}"))
+                .1;
+            let first = argv
+                .split_whitespace()
+                .next()
+                .unwrap_or_else(|| panic!("helper argv must not be empty; got: {cmd}"));
+            assert_eq!(
+                first, ":99",
+                "the first argv token after the script path must be the display \
+                 (the helper takes the display from argv, not the environment); got: {cmd}"
+            );
+        }
+    }
+
+    /// The exact wire form the fixed builders must produce: the env prefix
+    /// carries the cookie, the display stays a positional argv argument.
+    #[test]
+    fn build_helper_cmd_emits_display_in_both_env_and_argv() {
+        let cmd = build_helper_cmd(
+            "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py",
+            ":99",
+            Some("/tmp/xauth-cookie"),
+            true,
+            "enter",
+            None,
+        );
+        assert_eq!(
+            cmd, "env DISPLAY=:99 XAUTHORITY=/tmp/xauth-cookie \
+                 python3 '/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py' :99 --dismiss --action enter"
+        );
+    }
+
+    /// xauthority values that contain spaces or single quotes must be shell-
+    /// escaped. The previous trailing-token form pushed xa raw, which would
+    /// have broken under any unusual cookie path.
+    #[test]
+    fn build_helper_cmd_shell_escapes_xauthority_with_special_chars() {
+        let cmd = build_helper_cmd(
+            "/h.py",
+            ":0",
+            Some("/path with spaces/xauth"),
+            false,
+            "enter",
+            None,
+        );
+        assert!(
+            cmd.contains("XAUTHORITY='/path with spaces/xauth'"),
+            "spaces must be single-quoted; got: {cmd}"
+        );
+        // And the unescaped variant must not appear (would split into two args).
+        assert!(
+            !cmd.contains(" XAUTHORITY=/path with spaces/"),
+            "raw unquoted path with spaces must not appear; got: {cmd}"
+        );
+
+        let cmd2 = build_helper_cmd(
+            "/h.py",
+            ":0",
+            Some("/path/with'quote"),
+            false,
+            "enter",
+            None,
+        );
+        assert!(
+            cmd2.contains("XAUTHORITY='/path/with'\\''quote'"),
+            "embedded single quote must be escaped via '\\''; got: {cmd2}"
+        );
+    }
+
+    /// No argv token passed to the helper may begin with `XAUTHORITY=` — the
+    /// helper's parser has no such branch and would overwrite `display` with
+    /// the literal `"XAUTHORITY=/path"` (the exact bug class).
+    ///
+    /// Shell semantics: `env DISPLAY=X XAUTHORITY=Y python3 <script> <args...>`
+    /// is parsed by the shell such that `env` consumes the `KEY=val` tokens
+    /// and execs `python3 <script> <args...>` — the env-var tokens never
+    /// reach the helper's argv. So we assert that EVERY token AFTER the first
+    /// `python3` is not a `KEY=` env-var assignment that the helper would
+    /// misinterpret.
+    #[test]
+    fn helper_argv_never_sees_xauthority_token() {
+        let cmds = vec![
+            build_helper_cmd("/h.py", ":99", Some("/tmp/cookie"), true, "enter", None),
+            build_helper_cmd("/h.py", ":99", Some("/tmp/cookie"), false, "enter", None),
+            build_helper_cmd(
+                "/h.py",
+                ":99",
+                Some("/tmp/cookie"),
+                true,
+                "enter",
+                Some("0x1"),
+            ),
+            build_helper_cmd_list_windows("/h.py", ":99", Some("/tmp/cookie")),
+            build_helper_cmd_dismiss_window("/h.py", ":99", Some("/tmp/cookie"), "0x1", "enter"),
+            // Also exercise the None-xauthority variants — those never had the
+            // defect but must remain clean for symmetry.
+            build_helper_cmd("/h.py", ":99", None, true, "enter", None),
+            build_helper_cmd_list_windows("/h.py", ":99", None),
+            build_helper_cmd_dismiss_window("/h.py", ":99", None, "0x1", "enter"),
+        ];
+        for cmd in &cmds {
+            // The command must START with `env DISPLAY=` so the env-prefix form
+            // is in use — a regression to the trailing-token form would fail here.
+            assert!(
+                cmd.starts_with("env DISPLAY="),
+                "command must start with `env DISPLAY=` (env-prefix form); got: {cmd}"
+            );
+            // Find the first `python3` occurrence — tokens BEFORE it are env-var
+            // assignments consumed by `env`; tokens AFTER it are the helper's argv.
+            let py_pos = cmd
+                .find("python3")
+                .unwrap_or_else(|| panic!("command must contain python3; got: {cmd}"));
+            let after_python3 = &cmd[py_pos..];
+            for tok in after_python3.split_whitespace() {
+                assert!(
+                    !tok.starts_with("XAUTHORITY="),
+                    "argv token after `python3` must not start with XAUTHORITY= \
+                     (helper has no branch for it); token={tok:?} in cmd={cmd:?}"
+                );
+                assert!(
+                    !tok.starts_with("DISPLAY="),
+                    "argv token after `python3` must not start with DISPLAY= \
+                     (helper would treat it as positional display); token={tok:?} \
+                     in cmd={cmd:?}"
+                );
+            }
+        }
+    }
+
+    /// resolve_envs with an explicit display must source xauthority from a
+    /// virtuoso process whose DISPLAY matches (mirror of upstream #241). The
+    /// fake transport returns the detect_envs output for one process bound
+    /// to :99 with a known cookie.
+    #[test]
+    fn resolve_envs_with_explicit_display_sources_xauthority_from_process_table() {
+        let transport = RecordingTransport::new();
+        // detect_envs parses stdout line-by-line: __PID__=<n>\nDISPLAY=...\nXAUTHORITY=...
+        transport.enqueue_response(mk_result(
+            "__PID__=1234\nDISPLAY=:99\nXAUTHORITY=/tmp/cookie-from-virtuoso\n",
+            "",
+            0,
+        ));
+        let envs = resolve_envs(&transport, None, Some(":99")).expect("resolve_envs must succeed");
+        assert_eq!(envs.len(), 1, "explicit display must yield a single env");
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/cookie-from-virtuoso"),
+            "explicit display must inherit XAUTHORITY from the matching virtuoso process"
+        );
+    }
+
+    /// If no virtuoso process matches the requested display, xauthority stays
+    /// None — preserves the pre-fix error/help path for missing cookies.
+    #[test]
+    fn resolve_envs_with_explicit_display_falls_back_when_no_matching_process() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1234\nDISPLAY=:5\nXAUTHORITY=/tmp/other-cookie\n",
+            "",
+            0,
+        ));
+        let envs = resolve_envs(&transport, None, Some(":99")).expect("resolve_envs must succeed");
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert!(
+            envs[0].xauthority.is_none(),
+            "fallback to xauthority=None when no process matches; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// Multiple virtuoso processes — pick the first whose DISPLAY matches.
+    /// (detect_envs is order-preserving over the pgrep output.)
+    #[test]
+    fn resolve_envs_with_explicit_display_picks_first_matching_process() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=100\nDISPLAY=:5\nXAUTHORITY=/tmp/cookie-A\n\
+             __PID__=200\nDISPLAY=:99\nXAUTHORITY=/tmp/cookie-B\n\
+             __PID__=300\nDISPLAY=:99\nXAUTHORITY=/tmp/cookie-C\n",
+            "",
+            0,
+        ));
+        let envs = resolve_envs(&transport, None, Some(":99")).expect("resolve_envs must succeed");
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/cookie-B"),
+            "first matching DISPLAY wins; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// If the user's requested display has no XAUTHORITY set on the matching
+    /// virtuoso process, the resolved env carries through xauthority: None
+    /// (the helper will then fall back to its own find_x11_env()).
+    #[test]
+    fn resolve_envs_with_explicit_display_no_xauthority_on_matching_process() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("__PID__=42\nDISPLAY=:99\n", "", 0));
+        let envs = resolve_envs(&transport, None, Some(":99")).expect("resolve_envs must succeed");
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert!(
+            envs[0].xauthority.is_none(),
+            "no XAUTHORITY on the matching process → None; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// If no virtuoso process is visible at all (detect_envs empty), the
+    /// explicit-display path still returns Ok with xauthority: None — the
+    /// helper then runs without a cookie and falls back to its own
+    /// find_x11_env() (or surfaces the missing-cookie error from there).
+    /// The Config error fires only on the AUTO-DETECT path (explicit_display
+    /// is None AND detect_envs returns empty).
+    #[test]
+    fn resolve_envs_with_explicit_display_no_virtuoso_process_at_all_returns_ok_with_none() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0));
+        let envs = resolve_envs(&transport, None, Some(":99"))
+            .expect("explicit display with no process must still return Ok");
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert!(
+            envs[0].xauthority.is_none(),
+            "no process at all → xauthority: None; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// Argument-parsing sanity check: given the helper argv `[":99", "--list-windows"]`,
+    /// the helper's parser correctly assigns display=":99" (no XAUTHORITY token
+    /// ever reaches argv). This documents why the env-prefix form is mandatory.
+    #[test]
+    fn helper_argv_parse_assigns_display_when_only_flags_follow() {
+        // Simulate the helper's argv parser by hand on the argv our builders
+        // would produce when shell-tokenized. We don't ship the helper as a
+        // library; the point of this test is to *document* the invariant at
+        // the Rust side: the trailing form would have produced a token starting
+        // with "XAUTHORITY=", which we now guarantee never happens.
+        let argv_no_xa: Vec<&str> = vec!["python3", "/h.py", ":99", "--list-windows"];
+        // Hand-rolled mini-parser mirroring the helper main():
+        let mut display = None;
+        let mut list_windows = false;
+        let mut i = 0;
+        let args: Vec<&str> = argv_no_xa.iter().skip(2).copied().collect();
+        while i < args.len() {
+            let a = args[i];
+            if a == "--list-windows" {
+                list_windows = true;
+            } else if !a.starts_with('-') {
+                display = Some(a);
+            }
+            i += 1;
+        }
+        assert_eq!(display, Some(":99"));
+        assert!(list_windows);
+    }
+
     #[test]
     fn dialog_info_parses_dismiss_metadata() {
         let line = r#"{"window_id":"0x1","title":"a","x":0,"y":0,"w":1,"h":1,"child":"0x2","action":"alt-o","still_mapped":false}"#;
@@ -4334,6 +4778,7 @@ mod tests {
         // healthy state and must come back as an empty list, not a helper error.
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result("", "", 1)); // helper: no dialogs → exit 1
         let (_, dialogs) = list_dialogs(&transport, "client1", Some("user1"), Some(":99"))
             .expect("list_dialogs should succeed");
@@ -4344,6 +4789,7 @@ mod tests {
     fn list_dialogs_with_dialog_exit0_returns_dialog() {
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result(
             "{\"window_id\":\"0x1\",\"title\":\"Save?\",\"x\":10,\"y\":10,\"w\":300,\"h\":120}\n",
             "",
@@ -4361,6 +4807,7 @@ mod tests {
         // so callers can distinguish it from the healthy "no dialogs" state.
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result("", "xwininfo: unable to open display", 2));
         let (_, dialogs) = list_dialogs(&transport, "client1", Some("user1"), Some(":99"))
             .expect("list_dialogs should succeed");
@@ -4376,6 +4823,7 @@ mod tests {
         // helper failure (same semantics as list_dialogs).
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result("", "", 1)); // helper: no windows → exit 1
         let (_, windows) = list_windows(&transport, "client1", Some("user1"), Some(":99"))
             .expect("list_windows should succeed");
@@ -4386,6 +4834,7 @@ mod tests {
     fn list_windows_with_window_exit0_returns_window() {
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result(
             r#"{"frame_id":"0x1","window_id":"0x2","dismiss_id":"0x2","title":"Virtuoso","class":["virtuoso"],"geometry":{"x":0,"y":0,"w":800,"h":600},"pid":12345,"visible":true}"#,
             "",
@@ -4404,6 +4853,7 @@ mod tests {
         // helper crashed".
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result("", "xwininfo: unable to open display", 2));
         let err = list_windows(&transport, "client1", Some("user1"), Some(":99"))
             .expect_err("expected an error for real helper failure");
