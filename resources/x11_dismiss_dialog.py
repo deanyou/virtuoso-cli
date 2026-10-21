@@ -13,7 +13,19 @@ Output (stdout): JSON lines, one per dialog found:
 With --dismiss, the chosen --action is sent to each dialog after reporting it.
 DISPLAY/XAUTHORITY are auto-detected from the running virtuoso process if omitted.
 
-Exit codes: 0 = dialogs found/dismissed, 1 = no dialogs found, 2 = error.
+Dismissal outcome (fail-closed, see virtuoso-bridge-lite#248):
+    Sending a key proves nothing. A dismissal is reported as
+    {"status": "closed", "closure_confirmed": true, "dismissed": "<child xid>"}
+    ONLY after the exact XID that received the key is verified unmapped or
+    destroyed via XGetWindowAttributes. Otherwise the record stays
+    {"status": "requested", "closure_confirmed": false, "still_mapped": ...}
+    with no "dismissed" key, plus "verification_error" when the state query
+    itself failed. Only X error 3 (BadWindow) counts as "destroyed"; any other
+    X error, an unreadable display or a malformed id is a verification failure,
+    never a dismissal.
+
+Exit codes: 0 = dialogs found, and every requested dismissal verified closed;
+1 = no dialogs found, or a dismissal could not be verified closed; 2 = error.
 
 Notes (pinned here for downstream test stability; see Virtuoso FAQ):
 - Modal dialogs at 1x DPI:  ~300-600w x 100-350h (e.g. ADE "Update and Run" 580x140).
@@ -53,6 +65,164 @@ KEYSYM_N = 0x006E
 KEYSYM_O = 0x006F
 KEYSYM_Y = 0x0079
 KEYSYM_ALT_L = 0xFFE9
+
+# --- Exact-XID inspection (libX11 via ctypes) ------------------------------
+# A dismissal is verified by asking the X server about the exact window id we
+# sent the key to, not by parsing xwininfo text: a lookup that failed used to
+# default to "not mapped", making "the dialog is gone" and "the check itself
+# broke" indistinguishable.
+X_BAD_WINDOW = 3   # the only X error that proves a window was destroyed
+MAP_UNMAPPED = 0   # IsUnmapped
+MAP_VIEWABLE = 2   # IsViewable
+# IsUnviewable (1) is a mapped child of an unmapped parent — still mapped.
+
+
+class XInspectionFailure(Exception):
+    """Exact-XID window state is unavailable. Never means 'closed'."""
+
+
+class _XWindowAttributes(ctypes.Structure):
+    _fields_ = [
+        ("x", ctypes.c_int),
+        ("y", ctypes.c_int),
+        ("width", ctypes.c_int),
+        ("height", ctypes.c_int),
+        ("border_width", ctypes.c_int),
+        ("depth", ctypes.c_int),
+        ("visual", ctypes.c_void_p),
+        ("root", ctypes.c_ulong),
+        ("window_class", ctypes.c_int),
+        ("bit_gravity", ctypes.c_int),
+        ("win_gravity", ctypes.c_int),
+        ("backing_store", ctypes.c_int),
+        ("backing_planes", ctypes.c_ulong),
+        ("backing_pixel", ctypes.c_ulong),
+        ("save_under", ctypes.c_int),
+        ("colormap", ctypes.c_ulong),
+        ("map_installed", ctypes.c_int),
+        ("map_state", ctypes.c_int),
+        ("all_event_masks", ctypes.c_long),
+        ("your_event_mask", ctypes.c_long),
+        ("do_not_propagate_mask", ctypes.c_long),
+        ("override_redirect", ctypes.c_int),
+        ("screen", ctypes.c_void_p),
+    ]
+
+
+class _XErrorEvent(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.c_int),
+        ("display", ctypes.c_void_p),
+        ("resourceid", ctypes.c_ulong),
+        ("serial", ctypes.c_ulong),
+        ("error_code", ctypes.c_ubyte),
+        ("request_code", ctypes.c_ubyte),
+        ("minor_code", ctypes.c_ubyte),
+    ]
+
+
+_X_ERROR_HANDLER = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
+
+
+class _XWindowStateReader(object):
+    """Minimal read-only libX11 surface: 'does this exact XID still exist?'.
+
+    A process-wide X error handler is installed for the lifetime of the
+    connection. Without it libX11's default handler prints to stderr and kills
+    the process on the first protocol error, and an error that merely *looks*
+    like "window gone" can never be told apart from a destroyed window.
+    """
+
+    def __init__(self, display):
+        xlib_path = ctypes.util.find_library("X11")
+        if not xlib_path:
+            raise XInspectionFailure("libX11 not found on remote host")
+        self._xlib = ctypes.cdll.LoadLibrary(xlib_path)
+        self._display = None
+        self._closed = False
+        self._error_codes = []
+        self._previous_error_handler = None
+        self._error_handler_installed = False
+        self._error_callback = _X_ERROR_HANDLER(self._handle_x_error)
+        self._declare_signatures()
+        display_name = display.encode("utf-8") if display else None
+        self._display = self._xlib.XOpenDisplay(display_name)
+        if not self._display:
+            raise XInspectionFailure("cannot open display %s" % display)
+        self._previous_error_handler = self._xlib.XSetErrorHandler(
+            ctypes.cast(self._error_callback, ctypes.c_void_p)
+        )
+        self._error_handler_installed = True
+
+    def _declare_signatures(self):
+        # Explicit ctypes signatures are mandatory: without argtypes/restype
+        # every argument defaults to a 32-bit C int and truncates the 64-bit
+        # Display* returned by XOpenDisplay (see dismiss_window).
+        self._xlib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        self._xlib.XOpenDisplay.restype = ctypes.c_void_p
+        self._xlib.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        self._xlib.XCloseDisplay.restype = ctypes.c_int
+        self._xlib.XGetWindowAttributes.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.POINTER(_XWindowAttributes),
+        ]
+        self._xlib.XGetWindowAttributes.restype = ctypes.c_int
+        self._xlib.XSetErrorHandler.argtypes = [ctypes.c_void_p]
+        self._xlib.XSetErrorHandler.restype = ctypes.c_void_p
+
+    def _handle_x_error(self, _display, event):
+        # Returning 0 tells Xlib the error is handled; swallowing it silently
+        # would be exactly the fail-open behaviour this class exists to remove.
+        self._error_codes.append(
+            ctypes.cast(event, ctypes.POINTER(_XErrorEvent)).contents.error_code
+            if event
+            else 0
+        )
+        return 0
+
+    def window_state(self, window_id):
+        """Query the exact XID: only BadWindow proves destruction.
+
+        Returns {"exists": bool, "mapped": bool}. Raises XInspectionFailure
+        when the server answered something other than "here is its state" —
+        an unreadable display must never degrade to "not mapped".
+        """
+        attributes = _XWindowAttributes()
+        self._error_codes = []
+        status = self._xlib.XGetWindowAttributes(
+            self._display, int(window_id), ctypes.byref(attributes)
+        )
+        if self._error_codes == [X_BAD_WINDOW]:
+            return {"exists": False, "mapped": False}
+        if not status or self._error_codes:
+            raise XInspectionFailure(
+                "cannot read exact X11 window attributes for 0x%x" % int(window_id)
+            )
+        # IsUnviewable (mapped child of an unmapped parent) is still mapped.
+        return {"exists": True, "mapped": attributes.map_state != MAP_UNMAPPED}
+
+    def close(self):
+        if self._closed:
+            return
+        if self._display:
+            self._xlib.XCloseDisplay(self._display)
+        if self._error_handler_installed:
+            self._xlib.XSetErrorHandler(self._previous_error_handler)
+        self._closed = True
+        self._display = None
+
+
+def _open_window_state_reader(display):
+    return _XWindowStateReader(display)
+
+
+def _parse_xid(value):
+    """Parse an X resource id ("0x2e01f16", "0X2E01F16" or decimal) to int."""
+    text = str(value).strip()
+    if text[:2].lower() == "0x":
+        return int(text, 16)
+    return int(text)
 
 
 def find_x11_env(user=None):
@@ -382,6 +552,8 @@ def _read_window_geometry(win_id):
 
 
 def _is_window_mapped(win_id):
+    """Legacy xwininfo-text map check. Fails open — do NOT use to verify a
+    dismissal; `_verify_dismissal` asks the X server about the exact XID."""
     return bool(_read_window_geometry(win_id).get("mapped", False))
 
 
@@ -568,6 +740,10 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
 
     Explicit ids are resolved through discover_windows first, so callers can pass
     a WM frame id, app child id, or dismiss_id and still target the actual child.
+
+    The returned record is always *requested*: the key was sent, nothing about
+    the window is claimed yet (no "dismissed" key, still_mapped is None).
+    Call `_verify_dismissal` to turn it into a verified "closed" outcome.
     """
     if action not in VALID_ACTIONS:
         raise ValueError("action must be one of %s" % (VALID_ACTIONS,))
@@ -648,68 +824,115 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
         time.sleep(0.15)
 
         kc_alt = xlib.XKeysymToKeycode(dpy, KEYSYM_ALT_L)
+        # Every branch below returns the same *requested* outcome: the action
+        # was sent, nothing is claimed about the window yet. `_verify_dismissal`
+        # upgrades it to "closed" only on positive proof from the X server.
+        def _requested(action_name, extra):
+            return {
+                "window_id": win_id_str, "requested_window_id": requested_id_str,
+                "resolved_window_id": child_id_str, "child": child_id_str,
+                "title": resolved_title,
+                "status": "requested", "action_sent": True,
+                "closure_confirmed": False, "still_mapped": None,
+                "action": action_name,
+                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
+                **extra
+            }
+
         if action == "enter":
             keycode = xlib.XKeysymToKeycode(dpy, KEYSYM_RETURN)
             xtst.XTestFakeKeyEvent(dpy, keycode, True, 0)
             xtst.XTestFakeKeyEvent(dpy, keycode, False, 0)
             xlib.XFlush(dpy)
             time.sleep(0.30)
-            return {
-                "dismissed": win_id_str, "requested_window_id": requested_id_str,
-                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
-                "action": "enter", "keycode": int(keycode),
-                "still_mapped": _is_window_mapped(child_id_str),
-                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
-            }
+            return _requested("enter", {"keycode": int(keycode)})
         if action == "escape":
             keycode = xlib.XKeysymToKeycode(dpy, KEYSYM_ESCAPE)
             xtst.XTestFakeKeyEvent(dpy, keycode, True, 0)
             xtst.XTestFakeKeyEvent(dpy, keycode, False, 0)
             xlib.XFlush(dpy)
             time.sleep(0.30)
-            return {
-                "dismissed": win_id_str, "requested_window_id": requested_id_str,
-                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
-                "action": "escape", "keycode": int(keycode),
-                "still_mapped": _is_window_mapped(child_id_str),
-                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
-            }
+            return _requested("escape", {"keycode": int(keycode)})
         if action == "alt-y":
             kc_y = xlib.XKeysymToKeycode(dpy, KEYSYM_Y)
             _press_pair(dpy, xlib, xtst, kc_alt, kc_y, "alt-y")
             time.sleep(0.30)
-            return {
-                "dismissed": win_id_str, "requested_window_id": requested_id_str,
-                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
-                "action": "alt-y", "keycode_alt": int(kc_alt), "keycode_y": int(kc_y),
-                "still_mapped": _is_window_mapped(child_id_str),
-                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
-            }
+            return _requested(
+                "alt-y", {"keycode_alt": int(kc_alt), "keycode_y": int(kc_y)}
+            )
         if action == "alt-n":
             kc_n = xlib.XKeysymToKeycode(dpy, KEYSYM_N)
             _press_pair(dpy, xlib, xtst, kc_alt, kc_n, "alt-n")
             time.sleep(0.30)
-            return {
-                "dismissed": win_id_str, "requested_window_id": requested_id_str,
-                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
-                "action": "alt-n", "keycode_alt": int(kc_alt), "keycode_n": int(kc_n),
-                "still_mapped": _is_window_mapped(child_id_str),
-                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
-            }
+            return _requested(
+                "alt-n", {"keycode_alt": int(kc_alt), "keycode_n": int(kc_n)}
+            )
         if action == "alt-o":
             kc_o = xlib.XKeysymToKeycode(dpy, KEYSYM_O)
             _press_pair(dpy, xlib, xtst, kc_alt, kc_o, "alt-o")
             time.sleep(0.30)
-            return {
-                "dismissed": win_id_str, "requested_window_id": requested_id_str,
-                "resolved_window_id": child_id_str, "child": child_id_str, "title": resolved_title,
-                "action": "alt-o", "keycode_alt": int(kc_alt), "keycode_o": int(kc_o),
-                "still_mapped": _is_window_mapped(child_id_str),
-                "x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"],
-            }
+            return _requested(
+                "alt-o", {"keycode_alt": int(kc_alt), "keycode_o": int(kc_o)}
+            )
         raise AssertionError("unreachable: action=%r" % action)
     finally:
         xlib.XCloseDisplay(dpy)
+
+
+# Seconds to let the dialog react to the key before asking the X server.
+VERIFY_SETTLE_SECONDS = 0.3
+
+
+def _verify_dismissal(result, display=None):
+    """An injected action stays *requested* until the exact XID is closed.
+
+    The window that received the key is queried directly. Only two outcomes
+    exist: verified closed (destroyed or unmapped) → "closed" plus a "dismissed"
+    id; everything else, including a state query that failed, stays
+    "requested" with no "dismissed" key so callers fail closed.
+    """
+    if "error" in result:
+        return result
+    target = (
+        result.get("child")
+        or result.get("resolved_window_id")
+        or result.get("window_id")
+        or result.get("dismissed")
+    )
+    if not target:
+        result["verification_error"] = "no target window id to verify"
+        return result
+
+    result.pop("dismissed", None)
+    result.update(
+        status="requested",
+        action_sent=True,
+        closure_confirmed=False,
+        still_mapped=None,
+    )
+    time.sleep(VERIFY_SETTLE_SECONDS)
+
+    reader = None
+    try:
+        reader = _open_window_state_reader(display or os.environ.get("DISPLAY"))
+        state = reader.window_state(_parse_xid(target))
+        result["still_mapped"] = state["mapped"]
+        if not state["exists"] or not state["mapped"]:
+            result.update(status="closed", closure_confirmed=True, dismissed=target)
+    except Exception as exc:
+        # Deliberately broad (upstream #248): any failure of the state query is
+        # a verification failure, never a dismissal. A broken check must never
+        # read as a closed window.
+        result["verification_error"] = str(exc)
+    finally:
+        if reader is not None:
+            try:
+                reader.close()
+            except Exception:
+                # A failed teardown must not discard the verdict we just
+                # established (nor crash the run before it is reported).
+                pass
+    return result
 
 
 def main():
@@ -786,8 +1009,12 @@ def main():
             )
         except (RuntimeError, ValueError) as exc:
             result = {"error": str(exc), "window_id": dismiss_target}
+        if "error" not in result:
+            result["requested_window_id"] = dismiss_target
+            result = _verify_dismissal(result, display)
         print(json.dumps(result))
-        sys.exit(0 if "dismissed" in result else 1)
+        # Fail closed: only a verified closed window is a successful dismissal.
+        sys.exit(0 if result.get("closure_confirmed") else 1)
 
     if list_windows:
         windows = discover_windows(display)
@@ -802,6 +1029,7 @@ def main():
     if not dialogs:
         sys.exit(1)
 
+    failed = False
     if do_dismiss:
         for d in dialogs:
             if "window_id" in d:
@@ -818,8 +1046,13 @@ def main():
                     for geom_key in ("x", "y", "w", "h"):
                         if geom_key in d and geom_key not in result:
                             result[geom_key] = d[geom_key]
+                    result = _verify_dismissal(result, display)
+                    failed = failed or not result.get("closure_confirmed", False)
+                else:
+                    failed = True
                 print(json.dumps(result))
-    sys.exit(0)
+    # Fail closed: any unverified dismissal makes the whole run non-zero.
+    sys.exit(1 if failed else 0)
 
 
 if __name__ == "__main__":
