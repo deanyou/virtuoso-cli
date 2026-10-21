@@ -619,6 +619,10 @@ pub fn dismiss(
                 continue;
             }
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(line) {
+                // A dismissal the helper could not verify must be reported even
+                // though it never reaches `dismissed` (see
+                // `unverified_dismissal_error`).
+                let unverified = unverified_dismissal_error(&val);
                 if val.get("error").is_some() {
                     continue;
                 }
@@ -627,6 +631,9 @@ pub fn dismiss(
                 } else if let Ok(mut d) = serde_json::from_value::<DialogInfo>(val) {
                     d.display = Some(display.to_string());
                     found.push(d);
+                }
+                if let Some(err) = unverified {
+                    errors.push(err);
                 }
             }
         }
@@ -1120,6 +1127,9 @@ pub fn dismiss_window(
                 continue;
             }
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(line) {
+                if let Some(err) = unverified_dismissal_error(&val) {
+                    errors.push(err);
+                }
                 if val.get("error").is_some() {
                     continue;
                 }
@@ -2842,6 +2852,44 @@ fn append_still_mapped_errors(errors: &mut Vec<String>, dismissed: &[DialogInfo]
     }
 }
 
+/// Turn a helper record for a *requested but unverified* dismissal into an error.
+///
+/// The helper only emits a `dismissed` id after it has confirmed through
+/// `XGetWindowAttributes` that the exact XID is unmapped or destroyed
+/// (`resources/x11_dismiss_dialog.py`). A record with `action_sent` but no
+/// `dismissed` means the key was injected and the window state was never
+/// confirmed — either it is still mapped, or the check itself failed
+/// (`verification_error`). Either way the dismissal must not read as a success,
+/// so it becomes an error and leaves `dismissed` empty.
+fn unverified_dismissal_error(val: &serde_json::Value) -> Option<String> {
+    if val.get("dismissed").is_some() || val.get("error").is_some() {
+        return None;
+    }
+    if val.get("action_sent").and_then(|v| v.as_bool()) != Some(true) {
+        return None;
+    }
+    let window = val
+        .get("child")
+        .and_then(|v| v.as_str())
+        .or_else(|| val.get("window_id").and_then(|v| v.as_str()))
+        .unwrap_or("unknown");
+    if let Some(err) = val.get("verification_error").and_then(|v| v.as_str()) {
+        return Some(format!("dismissal of {window} unverified: {err}"));
+    }
+    let action = val
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    if val.get("still_mapped").and_then(|v| v.as_bool()) == Some(true) {
+        return Some(format!(
+            "window {window} still mapped after action {action}; dismissal requested but not confirmed closed"
+        ));
+    }
+    Some(format!(
+        "dismissal of {window} requested (action {action}) but closure not confirmed"
+    ))
+}
+
 /// Shared env-resolution: explicit display, else auto-detect from the running
 /// virtuoso process. Returns the resolved env and the display string.
 fn resolve_envs(
@@ -3807,6 +3855,151 @@ mod tests {
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("0x1"));
         assert!(errors[0].contains("alt-o"));
+    }
+
+    fn dismiss_val(json: &str) -> serde_json::Value {
+        serde_json::from_str(json).expect("valid json")
+    }
+
+    #[test]
+    fn verified_closed_record_is_not_an_error() {
+        let val = dismiss_val(
+            r#"{"dismissed":"0x2","child":"0x2","window_id":"0x1","action":"enter",
+                "status":"closed","closure_confirmed":true,"action_sent":true,"still_mapped":false}"#,
+        );
+        assert!(unverified_dismissal_error(&val).is_none());
+    }
+
+    #[test]
+    fn still_mapped_record_becomes_unverified_error() {
+        let val = dismiss_val(
+            r#"{"window_id":"0x1","child":"0x2","action":"escape","title":"Save Changes",
+                "status":"requested","closure_confirmed":false,"action_sent":true,"still_mapped":true,
+                "x":0,"y":0,"w":580,"h":140}"#,
+        );
+        let err = unverified_dismissal_error(&val).expect("still-mapped must error");
+        assert!(err.contains("0x2"), "{err}");
+        assert!(err.contains("escape"), "{err}");
+        assert!(err.contains("not confirmed"), "{err}");
+    }
+
+    #[test]
+    fn verification_error_record_surfaces_the_reason() {
+        let val = dismiss_val(
+            r#"{"window_id":"0x1","child":"0x2","action":"enter","status":"requested",
+                "closure_confirmed":false,"action_sent":true,"still_mapped":null,
+                "verification_error":"cannot open display :7"}"#,
+        );
+        let err = unverified_dismissal_error(&val).expect("failed check must error");
+        assert!(err.contains("cannot open display :7"), "{err}");
+    }
+
+    #[test]
+    fn plain_dialog_listing_is_not_an_unverified_dismissal() {
+        // find_dialogs output has no action_sent: it must not become an error.
+        let val = dismiss_val(r#"{"window_id":"0x1","title":"Save?","x":1,"y":2,"w":3,"h":4}"#);
+        assert!(unverified_dismissal_error(&val).is_none());
+    }
+
+    #[test]
+    fn helper_error_record_is_not_double_reported() {
+        let val = dismiss_val(r#"{"error":"libXtst not found","window_id":"0x1"}"#);
+        assert!(unverified_dismissal_error(&val).is_none());
+    }
+
+    #[test]
+    fn dismiss_unverified_dismissal_becomes_error_and_not_dismissed() {
+        // Helper exit 1 + a record with no `dismissed` key: the key was sent but
+        // the window was not verified closed. Must not land in `dismissed`.
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result(
+            r#"{"window_id":"0x1","child":"0x2","title":"Save Changes","action":"escape","status":"requested","closure_confirmed":false,"action_sent":true,"still_mapped":true,"x":0,"y":0,"w":580,"h":140}
+"#,
+            "",
+            1,
+        ));
+        let result = dismiss(
+            &transport,
+            "client1",
+            Some("user1"),
+            Some(":99"),
+            "escape",
+            false,
+            None,
+        )
+        .expect("dismiss should succeed");
+        assert!(result.dismissed.is_empty(), "{:?}", result.dismissed);
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("still mapped") && e.contains("0x2")),
+            "errors: {:?}",
+            result.errors
+        );
+    }
+
+    #[test]
+    fn dismiss_verified_closed_record_is_reported_as_dismissed() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result(
+            r#"{"dismissed":"0x2","child":"0x2","requested_window_id":"0x1","title":"Save Changes","action":"escape","status":"closed","closure_confirmed":true,"action_sent":true,"still_mapped":false,"x":0,"y":0,"w":580,"h":140}
+"#,
+            "",
+            0,
+        ));
+        let result = dismiss(
+            &transport,
+            "client1",
+            Some("user1"),
+            Some(":99"),
+            "escape",
+            false,
+            Some("0x1"),
+        )
+        .expect("dismiss should succeed");
+        assert_eq!(result.dismissed.len(), 1);
+        assert_eq!(result.dismissed[0].child.as_deref(), Some("0x2"));
+        assert_eq!(result.dismissed[0].still_mapped, Some(false));
+        assert!(
+            !result.errors.iter().any(|e| e.contains("not confirmed")),
+            "errors: {:?}",
+            result.errors
+        );
+    }
+
+    #[test]
+    fn dismiss_window_unverified_dismissal_becomes_error() {
+        // The single-window path drops non-dismissed records; the outcome must
+        // still be reported as an error instead of vanishing.
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result(
+            r#"{"window_id":"0x1","child":"0x2","title":"Save Changes","action":"enter","status":"requested","closure_confirmed":false,"action_sent":true,"still_mapped":null,"verification_error":"cannot read exact X11 window attributes for 0x2","x":0,"y":0,"w":580,"h":140}
+"#,
+            "",
+            1,
+        ));
+        let result = dismiss_window(
+            &transport,
+            "client1",
+            Some("user1"),
+            Some(":99"),
+            "0x1",
+            "enter",
+        )
+        .expect("dismiss_window should succeed");
+        assert!(result.dismissed.is_empty());
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.contains("cannot read exact X11 window attributes")),
+            "errors: {:?}",
+            result.errors
+        );
     }
 
     #[test]
