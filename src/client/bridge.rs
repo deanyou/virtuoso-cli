@@ -732,6 +732,12 @@ impl VirtuosoClient {
     /// Uses `execute_skill_unchecked` so the check works without the
     /// Admin capability — the SKILL payload is a fixed literal.
     ///
+    /// The probe's budget is the **client's configured timeout** (`self.timeout`,
+    /// i.e. `VB_TIMEOUT`), not a hardcoded cap: a busy daemon needs the same
+    /// headroom the user granted the rest of the session. A fixed short cap
+    /// made the identity silently unknown on busy servers — which then made
+    /// the cross-user guard look like it had passed.
+    ///
     /// Returns:
     /// - `Ok(Some(user))` when the daemon returned a non-nil string
     /// - `Ok(None)` when the daemon returned `nil` or empty (no user set)
@@ -740,7 +746,8 @@ impl VirtuosoClient {
         const SKILL: &str =
             r#"let((u) u = getShellEnvVar("USER") if(u && u != "" then u else nil))"#;
         // Idempotent probe: fixed read-only literal, may drain a stale ticket.
-        let r = self.execute_skill_idempotent_probe(SKILL, Some(5))?;
+        // `None` → the probe spends the client's configured timeout budget.
+        let r = self.execute_skill_idempotent_probe(SKILL, None)?;
         if !r.skill_ok() {
             // nil/empty = no USER env var on daemon — treat as unknown, not error
             return Ok(None);
@@ -1001,8 +1008,9 @@ fn is_port_open(port: u16) -> bool {
 /// This runs in `VirtuosoClient::from_env()` after session resolution, preventing
 /// accidental connection to a daemon started by a different Unix user. The check
 /// only applies when `session.daemon_user` is already known (populated by a prior
-/// `vcli session show` call). If `daemon_user` is `None`, the check is skipped
-/// with a debug log (the user will be unknown until first `session show`).
+/// `vcli session show` call). If `daemon_user` is `None`, the check cannot run:
+/// the identity is *unconfirmed*, not *verified as matching* — that is logged
+/// at WARN level so the user is not left believing the check happened.
 ///
 /// Set `VB_ALLOW_CROSS_USER_DAEMON=1` to disable this guard intentionally.
 fn guard_cross_user(session: &SessionInfo) -> Result<()> {
@@ -1027,13 +1035,23 @@ fn guard_cross_user(session: &SessionInfo) -> Result<()> {
         None => return Ok(()),
     };
 
-    // If daemon_user is not yet known (None), we can't perform the check
+    // If daemon_user is not yet known (None), we can't perform the check.
+    // This is NOT a pass: the identity is unconfirmed (the probe timed out or
+    // the daemon reported no USER), so the cross-user check was skipped
+    // entirely. Warn loudly — the user configured VB_REMOTE_USER precisely
+    // because they want to know who the daemon runs as. Not a hard error:
+    // daemon_user is only populated by `session show`, so failing here would
+    // break the first connect of every session.
     let daemon_user = match session.daemon_user.as_deref() {
         Some(u) => u,
         None => {
-            tracing::debug!(
-                "cross-user guard: daemon_user unknown for session '{}', skipping check",
-                session.id
+            tracing::warn!(
+                "cross-user guard: daemon user is unconfirmed for session '{}' — \
+                 the cross-user check against VB_REMOTE_USER '{}' was skipped \
+                 (identity unconfirmed, not verified as matching). \
+                 Run 'vcli session show' to probe the daemon.",
+                session.id,
+                expected
             );
             return Ok(());
         }
@@ -1289,6 +1307,34 @@ pub fn poll_log_completion(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+
+    /// A `tracing` writer that funnels formatted log output into a shared
+    /// buffer so a test can assert on the level and the message.
+    #[derive(Clone, Default)]
+    struct SharedBuf(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for SharedBuf {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let mut guard = self
+                .0
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            guard.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for SharedBuf {
+        type Writer = Self;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
 
     #[test]
     fn fetch_skill_single_field() {
@@ -1544,6 +1590,120 @@ mod tests {
             decode_skill_string(r#""first\nsecond\"third\\fourth""#),
             "first\nsecond\"third\\fourth"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Daemon identity probe budget
+    // ------------------------------------------------------------------
+
+    /// The daemon-identity probe must spend the *client's configured*
+    /// timeout, not a hardcoded cap.
+    ///
+    /// Proof: a fake listener that accepts the TCP connection but never
+    /// answers. With a 1-second client timeout the probe must fail with
+    /// `Timeout(1)` — the client's own budget — and long before the old
+    /// hardcoded 5-second cap.
+    #[test]
+    fn daemon_user_probe_budget_follows_client_timeout() {
+        // Bind but never accept/answer: the client's connect() succeeds
+        // (kernel backlog) and the read then blocks until the socket read
+        // timeout fires.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let client = VirtuosoClient::new("127.0.0.1", port, 1);
+        let started = Instant::now();
+        let err = client
+            .get_daemon_user()
+            .expect_err("a silent daemon must make the identity probe fail");
+        let elapsed = started.elapsed();
+
+        assert!(
+            matches!(err, VirtuosoError::Timeout(1)),
+            "probe must time out on the client's own 1s budget, got {err:?}"
+        );
+        assert!(
+            elapsed.as_secs_f64() < 3.0,
+            "probe must fail well inside the old hardcoded 5s cap, took {elapsed:?}"
+        );
+        drop(listener);
+    }
+
+    // ------------------------------------------------------------------
+    // guard_cross_user: unconfirmed identity must be loud
+    // ------------------------------------------------------------------
+
+    /// When `VB_REMOTE_USER` is configured but the session has no recorded
+    /// daemon user, the guard did NOT verify anything. That must be a
+    /// warning (not a debug line, and not a hard error — `daemon_user` is
+    /// only populated by `session show`).
+    #[test]
+    #[serial]
+    fn guard_cross_user_warns_when_daemon_user_is_unconfirmed() {
+        let prev_user = std::env::var("VB_REMOTE_USER").ok();
+        let prev_profile = std::env::var("VB_PROFILE").ok();
+        std::env::set_var("VB_REMOTE_USER", "expected-user");
+        std::env::remove_var("VB_PROFILE");
+
+        let session = SessionInfo {
+            id: "guard-test-session".into(),
+            port: 40567,
+            pid: 0,
+            host: "meowu".into(),
+            user: "meow".into(),
+            created: "Jun  1 08:14:16 2026".into(),
+            daemon_user: None,
+            daemon_version: None,
+        };
+
+        let buf = SharedBuf::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(buf.clone())
+            .with_ansi(false)
+            .with_max_level(tracing::Level::DEBUG)
+            .finish();
+
+        let outcome = tracing::subscriber::with_default(subscriber, || guard_cross_user(&session));
+
+        // Not a hard failure: daemon_user is only known after `session show`.
+        assert!(
+            outcome.is_ok(),
+            "unconfirmed identity must not break the connect path, got {:?}",
+            outcome.err()
+        );
+
+        let logged = String::from_utf8(
+            buf.0
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone(),
+        )
+        .expect("log output must be UTF-8");
+        assert!(
+            logged.contains("WARN"),
+            "unconfirmed identity must be logged at WARN level, got: {logged}"
+        );
+        assert!(
+            !logged.contains("DEBUG"),
+            "the old debug-level log must be gone, got: {logged}"
+        );
+        assert!(
+            logged.to_lowercase().contains("unconfirmed"),
+            "log must state that the daemon user is unconfirmed, got: {logged}"
+        );
+        assert!(
+            logged.to_lowercase().contains("skipped"),
+            "log must state that the check was skipped, got: {logged}"
+        );
+
+        match prev_user {
+            Some(v) => std::env::set_var("VB_REMOTE_USER", v),
+            None => std::env::remove_var("VB_REMOTE_USER"),
+        }
+        match prev_profile {
+            Some(v) => std::env::set_var("VB_PROFILE", v),
+            None => std::env::remove_var("VB_PROFILE"),
+        }
     }
 }
 

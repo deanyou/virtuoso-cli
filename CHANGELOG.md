@@ -14,6 +14,24 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **The daemon-identity probe ignored the configured timeout.**
+  `VirtuosoClient::get_daemon_user()` hardcoded a 5-second budget and
+  `vcli session show` built its probe client with a hardcoded 3-second
+  timeout, so `VB_TIMEOUT` (documented as "raise it to 120 for busy
+  servers") had no effect on the identity check. On a busy daemon the probe
+  timed out, the daemon user stayed unknown, and the cross-user guard
+  silently skipped — the user who set `VB_REMOTE_USER` was told nothing.
+  The probe now spends the client's configured timeout, like every other
+  SKILL operation. The version probe (5s) and the liveness probe (3s) keep
+  their deliberately short budgets.
+- **"Identity unconfirmed" was indistinguishable from "identity OK".**
+  When an expected remote user was configured but the daemon user could not
+  be determined, `session show` returned no cross-user warning at all: the
+  check had not run, but the output looked exactly like a clean check. An
+  unconfirmed identity now produces its own warning that says the check was
+  NOT performed, and the connect-time guard logs the skip at WARN level
+  instead of DEBUG (it is still not a hard error — the daemon user is only
+  known after `session show`).
 - **Daemon path resolution was split across two conflicting places.**
   `_RBAutoStart()` unconditionally hardcoded `$HOME/.cargo/bin/virtuoso-daemon` and
   silently overrode the top-level resolver — and therefore `RB_DAEMON_PATH`. Both now

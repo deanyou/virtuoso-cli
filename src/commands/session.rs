@@ -856,7 +856,12 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
                 ProbeEndpoint::RemoteTunnel { .. } => "remote_tunnel",
             };
 
-            let client = VirtuosoClient::new("127.0.0.1", port, 3);
+            // The probe client inherits the resolved config timeout
+            // (VB_TIMEOUT): the daemon-identity probe must get the same
+            // headroom the user granted the rest of the session, not a
+            // hardcoded cap. The liveness probe keeps its own short budget
+            // (daemon_alive passes Some(3)).
+            let client = VirtuosoClient::new("127.0.0.1", port, ctx.config().timeout);
             let user_result = client.get_daemon_user();
             let version_result = client.get_daemon_version();
             let alive = client.daemon_alive();
@@ -1001,9 +1006,21 @@ fn check_version_skew(daemon_version: &str) -> Option<String> {
 
 /// Compare the daemon's Unix user with the configured `remote_user`.
 ///
-/// Returns `Some(warning)` if a mismatch is detected, `None` otherwise.
+/// Returns `Some(warning)` when the daemon user could NOT be confirmed
+/// (the identity probe returned no user) while an expected user *is*
+/// configured, and `Some(warning)` on an actual mismatch. Returns `None`
+/// when the users match, when no expected user is configured, or when the
+/// mismatch is explicitly overridden.
+///
+/// "Unconfirmed" and "mismatch" are different facts and get different
+/// wording: an unconfirmed identity means the cross-user check did not run
+/// at all (the probe timed out or the daemon reported no `USER`), which is
+/// not the same as "the daemon runs as somebody else".
+///
 /// Set `allow_cross_user_daemon: true` in config (env: `VB_ALLOW_CROSS_USER_DAEMON=1`,
-/// or target config field) to suppress the warning.
+/// or target config field) to suppress the mismatch warning. It does not
+/// suppress the unconfirmed-identity warning: that override authorises a
+/// *different* daemon user, it cannot confirm an *unknown* one.
 ///
 /// Uses the resolved `Config` — never re-reads environment variables.
 /// `Config::from_env()` already handles the `VB_REMOTE_USER_<profile>` →
@@ -1019,7 +1036,22 @@ fn check_cross_user(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())?;
 
-    let daemon_user = daemon_user?;
+    // Expected user configured, but the daemon user is unknown → the
+    // cross-user check was NOT performed. Say so, instead of returning
+    // "no warning" and letting an unchecked identity look verified.
+    let daemon_user = match daemon_user {
+        Some(u) => u,
+        None => {
+            return Some(format!(
+                "daemon Unix user unconfirmed for session {sid}: the daemon user could not be \
+                 determined, so the cross-user check against configured remote_user \
+                 {expected:?} was NOT performed (UNCONFIRMED identity — not a mismatch). \
+                 Run 'vcli session show' to re-probe; if the daemon is busy, raise VB_TIMEOUT \
+                 so the probe gets enough budget.",
+                sid = session.id
+            ))
+        }
+    };
     if daemon_user == expected {
         return None;
     }
@@ -1142,9 +1174,41 @@ mod tests {
     }
 
     #[test]
-    fn cross_user_no_daemon_user_returns_none() {
+    fn cross_user_unconfirmed_daemon_user_returns_warning() {
+        // An expected user IS configured but the daemon user could not be
+        // determined (identity probe returned no USER). The check was NOT
+        // performed — that must not look like "no problem found".
         let cfg = test_config(Some("meow"), false);
-        // daemon_user is None — we don't know, so don't warn
+        let r = check_cross_user(&cfg, &session(), None);
+        let w = r.expect("unconfirmed identity must warn");
+        let lower = w.to_lowercase();
+        assert!(
+            lower.contains("unconfirmed"),
+            "warning must mark the identity as unconfirmed: {w}"
+        );
+        assert!(
+            lower.contains("not performed"),
+            "warning must say the check was not performed: {w}"
+        );
+        assert!(
+            w.contains("meowu-meow-40567"),
+            "warning should name session: {w}"
+        );
+        assert!(
+            w.contains("\"meow\""),
+            "warning should name the configured user: {w}"
+        );
+        assert!(
+            !lower.contains("does not match"),
+            "unconfirmed must be distinguishable from a mismatch: {w}"
+        );
+    }
+
+    #[test]
+    fn cross_user_no_remote_user_and_no_daemon_user_returns_none() {
+        // Nothing configured to compare against AND no daemon user — there
+        // is no check to run, so there is nothing to warn about.
+        let cfg = test_config(None, false);
         let r = check_cross_user(&cfg, &session(), None);
         assert!(r.is_none());
     }
@@ -2062,6 +2126,107 @@ mod tests {
         assert_eq!(
             before, after,
             "session file must NOT be mutated when probe is skipped"
+        );
+    }
+
+    /// Fake daemon that swallows the daemon-user identity probe and answers
+    /// every other request immediately.
+    ///
+    /// The connection is keyed on the SKILL payload, not on its ordinal: the
+    /// endpoint-reachability check opens a payload-less connection first, and
+    /// the identity probe is the one carrying `getShellEnvVar`. The version
+    /// and liveness probes are answered fast, so the wall-clock of
+    /// `session show` is dominated by the identity probe's timeout budget —
+    /// which is exactly what the test measures.
+    fn spawn_daemon_swallows_identity_probe() -> (u16, std::sync::Arc<()>) {
+        use std::io::{Read, Write};
+        use std::net::Shutdown;
+        use std::time::Duration;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("local addr").port();
+        let keep = std::sync::Arc::new(());
+        let keep2 = std::sync::Arc::clone(&keep);
+        std::thread::spawn(move || {
+            let _keep = keep2;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).to_string();
+                if request.contains("getShellEnvVar") {
+                    // Identity probe: never answer. Hold the socket open so
+                    // the client burns its own timeout budget.
+                    std::thread::spawn(move || {
+                        let mut sink = [0u8; 1024];
+                        let _ = stream.read(&mut sink);
+                        std::thread::sleep(Duration::from_secs(30));
+                    });
+                    continue;
+                }
+                if n == 0 {
+                    // Reachability probe (no payload) — nothing to answer.
+                    continue;
+                }
+                // Version probe → a version string; liveness probe → a number.
+                let answer: &[u8] = if request.contains("RBDVersion") {
+                    b"\"9.9.9\""
+                } else {
+                    b"2"
+                };
+                let mut payload = vec![0x02];
+                payload.extend_from_slice(answer);
+                let _ = stream.write_all(&payload);
+                let _ = stream.shutdown(Shutdown::Write);
+            }
+        });
+        (port, keep)
+    }
+
+    #[test]
+    #[serial]
+    fn show_identity_probe_uses_configured_timeout_not_a_hardcoded_cap() {
+        // The identity probe inside `session show` must spend the resolved
+        // config timeout (VB_TIMEOUT), not a hardcoded 3s/5s cap: a busy
+        // daemon needs the headroom the user granted the rest of the
+        // session.
+        //
+        // With `timeout = 1` the probe must give up after ~1s. The old
+        // hardcoded 3s client budget (or the hardcoded 5s probe budget)
+        // would push the call past 2.5s.
+        let _cache = CacheDirGuard::new();
+        let _state = StateDirGuard::new();
+
+        let (port, _keep) = spawn_daemon_swallows_identity_probe();
+
+        let mut s = session();
+        s.host = "localhost".into();
+        s.port = port;
+        s.save_to_session_file();
+
+        let mut cfg = test_config(None, false);
+        cfg.remote_host = None;
+        cfg.port = 0;
+        cfg.port_explicit = false;
+        cfg.timeout = 1;
+        let ctx = CommandContext::new(cfg, Some("local-target".into())).expect("ctx");
+
+        let started = std::time::Instant::now();
+        let result = show(&ctx, &s.id, OutputFormat::Json).expect("show should succeed");
+        let elapsed = started.elapsed();
+
+        assert!(
+            elapsed.as_secs_f64() < 2.5,
+            "identity probe must honor the 1s configured timeout, took {elapsed:?}"
+        );
+        // The probe ran (not skipped) and its failure is surfaced.
+        assert_eq!(result["probe"]["skipped"], false);
+        assert!(
+            result["warnings"]["daemon_user"]
+                .as_str()
+                .is_some_and(|w| w.contains("daemon user query failed")),
+            "a failed identity probe must be surfaced, got {}",
+            result["warnings"]["daemon_user"]
         );
     }
 }
