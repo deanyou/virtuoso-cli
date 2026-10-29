@@ -330,9 +330,11 @@ class TestBaseline(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
+            png = Path(tmp) / "baseline.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\n")
             runner = FakeRunner(
                 [res(stdout=SESSIONS_OK), res(stdout=WINDOWS_ONE),
-                 res(stdout=json.dumps({"status": "success", "operation": "screenshot"}))]
+                 res(stdout=json.dumps({"status": "saved", "path": str(png)}))]
             )
             ex = make_executor(runner, tmp)
             self.assertIsNone(ex.precheck(make_scenario()))
@@ -340,6 +342,41 @@ class TestBaseline(unittest.TestCase):
             self.assertIsNone(err, f"baseline failed: {err}")
             argv = " ".join(runner.argvs[-1])
             self.assertIn("screenshot", argv)
+
+    def test_baseline_passes_the_bound_window_id(self):
+        """The window id is always passed, so vcli can fall back to a
+        per-window capture on hosts that refuse a root-window grab."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            png = Path(tmp) / "baseline.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\n")
+            runner = FakeRunner(
+                [res(stdout=SESSIONS_OK), res(stdout=WINDOWS_ONE),
+                 res(stdout=json.dumps({"status": "saved", "path": str(png)}))]
+            )
+            ex = make_executor(runner, tmp)
+            self.assertIsNone(ex.precheck(make_scenario()))
+            self.assertIsNone(ex.baseline(make_scenario()))
+            argv = " ".join(runner.argvs[-1])
+            self.assertIn("screenshot", argv)
+            self.assertIn(WINDOW_ID, argv)
+            self.assertIn("--window-id", argv)
+
+    def test_baseline_reports_a_failed_capture(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([
+                res(stdout=SESSIONS_OK),
+                res(stdout=WINDOWS_ONE),
+                res(exit_code=1, stderr="screenshot failed: nil"),
+            ])
+            ex = make_executor(runner, tmp)
+            self.assertIsNone(ex.precheck(make_scenario()))
+            err = ex.baseline(make_scenario())
+            self.assertIsNotNone(err)
+            self.assertIn("screenshot failed", err["error"])
 
     def test_baseline_requires_precheck(self):
         import tempfile
@@ -430,7 +467,11 @@ class TestExecuteMapping(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            ex, runner = self._with_action(tmp)
+            png = Path(tmp) / f"window_{WINDOW_ID}.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\n")
+            ex, runner = self._with_action(
+                tmp, res(stdout=json.dumps({"status": "saved", "path": str(png)}))
+            )
             step = make_step(operation="SCREENSHOT", arguments={"path": "shot.png"})
             self.assertIsNone(ex.execute(step, 0))
             argv = " ".join(runner.argvs[-1])

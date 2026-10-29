@@ -1,0 +1,58 @@
+{
+  "version": "1.0",
+  "task_id": "live-gui-smoke-2026-10-29",
+  "session_id": "xunipc-userone-45591",
+  "pid": 63257,
+  "display": ":0",
+  "cellview": {"lib": "FT0001A_SH", "cell": "inv", "view": "schematic"},
+  "steps": [
+    {
+      "id": "s1-activate-ciw",
+      "operation": "WINDOW_ACTIVATE",
+      "arguments": {"window_title": "Virtuoso"},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 20,
+      "max_retries": 0
+    },
+    {
+      "id": "s2-ciw-eval-arith",
+      "operation": "CIW_INPUT",
+      "arguments": {"text": "6*7", "delay_ms": 10, "clear_first": true},
+      "verifier": {"predicate": "ciw_eval", "expected": {"expression": "6*7", "equals": "42"}},
+      "timeout_seconds": 30,
+      "max_retries": 0
+    },
+    {
+      "id": "s3-ciw-var-assign",
+      "operation": "CIW_INPUT",
+      "arguments": {"text": "guiSmokeVar = 1234", "delay_ms": 10, "clear_first": true},
+      "verifier": {"predicate": "ciw_eval", "expected": {"expression": "guiSmokeVar", "equals": "1234"}},
+      "timeout_seconds": 30,
+      "max_retries": 0
+    },
+    {
+      "id": "s4-key-escape",
+      "operation": "KEY",
+      "arguments": {"keys": "Escape"},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 15,
+      "max_retries": 0
+    },
+    {
+      "id": "s5-scroll",
+      "operation": "SCROLL",
+      "arguments": {"direction": "down", "count": 2, "x": 300, "y": 300},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 20,
+      "max_retries": 0
+    },
+    {
+      "id": "s6-screenshot",
+      "operation": "SCREENSHOT",
+      "arguments": {},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 30,
+      "max_retries": 0
+    }
+  ]
+}

@@ -441,6 +441,7 @@ class LiveExecutor(Executor):
             self._run_action(
                 "screenshot",
                 output_dir=str(self._output_dir),
+                png_name="baseline.png",
                 timeout_seconds=_TIMEOUT_ACTION,
             )
             self._baseline_taken = True
@@ -728,6 +729,77 @@ class LiveExecutor(Executor):
     # action plumbing
     # ------------------------------------------------------------------
 
+    def _capture_screenshot(
+        self,
+        png_name: str,
+        output_dir: Optional[str],
+        timeout_seconds: int,
+    ) -> Dict[str, Any]:
+        """Capture the bound window into ``output_dir/png_name``.
+
+        ``vcli window screenshot`` handles both capture routes itself: it
+        first tries the Virtuoso-side SKILL grab of the X11 root window
+        (works without a window id, but refused by X servers that reject
+        ``XGetImage`` on the root window), and falls back to a per-window grab
+        when ``--window-id`` names the target.
+
+        The window id is always passed, so the fallback is available on hosts
+        where the root grab is refused.
+        """
+        import os as _os
+        import shutil as _shutil
+
+        out_dir = output_dir or str(self._output_dir)
+        png_path = _os.path.join(out_dir, png_name)
+        argv = self._vcli_argv_with_session(
+            "window",
+            "screenshot",
+            "--path",
+            png_path,
+            "--window-id",
+            self.window_id or "",
+        )
+        if self._scenario_display:
+            argv += ["--display", self._scenario_display]
+        result = self._run_json(argv, timeout_seconds)
+        # window screenshot reports status "saved"; normalize so the
+        # downstream status check (which expects None/"success") passes.
+        if result.get("status") == "saved":
+            result["status"] = "success"
+        if result.get("status") not in (None, "success"):
+            raise RuntimeError(
+                f"screenshot failed: {result.get('status')}"
+            )
+        if not _os.path.exists(png_path):
+            raise RuntimeError(
+                f"screenshot failed: no PNG was written to {png_path}"
+            )
+        # Local runner writes directly; SSH runner writes on the remote
+        # host, so scp the PNG down and rewrite the path.
+        if self._is_ssh():
+            remote_path = result.get("path")
+            if remote_path:
+                fname = _os.path.basename(remote_path)
+                local_path = self._output_dir / fname
+                from .command_runner import SshRunner
+                if isinstance(self._runner, SshRunner):
+                    scp_result = self._runner.scp_download(
+                        remote_path, str(local_path)
+                    )
+                    if scp_result.exit_code != 0:
+                        raise RuntimeError(
+                            f"screenshot download failed: "
+                            f"{scp_result.stderr.strip()}"
+                        )
+                    result["path"] = str(local_path)
+        # The capture may land under a different name (the transport's own
+        # artifact naming); expose it under the requested one.
+        if _os.path.abspath(result.get("path") or "") != _os.path.abspath(png_path):
+            if _os.path.exists(result.get("path") or ""):
+                _shutil.copyfile(result["path"], png_path)
+                result["path"] = png_path
+        return result
+
     def _run_action(
         self,
         operation: str,
@@ -737,45 +809,15 @@ class LiveExecutor(Executor):
         text=None,
         output_dir=None,
         window_id=None,
+        png_name=None,
         timeout_seconds=_TIMEOUT_ACTION,
     ) -> Dict[str, Any]:
         if operation == "screenshot":
-            # Virtuoso-native screenshot (hiGetWindowScreenDump, IC23.1+) avoids
-            # the daemon X11 helper's xwininfo geometry probe. That probe fails
-            # when the daemon was launched with an empty PATH, because the
-            # helper subprocess cannot locate xwininfo. Routing screenshots
-            # through `window screenshot` keeps live baselines/screenshots
-            # working on such daemons (and is generally more robust).
-            import os as _os
-            out_dir = output_dir or str(self._output_dir)
-            png_path = _os.path.join(out_dir, "baseline.png")
-            argv = self._vcli_argv_with_session(
-                "window", "screenshot", "--path", png_path
+            return self._capture_screenshot(
+                png_name=png_name or "baseline.png",
+                output_dir=output_dir,
+                timeout_seconds=timeout_seconds,
             )
-            result = self._run_json(argv, timeout_seconds)
-            # Local runner writes directly; SSH runner writes on the remote
-            # host, so scp the PNG down and rewrite the path.
-            if self._is_ssh():
-                remote_path = result.get("path")
-                if remote_path:
-                    fname = _os.path.basename(remote_path)
-                    local_path = self._output_dir / fname
-                    from .command_runner import SshRunner
-                    if isinstance(self._runner, SshRunner):
-                        scp_result = self._runner.scp_download(
-                            remote_path, str(local_path)
-                        )
-                        if scp_result.exit_code != 0:
-                            raise RuntimeError(
-                                f"screenshot download failed: "
-                                f"{scp_result.stderr.strip()}"
-                            )
-                        result["path"] = str(local_path)
-            # window screenshot reports status "saved"; normalize so the
-            # downstream status check (which expects None/"success") passes.
-            if result.get("status") == "saved":
-                result["status"] = "success"
-            return result
         argv = self._vcli_argv(
             "window",
             "action-x11",
@@ -819,7 +861,7 @@ class LiveExecutor(Executor):
             return
         op = _ACTION_OPERATIONS[step.operation]
         args = step.arguments
-        x = y = button = text = output_dir = None
+        x = y = button = text = output_dir = png_name = None
         action_window_id = self.window_id
         if step.operation in (Operation.CLICK_REL, Operation.CLICK_ABS, Operation.DOUBLE_CLICK):
             x, y = args.get("x"), args.get("y")
@@ -844,16 +886,51 @@ class LiveExecutor(Executor):
                 y = args.get("y")
         elif step.operation == Operation.SCREENSHOT:
             output_dir = str(self._output_dir)
+            png_name = f"window_{self.window_id}.png"
         elif step.operation == Operation.CLOSE:
             if args.get("window_id"):
-                action_window_id = args.get("window_id")
+                action_window_id = args["window_id"]
         # MINIMIZE / MAXIMIZE / WINDOW_ACTIVATE take no coordinates.
         result = self._run_action(
             op, x=x, y=y, button=button, text=text, output_dir=output_dir,
-            window_id=action_window_id,
+            window_id=action_window_id, png_name=png_name,
         )
         if result.get("status") not in (None, "success"):
             raise RuntimeError(f"action {op} failed: {result.get('status')}")
+
+    def _client_geometry(self) -> tuple:
+        """Return the (width, height) of the bound window's client area.
+
+        `vcli window geometry` reports the same client geometry that
+        `action-x11` bounds-checks click coordinates against. The frame
+        geometry from list-windows-x11 is NOT interchangeable: it includes the
+        WM decorations, so a click computed from it can land outside the
+        client area and be rejected.
+
+        Falls back to the precheck geometry when the command is unavailable
+        (older vcli), so the harness still runs against an older CLI.
+        """
+        try:
+            data = self._run_json(
+                self._vcli_argv(
+                    "window",
+                    "geometry",
+                    "--window-id",
+                    self.window_id or "",
+                    "--display",
+                    self._scenario_display or ":0",
+                ),
+                _TIMEOUT_PRECHECK,
+            )
+            geom = data.get("geometry") or {}
+            w, h = geom.get("w"), geom.get("h")
+            if w and h:
+                self._window_width = w
+                self._window_height = h
+                return w, h
+        except Exception:  # noqa: BLE001 — fall back to precheck geometry
+            pass
+        return self._window_width, self._window_height
 
     def _ciw_input(self, expression: str, delay_ms: int = 10, clear_first: bool = True) -> None:
         """Type a SKILL expression into the CIW input line and press Return.
@@ -862,14 +939,15 @@ class LiveExecutor(Executor):
         The CIW input line is at the bottom of the window; we click at
         (width/2, height-20) which reliably lands in the input area.
 
-        Geometry note: list-windows-x11 reports window geometry including WM
-        decorations (e.g. 730x743 for a 720x709 CIW), which causes click-y to
-        land outside the content area. After activate, vcli writes a precise
-        geometry cache to /tmp/vcli_geom_<display>_<wid>.json; we read that
-        for accurate click coordinates.
+        Geometry note: the click coordinates must be in the window's *client*
+        area, because that is the space `action-x11` bounds-checks against.
+        The geometry reported by list-windows-x11 is the window *frame*,
+        which includes the WM decorations, so it is larger by the title-bar
+        and border widths — a click computed from it lands outside the client
+        area and is rejected ("coordinates out of bounds for window size
+        641x584"). `vcli window geometry` reports the client geometry that
+        the action layer actually uses, so ask it for that.
         """
-        import json as _json
-        import os as _os
         import time as _time
 
         wid = self.window_id
@@ -880,26 +958,10 @@ class LiveExecutor(Executor):
                 "CIW_INPUT requires window geometry from precheck; "
                 "run precheck() before execute()"
             )
-        # 1. Activate the CIW window (also refreshes vcli geometry cache)
+        # 1. Activate the CIW window.
         self._run_action("activate")
-        # 2. Read precise geometry from vcli cache (written by activate).
-        #    Cache path: /tmp/vcli_geom_<display_with_underscores>_<wid>.json
-        display_safe = (self._scenario_display or ":0").replace(":", "_").replace(".", "_")
-        cache_path = f"/tmp/vcli_geom_{display_safe}_{wid}.json"
-        w, h = self._window_width, self._window_height
-        try:
-            # Wait briefly for cache to be written/refreshed by activate
-            for _ in range(10):
-                if _os.path.exists(cache_path):
-                    with open(cache_path, "r") as _f:
-                        _cache = _json.load(_f)
-                    _geom = _cache.get("geom", {})
-                    if _geom.get("w") and _geom.get("h"):
-                        w, h = _geom["w"], _geom["h"]
-                        break
-                _time.sleep(0.05)
-        except Exception:  # noqa: BLE001 — fall back to precheck geometry
-            pass
+        # 2. Ask vcli for the client-area geometry it validates clicks against.
+        w, h = self._client_geometry()
         click_x = w // 2  # Center X
         # CIW input line is at the very bottom of the window (~height-20).
         click_y = h - 20

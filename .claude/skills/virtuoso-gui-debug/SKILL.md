@@ -232,6 +232,19 @@ python3 scripts/xdotool_cli.py click --x 100 --y 50
 python3 scripts/xdotool_cli.py scroll --direction down --count 5
 ```
 
+End-to-end live smoke scenario (`live_smoke_scenario.json`): activate the CIW,
+evaluate `6*7` and a variable assignment through the CIW input line, send a
+key, scroll, and capture a screenshot — each step verified against the live
+session. Before running it, set `session_id`, `pid`, `display` and the
+`--window-id` of the CIW to the target session:
+
+```bash
+vcli session list
+vcli window list-windows-x11 --display :0   # find the CIW window id
+python3 scripts/gui_runner.py run live_smoke_scenario.json --output /tmp/gui-live \
+    --executor live --session <session-id> --vcli $(which vcli) --window-id <ciw-window-id>
+```
+
 ## Live-Mode Contract (fail-closed rules)
 
 Before any GUI input is sent, precheck verifies in order:
@@ -246,6 +259,10 @@ Before any GUI input is sent, precheck verifies in order:
 The DISPLAY lock is not just for safety - it is required for correctness. `xdotool type` sends key events one character at a time; two concurrent runs interleave their keystrokes, producing garbled input (observed: `dualTestA=100` + `dualTestB=200` merged into `dualTestBA=1200`). Additionally, concurrent `windowactivate` calls fight for X focus. Multi-session / multi-window GUI operations MUST be serialized either through this lock or by running scenarios sequentially. The lock also prevents ibus engine state from being toggled mid-input by another run.
 
 Every GUI action (`KEY`, `TYPE`, `CLICK_REL`, `CLICK_ABS`, `DOUBLE_CLICK`, `DRAG_REL`, `WINDOW_ACTIVATE`, `MINIMIZE`, `MAXIMIZE`, `CLOSE`, `SCROLL`) maps to a fixed `vcli window action-x11` argv carrying the resolved window id, PID, and DISPLAY. **`--direct` is enabled by default** (~5x faster, skips helper upload/env resolution/list-windows); use `--no-direct` for full server-side re-validation. `--pid` is optional since v1.3.1 (windows without `_NET_WM_PID` are reachable). `verify` prefers database-first predicates via vcli; the `ciw_eval` predicate executes SKILL via `vcli skill exec` and compares output. `recover` executes only rollback operations that pass scenario validation.
+
+**Click coordinates live in the client area.** `action-x11` bounds-checks `--x`/`--y` against the window's *client* geometry, while `list-windows-x11` reports the window *frame* geometry (WM decorations included). The two differ by the title-bar and border widths, so a click computed from the frame geometry lands outside the client area and is rejected ("coordinates (330, 604) out of bounds for window size 641x584"). Ask `vcli window geometry --window-id <hex>` for the client geometry before computing coordinates — that is the space the action layer validates against.
+
+**Screenshots.** The live executor captures through `vcli window screenshot --path <file> --window-id <hex>`. vcli owns both capture routes: it first tries the SKILL-side grab of the X11 root window, then falls back to a per-window grab (`import -window <id>`) when the X server refuses a root-window grab (ImageMagick: "missing an image filename"; `xwd -root` fails with BadMatch on the same display). Passing the window id is what makes the fallback available. The response reports which route was used (`"capture": "skill"` or `"x11"`).
 
 Typed input text never appears in error payloads or logs — it is replaced by `text_length` markers.
 
