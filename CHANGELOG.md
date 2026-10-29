@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`vcli window geometry`** (also `window.geometry` over RPC) — reports the
+  **client-area** geometry of one X11 window, which is the coordinate space
+  `action-x11` validates and applies `--x`/`--y` in. Callers previously had no
+  way to learn this space: `list-windows-x11` reports the window *frame*
+  geometry (WM decorations included), and the two differ by the title-bar and
+  border widths — so a click computed from the frame geometry lands outside
+  the client area and is rejected as out of bounds.
 - **`install.sh`** — shared/multi-user installer with `--system` (`/opt/virtuoso-cli`),
   `--user` (`~/.local`), `--prefix DIR` and `--no-build`. Installs `vcli`/`vtui`/
   `virtuoso-daemon` into `$PREFIX/bin` and `ramic_bridge.il` into
@@ -14,6 +21,16 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`vcli window screenshot` failed on hosts whose X server refuses a root-window
+  grab.** The SKILL capture path runs `import -window root`, which some X servers
+  reject — ImageMagick reports "missing an image filename", while `xwd -root` on
+  the same display fails with `BadMatch`, so the daemon returned nil and the
+  command failed even though the session was healthy. A per-window grab
+  (`import -window <id>`) works on those hosts, so `vcli window screenshot`
+  now takes `--window-id` and falls back to a per-window capture when the root
+  grab fails. The fallback is reported as `"capture": "x11"` alongside the
+  original error. Without `--window-id` there is no window to fall back to, and
+  the error says so.
 - **Daemon path resolution was split across two conflicting places.**
   `_RBAutoStart()` unconditionally hardcoded `$HOME/.cargo/bin/virtuoso-daemon` and
   silently overrode the top-level resolver — and therefore `RB_DAEMON_PATH`. Both now

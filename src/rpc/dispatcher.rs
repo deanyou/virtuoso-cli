@@ -823,12 +823,18 @@ impl RpcDispatcher {
             }
             "screenshot" => {
                 let path = json_str(params.get("path"), "path")?;
-                let skill = ops.screenshot(&path);
-                let r = execute_query_skill(client, &skill, "capture screenshot")?;
-                if r.output.trim().is_empty() || r.output.contains("nil") {
-                    Ok(serde_json::json!({ "status": "no-dialog-or-capture-failed" }))
-                } else {
-                    Ok(serde_json::json!({ "status": "ok", "path": r.output.trim() }))
+                // The SKILL route grabs the X11 root window; on servers that
+                // refuse a root-window grab it fails, and a per-window capture
+                // is used instead when the caller names a window.
+                let window_id = params.get("window_id").and_then(|v| v.as_str());
+                let display = params.get("display").and_then(|v| v.as_str());
+                let ctx = &self.ctx;
+                match crate::commands::window::screenshot(ctx, &path, None, window_id, display) {
+                    Ok(v) => Ok(v),
+                    Err(e) => Ok(serde_json::json!({
+                        "status": "capture-failed",
+                        "error": e.to_string(),
+                    })),
                 }
             }
             "screenshot_by_pattern" => {
@@ -904,6 +910,14 @@ impl RpcDispatcher {
                 let display = params.get("display").and_then(|v| v.as_str());
                 let ctx = &self.ctx;
                 crate::commands::window::dismiss_window_x11(ctx, window_id, pid, &action, display)
+            }
+            "geometry" => {
+                // Client-area geometry of one window — the coordinate space
+                // action-x11 bounds-checks click coordinates against.
+                let window_id = json_str(params.get("window_id"), "window_id")?;
+                let display = params.get("display").and_then(|v| v.as_str());
+                let ctx = &self.ctx;
+                crate::commands::window::geometry(ctx, &window_id, display)
             }
             _ => Err(VirtuosoError::Execution(format!(
                 "unknown window method '{}'",
@@ -2160,8 +2174,10 @@ mod tests {
         //  + 5 deletes            (schematic.delete_instance, schematic.delete_prop,
         //                          schematic.delete_figure, cell.delete_view,
         //                          cell.delete) — all two-phase
-        //  = 97
-        assert_eq!(schema.methods.len(), 97, "should have exactly 97 methods");
+        //  + 1 window.geometry — the client-area geometry that action-x11
+        //                    bounds-checks click coordinates against
+        //  = 98
+        assert_eq!(schema.methods.len(), 98, "should have exactly 98 methods");
     }
 
     /// The five destructive methods, and the two properties that make them

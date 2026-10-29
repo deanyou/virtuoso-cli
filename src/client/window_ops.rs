@@ -177,6 +177,19 @@ impl WindowOps {
     /// form — SKILL rejects `if(cond t else e)` with a `lineread/read: syntax
     /// error` — and `isFile` must run AFTER `system` (it probes the file the
     /// capture just created; checking first always returns nil).
+    ///
+    /// The grab targets the X11 root window. That is the only capture that
+    /// needs no window id, so it is the one that works for a caller that has
+    /// none. It does NOT work on X servers that refuse `XGetImage` on the root
+    /// window (observed on an IC26.1 host: `xwd -root` fails with BadMatch,
+    /// and ImageMagick reports that as the misleading "missing an image
+    /// filename"). Hosts like that need the per-window capture in
+    /// `transport::x11`, which is where the window id is known.
+    ///
+    /// No fallback is attempted here on purpose: a shell substitution that
+    /// yields an empty window id turns into `import -window -silent file`,
+    /// which HANGS inside the Virtuoso SKILL interpreter and blocks the
+    /// daemon for the whole SKILL timeout.
     fn skill_capture(path_escaped: &str) -> String {
         format!(
             r#"let((cmd) cmd = strcat("import -window root -silent " "{path}") system(cmd) if(isFile("{path}") "{path}" nil))"#,

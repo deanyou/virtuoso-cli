@@ -505,12 +505,27 @@ pub fn standard_schema() -> RpcSchema {
         Method {
             name: "window.screenshot".into(),
             summary: "Capture screenshot of current window".into(),
-            params: vec![Param {
-                name: "path".into(),
-                ptype: "string".into(),
-                description: "Output PNG file path".into(),
-                required: true,
-            }],
+            params: vec![
+                Param {
+                    name: "path".into(),
+                    ptype: "string".into(),
+                    description: "Output PNG file path".into(),
+                    required: true,
+                },
+                Param {
+                    name: "window_id".into(),
+                    ptype: "string".into(),
+                    description: "Window id (dismiss_id from list_windows_x11). Used as the fallback capture target when the X server refuses a root-window grab."
+                        .into(),
+                    required: false,
+                },
+                Param {
+                    name: "display".into(),
+                    ptype: "string".into(),
+                    description: "Override the detected DISPLAY".into(),
+                    required: false,
+                },
+            ],
             returns: "file path on success".into(),
         },
         Method {
@@ -583,6 +598,26 @@ pub fn standard_schema() -> RpcSchema {
                 },
             ],
             returns: "{status, found, dismissed, errors, display, raw_log}".into(),
+        },
+        Method {
+            name: "window.geometry".into(),
+            summary: "Client-area geometry of one X11 window — the coordinate space action-x11 bounds-checks clicks against. Note: list_windows_x11 reports the window FRAME geometry instead (WM decorations included), so the two are not interchangeable."
+                .into(),
+            params: vec![
+                Param {
+                    name: "window_id".into(),
+                    ptype: "string".into(),
+                    description: "X11 window id (e.g. 0x2e01f16) from list_windows_x11".into(),
+                    required: true,
+                },
+                Param {
+                    name: "display".into(),
+                    ptype: "string".into(),
+                    description: "Override the detected DISPLAY".into(),
+                    required: false,
+                },
+            ],
+            returns: "{status, window_id, display, geometry}".into(),
         },
         Method {
             name: "window.list_windows_x11".into(),

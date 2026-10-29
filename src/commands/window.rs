@@ -287,6 +287,38 @@ pub fn list_windows_x11(
     }))
 }
 
+/// Report the client-area geometry of one X11 window.
+///
+/// The geometry that `action-x11` validates `--x`/`--y` against, and the
+/// space those coordinates are interpreted in. `list-windows-x11` reports the
+/// window *frame* geometry instead, which includes the WM decorations — the
+/// two differ by the title-bar and border widths, so a caller that mixes them
+/// computes coordinates outside the client area.
+pub fn geometry(
+    ctx: &crate::context::CommandContext,
+    window_id: &str,
+    explicit_display: Option<&str>,
+) -> Result<Value> {
+    use crate::transport::x11;
+
+    let config = ctx.config();
+    let runner = x11::transport_for_config(config)?;
+    let user = config.remote_user.as_deref();
+    let geom = x11::client_geometry(
+        runner.as_ref(),
+        &x11::client_id_for(config),
+        user,
+        explicit_display,
+        window_id,
+    )?;
+    Ok(json!({
+        "status": "success",
+        "window_id": geom.window_id,
+        "display": geom.display,
+        "geometry": geom.geometry,
+    }))
+}
+
 /// Dismiss a SPECIFIC X11 window by id. Use `list_windows_x11` to find the id first.
 ///
 /// The window id is the `dismiss_id` field returned by `--list-windows`
@@ -377,10 +409,25 @@ pub fn dismiss_window_x11(
 /// Capture a screenshot of the current (or pattern-matched) Virtuoso window.
 ///
 /// Saves to --path as PNG. Requires IC23.1+ (hiGetWindowScreenDump).
+///
+/// Two capture routes, tried in order:
+///
+/// 1. The SKILL route grabs the X11 **root** window. It needs no window id,
+///    so it works for a caller that has none — but it fails outright on X
+///    servers that refuse `XGetImage` on the root window (observed on an
+///    IC26.1 host: `xwd -root` fails with BadMatch, and ImageMagick reports
+///    that as the misleading "missing an image filename").
+/// 2. The X11 route grabs one named window by id. It works on those hosts.
+///
+/// The fallback needs a window id, so it only applies when the caller supplied
+/// one (`--window-id`). Without a window id there is nothing to fall back to,
+/// and the SKILL route's failure is reported as-is.
 pub fn screenshot(
     ctx: &crate::context::CommandContext,
     path: &str,
     window_pattern: Option<&str>,
+    window_id: Option<&str>,
+    explicit_display: Option<&str>,
 ) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
     let skill = match window_pattern {
@@ -388,27 +435,54 @@ pub fn screenshot(
         None => client.window.screenshot(path),
     };
     let r = client.execute_skill(&skill, None)?;
-    if !r.skill_ok() {
-        let detail = if r.output.is_empty() {
-            r.errors.join("; ")
-        } else {
-            r.output.clone()
-        };
-        return Err(VirtuosoError::Execution(format!(
-            "screenshot failed: {}",
-            detail
-        )));
+    if r.skill_ok() {
+        if r.output.trim_matches('"') == "no-match" {
+            return Err(VirtuosoError::NotFound(format!(
+                "no window matching pattern '{}'",
+                window_pattern.unwrap_or("")
+            )));
+        }
+        return Ok(json!({
+            "status": "saved",
+            "path": path,
+            "capture": "skill",
+        }));
     }
-    if r.output.trim_matches('"') == "no-match" {
-        return Err(VirtuosoError::NotFound(format!(
-            "no window matching pattern '{}'",
-            window_pattern.unwrap_or("")
-        )));
+    let detail = if r.output.is_empty() {
+        r.errors.join("; ")
+    } else {
+        r.output.clone()
+    };
+
+    // The root-window grab failed. Fall back to a per-window capture when the
+    // caller told us which window to grab.
+    if let Some(wid) = window_id {
+        use crate::transport::x11;
+        let config = ctx.config();
+        let runner = x11::transport_for_config(config)?;
+        let user = config.remote_user.as_deref();
+        x11::capture_window(
+            runner.as_ref(),
+            &x11::client_id_for(config),
+            user,
+            explicit_display,
+            wid,
+            path,
+        )?;
+        return Ok(json!({
+            "status": "saved",
+            "path": path,
+            "capture": "x11",
+            "window_id": wid,
+            "skill_error": detail,
+        }));
     }
-    Ok(json!({
-        "status": "saved",
-        "path": path,
-    }))
+
+    Err(VirtuosoError::Execution(format!(
+        "screenshot failed: {} (the root-window capture is unsupported on this \
+         display; pass --window-id to capture a specific window instead)",
+        detail
+    )))
 }
 
 /// Execute a fixed-semantics X11 action on a specific window.

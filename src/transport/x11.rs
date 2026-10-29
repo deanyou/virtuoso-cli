@@ -712,6 +712,135 @@ pub fn list_windows(
     Ok((primary_env, windows))
 }
 
+/// Client-area geometry of a window, as `xwininfo -id <wid>` reports it.
+///
+/// This is the coordinate space in which `action-x11` validates and applies
+/// `--x`/`--y` for `click-rel`/`drag-rel`, and it is NOT the same as the
+/// `geometry` reported by `list-windows-x11`: that one describes the window
+/// *frame* (WM decorations included), while click coordinates are relative
+/// to the client area. On a window with decorations the two differ by the
+/// title bar and border widths, so a caller that mixes them computes
+/// coordinates outside the client area — which the bounds check then
+/// rejects.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClientGeometry {
+    pub window_id: String,
+    pub display: String,
+    pub geometry: Geometry,
+}
+
+/// Capture one window to a PNG file on the GUI host.
+///
+/// This is the per-window counterpart of the SKILL-side capture, and it works
+/// on X servers that refuse `XGetImage` on the root window (observed on an
+/// IC26.1 host: `xwd -root` fails with BadMatch and ImageMagick reports the
+/// failure as "missing an image filename"). A grab of a normal client window
+/// succeeds on the same display.
+///
+/// The window id must be a real client window id — a root-window grab is
+/// exactly what fails on those hosts.
+pub fn capture_window(
+    runner: &dyn RemoteTransport,
+    client_id: &str,
+    user: Option<&str>,
+    explicit_display: Option<&str>,
+    window_id: &str,
+    path: &str,
+) -> Result<()> {
+    if window_id.is_empty() {
+        return Err(VirtuosoError::Config(
+            "window_id is required and cannot be empty".into(),
+        ));
+    }
+    if path.is_empty() {
+        return Err(VirtuosoError::Config(
+            "output path is required and cannot be empty".into(),
+        ));
+    }
+    let envs = resolve_envs(runner, user, explicit_display)?;
+    let env = &envs[0];
+    let display = env.display.as_deref().unwrap_or("");
+    if display.is_empty() {
+        return Err(VirtuosoError::Config(
+            "could not determine the DISPLAY of the Virtuoso host".into(),
+        ));
+    }
+    let display_prefix = format!("env DISPLAY={} ", shell_escape(display));
+    let cmd = format!(
+        "{}import -window {} {}",
+        display_prefix,
+        shell_escape(window_id),
+        shell_escape(path)
+    );
+    let out = runner.run_command(&CommandRequest::with_exec_timeout(
+        &cmd,
+        Duration::from_secs(20),
+    ))?;
+    if !out.success {
+        return Err(VirtuosoError::Execution(format!(
+            "import -window failed for window {}: {} (stderr: {})",
+            window_id,
+            out.exit_status,
+            out.stderr.trim()
+        )));
+    }
+    let _ = client_id;
+    Ok(())
+}
+
+/// Query the client-area geometry of one window on the GUI host.
+///
+/// Uses the same `xwininfo -id` call (and the same DISPLAY/XAUTHORITY
+/// resolution) that `action-x11` uses for its bounds check, so the returned
+/// geometry is exactly the space the action layer validates against.
+pub fn client_geometry(
+    runner: &dyn RemoteTransport,
+    client_id: &str,
+    user: Option<&str>,
+    explicit_display: Option<&str>,
+    window_id: &str,
+) -> Result<ClientGeometry> {
+    if window_id.is_empty() {
+        return Err(VirtuosoError::Config(
+            "window_id is required and cannot be empty".into(),
+        ));
+    }
+    let envs = resolve_envs(runner, user, explicit_display)?;
+    let env = &envs[0];
+    let display = env.display.as_deref().unwrap_or("");
+    if display.is_empty() {
+        return Err(VirtuosoError::Config(
+            "could not determine the DISPLAY of the Virtuoso host".into(),
+        ));
+    }
+    let display_prefix = format!("env DISPLAY={} ", shell_escape(display));
+    let cmd = format!(
+        "{}xwininfo -id {}",
+        display_prefix,
+        shell_escape(window_id)
+    );
+    let out = runner.run_command(&CommandRequest::with_exec_timeout(
+        &cmd,
+        Duration::from_secs(5),
+    ))?;
+    if !out.success {
+        return Err(VirtuosoError::Execution(format!(
+            "xwininfo failed for window {}: {}",
+            window_id,
+            out.stderr.trim()
+        )));
+    }
+    let geometry = parse_xwininfo_geometry(&out.stdout)?;
+    // Cache it so a following action-x11 call can reuse it.
+    geom_cache_write(display, window_id, &geometry);
+    let _ = client_id;
+    Ok(ClientGeometry {
+        window_id: window_id.to_string(),
+        display: display.to_string(),
+        geometry,
+    })
+}
+
 /// Result of a single X11 action operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct X11ActionResult {
@@ -5611,5 +5740,146 @@ mod tests {
     #[test]
     fn geom_cache_read_returns_none_for_missing_file() {
         assert!(geom_cache_read(":nonexistent", "0x0").is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // client_geometry: the coordinate space action-x11 validates clicks in
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn client_geometry_rejects_empty_window_id() {
+        let transport = RecordingTransport::new();
+        let err = client_geometry(&transport, "cid", None, Some(":0"), "")
+            .expect_err("empty window id must be rejected");
+        assert!(
+            err.to_string().contains("window_id"),
+            "error should name the offending argument, got: {err}"
+        );
+    }
+
+    #[test]
+    fn client_geometry_parses_xwininfo_output() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(CommandResult {
+            exit_status: 0,
+            stdout: "  Absolute upper-left X:  1124\n  Absolute upper-left Y:  54\n  Width: 641\n  Height: 584\n".to_string(),
+            stderr: String::new(),
+            success: true,
+            duration: Duration::ZERO,
+        });
+        let geom = client_geometry(&transport, "cid", None, Some(":0"), "0x1400010")
+            .expect("client_geometry should succeed");
+        assert_eq!(geom.geometry.w, 641);
+        assert_eq!(geom.geometry.h, 584);
+        assert_eq!(geom.geometry.x, 1124);
+        assert_eq!(geom.window_id, "0x1400010");
+        // The command must target the requested window on the requested display.
+        let commands = transport.commands.lock().unwrap().clone();
+        assert_eq!(commands.len(), 1);
+        assert!(
+            commands[0].contains("xwininfo -id 0x1400010"),
+            "expected xwininfo on the target window, got: {}",
+            commands[0]
+        );
+        assert!(
+            commands[0].contains("DISPLAY=:0"),
+            "expected the DISPLAY to be set, got: {}",
+            commands[0]
+        );
+    }
+
+    #[test]
+    fn client_geometry_reports_xwininfo_failure() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(CommandResult {
+            exit_status: 1,
+            stdout: String::new(),
+            stderr: "No such window 0xdead".to_string(),
+            success: false,
+            duration: Duration::ZERO,
+        });
+        let err = client_geometry(&transport, "cid", None, Some(":0"), "0xdead")
+            .expect_err("a failed xwininfo must be reported");
+        assert!(
+            err.to_string().contains("xwininfo failed"),
+            "error should identify the failing probe, got: {err}"
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // capture_window: the per-window capture that works on hosts where a
+    // root-window grab is refused
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn capture_window_rejects_empty_arguments() {
+        let transport = RecordingTransport::new();
+        assert!(capture_window(&transport, "cid", None, Some(":0"), "", "/tmp/x.png").is_err());
+        assert!(capture_window(&transport, "cid", None, Some(":0"), "0x1", "").is_err());
+    }
+
+    #[test]
+    fn capture_window_imports_the_named_window() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(CommandResult {
+            exit_status: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+            success: true,
+            duration: Duration::ZERO,
+        });
+        capture_window(
+            &transport,
+            "cid",
+            None,
+            Some(":0"),
+            "0x1400010",
+            "/tmp/shot.png",
+        )
+        .expect("capture_window should succeed");
+        let commands = transport.commands.lock().unwrap().clone();
+        assert_eq!(commands.len(), 1);
+        assert!(
+            commands[0].contains("import -window 0x1400010"),
+            "expected a per-window import, got: {}",
+            commands[0]
+        );
+        assert!(
+            commands[0].contains("/tmp/shot.png"),
+            "expected the output path, got: {}",
+            commands[0]
+        );
+        // It must never grab the root window: that is exactly what fails on
+        // the hosts this fallback exists for.
+        assert!(
+            !commands[0].contains("-window root"),
+            "the per-window capture must not target the root window, got: {}",
+            commands[0]
+        );
+    }
+
+    #[test]
+    fn capture_window_reports_import_failure() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(CommandResult {
+            exit_status: 1,
+            stdout: String::new(),
+            stderr: "missing an image filename".to_string(),
+            success: false,
+            duration: Duration::ZERO,
+        });
+        let err = capture_window(
+            &transport,
+            "cid",
+            None,
+            Some(":0"),
+            "0x1400010",
+            "/tmp/shot.png",
+        )
+        .expect_err("a failed import must be reported");
+        assert!(
+            err.to_string().contains("import -window failed"),
+            "error should identify the failing capture, got: {err}"
+        );
     }
 }

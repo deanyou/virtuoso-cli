@@ -1711,6 +1711,22 @@ enum WindowCmd {
         display: Option<String>,
     },
 
+    /// Report the client-area geometry of one X11 window.
+    ///
+    /// This is the coordinate space `action-x11` validates `--x`/`--y`
+    /// against, and the space those coordinates are interpreted in.
+    /// `list-windows-x11` reports the window frame geometry instead, which
+    /// includes the WM decorations — the two differ by the title-bar and
+    /// border widths.
+    Geometry {
+        /// Window id (dismiss_id from list-windows-x11, e.g. 0x2e01f16)
+        #[arg(long)]
+        window_id: String,
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display: Option<String>,
+    },
+
     /// Capture a screenshot of the current Virtuoso window (IC23.1+)
     Screenshot {
         /// Output file path (PNG)
@@ -1719,6 +1735,14 @@ enum WindowCmd {
         /// Match window by name pattern (regex); uses current window if omitted
         #[arg(long)]
         window: Option<String>,
+        /// Window id to capture (dismiss_id from list-windows-x11). Used as
+        /// the fallback when the root-window capture is unsupported by the X
+        /// server.
+        #[arg(long)]
+        window_id: Option<String>,
+        /// Override the detected DISPLAY
+        #[arg(long)]
+        display: Option<String>,
     },
 
     /// Execute a fixed-semantics X11 action on a specific window.
@@ -2662,9 +2686,21 @@ fn dispatch_window(
             &action,
             display.as_deref(),
         ),
-        WindowCmd::Screenshot { path, window } => {
-            commands::window::screenshot(ctx, &path, window.as_deref())
+        WindowCmd::Geometry { window_id, display } => {
+            commands::window::geometry(ctx, &window_id, display.as_deref())
         }
+        WindowCmd::Screenshot {
+            path,
+            window,
+            window_id,
+            display,
+        } => commands::window::screenshot(
+            ctx,
+            &path,
+            window.as_deref(),
+            window_id.as_deref(),
+            display.as_deref(),
+        ),
         WindowCmd::ActionX11 {
             window_id,
             pid,
