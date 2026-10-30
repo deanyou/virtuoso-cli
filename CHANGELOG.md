@@ -18,6 +18,12 @@ All notable changes to this project will be documented in this file.
   `virtuoso-daemon` into `$PREFIX/bin` and `ramic_bridge.il` into
   `$PREFIX/share/virtuoso-cli/` with `__DAEMON_PATH__` baked to the real daemon path,
   so one shared install serves every user with zero per-user setup.
+- **`virtuoso-gui-debug` auto-approve loop** —
+  `.claude/skills/virtuoso-gui-debug/scripts/auto_allow.py` polls a target
+  window for the ViraStack permission prompt, matches it against a template
+  that spans both option rows (so "Don't Allow" can never be matched on its
+  own), and clicks "Allow" through `vcli window action-x11`. A post-click
+  pixel check aborts instead of hammering a coordinate that did not land.
 
 ### Fixed
 
