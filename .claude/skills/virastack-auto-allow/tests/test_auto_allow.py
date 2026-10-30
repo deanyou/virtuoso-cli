@@ -68,6 +68,19 @@ class FindPromptTests(unittest.TestCase):
         self.assertIsNotNone(aa.find_prompt(self.path, template))
 
 
+class IdleLimitTests(unittest.TestCase):
+    def test_zero_idle_polls_never_stops_the_loop(self):
+        # A cellview run (apRunDeviceGeneration) keeps the agent busy for
+        # longer than any idle budget; the loop must not quit unnoticed.
+        self.assertFalse(aa.idle_limit_reached(0, 1))
+        self.assertFalse(aa.idle_limit_reached(0, 100000))
+
+    def test_positive_idle_polls_stops_after_the_limit(self):
+        self.assertFalse(aa.idle_limit_reached(3, 2))
+        self.assertTrue(aa.idle_limit_reached(3, 3))
+        self.assertTrue(aa.idle_limit_reached(3, 4))
+
+
 class ResolveSessionTests(unittest.TestCase):
     def _patch_vcli_json(self, sessions):
         original = rt.vcli_json

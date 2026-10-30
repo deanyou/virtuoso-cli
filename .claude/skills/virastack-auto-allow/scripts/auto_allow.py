@@ -163,6 +163,17 @@ def crop_region(path, region):
     return np.array(img.crop((left, top, right, bottom)))
 
 
+def idle_limit_reached(idle_polls, idle):
+    """Whether the loop should stop because no prompt showed up.
+
+    `idle_polls == 0` disables the idle stop entirely: a cellview run
+    (apRunDeviceGeneration and friends) can keep the agent busy for far
+    longer than any idle budget without asking for permission, and the
+    loop must survive that instead of quitting unnoticed.
+    """
+    return bool(idle_polls) and idle >= idle_polls
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--window-id", required=True)
@@ -174,7 +185,7 @@ def main():
     ap.add_argument("--max-clicks", type=int, default=0, help="0 = unlimited")
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--idle-polls", type=int, default=3,
-                    help="stop after this many consecutive polls without a prompt")
+                    help="stop after this many consecutive polls without a prompt; 0 = never stop on idle")
     ap.add_argument("--settle-polls", type=int, default=5,
                     help="polls to wait for the prompt to vanish after a click")
     ap.add_argument("--dry-run", action="store_true")
@@ -201,7 +212,7 @@ def main():
         found = find_prompt(shot, template)
         if found is None:
             idle += 1
-            if idle >= args.idle_polls:
+            if idle_limit_reached(args.idle_polls, idle):
                 print("no pending prompt after %d idle polls" % idle)
                 return 0
         else:

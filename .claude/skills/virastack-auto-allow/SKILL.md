@@ -88,18 +88,24 @@ without aborting on the post-click guard. Expect either
 ```bash
 python3 -u ${CLAUDE_SKILL_DIR}/scripts/auto_allow.py \
     --vcli vcli --session <SESSION> --window-id <WID> --display :0 \
-    --interval 3 --idle-polls 40 --timeout 7200 --max-clicks 300
+    --interval 3 --idle-polls 0 --timeout 7200 --max-clicks 300
 ```
 
 Run it with `run_in_background: true` and keep it running for as long as the
 agent works. `-u` matters — without it the log stays buffered and looks empty.
+
+`--idle-polls 0` is the setting to use while the agent operates a cellview:
+a layout or schematic run (`apRunDeviceGeneration` and friends) can occupy
+the agent for far longer than any idle budget without asking for permission,
+and a loop that quits on idle would stop approving exactly when the agent
+comes back with the next command.
 
 Key flags:
 
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--interval` | 2.0 | Seconds between polls |
-| `--idle-polls` | 3 | Consecutive polls without a prompt before exiting. Raise it (40 ≈ 2 min) so the loop survives the gap between two commands |
+| `--idle-polls` | 3 | Consecutive polls without a prompt before exiting. Raise it (40 ≈ 2 min) so the loop survives the gap between two commands; `0` disables the idle stop entirely — use that while the agent runs a long cellview operation |
 | `--timeout` | 600 | Overall wall-clock budget in seconds |
 | `--max-clicks` | 0 (unlimited) | Stop after N clicks |
 | `--settle-polls` | 5 | Polls to wait for the prompt area to change after a click |
