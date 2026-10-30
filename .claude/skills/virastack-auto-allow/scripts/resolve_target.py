@@ -57,6 +57,8 @@ def main():
     ap.add_argument("--session", default="")
     ap.add_argument("--title-prefix", default="ViraStack")
     ap.add_argument("--display", default="")
+    ap.add_argument("--window-id", default="",
+                    help="pin this window id instead of the first ViraStack match")
     args = ap.parse_args()
 
     try:
@@ -78,6 +80,16 @@ def main():
         return 1
 
     chosen = candidates[0]
+    if args.window_id:
+        pinned = [w for w in candidates if w.get("window_id") == args.window_id]
+        if not pinned:
+            print(json.dumps({
+                "error": "window %s is not a %s window" % (args.window_id, args.title_prefix),
+                "session": session,
+                "candidates": [w.get("window_id") for w in candidates],
+            }))
+            return 1
+        chosen = pinned[0]
     print(json.dumps({
         "session": session,
         "display": args.display or data.get("display"),

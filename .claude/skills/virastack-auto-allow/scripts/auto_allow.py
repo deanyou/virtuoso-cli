@@ -36,6 +36,8 @@ DEFAULT_TEMPLATE = os.path.join(
 # single-row template, far too close to the threshold.
 ALLOW_OFFSET = (32, 16)
 MATCH_THRESHOLD = 0.90
+# Consecutive rejected clicks before the loop gives up.
+MAX_CLICK_FAILURES = 3
 
 
 def run(cmd):
@@ -144,12 +146,21 @@ def wait_until_progress(args, workdir, before, region, polls):
 
 
 def crop_region(path, region):
-    """Crop (x, y, w, h) out of a screenshot; None when it does not fit."""
+    """Crop (x, y, w, h) out of a screenshot, clamped to the image.
+
+    Clamping instead of bailing out matters: the region is a fixed 700x260
+    block around the prompt, and a narrower window would otherwise make the
+    post-click guard silently skip instead of checking anything.
+    """
     x, y, w, h = region
     img = Image.open(path).convert("L")
-    if x + w > img.size[0] or y + h > img.size[1]:
+    left = max(0, min(x, img.size[0]))
+    top = max(0, min(y, img.size[1]))
+    right = max(left, min(x + w, img.size[0]))
+    bottom = max(top, min(y + h, img.size[1]))
+    if right <= left or bottom <= top:
         return None
-    return np.array(img.crop((x, y, x + w, y + h)))
+    return np.array(img.crop((left, top, right, bottom)))
 
 
 def main():
@@ -177,6 +188,7 @@ def main():
     deadline = time.time() + args.timeout
     clicks = 0
     idle = 0
+    failed = 0
     workdir = tempfile.mkdtemp(prefix="auto_allow_")
 
     while time.time() < deadline:
@@ -198,6 +210,7 @@ def main():
             print("prompt detected (ncc=%.3f) -> Allow at (%d, %d)" % (score, x, y))
             if click(args.vcli, args.session, args.window_id, args.display, x, y, args.dry_run):
                 clicks += 1
+                failed = 0
                 # The click must have consumed the prompt. Compare the area
                 # around the prompt block with the pre-click snapshot: if it
                 # never changes, the click did not land on "Allow" and we stop
@@ -212,6 +225,14 @@ def main():
                     ):
                         print("prompt area unchanged after click — aborting")
                         return 1
+            else:
+                # The click itself was rejected (window gone, action refused).
+                # Retrying the same coordinates will not help — stop instead of
+                # spinning until the timeout.
+                failed += 1
+                if failed >= MAX_CLICK_FAILURES:
+                    print("%d consecutive click failures — aborting" % failed)
+                    return 1
             if args.max_clicks and clicks >= args.max_clicks:
                 print("reached --max-clicks=%d" % args.max_clicks)
                 return 0

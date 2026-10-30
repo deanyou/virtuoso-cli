@@ -53,8 +53,12 @@ anything that does not involve the ViraStack GUI.
 ### 1. Resolve the target
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/resolve_target.py --vcli vcli
+python3 ${CLAUDE_SKILL_DIR}/scripts/resolve_target.py --vcli vcli \
+    [--session <SESSION>] [--window-id <WID>]
 ```
+
+Pass `--session` / `--window-id` when `$ARGUMENTS` supplied them (see
+[Arguments](#arguments)); otherwise the script resolves them.
 
 Prints the session id, DISPLAY and window id of the ViraStack window:
 
@@ -111,8 +115,18 @@ prompt detected (ncc=0.995) -> Allow at (90, 710)
 clicked Allow at (90, 710)
 ```
 
-Exit codes: `0` = stopped normally (idle or max-clicks), `1` = the prompt area
-never changed after a click (the click did not land), `2` = bad arguments.
+Exit codes: `0` = stopped normally (idle or max-clicks), `1` = the click did
+not land (the prompt area never changed) or 3 consecutive clicks were rejected
+by `vcli`, `2` = bad arguments.
+
+## Arguments
+
+`$ARGUMENTS` may carry the session id and/or the window id, whitespace
+separated: `xunipc-userone-34269 0x2400330`. The first token that looks like a
+session id (contains a `-`) is used as `--session`; a token starting with `0x`
+is used as `--window-id`. Anything else is ignored and resolved automatically
+by `resolve_target.py`. When the user supplies no argument, resolve the target
+from the single live session.
 
 ## Detection
 
@@ -120,8 +134,8 @@ The template (`data/allow_prompt_template.png`) spans **both** option rows, so
 a match can never be the "Don't Allow" row on its own. Scoring is normalized
 cross-correlation (mean-subtracted template, integral-image window sums via
 `scipy.signal.fftconvolve`) and the threshold is `0.90`; the "Don't Allow"
-row alone scores about `0.45`, and a window without any prompt peaks below
-`0.35`.
+row alone scores about `0.45`, and a window without any prompt peaks around
+`0.34–0.41` — still a wide margin below the threshold.
 
 `ALLOW_OFFSET = (32, 16)` is the position of the "Allow" label **relative to
 the matched template**, so the click lands correctly in any window size — do
@@ -136,15 +150,18 @@ allowed, the prompt text has to be matched per command and the "Don't Allow"
 branch implemented; the current template is deliberately command-agnostic.
 
 The post-click guard is the safety net against a misfiring loop: after each
-click the pixels around the prompt are compared with the pre-click snapshot.
-If nothing changed, the click did not land and the loop aborts (exit 1)
-instead of hammering the same coordinate.
+click the pixels around the prompt are compared with the pre-click snapshot
+(the region is clamped to the screenshot, so a narrow window still gets
+checked). If nothing changed, the click did not land and the loop aborts
+(exit 1) instead of hammering the same coordinate. Likewise, three
+consecutive clicks rejected by `vcli` abort the loop (exit 1) — retrying the
+same coordinates would not help.
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `cannot open display XAUTHORITY=...` | Helper parsed the XAUTHORITY token as the DISPLAY | Fixed on `main` — rebuild `vcli` (`cargo build --release`) and reinstall it |
+| `cannot open display XAUTHORITY=...` | Helper parsed the XAUTHORITY token as the DISPLAY | Fixed on the `fix/x11-client-geometry-and-capture-fallback` branch — rebuild `vcli` (`cargo build --release`) and reinstall it |
 | `template not found` | Wrong `--template` | Default is `data/allow_prompt_template.png` next to the skill |
 | `prompt area unchanged after click — aborting` | Click did not land, or the window moved | Re-check `vcli window geometry` for the window; the template offset is relative, so a resize is fine |
 | Loop exits after a few seconds | `--idle-polls` too small for the gap between commands | Raise `--idle-polls` to 40 |
