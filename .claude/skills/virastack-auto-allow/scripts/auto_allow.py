@@ -85,10 +85,16 @@ def ncc_map(image, template):
         return np.where(denom > 0, corr / denom, 0.0)
 
 
-def find_prompt(screenshot, template_path):
+def load_template(template_path):
+    """Load the detection template once — the loop must not depend on the
+    file still being there on every poll."""
+    return np.array(Image.open(template_path).convert("L"))
+
+
+def find_prompt(screenshot, template):
     """Return (x, y, score) of the Allow label, or None when the prompt is absent."""
     image = np.array(Image.open(screenshot).convert("L"))
-    tpl = np.array(Image.open(template_path).convert("L"))
+    tpl = template
     if image.shape[0] < tpl.shape[0] or image.shape[1] < tpl.shape[1]:
         return None
     scores = ncc_map(image, tpl)
@@ -166,6 +172,7 @@ def main():
     if not os.path.exists(args.template):
         print("template not found: %s" % args.template)
         return 2
+    template = load_template(args.template)
 
     deadline = time.time() + args.timeout
     clicks = 0
@@ -179,7 +186,7 @@ def main():
             print("capture error: %s" % exc)
             time.sleep(args.interval)
             continue
-        found = find_prompt(shot, args.template)
+        found = find_prompt(shot, template)
         if found is None:
             idle += 1
             if idle >= args.idle_polls:

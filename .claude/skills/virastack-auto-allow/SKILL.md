@@ -1,0 +1,160 @@
+---
+name: virastack-auto-allow
+display_name: ViraStack Auto-Allow
+description: Auto-approve the ViraStack (Claude Code UI) permission prompt in a running Cadence Virtuoso session. Detects the "1 Allow / 2 Don't Allow" block by template matching and clicks Allow through vcli window action-x11. Trigger when the user asks to auto click / auto allow / auto approve the ViraStack or Claude Code permission prompt, or to keep Virtuoso GUI automation running unattended.
+description_zh: 在运行中的 Cadence Virtuoso 会话里自动批准 ViraStack（Claude Code UI）的权限提示：模板匹配 "1 Allow / 2 Don't Allow" 弹窗并通过 vcli window action-x11 点击 Allow。
+argument-hint: '[optional session id / window id, e.g. "xunipc-userone-34269 0x2400330"]'
+allowed-tools: Bash(python3 *) Bash(vcli *) Read
+category: coding
+version: 1.0.0
+author: deanyou
+---
+
+# ViraStack Auto-Allow
+
+## Purpose
+
+The ViraStack agent inside Virtuoso asks for permission before running shell
+commands. Each request renders an inline block at the bottom of the transcript:
+
+```
+1  Allow
+2  Don't Allow
+```
+
+This skill keeps that block approved without a human in the loop: it polls the
+ViraStack window, finds the block by normalized cross-correlation against a
+template, and clicks "Allow" through `vcli window action-x11`.
+
+Everything the GUI does goes through the `vcli` binary boundary — the skill
+never drives X11 directly, so the Virtuoso host keeps re-validating the
+window identity server-side on every action.
+
+## When to Use
+
+- "auto click the Allow button in ViraStack / Claude Code"
+- "keep approving the permission prompts while the agent works"
+- The agent is blocked on a permission prompt and the session must keep running
+
+Not for: one-off approvals (use a single `vcli window action-x11` click), or
+anything that does not involve the ViraStack GUI.
+
+## Prerequisites
+
+| Item | Requirement |
+|------|-------------|
+| `vcli` | On PATH or passed via `--vcli`; must be able to reach the Virtuoso session |
+| Live session | `vcli session list` shows one session (the daemon must be running) |
+| Python deps | `numpy`, `scipy`, `Pillow` on the machine running the script |
+| Target window | A visible ViraStack window on the Virtuoso host's X display |
+
+## Workflow
+
+### 1. Resolve the target
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/resolve_target.py --vcli vcli
+```
+
+Prints the session id, DISPLAY and window id of the ViraStack window:
+
+```json
+{"session": "xunipc-userone-34269", "display": ":0", "window_id": "0x2400334",
+ "pid": 5730, "title": "ViraStack : DeepSeekViaJedAI (0)",
+ "alternatives": ["0x2400330", "0x24002ea"]}
+```
+
+Several ViraStack windows may share one title (they render the same client).
+Any of them works; pass `--window-id` to `auto_allow.py` to pin one.
+
+### 2. Dry run first
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/auto_allow.py \
+    --vcli vcli --session <SESSION> --window-id <WID> --display :0 \
+    --dry-run --idle-polls 3 --interval 2
+```
+
+`--dry-run` detects and prints the target coordinates without clicking and
+without aborting on the post-click guard. Expect either
+`dry-run: would click Allow at (x, y)` or `no pending prompt after N idle polls`.
+
+### 3. Run the loop (background)
+
+```bash
+python3 -u ${CLAUDE_SKILL_DIR}/scripts/auto_allow.py \
+    --vcli vcli --session <SESSION> --window-id <WID> --display :0 \
+    --interval 3 --idle-polls 40 --timeout 7200 --max-clicks 300
+```
+
+Run it with `run_in_background: true` and keep it running for as long as the
+agent works. `-u` matters — without it the log stays buffered and looks empty.
+
+Key flags:
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--interval` | 2.0 | Seconds between polls |
+| `--idle-polls` | 3 | Consecutive polls without a prompt before exiting. Raise it (40 ≈ 2 min) so the loop survives the gap between two commands |
+| `--timeout` | 600 | Overall wall-clock budget in seconds |
+| `--max-clicks` | 0 (unlimited) | Stop after N clicks |
+| `--settle-polls` | 5 | Polls to wait for the prompt area to change after a click |
+| `--dry-run` | off | Detect only, never click |
+
+### 4. Monitor
+
+Read the background task's output file. Each cycle logs one line per
+detection:
+
+```
+prompt detected (ncc=0.995) -> Allow at (90, 710)
+clicked Allow at (90, 710)
+```
+
+Exit codes: `0` = stopped normally (idle or max-clicks), `1` = the prompt area
+never changed after a click (the click did not land), `2` = bad arguments.
+
+## Detection
+
+The template (`data/allow_prompt_template.png`) spans **both** option rows, so
+a match can never be the "Don't Allow" row on its own. Scoring is normalized
+cross-correlation (mean-subtracted template, integral-image window sums via
+`scipy.signal.fftconvolve`) and the threshold is `0.90`; the "Don't Allow"
+row alone scores about `0.45`, and a window without any prompt peaks below
+`0.35`.
+
+`ALLOW_OFFSET = (32, 16)` is the position of the "Allow" label **relative to
+the matched template**, so the click lands correctly in any window size — do
+not turn it into an absolute coordinate.
+
+## Safety
+
+**This grants the ViraStack agent unrestricted shell permission** — every
+prompt is answered "Allow", including ones for destructive commands. Before
+starting the loop, tell the user this. If only specific commands should be
+allowed, the prompt text has to be matched per command and the "Don't Allow"
+branch implemented; the current template is deliberately command-agnostic.
+
+The post-click guard is the safety net against a misfiring loop: after each
+click the pixels around the prompt are compared with the pre-click snapshot.
+If nothing changed, the click did not land and the loop aborts (exit 1)
+instead of hammering the same coordinate.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `cannot open display XAUTHORITY=...` | Helper parsed the XAUTHORITY token as the DISPLAY | Fixed on `main` — rebuild `vcli` (`cargo build --release`) and reinstall it |
+| `template not found` | Wrong `--template` | Default is `data/allow_prompt_template.png` next to the skill |
+| `prompt area unchanged after click — aborting` | Click did not land, or the window moved | Re-check `vcli window geometry` for the window; the template offset is relative, so a resize is fine |
+| Loop exits after a few seconds | `--idle-polls` too small for the gap between commands | Raise `--idle-polls` to 40 |
+| `FileNotFoundError: allow_prompt_template.png` | The template was moved while the loop ran | Restart the loop — the template is now loaded once at startup |
+| Nothing detected, prompt visible | UI theme/font changed | Re-crop the template from a fresh `vcli window action-x11 --operation screenshot` |
+
+## Files
+
+| Path | Role |
+|------|------|
+| `scripts/auto_allow.py` | The polling/detection/click loop |
+| `scripts/resolve_target.py` | Resolve session id, DISPLAY and window id |
+| `data/allow_prompt_template.png` | Detection template (both option rows) |
