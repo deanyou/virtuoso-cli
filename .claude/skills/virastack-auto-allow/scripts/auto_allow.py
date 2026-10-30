@@ -174,9 +174,68 @@ def idle_limit_reached(idle_polls, idle):
     return bool(idle_polls) and idle >= idle_polls
 
 
+def list_sessions(vcli):
+    """Ids of the live daemon sessions."""
+    rc, out, err = run([vcli, "session", "list", "--format", "json"])
+    if rc != 0:
+        return []
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return []
+    return [s.get("id") for s in (data.get("sessions") or []) if s.get("id")]
+
+
+def resolve_session(vcli, session):
+    """Keep the current session if it is alive, else adopt the only live one."""
+    ids = list_sessions(vcli)
+    if session and session in ids:
+        return session
+    if len(ids) == 1:
+        return ids[0]
+    return session
+
+
+def resolve_window(vcli, session, title_prefix):
+    """Window id of the first window whose title starts with `title_prefix`."""
+    rc, out, err = run([
+        vcli, "--session", session, "window", "list-windows-x11", "--format", "json",
+    ])
+    if rc != 0:
+        return None
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return None
+    for w in data.get("windows") or []:
+        if (w.get("title") or "").startswith(title_prefix):
+            return w.get("window_id")
+    return None
+
+
+def recover_target(args):
+    """Re-resolve session and window id after a Virtuoso or daemon restart.
+
+    A restart invalidates both the daemon session id and the X11 window id.
+    Without this the loop keeps failing to capture forever and silently
+    stops approving.
+    """
+    session = resolve_session(args.vcli, args.session)
+    window_id = resolve_window(args.vcli, session, args.title_prefix)
+    if not window_id:
+        return False
+    if session == args.session and window_id == args.window_id:
+        return False
+    print("re-resolved target: session=%s window=%s" % (session, window_id))
+    args.session = session
+    args.window_id = window_id
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--window-id", required=True)
+    ap.add_argument("--window-id", default="",
+                    help="X11 window id of the ViraStack client; resolved from the title when omitted")
     ap.add_argument("--display", default=":0")
     ap.add_argument("--vcli", required=True)
     ap.add_argument("--session", default="")
@@ -188,6 +247,8 @@ def main():
                     help="stop after this many consecutive polls without a prompt; 0 = never stop on idle")
     ap.add_argument("--settle-polls", type=int, default=5,
                     help="polls to wait for the prompt to vanish after a click")
+    ap.add_argument("--title-prefix", default="ViraStack",
+                    help="window title prefix used to re-resolve the target after a restart")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -196,16 +257,37 @@ def main():
         return 2
     template = load_template(args.template)
 
+    if not args.session:
+        args.session = resolve_session(args.vcli, "")
+        if not args.session:
+            print("no live vcli session — start virtuoso-daemon first")
+            return 2
+        print("resolved session=%s" % args.session)
+
+    if not args.window_id:
+        args.window_id = resolve_window(args.vcli, args.session, args.title_prefix) or ""
+        if not args.window_id:
+            print("no window titled %r — is ViraStack running?" % args.title_prefix)
+            return 2
+        print("resolved window=%s" % args.window_id)
+
     deadline = time.time() + args.timeout
     clicks = 0
     idle = 0
     failed = 0
+    capture_failures = 0
     workdir = tempfile.mkdtemp(prefix="auto_allow_")
 
     while time.time() < deadline:
         try:
             shot = capture(args.vcli, args.session, args.window_id, args.display, workdir)
+            capture_failures = 0
         except Exception as exc:  # noqa: BLE001
+            capture_failures += 1
+            # A Virtuoso or daemon restart invalidates the session id and the
+            # window id. Re-resolve them instead of failing forever.
+            if capture_failures % 10 == 1 and recover_target(args):
+                continue
             print("capture error: %s" % exc)
             time.sleep(args.interval)
             continue

@@ -87,18 +87,24 @@ without aborting on the post-click guard. Expect either
 
 ```bash
 python3 -u ${CLAUDE_SKILL_DIR}/scripts/auto_allow.py \
-    --vcli vcli --session <SESSION> --window-id <WID> --display :0 \
+    --vcli vcli --display :0 \
     --interval 3 --idle-polls 0 --timeout 7200 --max-clicks 300
 ```
 
-Run it with `run_in_background: true` and keep it running for as long as the
-agent works. `-u` matters — without it the log stays buffered and looks empty.
+`--session` and `--window-id` may be omitted: the loop resolves the single
+live session and the ViraStack window by title. Run it with
+`run_in_background: true` and keep it running for as long as the agent works.
+`-u` matters — without it the log stays buffered and looks empty.
 
 `--idle-polls 0` is the setting to use while the agent operates a cellview:
 a layout or schematic run (`apRunDeviceGeneration` and friends) can occupy
 the agent for far longer than any idle budget without asking for permission,
 and a loop that quits on idle would stop approving exactly when the agent
 comes back with the next command.
+
+A Virtuoso or daemon restart invalidates both the session id and the X11
+window id, so the loop re-resolves them itself when a capture fails (log line
+`re-resolved target: session=… window=…`) instead of failing forever.
 
 Key flags:
 
@@ -109,6 +115,9 @@ Key flags:
 | `--timeout` | 600 | Overall wall-clock budget in seconds |
 | `--max-clicks` | 0 (unlimited) | Stop after N clicks |
 | `--settle-polls` | 5 | Polls to wait for the prompt area to change after a click |
+| `--session` | resolved | Daemon session id; resolved when omitted |
+| `--window-id` | resolved | X11 window id; resolved by title prefix when omitted |
+| `--title-prefix` | `ViraStack` | Window title prefix used to find the window again |
 | `--dry-run` | off | Detect only, never click |
 
 ### 4. Monitor
@@ -172,7 +181,8 @@ same coordinates would not help.
 | `prompt area unchanged after click — aborting` | Click did not land, or the window moved | Re-check `vcli window geometry` for the window; the template offset is relative, so a resize is fine |
 | Loop exits after a few seconds | `--idle-polls` too small for the gap between commands | Raise `--idle-polls` to 40 |
 | `FileNotFoundError: allow_prompt_template.png` | The template was moved while the loop ran | Restart the loop — the template is now loaded once at startup |
-| Nothing detected, prompt visible | UI theme/font changed | Re-crop the template from a fresh `vcli window action-x11 --operation screenshot` |
+| Nothing detected, prompt visible | UI theme/font changed, or the prompt is rendered as the inline "Allow" pill instead of the numbered block | Re-crop the template from a fresh `vcli window action-x11 --operation screenshot` |
+| `capture error: no window with id` | Virtuoso or the daemon was restarted and the window id changed | Nothing to do — the loop re-resolves the session and window on its own; check the log for `re-resolved target:` |
 
 ## Files
 
