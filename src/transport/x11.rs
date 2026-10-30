@@ -814,11 +814,7 @@ pub fn client_geometry(
         ));
     }
     let display_prefix = format!("env DISPLAY={} ", shell_escape(display));
-    let cmd = format!(
-        "{}xwininfo -id {}",
-        display_prefix,
-        shell_escape(window_id)
-    );
+    let cmd = format!("{}xwininfo -id {}", display_prefix, shell_escape(window_id));
     let out = runner.run_command(&CommandRequest::with_exec_timeout(
         &cmd,
         Duration::from_secs(5),
@@ -3026,8 +3022,8 @@ fn build_helper_cmd(
         s.push_str(action);
     }
     if let Some(xa) = xauthority {
-        s.push_str(" XAUTHORITY=");
-        s.push_str(xa);
+        s.push(' ');
+        s.push_str(&shell_escape(&format!("XAUTHORITY={xa}")));
     }
     s
 }
@@ -3043,8 +3039,8 @@ fn build_helper_cmd_list_windows(
     s.push_str(&shell_escape(display));
     s.push_str(" --list-windows");
     if let Some(xa) = xauthority {
-        s.push_str(" XAUTHORITY=");
-        s.push_str(xa);
+        s.push(' ');
+        s.push_str(&shell_escape(&format!("XAUTHORITY={xa}")));
     }
     s
 }
@@ -3108,8 +3104,8 @@ fn build_helper_cmd_dismiss_window(
     s.push_str(" --action ");
     s.push_str(action);
     if let Some(xa) = xauthority {
-        s.push_str(" XAUTHORITY=");
-        s.push_str(xa);
+        s.push(' ');
+        s.push_str(&shell_escape(&format!("XAUTHORITY={xa}")));
     }
     s
 }
@@ -3874,6 +3870,14 @@ mod tests {
     fn build_helper_cmd_list_windows_propagates_xauthority() {
         let cmd = build_helper_cmd_list_windows("/h.py", ":0", Some("/tmp/.X11-unix/X0"));
         assert!(cmd.contains("XAUTHORITY=/tmp/.X11-unix/X0"));
+    }
+
+    #[test]
+    fn build_helper_cmd_quotes_xauthority_with_spaces() {
+        // An unquoted value would split into two argv tokens and the second
+        // one would be parsed as the DISPLAY by the helper.
+        let cmd = build_helper_cmd_list_windows("/h.py", ":0", Some("/tmp/my xauth/file"));
+        assert!(cmd.contains("'XAUTHORITY=/tmp/my xauth/file'"));
     }
 
     #[test]

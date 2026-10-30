@@ -31,6 +31,17 @@ All notable changes to this project will be documented in this file.
   grab fails. The fallback is reported as `"capture": "x11"` alongside the
   original error. Without `--window-id` there is no window to fall back to, and
   the error says so.
+- **`vcli window list-windows-x11` (and every other X11 helper call) failed with
+  `cannot open display XAUTHORITY=...`.** The Rust side appends
+  `XAUTHORITY=<path>` to the helper command line as a bare token, and the
+  helper treated *every* non-flag token as the DISPLAY — so the XAUTHORITY
+  value overwrote the display and the helper aborted before enumerating any
+  window. The helper now parses `KEY=VALUE` tokens as environment overrides
+  (and `DISPLAY=…` as the display), and the parsing was extracted into
+  `parse_args()` so it is unit-tested.
+- **The `XAUTHORITY=` token was not shell-escaped.** A path containing a space
+  was split into two arguments, and the second one was parsed as the DISPLAY —
+  the same failure mode as the bug above. The token is now quoted as a whole.
 - **Daemon path resolution was split across two conflicting places.**
   `_RBAutoStart()` unconditionally hardcoded `$HOME/.cargo/bin/virtuoso-daemon` and
   silently overrode the top-level resolver — and therefore `RB_DAEMON_PATH`. Both now

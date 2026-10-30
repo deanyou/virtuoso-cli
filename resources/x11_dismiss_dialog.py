@@ -712,13 +712,29 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
         xlib.XCloseDisplay(dpy)
 
 
-def main():
-    args = sys.argv[1:]
+USAGE = (
+    "usage: x11_dismiss_dialog.py [DISPLAY] [options]\n"
+    "  --list-windows                 enumerate Virtuoso-related X11 windows\n"
+    "  --dismiss                      dismiss all detected dialogs\n"
+    "  --dismiss-window <ID>          dismiss a specific window id\n"
+    "  --action <a>                   enter|escape|alt-y|alt-n|alt-o (default: enter)\n"
+    "  --json                         reserved (always JSON)\n"
+)
+
+
+def parse_args(args):
+    """Parse the helper's CLI arguments.
+
+    Returns a dict with `display`, `do_dismiss`, `list_windows`,
+    `dismiss_target`, `action`, `help` and `env` (KEY=VALUE tokens).
+    """
     display = None
     do_dismiss = False
     list_windows = False
     dismiss_target = None
     action = "enter"
+    env = {}
+    want_help = False
 
     i = 0
     while i < len(args):
@@ -737,19 +753,44 @@ def main():
             action = args[i + 1]
             i += 1
         elif a in ("-h", "--help"):
-            print(
-                "usage: x11_dismiss_dialog.py [DISPLAY] [options]\n"
-                "  --list-windows                 enumerate Virtuoso-related X11 windows\n"
-                "  --dismiss                      dismiss all detected dialogs\n"
-                "  --dismiss-window <ID>          dismiss a specific window id\n"
-                "  --action <a>                   enter|escape|alt-y|alt-n|alt-o (default: enter)\n"
-                "  --json                         reserved (always JSON)\n",
-                file=sys.stderr,
-            )
-            sys.exit(0)
+            want_help = True
+        elif "=" in a:
+            # KEY=VALUE token (e.g. XAUTHORITY=...) — the caller passes these as
+            # bare arguments, so they must not be mistaken for the display.
+            key, _, value = a.partition("=")
+            if key == "DISPLAY":
+                display = value
+            elif key and key.replace("_", "a").isalnum() and key[0].isalpha():
+                env[key] = value
         elif not a.startswith("-"):
             display = a
         i += 1
+
+    return {
+        "display": display,
+        "do_dismiss": do_dismiss,
+        "list_windows": list_windows,
+        "dismiss_target": dismiss_target,
+        "action": action,
+        "help": want_help,
+        "env": env,
+    }
+
+
+def main():
+    parsed = parse_args(sys.argv[1:])
+    display = parsed["display"]
+    do_dismiss = parsed["do_dismiss"]
+    list_windows = parsed["list_windows"]
+    dismiss_target = parsed["dismiss_target"]
+    action = parsed["action"]
+
+    if parsed["help"]:
+        print(USAGE, file=sys.stderr)
+        sys.exit(0)
+
+    for key, value in parsed["env"].items():
+        os.environ[key] = value
 
     if action not in VALID_ACTIONS:
         print(json.dumps({"error": "invalid action: %s" % action}))

@@ -239,5 +239,40 @@ class VirtuosoClassTests(unittest.TestCase):
         self.assertFalse(x11d._is_virtuoso_class([]))
 
 
+class ParseArgsTests(unittest.TestCase):
+    """The Rust caller appends `XAUTHORITY=<path>` as a bare argument.
+
+    Regression: the helper treated every non-flag token as the DISPLAY, so
+    `XAUTHORITY=...` overwrote the display and the helper aborted with
+    "cannot open display XAUTHORITY=...".
+    """
+
+    def test_xauthority_token_does_not_become_the_display(self):
+        parsed = x11d.parse_args(
+            [":0", "--list-windows", "XAUTHORITY=/run/user/1000/.mutter-xauth"]
+        )
+        self.assertEqual(parsed["display"], ":0")
+        self.assertTrue(parsed["list_windows"])
+        self.assertEqual(
+            parsed["env"]["XAUTHORITY"], "/run/user/1000/.mutter-xauth"
+        )
+
+    def test_display_token_sets_the_display(self):
+        parsed = x11d.parse_args(["DISPLAY=:1", "--list-windows"])
+        self.assertEqual(parsed["display"], ":1")
+
+    def test_plain_positional_sets_the_display(self):
+        parsed = x11d.parse_args([":0.0", "--action", "escape"])
+        self.assertEqual(parsed["display"], ":0.0")
+        self.assertEqual(parsed["action"], "escape")
+
+    def test_dismiss_window_and_action_flags(self):
+        parsed = x11d.parse_args(
+            [":0", "--dismiss-window", "0x2e01f16", "--action", "alt-o"]
+        )
+        self.assertEqual(parsed["dismiss_target"], "0x2e01f16")
+        self.assertEqual(parsed["action"], "alt-o")
+
+
 if __name__ == "__main__":
     unittest.main()
