@@ -60,6 +60,11 @@ BAND_SHIFT = 3
 # two composer crops are compared (the placeholder re-renders slightly).
 COMPOSER_INK_THRESHOLD = 120
 COMPOSER_INK_TOLERANCE = 20
+# How much the composer may differ from the text the loop typed and still be
+# taken for it: the ink has to match within this ratio and the glyphs within
+# this similarity.
+COMPOSER_INK_RATIO = 0.15
+COMPOSER_SIMILARITY = 0.95
 # Consecutive rejected clicks before the loop gives up.
 MAX_CLICK_FAILURES = 3
 
@@ -357,7 +362,24 @@ def composer_ink(crop):
     return int((crop >= COMPOSER_INK_THRESHOLD).sum())
 
 
-def try_send_guidance(args, message, workdir, ours_in_composer=False):
+def composer_is_ours(crop, snapshot):
+    """Whether the composer still holds the text the loop typed.
+
+    The loop only clears the composer when its own message is still there.
+    When the user has typed over it, the pixels differ and the text belongs
+    to somebody else.
+    """
+    if crop is None or snapshot is None:
+        return False
+    ink, ink_snapshot = composer_ink(crop), composer_ink(snapshot)
+    if not ink or not ink_snapshot:
+        return False
+    if abs(ink - ink_snapshot) > COMPOSER_INK_RATIO * ink_snapshot:
+        return False
+    return band_similarity(crop, snapshot) >= COMPOSER_SIMILARITY
+
+
+def try_send_guidance(args, message, workdir, ours_snapshot=None):
     """Type a guidance message into the chat composer and verify it landed.
 
     While a permission prompt is pending, the composer is an answer field for
@@ -370,13 +392,14 @@ def try_send_guidance(args, message, workdir, ours_in_composer=False):
     while the agent is busy, which is why the delivery is verified with a
     screenshot instead of assumed.
 
-    Returns (delivered, typed): `typed` tells the caller that the message is
-    still sitting in the composer, so the next attempt may clear it.
+    Returns (delivered, snapshot): `snapshot` is the composer as it holds the
+    message the loop typed. The next attempt compares the composer with that
+    snapshot before it clears it, so text somebody else typed is never wiped.
     """
     size = client_size(args.vcli, args.session, args.window_id, args.display)
     if not size:
         print("guidance skipped: window geometry unavailable")
-        return False, False
+        return False, None
     _, h = size
 
     def action(*cmd):
@@ -391,16 +414,25 @@ def try_send_guidance(args, message, workdir, ours_in_composer=False):
     before = composer_crop(args, workdir)
     if before is None:
         print("guidance skipped: composer not visible")
-        return False, False
+        return False, None
     ink_before = composer_ink(before)
-    if not ours_in_composer and ink_before > COMPOSER_INK_TOLERANCE:
+    if ours_snapshot is not None:
+        if ink_before > COMPOSER_INK_TOLERANCE \
+                and not composer_is_ours(before, ours_snapshot):
+            # The loop left its message in the composer, but the text that is
+            # there now is not the message the loop typed: the user has typed
+            # over it. Clearing the composer would wipe their text.
+            print("guidance skipped: the composer holds text that is not ours")
+            return False, None
+    elif ink_before > COMPOSER_INK_TOLERANCE:
         # The composer holds something: the answer placeholder of a pending
         # prompt, or text the user typed. Writing here would answer the prompt
         # instead of talking to the agent, or destroy the user's message.
         print("guidance skipped: the composer is not empty (a prompt may be pending)")
-        return False, False
+        return False, None
 
     landed = False
+    typed_crop = None
     ink_empty = ink_before
     # The input line sits a few pixels above the bottom of the client area and
     # its exact row depends on the composer layout, so a few candidates are
@@ -409,7 +441,7 @@ def try_send_guidance(args, message, workdir, ours_in_composer=False):
     for offset in COMPOSER_CLICK_OFFSETS:
         y = max(0, h - offset)
         if not action("--operation", "click-rel", "--x", "30", "--y", str(y)):
-            return False, False
+            return False, None
         action("--operation", "key", "--text", "ctrl+a")
         action("--operation", "key", "--text", "BackSpace")
         time.sleep(0.3)
@@ -420,12 +452,13 @@ def try_send_guidance(args, message, workdir, ours_in_composer=False):
         if ink_empty is None:
             ink_empty = 0
         if not action("--operation", "type", "--text", message):
-            return False, False
+            return False, None
         time.sleep(0.4)
         after = composer_crop(args, workdir)
         ink_after = composer_ink(after)
         if ink_after is not None and ink_after > ink_empty + COMPOSER_INK_TOLERANCE:
             landed = True
+            typed_crop = after
             break
 
     if not landed:
@@ -436,8 +469,8 @@ def try_send_guidance(args, message, workdir, ours_in_composer=False):
         if ink_still is not None and ink_still > COMPOSER_INK_TOLERANCE:
             # The text is in the composer but was not confirmed: the next
             # attempt may clear it and try again.
-            return False, True
-        return False, False
+            return False, still
+        return False, None
 
     # Submitting needs the input to have settled: a Return sent too early is
     # swallowed, so the emptied composer is verified and Return is retried.
@@ -449,15 +482,15 @@ def try_send_guidance(args, message, workdir, ours_in_composer=False):
         ])
         if rc != 0:
             print("guidance Return failed: %s %s" % (out.strip(), err.strip()))
-            return False, True
+            return False, typed_crop
         time.sleep(1.0)
         submitted = composer_crop(args, workdir)
         ink_submitted = composer_ink(submitted)
         if ink_submitted is None or ink_submitted <= ink_empty + COMPOSER_INK_TOLERANCE:
             print("guided the agent: %s" % message)
-            return True, False
+            return True, None
     print("guidance typed but not submitted — keeping it for the next poll")
-    return False, True
+    return False, typed_crop
 
 
 def wait_until_progress(args, workdir, before, region, polls):
@@ -625,7 +658,7 @@ def main():
     last_band = None
     repeats = 0
     guidance_pending = None
-    guidance_typed = False
+    guidance_snapshot = None
     workdir = tempfile.mkdtemp(prefix="auto_allow_")
 
     while time.time() < deadline:
@@ -647,12 +680,13 @@ def main():
             # No prompt pending: the agent is either idle or busy. If a
             # guidance message is queued, this is the moment to deliver it.
             if guidance_pending and not args.dry_run:
-                delivered, typed = try_send_guidance(
-                    args, guidance_pending, workdir, ours_in_composer=guidance_typed
+                delivered, snapshot = try_send_guidance(
+                    args, guidance_pending, workdir, ours_snapshot=guidance_snapshot
                 )
-                guidance_typed = typed
+                guidance_snapshot = snapshot
                 if delivered:
                     guidance_pending = None
+                    guidance_snapshot = None
             if idle_limit_reached(args.idle_polls, idle):
                 print("no pending prompt after %d idle polls" % idle)
                 return 0
@@ -673,7 +707,7 @@ def main():
                 if (args.guide_threshold and repeats >= args.guide_threshold
                         and repeats % args.guide_threshold == 0):
                     guidance_pending = format_guide_message(args.guide_message, repeats)
-                    guidance_typed = False
+                    guidance_snapshot = None
                     print("same command %d times in a row — guidance queued" % repeats)
             if click(args.vcli, args.session, args.window_id, args.display, x, y, args.dry_run):
                 clicks += 1

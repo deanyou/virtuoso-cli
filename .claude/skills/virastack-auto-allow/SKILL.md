@@ -169,13 +169,13 @@ command still matches, a changed command does not. Measured on the captured
 frames: the same command scores 1.0, the most similar pair of different
 commands 0.91 — the threshold is 0.95.
 
-The message is only typed when **no** permission prompt is pending: while a
-prompt is up, the composer is that prompt's answer field ("pick an option
-above"), and writing there would answer the prompt instead of talking to the
-agent. While the agent is busy the composer is disabled, so the delivery is
-verified with a screenshot — the text must appear before Return is sent, and
-the composer must be empty again afterwards, otherwise the message stays
-queued for the next poll.
+The message is only typed when **no** permission prompt is pending: a pending
+prompt that uses the composer as its answer field shows the answer
+placeholder ("pick an option above"), and writing there would answer the
+prompt instead of talking to the agent. While the agent is busy the composer
+is disabled, so the delivery is verified with a screenshot — the text must
+appear before Return is sent, and the composer must be empty again
+afterwards, otherwise the message stays queued for the next poll.
 
 Log lines:
 
@@ -192,6 +192,13 @@ A composer that already holds ink is never typed into: it means either a
 prompt is pending or the user is writing, so the message stays queued
 ("guidance skipped: the composer is not empty"). This also means the loop
 never clears text somebody else typed.
+
+The one exception is the text the loop itself typed and could not submit.
+The loop keeps a snapshot of the composer as it held its own message and
+compares the composer with it before it clears it: when the pixels still
+match, the text is the message of the loop and the attempt is repeated; when
+they do not, the user has typed over it and the composer is left alone
+("guidance skipped: the composer holds text that is not ours").
 
 `--guide-message` overrides the text (`%d` is the repeat count). It must be
 ASCII: the `type` action of `vcli window action-x11` rejects anything else

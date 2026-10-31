@@ -359,9 +359,9 @@ class LoopGuidanceTests(unittest.TestCase):
         aa.click = lambda *a, **k: True
         aa.wait_until_progress = lambda *a, **k: True
 
-        def fake_guidance(args, message, workdir, ours_in_composer=False):
-            guidance.append((message, ours_in_composer))
-            return True, False
+        def fake_guidance(args, message, workdir, ours_snapshot=None):
+            guidance.append((message, ours_snapshot is not None))
+            return True, None
 
         aa.try_send_guidance = fake_guidance
         self.addCleanup(lambda: [setattr(aa, k, v) for k, v in originals.items()])
@@ -450,7 +450,12 @@ class GuidanceDeliveryTests(unittest.TestCase):
                 for x in range(35, 300):
                     for y in range(self.H - 70, self.H - 62):
                         img.putpixel((x, y), 140)
-            if state["typed"] or state["leftover"]:
+            if state.get("foreign"):
+                # Text the user typed over the message of the loop.
+                for x in range(40, 200):
+                    for y in range(self.H - 70, self.H - 60):
+                        img.putpixel((x, y), 220)
+            elif state["typed"] or state["leftover"]:
                 for x in range(20, 320):
                     for y in range(self.H - 84, self.H - 60):
                         img.putpixel((x, y), 220)
@@ -484,20 +489,38 @@ class GuidanceDeliveryTests(unittest.TestCase):
         return [c for c in self.calls
                 if "--operation" in c and c[c.index("--operation") + 1] == "type"]
 
+    def _clears_sent(self):
+        return [c for c in self.calls
+                if "--operation" in c and c[c.index("--operation") + 1] == "key"
+                and c[c.index("--text") + 1] == "BackSpace"]
+
+    def _composer_crop(self, kind):
+        """The composer crop as the mock renders it."""
+        crop = np.full((56, 400), 30, dtype=np.uint8)
+        if kind == "ours":
+            for x in range(20, 320):
+                for y in range(self.H - 84, self.H - 60):
+                    crop[y - (self.H - 96), x] = 220
+        elif kind == "foreign":
+            for x in range(40, 200):
+                for y in range(self.H - 70, self.H - 60):
+                    crop[y - (self.H - 96), x] = 220
+        return crop
+
     def test_message_is_sent_and_submitted(self):
         self._patch(accepts_type_at=68)
-        delivered, typed = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        delivered, snapshot = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
         self.assertTrue(delivered)
-        self.assertFalse(typed)
+        self.assertIsNone(snapshot)
         self.assertTrue(self._returns_sent())
 
     def test_busy_composer_keeps_the_message_queued(self):
         # The composer never accepts the text (the agent is busy): nothing may
         # be submitted, and the caller keeps the message for the next poll.
         self._patch(accepts_type_at=None)
-        delivered, typed = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        delivered, snapshot = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
         self.assertFalse(delivered)
-        self.assertFalse(typed)
+        self.assertIsNone(snapshot)
         self.assertEqual(self._returns_sent(), [])
 
     def test_a_second_click_row_is_tried_when_the_first_misses(self):
@@ -512,9 +535,9 @@ class GuidanceDeliveryTests(unittest.TestCase):
         # shows the answer placeholder in the composer: typing there would
         # answer the prompt instead of talking to the agent.
         self._patch(accepts_type_at=68, placeholder=True)
-        delivered, typed = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        delivered, snapshot = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
         self.assertFalse(delivered)
-        self.assertFalse(typed)
+        self.assertIsNone(snapshot)
         self.assertEqual(self._types_sent(), [])
         self.assertEqual(self._returns_sent(), [])
 
@@ -523,21 +546,33 @@ class GuidanceDeliveryTests(unittest.TestCase):
         self._patch(accepts_type_at=68, placeholder=True)
         delivered, _ = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
         self.assertFalse(delivered)
-        clears = [c for c in self.calls
-                  if "--operation" in c and c[c.index("--operation") + 1] == "key"
-                  and c[c.index("--text") + 1] == "BackSpace"]
-        self.assertEqual(clears, [])
+        self.assertEqual(self._clears_sent(), [])
 
     def test_the_leftover_text_of_the_loop_is_retried(self):
         # A previous attempt left the message in the composer: the loop owns
         # that text, so it must clear it and try again instead of treating it
         # as somebody else's.
         self._patch(accepts_type_at=68, leftover=True)
-        delivered, typed = aa.try_send_guidance(
-            self._args(), "diagnose first", "/tmp", ours_in_composer=True)
+        delivered, snapshot = aa.try_send_guidance(
+            self._args(), "diagnose first", "/tmp",
+            ours_snapshot=self._composer_crop("ours"))
         self.assertTrue(delivered)
-        self.assertFalse(typed)
+        self.assertIsNone(snapshot)
         self.assertTrue(self._returns_sent())
+
+    def test_text_the_user_typed_over_the_message_is_not_wiped(self):
+        # The loop left its message in the composer, but the user has typed
+        # over it: the composer no longer shows the text of the loop, and
+        # clearing it would destroy the text of the user.
+        self._patch(accepts_type_at=68)
+        self.state["foreign"] = True
+        delivered, snapshot = aa.try_send_guidance(
+            self._args(), "diagnose first", "/tmp",
+            ours_snapshot=self._composer_crop("ours"))
+        self.assertFalse(delivered)
+        self.assertIsNone(snapshot)
+        self.assertEqual(self._clears_sent(), [])
+        self.assertEqual(self._types_sent(), [])
 
 
 if __name__ == "__main__":

@@ -35,6 +35,10 @@ All notable changes to this project will be documented in this file.
   message is only sent while no permission prompt is pending: the composer
   itself is the guard, and a composer that already holds text is never typed
   into, so neither a pending prompt nor the user's own text is overwritten.
+  The one exception is the text the loop itself typed and could not submit:
+  the loop keeps a snapshot of the composer holding its own message and
+  compares the composer with it before clearing it, so text the user has
+  typed over it is never wiped.
   The delivery is verified with a screenshot.
   `--timeout 0` runs the loop until it is stopped.
 
