@@ -73,6 +73,9 @@ COMPOSER_INK_RATIO = 0.15
 COMPOSER_SIMILARITY = 0.95
 # Margin around the detected prompt block that the post-click guard compares.
 GUARD_MARGIN = 20
+# How often the post-click guard samples the prompt area. The card is
+# re-rendered in place, so the change has to be caught while it is there.
+GUARD_POLL_INTERVAL = 0.3
 # Consecutive rejected clicks before the loop gives up.
 MAX_CLICK_FAILURES = 3
 
@@ -541,16 +544,26 @@ def wait_until_progress(args, workdir, before, region, polls):
     new one may already have taken its place). If the area stays identical,
     the click never landed on "Allow" — the caller stops instead of hammering
     the same coordinates.
+
+    The client re-renders the permission card in place: the card is consumed
+    and the next request appears at the very same place a second later. A
+    check that waits several seconds before its first sample therefore sees
+    the card back exactly as it was and mistakes a working click for a miss
+    — it aborted the loop while the agent was simply asking again. So the
+    area is sampled right away and several times a second: any sample that
+    differs from the pre-click snapshot counts as progress.
     """
-    for _ in range(polls):
-        time.sleep(args.interval)
+    deadline = time.time() + args.interval * polls
+    while time.time() < deadline:
         try:
             shot = capture(args.vcli, args.session, args.window_id, args.display, workdir)
         except Exception:  # noqa: BLE001 — treat a capture failure as "no progress"
+            time.sleep(GUARD_POLL_INTERVAL)
             continue
         current = crop_region(shot, region)
         if current is not None and not np.array_equal(current, before):
             return True
+        time.sleep(GUARD_POLL_INTERVAL)
     return False
 
 

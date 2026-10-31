@@ -251,6 +251,13 @@ checked). If nothing changed, the click did not land and the loop aborts
 consecutive clicks rejected by `vcli` abort the loop (exit 1) — retrying the
 same coordinates would not help.
 
+The guard samples the area right after the click and several times a second:
+the client re-renders the permission card in place, so the consumed card is
+gone a second later and the next request takes its place. A guard that waited
+several seconds before its first sample would see the card back exactly as it
+was and mistake a working click for a miss — it aborted the loop while the
+agent was simply asking again.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |

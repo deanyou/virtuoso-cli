@@ -56,6 +56,10 @@ All notable changes to this project will be documented in this file.
   `--timeout 0` runs the loop until it is stopped.
   An unreadable screenshot (a truncated capture) counts as "no prompt this
   time" instead of killing the loop.
+  The post-click guard samples the prompt area right after the click: the
+  client re-renders the permission card in place, so a guard that waited
+  several seconds before its first sample saw the card back unchanged and
+  aborted the loop while the agent was simply asking again.
 
 ### Fixed
 

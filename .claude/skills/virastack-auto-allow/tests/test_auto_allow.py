@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 
 import numpy as np
@@ -435,6 +436,71 @@ class DisplayFlagTests(unittest.TestCase):
         aa.capture("vcli", "s", "0x1", ":3", "/tmp/work")
         self.assertIn("--display", calls[0])
         self.assertEqual(calls[0][calls[0].index("--display") + 1], ":3")
+
+
+class GuardSamplingTests(unittest.TestCase):
+    """The post-click guard has to catch the change while it is there.
+
+    The client re-renders the permission card in place: the card is consumed
+    and the next request appears at the very same place a second later. A
+    guard that waits several seconds before its first sample sees the card
+    back exactly as it was and mistakes a working click for a miss — it
+    aborted the loop while the agent was simply asking again.
+    """
+
+    def _args(self, interval=3):
+        class A(object):
+            pass
+        a = A()
+        a.vcli = "vcli"
+        a.session = "s"
+        a.window_id = "0x1"
+        a.display = ":0"
+        a.interval = interval
+        return a
+
+    def test_a_short_lived_change_is_still_caught(self):
+        state = {"t0": None}
+
+        def fake_capture(vcli, session, window_id, display, workdir):
+            # The card is back exactly as it was two seconds after the click.
+            if state["t0"] is None:
+                state["t0"] = time.time()
+            changed = (time.time() - state["t0"]) < 2.0
+            img = Image.new("L", (40, 40), 200 if changed else 100)
+            handle, path = tempfile.mkstemp(suffix=".png")
+            os.close(handle)
+            img.save(path)
+            self.addCleanup(os.remove, path)
+            return path
+
+        original = aa.capture
+        aa.capture = fake_capture
+        self.addCleanup(setattr, aa, "capture", original)
+
+        before = np.full((40, 40), 100, dtype=np.uint8)
+        self.assertTrue(
+            aa.wait_until_progress(self._args(), "/tmp", before, (0, 0, 40, 40), polls=5))
+
+    def test_a_prompt_that_never_changes_is_still_a_miss(self):
+        # The guard keeps its teeth: when nothing changes at all, the click
+        # did not land and the caller has to stop.
+        def fake_capture(vcli, session, window_id, display, workdir):
+            img = Image.new("L", (40, 40), 100)
+            handle, path = tempfile.mkstemp(suffix=".png")
+            os.close(handle)
+            img.save(path)
+            self.addCleanup(os.remove, path)
+            return path
+
+        original = aa.capture
+        aa.capture = fake_capture
+        self.addCleanup(setattr, aa, "capture", original)
+
+        before = np.full((40, 40), 100, dtype=np.uint8)
+        self.assertFalse(
+            aa.wait_until_progress(self._args(interval=0.2), "/tmp", before,
+                                  (0, 0, 40, 40), polls=2))
 
 
 class GuideMessageTests(unittest.TestCase):
