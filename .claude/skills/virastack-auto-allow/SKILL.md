@@ -88,13 +88,17 @@ without aborting on the post-click guard. Expect either
 ```bash
 python3 -u ${CLAUDE_SKILL_DIR}/scripts/auto_allow.py \
     --vcli vcli --display :0 \
-    --interval 3 --idle-polls 0 --timeout 7200 --max-clicks 300
+    --interval 3 --idle-polls 0 --timeout 0 --max-clicks 0
 ```
 
 `--session` and `--window-id` may be omitted: the loop resolves the single
 live session and the ViraStack window by title. Run it with
 `run_in_background: true` and keep it running for as long as the agent works.
 `-u` matters — without it the log stays buffered and looks empty.
+
+`--timeout 0` runs until the process is stopped; a finite timeout silently
+kills the loop after a few hours, which is how an unattended overnight run
+ends with no approvals happening.
 
 `--idle-polls 0` is the setting to use while the agent operates a cellview:
 a layout or schematic run (`apRunDeviceGeneration` and friends) can occupy
@@ -112,12 +116,14 @@ Key flags:
 |------|---------|---------|
 | `--interval` | 2.0 | Seconds between polls |
 | `--idle-polls` | 3 | Consecutive polls without a prompt before exiting. Raise it (40 ≈ 2 min) so the loop survives the gap between two commands; `0` disables the idle stop entirely — use that while the agent runs a long cellview operation |
-| `--timeout` | 600 | Overall wall-clock budget in seconds |
+| `--timeout` | 600 | Overall wall-clock budget in seconds; `0` runs until the process is stopped (the setting for an unattended session) |
 | `--max-clicks` | 0 (unlimited) | Stop after N clicks |
 | `--settle-polls` | 5 | Polls to wait for the prompt area to change after a click |
 | `--session` | resolved | Daemon session id; resolved when omitted |
 | `--window-id` | resolved | X11 window id; resolved by title prefix when omitted |
 | `--title-prefix` | `ViraStack` | Window title prefix used to find the window again |
+| `--guide-threshold` | 3 | Consecutive approvals of the *same* command before the agent is steered; `0` never steers |
+| `--guide-message` | English text with `%d` | Message typed into the chat composer; `%d` is replaced by the repeat count. ASCII only |
 | `--dry-run` | off | Detect only, never click |
 
 ### 4. Monitor
@@ -133,6 +139,41 @@ clicked Allow at (90, 710)
 Exit codes: `0` = stopped normally (idle or max-clicks), `1` = the click did
 not land (the prompt area never changed) or 3 consecutive clicks were rejected
 by `vcli`, `2` = bad arguments.
+
+## Steering a repeated command
+
+Auto-approving forever hides the failure mode where the agent keeps re-running
+one command that never succeeds. The loop therefore fingerprints the command
+line printed above the option rows (`command_signature`: a hash of the band
+just above the matched template) and counts how many *consecutive* approvals
+share that fingerprint. At every multiple of `--guide-threshold` (default 3)
+the loop queues a guidance message.
+
+The message is only typed when **no** permission prompt is pending: while a
+prompt is up, the composer is that prompt's answer field ("pick an option
+above"), and writing there would answer the prompt instead of talking to the
+agent. While the agent is busy the composer is disabled, so the delivery is
+verified with a screenshot — the text must appear before Return is sent, and
+the composer must be empty again afterwards, otherwise the message stays
+queued for the next poll.
+
+Log lines:
+
+```
+same command 3 times in a row — guidance queued
+guided the agent: Auto-approve notice: the same command has been requested 3 times in a row. …
+```
+
+The input line moves with the composer layout, so a few candidate rows are
+tried in turn (`COMPOSER_CLICK_OFFSETS`, counted from the bottom of the
+client area); the first one where the text shows up in the screenshot wins.
+Each attempt clears the composer first, so a failed attempt cannot leave a
+half-typed message behind.
+
+`--guide-message` overrides the text (`%d` is the repeat count). It must be
+ASCII: the `type` action of `vcli window action-x11` rejects anything else
+(clipboard paste would need `xclip`, which is not installed on the Virtuoso
+host).
 
 ## Arguments
 
@@ -183,6 +224,8 @@ same coordinates would not help.
 | `FileNotFoundError: allow_prompt_template.png` | The template was moved while the loop ran | Restart the loop — the template is now loaded once at startup |
 | Nothing detected, prompt visible | UI theme/font changed, or the prompt is rendered as the inline "Allow" pill instead of the numbered block | Re-crop the template from a fresh `vcli window action-x11 --operation screenshot` |
 | `capture error: no window with id` | Virtuoso or the daemon was restarted and the window id changed | Nothing to do — the loop re-resolves the session and window on its own; check the log for `re-resolved target:` |
+| `guidance typed but not submitted — keeping it for the next poll` | The composer was disabled (agent busy) or Return was swallowed | Nothing to do — the message is retried on the next poll with no prompt pending |
+| `same command N times in a row — guidance queued` | The agent is stuck retrying one command | The message goes out as soon as no prompt is pending; the approvals themselves keep working |
 
 ## Files
 

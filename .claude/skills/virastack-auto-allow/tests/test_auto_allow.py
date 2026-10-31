@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(SKILL_DIR)))
@@ -175,6 +175,122 @@ class RecoverTargetTests(unittest.TestCase):
 
         args = self._args()
         self.assertFalse(aa.recover_target(args))
+
+
+class CommandSignatureTests(unittest.TestCase):
+    """The repeat counter keys on the command text, not on the whole prompt."""
+
+    def _prompt_image(self, command_text):
+        img = Image.new("L", (780, 968), 30)
+        img.paste(Image.open(aa.DEFAULT_TEMPLATE).convert("L"), (58, 694))
+        drawer = ImageDraw.Draw(img)
+        # The command line sits ~95px above the Allow label (694+16).
+        drawer.text((40, 694 + 16 - 95 + 4), command_text, fill=220)
+        handle, path = tempfile.mkstemp(suffix=".png")
+        os.close(handle)
+        img.save(path)
+        self.addCleanup(os.remove, path)
+        return path
+
+    def test_same_command_gives_the_same_signature(self):
+        a = aa.command_signature(self._prompt_image("/tmp/x.sh"), (58 + aa.ALLOW_OFFSET[0], 694 + aa.ALLOW_OFFSET[1], 1.0))
+        b = aa.command_signature(self._prompt_image("/tmp/x.sh"), (58 + aa.ALLOW_OFFSET[0], 694 + aa.ALLOW_OFFSET[1], 1.0))
+        self.assertEqual(a, b)
+
+    def test_different_command_gives_a_different_signature(self):
+        a = aa.command_signature(self._prompt_image("/tmp/x.sh"), (58 + aa.ALLOW_OFFSET[0], 694 + aa.ALLOW_OFFSET[1], 1.0))
+        b = aa.command_signature(self._prompt_image("/tmp/y.sh"), (58 + aa.ALLOW_OFFSET[0], 694 + aa.ALLOW_OFFSET[1], 1.0))
+        self.assertNotEqual(a, b)
+
+
+class GuidanceDeliveryTests(unittest.TestCase):
+    """The guidance message must land in the composer and be submitted.
+
+    While a permission prompt is pending the composer is that prompt's answer
+    field, so the message is only typed when no prompt is pending — and the
+    composer is disabled while the agent is busy, so delivery is verified with
+    a screenshot instead of assumed.
+    """
+
+    W, H = 640, 604
+
+    def _patch(self, accepts_type_at=None):
+        """Mock the vcli boundary and the capture.
+
+        `accepts_type_at` is the client row the fake composer accepts typing
+        on; None means it never accepts (the agent is busy).
+        """
+        state = {"typed": False}
+        self.state = state
+        calls = []
+        self.calls = calls
+
+        def fake_run(cmd):
+            calls.append(cmd)
+            if "geometry" in cmd:
+                return 0, json.dumps({"geometry": {"w": self.W, "h": self.H}}), ""
+            op = cmd[cmd.index("--operation") + 1] if "--operation" in cmd else ""
+            if op == "click-rel":
+                y = int(cmd[cmd.index("--y") + 1])
+                state["accepts"] = (accepts_type_at is not None and y == self.H - accepts_type_at)
+            elif op == "type":
+                if state.get("accepts"):
+                    state["typed"] = True
+            elif op == "key":
+                text = cmd[cmd.index("--text") + 1]
+                if text == "Return" and state["typed"]:
+                    state["typed"] = False
+            return 0, "{}", ""
+
+        def fake_capture(vcli, session, window_id, display, workdir):
+            img = Image.new("L", (self.W, self.H), 30)
+            if state["typed"]:
+                for x in range(20, 320):
+                    for y in range(self.H - 84, self.H - 60):
+                        img.putpixel((x, y), 220)
+            handle, path = tempfile.mkstemp(suffix=".png")
+            os.close(handle)
+            img.save(path)
+            self.addCleanup(os.remove, path)
+            return path
+
+        original_run, original_capture = aa.run, aa.capture
+        aa.run, aa.capture = fake_run, fake_capture
+        self.addCleanup(setattr, aa, "run", original_run)
+        self.addCleanup(setattr, aa, "capture", original_capture)
+
+    def _args(self):
+        class A(object):
+            pass
+        a = A()
+        a.vcli = "vcli"
+        a.session = "s"
+        a.window_id = "0x1"
+        a.display = ":0"
+        return a
+
+    def _returns_sent(self):
+        return [c for c in self.calls
+                if "--operation" in c and c[c.index("--operation") + 1] == "key"
+                and c[c.index("--text") + 1] == "Return"]
+
+    def test_message_is_sent_and_submitted(self):
+        self._patch(accepts_type_at=68)
+        self.assertTrue(aa.try_send_guidance(self._args(), "diagnose first", "/tmp"))
+        self.assertTrue(self._returns_sent())
+
+    def test_busy_composer_keeps_the_message_queued(self):
+        # The composer never accepts the text (the agent is busy): nothing may
+        # be submitted, and the caller keeps the message for the next poll.
+        self._patch(accepts_type_at=None)
+        self.assertFalse(aa.try_send_guidance(self._args(), "diagnose first", "/tmp"))
+        self.assertEqual(self._returns_sent(), [])
+
+    def test_a_second_click_row_is_tried_when_the_first_misses(self):
+        # The input line moves with the composer layout, so the delivery falls
+        # back to the next candidate row.
+        self._patch(accepts_type_at=74)
+        self.assertTrue(aa.try_send_guidance(self._args(), "diagnose first", "/tmp"))
 
 
 if __name__ == "__main__":

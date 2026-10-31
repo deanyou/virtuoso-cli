@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -36,6 +37,10 @@ DEFAULT_TEMPLATE = os.path.join(
 # single-row template, far too close to the threshold.
 ALLOW_OFFSET = (32, 16)
 MATCH_THRESHOLD = 0.90
+# Candidate rows of the composer input line, counted from the bottom of the
+# client area. The exact row depends on the composer layout, so the guidance
+# delivery tries them in order until the text shows up in a screenshot.
+COMPOSER_CLICK_OFFSETS = (68, 74, 60)
 # Consecutive rejected clicks before the loop gives up.
 MAX_CLICK_FAILURES = 3
 
@@ -122,6 +127,130 @@ def click(vcli, session, window_id, display, x, y, dry_run):
         return False
     print("clicked Allow at (%d, %d)" % (x, y))
     return True
+
+
+def command_signature(screenshot, found):
+    """Fingerprint of the command line the pending prompt belongs to.
+
+    The command is printed in a code block right above the option rows, so
+    the band just above the matched template holds the command text and
+    nothing else. Two approvals of the same command produce the same
+    fingerprint — that is what tells the loop the agent is repeating itself.
+    """
+    x, y, _ = found
+    # `y` is the Allow label, not the template top: the command line sits
+    # ~65-90px above it, and the band is kept narrow so it holds the command
+    # text only — the agent's message above it changes with every reply and
+    # would make every request look different.
+    band = crop_region(screenshot, (max(0, x - 30), max(0, y - 95), 570, 35))
+    if band is None:
+        return None
+    return hashlib.md5(band.tobytes()).hexdigest()
+
+
+def client_size(vcli, session, window_id, display):
+    """Client-area size of the window (the coordinate space of the actions)."""
+    rc, out, err = run([
+        vcli, "--session", session, "window", "geometry",
+        "--window-id", window_id, "--display", display, "--format", "json",
+    ])
+    if rc != 0:
+        return None
+    try:
+        geom = (json.loads(out) or {}).get("geometry") or {}
+    except ValueError:
+        return None
+    w, h = geom.get("w"), geom.get("h")
+    if not w or not h:
+        return None
+    return int(w), int(h)
+
+
+def composer_crop(args, workdir):
+    """Grayscale crop of the chat composer input area."""
+    size = client_size(args.vcli, args.session, args.window_id, args.display)
+    if not size:
+        return None
+    _, h = size
+    try:
+        shot = capture(args.vcli, args.session, args.window_id, args.display, workdir)
+    except Exception:  # noqa: BLE001
+        return None
+    # The composer box is anchored to the bottom of the client area; this crop
+    # covers its input line only, so the spinner next to the model selector
+    # and the chat transcript above cannot change it.
+    return crop_region(shot, (0, max(0, h - 86), 400, 46))
+
+
+def try_send_guidance(args, message, workdir):
+    """Type a guidance message into the chat composer and verify it landed.
+
+    While a permission prompt is pending, the composer is an answer field for
+    that prompt ("pick an option above") — writing there would answer the
+    prompt instead of talking to the agent. So the message is only typed when
+    no prompt is pending, and the composer is disabled while the agent is
+    busy, which is why the result is verified with a screenshot instead of
+    assumed.
+    """
+    size = client_size(args.vcli, args.session, args.window_id, args.display)
+    if not size:
+        print("guidance skipped: window geometry unavailable")
+        return False
+    _, h = size
+
+    def action(*cmd):
+        rc, out, err = run([
+            args.vcli, "--session", args.session, "window", "action-x11",
+            "--window-id", args.window_id, "--display", args.display,
+        ] + list(cmd) + ["--direct"])
+        if rc != 0:
+            print("guidance %s failed: %s %s" % (cmd[1], out.strip(), err.strip()))
+        return rc == 0
+
+    before = composer_crop(args, workdir)
+    landed = False
+    # The input line sits a few pixels above the bottom of the client area and
+    # its exact row depends on the composer layout, so a few candidates are
+    # tried; each attempt clears the composer first, so a failed attempt
+    # cannot leave a half-typed message behind.
+    for offset in COMPOSER_CLICK_OFFSETS:
+        y = max(0, h - offset)
+        if not action("--operation", "click-rel", "--x", "30", "--y", str(y)):
+            return False
+        action("--operation", "key", "--text", "ctrl+a")
+        action("--operation", "key", "--text", "BackSpace")
+        time.sleep(0.3)
+        if not action("--operation", "type", "--text", message):
+            return False
+        time.sleep(0.4)
+        after = composer_crop(args, workdir)
+        if before is None or after is None or not np.array_equal(before, after):
+            landed = True
+            break
+
+    if not landed:
+        # The composer did not accept the text — the agent is busy. Keep the
+        # message and try again on the next poll.
+        return False
+
+    # Submitting needs the input to have settled: a Return sent too early is
+    # swallowed, so the empty composer is verified and Return is retried.
+    for _ in range(3):
+        rc, out, err = run([
+            args.vcli, "--session", args.session, "window", "action-x11",
+            "--window-id", args.window_id, "--display", args.display,
+            "--operation", "key", "--text", "Return", "--direct",
+        ])
+        if rc != 0:
+            print("guidance Return failed: %s %s" % (out.strip(), err.strip()))
+            return False
+        time.sleep(1.0)
+        submitted = composer_crop(args, workdir)
+        if before is None or submitted is None or np.array_equal(before, submitted):
+            print("guided the agent: %s" % message)
+            return True
+    print("guidance typed but not submitted — keeping it for the next poll")
+    return False
 
 
 def wait_until_progress(args, workdir, before, region, polls):
@@ -242,13 +371,23 @@ def main():
     ap.add_argument("--template", default=DEFAULT_TEMPLATE)
     ap.add_argument("--interval", type=float, default=2.0)
     ap.add_argument("--max-clicks", type=int, default=0, help="0 = unlimited")
-    ap.add_argument("--timeout", type=float, default=600.0)
+    ap.add_argument("--timeout", type=float, default=600.0,
+                    help="overall wall-clock budget in seconds; 0 = run until stopped")
     ap.add_argument("--idle-polls", type=int, default=3,
                     help="stop after this many consecutive polls without a prompt; 0 = never stop on idle")
     ap.add_argument("--settle-polls", type=int, default=5,
                     help="polls to wait for the prompt to vanish after a click")
     ap.add_argument("--title-prefix", default="ViraStack",
                     help="window title prefix used to re-resolve the target after a restart")
+    ap.add_argument("--guide-threshold", type=int, default=3,
+                    help="guide the agent after this many consecutive approvals of the same command; 0 = never")
+    ap.add_argument("--guide-message",
+                    default="Auto-approve notice: the same command has been requested %d "
+                            "times in a row. Please diagnose the root cause first (paste the "
+                            "error output, check the dependencies and the paths) instead of "
+                            "running the same command again.",
+                    help="message typed into the chat when the repeat limit is hit; %%d is the "
+                         "repeat count. ASCII only — the type action rejects other characters")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -271,11 +410,14 @@ def main():
             return 2
         print("resolved window=%s" % args.window_id)
 
-    deadline = time.time() + args.timeout
+    deadline = time.time() + args.timeout if args.timeout else float("inf")
     clicks = 0
     idle = 0
     failed = 0
     capture_failures = 0
+    last_signature = None
+    repeats = 0
+    guidance_pending = None
     workdir = tempfile.mkdtemp(prefix="auto_allow_")
 
     while time.time() < deadline:
@@ -294,6 +436,11 @@ def main():
         found = find_prompt(shot, template)
         if found is None:
             idle += 1
+            # No prompt pending: the agent is either idle or busy. If a
+            # guidance message is queued, this is the moment to deliver it.
+            if guidance_pending and not args.dry_run:
+                if try_send_guidance(args, guidance_pending, workdir):
+                    guidance_pending = None
             if idle_limit_reached(args.idle_polls, idle):
                 print("no pending prompt after %d idle polls" % idle)
                 return 0
@@ -301,6 +448,23 @@ def main():
             idle = 0
             x, y, score = found
             print("prompt detected (ncc=%.3f) -> Allow at (%d, %d)" % (score, x, y))
+            # The same command being approved over and over means the agent is
+            # stuck in a retry loop. Count the repeats and, once there are
+            # too many, queue a message telling it to diagnose the cause.
+            signature = command_signature(shot, found)
+            if signature is not None:
+                if signature == last_signature:
+                    repeats += 1
+                else:
+                    last_signature = signature
+                    repeats = 1
+                if (args.guide_threshold and repeats >= args.guide_threshold
+                        and repeats % args.guide_threshold == 0):
+                    message = args.guide_message
+                    if "%d" in message:
+                        message = message % repeats
+                    guidance_pending = message
+                    print("same command %d times in a row — guidance queued" % repeats)
             if click(args.vcli, args.session, args.window_id, args.display, x, y, args.dry_run):
                 clicks += 1
                 failed = 0
