@@ -213,9 +213,21 @@ impl VirtuosoClient {
         // Cross-user daemon guard: verify the daemon was started by the same Unix
         // user we expect before connecting. This prevents accidentally connecting
         // to a daemon started by a different user (e.g., a colleague's session).
-        // Skipped if daemon_user is not yet known (populated lazily by `session show`).
+        //
+        // The expected user and the override come from the RESOLVED config
+        // (env → config.toml → target overrides) — the same values every
+        // other command sees. The guard never re-parses the environment.
+        //
+        // A session whose daemon user is not yet known is NOT a pass: the
+        // identity is unconfirmed, and the guard says so at WARN level
+        // (never a silent pass; not a hard error either — `daemon_user` is
+        // only populated by `session show`).
         if let Some(ref session) = resolved_session {
-            guard_cross_user(session)?;
+            guard_cross_user(
+                session,
+                cfg.remote_user.as_deref(),
+                cfg.allow_cross_user_daemon,
+            )?;
         }
 
         // P0-A ownership (F05): when a target is selected, a session recorded
@@ -346,10 +358,7 @@ impl VirtuosoClient {
                         }
                         data.extend_from_slice(&buf[..n]);
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        return Err(VirtuosoError::Timeout(timeout));
-                    }
-                    Err(e) => return Err(VirtuosoError::Connection(e.to_string())),
+                    Err(e) => return Err(map_socket_read_error(&e, timeout)),
                 }
             }
 
@@ -728,7 +737,7 @@ impl VirtuosoClient {
     /// Query the daemon's Unix `$USER` via `getShellEnvVar`.
     ///
     /// Best-effort identity check used to detect SSH-tunnel-to-wrong-user
-    /// misconfigurations (see `daemon_user_check`).
+    /// misconfigurations (see `guard_cross_user`).
     /// Uses `execute_skill_unchecked` so the check works without the
     /// Admin capability — the SKILL payload is a fixed literal.
     ///
@@ -1003,42 +1012,60 @@ fn is_port_open(port: u16) -> bool {
     TcpStream::connect(format!("127.0.0.1:{port}")).is_ok()
 }
 
-/// Guard: verify the daemon's Unix user matches VB_REMOTE_USER before connecting.
+/// Map a socket read error to a client error.
 ///
-/// This runs in `VirtuosoClient::from_env()` after session resolution, preventing
-/// accidental connection to a daemon started by a different Unix user. The check
-/// only applies when `session.daemon_user` is already known (populated by a prior
-/// `vcli session show` call). If `daemon_user` is `None`, the check cannot run:
-/// the identity is *unconfirmed*, not *verified as matching* — that is logged
-/// at WARN level so the user is not left believing the check happened.
-///
-/// Set `VB_ALLOW_CROSS_USER_DAEMON=1` to disable this guard intentionally.
-fn guard_cross_user(session: &SessionInfo) -> Result<()> {
-    // Get expected user from VB_REMOTE_USER[<profile>] or plain VB_REMOTE_USER
-    let profile = std::env::var("VB_PROFILE").ok();
-    let expected = std::env::var(format!(
-        "VB_REMOTE_USER{}",
-        profile
-            .as_deref()
-            .filter(|p| !p.is_empty())
-            .map(|p| format!("_{p}"))
-            .unwrap_or_default()
-    ))
-    .ok()
-    .or_else(|| std::env::var("VB_REMOTE_USER").ok())
-    .map(|s| s.trim().to_string())
-    .filter(|s| !s.is_empty());
+/// A read timeout has two spellings: on Unix an expired `SO_RCVTIMEO`
+/// surfaces as [`std::io::ErrorKind::WouldBlock`] (`EAGAIN`/`EWOULDBLOCK`),
+/// on Windows as [`std::io::ErrorKind::TimedOut`] (`WSAETIMEDOUT`). Both
+/// mean "the read timed out", so both must map to [`VirtuosoError::Timeout`]
+/// — otherwise the caller's timeout budget silently degrades into
+/// "connection failed" on Windows and the probe looks like a dead daemon
+/// instead of a slow one.
+fn map_socket_read_error(e: &std::io::Error, timeout: u64) -> VirtuosoError {
+    match e.kind() {
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => {
+            VirtuosoError::Timeout(timeout)
+        }
+        _ => VirtuosoError::Connection(e.to_string()),
+    }
+}
 
-    // If no expected user configured, skip the check
-    let expected = match expected {
-        Some(e) => e,
+/// Guard: verify the daemon's Unix user matches the configured `remote_user`
+/// before connecting.
+///
+/// This runs in `VirtuosoClient::from_config()` after session resolution,
+/// preventing accidental connection to a daemon started by a different Unix
+/// user. The expected user and the override are passed in from the RESOLVED
+/// [`Config`] (env → `config.toml` → target overrides) — the guard never
+/// re-parses the environment. A second, hand-rolled env parser is a second
+/// precedence rule: it used to disagree with the rest of the CLI (an empty
+/// `VB_REMOTE_USER_<profile>` masked the generic `VB_REMOTE_USER` and
+/// silently disabled the guard entirely).
+///
+/// The check only applies when `session.daemon_user` is already known
+/// (populated by a prior `vcli session show` call). If `daemon_user` is
+/// `None`, the check cannot run: the identity is *unconfirmed*, not
+/// *verified as matching* — that is logged at WARN level so the user is
+/// not left believing the check happened.
+///
+/// Set `allow_cross_user_daemon` (env `VB_ALLOW_CROSS_USER_DAEMON=1`) to
+/// disable this guard intentionally.
+fn guard_cross_user(
+    session: &SessionInfo,
+    expected_user: Option<&str>,
+    allow_cross_user: bool,
+) -> Result<()> {
+    // Expected user comes from the resolved config. A blank value means
+    // "not configured" — there is nothing to compare against.
+    let expected = match expected_user.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(e) => e.to_string(),
         None => return Ok(()),
     };
 
     // If daemon_user is not yet known (None), we can't perform the check.
     // This is NOT a pass: the identity is unconfirmed (the probe timed out or
     // the daemon reported no USER), so the cross-user check was skipped
-    // entirely. Warn loudly — the user configured VB_REMOTE_USER precisely
+    // entirely. Warn loudly — the user configured a remote_user precisely
     // because they want to know who the daemon runs as. Not a hard error:
     // daemon_user is only populated by `session show`, so failing here would
     // break the first connect of every session.
@@ -1047,7 +1074,7 @@ fn guard_cross_user(session: &SessionInfo) -> Result<()> {
         None => {
             tracing::warn!(
                 "cross-user guard: daemon user is unconfirmed for session '{}' — \
-                 the cross-user check against VB_REMOTE_USER '{}' was skipped \
+                 the cross-user check against configured remote_user '{}' was skipped \
                  (identity unconfirmed, not verified as matching). \
                  Run 'vcli session show' to probe the daemon.",
                 session.id,
@@ -1062,20 +1089,10 @@ fn guard_cross_user(session: &SessionInfo) -> Result<()> {
         return Ok(());
     }
 
-    // Allow override via VB_ALLOW_CROSS_USER_DAEMON=1
-    if std::env::var("VB_ALLOW_CROSS_USER_DAEMON")
-        .ok()
-        .filter(|v| !v.is_empty())
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
-    {
+    // Explicit override (config field / VB_ALLOW_CROSS_USER_DAEMON=1).
+    if allow_cross_user {
         tracing::warn!(
-            "cross-user guard: VB_ALLOW_CROSS_USER_DAEMON=1 set, allowing daemon user '{}' (expected '{}')",
+            "cross-user guard: allow_cross_user_daemon is enabled, allowing daemon user '{}' (expected '{}')",
             daemon_user,
             expected
         );
@@ -1083,8 +1100,9 @@ fn guard_cross_user(session: &SessionInfo) -> Result<()> {
     }
 
     Err(VirtuosoError::Connection(format!(
-        "daemon Unix user '{}' does not match configured VB_REMOTE_USER '{}' for session '{}'. \
-         Set VB_ALLOW_CROSS_USER_DAEMON=1 to override if you intentionally want to connect.",
+        "daemon Unix user '{}' does not match configured remote_user '{}' for session '{}'. \
+         Set allow_cross_user_daemon: true (env VB_ALLOW_CROSS_USER_DAEMON=1) to override if you \
+         intentionally want to connect.",
         daemon_user, expected, session.id
     )))
 }
@@ -1630,31 +1648,125 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
+    // Socket read error mapping
+    // ------------------------------------------------------------------
+
+    /// A socket read timeout has two spellings: Unix reports the expired
+    /// `SO_RCVTIMEO` as `ErrorKind::WouldBlock`, Windows as
+    /// `ErrorKind::TimedOut`. Both must map to `VirtuosoError::Timeout` —
+    /// otherwise the probe budget silently degrades into "connection
+    /// failed" on Windows and a slow daemon looks like a dead one.
+    #[test]
+    fn socket_read_timeout_kinds_map_to_timeout_error() {
+        for kind in [std::io::ErrorKind::WouldBlock, std::io::ErrorKind::TimedOut] {
+            let err = map_socket_read_error(&std::io::Error::from(kind), 7);
+            assert!(
+                matches!(err, VirtuosoError::Timeout(7)),
+                "{kind:?} must map to Timeout(7), got {err:?}"
+            );
+        }
+    }
+
+    /// Everything else stays a connection error — a timeout mapping must
+    /// not swallow real transport failures.
+    #[test]
+    fn socket_read_other_errors_map_to_connection_error() {
+        let err = map_socket_read_error(
+            &std::io::Error::from(std::io::ErrorKind::ConnectionReset),
+            7,
+        );
+        assert!(
+            matches!(err, VirtuosoError::Connection(_)),
+            "a reset connection must not be reported as a timeout, got {err:?}"
+        );
+    }
+
+    // ------------------------------------------------------------------
     // guard_cross_user: unconfirmed identity must be loud
     // ------------------------------------------------------------------
 
-    /// When `VB_REMOTE_USER` is configured but the session has no recorded
-    /// daemon user, the guard did NOT verify anything. That must be a
-    /// warning (not a debug line, and not a hard error — `daemon_user` is
-    /// only populated by `session show`).
-    #[test]
-    #[serial]
-    fn guard_cross_user_warns_when_daemon_user_is_unconfirmed() {
-        let prev_user = std::env::var("VB_REMOTE_USER").ok();
-        let prev_profile = std::env::var("VB_PROFILE").ok();
-        std::env::set_var("VB_REMOTE_USER", "expected-user");
-        std::env::remove_var("VB_PROFILE");
+    /// RAII guard for environment variables: restores the previous value
+    /// when it is dropped — including when an assertion panics and the
+    /// stack unwinds. A test that restores an env var *after* its asserts
+    /// leaks the var into every later test in the same binary.
+    struct EnvVarGuard {
+        saved: Vec<(String, Option<String>)>,
+    }
 
-        let session = SessionInfo {
+    impl EnvVarGuard {
+        /// Apply `vars` (key → value; `None` removes the variable) and
+        /// remember the previous state of every touched variable.
+        fn apply(vars: &[(&str, Option<&str>)]) -> Self {
+            let mut saved = Vec::with_capacity(vars.len());
+            for (key, value) in vars {
+                saved.push(((*key).to_string(), std::env::var(key).ok()));
+                match value {
+                    Some(v) => std::env::set_var(key, v),
+                    None => std::env::remove_var(key),
+                }
+            }
+            Self { saved }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            for (key, value) in &self.saved {
+                match value {
+                    Some(v) => std::env::set_var(key, v),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    /// A session record with the given daemon user (the identity the
+    /// guard compares against the configured `remote_user`).
+    fn guard_session(daemon_user: Option<&str>) -> SessionInfo {
+        SessionInfo {
             id: "guard-test-session".into(),
             port: 40567,
             pid: 0,
             host: "meowu".into(),
             user: "meow".into(),
             created: "Jun  1 08:14:16 2026".into(),
-            daemon_user: None,
+            daemon_user: daemon_user.map(str::to_string),
             daemon_version: None,
-        };
+        }
+    }
+
+    /// When a remote user is configured but the session has no recorded
+    /// daemon user, the guard did NOT verify anything. That must be a
+    /// warning (not a debug line, and not a hard error — `daemon_user` is
+    /// only populated by `session show`).
+    ///
+    /// The expected user now comes from the RESOLVED config, so the test
+    /// resolves it the way the connect path does: env → `Config`.
+    #[test]
+    #[serial]
+    fn guard_cross_user_warns_when_daemon_user_is_unconfirmed() {
+        let config_dir = tempfile::tempdir().expect("temp config dir");
+        let config_dir_path = config_dir
+            .path()
+            .to_str()
+            .expect("utf-8 temp config dir")
+            .to_string();
+        // Restored on unwind — a panicking assert must not leak these.
+        let _env = EnvVarGuard::apply(&[
+            ("VB_REMOTE_USER", Some("expected-user")),
+            ("VB_PROFILE", None),
+            ("VB_TARGET", None),
+            ("VB_CONFIG_DIR", Some(&config_dir_path)),
+        ]);
+
+        let session = guard_session(None);
+
+        let cfg = Config::from_env_with_profile(None).expect("resolved config");
+        assert_eq!(
+            cfg.remote_user.as_deref(),
+            Some("expected-user"),
+            "the resolved config must carry VB_REMOTE_USER"
+        );
 
         let buf = SharedBuf::default();
         let subscriber = tracing_subscriber::fmt()
@@ -1663,7 +1775,13 @@ mod tests {
             .with_max_level(tracing::Level::DEBUG)
             .finish();
 
-        let outcome = tracing::subscriber::with_default(subscriber, || guard_cross_user(&session));
+        let outcome = tracing::subscriber::with_default(subscriber, || {
+            guard_cross_user(
+                &session,
+                cfg.remote_user.as_deref(),
+                cfg.allow_cross_user_daemon,
+            )
+        });
 
         // Not a hard failure: daemon_user is only known after `session show`.
         assert!(
@@ -1695,15 +1813,58 @@ mod tests {
             logged.to_lowercase().contains("skipped"),
             "log must state that the check was skipped, got: {logged}"
         );
+    }
 
-        match prev_user {
-            Some(v) => std::env::set_var("VB_REMOTE_USER", v),
-            None => std::env::remove_var("VB_REMOTE_USER"),
-        }
-        match prev_profile {
-            Some(v) => std::env::set_var("VB_PROFILE", v),
-            None => std::env::remove_var("VB_PROFILE"),
-        }
+    /// A daemon user that differs from the configured one is a hard
+    /// error — the whole point of the guard.
+    #[test]
+    fn guard_cross_user_rejects_daemon_user_that_does_not_match() {
+        let session = guard_session(Some("other-user"));
+        let err = guard_cross_user(&session, Some("expected-user"), false)
+            .expect_err("a foreign daemon user must be rejected");
+        assert!(
+            matches!(err, VirtuosoError::Connection(_)),
+            "a cross-user daemon must fail as a connection error, got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("other-user") && msg.contains("expected-user"),
+            "the error must name both users, got: {msg}"
+        );
+    }
+
+    /// The matching user passes.
+    #[test]
+    fn guard_cross_user_allows_matching_daemon_user() {
+        let session = guard_session(Some("expected-user"));
+        assert!(
+            guard_cross_user(&session, Some("expected-user"), false).is_ok(),
+            "a matching daemon user must be allowed"
+        );
+    }
+
+    /// The explicit override allows a foreign daemon user.
+    #[test]
+    fn guard_cross_user_allows_mismatch_when_override_is_enabled() {
+        let session = guard_session(Some("other-user"));
+        assert!(
+            guard_cross_user(&session, Some("expected-user"), true).is_ok(),
+            "allow_cross_user_daemon must allow a foreign daemon user"
+        );
+    }
+
+    /// No expected user configured → nothing to check → no error.
+    #[test]
+    fn guard_cross_user_without_configured_user_is_a_no_op() {
+        let session = guard_session(Some("other-user"));
+        assert!(
+            guard_cross_user(&session, None, false).is_ok(),
+            "without a configured remote_user there is nothing to compare"
+        );
+        assert!(
+            guard_cross_user(&session, Some("   "), false).is_ok(),
+            "a blank remote_user is the same as no remote_user"
+        );
     }
 }
 

@@ -24,6 +24,38 @@ All notable changes to this project will be documented in this file.
   The probe now spends the client's configured timeout, like every other
   SKILL operation. The version probe (5s) and the liveness probe (3s) keep
   their deliberately short budgets.
+- **The probe budget was honoured on Unix but not on Windows.**
+  An expired `SO_RCVTIMEO` surfaces as `ErrorKind::WouldBlock` on Unix but
+  as `ErrorKind::TimedOut` on Windows, and only the former was mapped to a
+  timeout — so on Windows a slow daemon was reported as "connection
+  failed" instead of "timed out", and the configured probe budget was
+  silently lost. Both error kinds now map to `VirtuosoError::Timeout`, so
+  the probe budget holds on every platform.
+- **`vcli session show` probed the identity before the liveness.**
+  The identity probe ran first and spent the whole configured timeout
+  (`VB_TIMEOUT`) on a daemon that was already dead or wedged, so the user
+  waited out the full budget before learning the daemon was gone. The
+  liveness probe now runs first (it keeps its own short 3-second budget);
+  when the daemon does not answer, the identity and version probes are
+  skipped entirely. The skip is reported through the existing
+  `probe.skipped` / `probe.skip_reason` fields (`daemon_not_alive`), the
+  cached values are shown (`data_source: "cached"`), and the stale-daemon
+  hint (`RBStop()` / reload `ramic_bridge.il`) still fires.
+- **The cross-user guard used a second, hand-rolled config parser.**
+  `guard_cross_user()` re-read `VB_PROFILE`, `VB_REMOTE_USER[_<profile>]`
+  and `VB_ALLOW_CROSS_USER_DAEMON` from the environment instead of using
+  the resolved `Config`, so it ignored `config.toml` and target overrides
+  and applied a different precedence rule than the rest of the CLI — an
+  empty `VB_REMOTE_USER_<profile>` masked the generic `VB_REMOTE_USER` and
+  silently disabled the guard. The guard now takes the expected user and
+  the override from the resolved config, exactly like every other command.
+- **An unconfirmed probe left a stale daemon identity in the session file.**
+  When the identity probe ran and confirmed nothing, `session show` kept
+  the previous probe's `daemon_user` in the session file — and the
+  connect-time guard then compared against that stale value as if it had
+  been verified. A probe that ran and confirmed nothing now clears the
+  stored `daemon_user`; a probe that was skipped keeps the cached value
+  (nothing was learned either way).
 - **"Identity unconfirmed" was indistinguishable from "identity OK".**
   When an expected remote user was configured but the daemon user could not
   be determined, `session show` returned no cross-user warning at all: the

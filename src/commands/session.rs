@@ -40,6 +40,46 @@ pub(crate) struct ProbeSkip {
     pub reason: &'static str,
 }
 
+/// How the identity probe ended, as seen by the cross-user check.
+///
+/// "Skipped" and "ran but confirmed nothing" are different facts with
+/// different remedies, so the warning wording differs for each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdentityProbeOutcome {
+    /// The probe ran. Whether the identity was confirmed is carried by the
+    /// daemon-user value itself.
+    Ran,
+    /// The probe never ran; carries the reason it was skipped.
+    Skipped(&'static str),
+}
+
+/// Outcome of the phase-2 daemon probe in [`show`].
+///
+/// `skipped` separates "the probe never ran" from "the probe ran and
+/// produced nothing" — the two must not look alike in the output.
+struct ProbeOutcome {
+    /// Live daemon user when the probe confirmed one; the cached value
+    /// when the probe was skipped.
+    daemon_user: Option<String>,
+    /// Warning about a failed identity probe.
+    daemon_user_warning: Option<String>,
+    /// `Some(true|false)` when the liveness probe ran; `None` when the
+    /// probe never ran (unknown — not "false").
+    daemon_responsive: Option<bool>,
+    /// Live daemon version when the probe produced one; cached otherwise.
+    daemon_version: Option<String>,
+    /// Warning about a failed version probe.
+    daemon_version_warning: Option<String>,
+    /// True when the probe did not run.
+    skipped: bool,
+    /// Machine-readable reason the probe was skipped.
+    skip_reason: Option<&'static str>,
+    /// Where the probe connected: "local" or "remote_tunnel".
+    source: Option<&'static str>,
+    /// The port the probe connected to.
+    port: Option<u16>,
+}
+
 /// Shared entry point: resolve a probe endpoint for a session under the
 /// given context. Returns `Ok(endpoint)` if probing is allowed,
 /// `Err(skip)` otherwise (caller shows cached data).
@@ -818,11 +858,11 @@ pub fn history(
 /// Errors here are real (file missing / corrupt → `NotFound`).
 ///
 /// **Phase 2 (only when `resolve_probe_endpoint` succeeds):** connect to the
-/// verified local port, query the daemon for `$USER` / version / liveness,
-/// and write fresh values back to the session file. Any verification failure
-/// (ownership mismatch, no tunnel, dead process, corrupt state, …) sets
-/// `probe_skipped: true` with a `probe_skip_reason` — the cached view is
-/// still returned, never an error.
+/// verified local port, check liveness first, then query the daemon for
+/// `$USER` / version, and write fresh values back to the session file. Any
+/// verification failure (ownership mismatch, no tunnel, dead process, dead
+/// daemon, corrupt state, …) sets `probe_skipped: true` with a
+/// `probe_skip_reason` — the cached view is still returned, never an error.
 pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Value> {
     // Phase 1: load session. File missing / corrupt is a real error.
     let s = SessionInfo::load(id)
@@ -831,29 +871,15 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
     let endpoint_match = compute_endpoint_match(ctx, &s);
 
     // Phase 2: resolve a probe endpoint, then probe if allowed.
-    // daemon_responsive is Option<bool>: Some(_) = probe ran, None = skipped.
-    // daemon_user / daemon_version hold the LIVE probe values when probe
-    // succeeded; the output layer falls back to s.daemon_user / s.daemon_version
-    // (cached) when probe was skipped.
-    let (
-        daemon_user,
-        daemon_user_warning,
-        daemon_responsive,
-        daemon_version,
-        daemon_version_warning,
-        probe_skipped,
-        probe_skip_reason,
-        probe_source,
-        probe_port,
-    ) = match resolve_probe_endpoint(ctx, &s) {
+    // daemon_responsive is Option<bool>: Some(_) = liveness probe ran,
+    // None = the probe never ran. daemon_user / daemon_version hold the LIVE
+    // probe values when the probe succeeded; the cached values from the
+    // session file are shown when it was skipped.
+    let probe = match resolve_probe_endpoint(ctx, &s) {
         Ok(endpoint) => {
-            let port = match &endpoint {
-                ProbeEndpoint::Local { port } => *port,
-                ProbeEndpoint::RemoteTunnel { port } => *port,
-            };
-            let source = match &endpoint {
-                ProbeEndpoint::Local { .. } => "local",
-                ProbeEndpoint::RemoteTunnel { .. } => "remote_tunnel",
+            let (port, source) = match &endpoint {
+                ProbeEndpoint::Local { port } => (*port, "local"),
+                ProbeEndpoint::RemoteTunnel { port } => (*port, "remote_tunnel"),
             };
 
             // The probe client inherits the resolved config timeout
@@ -862,52 +888,88 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
             // hardcoded cap. The liveness probe keeps its own short budget
             // (daemon_alive passes Some(3)).
             let client = VirtuosoClient::new("127.0.0.1", port, ctx.config().timeout);
-            let user_result = client.get_daemon_user();
-            let version_result = client.get_daemon_version();
-            let alive = client.daemon_alive();
-            let ver = version_result.as_ref().unwrap_or(&None).clone();
-            let ver_warn = match &version_result {
-                Ok(Some(v)) => check_version_skew(v),
-                Ok(None) => None,
-                Err(e) => Some(format!("daemon version query failed: {e}")),
-            };
-            let (user, user_warn) = match user_result {
-                Ok(user_opt) => (user_opt, None),
-                Err(e) => (None, Some(format!("daemon user query failed: {e}"))),
-            };
 
-            (
-                user,
-                user_warn,
-                Some(alive),
-                ver,
-                ver_warn,
-                false,
-                None,
-                Some(source),
-                Some(port),
-            )
+            // LIVENESS FIRST. A dead or wedged daemon must not make the
+            // user wait out the whole identity-probe budget before they
+            // learn that the daemon is gone: the liveness probe has its own
+            // short budget, so a dead daemon is detected in seconds instead
+            // of after VB_TIMEOUT.
+            let alive = client.daemon_alive();
+            if !alive {
+                // Daemon is not answering: skip the identity and version
+                // probes entirely. The skip is reported through the
+                // existing probe.skip_reason channel; the cached values are
+                // shown (data_source="cached").
+                ProbeOutcome {
+                    daemon_user: s.daemon_user.clone(),
+                    daemon_user_warning: None,
+                    daemon_responsive: Some(false),
+                    daemon_version: s.daemon_version.clone(),
+                    daemon_version_warning: None,
+                    skipped: true,
+                    skip_reason: Some("daemon_not_alive"),
+                    source: Some(source),
+                    port: Some(port),
+                }
+            } else {
+                let user_result = client.get_daemon_user();
+                let version_result = client.get_daemon_version();
+                let ver = version_result.as_ref().unwrap_or(&None).clone();
+                let ver_warn = match &version_result {
+                    Ok(Some(v)) => check_version_skew(v),
+                    Ok(None) => None,
+                    Err(e) => Some(format!("daemon version query failed: {e}")),
+                };
+                let (user, user_warn) = match user_result {
+                    Ok(user_opt) => (user_opt, None),
+                    Err(e) => (None, Some(format!("daemon user query failed: {e}"))),
+                };
+
+                ProbeOutcome {
+                    daemon_user: user,
+                    daemon_user_warning: user_warn,
+                    daemon_responsive: Some(true),
+                    daemon_version: ver,
+                    daemon_version_warning: ver_warn,
+                    skipped: false,
+                    skip_reason: None,
+                    source: Some(source),
+                    port: Some(port),
+                }
+            }
         }
-        Err(skip) => (
+        Err(skip) => ProbeOutcome {
             // Probe skipped: use cached values from the session file.
-            s.daemon_user.clone(),
-            None,
-            None, // responsive unknown — not "false"
-            s.daemon_version.clone(),
-            None,
-            true,
-            Some(skip.reason),
-            None,
-            None,
-        ),
+            daemon_user: s.daemon_user.clone(),
+            daemon_user_warning: None,
+            daemon_responsive: None, // responsive unknown — not "false"
+            daemon_version: s.daemon_version.clone(),
+            daemon_version_warning: None,
+            skipped: true,
+            skip_reason: Some(skip.reason),
+            source: None,
+            port: None,
+        },
     };
 
     // Cross-user check uses the resolved config (never re-reads env).
-    let cross_user_warning = check_cross_user(ctx.config(), &s, daemon_user.as_deref());
+    let probe_outcome = match (probe.skipped, probe.skip_reason) {
+        (true, Some(reason)) => IdentityProbeOutcome::Skipped(reason),
+        (true, None) => IdentityProbeOutcome::Skipped("unknown"),
+        (false, _) => IdentityProbeOutcome::Ran,
+    };
+    let cross_user_warning = check_cross_user(
+        ctx.config(),
+        &s,
+        probe.daemon_user.as_deref(),
+        probe_outcome,
+    );
 
-    // Stale-daemon hint only when the probe actually ran and the daemon
-    // didn't respond (daemon_responsive == Some(false)).
-    let stale_daemon_hint = if !probe_skipped && daemon_responsive == Some(false) {
+    // Stale-daemon hint when the liveness probe ran and the daemon did not
+    // answer (daemon_responsive == Some(false)). The identity and version
+    // probes are skipped in that case, but the hint must still fire: the
+    // port is bound while the daemon itself is wedged.
+    let stale_daemon_hint = if probe.daemon_responsive == Some(false) {
         Some(
             "CIW daemon port is bound but the daemon is not responding to SKILL.\n\
              In the Virtuoso CIW, run:\n\
@@ -920,27 +982,49 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
         None
     };
 
-    // Write back only when the probe succeeded and produced fresh data.
-    // Skipped probes never mutate the cache.
-    if !probe_skipped && (daemon_user.is_some() || daemon_version.is_some()) {
+    // Write back only when the probe RAN. A probe that ran and produced NO
+    // confirmed identity must CLEAR the stored daemon_user: the connect-time
+    // guard compares the stored value, so a stale one would be compared as if
+    // it had been verified. A skipped probe never mutates the cache —
+    // nothing was learned either way.
+    if !probe.skipped {
         let mut s_mut = s.clone();
-        if let Some(u) = daemon_user.as_ref() {
-            s_mut.daemon_user = Some(u.clone());
+        let mut dirty = false;
+        match probe.daemon_user.as_ref() {
+            Some(u) => {
+                if s_mut.daemon_user.as_deref() != Some(u.as_str()) {
+                    s_mut.daemon_user = Some(u.clone());
+                    dirty = true;
+                }
+            }
+            // Identity unconfirmed → drop the stale cached value instead of
+            // leaving it to look verified.
+            None => {
+                if s_mut.daemon_user.is_some() {
+                    s_mut.daemon_user = None;
+                    dirty = true;
+                }
+            }
         }
-        if let Some(v) = daemon_version.as_ref() {
-            s_mut.daemon_version = Some(v.clone());
+        if let Some(v) = probe.daemon_version.as_ref() {
+            if s_mut.daemon_version.as_deref() != Some(v.as_str()) {
+                s_mut.daemon_version = Some(v.clone());
+                dirty = true;
+            }
         }
-        s_mut.save_to_session_file();
+        if dirty {
+            s_mut.save_to_session_file();
+        }
     }
 
     let has_warnings = cross_user_warning.is_some()
-        || daemon_version_warning.is_some()
-        || daemon_user_warning.is_some()
+        || probe.daemon_version_warning.is_some()
+        || probe.daemon_user_warning.is_some()
         || stale_daemon_hint.is_some();
 
     // data_source: "live" when probe ran, "cached" when skipped (values
     // come from the session file).
-    let data_source = if probe_skipped { "cached" } else { "live" };
+    let data_source = if probe.skipped { "cached" } else { "live" };
 
     Ok(json!({
         "status": if has_warnings { "warning" } else { "success" },
@@ -952,22 +1036,22 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
             "user": s.user,
             "created": s.created,
             "endpoint_match": endpoint_match,
-            "daemon_responsive": daemon_responsive,
-            "daemon_user": daemon_user,
-            "daemon_version": daemon_version,
+            "daemon_responsive": probe.daemon_responsive,
+            "daemon_user": probe.daemon_user,
+            "daemon_version": probe.daemon_version,
             "data_source": data_source,
             "cli_version": env!("CARGO_PKG_VERSION"),
         },
         "probe": {
-            "skipped": probe_skipped,
-            "skip_reason": probe_skip_reason,
-            "source": probe_source,
-            "port": probe_port,
+            "skipped": probe.skipped,
+            "skip_reason": probe.skip_reason,
+            "source": probe.source,
+            "port": probe.port,
         },
         "warnings": {
-            "daemon_user": daemon_user_warning,
+            "daemon_user": probe.daemon_user_warning,
             "cross_user": cross_user_warning,
-            "version_skew": daemon_version_warning,
+            "version_skew": probe.daemon_version_warning,
             "stale_daemon": stale_daemon_hint,
         }
     }))
@@ -1025,10 +1109,16 @@ fn check_version_skew(daemon_version: &str) -> Option<String> {
 /// Uses the resolved `Config` — never re-reads environment variables.
 /// `Config::from_env()` already handles the `VB_REMOTE_USER_<profile>` →
 /// `VB_REMOTE_USER` fallback, so this function simply uses `cfg.remote_user`.
+///
+/// The `probe` outcome decides the wording of the UNCONFIRMED warning: a
+/// probe that was skipped and a probe that ran but confirmed nothing are
+/// different facts with different remedies. Telling the user to run
+/// `vcli session show` again — this very command — would be useless.
 fn check_cross_user(
     cfg: &Config,
     session: &SessionInfo,
     daemon_user: Option<&str>,
+    probe: IdentityProbeOutcome,
 ) -> Option<String> {
     let expected = cfg
         .remote_user
@@ -1042,14 +1132,21 @@ fn check_cross_user(
     let daemon_user = match daemon_user {
         Some(u) => u,
         None => {
-            return Some(format!(
-                "daemon Unix user unconfirmed for session {sid}: the daemon user could not be \
-                 determined, so the cross-user check against configured remote_user \
-                 {expected:?} was NOT performed (UNCONFIRMED identity — not a mismatch). \
-                 Run 'vcli session show' to re-probe; if the daemon is busy, raise VB_TIMEOUT \
-                 so the probe gets enough budget.",
-                sid = session.id
-            ))
+            return Some(match probe {
+                IdentityProbeOutcome::Skipped(reason) => format!(
+                    "daemon Unix user unconfirmed for session {sid}: the identity probe was \
+                     skipped ({reason}), so the cross-user check against configured remote_user \
+                     {expected:?} was NOT performed (UNCONFIRMED identity — not a mismatch).",
+                    sid = session.id
+                ),
+                IdentityProbeOutcome::Ran => format!(
+                    "daemon Unix user unconfirmed for session {sid}: the identity probe ran but \
+                     returned no user, so the cross-user check against configured remote_user \
+                     {expected:?} was NOT performed (UNCONFIRMED identity — not a mismatch). \
+                     Check the daemon load, or raise VB_TIMEOUT so the probe gets enough budget.",
+                    sid = session.id
+                ),
+            })
         }
     };
     if daemon_user == expected {
@@ -1131,14 +1228,14 @@ mod tests {
     #[test]
     fn cross_user_match_returns_none() {
         let cfg = test_config(Some("meow"), false);
-        let r = check_cross_user(&cfg, &session(), Some("meow"));
+        let r = check_cross_user(&cfg, &session(), Some("meow"), IdentityProbeOutcome::Ran);
         assert!(r.is_none());
     }
 
     #[test]
     fn cross_user_mismatch_returns_warning() {
         let cfg = test_config(Some("alice"), false);
-        let r = check_cross_user(&cfg, &session(), Some("bob"));
+        let r = check_cross_user(&cfg, &session(), Some("bob"), IdentityProbeOutcome::Ran);
         let w = r.expect("expected warning for user mismatch");
         assert!(
             w.contains("\"bob\""),
@@ -1161,7 +1258,7 @@ mod tests {
     #[test]
     fn cross_user_mismatch_suppressed_by_override() {
         let cfg = test_config(Some("alice"), true);
-        let r = check_cross_user(&cfg, &session(), Some("bob"));
+        let r = check_cross_user(&cfg, &session(), Some("bob"), IdentityProbeOutcome::Ran);
         assert!(r.is_none(), "allow_cross_user_daemon=true should suppress");
     }
 
@@ -1169,7 +1266,7 @@ mod tests {
     fn cross_user_no_remote_user_returns_none() {
         // Config has no remote_user — nothing to compare against.
         let cfg = test_config(None, false);
-        let r = check_cross_user(&cfg, &session(), Some("anyone"));
+        let r = check_cross_user(&cfg, &session(), Some("anyone"), IdentityProbeOutcome::Ran);
         assert!(r.is_none());
     }
 
@@ -1179,7 +1276,7 @@ mod tests {
         // determined (identity probe returned no USER). The check was NOT
         // performed — that must not look like "no problem found".
         let cfg = test_config(Some("meow"), false);
-        let r = check_cross_user(&cfg, &session(), None);
+        let r = check_cross_user(&cfg, &session(), None, IdentityProbeOutcome::Ran);
         let w = r.expect("unconfirmed identity must warn");
         let lower = w.to_lowercase();
         assert!(
@@ -1204,19 +1301,77 @@ mod tests {
         );
     }
 
+    /// A SKIPPED probe and a FAILED probe are different facts: the skipped
+    /// one must cite the actual skip reason and must not tell the user to
+    /// re-run the very command that produced the warning.
+    #[test]
+    fn cross_user_skipped_probe_cites_skip_reason_without_reprobe_advice() {
+        let cfg = test_config(Some("meow"), false);
+        let r = check_cross_user(
+            &cfg,
+            &session(),
+            None,
+            IdentityProbeOutcome::Skipped("no_tunnel"),
+        );
+        let w = r.expect("unconfirmed identity must warn");
+        let lower = w.to_lowercase();
+        assert!(
+            lower.contains("unconfirmed"),
+            "warning must mark the identity as unconfirmed: {w}"
+        );
+        assert!(
+            lower.contains("not performed"),
+            "warning must say the check was not performed: {w}"
+        );
+        assert!(
+            w.contains("no_tunnel"),
+            "warning must cite the actual skip reason: {w}"
+        );
+        assert!(
+            !lower.contains("re-probe"),
+            "a skipped probe must not advise re-probing: {w}"
+        );
+        assert!(
+            !lower.contains("session show"),
+            "a skipped probe must not tell the user to run this command again: {w}"
+        );
+    }
+
+    /// A probe that ran and confirmed nothing must point at the two real
+    /// remedies: a busy daemon, or a too-small VB_TIMEOUT.
+    #[test]
+    fn cross_user_failed_probe_advises_daemon_load_or_timeout() {
+        let cfg = test_config(Some("meow"), false);
+        let r = check_cross_user(&cfg, &session(), None, IdentityProbeOutcome::Ran);
+        let w = r.expect("unconfirmed identity must warn");
+        let lower = w.to_lowercase();
+        assert!(
+            lower.contains("daemon load"),
+            "warning must advise checking the daemon load: {w}"
+        );
+        assert!(
+            lower.contains("vb_timeout"),
+            "warning must advise raising VB_TIMEOUT: {w}"
+        );
+        assert!(
+            !lower.contains("re-probe"),
+            "a failed probe must not advise re-probing this command: {w}"
+        );
+    }
+
     #[test]
     fn cross_user_no_remote_user_and_no_daemon_user_returns_none() {
         // Nothing configured to compare against AND no daemon user — there
         // is no check to run, so there is nothing to warn about.
         let cfg = test_config(None, false);
-        let r = check_cross_user(&cfg, &session(), None);
+        let r = check_cross_user(&cfg, &session(), None, IdentityProbeOutcome::Ran);
         assert!(r.is_none());
     }
 
     #[test]
     fn cross_user_whitespace_remote_user_treated_as_unset() {
         let cfg = test_config(Some("   "), false);
-        let r = check_cross_user(&cfg, &session(), Some("bob"));
+        let r = check_cross_user(&cfg, &session(), Some("bob"), IdentityProbeOutcome::Ran);
         assert!(
             r.is_none(),
             "whitespace-only remote_user should be treated as unset"
@@ -1231,7 +1386,7 @@ mod tests {
         // function still returns None (suppressed) when override is on,
         // confirming the override is scoped to warning suppression only.
         let cfg = test_config(Some("alice"), true);
-        let r = check_cross_user(&cfg, &session(), Some("bob"));
+        let r = check_cross_user(&cfg, &session(), Some("bob"), IdentityProbeOutcome::Ran);
         assert!(r.is_none(), "override suppresses warning");
         // The config still records the mismatch — ownership is a separate concern.
         assert_eq!(cfg.remote_user.as_deref(), Some("alice"));
@@ -2126,6 +2281,207 @@ mod tests {
         assert_eq!(
             before, after,
             "session file must NOT be mutated when probe is skipped"
+        );
+
+        // Explicitly: the cached daemon_user survives a skipped probe —
+        // nothing was learned, so nothing is claimed and nothing is cleared.
+        let reloaded = SessionInfo::load(&s.id).expect("reload session");
+        assert_eq!(
+            reloaded.daemon_user.as_deref(),
+            Some("originaluser"),
+            "a skipped probe must keep the cached daemon_user"
+        );
+    }
+
+    /// How a [`spawn_fake_daemon`] fake daemon answers.
+    #[derive(Clone, Copy)]
+    enum FakeDaemonMode {
+        /// The daemon is wedged: every SKILL request is answered with a
+        /// NAK (transport error), so the liveness probe fails.
+        Wedged,
+        /// The daemon answers everything, but the identity probe returns
+        /// `nil` — no `USER` on the daemon side, so the identity stays
+        /// unconfirmed.
+        NoIdentity,
+    }
+
+    /// Fake daemon that records every SKILL request it receives.
+    ///
+    /// Returns the port, the recorded requests, and a keep-alive handle
+    /// (the listener thread ends when it is dropped).
+    fn spawn_fake_daemon(
+        mode: FakeDaemonMode,
+    ) -> (
+        u16,
+        std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+        std::sync::Arc<()>,
+    ) {
+        use std::io::{Read, Write};
+        use std::net::Shutdown;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("local addr").port();
+        let seen: std::sync::Arc<std::sync::Mutex<Vec<String>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let keep = std::sync::Arc::new(());
+        let seen2 = std::sync::Arc::clone(&seen);
+        let keep2 = std::sync::Arc::clone(&keep);
+        // The version answer matches the CLI version so the version-skew
+        // warning does not pollute the assertions.
+        let version = format!("\"{}\"", env!("CARGO_PKG_VERSION"));
+        std::thread::spawn(move || {
+            let _keep = keep2;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).to_string();
+                if n == 0 {
+                    // Reachability probe (no payload) — nothing to answer.
+                    continue;
+                }
+                seen2
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .push(request.clone());
+
+                let (marker, payload): (u8, &[u8]) = match mode {
+                    FakeDaemonMode::Wedged => (0x15, b"wedged"),
+                    FakeDaemonMode::NoIdentity => {
+                        if request.contains("getShellEnvVar") {
+                            // STX + nil → the identity stays unconfirmed.
+                            (0x02, b"nil")
+                        } else if request.contains("RBDVersion") {
+                            (0x02, version.as_bytes())
+                        } else {
+                            // Liveness probe → a number.
+                            (0x02, b"2")
+                        }
+                    }
+                };
+                let mut out = vec![marker];
+                out.extend_from_slice(payload);
+                let _ = stream.write_all(&out);
+                let _ = stream.shutdown(Shutdown::Write);
+            }
+        });
+        (port, seen, keep)
+    }
+
+    /// `session show` must check liveness FIRST: a dead/wedged daemon must
+    /// not make the user wait out the whole identity-probe budget before
+    /// they learn that the daemon is gone.
+    #[test]
+    #[serial]
+    fn show_checks_liveness_first_and_skips_the_identity_probe() {
+        let _cache = CacheDirGuard::new();
+        let _state = StateDirGuard::new();
+
+        let (port, seen, _keep) = spawn_fake_daemon(FakeDaemonMode::Wedged);
+
+        let mut s = session();
+        s.host = "localhost".into();
+        s.port = port;
+        s.daemon_user = Some("cacheduser".into());
+        s.save_to_session_file();
+
+        let mut cfg = test_config(None, false);
+        cfg.remote_host = None;
+        cfg.port = 0;
+        cfg.port_explicit = false;
+        // A large budget: if the identity probe ran, it would burn 30s.
+        cfg.timeout = 30;
+        let ctx = CommandContext::new(cfg, Some("local-target".into())).expect("ctx");
+
+        let started = std::time::Instant::now();
+        let result = show(&ctx, &s.id, OutputFormat::Json).expect("show should succeed");
+        let elapsed = started.elapsed();
+
+        // The identity and version probes must never have been sent.
+        let requests = seen
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        assert!(
+            !requests.iter().any(|r| r.contains("getShellEnvVar")),
+            "the identity probe must be skipped when the daemon is not alive, saw: {requests:?}"
+        );
+        assert!(
+            !requests.iter().any(|r| r.contains("RBDVersion")),
+            "the version probe must be skipped when the daemon is not alive, saw: {requests:?}"
+        );
+
+        // The skip is visible through the existing probe fields.
+        assert_eq!(result["probe"]["skipped"], true);
+        assert_eq!(result["probe"]["skip_reason"], "daemon_not_alive");
+        assert_eq!(result["session"]["daemon_responsive"], false);
+        assert_eq!(result["session"]["data_source"], "cached");
+
+        // The stale-daemon hint must survive the skip: the port is bound
+        // while the daemon itself is wedged.
+        assert!(
+            result["warnings"]["stale_daemon"].as_str().is_some(),
+            "a wedged daemon must still produce the stale-daemon hint, got {}",
+            result["warnings"]["stale_daemon"]
+        );
+
+        assert!(
+            elapsed.as_secs_f64() < 5.0,
+            "a dead daemon must be detected in seconds, not after the 30s identity budget, \
+             took {elapsed:?}"
+        );
+    }
+
+    /// An unconfirmed identity probe must CLEAR the stored daemon_user:
+    /// the connect-time guard compares the stored value, so a stale one
+    /// would be compared as if it had been verified.
+    #[test]
+    #[serial]
+    fn show_clears_stored_daemon_user_when_the_identity_probe_is_unconfirmed() {
+        let _cache = CacheDirGuard::new();
+        let _state = StateDirGuard::new();
+
+        let (port, _seen, _keep) = spawn_fake_daemon(FakeDaemonMode::NoIdentity);
+
+        let mut s = session();
+        s.host = "localhost".into();
+        s.port = port;
+        s.daemon_user = Some("staleuser".into());
+        s.save_to_session_file();
+
+        let mut cfg = test_config(Some("expected-user"), false);
+        cfg.remote_host = None;
+        cfg.port = 0;
+        cfg.port_explicit = false;
+        cfg.timeout = 5;
+        let ctx = CommandContext::new(cfg, Some("local-target".into())).expect("ctx");
+
+        let result = show(&ctx, &s.id, OutputFormat::Json).expect("show should succeed");
+
+        // The probe ran and confirmed nothing.
+        assert_eq!(result["probe"]["skipped"], false);
+        assert!(
+            result["session"]["daemon_user"].is_null(),
+            "the reported daemon user must be the (unconfirmed) live value, got {}",
+            result["session"]["daemon_user"]
+        );
+
+        // The stored value must be gone — not left behind to look verified.
+        let reloaded = SessionInfo::load(&s.id).expect("reload session");
+        assert!(
+            reloaded.daemon_user.is_none(),
+            "an unconfirmed identity probe must clear the stored daemon_user, got {:?}",
+            reloaded.daemon_user
+        );
+
+        // The cross-user warning must say the probe RAN (not that it was
+        // skipped) and point at the real remedies.
+        let warning = result["warnings"]["cross_user"]
+            .as_str()
+            .expect("cross-user warning for an unconfirmed identity");
+        assert!(
+            warning.contains("VB_TIMEOUT"),
+            "the warning must advise raising VB_TIMEOUT: {warning}"
         );
     }
 
