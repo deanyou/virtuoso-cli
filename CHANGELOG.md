@@ -53,6 +53,11 @@ All notable changes to this project will be documented in this file.
   the loop keeps a snapshot of the composer holding its own message and
   compares the composer with it before clearing it, so text the user has
   typed over it is never wiped.
+  Whether the composer holds text is decided by the shape of its ink and not
+  by its amount: the caret and the descenders of the disclaimer above the
+  input line are not text, but a glyph is wider than the caret. On the
+  captured frames this classifies every frame exactly as the previous ink
+  threshold did, and it also protects a single character the user typed.
   The delivery is verified with a screenshot.
   `--timeout 0` runs the loop until it is stopped.
   An unreadable screenshot (a truncated capture) counts as "no prompt this

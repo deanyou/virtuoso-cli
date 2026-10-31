@@ -192,14 +192,18 @@ The input line moves with the composer layout, so a few candidate rows are
 tried in turn (`COMPOSER_CLICK_OFFSETS`, counted from the bottom of the
 client area); the first one where the text shows up in the screenshot wins.
 
-A composer that already holds ink is never typed into: it means either a
+A composer that already holds text is never typed into: it means either a
 prompt is pending or the user is writing, so the message stays queued
 ("guidance skipped: the composer is not empty"). An empty composer is not
 free of ink — the blinking caret is a line of its own and the descenders of
-the disclaimer above it bleed into the crop — so the guard allows a small
-amount of ink: measured on the captured frames an empty composer shows 24
-pixels, the smallest composer that holds text shows 163. This also means the
-loop never clears text somebody else typed.
+the disclaimer above it bleed into the crop — so the ink is judged by its
+**shape** and not by its amount: everything outside the top rows of the crop
+that is not a narrow vertical line is text. On the captured frames this
+classifies every frame exactly as an ink threshold did (an empty composer
+shows 24 pixels, the smallest composer that holds text shows 163), and it
+also protects a single character the user typed, which carries less ink
+than the empty baseline. This also means the loop never clears text
+somebody else typed.
 
 The one exception is the text the loop itself typed and could not submit.
 The loop keeps a snapshot of the composer as it held its own message and

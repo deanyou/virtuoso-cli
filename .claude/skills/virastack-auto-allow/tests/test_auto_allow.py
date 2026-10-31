@@ -679,7 +679,7 @@ class GuidanceDeliveryTests(unittest.TestCase):
     W, H = 640, 604
 
     def _patch(self, accepts_type_at=None, placeholder=False, leftover=False,
-               caret=False):
+               caret=False, single_char=False):
         """Mock the vcli boundary and the capture.
 
         `accepts_type_at` is the client row the fake composer accepts typing
@@ -688,6 +688,8 @@ class GuidanceDeliveryTests(unittest.TestCase):
         `leftover` makes the composer hold the text of a previous, unconfirmed
         attempt of the loop itself. `caret` makes the empty composer show the
         blinking caret and the descenders of the disclaimer above it.
+        `single_char` makes the composer hold one narrow character the user
+        typed.
         """
         state = {"typed": False, "leftover": leftover}
         self.state = state
@@ -733,6 +735,12 @@ class GuidanceDeliveryTests(unittest.TestCase):
                 for x in range(35, 300):
                     for y in range(self.H - 70, self.H - 62):
                         img.putpixel((x, y), 140)
+            if single_char:
+                # One narrow character the user typed: three columns of ink,
+                # less than the ink of an empty composer with its caret.
+                for x in range(38, 41):
+                    for y in range(self.H - 66, self.H - 63):
+                        img.putpixel((x, y), 220)
             if state.get("foreign"):
                 # Text the user typed over the message of the loop.
                 for x in range(40, 200):
@@ -868,6 +876,52 @@ class GuidanceDeliveryTests(unittest.TestCase):
         self.assertTrue(delivered)
         self.assertIsNone(snapshot)
         self.assertTrue(self._returns_sent())
+
+    def test_a_single_character_the_user_typed_is_not_wiped(self):
+        # One narrow character carries less ink than an empty composer with its
+        # caret, so the ink is judged by its shape: a glyph is wider than the
+        # caret, and the user's character must survive the loop.
+        self._patch(accepts_type_at=68, single_char=True)
+        delivered, snapshot = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        self.assertFalse(delivered)
+        self.assertIsNone(snapshot)
+        self.assertEqual(self._clears_sent(), [])
+        self.assertEqual(self._types_sent(), [])
+
+
+class ComposerInkShapeTests(unittest.TestCase):
+    """An empty composer is told apart from one that holds text by shape."""
+
+    def _crop(self):
+        return np.full((56, 400), 30, dtype=np.uint8)
+
+    def test_a_caret_and_the_descenders_are_not_text(self):
+        crop = self._crop()
+        for y in range(28, 42):
+            crop[y, 37] = 220
+        for x in (277, 326, 395):
+            crop[0, x] = 220
+        for x in range(322, 326):
+            crop[1, x] = 220
+        self.assertFalse(aa.composer_holds_text(crop))
+
+    def test_a_narrow_glyph_is_text(self):
+        crop = self._crop()
+        for x in range(38, 41):
+            for y in range(30, 33):
+                crop[y, x] = 220
+        self.assertTrue(aa.composer_holds_text(crop))
+
+    def test_a_line_of_text_is_text(self):
+        crop = self._crop()
+        crop[28:34, 40:200] = 220
+        self.assertTrue(aa.composer_holds_text(crop))
+
+    def test_an_empty_crop_holds_no_text(self):
+        self.assertFalse(aa.composer_holds_text(self._crop()))
+
+    def test_a_missing_crop_holds_no_text(self):
+        self.assertFalse(aa.composer_holds_text(None))
 
 
 if __name__ == "__main__":

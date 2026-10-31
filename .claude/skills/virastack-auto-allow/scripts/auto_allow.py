@@ -59,13 +59,18 @@ BAND_SHIFT = 3
 # Grey level from which a pixel counts as text, and the slack allowed when
 # two composer crops are compared (the placeholder re-renders slightly).
 COMPOSER_INK_THRESHOLD = 120
-# How much ink an empty composer may show before it counts as holding text.
-# An empty composer is not free of ink: the descenders of the disclaimer above
-# it bleed into the crop and the blinking caret is a line of its own. Measured
-# over the captured frames: an empty composer shows 0, 10 or 24 pixels (the
-# 24 are the descenders plus the caret), the smallest composer that holds
-# text shows 163. The tolerance sits in that gap.
+# Slack allowed when the ink of the composer is compared with the ink of an
+# empty one: the caret blinks and the descenders of the disclaimer above it
+# bleed into the crop, so the two never match exactly. Whether the composer
+# holds text is decided by the shape of the ink, not by this amount.
 COMPOSER_INK_TOLERANCE = 40
+# The rows at the top of the composer crop that hold the descenders of the
+# disclaimer above the input line, and the shape of the blinking caret: a
+# vertical line of at most two columns. Everything else in the crop is a
+# glyph.
+COMPOSER_DESCENDER_ROWS = 2
+CARET_MAX_WIDTH = 2
+CARET_MIN_HEIGHT = 8
 # How much the composer may differ from the text the loop typed and still be
 # taken for it: the ink has to match within this ratio and the glyphs within
 # this similarity.
@@ -404,6 +409,47 @@ def composer_ink(crop):
     return int((crop >= COMPOSER_INK_THRESHOLD).sum())
 
 
+def composer_holds_text(crop):
+    """Whether the composer holds anything but the caret.
+
+    An empty composer is not free of ink: the descenders of the disclaimer
+    above the input line bleed into the top rows of the crop and the blinking
+    caret is a vertical line of its own. Neither is text — but a character
+    the user typed is, and it can be as small as a single narrow glyph. The
+    ink is therefore judged by its shape and not by its amount: anything
+    outside the descender rows that is not a narrow vertical line is text,
+    so a one-character input is protected as well.
+    """
+    if crop is None:
+        return False
+    body = crop >= COMPOSER_INK_THRESHOLD
+    body = body.copy()
+    body[:COMPOSER_DESCENDER_ROWS, :] = False
+    if not body.any():
+        return False
+    columns = np.nonzero(body.any(axis=0))[0]
+    start = prev = int(columns[0])
+    for column in columns[1:]:
+        column = int(column)
+        if column == prev + 1:
+            prev = column
+            continue
+        if not _is_caret(body, start, prev):
+            return True
+        start = prev = column
+    return not _is_caret(body, start, prev)
+
+
+def _is_caret(mask, first, last):
+    """Whether the ink in these columns is the blinking caret."""
+    if last - first + 1 > CARET_MAX_WIDTH:
+        return False
+    rows = np.nonzero(mask[:, first:last + 1].any(axis=1))[0]
+    if len(rows) == 0:
+        return False
+    return int(rows[-1]) - int(rows[0]) + 1 >= CARET_MIN_HEIGHT
+
+
 def composer_is_ours(crop, snapshot):
     """Whether the composer still holds the text the loop typed.
 
@@ -459,14 +505,14 @@ def try_send_guidance(args, message, workdir, ours_snapshot=None):
         return False, None
     ink_before = composer_ink(before)
     if ours_snapshot is not None:
-        if ink_before > COMPOSER_INK_TOLERANCE \
+        if composer_holds_text(before) \
                 and not composer_is_ours(before, ours_snapshot):
             # The loop left its message in the composer, but the text that is
             # there now is not the message the loop typed: the user has typed
             # over it. Clearing the composer would wipe their text.
             print("guidance skipped: the composer holds text that is not ours")
             return False, None
-    elif ink_before > COMPOSER_INK_TOLERANCE:
+    elif composer_holds_text(before):
         # The composer holds something: the answer placeholder of a pending
         # prompt, or text the user typed. Writing here would answer the prompt
         # instead of talking to the agent, or destroy the user's message.
@@ -507,8 +553,7 @@ def try_send_guidance(args, message, workdir, ours_snapshot=None):
         # The composer did not accept the text — the agent is busy. Keep the
         # message and try again on the next poll.
         still = composer_crop(args, workdir)
-        ink_still = composer_ink(still)
-        if ink_still is not None and ink_still > COMPOSER_INK_TOLERANCE:
+        if composer_holds_text(still):
             # The text is in the composer but was not confirmed: the next
             # attempt may clear it and try again.
             return False, still
