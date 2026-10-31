@@ -180,10 +180,10 @@ def command_band(screenshot, found):
     look like a repeat of the same one.
 
     The code block is the only part of the card with its own background, so
-    the command is the last text line whose background differs from the
-    background of the status line above the options.
+    the command is the last text line that does not sit on the background of
+    the card itself.
     """
-    x, y, _ = found
+    _, y, _ = found
     crop = crop_region(screenshot, (
         0,
         max(0, y - COMMAND_REGION_ABOVE),
@@ -196,16 +196,17 @@ def command_band(screenshot, found):
     groups = _text_groups(rows)
     if not groups:
         return None
-    status_bg = _row_background(crop[groups[-1][0]])
-    candidates = [g for g in groups if _row_background(crop[g[0]]) != status_bg]
+    card_bg = _row_background(crop.reshape(-1))
+    candidates = [g for g in groups if _row_background(crop[g[0]]) != card_bg]
     if not candidates:
         # No code block in sight: fall back to the last text line.
         first, last = groups[-1]
         return crop[first:last + 1]
     first, last = candidates[-1]
+    command_bg = _row_background(crop[first])
     # A command that wraps onto several lines: take the whole block.
     for earlier in reversed(candidates[:-1]):
-        if _row_background(crop[earlier[0]]) == _row_background(crop[first]) \
+        if _row_background(crop[earlier[0]]) == command_bg \
                 and earlier[1] >= first - 30:
             first = earlier[0]
         else:
