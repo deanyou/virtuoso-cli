@@ -7,6 +7,11 @@ use crate::error::Result;
 
 /// Run the MCP server (stdio mode).
 pub fn run() -> Result<()> {
+    // A set-but-invalid VB_SKILLS_DIR is a configuration error: serving a
+    // different skills root than the operator asked for is worse than
+    // refusing to start.
+    crate::mcp::resources::resolve_skills_dir_override()
+        .map_err(|e| crate::error::VirtuosoError::Config(format!("MCP server {e}")))?;
     crate::auth::Auth::init();
     let config = crate::mcp::McpConfig::from_env();
     // Resolve the active target via the canonical selection path so the MCP

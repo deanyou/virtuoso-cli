@@ -145,10 +145,18 @@ impl MaestroOps {
     /// List all Assembler-global design variables. Returns JSON via sprintf.
     ///
     /// Scope note: `set_var`/`get_var` write and read the *Assembler-global*
-    /// scope (`maeSetVar`/`maeGetVar`), which is the scope that reaches the
-    /// netlist. This method used to read `asiGetDesignVarList`, the *per-test /
+    /// (Maestro-internal) varList — `maeSetVar`/`maeGetVar`. A readback in
+    /// that scope does NOT prove what the netlist contains: the variable the
+    /// simulator consumes lives in the asi design-var list
+    /// (`asiSetDesignVarList`), which is flushed into the netlist at run
+    /// setup. So a `set_var` that is followed by a matching `get_var` is not
+    /// evidence that a run used the new value — the generated netlist is the
+    /// ground truth (the `parameters` line of `input.scs`).
+    ///
+    /// This method used to read `asiGetDesignVarList`, the *per-test /
     /// Explorer* scope — a different table that does not mirror the global one,
-    /// so variables written over RPC always read back as absent.
+    /// so variables written over RPC always read back as absent. That is why
+    /// the READ side stays on `maeGetVar`.
     ///
     /// IC23.1 has no `mae*` enumerator (`maeGetVarList` / `maeGetVars` /
     /// `maeGetAllVars` / `maeGetVarNames` / `maeListVars` /
