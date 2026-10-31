@@ -8,15 +8,24 @@ helper uses, mirroring the Rust-side guarantees tested in
 - window identity components (window id, _NET_WM_PID, display) are parsed
   strictly, and PID zero / missing is rejected;
 - title is only ever a narrowing hint, never a sole identity;
-- dialog-size classification matches the pinned geometric thresholds.
+- dialog-size classification matches the pinned geometric thresholds;
+- a sent key is not a dismissal: the exact XID must be queried via
+  XGetWindowAttributes and only X error 3 (BadWindow) proves destruction
+  (port of virtuoso-bridge-lite PR #248, `test_x11_dismiss_outcome.py`).
 
 Run:
     python3 -m unittest discover -s tests/docs -p 'test_x11_dismiss_dialog.py' -v
 """
+import ctypes
 import importlib.util
+import io
+import json
 import os
+import subprocess
 import sys
 import unittest
+import unittest.mock
+from contextlib import redirect_stdout
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HELPER_PATH = os.path.join(REPO_ROOT, "resources", "x11_dismiss_dialog.py")
@@ -237,6 +246,668 @@ class VirtuosoClassTests(unittest.TestCase):
 
     def test_empty_class_rejected(self):
         self.assertFalse(x11d._is_virtuoso_class([]))
+
+
+class _FakeReader:
+    """Stand-in for _XWindowStateReader; answers per XID, records queries."""
+
+    def __init__(self, states=None, error=None):
+        self.states = states or {}
+        self.error = error
+        self.queried = []
+        self.closed = False
+
+    def window_state(self, xid):
+        self.queried.append(xid)
+        if self.error is not None:
+            raise self.error
+        return self.states.get(xid, {"exists": False, "mapped": False})
+
+    def close(self):
+        self.closed = True
+
+
+class _SequenceReader:
+    """Reader stub that answers with a scripted sequence of window states.
+
+    The last entry repeats once the script is exhausted, so "always mapped"
+    is simply a one-entry script.
+    """
+
+    def __init__(self, states):
+        self.states = list(states)
+        self.queried = []
+        self.closed = False
+
+    def window_state(self, xid):
+        self.queried.append(xid)
+        if len(self.states) > 1:
+            return self.states.pop(0)
+        return self.states[0]
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeClock:
+    """Deterministic clock: sleep() advances it, monotonic() reads it."""
+
+    def __init__(self):
+        self.now = 0.0
+        self.slept = []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def _x_error_event(code):
+    """Build a real _XErrorEvent pointer, as the X server would deliver it."""
+    event = x11d._XErrorEvent()
+    event.type = 2  # Error
+    event.error_code = code
+    return ctypes.cast(ctypes.pointer(event), ctypes.c_void_p)
+
+
+class _FakeXlib:
+    """ctypes stand-in for the XGetWindowAttributes call.
+
+    Fills map_state like the server would and routes any simulated protocol
+    error through the reader's own error handler, so the captured-code logic
+    is exercised instead of bypassed.
+    """
+
+    def __init__(self, reader, status=1, map_state=2, error_codes=()):
+        self.reader = reader
+        self.status = status
+        self.map_state = map_state
+        self.error_codes = list(error_codes)
+        self.queried = []
+
+    def XGetWindowAttributes(self, display, window_id, attrs_ptr):
+        self.queried.append(window_id)
+        attrs = ctypes.cast(
+            attrs_ptr, ctypes.POINTER(x11d._XWindowAttributes)
+        ).contents
+        attrs.map_state = self.map_state
+        for code in self.error_codes:
+            self.reader._handle_x_error(None, _x_error_event(code))
+        return self.status
+
+
+def _offline_reader(status=1, map_state=2, error_codes=()):
+    """A _XWindowStateReader wired to a fake libX11 (no display, no server)."""
+    reader = x11d._XWindowStateReader.__new__(x11d._XWindowStateReader)
+    reader._xlib = None
+    reader._display = 1
+    reader._closed = False
+    reader._error_codes = []
+    fake = _FakeXlib(reader, status, map_state, error_codes)
+    reader._xlib = fake
+    return reader, fake
+
+
+class WindowStateReaderTests(unittest.TestCase):
+    """window_state(): only X error 3 (BadWindow) means 'destroyed'."""
+
+    def test_viewable_window_is_still_mapped(self):
+        reader, fake = _offline_reader(map_state=x11d.MAP_VIEWABLE)
+        state = reader.window_state(0x10)
+        self.assertEqual(fake.queried, [0x10])
+        self.assertEqual(state, {"exists": True, "mapped": True})
+
+    def test_unmapped_window_is_closed_but_still_exists(self):
+        reader, _ = _offline_reader(map_state=x11d.MAP_UNMAPPED)
+        self.assertEqual(
+            reader.window_state(0x10), {"exists": True, "mapped": False}
+        )
+
+    def test_unviewable_child_counts_as_mapped(self):
+        # IsUnviewable(1): a mapped child of an unmapped parent is not closed.
+        reader, _ = _offline_reader(map_state=1)
+        self.assertEqual(
+            reader.window_state(0x10), {"exists": True, "mapped": True}
+        )
+
+    def test_bad_window_error_means_destroyed(self):
+        reader, _ = _offline_reader(error_codes=[x11d.X_BAD_WINDOW])
+        self.assertEqual(
+            reader.window_state(0x10), {"exists": False, "mapped": False}
+        )
+
+    def test_non_badwindow_error_is_a_verification_failure(self):
+        for code in (1, 9, 11):  # BadRequest, BadDrawable, BadAlloc
+            with self.subTest(code=code):
+                reader, _ = _offline_reader(error_codes=[code])
+                with self.assertRaises(x11d.XInspectionFailure):
+                    reader.window_state(0x10)
+
+    def test_badwindow_plus_another_error_is_not_destruction(self):
+        reader, _ = _offline_reader(error_codes=[x11d.X_BAD_WINDOW, 9])
+        with self.assertRaises(x11d.XInspectionFailure):
+            reader.window_state(0x10)
+
+    def test_zero_status_without_error_is_a_verification_failure(self):
+        reader, _ = _offline_reader(status=0)
+        with self.assertRaises(x11d.XInspectionFailure):
+            reader.window_state(0x10)
+
+    def test_error_codes_do_not_leak_into_the_next_query(self):
+        reader, _ = _offline_reader(map_state=x11d.MAP_VIEWABLE)
+        reader._handle_x_error(None, _x_error_event(x11d.X_BAD_WINDOW))
+        self.assertEqual(reader._error_codes, [x11d.X_BAD_WINDOW])
+        self.assertEqual(
+            reader.window_state(0x10), {"exists": True, "mapped": True}
+        )
+        self.assertEqual(reader._error_codes, [])
+
+    def test_error_handler_records_the_code_and_keeps_the_process_alive(self):
+        # The default libX11 handler prints and exits; ours must return 0.
+        reader, _ = _offline_reader()
+        self.assertEqual(reader._handle_x_error(None, _x_error_event(3)), 0)
+        self.assertEqual(reader._error_codes, [3])
+
+
+class VerifyDismissalTests(unittest.TestCase):
+    """_verify_dismissal(): a sent key is only *requested* until proven closed."""
+
+    def setUp(self):
+        p = unittest.mock.patch.object(x11d.time, "sleep", lambda seconds: None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _patch_reader(self, reader=None, error=None):
+        def _open(display):
+            if error is not None:
+                raise error
+            return reader
+
+        p = unittest.mock.patch.object(x11d, "_open_window_state_reader", _open)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _patch_clock(self):
+        """Drive the verification budget with a deterministic clock."""
+        clock = _FakeClock()
+        p = unittest.mock.patch.object(x11d.time, "sleep", clock.sleep)
+        p.start()
+        self.addCleanup(p.stop)
+        p = unittest.mock.patch.object(x11d, "_monotonic", clock.monotonic)
+        p.start()
+        self.addCleanup(p.stop)
+        return clock
+
+    @staticmethod
+    def _requested(**overrides):
+        result = {
+            "window_id": "0x10",
+            "requested_window_id": "0x10",
+            "resolved_window_id": "0x10",
+            "child": "0x10",
+            "title": "Save Changes",
+            "status": "requested",
+            "action_sent": True,
+            "closure_confirmed": False,
+            "still_mapped": None,
+            "action": "enter",
+            "x": 0, "y": 0, "w": 580, "h": 140,
+        }
+        result.update(overrides)
+        return result
+
+    def _verify(self, result, reader=None, error=None):
+        self._patch_reader(reader=reader, error=error)
+        return x11d._verify_dismissal(result, ":7")
+
+    def test_verified_closed_reports_dismissed(self):
+        reader = _FakeReader({0x10: {"exists": False, "mapped": False}})
+        out = self._verify(self._requested(), reader=reader)
+        self.assertEqual(reader.queried, [0x10])
+        self.assertEqual(out["status"], "closed")
+        self.assertIs(out["closure_confirmed"], True)
+        self.assertIs(out["still_mapped"], False)
+        self.assertEqual(out["dismissed"], "0x10")
+        self.assertTrue(reader.closed)
+
+    def test_unmapped_but_alive_window_is_verified_closed(self):
+        reader = _FakeReader({0x10: {"exists": True, "mapped": False}})
+        out = self._verify(self._requested(), reader=reader)
+        self.assertEqual(out["status"], "closed")
+        self.assertEqual(out["dismissed"], "0x10")
+
+    def test_still_mapped_window_is_not_dismissed(self):
+        reader = _FakeReader({0x10: {"exists": True, "mapped": True}})
+        out = self._verify(self._requested(), reader=reader)
+        self.assertEqual(out["status"], "requested")
+        self.assertIs(out["closure_confirmed"], False)
+        self.assertIs(out["still_mapped"], True)
+        self.assertNotIn("dismissed", out)
+
+    def test_unavailable_display_never_confirms_closure(self):
+        out = self._verify(
+            self._requested(), error=x11d.XInspectionFailure("cannot open display")
+        )
+        self.assertEqual(out["status"], "requested")
+        self.assertIsNone(out["still_mapped"])
+        self.assertIs(out["closure_confirmed"], False)
+        self.assertNotIn("dismissed", out)
+        self.assertIn("cannot open display", out["verification_error"])
+
+    def test_state_query_failure_never_confirms_closure(self):
+        reader = _FakeReader(error=x11d.XInspectionFailure("cannot read attributes"))
+        out = self._verify(self._requested(), reader=reader)
+        self.assertNotIn("dismissed", out)
+        self.assertIs(out["closure_confirmed"], False)
+        self.assertIn("cannot read attributes", out["verification_error"])
+
+    def test_unexpected_failure_never_confirms_closure(self):
+        reader = _FakeReader(error=RuntimeError("ctypes blew up"))
+        out = self._verify(self._requested(), reader=reader)
+        self.assertNotIn("dismissed", out)
+        self.assertIn("ctypes blew up", out["verification_error"])
+
+    def test_malformed_target_id_never_confirms_closure(self):
+        reader = _FakeReader()
+        out = self._verify(self._requested(child="not-a-window"), reader=reader)
+        self.assertNotIn("dismissed", out)
+        self.assertEqual(reader.queried, [])
+        self.assertIn("verification_error", out)
+
+    def test_legacy_dismissed_key_is_not_trusted(self):
+        # An old helper (or a caller) claiming "dismissed" with no closure
+        # evidence must not survive verification.
+        out = self._verify(
+            self._requested(status=None, dismissed="0x10"),
+            reader=_FakeReader({0x10: {"exists": True, "mapped": True}}),
+        )
+        self.assertNotIn("dismissed", out)
+        self.assertEqual(out["status"], "requested")
+
+    def test_failed_action_is_not_verified(self):
+        result = {"error": "libXtst not found", "window_id": "0x10"}
+        self._patch_reader(reader=_FakeReader())
+        self.assertEqual(x11d._verify_dismissal(result, ":7"), result)
+
+    def test_missing_target_is_reported_not_assumed_closed(self):
+        result = {"window_id": "", "action": "enter"}
+        self._patch_reader(reader=_FakeReader())
+        out = x11d._verify_dismissal(result, ":7")
+        self.assertNotIn("dismissed", out)
+        self.assertIn("no target window id", out["verification_error"])
+
+    def test_teardown_failure_does_not_discard_the_verdict(self):
+        class _BrokenClose(_FakeReader):
+            def close(self):
+                raise OSError("teardown failed")
+
+        closed = self._verify(
+            self._requested(),
+            reader=_BrokenClose({0x10: {"exists": False, "mapped": False}}),
+        )
+        self.assertEqual(closed["status"], "closed")
+        self.assertEqual(closed["dismissed"], "0x10")
+
+        failed = self._verify(
+            self._requested(),
+            reader=_BrokenClose(
+                {0x10: {"exists": True, "mapped": True}},
+                error=OSError("cannot query"),
+            ),
+        )
+        self.assertNotIn("dismissed", failed)
+        self.assertIn("cannot query", failed["verification_error"])
+
+
+class VerifyPollTests(unittest.TestCase):
+    """_verify_dismissal() polls the exact XID instead of sampling it once.
+
+    A single sample after the settle time misjudged a slow dialog (a second
+    confirmation, a busy X server) as still mapped.
+    """
+
+    def setUp(self):
+        clock = _FakeClock()
+        p = unittest.mock.patch.object(x11d.time, "sleep", clock.sleep)
+        p.start()
+        self.addCleanup(p.stop)
+        p = unittest.mock.patch.object(x11d, "_monotonic", clock.monotonic)
+        p.start()
+        self.addCleanup(p.stop)
+        self.clock = clock
+
+    @staticmethod
+    def _requested(**overrides):
+        result = {
+            "window_id": "0x10",
+            "requested_window_id": "0x10",
+            "resolved_window_id": "0x10",
+            "child": "0x10",
+            "title": "Save Changes",
+            "status": "requested",
+            "action_sent": True,
+            "closure_confirmed": False,
+            "still_mapped": None,
+            "action": "enter",
+            "x": 0, "y": 0, "w": 580, "h": 140,
+        }
+        result.update(overrides)
+        return result
+
+    def _verify(self, result, reader):
+        def _open(display):
+            return reader
+
+        p = unittest.mock.patch.object(x11d, "_open_window_state_reader", _open)
+        p.start()
+        self.addCleanup(p.stop)
+        return x11d._verify_dismissal(result, ":7")
+
+    def test_slow_dialog_is_confirmed_closed_by_the_poll(self):
+        # Still mapped on the first two samples, gone on the third.
+        reader = _SequenceReader([
+            {"exists": True, "mapped": True},
+            {"exists": True, "mapped": True},
+            {"exists": True, "mapped": False},
+        ])
+        out = self._verify(self._requested(), reader)
+        self.assertEqual(out["status"], "closed")
+        self.assertIs(out["closure_confirmed"], True)
+        self.assertIs(out["still_mapped"], False)
+        self.assertEqual(out["dismissed"], "0x10")
+        self.assertEqual(len(reader.queried), 3)
+        # The poll waited between the samples instead of giving up after the
+        # settle time.
+        self.assertEqual(self.clock.slept[-1], x11d.VERIFY_POLL_INTERVAL_SECONDS)
+        self.assertTrue(reader.closed)
+
+    def test_destroyed_window_is_confirmed_on_the_first_sample(self):
+        reader = _SequenceReader([{"exists": False, "mapped": False}])
+        out = self._verify(self._requested(), reader)
+        self.assertEqual(out["status"], "closed")
+        self.assertEqual(out["dismissed"], "0x10")
+        self.assertEqual(len(reader.queried), 1)
+
+    def test_still_mapped_after_the_budget_is_not_a_dismissal(self):
+        reader = _SequenceReader([{"exists": True, "mapped": True}])
+        out = self._verify(self._requested(), reader)
+        self.assertEqual(out["status"], "requested")
+        self.assertIs(out["closure_confirmed"], False)
+        self.assertIs(out["still_mapped"], True)
+        self.assertNotIn("dismissed", out)
+        # The poll kept re-checking until the verification budget was spent.
+        self.assertGreater(len(reader.queried), 1)
+        self.assertLessEqual(len(reader.queried), x11d.VERIFY_MAX_POLLS + 1)
+        spent = self.clock.now - x11d.VERIFY_SETTLE_SECONDS
+        self.assertLessEqual(spent, x11d.VERIFY_BUDGET_SECONDS + 1e-6)
+        self.assertGreater(spent, 0.0)
+
+
+class DismissExitCodeTests(unittest.TestCase):
+    """main() fails closed: exit 0 only when the window was verified closed."""
+
+    def setUp(self):
+        p = unittest.mock.patch.object(x11d.time, "sleep", lambda seconds: None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _run_main(self, argv, dismiss=None, reader=None, reader_error=None,
+                  dialogs=None, dismiss_error=None):
+        def _patch(obj, name, value):
+            p = unittest.mock.patch.object(obj, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+
+        # The helper's display reachability probe is stubbed out; no X server.
+        _patch(x11d.subprocess, "check_output", lambda cmd, **kw: b"")
+
+        def _dismiss(*args, **kwargs):
+            if dismiss_error is not None:
+                raise dismiss_error
+            if callable(dismiss):
+                return dismiss(*args, **kwargs)
+            return dict(dismiss)
+
+        _patch(x11d, "dismiss_window", _dismiss)
+        if dialogs is not None:
+            _patch(x11d, "find_dialogs", lambda display: list(dialogs))
+
+        def _open(display):
+            if reader_error is not None:
+                raise reader_error
+            return reader
+
+        _patch(x11d, "_open_window_state_reader", _open)
+
+        original_argv = sys.argv
+        sys.argv = ["x11_dismiss_dialog.py"] + argv
+        self.addCleanup(setattr, sys, "argv", original_argv)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ctx:
+                x11d.main()
+        records = [
+            json.loads(line)
+            for line in out.getvalue().splitlines()
+            if line.strip()
+        ]
+        return ctx.exception.code, records
+
+    @staticmethod
+    def _requested(**overrides):
+        result = {
+            "window_id": "0x10",
+            "requested_window_id": "0x10",
+            "resolved_window_id": "0x10",
+            "child": "0x10",
+            "title": "Save Changes",
+            "status": "requested",
+            "action_sent": True,
+            "closure_confirmed": False,
+            "still_mapped": None,
+            "action": "enter",
+            "x": 0, "y": 0, "w": 580, "h": 140,
+        }
+        result.update(overrides)
+        return result
+
+    def test_verified_closed_exits_zero(self):
+        reader = _FakeReader({0x10: {"exists": False, "mapped": False}})
+        code, records = self._run_main(
+            [":7", "--dismiss-window", "0x10"],
+            dismiss=self._requested(), reader=reader,
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["status"], "closed")
+        self.assertEqual(records[0]["dismissed"], "0x10")
+        self.assertEqual(records[0]["requested_window_id"], "0x10")
+
+    def test_still_mapped_exits_nonzero_and_is_not_dismissed(self):
+        reader = _FakeReader({0x10: {"exists": True, "mapped": True}})
+        code, records = self._run_main(
+            [":7", "--dismiss-window", "0x10"],
+            dismiss=self._requested(), reader=reader,
+        )
+        self.assertNotEqual(code, 0)
+        self.assertNotIn("dismissed", records[0])
+        self.assertIs(records[0]["still_mapped"], True)
+        self.assertIs(records[0]["closure_confirmed"], False)
+
+    def test_verification_failure_exits_nonzero_with_error_field(self):
+        code, records = self._run_main(
+            [":7", "--dismiss-window", "0x10"],
+            dismiss=self._requested(),
+            reader_error=x11d.XInspectionFailure("cannot open display :7"),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertNotIn("dismissed", records[0])
+        self.assertIn("verification_error", records[0])
+        self.assertEqual(records[0]["status"], "requested")
+
+    def test_failed_action_exits_nonzero(self):
+        code, records = self._run_main(
+            [":7", "--dismiss-window", "0x10"],
+            dismiss_error=RuntimeError("libXtst not found on remote host"),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertIn("error", records[0])
+        self.assertNotIn("dismissed", records[0])
+
+    @staticmethod
+    def _per_window_dismiss(display, win_id_str, action, title="", **kwargs):
+        """dismiss_window stand-in that reports each dialog it was given."""
+        return DismissExitCodeTests._requested(
+            window_id=win_id_str, child=win_id_str, title=title
+        )
+
+    def test_dismiss_all_exits_zero_when_every_dialog_closed(self):
+        dialogs = [
+            {"window_id": "0x10", "title": "a", "x": 0, "y": 0, "w": 10, "h": 10},
+            {"window_id": "0x11", "title": "b", "x": 0, "y": 0, "w": 10, "h": 10},
+        ]
+        reader = _FakeReader({
+            0x10: {"exists": False, "mapped": False},
+            0x11: {"exists": True, "mapped": False},
+        })
+        code, records = self._run_main(
+            [":7", "--dismiss"], dialogs=dialogs, reader=reader,
+            dismiss=self._per_window_dismiss,
+        )
+        self.assertEqual(code, 0)
+        outcomes = [r for r in records if "status" in r]
+        self.assertEqual([r["status"] for r in outcomes], ["closed", "closed"])
+        self.assertEqual([r["dismissed"] for r in outcomes], ["0x10", "0x11"])
+        self.assertEqual(sorted(reader.queried), [0x10, 0x11])
+
+    def test_dismiss_all_exits_nonzero_when_one_dialog_stays_mapped(self):
+        dialogs = [
+            {"window_id": "0x10", "title": "a", "x": 0, "y": 0, "w": 10, "h": 10},
+            {"window_id": "0x11", "title": "b", "x": 0, "y": 0, "w": 10, "h": 10},
+        ]
+        reader = _FakeReader({
+            0x10: {"exists": True, "mapped": True},
+            0x11: {"exists": False, "mapped": False},
+        })
+        code, records = self._run_main(
+            [":7", "--dismiss"], dialogs=dialogs, reader=reader,
+            dismiss=self._per_window_dismiss,
+        )
+        self.assertNotEqual(code, 0)
+        outcomes = [r for r in records if "status" in r]
+        self.assertEqual([r["status"] for r in outcomes], ["requested", "closed"])
+        self.assertNotIn("dismissed", outcomes[0])
+        self.assertEqual(outcomes[1]["dismissed"], "0x11")
+
+
+class XErrorHandlerInstallationTests(unittest.TestCase):
+    """The X error handler must be installed BEFORE any X call.
+
+    `dismiss_window` runs `XRaiseWindow` / `XSetInputFocus` before the state
+    reader exists. A handler installed only by the reader left that phase
+    unprotected: a BadWindow hit libX11's default handler, which kills the
+    process before a single record is printed.
+    """
+
+    def setUp(self):
+        p = unittest.mock.patch.object(x11d.time, "sleep", lambda seconds: None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _run_main(self, argv, dismiss):
+        order = []
+
+        def _install():
+            order.append("install")
+            return True
+
+        def _dismiss(*args, **kwargs):
+            order.append("dismiss")
+            return dismiss(*args, **kwargs)
+
+        p = unittest.mock.patch.object(x11d, "install_x_error_handler", _install)
+        p.start()
+        self.addCleanup(p.stop)
+
+        p = unittest.mock.patch.object(
+            x11d.subprocess, "check_output", lambda cmd, **kw: b""
+        )
+        p.start()
+        self.addCleanup(p.stop)
+
+        p = unittest.mock.patch.object(x11d, "dismiss_window", _dismiss)
+        p.start()
+        self.addCleanup(p.stop)
+
+        def _open(display):
+            return _FakeReader({0x10: {"exists": False, "mapped": False}})
+
+        p = unittest.mock.patch.object(x11d, "_open_window_state_reader", _open)
+        p.start()
+        self.addCleanup(p.stop)
+
+        original_argv = sys.argv
+        sys.argv = ["x11_dismiss_dialog.py"] + argv
+        self.addCleanup(setattr, sys, "argv", original_argv)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit):
+                x11d.main()
+        return order
+
+    def test_handler_is_installed_before_dismiss_window_runs(self):
+        requested = {
+            "window_id": "0x10",
+            "requested_window_id": "0x10",
+            "resolved_window_id": "0x10",
+            "child": "0x10",
+            "title": "Save Changes",
+            "status": "requested",
+            "action_sent": True,
+            "closure_confirmed": False,
+            "still_mapped": None,
+            "action": "enter",
+            "x": 0, "y": 0, "w": 580, "h": 140,
+        }
+        order = self._run_main([":7", "--dismiss-window", "0x10"], lambda *a, **kw: dict(requested))
+        self.assertIn("install", order, order)
+        self.assertIn("dismiss", order, order)
+        self.assertLess(
+            order.index("install"),
+            order.index("dismiss"),
+            "the X error handler must be installed before dismiss_window runs: %r" % (order,),
+        )
+
+    def test_handler_is_installed_before_the_dismiss_all_loop(self):
+        requested = {
+            "window_id": "0x10",
+            "requested_window_id": "0x10",
+            "resolved_window_id": "0x10",
+            "child": "0x10",
+            "title": "Save Changes",
+            "status": "requested",
+            "action_sent": True,
+            "closure_confirmed": False,
+            "still_mapped": None,
+            "action": "enter",
+            "x": 0, "y": 0, "w": 580, "h": 140,
+        }
+        p = unittest.mock.patch.object(
+            x11d, "find_dialogs",
+            lambda display: [
+                {"window_id": "0x10", "title": "a", "x": 0, "y": 0, "w": 10, "h": 10}
+            ],
+        )
+        p.start()
+        self.addCleanup(p.stop)
+        order = self._run_main([":7", "--dismiss"], lambda *a, **kw: dict(requested))
+        self.assertLess(
+            order.index("install"),
+            order.index("dismiss"),
+            "the X error handler must be installed before dismiss_window runs: %r" % (order,),
+        )
 
 
 if __name__ == "__main__":

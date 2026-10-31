@@ -140,6 +140,27 @@ All notable changes to this project will be documented in this file.
   use, so all three scopes now share one reader. `vcli profile bind <name> --user`
   writes the new file; `vcli profile clear --user` removes it *and* strips the
   `VB_PROFILE=` line from the legacy `~/.vcli/.env`.
+- **`vcli window dismiss-dialog --x11` / `dismiss-window` now fail closed**
+  (ported from virtuoso-bridge-lite PR #248). Sending the key no longer counts as a
+  dismissal: the X11 helper queries the exact window id with `XGetWindowAttributes`
+  (capturing X protocol errors through an error handler instead of parsing
+  `xwininfo` text, which defaulted a failed lookup to "closed") and only reports
+  `status: "closed"` with a `dismissed` id when the window is confirmed unmapped or
+  destroyed. A window that is still mapped — or a state check that failed, now
+  reported as `verification_error` — stays `status: "requested"` with no `dismissed`
+  id, makes the helper exit non-zero, and is surfaced as an error in the vcli result
+  (so `status` becomes `failed` rather than `dismissed`).
+- **`vcli window dismiss-dialog --x11` now exits non-zero when a dismissal could not
+  be verified.** The JSON result keeps its shape (`status` becomes `failed`, the
+  per-record errors stay in `errors`); the command additionally reports the exit code
+  it wants in a new top-level `exit_code` field, and the CLI exits with it. Callers
+  that only look at the exit status no longer read an unverified dismissal as a
+  success.
+- **The `dismissed` field of an X11 dismiss result record now carries the
+  child/resolved XID**, not the requested frame id — the frame id is reported
+  separately as `window_id` / `requested_window_id`. The dismissal is verified
+  against the exact window that received the key, so the id in `dismissed` is that
+  window's id.
 
 ### Deprecated
 
