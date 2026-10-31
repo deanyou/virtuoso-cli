@@ -3062,17 +3062,10 @@ fn main() {
     };
 
     let exit_code = match &result {
-        Ok(value) => {
-            if value
-                .get("dry_run")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-            {
-                exit_codes::DRY_RUN_OK
-            } else {
-                exit_codes::SUCCESS
-            }
-        }
+        // An `Ok` value may still carry a failure in its payload (e.g.
+        // `status: "failed"` from an unverified X11 dismissal). The mapping
+        // lives in `exit_codes::exit_code_for_value` so it stays testable.
+        Ok(value) => exit_codes::exit_code_for_value(value),
         Err(e) => e.exit_code(),
     };
     history::append_cmd(&cli_args, cli_session.as_deref(), exit_code as i32);

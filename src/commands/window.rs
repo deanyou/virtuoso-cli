@@ -234,27 +234,77 @@ pub fn dismiss_dialog_x11(
         dry_run,
         window_id,
     )?;
-    let mut out = serde_json::to_value(&result)
+    x11_dismiss_payload(
+        &result,
+        x11_dismiss_status(&result),
+        action,
+        &[("dry_run", json!(dry_run))],
+    )
+}
+
+/// Serialize an X11 dismiss result into the command's JSON payload.
+///
+/// Shared by `dismiss_dialog_x11` and `dismiss_window_x11` so both report a
+/// failure the same way. `status` is the command-specific status string;
+/// `failed` always carries a non-zero `exit_code` so `main()` maps it to a
+/// failing process exit status (see `exit_codes::exit_code_for_value`).
+/// Every other status keeps the default exit code.
+pub(crate) fn x11_dismiss_payload(
+    result: &crate::transport::x11::DismissResult,
+    status: &str,
+    action: &str,
+    extra: &[(&str, Value)],
+) -> Result<Value> {
+    let mut out = serde_json::to_value(result)
         .map_err(|e| VirtuosoError::Execution(format!("failed to serialize X11 result: {e}")))?;
-    // Ensure the top-level "status" field is set for parity with the SKILL path.
-    let obj = out.as_object_mut().unwrap();
-    let n_found = result.found.len();
-    let n_dismissed = result.dismissed.len();
-    obj.insert(
-        "status".into(),
-        json!(if !result.errors.is_empty() {
-            "failed"
-        } else if n_dismissed > 0 {
-            "dismissed"
-        } else if n_found > 0 {
-            "found"
-        } else {
-            "no-dialog"
-        }),
-    );
+    let obj = out.as_object_mut().ok_or_else(|| {
+        VirtuosoError::Execution("X11 dismiss result is not a JSON object".into())
+    })?;
+    obj.insert("status".into(), json!(status));
     obj.insert("action".into(), json!(action));
-    obj.insert("dry_run".into(), json!(dry_run));
+    for (key, value) in extra {
+        obj.insert((*key).to_string(), value.clone());
+    }
+    if status == "failed" {
+        // A dismissal that could not be verified must not read as success.
+        // Purely additive — the JSON shape dispatchers consume is unchanged.
+        obj.insert("exit_code".into(), json!(crate::exit_codes::GENERAL_ERROR));
+    }
     Ok(out)
+}
+
+/// Status string for an X11 dismiss result (the `dismiss-dialog` path).
+///
+/// `failed` means at least one dismissal could not be verified (or the helper
+/// itself failed).
+pub(crate) fn x11_dismiss_status(result: &crate::transport::x11::DismissResult) -> &'static str {
+    if !result.errors.is_empty() {
+        return "failed";
+    }
+    if !result.dismissed.is_empty() {
+        return "dismissed";
+    }
+    if !result.found.is_empty() {
+        return "found";
+    }
+    "no-dialog"
+}
+
+/// Status string for an X11 single-window dismiss result (the
+/// `dismiss-window` path).
+///
+/// Same rule as `x11_dismiss_status`, but the target is explicit, so "no
+/// window was dismissed" is `not-found` rather than `no-dialog`.
+pub(crate) fn x11_dismiss_window_status(
+    result: &crate::transport::x11::DismissResult,
+) -> &'static str {
+    if !result.errors.is_empty() {
+        return "failed";
+    }
+    if !result.dismissed.is_empty() {
+        return "dismissed";
+    }
+    "not-found"
 }
 
 /// List every Virtuoso-related X11 window (no keypress sent).
@@ -377,27 +427,12 @@ pub fn dismiss_window_x11(
         &id,
         action,
     )?;
-    let mut out = serde_json::to_value(&result)
-        .map_err(|e| VirtuosoError::Execution(format!("failed to serialize X11 result: {e}")))?;
-    let obj = out.as_object_mut().unwrap();
-    let n_dismissed = result.dismissed.len();
-    obj.insert(
-        "status".into(),
-        json!(if !result.errors.is_empty() {
-            "failed"
-        } else if n_dismissed > 0 {
-            "dismissed"
-        } else {
-            "not-found"
-        }),
-    );
-    obj.insert("action".into(), json!(action));
-    obj.insert("window_id".into(), json!(id));
+    let mut extra: Vec<(&str, Value)> = vec![("window_id", json!(id))];
     // Report which identity was used when resolution came from a PID.
     if pid.is_some() && window_id.filter(|s| !s.is_empty()).is_none() {
-        obj.insert("resolved_by_pid".into(), json!(pid));
+        extra.push(("resolved_by_pid", json!(pid)));
     }
-    Ok(out)
+    x11_dismiss_payload(&result, x11_dismiss_window_status(&result), action, &extra)
 }
 
 /// Capture a screenshot of the current (or pattern-matched) Virtuoso window.
@@ -745,5 +780,179 @@ fn annotate_modes(v: Value) -> Value {
                 .collect(),
         ),
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transport::x11::{DialogInfo, DismissResult};
+
+    fn dialog(id: &str) -> DialogInfo {
+        DialogInfo {
+            window_id: id.into(),
+            requested_window_id: None,
+            resolved_window_id: None,
+            display: None,
+            title: "Save Changes".into(),
+            x: 0,
+            y: 0,
+            w: 239,
+            h: 142,
+            child: None,
+            action: None,
+            still_mapped: None,
+        }
+    }
+
+    fn result(
+        found: Vec<DialogInfo>,
+        dismissed: Vec<DialogInfo>,
+        errors: Vec<String>,
+    ) -> DismissResult {
+        DismissResult {
+            display: ":0".into(),
+            found,
+            dismissed,
+            errors,
+            raw_log: String::new(),
+        }
+    }
+
+    #[test]
+    fn unverified_dismissal_reports_failed_status() {
+        let r = result(
+            vec![dialog("0x1")],
+            vec![],
+            vec!["dismissal of 0x2 unverified: still mapped".into()],
+        );
+        assert_eq!(x11_dismiss_status(&r), "failed");
+        assert_eq!(x11_dismiss_window_status(&r), "failed");
+    }
+
+    #[test]
+    fn verified_dismissal_reports_dismissed_status() {
+        let r = result(vec![], vec![dialog("0x2")], vec![]);
+        assert_eq!(x11_dismiss_status(&r), "dismissed");
+        assert_eq!(x11_dismiss_window_status(&r), "dismissed");
+    }
+
+    #[test]
+    fn found_but_not_dismissed_is_not_a_failure() {
+        let r = result(vec![dialog("0x1")], vec![], vec![]);
+        assert_eq!(x11_dismiss_status(&r), "found");
+        // The single-window path has no "found" state: the target was explicit.
+        assert_eq!(x11_dismiss_window_status(&r), "not-found");
+    }
+
+    #[test]
+    fn no_dialog_is_not_a_failure() {
+        let r = result(vec![], vec![], vec![]);
+        assert_eq!(x11_dismiss_status(&r), "no-dialog");
+        assert_eq!(x11_dismiss_window_status(&r), "not-found");
+    }
+
+    #[test]
+    fn failed_payload_carries_a_non_zero_exit_code() {
+        let r = result(
+            vec![dialog("0x1")],
+            vec![],
+            vec!["dismissal of 0x2 unverified: still mapped".into()],
+        );
+        let payload =
+            x11_dismiss_payload(&r, x11_dismiss_status(&r), "escape", &[]).expect("payload");
+        assert_eq!(payload["status"], json!("failed"));
+        assert_eq!(payload["exit_code"], json!(1));
+        // The mapping from the payload to the process exit code is the one
+        // main() applies — pin it here so the two cannot drift apart.
+        assert_ne!(
+            crate::exit_codes::exit_code_for_value(&payload),
+            crate::exit_codes::SUCCESS
+        );
+        assert_eq!(
+            crate::exit_codes::exit_code_for_value(&payload),
+            crate::exit_codes::GENERAL_ERROR
+        );
+    }
+
+    #[test]
+    fn successful_payload_has_no_exit_code_field() {
+        let r = result(vec![], vec![dialog("0x2")], vec![]);
+        let payload =
+            x11_dismiss_payload(&r, x11_dismiss_status(&r), "escape", &[]).expect("payload");
+        assert_eq!(payload["status"], json!("dismissed"));
+        assert!(payload.get("exit_code").is_none());
+        assert_eq!(
+            crate::exit_codes::exit_code_for_value(&payload),
+            crate::exit_codes::SUCCESS
+        );
+    }
+
+    #[test]
+    fn dry_run_payload_keeps_the_dry_run_exit_code() {
+        let r = result(vec![], vec![], vec![]);
+        let payload = x11_dismiss_payload(
+            &r,
+            x11_dismiss_status(&r),
+            "escape",
+            &[("dry_run", json!(true))],
+        )
+        .expect("payload");
+        assert_eq!(payload["status"], json!("no-dialog"));
+        assert_eq!(payload["dry_run"], json!(true));
+        assert!(payload.get("exit_code").is_none());
+        assert_eq!(
+            crate::exit_codes::exit_code_for_value(&payload),
+            crate::exit_codes::DRY_RUN_OK
+        );
+    }
+
+    // --- dismiss-window (the single-window X11 path) ------------------------
+
+    #[test]
+    fn failed_window_payload_carries_a_non_zero_exit_code() {
+        // Mirrors the dialog path: `vcli window dismiss-window --x11` must
+        // not exit 0 when the dismissal could not be verified.
+        let r = result(
+            vec![],
+            vec![],
+            vec!["dismissal of 0x2 unverified: still mapped".into()],
+        );
+        let payload = x11_dismiss_payload(
+            &r,
+            x11_dismiss_window_status(&r),
+            "enter",
+            &[("window_id", json!("0x1"))],
+        )
+        .expect("payload");
+        assert_eq!(payload["status"], json!("failed"));
+        assert_eq!(payload["window_id"], json!("0x1"));
+        assert_eq!(payload["exit_code"], json!(1));
+        assert_ne!(
+            crate::exit_codes::exit_code_for_value(&payload),
+            crate::exit_codes::SUCCESS
+        );
+        assert_eq!(
+            crate::exit_codes::exit_code_for_value(&payload),
+            crate::exit_codes::GENERAL_ERROR
+        );
+    }
+
+    #[test]
+    fn successful_window_payload_has_no_exit_code_field() {
+        let r = result(vec![], vec![dialog("0x2")], vec![]);
+        let payload = x11_dismiss_payload(
+            &r,
+            x11_dismiss_window_status(&r),
+            "enter",
+            &[("window_id", json!("0x1"))],
+        )
+        .expect("payload");
+        assert_eq!(payload["status"], json!("dismissed"));
+        assert!(payload.get("exit_code").is_none());
+        assert_eq!(
+            crate::exit_codes::exit_code_for_value(&payload),
+            crate::exit_codes::SUCCESS
+        );
     }
 }

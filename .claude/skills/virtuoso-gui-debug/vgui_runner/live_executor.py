@@ -1037,7 +1037,9 @@ class LiveExecutor(Executor):
         try:
             data = self._run_json(argv, _TIMEOUT_ACTION)
             # "no-dialog" is a normal outcome — nothing to dismiss.
-            if data.get("status") not in (None, "success", "no-dialog"):
+            # "dismissed" is the success status of `vcli window dismiss-dialog`
+            # (the X11 path reports it); "failed" stays a failure.
+            if data.get("status") not in (None, "success", "no-dialog", "dismissed"):
                 return {"error": f"dismiss-dialog failed: {data.get('status')}"}
             return None
         except Exception as exc:  # noqa: BLE001

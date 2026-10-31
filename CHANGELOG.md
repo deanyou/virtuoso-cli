@@ -16,6 +16,16 @@ All notable changes to this project will be documented in this file.
   geometry (its errors carry a `direct: ` prefix); the non-direct path checks
   against the frame geometry, so a frame-derived coordinate is not rejected
   there — it silently misses.
+- **MCP resources and prompts.** `vcli mcp serve` now publishes the repository's
+  Claude skills as read-only MCP resources (`skill://<name>`) and three workflow
+  prompts (`maestro-run-and-check`, `spectre-failure-triage`, `cell-design-review`).
+  A resource URI carries a skill *name*, never a path, and a skill that resolves
+  outside the skills root is never listed or served.
+- **`VB_SKILLS_DIR`** — env override for the skills root published as MCP
+  resources. It is now registered in the README configuration table, and a
+  set-but-invalid value (not a directory) fails the server startup with a
+  configuration error naming the variable and the path, instead of silently
+  falling back to working-directory discovery.
 - **`install.sh`** — shared/multi-user installer with `--system` (`/opt/virtuoso-cli`),
   `--user` (`~/.local`), `--prefix DIR` and `--no-build`. Installs `vcli`/`vtui`/
   `virtuoso-daemon` into `$PREFIX/bin` and `ramic_bridge.il` into
@@ -94,6 +104,96 @@ All notable changes to this project will be documented in this file.
 - **The `XAUTHORITY=` token was not shell-escaped.** A path containing a space
   was split into two arguments, and the second one was parsed as the DISPLAY —
   the same failure mode as the bug above. The token is now quoted as a whole.
+- **The daemon-identity probe ignored the configured timeout.**
+  `VirtuosoClient::get_daemon_user()` hardcoded a 5-second budget and
+  `vcli session show` built its probe client with a hardcoded 3-second
+  timeout, so `VB_TIMEOUT` (documented as "raise it to 120 for busy
+  servers") had no effect on the identity check. On a busy daemon the probe
+  timed out, the daemon user stayed unknown, and the cross-user guard
+  silently skipped — the user who set `VB_REMOTE_USER` was told nothing.
+  The probe now spends the client's configured timeout, like every other
+  SKILL operation. The version probe (5s) and the liveness probe (3s) keep
+  their deliberately short budgets.
+- **The probe budget was honoured on Unix but not on Windows.**
+  An expired `SO_RCVTIMEO` surfaces as `ErrorKind::WouldBlock` on Unix but
+  as `ErrorKind::TimedOut` on Windows, and only the former was mapped to a
+  timeout — so on Windows a slow daemon was reported as "connection
+  failed" instead of "timed out", and the configured probe budget was
+  silently lost. Both error kinds now map to `VirtuosoError::Timeout`, so
+  the probe budget holds on every platform.
+- **`vcli session show` probed the identity before the liveness.**
+  The identity probe ran first and spent the whole configured timeout
+  (`VB_TIMEOUT`) on a daemon that was already dead or wedged, so the user
+  waited out the full budget before learning the daemon was gone. The
+  liveness probe now runs first (it keeps its own short 3-second budget);
+  when the daemon does not answer, the identity and version probes are
+  skipped entirely. The skip is reported through the existing
+  `probe.skipped` / `probe.skip_reason` fields (`daemon_not_alive`), the
+  cached values are shown (`data_source: "cached"`), and the stale-daemon
+  hint (`RBStop()` / reload `ramic_bridge.il`) still fires.
+- **The cross-user guard used a second, hand-rolled config parser.**
+  `guard_cross_user()` re-read `VB_PROFILE`, `VB_REMOTE_USER[_<profile>]`
+  and `VB_ALLOW_CROSS_USER_DAEMON` from the environment instead of using
+  the resolved `Config`, so it ignored `config.toml` and target overrides
+  and applied a different precedence rule than the rest of the CLI — an
+  empty `VB_REMOTE_USER_<profile>` masked the generic `VB_REMOTE_USER` and
+  silently disabled the guard. The guard now takes the expected user and
+  the override from the resolved config, exactly like every other command.
+- **An unconfirmed probe left a stale daemon identity in the session file.**
+  When the identity probe ran and confirmed nothing, `session show` kept
+  the previous probe's `daemon_user` in the session file — and the
+  connect-time guard then compared against that stale value as if it had
+  been verified. A probe that ran and confirmed nothing now clears the
+  stored `daemon_user`; a probe that was skipped keeps the cached value
+  (nothing was learned either way).
+- **"Identity unconfirmed" was indistinguishable from "identity OK".**
+  When an expected remote user was configured but the daemon user could not
+  be determined, `session show` returned no cross-user warning at all: the
+  check had not run, but the output looked exactly like a clean check. An
+  unconfirmed identity now produces its own warning that says the check was
+  NOT performed, and the connect-time guard logs the skip at WARN level
+  instead of DEBUG (it is still not a hard error — the daemon user is only
+  known after `session show`).
+- **`prompts/get` accepted a request with missing required arguments.** The
+  missing value silently rendered as `(not provided)`, handing the agent a
+  workflow with a hole in it. A missing or null required argument is now a
+  JSON-RPC `-32602` error naming the argument(s).
+- **`prompts/list` published prompts whose tools were unavailable.** The triage
+  prompt names `skill_exec`, which only exists under the Admin capability, so
+  the default capability set advertised a workflow the caller cannot finish.
+  A prompt is now published only when every tool it names is available under
+  the server's capabilities — the same list `tools/list` serves.
+- **The MCP `serverInfo.version` was hardcoded to `0.3.18`** while the crate is
+  at 1.3.5. It now reports the crate version.
+- **A missing MCP resource answered with `-32001`** (JSON-RPC "request
+  cancelled"). It is now `-32002` ("resource not found"), and an unreadable
+  resource is `-32603`.
+- **A SKILL.md `description: |` block was truncated at the first blank line.**
+  YAML block scalars may contain blank lines — the repository's own
+  `maestro-read-results` skill has one, so its description was cut short.
+- **`load_skills` published skills that escaped the skills root.** A symlinked
+  skill directory pointing outside the root was listed (leaking its frontmatter
+  description) although the read path refused to serve it. The list now applies
+  the same root-containment rule as the read path.
+- **The `maestro-run-and-check` prompt told the agent to "verify" a variable
+  with a same-scope readback.** `maestro_set_var`/`maestro_get_var` share one
+  Maestro-internal scope, so the readback agrees by construction and proves
+  nothing about the netlist. The prompt now names the generated netlist (the
+  `parameters` line of `input.scs`) as the ground truth and forbids reporting a
+  run's measurements as belonging to a value the netlist does not carry.
+- **The `list_vars` scope comment contradicted the repo convention.** It
+  claimed the Assembler-global scope reaches the netlist; per
+  `.claude/skills/_shared/convention.md` the simulator consumes the asi
+  design-var list. The comment now matches the convention.
+- **The `spectre-failure-triage` prompt read the current session's data.**
+  `maestro_get_history_list`/`maestro_list_vars` are current-session scoped, so
+  the prompt now aligns on the session first and says so.
+- **`cell-design-review` implied a schematic default.** `cell_open`'s real
+  defaults are view `layout` and mode `a` (append, which takes an edit lock).
+  The prompt now passes view `schematic` and mode `r` explicitly.
+- **The MCP integration test was not hermetic on Windows.** `dirs::home_dir()`
+  ignores `HOME` there, so the server could read the real `~/.vcli/targets.yaml`.
+  The harness now pins `VB_TARGETS_FILE` to a throwaway file.
 - **Daemon path resolution was split across two conflicting places.**
   `_RBAutoStart()` unconditionally hardcoded `$HOME/.cargo/bin/virtuoso-daemon` and
   silently overrode the top-level resolver — and therefore `RB_DAEMON_PATH`. Both now
@@ -120,6 +220,27 @@ All notable changes to this project will be documented in this file.
   use, so all three scopes now share one reader. `vcli profile bind <name> --user`
   writes the new file; `vcli profile clear --user` removes it *and* strips the
   `VB_PROFILE=` line from the legacy `~/.vcli/.env`.
+- **`vcli window dismiss-dialog --x11` / `dismiss-window` now fail closed**
+  (ported from virtuoso-bridge-lite PR #248). Sending the key no longer counts as a
+  dismissal: the X11 helper queries the exact window id with `XGetWindowAttributes`
+  (capturing X protocol errors through an error handler instead of parsing
+  `xwininfo` text, which defaulted a failed lookup to "closed") and only reports
+  `status: "closed"` with a `dismissed` id when the window is confirmed unmapped or
+  destroyed. A window that is still mapped — or a state check that failed, now
+  reported as `verification_error` — stays `status: "requested"` with no `dismissed`
+  id, makes the helper exit non-zero, and is surfaced as an error in the vcli result
+  (so `status` becomes `failed` rather than `dismissed`).
+- **`vcli window dismiss-dialog --x11` now exits non-zero when a dismissal could not
+  be verified.** The JSON result keeps its shape (`status` becomes `failed`, the
+  per-record errors stay in `errors`); the command additionally reports the exit code
+  it wants in a new top-level `exit_code` field, and the CLI exits with it. Callers
+  that only look at the exit status no longer read an unverified dismissal as a
+  success.
+- **The `dismissed` field of an X11 dismiss result record now carries the
+  child/resolved XID**, not the requested frame id — the frame id is reported
+  separately as `window_id` / `requested_window_id`. The dismissal is verified
+  against the exact window that received the key, so the id in `dismissed` is that
+  window's id.
 
 ### Deprecated
 

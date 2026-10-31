@@ -713,6 +713,26 @@ class TestNewOperationsLive(unittest.TestCase):
             action_argv = runner.argvs[-1]
             self.assertIn("0xdeadbeef", action_argv)
 
+    def test_dismiss_dialog_accepts_dismissed_status(self):
+        # `vcli window dismiss-dialog --x11` reports status "dismissed" on
+        # success — that is a success, not a failure.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, runner = self._prechecked_executor(
+                tmp, [res(stdout='{"status":"dismissed"}')])
+            step = make_step(operation="DISMISS_DIALOG", arguments={})
+            self.assertIsNone(ex.execute(step, 0))
+
+    def test_dismiss_dialog_rejects_failed_status(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, runner = self._prechecked_executor(
+                tmp, [res(stdout='{"status":"failed"}')])
+            step = make_step(operation="DISMISS_DIALOG", arguments={})
+            err = ex.execute(step, 0)
+            self.assertIsNotNone(err)
+            self.assertIn("failed", err["error"])
+
     def test_close_maps_to_vcli(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
