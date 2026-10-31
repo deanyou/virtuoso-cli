@@ -828,7 +828,7 @@ def main():
                     print("same command %d times in a row — guidance queued" % repeats)
             if click(args.vcli, args.session, args.window_id, args.display, x, y, args.dry_run):
                 clicks += 1
-                failed = 0
+                progressed = True
                 # The click must have consumed the prompt. Compare the area
                 # around the prompt block with the pre-click snapshot: if it
                 # never changes, the click did not land on "Allow" and we stop
@@ -839,15 +839,27 @@ def main():
                     # rendered wherever the client puts it, and a fixed block
                     # would compare unrelated pixels.
                     image = load_screenshot(shot)
-                    if image is None:
-                        continue
-                    region = guard_region(found, template,
-                                          (image.shape[1], image.shape[0]))
-                    before = crop_region(shot, region)
-                    if before is not None and not wait_until_progress(
-                        args, workdir, before, region, polls=args.settle_polls
-                    ):
-                        print("prompt area unchanged after click — aborting")
+                    if image is not None:
+                        region = guard_region(found, template,
+                                              (image.shape[1], image.shape[0]))
+                        before = crop_region(shot, region)
+                        if before is not None and not wait_until_progress(
+                            args, workdir, before, region, polls=args.settle_polls
+                        ):
+                            progressed = False
+                            print("prompt area unchanged after the click — "
+                                  "the click may have missed")
+                if progressed:
+                    failed = 0
+                else:
+                    # The card is re-rendered in place, so the change can be
+                    # over before the first sample catches it. One such miss
+                    # is not proof that the click went nowhere: the click is
+                    # retried, and only a run of them aborts the loop.
+                    failed += 1
+                    if failed >= MAX_CLICK_FAILURES:
+                        print("%d consecutive clicks that left the prompt "
+                              "unchanged — aborting" % failed)
                         return 1
             else:
                 # The click itself was rejected (window gone, action refused).

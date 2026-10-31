@@ -140,9 +140,9 @@ prompt detected (ncc=0.995) -> Allow at (90, 710)
 clicked Allow at (90, 710)
 ```
 
-Exit codes: `0` = stopped normally (idle or max-clicks), `1` = the click did
-not land (the prompt area never changed) or 3 consecutive clicks were rejected
-by `vcli`, `2` = bad arguments.
+Exit codes: `0` = stopped normally (idle or max-clicks), `1` = three
+consecutive clicks left the prompt area unchanged, or three consecutive
+clicks were rejected by `vcli`, `2` = bad arguments.
 
 ## Steering a repeated command
 
@@ -246,8 +246,11 @@ branch implemented; the current template is deliberately command-agnostic.
 The post-click guard is the safety net against a misfiring loop: after each
 click the pixels around the prompt are compared with the pre-click snapshot
 (the region is clamped to the screenshot, so a narrow window still gets
-checked). If nothing changed, the click did not land and the loop aborts
-(exit 1) instead of hammering the same coordinate. Likewise, three
+checked). If nothing changed, the click did not land — the miss is counted
+and the click is retried, and only three consecutive misses abort the loop
+(exit 1) instead of hammering the same coordinate. One miss is not proof
+that the click went nowhere: the client re-renders the card in place, so the
+change can be over before the first sample catches it. Likewise, three
 consecutive clicks rejected by `vcli` abort the loop (exit 1) — retrying the
 same coordinates would not help.
 
@@ -264,7 +267,8 @@ agent was simply asking again.
 |---------|-------|-----|
 | `cannot open display XAUTHORITY=...` | Helper parsed the XAUTHORITY token as the DISPLAY | Fixed on the `fix/x11-client-geometry-and-capture-fallback` branch — rebuild `vcli` (`cargo build --release`) and reinstall it |
 | `template not found` | Wrong `--template` | Default is `data/allow_prompt_template.png` next to the skill |
-| `prompt area unchanged after click — aborting` | Click did not land, or the window moved | Re-check `vcli window geometry` for the window; the template offset is relative, so a resize is fine |
+| `prompt area unchanged after the click — the click may have missed` | The card was re-rendered before the guard's first sample, or the click did not land | Nothing to do for a single miss — the click is retried; three consecutive misses abort the loop |
+| `consecutive clicks that left the prompt unchanged — aborting` | The click is not landing (window moved, UI changed) | Re-check `vcli window geometry` for the window; the template offset is relative, so a resize is fine |
 | Loop exits after a few seconds | `--idle-polls` too small for the gap between commands | Raise `--idle-polls` to 40 |
 | `FileNotFoundError: allow_prompt_template.png` | The template was moved while the loop ran | Restart the loop — the template is now loaded once at startup |
 | Nothing detected, prompt visible | UI theme/font changed, or the prompt is rendered as the inline "Allow" pill instead of the numbered block | Re-crop the template from a fresh `vcli window action-x11 --operation screenshot` |

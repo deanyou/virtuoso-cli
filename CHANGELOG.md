@@ -36,7 +36,8 @@ All notable changes to this project will be documented in this file.
   window for the ViraStack permission prompt, matches it against a template
   that spans both option rows (so "Don't Allow" can never be matched on its
   own), and clicks "Allow" through `vcli window action-x11`. A post-click
-  pixel check aborts instead of hammering a coordinate that did not land.
+  pixel check counts a coordinate that did not land and aborts after three
+  consecutive misses instead of hammering it.
   The loop survives a long cellview run (`--idle-polls 0` never stops on
   idle) and re-resolves the daemon session and the X11 window id by itself
   after a Virtuoso or daemon restart.
@@ -59,7 +60,9 @@ All notable changes to this project will be documented in this file.
   The post-click guard samples the prompt area right after the click: the
   client re-renders the permission card in place, so a guard that waited
   several seconds before its first sample saw the card back unchanged and
-  aborted the loop while the agent was simply asking again.
+  aborted the loop while the agent was simply asking again. A click that
+  leaves the prompt unchanged is counted as a miss and retried; only three
+  consecutive misses abort the loop.
 
 ### Fixed
 

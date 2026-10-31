@@ -10,7 +10,9 @@ Run:
     cd .claude/skills/virastack-auto-allow && python3 -m unittest discover tests
 """
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -501,6 +503,82 @@ class GuardSamplingTests(unittest.TestCase):
         self.assertFalse(
             aa.wait_until_progress(self._args(interval=0.2), "/tmp", before,
                                   (0, 0, 40, 40), polls=2))
+
+
+class ClickFailureCountTests(unittest.TestCase):
+    """A click that leaves the prompt unchanged is counted, not fatal.
+
+    The client re-renders the permission card in place, so the change can be
+    over before the first sample catches it. One such miss is no proof that
+    the click went nowhere — only a run of them means the loop is clicking
+    at a place that does nothing.
+    """
+
+    def _run_loop(self, misses, max_clicks=6):
+        """Drive main() with a fixed pattern of misses; return (code, log)."""
+        img = Image.new("L", (780, 968), 30)
+        img.paste(Image.open(aa.DEFAULT_TEMPLATE).convert("L"), (58, 694))
+        handle, path = tempfile.mkstemp(suffix=".png")
+        os.close(handle)
+        img.save(path)
+        self.addCleanup(os.remove, path)
+
+        state = {"misses": list(misses)}
+
+        def fake_capture(vcli, session, window_id, display, workdir):
+            return path
+
+        originals = {
+            "capture": aa.capture,
+            "click": aa.click,
+            "wait_until_progress": aa.wait_until_progress,
+            "try_send_guidance": aa.try_send_guidance,
+        }
+        aa.capture = fake_capture
+        aa.click = lambda *a, **k: True
+
+        def fake_progress(*a, **k):
+            # Each entry of the pattern says what the guard reports for that
+            # click: True = the prompt area stayed unchanged (a miss).
+            if state["misses"]:
+                return not state["misses"].pop(0)
+            return True
+
+        aa.wait_until_progress = fake_progress
+        aa.try_send_guidance = lambda *a, **k: (True, None)
+        self.addCleanup(lambda: [setattr(aa, k, v) for k, v in originals.items()])
+
+        argv = ["auto_allow.py", "--vcli", "vcli", "--session", "s",
+                "--window-id", "0x1", "--display", ":0", "--interval", "0",
+                "--idle-polls", "0", "--timeout", "0",
+                "--max-clicks", str(max_clicks)]
+        old_argv = sys.argv
+        sys.argv = argv
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                code = aa.main()
+        finally:
+            sys.argv = old_argv
+        return code, buf.getvalue()
+
+    def test_a_single_miss_does_not_abort_the_loop(self):
+        code, log = self._run_loop([True])
+        self.assertEqual(code, 0)
+        self.assertIn("the click may have missed", log)
+        self.assertNotIn("aborting", log)
+
+    def test_three_misses_in_a_row_abort_the_loop(self):
+        code, log = self._run_loop([True, True, True])
+        self.assertEqual(code, 1)
+        self.assertIn("aborting", log)
+
+    def test_a_miss_after_a_success_does_not_abort_the_loop(self):
+        # The counter is reset by a click that did land, so only consecutive
+        # misses count.
+        code, log = self._run_loop([True, False, True, False], max_clicks=4)
+        self.assertEqual(code, 0)
+        self.assertNotIn("aborting", log)
 
 
 class GuideMessageTests(unittest.TestCase):
