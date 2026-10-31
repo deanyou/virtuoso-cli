@@ -144,10 +144,23 @@ by `vcli`, `2` = bad arguments.
 
 Auto-approving forever hides the failure mode where the agent keeps re-running
 one command that never succeeds. The loop therefore fingerprints the command
-line printed above the option rows (`command_signature`: a hash of the band
-just above the matched template) and counts how many *consecutive* approvals
-share that fingerprint. At every multiple of `--guide-threshold` (default 3)
-the loop queues a guidance message.
+line printed above the option rows and counts how many *consecutive* approvals
+show that command. At every multiple of `--guide-threshold` (default 3) the
+loop queues a guidance message.
+
+The command is the text line in the code block of the permission card — not
+the status line ("Running script...") above the option rows, which is the
+same for every prompt and would make every request look like a repeat of the
+same command. The code block is the only part of the card with its own
+background, so the band is the last text line whose background differs from
+the background of the status line.
+
+The fingerprint is a tolerant pixel comparison, not a hash: the band of two
+consecutive frames of the same command is aligned within a few pixels and the
+glyphs are compared in a 3x3 neighbourhood (`band_similarity`). A re-rendered
+command still matches, a changed command does not. Measured on the captured
+frames: the same command scores 1.0, the most similar pair of different
+commands 0.91 — the threshold is 0.95.
 
 The message is only typed when **no** permission prompt is pending: while a
 prompt is up, the composer is that prompt's answer field ("pick an option
@@ -167,8 +180,11 @@ guided the agent: Auto-approve notice: the same command has been requested 3 tim
 The input line moves with the composer layout, so a few candidate rows are
 tried in turn (`COMPOSER_CLICK_OFFSETS`, counted from the bottom of the
 client area); the first one where the text shows up in the screenshot wins.
-Each attempt clears the composer first, so a failed attempt cannot leave a
-half-typed message behind.
+
+A composer that already holds ink is never typed into: it means either a
+prompt is pending or the user is writing, so the message stays queued
+("guidance skipped: the composer is not empty"). This also means the loop
+never clears text somebody else typed.
 
 `--guide-message` overrides the text (`%d` is the repeat count). It must be
 ASCII: the `type` action of `vcli window action-x11` rejects anything else

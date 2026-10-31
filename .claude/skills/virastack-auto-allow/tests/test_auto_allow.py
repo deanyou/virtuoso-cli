@@ -185,22 +185,163 @@ class CommandSignatureTests(unittest.TestCase):
         img.paste(Image.open(aa.DEFAULT_TEMPLATE).convert("L"), (58, 694))
         drawer = ImageDraw.Draw(img)
         # The command line sits ~95px above the Allow label (694+16).
-        drawer.text((40, 694 + 16 - 95 + 4), command_text, fill=220)
+        drawer.text((35, 694 + 16 - 95), command_text, fill=220)
         handle, path = tempfile.mkstemp(suffix=".png")
         os.close(handle)
         img.save(path)
         self.addCleanup(os.remove, path)
         return path
 
+    def _band(self, command_text):
+        found = aa.find_prompt(self._prompt_image(command_text), aa.load_template(aa.DEFAULT_TEMPLATE))
+        self.assertIsNotNone(found)
+        return aa.command_band(self._prompt_image(command_text), found)
+
     def test_same_command_gives_the_same_signature(self):
-        a = aa.command_signature(self._prompt_image("/tmp/x.sh"), (58 + aa.ALLOW_OFFSET[0], 694 + aa.ALLOW_OFFSET[1], 1.0))
-        b = aa.command_signature(self._prompt_image("/tmp/x.sh"), (58 + aa.ALLOW_OFFSET[0], 694 + aa.ALLOW_OFFSET[1], 1.0))
-        self.assertEqual(a, b)
+        a = self._band("/tmp/mkdir.sh")
+        b = self._band("/tmp/mkdir.sh")
+        self.assertTrue(aa.same_command(a, b))
 
     def test_different_command_gives_a_different_signature(self):
-        a = aa.command_signature(self._prompt_image("/tmp/x.sh"), (58 + aa.ALLOW_OFFSET[0], 694 + aa.ALLOW_OFFSET[1], 1.0))
-        b = aa.command_signature(self._prompt_image("/tmp/y.sh"), (58 + aa.ALLOW_OFFSET[0], 694 + aa.ALLOW_OFFSET[1], 1.0))
-        self.assertNotEqual(a, b)
+        a = self._band("/tmp/mkdir.sh")
+        b = self._band("/tmp/spectre_run.sh")
+        self.assertFalse(aa.same_command(a, b))
+
+    def test_a_re_rendered_command_is_still_the_same_command(self):
+        # The same command drawn one pixel lower must not look like a new
+        # command — a byte-exact hash would, and the repeat counter would
+        # never reach the threshold.
+        img = Image.new("L", (780, 968), 30)
+        img.paste(Image.open(aa.DEFAULT_TEMPLATE).convert("L"), (58, 694))
+        drawer = ImageDraw.Draw(img)
+        drawer.text((35, 694 + 16 - 95), "/tmp/mkdir.sh", fill=220)
+        handle, path = tempfile.mkstemp(suffix=".png")
+        os.close(handle)
+        img.save(path)
+        self.addCleanup(os.remove, path)
+        template = aa.load_template(aa.DEFAULT_TEMPLATE)
+        found = aa.find_prompt(path, template)
+        band = aa.command_band(path, found)
+        # Move the band down by one pixel without wrapping the rows around.
+        shifted = np.zeros_like(band)
+        shifted[1:] = band[:-1]
+        self.assertTrue(aa.same_command(band, shifted))
+
+    def _card_image(self, command_text):
+        """A permission card: the command in a code block, a status line, the
+        option rows. The status line is the last text line above the options
+        and is the same for every prompt."""
+        allow_y = 694 + 16
+        img = Image.new("L", (780, 968), 90)
+        drawer = ImageDraw.Draw(img)
+        # the code block, ~70px above the Allow label
+        drawer.rectangle((35, allow_y - 80, 600, allow_y - 50), fill=45)
+        drawer.text((40, allow_y - 74), command_text, fill=216)
+        # the status line, ~35px above the Allow label
+        drawer.text((35, allow_y - 42), "Running script...", fill=255)
+        img.paste(Image.open(aa.DEFAULT_TEMPLATE).convert("L"), (58, 694))
+        handle, path = tempfile.mkstemp(suffix=".png")
+        os.close(handle)
+        img.save(path)
+        self.addCleanup(os.remove, path)
+        return path
+
+    def test_the_band_is_the_command_and_not_the_status_line(self):
+        # The status line above the option rows is the same for every prompt:
+        # fingerprinting it would make every request look like a repeat of
+        # the same command.
+        template = aa.load_template(aa.DEFAULT_TEMPLATE)
+        a = aa.command_band(self._card_image("/tmp/mkdir.sh"),
+                            aa.find_prompt(self._card_image("/tmp/mkdir.sh"), template))
+        b = aa.command_band(self._card_image("/tmp/spectre_run.sh"),
+                            aa.find_prompt(self._card_image("/tmp/spectre_run.sh"), template))
+        self.assertFalse(aa.same_command(a, b))
+
+
+class GuideMessageTests(unittest.TestCase):
+    def test_the_repeat_count_is_substituted(self):
+        self.assertEqual(aa.format_guide_message("seen %d times", 3), "seen 3 times")
+
+    def test_a_literal_percent_does_not_crash_the_loop(self):
+        # %-formatting would raise on "100% of the time" and take the
+        # unattended loop down with it.
+        self.assertEqual(
+            aa.format_guide_message("100% of the time, %d repeats", 3),
+            "100% of the time, 3 repeats",
+        )
+
+
+class LoopGuidanceTests(unittest.TestCase):
+    """The loop counts repeated commands and queues the guidance."""
+
+    def _prompt_image(self, command_text=None):
+        img = Image.new("L", (780, 968), 30)
+        if command_text is not None:
+            img.paste(Image.open(aa.DEFAULT_TEMPLATE).convert("L"), (58, 694))
+            drawer = ImageDraw.Draw(img)
+            drawer.text((35, 694 + 16 - 95), command_text, fill=220)
+        handle, path = tempfile.mkstemp(suffix=".png")
+        os.close(handle)
+        img.save(path)
+        self.addCleanup(os.remove, path)
+        return path
+
+    def _run_loop(self, commands, guide_threshold=2, max_clicks=6):
+        """Drive main() over a list of commands (None = no prompt pending)."""
+        frames = [self._prompt_image(c) for c in commands]
+        state = {"i": 0}
+        guidance = []
+
+        def fake_capture(vcli, session, window_id, display, workdir):
+            path = frames[min(state["i"], len(frames) - 1)]
+            state["i"] += 1
+            return path
+
+        originals = {
+            "capture": aa.capture,
+            "click": aa.click,
+            "wait_until_progress": aa.wait_until_progress,
+            "try_send_guidance": aa.try_send_guidance,
+        }
+        aa.capture = fake_capture
+        aa.click = lambda *a, **k: True
+        aa.wait_until_progress = lambda *a, **k: True
+
+        def fake_guidance(args, message, workdir, ours_in_composer=False):
+            guidance.append((message, ours_in_composer))
+            return True, False
+
+        aa.try_send_guidance = fake_guidance
+        self.addCleanup(lambda: [setattr(aa, k, v) for k, v in originals.items()])
+
+        argv = ["auto_allow.py", "--vcli", "vcli", "--session", "s",
+                "--window-id", "0x1", "--display", ":0", "--interval", "0",
+                "--idle-polls", "1", "--timeout", "0",
+                "--max-clicks", str(max_clicks),
+                "--guide-threshold", str(guide_threshold)]
+        old_argv = sys.argv
+        sys.argv = argv
+        try:
+            aa.main()
+        finally:
+            sys.argv = old_argv
+        return guidance
+
+    def test_the_guidance_is_queued_after_the_threshold(self):
+        guidance = self._run_loop(["/tmp/mkdir.sh", "/tmp/mkdir.sh",
+                                   "/tmp/mkdir.sh", None])
+        self.assertEqual(len(guidance), 1)
+        self.assertIn("2 times", guidance[0][0])
+
+    def test_a_different_command_resets_the_counter(self):
+        guidance = self._run_loop(["/tmp/mkdir.sh", "/tmp/spectre_run.sh",
+                                   "/tmp/mkdir.sh", None])
+        self.assertEqual(guidance, [])
+
+    def test_the_guidance_is_only_sent_when_no_prompt_is_pending(self):
+        # The last frame still shows a prompt: the message stays queued.
+        guidance = self._run_loop(["/tmp/x.sh", "/tmp/x.sh", "/tmp/x.sh"])
+        self.assertEqual(guidance, [])
 
 
 class GuidanceDeliveryTests(unittest.TestCase):
@@ -214,13 +355,16 @@ class GuidanceDeliveryTests(unittest.TestCase):
 
     W, H = 640, 604
 
-    def _patch(self, accepts_type_at=None):
+    def _patch(self, accepts_type_at=None, placeholder=False, leftover=False):
         """Mock the vcli boundary and the capture.
 
         `accepts_type_at` is the client row the fake composer accepts typing
-        on; None means it never accepts (the agent is busy).
+        on; None means it never accepts (the agent is busy). `placeholder`
+        makes the composer show the answer placeholder of a pending prompt.
+        `leftover` makes the composer hold the text of a previous, unconfirmed
+        attempt of the loop itself.
         """
-        state = {"typed": False}
+        state = {"typed": False, "leftover": leftover}
         self.state = state
         calls = []
         self.calls = calls
@@ -238,13 +382,23 @@ class GuidanceDeliveryTests(unittest.TestCase):
                     state["typed"] = True
             elif op == "key":
                 text = cmd[cmd.index("--text") + 1]
-                if text == "Return" and state["typed"]:
+                if text == "BackSpace":
+                    # The loop clears the composer before typing.
+                    state["typed"] = False
+                    state["leftover"] = False
+                elif text == "Return" and state["typed"]:
                     state["typed"] = False
             return 0, "{}", ""
 
         def fake_capture(vcli, session, window_id, display, workdir):
             img = Image.new("L", (self.W, self.H), 30)
-            if state["typed"]:
+            if placeholder:
+                # The answer placeholder of a pending prompt: a long dim line
+                # across the composer.
+                for x in range(35, 300):
+                    for y in range(self.H - 70, self.H - 62):
+                        img.putpixel((x, y), 140)
+            if state["typed"] or state["leftover"]:
                 for x in range(20, 320):
                     for y in range(self.H - 84, self.H - 60):
                         img.putpixel((x, y), 220)
@@ -274,23 +428,64 @@ class GuidanceDeliveryTests(unittest.TestCase):
                 if "--operation" in c and c[c.index("--operation") + 1] == "key"
                 and c[c.index("--text") + 1] == "Return"]
 
+    def _types_sent(self):
+        return [c for c in self.calls
+                if "--operation" in c and c[c.index("--operation") + 1] == "type"]
+
     def test_message_is_sent_and_submitted(self):
         self._patch(accepts_type_at=68)
-        self.assertTrue(aa.try_send_guidance(self._args(), "diagnose first", "/tmp"))
+        delivered, typed = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        self.assertTrue(delivered)
+        self.assertFalse(typed)
         self.assertTrue(self._returns_sent())
 
     def test_busy_composer_keeps_the_message_queued(self):
         # The composer never accepts the text (the agent is busy): nothing may
         # be submitted, and the caller keeps the message for the next poll.
         self._patch(accepts_type_at=None)
-        self.assertFalse(aa.try_send_guidance(self._args(), "diagnose first", "/tmp"))
+        delivered, typed = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        self.assertFalse(delivered)
+        self.assertFalse(typed)
         self.assertEqual(self._returns_sent(), [])
 
     def test_a_second_click_row_is_tried_when_the_first_misses(self):
         # The input line moves with the composer layout, so the delivery falls
         # back to the next candidate row.
         self._patch(accepts_type_at=74)
-        self.assertTrue(aa.try_send_guidance(self._args(), "diagnose first", "/tmp"))
+        delivered, _ = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        self.assertTrue(delivered)
+
+    def test_a_pending_prompt_is_never_answered(self):
+        # A prompt that this skill does not match (the plan approval) still
+        # shows the answer placeholder in the composer: typing there would
+        # answer the prompt instead of talking to the agent.
+        self._patch(accepts_type_at=68, placeholder=True)
+        delivered, typed = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        self.assertFalse(delivered)
+        self.assertFalse(typed)
+        self.assertEqual(self._types_sent(), [])
+        self.assertEqual(self._returns_sent(), [])
+
+    def test_text_the_user_typed_is_not_wiped(self):
+        # A composer that already holds text is left alone.
+        self._patch(accepts_type_at=68, placeholder=True)
+        delivered, _ = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        self.assertFalse(delivered)
+        clears = [c for c in self.calls
+                  if "--operation" in c and c[c.index("--operation") + 1] == "key"
+                  and c[c.index("--text") + 1] == "BackSpace"]
+        self.assertEqual(clears, [])
+
+    def test_the_leftover_text_of_the_loop_is_retried(self):
+        # A previous attempt left the message in the composer: the loop owns
+        # that text, so it must clear it and try again instead of treating it
+        # as somebody else's.
+        self._patch(accepts_type_at=68, leftover=True)
+        delivered, typed = aa.try_send_guidance(
+            self._args(), "diagnose first", "/tmp", ours_in_composer=True)
+        self.assertTrue(delivered)
+        self.assertFalse(typed)
+        self.assertTrue(self._returns_sent())
 
 
 if __name__ == "__main__":

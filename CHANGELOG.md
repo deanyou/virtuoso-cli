@@ -28,11 +28,14 @@ All notable changes to this project will be documented in this file.
   idle) and re-resolves the daemon session and the X11 window id by itself
   after a Virtuoso or daemon restart.
   When the agent keeps re-running the same command, the loop fingerprints the
-  command line above the option rows and, after `--guide-threshold`
-  consecutive identical approvals, types a guidance message into the chat
-  composer telling the agent to diagnose the root cause. The message is only
-  sent while no permission prompt is pending (the composer is the prompt's
-  answer field otherwise), and its delivery is verified with a screenshot.
+  command line above the option rows — a pixel-tolerant comparison of the text
+  band, so a re-rendered command still counts as the same one — and, after
+  `--guide-threshold` consecutive identical approvals, types a guidance message
+  into the chat composer telling the agent to diagnose the root cause. The
+  message is only sent while no permission prompt is pending: the composer
+  itself is the guard, and a composer that already holds text is never typed
+  into, so neither a pending prompt nor the user's own text is overwritten.
+  The delivery is verified with a screenshot.
   `--timeout 0` runs the loop until it is stopped.
 
 ### Fixed

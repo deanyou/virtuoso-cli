@@ -23,6 +23,7 @@ import time
 
 import numpy as np
 from PIL import Image
+from scipy.ndimage import maximum_filter
 from scipy.signal import fftconvolve
 
 DEFAULT_TEMPLATE = os.path.join(
@@ -41,6 +42,23 @@ MATCH_THRESHOLD = 0.90
 # client area. The exact row depends on the composer layout, so the guidance
 # delivery tries them in order until the text shows up in a screenshot.
 COMPOSER_CLICK_OFFSETS = (68, 74, 60)
+# The command line is printed in a code block right above the option rows.
+# The band is searched for in the rows above the Allow label: this far above,
+# and this tall. The command line is then picked out of that region by ink.
+COMMAND_REGION_ABOVE = 170
+COMMAND_REGION_HIGH = 140
+COMMAND_BAND_WIDE = 570
+# Two bands of the same command match at least this fraction of their text.
+# A re-rendered glyph still matches within a 3x3 neighbourhood, a changed
+# character does not. Measured on the captured frames: the same command scores
+# 1.0, the most similar pair of different commands 0.91.
+COMMAND_SIMILARITY = 0.95
+# How far two bands may be displaced and still be compared to each other.
+BAND_SHIFT = 3
+# Grey level from which a pixel counts as text, and the slack allowed when
+# two composer crops are compared (the placeholder re-renders slightly).
+COMPOSER_INK_THRESHOLD = 120
+COMPOSER_INK_TOLERANCE = 20
 # Consecutive rejected clicks before the loop gives up.
 MAX_CLICK_FAILURES = 3
 
@@ -129,23 +147,155 @@ def click(vcli, session, window_id, display, x, y, dry_run):
     return True
 
 
+def _text_groups(rows):
+    """Contiguous runs of rows that hold ink, as (first, last) pairs."""
+    ink_rows = np.nonzero(rows > 0)[0]
+    if len(ink_rows) == 0:
+        return []
+    groups = []
+    start = prev = int(ink_rows[0])
+    for r in ink_rows[1:]:
+        r = int(r)
+        if r - prev > 3:
+            groups.append((start, prev))
+            start = r
+        prev = r
+    groups.append((start, prev))
+    return groups
+
+
+def _row_background(row):
+    """The most common grey level of a row: the colour behind the text."""
+    values, counts = np.unique(row, return_counts=True)
+    return int(values[counts.argmax()])
+
+
+def command_band(screenshot, found):
+    """The band of the screenshot that holds the command line of the prompt.
+
+    The permission card shows the command in a code block, followed by the
+    status line ("Running script...") and the option rows. The command is
+    therefore *not* the last text line above the options — that is the status
+    line, which is the same for every prompt and would make every request
+    look like a repeat of the same one.
+
+    The code block is the only part of the card with its own background, so
+    the command is the last text line whose background differs from the
+    background of the status line above the options.
+    """
+    x, y, _ = found
+    crop = crop_region(screenshot, (
+        0,
+        max(0, y - COMMAND_REGION_ABOVE),
+        COMMAND_BAND_WIDE,
+        COMMAND_REGION_HIGH,
+    ))
+    if crop is None:
+        return None
+    rows = (crop >= COMPOSER_INK_THRESHOLD).sum(axis=1)
+    groups = _text_groups(rows)
+    if not groups:
+        return None
+    status_bg = _row_background(crop[groups[-1][0]])
+    candidates = [g for g in groups if _row_background(crop[g[0]]) != status_bg]
+    if not candidates:
+        # No code block in sight: fall back to the last text line.
+        first, last = groups[-1]
+        return crop[first:last + 1]
+    first, last = candidates[-1]
+    # A command that wraps onto several lines: take the whole block.
+    for earlier in reversed(candidates[:-1]):
+        if _row_background(crop[earlier[0]]) == _row_background(crop[first]) \
+                and earlier[1] >= first - 30:
+            first = earlier[0]
+        else:
+            break
+    return crop[first:last + 1]
+
+
+def band_text_pixels(band):
+    if band is None:
+        return None
+    return band >= COMPOSER_INK_THRESHOLD
+
+
+def _shift(mask, dy, dx):
+    """Copy of `mask` moved by (dy, dx), without wrapping around."""
+    out = np.zeros_like(mask)
+    h, w = mask.shape
+    y0, y1 = max(0, dy), min(h, h + dy)
+    x0, x1 = max(0, dx), min(w, w + dx)
+    if y0 >= y1 or x0 >= x1:
+        return out
+    out[y0:y1, x0:x1] = mask[y0 - dy:y1 - dy, x0 - dx:x1 - dx]
+    return out
+
+
+def band_similarity(a, b):
+    """How much of the text of two bands has a counterpart in the other.
+
+    A glyph that was re-rendered a pixel away still matches within a 3x3
+    neighbourhood, so the score stays high; a changed character leaves a
+    blob of unmatched pixels. Comparing the raw pixels instead would call a
+    one-pixel re-render a new command, and the repeat counter would never
+    reach the threshold. The bands are also aligned first: the command line
+    moves with the transcript, and a displacement is not a new command.
+
+    Bands of different size are compared on a common canvas — a command whose
+    last line gained or lost a row (a descender) must still count as the same
+    command.
+    """
+    ba, bb = band_text_pixels(a), band_text_pixels(b)
+    if ba is None or bb is None:
+        return 0.0
+    if ba.shape != bb.shape:
+        h = max(ba.shape[0], bb.shape[0])
+        w = max(ba.shape[1], bb.shape[1])
+        ba = np.pad(ba, ((0, h - ba.shape[0]), (0, w - ba.shape[1])))
+        bb = np.pad(bb, ((0, h - bb.shape[0]), (0, w - bb.shape[1])))
+    ink_a, ink_b = int(ba.sum()), int(bb.sum())
+    if not ink_a and not ink_b:
+        return 1.0
+    if not ink_a or not ink_b:
+        return 0.0
+    dil_a = maximum_filter(ba.astype(np.uint8), size=3) > 0
+    dil_b = maximum_filter(bb.astype(np.uint8), size=3) > 0
+    best = 0.0
+    for dy in range(-BAND_SHIFT, BAND_SHIFT + 1):
+        for dx in range(-BAND_SHIFT, BAND_SHIFT + 1):
+            shifted_b = _shift(bb, dy, dx)
+            shifted_dil_b = _shift(dil_b, dy, dx)
+            matched_a = int((ba & shifted_dil_b).sum()) / ink_a
+            matched_b = int((shifted_b & dil_a).sum()) / ink_b
+            best = max(best, min(matched_a, matched_b))
+    return best
+
+
+def same_command(a, b):
+    """True when two command bands show the same command."""
+    return band_similarity(a, b) >= COMMAND_SIMILARITY
+
+
 def command_signature(screenshot, found):
     """Fingerprint of the command line the pending prompt belongs to.
 
-    The command is printed in a code block right above the option rows, so
-    the band just above the matched template holds the command text and
-    nothing else. Two approvals of the same command produce the same
-    fingerprint — that is what tells the loop the agent is repeating itself.
+    Only used for logging: the repeat counter compares the bands themselves,
+    because a byte-exact hash changes whenever the text is re-rendered.
     """
-    x, y, _ = found
-    # `y` is the Allow label, not the template top: the command line sits
-    # ~65-90px above it, and the band is kept narrow so it holds the command
-    # text only — the agent's message above it changes with every reply and
-    # would make every request look different.
-    band = crop_region(screenshot, (max(0, x - 30), max(0, y - 95), 570, 35))
+    band = command_band(screenshot, found)
     if band is None:
         return None
     return hashlib.md5(band.tobytes()).hexdigest()
+
+
+def format_guide_message(template, repeats):
+    """Substitute the repeat count without %-formatting.
+
+    A custom message may contain a literal '%' ("100% of the time");
+    %-formatting would raise and take the unattended loop down with it, so
+    only the %d placeholder is replaced.
+    """
+    return template.replace("%d", str(repeats))
 
 
 def client_size(vcli, session, window_id, display):
@@ -177,25 +327,38 @@ def composer_crop(args, workdir):
     except Exception:  # noqa: BLE001
         return None
     # The composer box is anchored to the bottom of the client area; this crop
-    # covers its input line only, so the spinner next to the model selector
-    # and the chat transcript above cannot change it.
-    return crop_region(shot, (0, max(0, h - 86), 400, 46))
+    # covers its input line only, so the disclaimer above it and the model
+    # selector below it cannot change it.
+    return crop_region(shot, (0, max(0, h - 96), 400, 56))
 
 
-def try_send_guidance(args, message, workdir):
+def composer_ink(crop):
+    """Number of text pixels in a composer crop."""
+    if crop is None:
+        return None
+    return int((crop >= COMPOSER_INK_THRESHOLD).sum())
+
+
+def try_send_guidance(args, message, workdir, ours_in_composer=False):
     """Type a guidance message into the chat composer and verify it landed.
 
     While a permission prompt is pending, the composer is an answer field for
     that prompt ("pick an option above") — writing there would answer the
-    prompt instead of talking to the agent. So the message is only typed when
-    no prompt is pending, and the composer is disabled while the agent is
-    busy, which is why the result is verified with a screenshot instead of
-    assumed.
+    prompt instead of talking to the agent. Not every prompt renders the
+    "Allow / Don't Allow" block this skill matches (the plan approval renders
+    "Approve / Adjust / Reject"), so the composer itself is the guard: while
+    a prompt is pending it shows the answer placeholder, and a composer that
+    already holds text is never typed into. The composer is also disabled
+    while the agent is busy, which is why the delivery is verified with a
+    screenshot instead of assumed.
+
+    Returns (delivered, typed): `typed` tells the caller that the message is
+    still sitting in the composer, so the next attempt may clear it.
     """
     size = client_size(args.vcli, args.session, args.window_id, args.display)
     if not size:
         print("guidance skipped: window geometry unavailable")
-        return False
+        return False, False
     _, h = size
 
     def action(*cmd):
@@ -208,7 +371,19 @@ def try_send_guidance(args, message, workdir):
         return rc == 0
 
     before = composer_crop(args, workdir)
+    if before is None:
+        print("guidance skipped: composer not visible")
+        return False, False
+    ink_before = composer_ink(before)
+    if not ours_in_composer and ink_before > COMPOSER_INK_TOLERANCE:
+        # The composer holds something: the answer placeholder of a pending
+        # prompt, or text the user typed. Writing here would answer the prompt
+        # instead of talking to the agent, or destroy the user's message.
+        print("guidance skipped: the composer is not empty (a prompt may be pending)")
+        return False, False
+
     landed = False
+    ink_empty = ink_before
     # The input line sits a few pixels above the bottom of the client area and
     # its exact row depends on the composer layout, so a few candidates are
     # tried; each attempt clears the composer first, so a failed attempt
@@ -216,25 +391,38 @@ def try_send_guidance(args, message, workdir):
     for offset in COMPOSER_CLICK_OFFSETS:
         y = max(0, h - offset)
         if not action("--operation", "click-rel", "--x", "30", "--y", str(y)):
-            return False
+            return False, False
         action("--operation", "key", "--text", "ctrl+a")
         action("--operation", "key", "--text", "BackSpace")
         time.sleep(0.3)
+        # The composer is empty now: this is the baseline the typed text has
+        # to exceed, no matter what was in the composer before.
+        cleared = composer_crop(args, workdir)
+        ink_empty = composer_ink(cleared)
+        if ink_empty is None:
+            ink_empty = 0
         if not action("--operation", "type", "--text", message):
-            return False
+            return False, False
         time.sleep(0.4)
         after = composer_crop(args, workdir)
-        if before is None or after is None or not np.array_equal(before, after):
+        ink_after = composer_ink(after)
+        if ink_after is not None and ink_after > ink_empty + COMPOSER_INK_TOLERANCE:
             landed = True
             break
 
     if not landed:
         # The composer did not accept the text — the agent is busy. Keep the
         # message and try again on the next poll.
-        return False
+        still = composer_crop(args, workdir)
+        ink_still = composer_ink(still)
+        if ink_still is not None and ink_still > COMPOSER_INK_TOLERANCE:
+            # The text is in the composer but was not confirmed: the next
+            # attempt may clear it and try again.
+            return False, True
+        return False, False
 
     # Submitting needs the input to have settled: a Return sent too early is
-    # swallowed, so the empty composer is verified and Return is retried.
+    # swallowed, so the emptied composer is verified and Return is retried.
     for _ in range(3):
         rc, out, err = run([
             args.vcli, "--session", args.session, "window", "action-x11",
@@ -243,14 +431,15 @@ def try_send_guidance(args, message, workdir):
         ])
         if rc != 0:
             print("guidance Return failed: %s %s" % (out.strip(), err.strip()))
-            return False
+            return False, True
         time.sleep(1.0)
         submitted = composer_crop(args, workdir)
-        if before is None or submitted is None or np.array_equal(before, submitted):
+        ink_submitted = composer_ink(submitted)
+        if ink_submitted is None or ink_submitted <= ink_empty + COMPOSER_INK_TOLERANCE:
             print("guided the agent: %s" % message)
-            return True
+            return True, False
     print("guidance typed but not submitted — keeping it for the next poll")
-    return False
+    return False, True
 
 
 def wait_until_progress(args, workdir, before, region, polls):
@@ -415,9 +604,10 @@ def main():
     idle = 0
     failed = 0
     capture_failures = 0
-    last_signature = None
+    last_band = None
     repeats = 0
     guidance_pending = None
+    guidance_typed = False
     workdir = tempfile.mkdtemp(prefix="auto_allow_")
 
     while time.time() < deadline:
@@ -439,7 +629,11 @@ def main():
             # No prompt pending: the agent is either idle or busy. If a
             # guidance message is queued, this is the moment to deliver it.
             if guidance_pending and not args.dry_run:
-                if try_send_guidance(args, guidance_pending, workdir):
+                delivered, typed = try_send_guidance(
+                    args, guidance_pending, workdir, ours_in_composer=guidance_typed
+                )
+                guidance_typed = typed
+                if delivered:
                     guidance_pending = None
             if idle_limit_reached(args.idle_polls, idle):
                 print("no pending prompt after %d idle polls" % idle)
@@ -451,19 +645,17 @@ def main():
             # The same command being approved over and over means the agent is
             # stuck in a retry loop. Count the repeats and, once there are
             # too many, queue a message telling it to diagnose the cause.
-            signature = command_signature(shot, found)
-            if signature is not None:
-                if signature == last_signature:
+            band = command_band(shot, found)
+            if band is not None:
+                if last_band is not None and same_command(last_band, band):
                     repeats += 1
                 else:
-                    last_signature = signature
+                    last_band = band
                     repeats = 1
                 if (args.guide_threshold and repeats >= args.guide_threshold
                         and repeats % args.guide_threshold == 0):
-                    message = args.guide_message
-                    if "%d" in message:
-                        message = message % repeats
-                    guidance_pending = message
+                    guidance_pending = format_guide_message(args.guide_message, repeats)
+                    guidance_typed = False
                     print("same command %d times in a row — guidance queued" % repeats)
             if click(args.vcli, args.session, args.window_id, args.display, x, y, args.dry_run):
                 clicks += 1
