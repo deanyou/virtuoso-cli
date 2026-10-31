@@ -54,6 +54,8 @@ All notable changes to this project will be documented in this file.
   typed over it is never wiped.
   The delivery is verified with a screenshot.
   `--timeout 0` runs the loop until it is stopped.
+  An unreadable screenshot (a truncated capture) counts as "no prompt this
+  time" instead of killing the loop.
 
 ### Fixed
 

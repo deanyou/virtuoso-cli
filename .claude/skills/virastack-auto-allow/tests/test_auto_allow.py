@@ -68,6 +68,18 @@ class FindPromptTests(unittest.TestCase):
         template = aa.load_template(aa.DEFAULT_TEMPLATE)
         self.assertIsNotNone(aa.find_prompt(self.path, template))
 
+    def test_a_truncated_capture_does_not_kill_the_loop(self):
+        # A capture can leave a truncated file behind. The loop has to survive
+        # it: an unreadable screenshot means "no prompt this time".
+        handle, path = tempfile.mkstemp(suffix=".png")
+        os.close(handle)
+        with open(path, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n")
+        self.addCleanup(os.remove, path)
+        self.assertIsNone(aa.find_prompt(path, self.template))
+        self.assertIsNone(aa.crop_region(path, (0, 0, 700, 260)))
+        self.assertIsNone(aa.command_band(path, (10, 710, 0.99)))
+
 
 class IdleLimitTests(unittest.TestCase):
     def test_zero_idle_polls_never_stops_the_loop(self):
@@ -522,14 +534,16 @@ class GuidanceDeliveryTests(unittest.TestCase):
 
     W, H = 640, 604
 
-    def _patch(self, accepts_type_at=None, placeholder=False, leftover=False):
+    def _patch(self, accepts_type_at=None, placeholder=False, leftover=False,
+               caret=False):
         """Mock the vcli boundary and the capture.
 
         `accepts_type_at` is the client row the fake composer accepts typing
         on; None means it never accepts (the agent is busy). `placeholder`
         makes the composer show the answer placeholder of a pending prompt.
         `leftover` makes the composer hold the text of a previous, unconfirmed
-        attempt of the loop itself.
+        attempt of the loop itself. `caret` makes the empty composer show the
+        blinking caret and the descenders of the disclaimer above it.
         """
         state = {"typed": False, "leftover": leftover}
         self.state = state
@@ -559,6 +573,16 @@ class GuidanceDeliveryTests(unittest.TestCase):
 
         def fake_capture(vcli, session, window_id, display, workdir):
             img = Image.new("L", (self.W, self.H), 30)
+            if caret:
+                # An empty composer is not free of ink: the blinking caret is a
+                # line of its own and the descenders of the disclaimer above
+                # bleed into the crop. Measured on the real frames: 24 pixels.
+                for y in range(self.H - 68, self.H - 55):
+                    img.putpixel((37, y), 220)
+                for x in (277, 326, 395):
+                    img.putpixel((x, self.H - 96), 220)
+                for x in range(322, 326):
+                    img.putpixel((x, self.H - 95), 220)
             if placeholder:
                 # The answer placeholder of a pending prompt: a long dim line
                 # across the composer.
@@ -688,6 +712,18 @@ class GuidanceDeliveryTests(unittest.TestCase):
         self.assertIsNone(snapshot)
         self.assertEqual(self._clears_sent(), [])
         self.assertEqual(self._types_sent(), [])
+
+
+    def test_an_empty_composer_with_a_caret_is_not_taken_for_text(self):
+        # An empty composer is not free of ink: the blinking caret is a line of
+        # its own and the descenders of the disclaimer above it bleed into the
+        # crop. That ink must not stop the guidance — otherwise the message
+        # would never be delivered in that layout.
+        self._patch(accepts_type_at=68, caret=True)
+        delivered, snapshot = aa.try_send_guidance(self._args(), "diagnose first", "/tmp")
+        self.assertTrue(delivered)
+        self.assertIsNone(snapshot)
+        self.assertTrue(self._returns_sent())
 
 
 if __name__ == "__main__":

@@ -194,8 +194,12 @@ client area); the first one where the text shows up in the screenshot wins.
 
 A composer that already holds ink is never typed into: it means either a
 prompt is pending or the user is writing, so the message stays queued
-("guidance skipped: the composer is not empty"). This also means the loop
-never clears text somebody else typed.
+("guidance skipped: the composer is not empty"). An empty composer is not
+free of ink — the blinking caret is a line of its own and the descenders of
+the disclaimer above it bleed into the crop — so the guard allows a small
+amount of ink: measured on the captured frames an empty composer shows 24
+pixels, the smallest composer that holds text shows 163. This also means the
+loop never clears text somebody else typed.
 
 The one exception is the text the loop itself typed and could not submit.
 The loop keeps a snapshot of the composer as it held its own message and
@@ -258,6 +262,7 @@ same coordinates would not help.
 | `FileNotFoundError: allow_prompt_template.png` | The template was moved while the loop ran | Restart the loop — the template is now loaded once at startup |
 | Nothing detected, prompt visible | UI theme/font changed, or the prompt is rendered as the inline "Allow" pill instead of the numbered block | Re-crop the template from a fresh `vcli window action-x11 --operation screenshot` |
 | `capture error: no window with id` | Virtuoso or the daemon was restarted and the window id changed | Nothing to do — the loop re-resolves the session and window on its own; check the log for `re-resolved target:` |
+| The loop dies on a screenshot | The capture was truncated (the daemon was interrupted while the image was written) | Nothing to do — an unreadable screenshot counts as "no prompt this time" and the loop keeps running |
 | `guidance typed but not submitted — keeping it for the next poll` | The composer was disabled (agent busy) or Return was swallowed | Nothing to do — the message is retried on the next poll with no prompt pending |
 | `same command N times in a row — guidance queued` | The agent is stuck retrying one command | The message goes out as soon as no prompt is pending; the approvals themselves keep working |
 

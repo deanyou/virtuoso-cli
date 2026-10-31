@@ -59,7 +59,13 @@ BAND_SHIFT = 3
 # Grey level from which a pixel counts as text, and the slack allowed when
 # two composer crops are compared (the placeholder re-renders slightly).
 COMPOSER_INK_THRESHOLD = 120
-COMPOSER_INK_TOLERANCE = 20
+# How much ink an empty composer may show before it counts as holding text.
+# An empty composer is not free of ink: the descenders of the disclaimer above
+# it bleed into the crop and the blinking caret is a line of its own. Measured
+# over the captured frames: an empty composer shows 0, 10 or 24 pixels (the
+# 24 are the descenders plus the caret), the smallest composer that holds
+# text shows 163. The tolerance sits in that gap.
+COMPOSER_INK_TOLERANCE = 40
 # How much the composer may differ from the text the loop typed and still be
 # taken for it: the ink has to match within this ratio and the glyphs within
 # this similarity.
@@ -135,9 +141,24 @@ def load_template(template_path):
     return np.array(Image.open(template_path).convert("L"))
 
 
+def load_screenshot(path):
+    """Grayscale pixels of a screenshot, or None when the file is unusable.
+
+    A capture can leave a truncated file behind (the daemon was interrupted
+    while the image was written). The loop has to survive that: an unreadable
+    capture means "no prompt this time", not the end of the run.
+    """
+    try:
+        return np.array(Image.open(path).convert("L"))
+    except Exception:  # noqa: BLE001 — an unreadable capture is not fatal
+        return None
+
+
 def find_prompt(screenshot, template):
     """Return (x, y, score) of the Allow label, or None when the prompt is absent."""
-    image = np.array(Image.open(screenshot).convert("L"))
+    image = load_screenshot(screenshot)
+    if image is None:
+        return None
     tpl = template
     if image.shape[0] < tpl.shape[0] or image.shape[1] < tpl.shape[1]:
         return None
@@ -190,15 +211,14 @@ def _row_background(row):
     return int(values[counts.argmax()])
 
 
-def _band_width(screenshot):
+def _band_width(image):
     """Width of the band crop.
 
     The command has to be cut off at the scrollbar, but not before it: a
     command that runs past the crop would lose its tail and two different
     commands would share a fingerprint.
     """
-    width = Image.open(screenshot).size[0]
-    return max(200, min(width - SCROLLBAR_MARGIN, COMMAND_BAND_MAX))
+    return max(200, min(image.shape[1] - SCROLLBAR_MARGIN, COMMAND_BAND_MAX))
 
 
 def _card_background(crop, groups):
@@ -232,10 +252,13 @@ def command_band(screenshot, found):
     colour, and the command would then be taken for the background.
     """
     _, y, _ = found
-    crop = crop_region(screenshot, (
+    image = load_screenshot(screenshot)
+    if image is None:
+        return None
+    crop = crop_from(image, (
         0,
         max(0, y - COMMAND_REGION_ABOVE),
-        _band_width(screenshot),
+        _band_width(image),
         COMMAND_REGION_HIGH,
     ))
     if crop is None:
@@ -537,16 +560,27 @@ def crop_region(path, region):
     Clamping instead of bailing out matters: the region is a fixed 700x260
     block around the prompt, and a narrower window would otherwise make the
     post-click guard silently skip instead of checking anything.
+
+    A truncated capture yields None instead of raising: the loop must survive
+    a bad screenshot, not die on it.
     """
+    image = load_screenshot(path)
+    if image is None:
+        return None
+    return crop_from(image, region)
+
+
+def crop_from(image, region):
+    """Crop (x, y, w, h) out of a loaded screenshot, clamped to the image."""
     x, y, w, h = region
-    img = Image.open(path).convert("L")
-    left = max(0, min(x, img.size[0]))
-    top = max(0, min(y, img.size[1]))
-    right = max(left, min(x + w, img.size[0]))
-    bottom = max(top, min(y + h, img.size[1]))
+    height, width = image.shape[:2]
+    left = max(0, min(x, width))
+    top = max(0, min(y, height))
+    right = max(left, min(x + w, width))
+    bottom = max(top, min(y + h, height))
     if right <= left or bottom <= top:
         return None
-    return np.array(img.crop((left, top, right, bottom)))
+    return image[top:bottom, left:right]
 
 
 def idle_limit_reached(idle_polls, idle):
