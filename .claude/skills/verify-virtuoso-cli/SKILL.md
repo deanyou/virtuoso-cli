@@ -138,16 +138,17 @@ One nuance: in remote mode (`VB_REMOTE_HOST` set) `vcli session list` opens an S
 connection to refresh the cached session list. It never mutates OA state. In local
 mode it is a pure local read. `vcli tunnel diagnose` likewise only probes.
 
-The only file any probe writes is the append-only command history
-(`$VB_HOME/cache/virtuoso_bridge/history/cmd.jsonl`) — that is vcli's design, not a
-mutation of the target.
+Probes write state only under `$VB_HOME`: the append-only command history
+(`$VB_HOME/cache/virtuoso_bridge/history/cmd.jsonl`), and — in remote mode — the
+session cache that `vcli session list` refreshes from the remote host. `vcli
+--version` writes nothing. The target Virtuoso is not modified.
 
 ## 3. Drive
 
 The harness is the `vcli` binary itself, driven from a shell. No PTY is needed for
 the JSON path; the TUI is the only surface that needs one.
 
-Three rules, every time:
+Four rules, every time:
 
 1. **Pass `--format json` explicitly** — `vcli --format json <command>`. The default
    is `table` in a TTY and `json` in a pipe, so an explicit flag keeps assertions
@@ -225,6 +226,12 @@ pass.
 ```
 
 `RUN_ID` is yours to choose, e.g. `$(date +%Y%m%d-%H%M%S)`.
+
+`.verify-artifacts/` is **git-ignored by default** — the repo-root `.gitignore`
+lists it. Evidence carries hostnames, ports and ssh key paths, so it must never be
+one `git add -A` away from a commit. If a run's evidence has to be archived, copy
+it out of the repo explicitly; the ignored directory is not versioned and will not
+travel with a branch.
 
 **Evidence must not live under `$VB_HOME`.** Cleanup deletes `$VB_HOME`. Proof that
 the cleanup ate is not proof. `.verify-artifacts/` sits in the repo working tree,
@@ -359,5 +366,7 @@ under `/tmp` unless `VB_HOME` is already exported.
 ## Maintenance
 
 The feature map rots as the app changes. After `vcli` gains a command, changes an
-exit code, or moves a path, run **`/maintain-verification-skill`** to re-audit this
-skill and the map under `features/`.
+exit code, or moves a path, re-audit this skill and the map under `features/`:
+run the review workflow in `.claude/skills/pstack-vcli/` and then manually
+re-verify every assertion in `features/*.md` against the current source under
+`src/`.

@@ -12,7 +12,7 @@ Virtuoso.
 - `skill-exec-gated` refuses raw SKILL evaluation and points at the RPC path.
 - `rpc-dry-run` shapes the request without contacting the bridge.
 - `rpc-failure-contract` returns a structured error with a retry hint.
-- `rpc-usage-error` rejects a malformed call with a usage exit code.
+- `rpc-usage-error` rejects a positional method with a usage exit code (2).
 - `mcp-equivalent` reaches the same bridge over the MCP stdio transport.
 
 ## How to get to it (user POV)
@@ -27,6 +27,7 @@ Preconditions:
 
 - The binary is built at `target/debug/vcli`.
 - `VB_HOME` points at an empty directory for this run.
+- `VCLI_CAPABILITY` does **not** contain `Admin`: the Admin capability permits raw SKILL exec, so the refusal below only happens without it.
 - For the success path: a Virtuoso instance running with `resources/ramic_bridge.il` loaded in its CIW, its port reachable, and a valid license. `scripts/doctor.sh` must report `tier_b: "drivable"`.
 
 - **Raw SKILL is refused.** Run `vcli --format json skill exec "1+1"`. Exit code `1`, stdout is empty, and **stderr** carries `"error": "execution_failed"` with a message reading `raw SKILL exec is not permitted: use 'vcli rpc call' instead`. This is the gate, and it fires before any network activity.

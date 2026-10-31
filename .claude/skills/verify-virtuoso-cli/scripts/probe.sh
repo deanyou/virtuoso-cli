@@ -77,7 +77,10 @@ RC=$?
 
 printf '%s\n' "$RC" >"$OUT_DIR/exit-code.txt"
 
-# stdout.json only when stdout really is JSON.
+# stdout.json only when stdout really is JSON. Remove any stale copy
+# first: OUT_DIR is reused per feature slug, so a previous run's success
+# JSON must never survive as "evidence" for a run that produced no JSON.
+rm -f "$OUT_DIR/stdout.json"
 python3 - "$OUT_DIR/stdout.txt" "$OUT_DIR/stdout.json" <<'PY' 2>/dev/null
 import json, sys
 raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
@@ -95,6 +98,9 @@ snapshot >"$OUT_DIR/.after"
 {
   echo "# side effects observed in $VB_HOME across this command"
   echo "# action: $VCLI --format json $*"
+  echo "# NOTE: this diff covers file additions and removals only; a change to"
+  echo "#       the contents of an existing file is invisible here and must be"
+  echo "#       checked manually."
   echo
   echo "## files added"
   comm -13 "$OUT_DIR/.before" "$OUT_DIR/.after" | sed 's/^/  + /'

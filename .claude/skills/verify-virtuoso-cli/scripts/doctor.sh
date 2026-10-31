@@ -38,9 +38,16 @@ if [[ -z "${VB_HOME:-}" ]]; then
 fi
 export VB_HOME
 
+# Scratch dir for the probe output. Initialized empty so the cleanup trap
+# stays safe even when it fires before mktemp ran (or mktemp failed).
+WORK=""
+
 cleanup() {
   if [[ "$CREATED_VB_HOME" == "1" && -n "${VB_HOME:-}" && -d "$VB_HOME" ]]; then
     rm -rf "$VB_HOME"
+  fi
+  if [[ -n "$WORK" && -d "$WORK" ]]; then
+    rm -rf "$WORK"
   fi
 }
 trap cleanup EXIT
@@ -91,6 +98,7 @@ def as_json(name):
 
 probes = {}
 reasons = []
+notes = []
 
 # --- identity -----------------------------------------------------------
 ident = out("identity").strip()
@@ -101,17 +109,47 @@ else:
     reasons.append("vcli --version failed (exit %s)" % rc("identity"))
 
 # --- config -------------------------------------------------------------
+# The rule the skill documents (SKILL.md "Verdict rules", features/README.md)
+# is: tier A is drivable iff identity is ok AND `config check` exits 0.
+# `config check` exits 0 even when it reports warning-level diagnostics
+# (e.g. LEGACY_ENV_PROFILE), and it exits non-zero exactly when the report
+# is invalid, i.e. when an error-level diagnostic exists. So the exit code
+# decides, and the diagnostics are carried in the reason so that the
+# information is not lost.
+cfg_rc = rc("config")
 cfg = as_json("config")
-if rc("config") == 0 and isinstance(cfg, dict):
-    diags = cfg.get("diagnostics") or []
+diags = []
+if isinstance(cfg, dict):
+    raw_diags = cfg.get("diagnostics") or []
+    if isinstance(raw_diags, list):
+        diags = [d for d in raw_diags if isinstance(d, dict)]
+
+
+def diag_label(d):
+    return "%s/%s" % (d.get("level") or "unknown", d.get("code") or "unknown")
+
+
+diag_summary = ", ".join(diag_label(d) for d in diags)
+error_diags = [d for d in diags if (d.get("level") or "") == "error"]
+
+if cfg_rc == 0 and not error_diags:
+    probes["config"] = "ok"
     if diags:
-        probes["config"] = "diagnostics"
-        reasons.append("config check reported %d diagnostic(s)" % len(diags))
-    else:
-        probes["config"] = "ok"
+        notes.append(
+            "config check reported %d diagnostic(s): %s" % (len(diags), diag_summary)
+        )
+    elif not isinstance(cfg, dict):
+        notes.append("config check exited 0 without JSON; diagnostics not inspected")
 else:
     probes["config"] = "failed"
-    reasons.append("vcli config check failed (exit %s)" % rc("config"))
+    if cfg_rc != 0:
+        reasons.append("vcli config check failed (exit %s)" % cfg_rc)
+    else:
+        reasons.append(
+            "vcli config check reported error-level diagnostic(s): %s" % diag_summary
+        )
+    if diags:
+        reasons.append("config check diagnostics: %s" % diag_summary)
 
 # --- sessions -----------------------------------------------------------
 sess = as_json("sessions")
@@ -139,7 +177,7 @@ else:
     probes["bridge"] = "failed"
     reasons.append("vcli tunnel diagnose failed (exit %s)" % rc("bridge"))
 
-tier_a = "drivable" if probes.get("identity") == "ok" and probes.get("config") in ("ok",) else "not drivable"
+tier_a = "drivable" if probes.get("identity") == "ok" and probes.get("config") == "ok" else "not drivable"
 if tier_a != "drivable" and not reasons:
     reasons.append("identity or config probe failed")
 
@@ -148,7 +186,7 @@ tier_b = "drivable" if probes.get("bridge", "").startswith("ok") else "unreachab
 verdict = {
     "tier_a": tier_a,
     "tier_b": tier_b,
-    "reason": "; ".join(reasons) if reasons else "client-side surface is usable",
+    "reason": "; ".join(reasons + notes) if (reasons or notes) else "client-side surface is usable",
     "probes": probes,
     "vcli": vcli,
 }

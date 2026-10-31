@@ -33,4 +33,7 @@ gmid_test*.log
 .ua/intermediate/
 .ua/diff-overlay.json
 
+# Verification skill evidence dirs (hostnames, ports, ssh key paths)
+.verify-artifacts/
+
 /0
