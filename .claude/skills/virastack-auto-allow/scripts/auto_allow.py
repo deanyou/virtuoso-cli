@@ -66,11 +66,11 @@ COMPOSER_INK_THRESHOLD = 120
 COMPOSER_INK_TOLERANCE = 40
 # The rows at the top of the composer crop that hold the descenders of the
 # disclaimer above the input line, and the shape of the blinking caret: a
-# vertical line of at most two columns. Everything else in the crop is a
-# glyph.
+# solid vertical line of at most two columns. Everything else in the crop is
+# a glyph.
 COMPOSER_DESCENDER_ROWS = 2
 CARET_MAX_WIDTH = 2
-CARET_MIN_HEIGHT = 8
+CARET_MIN_HEIGHT = 6
 # How much the composer may differ from the text the loop typed and still be
 # taken for it: the ink has to match within this ratio and the glyphs within
 # this similarity.
@@ -441,13 +441,22 @@ def composer_holds_text(crop):
 
 
 def _is_caret(mask, first, last):
-    """Whether the ink in these columns is the blinking caret."""
+    """Whether the ink in these columns is the blinking caret.
+
+    The caret is a solid vertical line. A glyph is not: a lowercase "i" has
+    a dot above its stem and leaves a gap, and a period is far too short.
+    """
     if last - first + 1 > CARET_MAX_WIDTH:
         return False
-    rows = np.nonzero(mask[:, first:last + 1].any(axis=1))[0]
+    block = mask[:, first:last + 1]
+    rows = np.nonzero(block.any(axis=1))[0]
     if len(rows) == 0:
         return False
-    return int(rows[-1]) - int(rows[0]) + 1 >= CARET_MIN_HEIGHT
+    height = int(rows[-1]) - int(rows[0]) + 1
+    if height < CARET_MIN_HEIGHT:
+        return False
+    # A gap in the middle means the ink is not one solid line.
+    return height == len(rows)
 
 
 def composer_is_ours(crop, snapshot):

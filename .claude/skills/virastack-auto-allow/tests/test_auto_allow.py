@@ -912,6 +912,27 @@ class ComposerInkShapeTests(unittest.TestCase):
                 crop[y, x] = 220
         self.assertTrue(aa.composer_holds_text(crop))
 
+    def test_a_glyph_with_a_gap_is_not_the_caret(self):
+        # A lowercase "i" is a dot above a stem: as narrow as the caret, but
+        # not a solid line, so it is text and not the blinking caret.
+        crop = self._crop()
+        for y in range(28, 30):
+            crop[y, 38] = 220
+            crop[y, 39] = 220
+        for y in range(32, 40):
+            crop[y, 38] = 220
+            crop[y, 39] = 220
+        self.assertTrue(aa.composer_holds_text(crop))
+
+    def test_a_caret_next_to_a_glyph_is_text(self):
+        crop = self._crop()
+        for y in range(28, 42):
+            crop[y, 37] = 220
+        for x in range(38, 41):
+            for y in range(30, 33):
+                crop[y, x] = 220
+        self.assertTrue(aa.composer_holds_text(crop))
+
     def test_a_line_of_text_is_text(self):
         crop = self._crop()
         crop[28:34, 40:200] = 220

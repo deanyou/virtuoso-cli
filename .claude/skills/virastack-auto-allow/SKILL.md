@@ -198,12 +198,14 @@ prompt is pending or the user is writing, so the message stays queued
 free of ink — the blinking caret is a line of its own and the descenders of
 the disclaimer above it bleed into the crop — so the ink is judged by its
 **shape** and not by its amount: everything outside the top rows of the crop
-that is not a narrow vertical line is text. On the captured frames this
+that is not a solid narrow vertical line is text. On the captured frames this
 classifies every frame exactly as an ink threshold did (an empty composer
 shows 24 pixels, the smallest composer that holds text shows 163), and it
 also protects a single character the user typed, which carries less ink
-than the empty baseline. This also means the loop never clears text
-somebody else typed.
+than the empty baseline. The one shape still taken for the caret is a single
+solid vertical stroke (a pipe, a lowercase "l"); a lowercase "i" has a dot
+above its stem and is therefore text. This also means the loop never clears
+text somebody else typed.
 
 The one exception is the text the loop itself typed and could not submit.
 The loop keeps a snapshot of the composer as it held its own message and
