@@ -211,7 +211,12 @@ impl McpServer {
                     Err(e) => McpResponse::error(e.code(), e.to_string(), request.id),
                 }
             }
-            "prompts/list" => McpResponse::success(prompts::list_json(), request.id),
+            "prompts/list" => {
+                // A prompt is a workflow over the tools the server exposes, so
+                // a prompt that names an unavailable tool is not published.
+                let available: Vec<String> = self.tools.iter().map(|t| t.name.clone()).collect();
+                McpResponse::success(prompts::list_json(&available), request.id)
+            }
             "prompts/get" => {
                 let name = request
                     .params
@@ -226,7 +231,23 @@ impl McpServer {
                     .unwrap_or_default();
                 match prompts::find_prompt(name) {
                     Some(prompt) => {
-                        McpResponse::success(prompts::get_json(prompt, &arguments), request.id)
+                        // Required arguments must be supplied: rendering a
+                        // placeholder instead would hand the agent a workflow
+                        // with a hole in it.
+                        let missing = prompts::missing_required_arguments(prompt, &arguments);
+                        if !missing.is_empty() {
+                            McpResponse::error(
+                                -32602,
+                                format!(
+                                    "missing required argument(s) for prompt '{}': {}",
+                                    name,
+                                    missing.join(", ")
+                                ),
+                                request.id,
+                            )
+                        } else {
+                            McpResponse::success(prompts::get_json(prompt, &arguments), request.id)
+                        }
                     }
                     None => {
                         McpResponse::error(-32602, format!("unknown prompt: {}", name), request.id)
@@ -297,7 +318,7 @@ pub fn initialize_result() -> serde_json::Value {
         },
         "serverInfo": {
             "name": "virtuoso-cli",
-            "version": "0.3.18",
+            "version": env!("CARGO_PKG_VERSION"),
         }
     })
 }

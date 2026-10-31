@@ -17,19 +17,32 @@ struct Server {
 
 impl Server {
     fn start(dir: &std::path::Path) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_vcli"))
+        Self::start_with_env(dir, &[])
+    }
+
+    /// Start the server with extra environment variables.
+    ///
+    /// The harness pins `VB_TARGETS_FILE` to a throwaway file: on Windows
+    /// `dirs::home_dir()` ignores `HOME`, so without the override the server
+    /// would read the real `~/.vcli/targets.yaml` of whoever runs the test.
+    fn start_with_env(dir: &std::path::Path, extra: &[(&str, &std::ffi::OsStr)]) -> Self {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_vcli"));
+        command
             .env_clear()
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("HOME", dir)
             .env("VB_HOME", dir)
+            .env("VB_TARGETS_FILE", targets_file(dir))
             .current_dir(dir)
             .arg("mcp")
             .arg("serve")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn vcli mcp serve");
+            .stderr(Stdio::null());
+        for (key, value) in extra {
+            command.env(key, value);
+        }
+        let mut child = command.spawn().expect("spawn vcli mcp serve");
 
         let stdin = child.stdin.take().expect("stdin");
         let stdout = BufReader::new(child.stdout.take().expect("stdout"));
@@ -82,6 +95,17 @@ fn write_skill(root: &std::path::Path, name: &str, body: &str) {
     std::fs::write(dir.join("SKILL.md"), body).expect("write SKILL.md");
 }
 
+/// The throwaway targets file the server is pointed at.
+///
+/// It defines no targets at all — the point is only that the server never
+/// reads the real user profile. It must still be valid YAML: an *empty* file
+/// fails to parse and the server refuses to start.
+fn targets_file(dir: &std::path::Path) -> std::path::PathBuf {
+    let path = dir.join("targets.yaml");
+    std::fs::write(&path, "targets: {}\n").expect("write targets.yaml");
+    path
+}
+
 fn skills_root(dir: &std::path::Path) -> std::path::PathBuf {
     dir.join(".claude").join("skills")
 }
@@ -111,8 +135,12 @@ fn initialize_declares_resources_and_prompts_capabilities() {
         capabilities.get("tools").is_some(),
         "tools capability must stay"
     );
-    // The serverInfo version line is owned by another change — do not touch it.
     assert_eq!(response["result"]["serverInfo"]["name"], "virtuoso-cli");
+    assert_eq!(
+        response["result"]["serverInfo"]["version"],
+        env!("CARGO_PKG_VERSION"),
+        "the reported version must be the crate version"
+    );
 }
 
 #[test]
@@ -219,7 +247,7 @@ fn resources_list_is_empty_when_no_skills_directory_exists() {
 }
 
 #[test]
-fn prompts_list_publishes_exactly_three_workflow_prompts() {
+fn prompts_list_publishes_the_prompts_whose_tools_are_available() {
     let tmp = tempfile::tempdir().expect("tempdir");
 
     let mut server = Server::start(tmp.path());
@@ -227,7 +255,6 @@ fn prompts_list_publishes_exactly_three_workflow_prompts() {
     let prompts = listed["result"]["prompts"]
         .as_array()
         .expect("prompts array");
-    assert_eq!(prompts.len(), 3, "exactly three prompts: {listed}");
 
     let names: Vec<&str> = prompts
         .iter()
@@ -235,16 +262,109 @@ fn prompts_list_publishes_exactly_three_workflow_prompts() {
         .collect();
     assert_eq!(
         names,
-        vec![
-            "maestro-run-and-check",
-            "spectre-failure-triage",
-            "cell-design-review"
-        ]
+        vec!["maestro-run-and-check", "cell-design-review"],
+        "the default capability set has no Admin, so the triage prompt — which \
+         names skill_exec — must not be published: {listed}"
     );
     for prompt in prompts {
         assert!(prompt["description"].is_string());
         assert!(prompt["arguments"].is_array());
     }
+}
+
+#[test]
+fn prompts_list_publishes_the_triage_prompt_with_the_admin_capability() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+
+    let mut server = Server::start_with_env(
+        tmp.path(),
+        &[("VCLI_CAPABILITY", std::ffi::OsStr::new("admin"))],
+    );
+    let listed = server.request(1, "prompts/list", serde_json::json!({}));
+    let prompts = listed["result"]["prompts"]
+        .as_array()
+        .expect("prompts array");
+
+    let names: Vec<&str> = prompts
+        .iter()
+        .map(|p| p["name"].as_str().expect("prompt name"))
+        .collect();
+    assert!(
+        names.contains(&"spectre-failure-triage"),
+        "with Admin the triage prompt must be published: {listed}"
+    );
+    assert_eq!(names.len(), 3, "all three prompts: {listed}");
+}
+
+#[test]
+fn prompts_get_rejects_missing_required_arguments() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+
+    let mut server = Server::start(tmp.path());
+    let response = server.request(
+        1,
+        "prompts/get",
+        serde_json::json!({ "name": "cell-design-review", "arguments": {} }),
+    );
+
+    let error = &response["error"];
+    assert!(
+        !error.is_null(),
+        "a missing required argument must be an error: {response}"
+    );
+    assert_eq!(error["code"], -32602, "invalid params: {response}");
+    let message = error["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("lib") && message.contains("cell"),
+        "the message must name the missing arguments: {message}"
+    );
+
+    let ok = server.request(
+        2,
+        "prompts/get",
+        serde_json::json!({
+            "name": "cell-design-review",
+            "arguments": { "lib": "myLib", "cell": "myCell" }
+        }),
+    );
+    assert!(ok["error"].is_null(), "supplied arguments must work: {ok}");
+    assert!(ok["result"]["messages"].is_array(), "{ok}");
+}
+
+#[test]
+fn mcp_serve_fails_fast_on_an_invalid_skills_dir() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    // A file, not a directory.
+    let not_a_dir = tmp.path().join("skills-file");
+    std::fs::write(&not_a_dir, "not a directory").expect("write file");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_vcli"))
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("HOME", tmp.path())
+        .env("VB_HOME", tmp.path())
+        .env("VB_TARGETS_FILE", targets_file(tmp.path()))
+        .env("VB_SKILLS_DIR", &not_a_dir)
+        .current_dir(tmp.path())
+        .arg("mcp")
+        .arg("serve")
+        .stdin(Stdio::null())
+        .output()
+        .expect("run vcli mcp serve");
+
+    assert!(
+        !output.status.success(),
+        "an invalid VB_SKILLS_DIR must fail the startup: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("VB_SKILLS_DIR"),
+        "the error must name the variable: {stderr}"
+    );
+    assert!(
+        stderr.contains(not_a_dir.to_str().unwrap_or_default()),
+        "the error must name the path: {stderr}"
+    );
 }
 
 #[test]
@@ -305,6 +425,7 @@ fn skills_are_discovered_from_the_working_directory_tree() {
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
         .env("HOME", tmp.path())
         .env("VB_HOME", tmp.path())
+        .env("VB_TARGETS_FILE", targets_file(tmp.path()))
         .current_dir(&nested)
         .arg("mcp")
         .arg("serve")

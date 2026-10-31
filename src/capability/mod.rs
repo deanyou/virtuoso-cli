@@ -100,6 +100,15 @@ impl CapabilitySet {
         self.0.contains(&cap) || self.0.contains(&Capability::Admin)
     }
 
+    /// Build a capability set from an explicit list of capabilities.
+    ///
+    /// The environment is the normal source of capabilities; this constructor
+    /// exists for callers that need a specific set — the MCP server filtering
+    /// its published tools and prompts by capability, for example.
+    pub fn from_capabilities(caps: &[Capability]) -> Self {
+        Self(caps.iter().copied().collect())
+    }
+
     /// Check if a specific RPC method name is permitted.
     /// Method names are "domain.operation" (e.g. "schematic.place").
     pub fn permits_method(&self, method: &str) -> bool {

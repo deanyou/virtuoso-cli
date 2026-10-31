@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **MCP resources and prompts.** `vcli mcp serve` now publishes the repository's
+  Claude skills as read-only MCP resources (`skill://<name>`) and three workflow
+  prompts (`maestro-run-and-check`, `spectre-failure-triage`, `cell-design-review`).
+  A resource URI carries a skill *name*, never a path, and a skill that resolves
+  outside the skills root is never listed or served.
+- **`VB_SKILLS_DIR`** — env override for the skills root published as MCP
+  resources. It is now registered in the README configuration table, and a
+  set-but-invalid value (not a directory) fails the server startup with a
+  configuration error naming the variable and the path, instead of silently
+  falling back to working-directory discovery.
 - **`install.sh`** — shared/multi-user installer with `--system` (`/opt/virtuoso-cli`),
   `--user` (`~/.local`), `--prefix DIR` and `--no-build`. Installs `vcli`/`vtui`/
   `virtuoso-daemon` into `$PREFIX/bin` and `ramic_bridge.il` into
@@ -14,6 +24,46 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`prompts/get` accepted a request with missing required arguments.** The
+  missing value silently rendered as `(not provided)`, handing the agent a
+  workflow with a hole in it. A missing or null required argument is now a
+  JSON-RPC `-32602` error naming the argument(s).
+- **`prompts/list` published prompts whose tools were unavailable.** The triage
+  prompt names `skill_exec`, which only exists under the Admin capability, so
+  the default capability set advertised a workflow the caller cannot finish.
+  A prompt is now published only when every tool it names is available under
+  the server's capabilities — the same list `tools/list` serves.
+- **The MCP `serverInfo.version` was hardcoded to `0.3.18`** while the crate is
+  at 1.3.5. It now reports the crate version.
+- **A missing MCP resource answered with `-32001`** (JSON-RPC "request
+  cancelled"). It is now `-32002` ("resource not found"), and an unreadable
+  resource is `-32603`.
+- **A SKILL.md `description: |` block was truncated at the first blank line.**
+  YAML block scalars may contain blank lines — the repository's own
+  `maestro-read-results` skill has one, so its description was cut short.
+- **`load_skills` published skills that escaped the skills root.** A symlinked
+  skill directory pointing outside the root was listed (leaking its frontmatter
+  description) although the read path refused to serve it. The list now applies
+  the same root-containment rule as the read path.
+- **The `maestro-run-and-check` prompt told the agent to "verify" a variable
+  with a same-scope readback.** `maestro_set_var`/`maestro_get_var` share one
+  Maestro-internal scope, so the readback agrees by construction and proves
+  nothing about the netlist. The prompt now names the generated netlist (the
+  `parameters` line of `input.scs`) as the ground truth and forbids reporting a
+  run's measurements as belonging to a value the netlist does not carry.
+- **The `list_vars` scope comment contradicted the repo convention.** It
+  claimed the Assembler-global scope reaches the netlist; per
+  `.claude/skills/_shared/convention.md` the simulator consumes the asi
+  design-var list. The comment now matches the convention.
+- **The `spectre-failure-triage` prompt read the current session's data.**
+  `maestro_get_history_list`/`maestro_list_vars` are current-session scoped, so
+  the prompt now aligns on the session first and says so.
+- **`cell-design-review` implied a schematic default.** `cell_open`'s real
+  defaults are view `layout` and mode `a` (append, which takes an edit lock).
+  The prompt now passes view `schematic` and mode `r` explicitly.
+- **The MCP integration test was not hermetic on Windows.** `dirs::home_dir()`
+  ignores `HOME` there, so the server could read the real `~/.vcli/targets.yaml`.
+  The harness now pins `VB_TARGETS_FILE` to a throwaway file.
 - **Daemon path resolution was split across two conflicting places.**
   `_RBAutoStart()` unconditionally hardcoded `$HOME/.cargo/bin/virtuoso-daemon` and
   silently overrode the top-level resolver — and therefore `RB_DAEMON_PATH`. Both now

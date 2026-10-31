@@ -60,12 +60,17 @@ pub enum ResourceError {
 }
 
 impl ResourceError {
-    /// JSON-RPC error code: invalid params for a bad URI, a server error for a
-    /// missing or unreadable resource.
+    /// JSON-RPC error code.
+    ///
+    /// * `InvalidUri` — invalid params (-32602): the URI itself is malformed.
+    /// * `NotFound` — MCP "resource not found" (-32002).
+    /// * `Io` — internal error (-32603): the resource exists but could not be
+    ///   read, which is a server-side failure, not a client mistake.
     pub fn code(&self) -> i32 {
         match self {
             ResourceError::InvalidUri(_) => -32602,
-            ResourceError::NotFound(_) | ResourceError::Io(_) => -32001,
+            ResourceError::NotFound(_) => -32002,
+            ResourceError::Io(_) => -32603,
         }
     }
 }
@@ -80,17 +85,56 @@ impl fmt::Display for ResourceError {
     }
 }
 
+/// Why the `VB_SKILLS_DIR` override cannot be used.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillsDirError {
+    /// The offending value of `VB_SKILLS_DIR`.
+    pub path: String,
+}
+
+impl fmt::Display for SkillsDirError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{SKILLS_DIR_ENV} is set to '{}' but that path is not a directory",
+            self.path
+        )
+    }
+}
+
+/// Resolve the skills root from the `VB_SKILLS_DIR` override.
+///
+/// An unset or empty variable means "no override". A set, non-empty value that
+/// is *not* a directory is a configuration error — not a reason to silently
+/// fall back to cwd discovery, which would serve a different skills root than
+/// the operator asked for.
+pub fn resolve_skills_dir_override() -> Result<Option<PathBuf>, SkillsDirError> {
+    let Ok(dir) = std::env::var(SKILLS_DIR_ENV) else {
+        return Ok(None);
+    };
+    let trimmed = dir.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let path = PathBuf::from(trimmed);
+    if path.is_dir() {
+        Ok(Some(path))
+    } else {
+        Err(SkillsDirError {
+            path: trimmed.to_string(),
+        })
+    }
+}
+
 /// Locate the skills root: env override first, then the nearest ancestor of
 /// the working directory that owns `.claude/skills`.
+///
+/// A set-but-invalid `VB_SKILLS_DIR` falls back to cwd discovery here — the
+/// lenient behaviour library callers rely on. The `vcli mcp serve` startup
+/// path uses [`resolve_skills_dir_override`] instead and fails fast.
 pub fn discover_skills_dir() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var(SKILLS_DIR_ENV) {
-        let trimmed = dir.trim();
-        if !trimmed.is_empty() {
-            let path = PathBuf::from(trimmed);
-            if path.is_dir() {
-                return Some(path);
-            }
-        }
+    if let Ok(Some(path)) = resolve_skills_dir_override() {
+        return Some(path);
     }
     let cwd = std::env::current_dir().ok()?;
     find_skills_dir(&cwd)
@@ -109,10 +153,15 @@ pub fn find_skills_dir(start: &Path) -> Option<PathBuf> {
 
 /// Load every skill under `skills_dir`. A missing or empty directory yields an
 /// empty list — never an error.
+///
+/// A skill whose directory (or `SKILL.md`) resolves outside the skills root is
+/// skipped: the read path refuses it, so publishing it would advertise a
+/// resource that cannot be read.
 pub fn load_skills(skills_dir: &Path) -> Vec<SkillResource> {
     let Ok(entries) = std::fs::read_dir(skills_dir) else {
         return Vec::new();
     };
+    let canonical_root = skills_dir.canonicalize().ok();
 
     let mut skills: Vec<SkillResource> = entries
         .filter_map(|entry| {
@@ -125,10 +174,23 @@ pub fn load_skills(skills_dir: &Path) -> Vec<SkillResource> {
             if name.starts_with('.') {
                 return None;
             }
-            let skill_file = path.join(SKILL_FILE_NAME);
-            if !skill_file.is_file() {
-                return None;
+            // Symlinked skill directories are refused with the same rule the
+            // read path applies: a directory that resolves outside the skills
+            // root must not be published, because reading it would fail
+            // anyway — listing it would advertise a resource that cannot be
+            // read and leak its frontmatter description.
+            if let Some(root) = canonical_root.as_ref() {
+                match path.canonicalize() {
+                    Ok(resolved) if resolved.starts_with(root) => {}
+                    _ => return None,
+                }
             }
+            // Resolve the skill file through the read path so a symlinked
+            // SKILL.md is skipped here exactly as it is refused on read.
+            let skill_file = match resolve_skill_path(skills_dir, &name) {
+                Ok(path) => path,
+                Err(_) => return None,
+            };
             let description = std::fs::read_to_string(&skill_file)
                 .map(|content| frontmatter_description(&content))
                 .unwrap_or_default();
@@ -226,6 +288,12 @@ fn resolve_skill_path(skills_dir: &Path, name: &str) -> Result<PathBuf, Resource
 /// Supports the three shapes the repository actually uses: a plain scalar, a
 /// quoted scalar, and a `|`/`>` block. A missing or unparsable frontmatter
 /// yields an empty description — never a fabricated one.
+///
+/// A YAML block scalar may contain blank lines: they belong to the block. The
+/// block ends at the first *non-empty* line that is not indented, so a
+/// description like the one in `.claude/skills/maestro-read-results/SKILL.md`
+/// keeps its "Use this skill whenever:" list instead of losing it at the first
+/// blank line.
 pub fn frontmatter_description(content: &str) -> String {
     let mut lines = content.lines();
     if lines.next().map(str::trim) != Some("---") {
@@ -243,10 +311,16 @@ pub fn frontmatter_description(content: &str) -> String {
             break;
         }
         if in_block {
-            if line.starts_with(' ') || line.starts_with('\t') {
-                block.push(line.trim().to_string());
+            // A blank line is part of the block scalar — it does not end it.
+            if trimmed.is_empty() {
+                block.push(String::new());
                 continue;
             }
+            if line.starts_with(' ') || line.starts_with('\t') {
+                block.push(trimmed.to_string());
+                continue;
+            }
+            // The first non-empty, non-indented line ends the block.
             in_block = false;
         }
         let Some((candidate_key, value)) = trimmed.split_once(':') else {
@@ -270,7 +344,16 @@ pub fn frontmatter_description(content: &str) -> String {
     }
 
     match key {
-        Some(_) if !block.is_empty() => block.join(" ").trim().to_string(),
+        // Blank lines inside the block are structural, not content: they are
+        // dropped from the one-line description.
+        Some(_) if !block.is_empty() => block
+            .iter()
+            .filter(|line| !line.is_empty())
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string(),
         Some(_) => scalar,
         None => String::new(),
     }
@@ -326,6 +409,62 @@ mod tests {
         assert!(load_skills(&tmp.path().join("nope")).is_empty());
     }
 
+    /// Regression: `load_skills` must apply the same root-containment rule as
+    /// the read path. A skill directory that is a symlink to a directory
+    /// outside the skills root used to be published — its frontmatter
+    /// description leaked, and the resource it advertised could never be read.
+    #[cfg(unix)]
+    #[test]
+    fn load_skills_skips_a_symlinked_directory_that_escapes_the_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("skills");
+        std::fs::create_dir_all(&root).unwrap();
+        write_skill(&root, "real", "---\nname: real\ndescription: Real\n---\n");
+
+        // A directory outside the root, with its own skill.
+        let outside = tmp.path().join("outside");
+        write_skill(
+            &outside,
+            "secret",
+            "---\nname: secret\ndescription: Secret\n---\n",
+        );
+
+        // The skills root links to it.
+        std::os::unix::fs::symlink(&outside, root.join("linked")).unwrap();
+
+        let skills = load_skills(&root);
+        let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["real"], "the escaping skill must not be listed");
+        assert!(
+            !skills.iter().any(|s| s.description.contains("Secret")),
+            "the escaping skill's description must not leak"
+        );
+    }
+
+    /// The same rule applies to a symlinked SKILL.md inside a real skill
+    /// directory — the read path refuses it, so the list must not offer it.
+    #[cfg(unix)]
+    #[test]
+    fn load_skills_skips_a_symlinked_skill_file_that_escapes_the_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("skills");
+        std::fs::create_dir_all(&root).unwrap();
+        write_skill(&root, "real", "---\nname: real\ndescription: Real\n---\n");
+
+        let secret = tmp.path().join("secret.md");
+        std::fs::write(&secret, "---\nname: secret\ndescription: Secret\n---\n").unwrap();
+        std::fs::create_dir_all(root.join("linked")).unwrap();
+        std::os::unix::fs::symlink(&secret, root.join("linked").join(SKILL_FILE_NAME)).unwrap();
+
+        let skills = load_skills(&root);
+        let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["real"],
+            "the escaping skill file must not be listed"
+        );
+    }
+
     #[test]
     fn frontmatter_description_handles_plain_quoted_and_block_forms() {
         assert_eq!(frontmatter_description("plain line\n"), "");
@@ -346,6 +485,36 @@ mod tests {
             "folded text"
         );
         assert_eq!(frontmatter_description("---\nname: x\n---\n"), "");
+    }
+
+    /// Regression: a YAML block scalar may contain blank lines — the block
+    /// must not stop at the first one, or every description that has a list
+    /// inside it is truncated (the repository's own
+    /// `.claude/skills/maestro-read-results/SKILL.md` has exactly that shape).
+    #[test]
+    fn frontmatter_description_keeps_a_block_scalar_across_blank_lines() {
+        let content = "---\nname: demo\ndescription: |\n  First paragraph.\n\n  Use this skill whenever:\n  - the user asks for a value\n  - the user wants the raw output\n---\nbody\n";
+        let description = frontmatter_description(content);
+        assert!(
+            description.contains("Use this skill whenever:"),
+            "the block must survive a blank line: {description}"
+        );
+        assert!(
+            description.contains("the user asks for a value"),
+            "the list after the blank line must survive: {description}"
+        );
+        assert_eq!(
+            description,
+            "First paragraph. Use this skill whenever: - the user asks for a value - the user wants the raw output"
+        );
+    }
+
+    /// A non-indented, non-empty line ends the block scalar — the following
+    /// key must not be swallowed into the description.
+    #[test]
+    fn frontmatter_description_stops_the_block_at_the_next_key() {
+        let content = "---\ndescription: |\n  one\n\nname: other\n---\n";
+        assert_eq!(frontmatter_description(content), "one");
     }
 
     #[test]
@@ -387,7 +556,14 @@ mod tests {
         write_skill(tmp.path(), "demo", "body");
 
         let err = read_skill(tmp.path(), "skill://missing").unwrap_err();
-        assert_eq!(err.code(), -32001);
+        assert_eq!(err.code(), -32002, "a missing resource is -32002");
+    }
+
+    #[test]
+    fn resource_error_codes_follow_the_mcp_spec() {
+        assert_eq!(ResourceError::InvalidUri("bad".into()).code(), -32602);
+        assert_eq!(ResourceError::NotFound("gone".into()).code(), -32002);
+        assert_eq!(ResourceError::Io("unreadable".into()).code(), -32603);
     }
 
     #[test]
