@@ -123,6 +123,8 @@ class RecoverTargetTests(unittest.TestCase):
         a.session = "old-session"
         a.window_id = "0xdead"
         a.title_prefix = "ViraStack"
+        a.display = ""
+        a.display_explicit = False
         return a
 
     def test_window_is_resolved_by_title_prefix(self):
@@ -132,13 +134,24 @@ class RecoverTargetTests(unittest.TestCase):
                 {"window_id": "0x2", "title": "ViraStack : Agent (0)"},
             ]}), ""),
         })
-        self.assertEqual(aa.resolve_window("vcli", "s", "ViraStack"), "0x2")
+        self.assertEqual(aa.resolve_window("vcli", "s", "ViraStack"), ("0x2", None))
+
+    def test_the_display_is_captured_with_the_window(self):
+        # list-windows-x11 reports the display it queried: the action calls
+        # have to name it, and ":0" is wrong on a host whose Virtuoso runs
+        # on another display.
+        self._patch_run({
+            "json": (0, json.dumps({"display": ":1", "windows": [
+                {"window_id": "0x2", "title": "ViraStack : Agent (0)", "display": ":1"},
+            ]}), ""),
+        })
+        self.assertEqual(aa.resolve_window("vcli", "s", "ViraStack"), ("0x2", ":1"))
 
     def test_no_matching_window_returns_none(self):
         self._patch_run({"json": (0, json.dumps({"windows": [
             {"window_id": "0x1", "title": "virtuoso"},
         ]}), "")})
-        self.assertIsNone(aa.resolve_window("vcli", "s", "ViraStack"))
+        self.assertEqual(aa.resolve_window("vcli", "s", "ViraStack")[0], None)
 
     def test_dead_session_is_replaced_by_the_live_one(self):
         self._patch_run({
@@ -157,20 +170,37 @@ class RecoverTargetTests(unittest.TestCase):
             "json": (0, json.dumps({"sessions": [{"id": "new-session"}]}), ""),
         })
         original = aa.resolve_window
-        aa.resolve_window = lambda vcli, session, prefix: "0xnew"
+        aa.resolve_window = lambda vcli, session, prefix: ("0xnew", ":1")
         self.addCleanup(setattr, aa, "resolve_window", original)
 
         args = self._args()
         self.assertTrue(aa.recover_target(args))
         self.assertEqual(args.session, "new-session")
         self.assertEqual(args.window_id, "0xnew")
+        # The display is re-resolved too: Virtuoso can come back on
+        # another display.
+        self.assertEqual(args.display, ":1")
+
+    def test_an_explicit_display_wins_over_the_detected_one(self):
+        self._patch_run({
+            "json": (0, json.dumps({"sessions": [{"id": "new-session"}]}), ""),
+        })
+        original = aa.resolve_window
+        aa.resolve_window = lambda vcli, session, prefix: ("0xnew", ":1")
+        self.addCleanup(setattr, aa, "resolve_window", original)
+
+        args = self._args()
+        args.display = ":7"
+        args.display_explicit = True
+        self.assertTrue(aa.recover_target(args))
+        self.assertEqual(args.display, ":7")
 
     def test_recover_is_a_noop_when_the_target_is_unchanged(self):
         self._patch_run({
             "json": (0, json.dumps({"sessions": [{"id": "old-session"}]}), ""),
         })
         original = aa.resolve_window
-        aa.resolve_window = lambda vcli, session, prefix: "0xdead"
+        aa.resolve_window = lambda vcli, session, prefix: ("0xdead", None)
         self.addCleanup(setattr, aa, "resolve_window", original)
 
         args = self._args()
@@ -308,6 +338,91 @@ class CommandSignatureTests(unittest.TestCase):
         band = self._band_of(path)
         self.assertIsNotNone(band)
         self.assertTrue(aa.same_command(band, self._band_of(self._card_image("/tmp/mkdir.sh"))))
+
+
+class GuardRegionTests(unittest.TestCase):
+    """The post-click guard must look at the prompt, not at a fixed block.
+
+    The permission prompt is rendered wherever the client puts it.  A region
+    hard-coded at the left of the window compares unrelated pixels when the
+    prompt renders further right: a false "unchanged" abort, or a false pass
+    when other content moved instead.
+    """
+
+    def _region(self, prompt_x, prompt_y, size=(1600, 900)):
+        template = aa.load_template(aa.DEFAULT_TEMPLATE)
+        found = (prompt_x + aa.ALLOW_OFFSET[0], prompt_y + aa.ALLOW_OFFSET[1], 0.95)
+        return aa.guard_region(found, template, size), template
+
+    def test_the_region_covers_the_detected_prompt(self):
+        region, template = self._region(1200, 700)
+        left, top, width, height = region
+        th, tw = template.shape[0], template.shape[1]
+        self.assertLessEqual(left, 1200)
+        self.assertGreaterEqual(left + width, 1200 + tw)
+        self.assertLessEqual(top, 700)
+        self.assertGreaterEqual(top + height, 700 + th)
+
+    def test_the_region_follows_the_prompt_to_the_right(self):
+        # The guard must not stay at the left edge of a wide window: that
+        # would compare pixels the prompt never touched.
+        region, _ = self._region(1200, 700)
+        self.assertGreater(region[0], 700)
+
+    def test_the_region_is_clamped_to_the_screenshot(self):
+        region, _ = self._region(1595, 895, size=(1600, 900))
+        left, top, width, height = region
+        self.assertGreaterEqual(left, 0)
+        self.assertGreaterEqual(top, 0)
+        self.assertLessEqual(left + width, 1600)
+        self.assertLessEqual(top + height, 900)
+        self.assertGreater(width, 0)
+        self.assertGreater(height, 0)
+
+    def test_the_region_of_a_prompt_at_the_left_edge_is_usable(self):
+        region, _ = self._region(0, 0, size=(1600, 900))
+        left, top, width, height = region
+        self.assertEqual(left, 0)
+        self.assertEqual(top, 0)
+        self.assertGreater(width, 0)
+        self.assertGreater(height, 0)
+
+
+class DisplayFlagTests(unittest.TestCase):
+    """--display defaults to auto: vcli detects the DISPLAY itself."""
+
+    def test_the_display_flag_is_omitted_when_it_is_empty(self):
+        self.assertEqual(aa.display_args(""), [])
+        self.assertEqual(aa.display_args(":1"), ["--display", ":1"])
+
+    def test_the_capture_omits_an_empty_display(self):
+        calls = []
+
+        def fake_run(cmd):
+            calls.append(cmd)
+            return 0, json.dumps({"artifact": {"local_path": __file__}}), ""
+
+        original = aa.run
+        aa.run = fake_run
+        self.addCleanup(setattr, aa, "run", original)
+
+        aa.capture("vcli", "s", "0x1", "", "/tmp/work")
+        self.assertNotIn("--display", calls[0])
+
+    def test_the_capture_passes_an_explicit_display(self):
+        calls = []
+
+        def fake_run(cmd):
+            calls.append(cmd)
+            return 0, json.dumps({"artifact": {"local_path": __file__}}), ""
+
+        original = aa.run
+        aa.run = fake_run
+        self.addCleanup(setattr, aa, "run", original)
+
+        aa.capture("vcli", "s", "0x1", ":3", "/tmp/work")
+        self.assertIn("--display", calls[0])
+        self.assertEqual(calls[0][calls[0].index("--display") + 1], ":3")
 
 
 class GuideMessageTests(unittest.TestCase):

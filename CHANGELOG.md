@@ -8,11 +8,14 @@ All notable changes to this project will be documented in this file.
 
 - **`vcli window geometry`** (also `window.geometry` over RPC) — reports the
   **client-area** geometry of one X11 window, which is the coordinate space
-  `action-x11` validates and applies `--x`/`--y` in. Callers previously had no
-  way to learn this space: `list-windows-x11` reports the window *frame*
+  `action-x11 --direct` validates `--x`/`--y` against. Callers previously had
+  no way to learn this space: `list-windows-x11` reports the window *frame*
   geometry (WM decorations included), and the two differ by the title-bar and
   border widths — so a click computed from the frame geometry lands outside
-  the client area and is rejected as out of bounds.
+  the client area. Only the `--direct` path bounds-checks against the client
+  geometry (its errors carry a `direct: ` prefix); the non-direct path checks
+  against the frame geometry, so a frame-derived coordinate is not rejected
+  there — it silently misses.
 - **`install.sh`** — shared/multi-user installer with `--system` (`/opt/virtuoso-cli`),
   `--user` (`~/.local`), `--prefix DIR` and `--no-build`. Installs `vcli`/`vtui`/
   `virtuoso-daemon` into `$PREFIX/bin` and `ramic_bridge.il` into
@@ -44,6 +47,32 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **RPC/MCP `window.screenshot` works under the default (Window) capability
+  again.** The RPC dispatcher routes the capture through the *unchecked* SKILL
+  executor: the dispatcher's own capability check (`permits_method` → Window)
+  is the permission check for that method. The checked executor demands the
+  Admin capability on top of it, so `vcli rpc call window.screenshot` and the
+  MCP `window_screenshot` tool failed for every default (non-Admin) client
+  with "raw SKILL exec is not permitted: use 'vcli rpc call' instead". The
+  CLI (`vcli window screenshot`) still runs raw SKILL and therefore still
+  needs Admin.
+- **The GUI-debug skill's CIW_INPUT step now fails loudly when the client
+  geometry cannot be read.** `vcli window geometry` used to be asked for the
+  client-area geometry and, when that failed, the step fell back to the
+  window *frame* geometry from `list-windows-x11` — the very coordinate space
+  this change exists to eliminate (WM decorations included). A click computed
+  from it lands outside the client area and silently misses. The step now
+  aborts with the reason instead.
+- **The screenshot fallback validates the artifact it captured.** `import
+  -window` can exit 0 and still leave nothing usable behind (an empty file, a
+  truncated PNG); the fallback reported `{"status": "saved", "capture":
+  "x11"}` regardless. It now runs the same PNG check the action-path
+  screenshot uses, deletes an invalid file, and reports the failure.
+- **`vcli window geometry` and the screenshot fallback pass the XAUTHORITY to
+  the X11 tools.** Both built an `env DISPLAY=… ` prefix without it, so
+  `xwininfo`/`import` failed with "No protocol specified" on a host whose
+  cookie is not at the default `~/.Xauthority`. The DISPLAY/XAUTHORITY are now
+  resolved exactly as the action path resolves them.
 - **`vcli window screenshot` failed on hosts whose X server refuses a root-window
   grab.** The SKILL capture path runs `import -window root`, which some X servers
   reject — ImageMagick reports "missing an image filename", while `xwd -root` on

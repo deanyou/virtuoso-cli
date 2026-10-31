@@ -526,7 +526,9 @@ pub fn standard_schema() -> RpcSchema {
                     required: false,
                 },
             ],
-            returns: "file path on success".into(),
+            returns: "{\"status\": \"saved\"|\"capture-failed\", \"path\": <png path>, \
+                      \"capture\": \"skill\"|\"x11\", \"window_id\": <id>, \"error\": <reason>}"
+                .into(),
         },
         Method {
             name: "window.screenshot_by_pattern".into(),

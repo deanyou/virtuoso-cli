@@ -348,6 +348,8 @@ pub fn window_tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Output PNG file path" },
+                    "window_id": { "type": "string", "description": "Window id (dismiss_id from list_windows_x11). Used as the fallback capture target when the X server refuses a root-window grab." },
+                    "display": { "type": "string", "description": "Override the detected DISPLAY" },
                 },
                 "required": ["path"]
             }),

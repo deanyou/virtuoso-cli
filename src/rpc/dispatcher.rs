@@ -829,7 +829,14 @@ impl RpcDispatcher {
                 let window_id = params.get("window_id").and_then(|v| v.as_str());
                 let display = params.get("display").and_then(|v| v.as_str());
                 let ctx = &self.ctx;
-                match crate::commands::window::screenshot(ctx, &path, None, window_id, display) {
+                // The unchecked entry: the dispatcher's own capability gate
+                // (`permits_method` → Window) is the permission check here.
+                // The checked one demands the Admin capability on top of it,
+                // which locked this method — and the MCP `window_screenshot`
+                // tool — out for every default (non-Admin) client.
+                match crate::commands::window::screenshot_unchecked(
+                    ctx, &path, None, window_id, display,
+                ) {
                     Ok(v) => Ok(v),
                     Err(e) => Ok(serde_json::json!({
                         "status": "capture-failed",
@@ -1455,6 +1462,92 @@ mod tests {
     use super::*;
     use crate::models::VirtuosoResult;
     use crate::rpc::schema::{standard_schema, RpcSchema};
+
+    /// PR #133: `window.screenshot` must not demand the Admin capability.
+    ///
+    /// The dispatcher gates the method with its own capability check
+    /// (`permits_method` → Window). The screenshot implementation used to run
+    /// the SKILL through `execute_skill`, which demands Admin on top of that
+    /// — so `vcli rpc call window.screenshot` and the MCP `window_screenshot`
+    /// tool failed for every default (non-Admin) client with "raw SKILL exec
+    /// is not permitted: use 'vcli rpc call' instead".
+    ///
+    /// The two routes are asserted side by side: the unchecked one (the one
+    /// the dispatcher uses) must not be stopped by the raw-SKILL permission
+    /// check, the checked one (the CLI path) must still be.
+    #[test]
+    #[serial_test::serial]
+    fn the_screenshot_route_does_not_demand_the_admin_capability() {
+        use crate::capability::CapabilitySet;
+        use crate::client::bridge::VirtuosoClient;
+        use crate::commands::window::{execute_screenshot_skill, ScreenshotRoute};
+
+        // The default capability set: every domain except raw SKILL exec.
+        // VCLI_CAPABILITY must be out of the way for "default" to mean
+        // anything, so remove it for the duration of the test.
+        let saved = std::env::var("VCLI_CAPABILITY").ok();
+        std::env::remove_var("VCLI_CAPABILITY");
+        let caps = CapabilitySet::from_env();
+        match &saved {
+            Some(v) => std::env::set_var("VCLI_CAPABILITY", v),
+            None => std::env::remove_var("VCLI_CAPABILITY"),
+        }
+        assert!(
+            caps.permits_method("window.screenshot"),
+            "the dispatcher admits window.screenshot with the default capabilities"
+        );
+        assert!(
+            !caps.allows_raw_skill(),
+            "the default capability set must not grant raw SKILL exec"
+        );
+
+        // A client with exactly that capability set. It points at a closed
+        // port, so the SKILL cannot run — but the permission check happens
+        // first, and that is what this test is about.
+        let client = VirtuosoClient::new("127.0.0.1", 9, 1).with_capabilities(caps);
+        let skill = client.window.screenshot("/tmp/vcli-screenshot-probe.png");
+
+        let err = execute_screenshot_skill(&client, &skill, ScreenshotRoute::Unchecked)
+            .expect_err("the probe cannot reach a daemon");
+        assert!(
+            !err.to_string().contains("raw SKILL exec is not permitted"),
+            "the unchecked route must not demand the Admin capability, got: {err}"
+        );
+
+        let err = execute_screenshot_skill(&client, &skill, ScreenshotRoute::Checked)
+            .expect_err("the probe cannot reach a daemon");
+        assert!(
+            err.to_string().contains("raw SKILL exec is not permitted"),
+            "the checked route (the CLI path) must still demand Admin, got: {err}"
+        );
+    }
+
+    /// The dispatcher must keep calling the *unchecked* screenshot entry.
+    ///
+    /// The behavioural test above proves what the two routes do; this one
+    /// makes sure the dispatcher does not drift back onto the checked one,
+    /// which would silently lock the method out again.
+    #[test]
+    fn the_dispatcher_screenshot_arm_uses_the_unchecked_entry() {
+        let src = include_str!("dispatcher.rs");
+        // Only the implementation — this test module quotes the names it
+        // looks for, and would match itself.
+        let code = src.split("#[cfg(test)]").next().unwrap();
+        let window_arm = code
+            .split("fn dispatch_window")
+            .nth(1)
+            .expect("the window domain must have a dispatch arm");
+        let arm = window_arm
+            .split("\"screenshot\" =>")
+            .nth(1)
+            .expect("the window.screenshot arm must exist");
+        let arm = arm.split("\"screenshot_by_pattern\" =>").next().unwrap();
+        assert!(
+            arm.contains("screenshot_unchecked"),
+            "the dispatcher must call the unchecked screenshot entry — the \
+             checked one demands the Admin capability. Arm was:\n{arm}"
+        );
+    }
 
     /// Defect N: an argument the method never reads used to vanish, and the
     /// answer looked exactly like a real one — `list_instances` reported the

@@ -304,13 +304,7 @@ pub fn geometry(
     let config = ctx.config();
     let runner = x11::transport_for_config(config)?;
     let user = config.remote_user.as_deref();
-    let geom = x11::client_geometry(
-        runner.as_ref(),
-        &x11::client_id_for(config),
-        user,
-        explicit_display,
-        window_id,
-    )?;
+    let geom = x11::client_geometry(runner.as_ref(), user, explicit_display, window_id)?;
     Ok(json!({
         "status": "success",
         "window_id": geom.window_id,
@@ -422,6 +416,9 @@ pub fn dismiss_window_x11(
 /// The fallback needs a window id, so it only applies when the caller supplied
 /// one (`--window-id`). Without a window id there is nothing to fall back to,
 /// and the SKILL route's failure is reported as-is.
+///
+/// This is the CLI entry point: the SKILL route runs raw SKILL, so it needs
+/// the Admin capability. The RPC dispatcher uses [`screenshot_unchecked`].
 pub fn screenshot(
     ctx: &crate::context::CommandContext,
     path: &str,
@@ -430,11 +427,87 @@ pub fn screenshot(
     explicit_display: Option<&str>,
 ) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
+    screenshot_with(
+        &client,
+        ctx,
+        path,
+        window_pattern,
+        window_id,
+        explicit_display,
+        ScreenshotRoute::Checked,
+    )
+}
+
+/// The RPC entry point for the same capture.
+///
+/// The RPC dispatcher has already checked the method's capability
+/// (`permits_method` → Window), so the SKILL must not demand the Admin
+/// capability on top of that: `window.screenshot` — and with it the MCP
+/// `window_screenshot` tool — failed for every default (non-Admin) client
+/// with "raw SKILL exec is not permitted: use 'vcli rpc call' instead".
+///
+/// The body is shared with [`screenshot`]; only the SKILL route differs.
+pub fn screenshot_unchecked(
+    ctx: &crate::context::CommandContext,
+    path: &str,
+    window_pattern: Option<&str>,
+    window_id: Option<&str>,
+    explicit_display: Option<&str>,
+) -> Result<Value> {
+    let client = VirtuosoClient::from_context(ctx)?;
+    screenshot_with(
+        &client,
+        ctx,
+        path,
+        window_pattern,
+        window_id,
+        explicit_display,
+        ScreenshotRoute::Unchecked,
+    )
+}
+
+/// How the SKILL half of a screenshot capture is executed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScreenshotRoute {
+    /// `execute_skill` — raw SKILL exec, Admin capability required. This is
+    /// the CLI path.
+    Checked,
+    /// `execute_skill_unchecked` — the caller checked the capability itself.
+    /// This is the RPC dispatcher path, whose gate is the Window capability.
+    Unchecked,
+}
+
+/// Execute the SKILL half of a screenshot capture on the given route.
+///
+/// Split out so the two routes cannot drift apart: the checked route demands
+/// the Admin capability, the unchecked one leaves the permission check to the
+/// caller that owns the capability decision.
+pub(crate) fn execute_screenshot_skill(
+    client: &VirtuosoClient,
+    skill: &str,
+    route: ScreenshotRoute,
+) -> Result<crate::models::VirtuosoResult> {
+    match route {
+        ScreenshotRoute::Checked => client.execute_skill(skill, None),
+        ScreenshotRoute::Unchecked => client.execute_skill_unchecked(skill, None),
+    }
+}
+
+/// The shared body of [`screenshot`] and [`screenshot_unchecked`].
+fn screenshot_with(
+    client: &VirtuosoClient,
+    ctx: &crate::context::CommandContext,
+    path: &str,
+    window_pattern: Option<&str>,
+    window_id: Option<&str>,
+    explicit_display: Option<&str>,
+    route: ScreenshotRoute,
+) -> Result<Value> {
     let skill = match window_pattern {
         Some(pat) => client.window.screenshot_by_pattern(path, pat),
         None => client.window.screenshot(path),
     };
-    let r = client.execute_skill(&skill, None)?;
+    let r = execute_screenshot_skill(client, &skill, route)?;
     if r.skill_ok() {
         if r.output.trim_matches('"') == "no-match" {
             return Err(VirtuosoError::NotFound(format!(
@@ -461,14 +534,7 @@ pub fn screenshot(
         let config = ctx.config();
         let runner = x11::transport_for_config(config)?;
         let user = config.remote_user.as_deref();
-        x11::capture_window(
-            runner.as_ref(),
-            &x11::client_id_for(config),
-            user,
-            explicit_display,
-            wid,
-            path,
-        )?;
+        x11::capture_window(runner.as_ref(), user, explicit_display, wid, path)?;
         return Ok(json!({
             "status": "saved",
             "path": path,

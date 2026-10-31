@@ -739,9 +739,12 @@ pub struct ClientGeometry {
 ///
 /// The window id must be a real client window id — a root-window grab is
 /// exactly what fails on those hosts.
+///
+/// The artifact is validated before the capture is reported as successful
+/// (see [`validate_captured_png`]): `import` can exit 0 and still leave
+/// nothing usable behind.
 pub fn capture_window(
     runner: &dyn RemoteTransport,
-    client_id: &str,
     user: Option<&str>,
     explicit_display: Option<&str>,
     window_id: &str,
@@ -765,7 +768,7 @@ pub fn capture_window(
             "could not determine the DISPLAY of the Virtuoso host".into(),
         ));
     }
-    let display_prefix = format!("env DISPLAY={} ", shell_escape(display));
+    let display_prefix = build_display_prefix(display, env.xauthority.as_deref());
     let cmd = format!(
         "{}import -window {} {}",
         display_prefix,
@@ -784,18 +787,84 @@ pub fn capture_window(
             out.stderr.trim()
         )));
     }
-    let _ = client_id;
+    // `import` can exit 0 and still leave nothing usable behind (an empty
+    // file, a truncated PNG). Validate the artifact the same way the
+    // action-path screenshot does, so a bogus capture is not reported as a
+    // saved screenshot.
+    validate_captured_png(runner, path)?;
     Ok(())
+}
+
+/// Build the `env DISPLAY=… [XAUTHORITY=…] ` prefix for a command that runs
+/// on the GUI host.
+///
+/// The XAUTHORITY is part of the prefix whenever the resolved environment
+/// carries one: on a host whose cookie does not live at the default
+/// `~/.Xauthority`, `xwininfo`/`import` fail with "No protocol specified"
+/// without it.
+fn build_display_prefix(display: &str, xauthority: Option<&str>) -> String {
+    match xauthority {
+        Some(xa) => format!(
+            "env DISPLAY={} XAUTHORITY={} ",
+            shell_escape(display),
+            shell_escape(xa)
+        ),
+        None => format!("env DISPLAY={} ", shell_escape(display)),
+    }
+}
+
+/// Validate a PNG that was just captured on the GUI host.
+///
+/// The capture is written on the GUI host, which is not necessarily the
+/// machine vcli runs on, so a copy is pulled into a temporary directory and
+/// checked with [`validate_png_artifact`] — the same validator the
+/// action-path screenshot uses. A capture that does not validate is deleted
+/// on the GUI host as well: a truncated PNG is worse than no PNG, because
+/// the caller would otherwise report it as a saved screenshot.
+fn validate_captured_png(runner: &dyn RemoteTransport, remote_path: &str) -> Result<()> {
+    let tmp = tempfile::Builder::new()
+        .prefix("vcli-capture-check-")
+        .tempdir()
+        .map_err(|e| {
+            VirtuosoError::Execution(format!(
+                "cannot create a temporary directory for the capture check: {e}"
+            ))
+        })?;
+    let dir = tmp.path().to_string_lossy().to_string();
+    runner
+        .fetch_file(remote_path, &dir, Duration::from_secs(20))
+        .map_err(|e| {
+            VirtuosoError::Execution(format!(
+                "captured file {remote_path} could not be read back for validation: {e}"
+            ))
+        })?;
+    let name = std::path::Path::new(remote_path)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "capture.png".to_string());
+    match validate_png_artifact(&tmp.path().join(name)) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            // Remove the unusable file on the GUI host — the caller would
+            // otherwise find a truncated PNG at the path it was promised.
+            let _ = runner.run_command(&CommandRequest::untimed(format!(
+                "rm -f {}",
+                shell_escape(remote_path)
+            )));
+            Err(e)
+        }
+    }
 }
 
 /// Query the client-area geometry of one window on the GUI host.
 ///
-/// Uses the same `xwininfo -id` call (and the same DISPLAY/XAUTHORITY
-/// resolution) that `action-x11` uses for its bounds check, so the returned
-/// geometry is exactly the space the action layer validates against.
+/// Uses the same `xwininfo -id` call, and the same DISPLAY/XAUTHORITY
+/// resolution, that `action-x11` uses for its bounds check — the resolved
+/// environment is turned into the same `env DISPLAY=… XAUTHORITY=… ` prefix —
+/// so the returned geometry is exactly the space the action layer validates
+/// against.
 pub fn client_geometry(
     runner: &dyn RemoteTransport,
-    client_id: &str,
     user: Option<&str>,
     explicit_display: Option<&str>,
     window_id: &str,
@@ -813,7 +882,7 @@ pub fn client_geometry(
             "could not determine the DISPLAY of the Virtuoso host".into(),
         ));
     }
-    let display_prefix = format!("env DISPLAY={} ", shell_escape(display));
+    let display_prefix = build_display_prefix(display, env.xauthority.as_deref());
     let cmd = format!("{}xwininfo -id {}", display_prefix, shell_escape(window_id));
     let out = runner.run_command(&CommandRequest::with_exec_timeout(
         &cmd,
@@ -829,7 +898,6 @@ pub fn client_geometry(
     let geometry = parse_xwininfo_geometry(&out.stdout)?;
     // Cache it so a following action-x11 call can reuse it.
     geom_cache_write(display, window_id, &geometry);
-    let _ = client_id;
     Ok(ClientGeometry {
         window_id: window_id.to_string(),
         display: display.to_string(),
@@ -1556,14 +1624,7 @@ fn action_x11_cached(
 
         // Build DISPLAY/XAUTHORITY prefix early so both the resolution fallback and
         // the action commands below can reuse it.
-        let display_prefix = match env.xauthority {
-            Some(ref xa) => format!(
-                "env DISPLAY={} XAUTHORITY={} ",
-                shell_escape(display),
-                shell_escape(xa)
-            ),
-            None => format!("env DISPLAY={} ", shell_escape(display)),
-        };
+        let display_prefix = build_display_prefix(display, env.xauthority.as_deref());
         (helper, env, windows, display_prefix)
     };
 
@@ -2312,14 +2373,7 @@ pub fn action_x11_batch(
                 Duration::from_secs(timeout_secs),
             ))?;
             let windows = parse_window_list(&out.stdout, display, env.xauthority.as_ref());
-            let display_prefix = match env.xauthority {
-                Some(ref xa) => format!(
-                    "env DISPLAY={} XAUTHORITY={} ",
-                    shell_escape(display),
-                    shell_escape(xa)
-                ),
-                None => format!("env DISPLAY={} ", shell_escape(display)),
-            };
+            let display_prefix = build_display_prefix(display, env.xauthority.as_deref());
             contexts.insert(
                 display.to_string(),
                 CachedX11Context {
@@ -4294,6 +4348,8 @@ mod tests {
     struct RecordingTransport {
         commands: std::sync::Mutex<Vec<String>>,
         responses: std::sync::Mutex<Vec<CommandResult>>,
+        /// Payloads handed out by `download_file` — the fetched artifact.
+        downloads: std::sync::Mutex<Vec<Vec<u8>>>,
     }
 
     impl RecordingTransport {
@@ -4304,6 +4360,18 @@ mod tests {
         fn enqueue_response(&self, r: CommandResult) {
             self.responses.lock().unwrap().push(r);
         }
+        /// Enqueue the bytes the next `download_file` call hands out.
+        fn enqueue_download(&self, bytes: Vec<u8>) {
+            self.downloads.lock().unwrap().push(bytes);
+        }
+    }
+
+    /// A PNG that passes `validate_png_artifact`: the magic bytes plus
+    /// enough padding to clear the minimum size.
+    fn valid_png_bytes() -> Vec<u8> {
+        let mut bytes = PNG_MAGIC.to_vec();
+        bytes.extend_from_slice(&[0u8; 128]);
+        bytes
     }
 
     impl RemoteTransport for RecordingTransport {
@@ -4349,13 +4417,20 @@ mod tests {
 
         fn download_file(
             &self,
-            _req: &crate::transport::contract::DownloadFileRequest,
+            req: &crate::transport::contract::DownloadFileRequest,
         ) -> std::result::Result<(), crate::transport::contract::TransportError> {
-            Err(
-                crate::transport::contract::TransportError::UnsupportedOperation(
-                    "download_file not supported".into(),
-                ),
-            )
+            let payload = self
+                .downloads
+                .lock()
+                .unwrap()
+                .pop()
+                .unwrap_or_else(valid_png_bytes);
+            std::fs::write(&req.local, payload).map_err(|e| {
+                crate::transport::contract::TransportError::LocalIo(format!(
+                    "write {}: {e}",
+                    req.local.display()
+                ))
+            })
         }
 
         fn download_dir(
@@ -5753,7 +5828,7 @@ mod tests {
     #[test]
     fn client_geometry_rejects_empty_window_id() {
         let transport = RecordingTransport::new();
-        let err = client_geometry(&transport, "cid", None, Some(":0"), "")
+        let err = client_geometry(&transport, None, Some(":0"), "")
             .expect_err("empty window id must be rejected");
         assert!(
             err.to_string().contains("window_id"),
@@ -5771,7 +5846,7 @@ mod tests {
             success: true,
             duration: Duration::ZERO,
         });
-        let geom = client_geometry(&transport, "cid", None, Some(":0"), "0x1400010")
+        let geom = client_geometry(&transport, None, Some(":0"), "0x1400010")
             .expect("client_geometry should succeed");
         assert_eq!(geom.geometry.w, 641);
         assert_eq!(geom.geometry.h, 584);
@@ -5802,7 +5877,7 @@ mod tests {
             success: false,
             duration: Duration::ZERO,
         });
-        let err = client_geometry(&transport, "cid", None, Some(":0"), "0xdead")
+        let err = client_geometry(&transport, None, Some(":0"), "0xdead")
             .expect_err("a failed xwininfo must be reported");
         assert!(
             err.to_string().contains("xwininfo failed"),
@@ -5818,8 +5893,8 @@ mod tests {
     #[test]
     fn capture_window_rejects_empty_arguments() {
         let transport = RecordingTransport::new();
-        assert!(capture_window(&transport, "cid", None, Some(":0"), "", "/tmp/x.png").is_err());
-        assert!(capture_window(&transport, "cid", None, Some(":0"), "0x1", "").is_err());
+        assert!(capture_window(&transport, None, Some(":0"), "", "/tmp/x.png").is_err());
+        assert!(capture_window(&transport, None, Some(":0"), "0x1", "").is_err());
     }
 
     #[test]
@@ -5832,15 +5907,8 @@ mod tests {
             success: true,
             duration: Duration::ZERO,
         });
-        capture_window(
-            &transport,
-            "cid",
-            None,
-            Some(":0"),
-            "0x1400010",
-            "/tmp/shot.png",
-        )
-        .expect("capture_window should succeed");
+        capture_window(&transport, None, Some(":0"), "0x1400010", "/tmp/shot.png")
+            .expect("capture_window should succeed");
         let commands = transport.commands.lock().unwrap().clone();
         assert_eq!(commands.len(), 1);
         assert!(
@@ -5872,18 +5940,96 @@ mod tests {
             success: false,
             duration: Duration::ZERO,
         });
-        let err = capture_window(
-            &transport,
-            "cid",
-            None,
-            Some(":0"),
-            "0x1400010",
-            "/tmp/shot.png",
-        )
-        .expect_err("a failed import must be reported");
+        let err = capture_window(&transport, None, Some(":0"), "0x1400010", "/tmp/shot.png")
+            .expect_err("a failed import must be reported");
         assert!(
             err.to_string().contains("import -window failed"),
             "error should identify the failing capture, got: {err}"
+        );
+    }
+
+    /// `import` can exit 0 and still leave nothing usable behind. A capture
+    /// that is not a PNG must not be reported as a saved screenshot.
+    #[test]
+    fn capture_window_rejects_an_artifact_that_is_not_a_png() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(CommandResult {
+            exit_status: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+            success: true,
+            duration: Duration::ZERO,
+        });
+        transport.enqueue_download(b"this is not a png".to_vec());
+        let err = capture_window(&transport, None, Some(":0"), "0x1400010", "/tmp/shot.png")
+            .expect_err("a capture that is not a PNG must not be reported as saved");
+        assert!(
+            err.to_string().contains("screenshot file"),
+            "error should name the invalid artifact, got: {err}"
+        );
+        // The unusable file must be removed on the GUI host — the caller
+        // would otherwise find a truncated PNG at the promised path.
+        let commands = transport.commands.lock().unwrap().clone();
+        assert!(
+            commands
+                .iter()
+                .any(|c| c.contains("rm -f") && c.contains("/tmp/shot.png")),
+            "the invalid capture must be deleted, commands: {commands:?}"
+        );
+    }
+
+    /// The XAUTHORITY has to reach the capture command: on a host whose cookie
+    /// does not live at the default ~/.Xauthority, `import` fails with
+    /// "No protocol specified" without it.
+    #[test]
+    fn capture_window_passes_the_xauthority_to_the_import() {
+        let transport = RecordingTransport::new();
+        // detect_envs reads DISPLAY/XAUTHORITY from the Virtuoso process env.
+        transport.enqueue_response(CommandResult {
+            exit_status: 0,
+            stdout: "DISPLAY=:1\nXAUTHORITY=/tmp/vcli-test-cookie\n".to_string(),
+            stderr: String::new(),
+            success: true,
+            duration: Duration::ZERO,
+        });
+        capture_window(&transport, None, None, "0x1400010", "/tmp/shot.png")
+            .expect("capture_window should succeed");
+        let commands = transport.commands.lock().unwrap().clone();
+        assert!(
+            commands
+                .iter()
+                .any(|c| c.contains("XAUTHORITY=/tmp/vcli-test-cookie")),
+            "the XAUTHORITY must be part of the command, commands: {commands:?}"
+        );
+    }
+
+    /// Same for the geometry probe: without the XAUTHORITY, `xwininfo` fails
+    /// with "No protocol specified" on a host with a non-default cookie.
+    #[test]
+    fn client_geometry_passes_the_xauthority_to_xwininfo() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(CommandResult {
+            exit_status: 0,
+            stdout: "DISPLAY=:1\nXAUTHORITY=/tmp/vcli-test-cookie\n".to_string(),
+            stderr: String::new(),
+            success: true,
+            duration: Duration::ZERO,
+        });
+        transport.enqueue_response(CommandResult {
+            exit_status: 0,
+            stdout: "  Absolute upper-left X:  10\n  Absolute upper-left Y:  20\n  Width: 100\n  Height: 200\n".to_string(),
+            stderr: String::new(),
+            success: true,
+            duration: Duration::ZERO,
+        });
+        client_geometry(&transport, None, None, "0x1400010")
+            .expect("client_geometry should succeed");
+        let commands = transport.commands.lock().unwrap().clone();
+        assert!(
+            commands
+                .iter()
+                .any(|c| c.contains("XAUTHORITY=/tmp/vcli-test-cookie")),
+            "the XAUTHORITY must be part of the command, commands: {commands:?}"
         );
     }
 }

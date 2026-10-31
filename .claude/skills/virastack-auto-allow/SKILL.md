@@ -92,7 +92,11 @@ python3 -u ${CLAUDE_SKILL_DIR}/scripts/auto_allow.py \
 ```
 
 `--session` and `--window-id` may be omitted: the loop resolves the single
-live session and the ViraStack window by title. Run it with
+live session and the ViraStack window by title. `--display` may be omitted
+too: the loop reads the DISPLAY off the `list-windows-x11` answer, so it
+targets the display Virtuoso actually runs on (a hard-coded `:0` is wrong on
+a host whose Virtuoso runs on another one). An explicit `--display` always
+wins. Run it with
 `run_in_background: true` and keep it running for as long as the agent works.
 `-u` matters — without it the log stays buffered and looks empty.
 

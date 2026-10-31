@@ -65,8 +65,20 @@ COMPOSER_INK_TOLERANCE = 20
 # this similarity.
 COMPOSER_INK_RATIO = 0.15
 COMPOSER_SIMILARITY = 0.95
+# Margin around the detected prompt block that the post-click guard compares.
+GUARD_MARGIN = 20
 # Consecutive rejected clicks before the loop gives up.
 MAX_CLICK_FAILURES = 3
+
+
+def display_args(display):
+    """The `--display` flag of a vcli call.
+
+    Omitted when the display is empty: vcli then detects the DISPLAY of the
+    Virtuoso process itself.  A hard-coded ":0" is wrong on a host whose
+    Virtuoso runs on another display — the clicks would go nowhere.
+    """
+    return ["--display", display] if display else []
 
 
 def run(cmd):
@@ -77,7 +89,8 @@ def run(cmd):
 def capture(vcli, session, window_id, display, workdir):
     rc, out, err = run([
         vcli, "--session", session, "window", "action-x11",
-        "--window-id", window_id, "--display", display,
+        "--window-id", window_id,
+    ] + display_args(display) + [
         "--operation", "screenshot", "--output-dir", workdir,
     ])
     if rc != 0:
@@ -143,7 +156,8 @@ def click(vcli, session, window_id, display, x, y, dry_run):
         return True
     rc, out, err = run([
         vcli, "--session", session, "window", "action-x11",
-        "--window-id", window_id, "--display", display,
+        "--window-id", window_id,
+    ] + display_args(display) + [
         "--operation", "click-rel", "--x", str(x), "--y", str(y), "--direct",
     ])
     if rc != 0:
@@ -325,7 +339,9 @@ def client_size(vcli, session, window_id, display):
     """Client-area size of the window (the coordinate space of the actions)."""
     rc, out, err = run([
         vcli, "--session", session, "window", "geometry",
-        "--window-id", window_id, "--display", display, "--format", "json",
+        "--window-id", window_id,
+    ] + display_args(display) + [
+        "--format", "json",
     ])
     if rc != 0:
         return None
@@ -405,8 +421,8 @@ def try_send_guidance(args, message, workdir, ours_snapshot=None):
     def action(*cmd):
         rc, out, err = run([
             args.vcli, "--session", args.session, "window", "action-x11",
-            "--window-id", args.window_id, "--display", args.display,
-        ] + list(cmd) + ["--direct"])
+            "--window-id", args.window_id,
+        ] + display_args(args.display) + list(cmd) + ["--direct"])
         if rc != 0:
             print("guidance %s failed: %s %s" % (cmd[1], out.strip(), err.strip()))
         return rc == 0
@@ -477,7 +493,8 @@ def try_send_guidance(args, message, workdir, ours_snapshot=None):
     for _ in range(3):
         rc, out, err = run([
             args.vcli, "--session", args.session, "window", "action-x11",
-            "--window-id", args.window_id, "--display", args.display,
+            "--window-id", args.window_id,
+        ] + display_args(args.display) + [
             "--operation", "key", "--text", "Return", "--direct",
         ])
         if rc != 0:
@@ -566,46 +583,83 @@ def resolve_session(vcli, session):
 
 
 def resolve_window(vcli, session, title_prefix):
-    """Window id of the first window whose title starts with `title_prefix`."""
+    """Window id and DISPLAY of the first window whose title starts with `title_prefix`.
+
+    The DISPLAY comes out of the same answer: `list-windows-x11` reports the
+    display it queried, and that is the display the action calls have to
+    use.  A hard-coded ":0" is wrong on a host whose Virtuoso runs on
+    another display.
+    """
     rc, out, err = run([
         vcli, "--session", session, "window", "list-windows-x11", "--format", "json",
     ])
     if rc != 0:
-        return None
+        return None, None
     try:
         data = json.loads(out)
     except ValueError:
-        return None
+        return None, None
+    display = data.get("display")
     for w in data.get("windows") or []:
         if (w.get("title") or "").startswith(title_prefix):
-            return w.get("window_id")
-    return None
+            return w.get("window_id"), display or w.get("display")
+    return None, display
 
 
 def recover_target(args):
-    """Re-resolve session and window id after a Virtuoso or daemon restart.
+    """Re-resolve session, window id and DISPLAY after a Virtuoso or daemon restart.
 
     A restart invalidates both the daemon session id and the X11 window id.
     Without this the loop keeps failing to capture forever and silently
-    stops approving.
+    stops approving.  The DISPLAY is re-resolved too: Virtuoso can come back
+    on another display.  An explicitly passed `--display` always wins.
     """
     session = resolve_session(args.vcli, args.session)
-    window_id = resolve_window(args.vcli, session, args.title_prefix)
+    window_id, display = resolve_window(args.vcli, session, args.title_prefix)
     if not window_id:
         return False
-    if session == args.session and window_id == args.window_id:
-        return False
-    print("re-resolved target: session=%s window=%s" % (session, window_id))
+    changed = session != args.session or window_id != args.window_id
     args.session = session
     args.window_id = window_id
+    if display and not getattr(args, "display_explicit", False):
+        changed = changed or args.display != display
+        args.display = display
+    if not changed:
+        return False
+    print("re-resolved target: session=%s window=%s display=%s"
+          % (session, window_id, args.display))
     return True
+
+
+def guard_region(found, template, screenshot_size):
+    """The region of the screenshot that holds the permission prompt block.
+
+    Derived from where the prompt was detected and how big the template is:
+    the client renders the prompt wherever it fits, and a fixed block at the
+    left of the window compared unrelated pixels when the prompt rendered
+    further right — a false "unchanged" abort, or a false pass when other
+    content moved instead.
+
+    The region is clamped to the screenshot: a block that runs past the edge
+    compares nothing useful.
+    """
+    x, y, _ = found
+    th, tw = template.shape[0], template.shape[1]
+    sw, sh = screenshot_size
+    left = max(0, min(x - ALLOW_OFFSET[0] - GUARD_MARGIN, max(0, sw - 1)))
+    top = max(0, min(y - ALLOW_OFFSET[1] - GUARD_MARGIN, max(0, sh - 1)))
+    width = max(1, min(tw + 2 * GUARD_MARGIN, sw - left))
+    height = max(1, min(th + 2 * GUARD_MARGIN, sh - top))
+    return (left, top, width, height)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--window-id", default="",
                     help="X11 window id of the ViraStack client; resolved from the title when omitted")
-    ap.add_argument("--display", default=":0")
+    ap.add_argument("--display", default="",
+                    help="X display of the ViraStack client; detected from the Virtuoso "
+                         "process when omitted")
     ap.add_argument("--vcli", required=True)
     ap.add_argument("--session", default="")
     ap.add_argument("--template", default=DEFAULT_TEMPLATE)
@@ -636,6 +690,10 @@ def main():
         return 2
     template = load_template(args.template)
 
+    # An explicitly passed --display always wins; a detected one may change
+    # after a restart and is re-resolved then.
+    args.display_explicit = bool(args.display)
+
     if not args.session:
         args.session = resolve_session(args.vcli, "")
         if not args.session:
@@ -643,12 +701,24 @@ def main():
             return 2
         print("resolved session=%s" % args.session)
 
-    if not args.window_id:
-        args.window_id = resolve_window(args.vcli, args.session, args.title_prefix) or ""
+    if not args.window_id or not args.display:
+        # The same answer carries the DISPLAY the Virtuoso runs on: the
+        # action calls have to name it, and ":0" is wrong on a host whose
+        # Virtuoso runs on another display.
+        window_id, display = resolve_window(args.vcli, args.session, args.title_prefix)
         if not args.window_id:
-            print("no window titled %r — is ViraStack running?" % args.title_prefix)
-            return 2
-        print("resolved window=%s" % args.window_id)
+            if not window_id:
+                print("no window titled %r — is ViraStack running?" % args.title_prefix)
+                return 2
+            args.window_id = window_id
+            print("resolved window=%s" % args.window_id)
+        if not args.display and display:
+            args.display = display
+            print("resolved display=%s" % args.display)
+    if not args.display:
+        print("could not determine the DISPLAY of the ViraStack window — "
+              "pass --display")
+        return 2
 
     deadline = time.time() + args.timeout if args.timeout else float("inf")
     clicks = 0
@@ -718,8 +788,10 @@ def main():
                 # instead of hammering the same coordinates. A dry run never
                 # clicks, so there is nothing to verify.
                 if not args.dry_run:
-                    block_y = y - ALLOW_OFFSET[1]
-                    region = (20, max(0, block_y - 160), 700, 260)
+                    # The guard has to look at the prompt block itself: it is
+                    # rendered wherever the client puts it, and a fixed block
+                    # would compare unrelated pixels.
+                    region = guard_region(found, template, Image.open(shot).size)
                     before = crop_region(shot, region)
                     if before is not None and not wait_until_progress(
                         args, workdir, before, region, polls=args.settle_polls

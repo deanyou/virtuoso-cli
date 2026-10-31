@@ -770,12 +770,12 @@ class LiveExecutor(Executor):
             raise RuntimeError(
                 f"screenshot failed: {result.get('status')}"
             )
-        if not _os.path.exists(png_path):
-            raise RuntimeError(
-                f"screenshot failed: no PNG was written to {png_path}"
-            )
         # Local runner writes directly; SSH runner writes on the remote
         # host, so scp the PNG down and rewrite the path.
+        #
+        # The download has to happen *before* the file is checked for: in
+        # SSH mode the PNG is written on the remote host, so a local
+        # existence check before the scp always failed the step.
         if self._is_ssh():
             remote_path = result.get("path")
             if remote_path:
@@ -798,6 +798,12 @@ class LiveExecutor(Executor):
             if _os.path.exists(result.get("path") or ""):
                 _shutil.copyfile(result["path"], png_path)
                 result["path"] = png_path
+        # Now the PNG has to be there: written directly (local mode) or
+        # just downloaded (SSH mode).
+        if not _os.path.exists(png_path):
+            raise RuntimeError(
+                f"screenshot failed: no PNG was written to {png_path}"
+            )
         return result
 
     def _run_action(
@@ -907,30 +913,31 @@ class LiveExecutor(Executor):
         WM decorations, so a click computed from it can land outside the
         client area and be rejected.
 
-        Falls back to the precheck geometry when the command is unavailable
-        (older vcli), so the harness still runs against an older CLI.
+        Fails closed.  When the geometry cannot be read, the step aborts with
+        the reason: falling back to the frame geometry would compute a click
+        outside the client area, which silently misses instead of failing.
         """
-        try:
-            data = self._run_json(
-                self._vcli_argv(
-                    "window",
-                    "geometry",
-                    "--window-id",
-                    self.window_id or "",
-                    "--display",
-                    self._scenario_display or ":0",
-                ),
-                _TIMEOUT_PRECHECK,
+        data = self._run_json(
+            self._vcli_argv(
+                "window",
+                "geometry",
+                "--window-id",
+                self.window_id or "",
+                "--display",
+                self._scenario_display or ":0",
+            ),
+            _TIMEOUT_PRECHECK,
+        )
+        geom = data.get("geometry") or {}
+        w, h = geom.get("w"), geom.get("h")
+        if not w or not h:
+            raise RuntimeError(
+                "client geometry unavailable: `vcli window geometry` reported "
+                f"no usable size for window {self.window_id} ({geom!r})"
             )
-            geom = data.get("geometry") or {}
-            w, h = geom.get("w"), geom.get("h")
-            if w and h:
-                self._window_width = w
-                self._window_height = h
-                return w, h
-        except Exception:  # noqa: BLE001 — fall back to precheck geometry
-            pass
-        return self._window_width, self._window_height
+        self._window_width = w
+        self._window_height = h
+        return w, h
 
     def _ciw_input(self, expression: str, delay_ms: int = 10, clear_first: bool = True) -> None:
         """Type a SKILL expression into the CIW input line and press Return.
