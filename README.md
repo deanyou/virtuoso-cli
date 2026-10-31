@@ -378,6 +378,7 @@ vcli [--profile P] [--session S] [--format json|table]
 | `VB_TIMEOUT` | `30` | Connection/execution timeout (seconds) |
 | `VCLI_CAPABILITY` | `user` | Set `admin` to unlock broadcast/raw SKILL |
 | `VB_CLIENT_ID` | hostname | Per-client scratch isolation |
+| `VB_SKILLS_DIR` | `.claude/skills` | Skills root published by `vcli mcp serve` as MCP resources. Set it to a directory; a set-but-invalid value fails the server startup instead of falling back to the working directory |
 
 Windows PowerShell 5.x strips inner double quotes passed to a native exe.
 `vcli skill exec 'getShellEnvVar("USER")'` arrives as `getShellEnvVar(USER)`.
