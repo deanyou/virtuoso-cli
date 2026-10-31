@@ -825,7 +825,11 @@ def main():
                     # The guard has to look at the prompt block itself: it is
                     # rendered wherever the client puts it, and a fixed block
                     # would compare unrelated pixels.
-                    region = guard_region(found, template, Image.open(shot).size)
+                    image = load_screenshot(shot)
+                    if image is None:
+                        continue
+                    region = guard_region(found, template,
+                                          (image.shape[1], image.shape[0]))
                     before = crop_region(shot, region)
                     if before is not None and not wait_until_progress(
                         args, workdir, before, region, polls=args.settle_polls
