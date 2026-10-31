@@ -50,6 +50,17 @@ All notable changes to this project will be documented in this file.
   reported as `verification_error` — stays `status: "requested"` with no `dismissed`
   id, makes the helper exit non-zero, and is surfaced as an error in the vcli result
   (so `status` becomes `failed` rather than `dismissed`).
+- **`vcli window dismiss-dialog --x11` now exits non-zero when a dismissal could not
+  be verified.** The JSON result keeps its shape (`status` becomes `failed`, the
+  per-record errors stay in `errors`); the command additionally reports the exit code
+  it wants in a new top-level `exit_code` field, and the CLI exits with it. Callers
+  that only look at the exit status no longer read an unverified dismissal as a
+  success.
+- **The `dismissed` field of an X11 dismiss result record now carries the
+  child/resolved XID**, not the requested frame id — the frame id is reported
+  separately as `window_id` / `requested_window_id`. The dismissal is verified
+  against the exact window that received the key, so the id in `dismissed` is that
+  window's id.
 
 ### Deprecated
 

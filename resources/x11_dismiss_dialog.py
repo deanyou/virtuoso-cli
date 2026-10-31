@@ -123,14 +123,76 @@ class _XErrorEvent(ctypes.Structure):
 
 _X_ERROR_HANDLER = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
 
+# --- Process-wide X error handling ------------------------------------------
+# libX11's default error handler prints to stderr and kills the process on the
+# first protocol error. That must never happen here: a BadWindow raised while
+# the key is being sent (XRaiseWindow / XSetInputFocus in `dismiss_window`)
+# would kill the helper before it printed a single record — the caller would
+# see "no output at all" instead of "this dismissal failed".
+#
+# Xlib's error handler is a process-global setting, so ONE installation
+# protects every connection. `main()` installs it before any X call and the
+# state reader reuses it.
+_X_ERROR_HANDLER_REF = None       # keeps the ctypes callback alive
+_X_PREVIOUS_ERROR_HANDLER = None
+_X_ERROR_HANDLER_INSTALLED = False
+# The reader currently querying window state (the handler forwards to it).
+_ACTIVE_STATE_READER = None
+
+
+def _process_x_error_handler(_display, event):
+    """Process-wide Xlib error handler: keep the process alive.
+
+    Returning 0 tells Xlib the error is handled; swallowing it silently would
+    be exactly the fail-open behaviour this module exists to remove.
+    """
+    reader = _ACTIVE_STATE_READER
+    if reader is not None:
+        return reader._handle_x_error(_display, event)
+    return 0
+
+
+def install_x_error_handler():
+    """Install the process-wide X error handler. Idempotent.
+
+    Must be called before any X call so that a protocol error in the
+    key-sending phase cannot kill the process before a record is printed.
+
+    Returns True when the handler is in place, False when libX11 is not
+    available on this host — the caller then fails with its own, clearer
+    error.
+    """
+    global _X_ERROR_HANDLER_REF, _X_PREVIOUS_ERROR_HANDLER
+    global _X_ERROR_HANDLER_INSTALLED
+    if _X_ERROR_HANDLER_INSTALLED:
+        return True
+    xlib_path = ctypes.util.find_library("X11")
+    if not xlib_path:
+        return False
+    try:
+        xlib = ctypes.cdll.LoadLibrary(xlib_path)
+        xlib.XSetErrorHandler.argtypes = [ctypes.c_void_p]
+        xlib.XSetErrorHandler.restype = ctypes.c_void_p
+        callback = _X_ERROR_HANDLER(_process_x_error_handler)
+        _X_PREVIOUS_ERROR_HANDLER = xlib.XSetErrorHandler(
+            ctypes.cast(callback, ctypes.c_void_p)
+        )
+        # Keep a reference: the callback must outlive the call.
+        _X_ERROR_HANDLER_REF = callback
+        _X_ERROR_HANDLER_INSTALLED = True
+        return True
+    except (OSError, AttributeError):
+        return False
+
 
 class _XWindowStateReader(object):
     """Minimal read-only libX11 surface: 'does this exact XID still exist?'.
 
-    A process-wide X error handler is installed for the lifetime of the
-    connection. Without it libX11's default handler prints to stderr and kills
-    the process on the first protocol error, and an error that merely *looks*
-    like "window gone" can never be told apart from a destroyed window.
+    The process-wide X error handler is installed once by `main()` (see
+    `install_x_error_handler`) and reused here. Without it libX11's default
+    handler prints to stderr and kills the process on the first protocol
+    error, and an error that merely *looks* like "window gone" can never be
+    told apart from a destroyed window.
     """
 
     def __init__(self, display):
@@ -141,18 +203,15 @@ class _XWindowStateReader(object):
         self._display = None
         self._closed = False
         self._error_codes = []
-        self._previous_error_handler = None
-        self._error_handler_installed = False
-        self._error_callback = _X_ERROR_HANDLER(self._handle_x_error)
         self._declare_signatures()
         display_name = display.encode("utf-8") if display else None
         self._display = self._xlib.XOpenDisplay(display_name)
         if not self._display:
             raise XInspectionFailure("cannot open display %s" % display)
-        self._previous_error_handler = self._xlib.XSetErrorHandler(
-            ctypes.cast(self._error_callback, ctypes.c_void_p)
-        )
-        self._error_handler_installed = True
+        # From now on the process-wide handler forwards X errors here, so the
+        # codes end up in `_error_codes` and can be inspected per query.
+        global _ACTIVE_STATE_READER
+        _ACTIVE_STATE_READER = self
 
     def _declare_signatures(self):
         # Explicit ctypes signatures are mandatory: without argtypes/restype
@@ -168,8 +227,6 @@ class _XWindowStateReader(object):
             ctypes.POINTER(_XWindowAttributes),
         ]
         self._xlib.XGetWindowAttributes.restype = ctypes.c_int
-        self._xlib.XSetErrorHandler.argtypes = [ctypes.c_void_p]
-        self._xlib.XSetErrorHandler.restype = ctypes.c_void_p
 
     def _handle_x_error(self, _display, event):
         # Returning 0 tells Xlib the error is handled; swallowing it silently
@@ -203,12 +260,13 @@ class _XWindowStateReader(object):
         return {"exists": True, "mapped": attributes.map_state != MAP_UNMAPPED}
 
     def close(self):
+        global _ACTIVE_STATE_READER
         if self._closed:
             return
         if self._display:
             self._xlib.XCloseDisplay(self._display)
-        if self._error_handler_installed:
-            self._xlib.XSetErrorHandler(self._previous_error_handler)
+        if _ACTIVE_STATE_READER is self:
+            _ACTIVE_STATE_READER = None
         self._closed = True
         self._display = None
 
@@ -881,6 +939,23 @@ def dismiss_window(display, win_id_str, action, title="", target_is_explicit=Fal
 
 # Seconds to let the dialog react to the key before asking the X server.
 VERIFY_SETTLE_SECONDS = 0.3
+# The dialog may need more than the settle time to disappear (a second
+# confirmation, a busy X server). After the settle, the exact XID is
+# re-checked every VERIFY_POLL_INTERVAL_SECONDS until the verification budget
+# is spent; the dismissal is confirmed as soon as the window is seen unmapped
+# or destroyed.
+VERIFY_POLL_INTERVAL_SECONDS = 0.1
+VERIFY_BUDGET_SECONDS = 2.0
+# Hard bound on the number of re-checks, so a mocked clock (or a stalled
+# server) can never turn the poll into an endless loop.
+VERIFY_MAX_POLLS = int(
+    round(VERIFY_BUDGET_SECONDS / VERIFY_POLL_INTERVAL_SECONDS)
+)
+
+
+def _monotonic():
+    """Indirection over `time.monotonic` so tests can drive the budget."""
+    return time.monotonic()
 
 
 def _verify_dismissal(result, display=None):
@@ -890,6 +965,10 @@ def _verify_dismissal(result, display=None):
     exist: verified closed (destroyed or unmapped) → "closed" plus a "dismissed"
     id; everything else, including a state query that failed, stays
     "requested" with no "dismissed" key so callers fail closed.
+
+    A single sample after the settle time misjudged a slow dialog (a second
+    confirmation, a busy X server) as still mapped, so the exact XID is polled
+    for the whole verification budget before it is called a failure.
     """
     if "error" in result:
         return result
@@ -915,10 +994,21 @@ def _verify_dismissal(result, display=None):
     reader = None
     try:
         reader = _open_window_state_reader(display or os.environ.get("DISPLAY"))
-        state = reader.window_state(_parse_xid(target))
-        result["still_mapped"] = state["mapped"]
-        if not state["exists"] or not state["mapped"]:
-            result.update(status="closed", closure_confirmed=True, dismissed=target)
+        xid = _parse_xid(target)
+        deadline = _monotonic() + VERIFY_BUDGET_SECONDS
+        polls = 0
+        while True:
+            state = reader.window_state(xid)
+            result["still_mapped"] = state["mapped"]
+            if not state["exists"] or not state["mapped"]:
+                result.update(status="closed", closure_confirmed=True, dismissed=target)
+                break
+            if polls >= VERIFY_MAX_POLLS or _monotonic() >= deadline:
+                # The window is still mapped after the whole verification
+                # budget: the dismissal stays unproven.
+                break
+            polls += 1
+            time.sleep(VERIFY_POLL_INTERVAL_SECONDS)
     except Exception as exc:
         # Deliberately broad (upstream #248): any failure of the state query is
         # a verification failure, never a dismissal. A broken check must never
@@ -992,6 +1082,13 @@ def main():
     # Without this, xwininfo failures inside discover_windows are swallowed and
     # the caller sees an empty window list — indistinguishable from "no windows".
     os.environ["DISPLAY"] = display
+    # Install the process-wide X error handler BEFORE any X call. The
+    # key-sending phase (XRaiseWindow / XSetInputFocus in `dismiss_window`)
+    # runs before the state reader exists, so a handler installed there alone
+    # would leave that phase unprotected: a BadWindow would hit libX11's
+    # default handler, which kills the process before a single record is
+    # printed.
+    install_x_error_handler()
     try:
         subprocess.check_output(
             ["xwininfo", "-root"],

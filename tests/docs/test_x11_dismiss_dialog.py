@@ -267,6 +267,43 @@ class _FakeReader:
         self.closed = True
 
 
+class _SequenceReader:
+    """Reader stub that answers with a scripted sequence of window states.
+
+    The last entry repeats once the script is exhausted, so "always mapped"
+    is simply a one-entry script.
+    """
+
+    def __init__(self, states):
+        self.states = list(states)
+        self.queried = []
+        self.closed = False
+
+    def window_state(self, xid):
+        self.queried.append(xid)
+        if len(self.states) > 1:
+            return self.states.pop(0)
+        return self.states[0]
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeClock:
+    """Deterministic clock: sleep() advances it, monotonic() reads it."""
+
+    def __init__(self):
+        self.now = 0.0
+        self.slept = []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+
 def _x_error_event(code):
     """Build a real _XErrorEvent pointer, as the X server would deliver it."""
     event = x11d._XErrorEvent()
@@ -308,9 +345,6 @@ def _offline_reader(status=1, map_state=2, error_codes=()):
     reader._display = 1
     reader._closed = False
     reader._error_codes = []
-    reader._previous_error_handler = None
-    reader._error_handler_installed = False
-    reader._error_callback = x11d._X_ERROR_HANDLER(reader._handle_x_error)
     fake = _FakeXlib(reader, status, map_state, error_codes)
     reader._xlib = fake
     return reader, fake
@@ -394,6 +428,17 @@ class VerifyDismissalTests(unittest.TestCase):
         p = unittest.mock.patch.object(x11d, "_open_window_state_reader", _open)
         p.start()
         self.addCleanup(p.stop)
+
+    def _patch_clock(self):
+        """Drive the verification budget with a deterministic clock."""
+        clock = _FakeClock()
+        p = unittest.mock.patch.object(x11d.time, "sleep", clock.sleep)
+        p.start()
+        self.addCleanup(p.stop)
+        p = unittest.mock.patch.object(x11d, "_monotonic", clock.monotonic)
+        p.start()
+        self.addCleanup(p.stop)
+        return clock
 
     @staticmethod
     def _requested(**overrides):
@@ -514,6 +559,90 @@ class VerifyDismissalTests(unittest.TestCase):
         )
         self.assertNotIn("dismissed", failed)
         self.assertIn("cannot query", failed["verification_error"])
+
+
+class VerifyPollTests(unittest.TestCase):
+    """_verify_dismissal() polls the exact XID instead of sampling it once.
+
+    A single sample after the settle time misjudged a slow dialog (a second
+    confirmation, a busy X server) as still mapped.
+    """
+
+    def setUp(self):
+        clock = _FakeClock()
+        p = unittest.mock.patch.object(x11d.time, "sleep", clock.sleep)
+        p.start()
+        self.addCleanup(p.stop)
+        p = unittest.mock.patch.object(x11d, "_monotonic", clock.monotonic)
+        p.start()
+        self.addCleanup(p.stop)
+        self.clock = clock
+
+    @staticmethod
+    def _requested(**overrides):
+        result = {
+            "window_id": "0x10",
+            "requested_window_id": "0x10",
+            "resolved_window_id": "0x10",
+            "child": "0x10",
+            "title": "Save Changes",
+            "status": "requested",
+            "action_sent": True,
+            "closure_confirmed": False,
+            "still_mapped": None,
+            "action": "enter",
+            "x": 0, "y": 0, "w": 580, "h": 140,
+        }
+        result.update(overrides)
+        return result
+
+    def _verify(self, result, reader):
+        def _open(display):
+            return reader
+
+        p = unittest.mock.patch.object(x11d, "_open_window_state_reader", _open)
+        p.start()
+        self.addCleanup(p.stop)
+        return x11d._verify_dismissal(result, ":7")
+
+    def test_slow_dialog_is_confirmed_closed_by_the_poll(self):
+        # Still mapped on the first two samples, gone on the third.
+        reader = _SequenceReader([
+            {"exists": True, "mapped": True},
+            {"exists": True, "mapped": True},
+            {"exists": True, "mapped": False},
+        ])
+        out = self._verify(self._requested(), reader)
+        self.assertEqual(out["status"], "closed")
+        self.assertIs(out["closure_confirmed"], True)
+        self.assertIs(out["still_mapped"], False)
+        self.assertEqual(out["dismissed"], "0x10")
+        self.assertEqual(len(reader.queried), 3)
+        # The poll waited between the samples instead of giving up after the
+        # settle time.
+        self.assertEqual(self.clock.slept[-1], x11d.VERIFY_POLL_INTERVAL_SECONDS)
+        self.assertTrue(reader.closed)
+
+    def test_destroyed_window_is_confirmed_on_the_first_sample(self):
+        reader = _SequenceReader([{"exists": False, "mapped": False}])
+        out = self._verify(self._requested(), reader)
+        self.assertEqual(out["status"], "closed")
+        self.assertEqual(out["dismissed"], "0x10")
+        self.assertEqual(len(reader.queried), 1)
+
+    def test_still_mapped_after_the_budget_is_not_a_dismissal(self):
+        reader = _SequenceReader([{"exists": True, "mapped": True}])
+        out = self._verify(self._requested(), reader)
+        self.assertEqual(out["status"], "requested")
+        self.assertIs(out["closure_confirmed"], False)
+        self.assertIs(out["still_mapped"], True)
+        self.assertNotIn("dismissed", out)
+        # The poll kept re-checking until the verification budget was spent.
+        self.assertGreater(len(reader.queried), 1)
+        self.assertLessEqual(len(reader.queried), x11d.VERIFY_MAX_POLLS + 1)
+        spent = self.clock.now - x11d.VERIFY_SETTLE_SECONDS
+        self.assertLessEqual(spent, x11d.VERIFY_BUDGET_SECONDS + 1e-6)
+        self.assertGreater(spent, 0.0)
 
 
 class DismissExitCodeTests(unittest.TestCase):
@@ -671,6 +800,114 @@ class DismissExitCodeTests(unittest.TestCase):
         self.assertEqual([r["status"] for r in outcomes], ["requested", "closed"])
         self.assertNotIn("dismissed", outcomes[0])
         self.assertEqual(outcomes[1]["dismissed"], "0x11")
+
+
+class XErrorHandlerInstallationTests(unittest.TestCase):
+    """The X error handler must be installed BEFORE any X call.
+
+    `dismiss_window` runs `XRaiseWindow` / `XSetInputFocus` before the state
+    reader exists. A handler installed only by the reader left that phase
+    unprotected: a BadWindow hit libX11's default handler, which kills the
+    process before a single record is printed.
+    """
+
+    def setUp(self):
+        p = unittest.mock.patch.object(x11d.time, "sleep", lambda seconds: None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _run_main(self, argv, dismiss):
+        order = []
+
+        def _install():
+            order.append("install")
+            return True
+
+        def _dismiss(*args, **kwargs):
+            order.append("dismiss")
+            return dismiss(*args, **kwargs)
+
+        p = unittest.mock.patch.object(x11d, "install_x_error_handler", _install)
+        p.start()
+        self.addCleanup(p.stop)
+
+        p = unittest.mock.patch.object(
+            x11d.subprocess, "check_output", lambda cmd, **kw: b""
+        )
+        p.start()
+        self.addCleanup(p.stop)
+
+        p = unittest.mock.patch.object(x11d, "dismiss_window", _dismiss)
+        p.start()
+        self.addCleanup(p.stop)
+
+        def _open(display):
+            return _FakeReader({0x10: {"exists": False, "mapped": False}})
+
+        p = unittest.mock.patch.object(x11d, "_open_window_state_reader", _open)
+        p.start()
+        self.addCleanup(p.stop)
+
+        original_argv = sys.argv
+        sys.argv = ["x11_dismiss_dialog.py"] + argv
+        self.addCleanup(setattr, sys, "argv", original_argv)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit):
+                x11d.main()
+        return order
+
+    def test_handler_is_installed_before_dismiss_window_runs(self):
+        requested = {
+            "window_id": "0x10",
+            "requested_window_id": "0x10",
+            "resolved_window_id": "0x10",
+            "child": "0x10",
+            "title": "Save Changes",
+            "status": "requested",
+            "action_sent": True,
+            "closure_confirmed": False,
+            "still_mapped": None,
+            "action": "enter",
+            "x": 0, "y": 0, "w": 580, "h": 140,
+        }
+        order = self._run_main([":7", "--dismiss-window", "0x10"], lambda *a, **kw: dict(requested))
+        self.assertIn("install", order, order)
+        self.assertIn("dismiss", order, order)
+        self.assertLess(
+            order.index("install"),
+            order.index("dismiss"),
+            "the X error handler must be installed before dismiss_window runs: %r" % (order,),
+        )
+
+    def test_handler_is_installed_before_the_dismiss_all_loop(self):
+        requested = {
+            "window_id": "0x10",
+            "requested_window_id": "0x10",
+            "resolved_window_id": "0x10",
+            "child": "0x10",
+            "title": "Save Changes",
+            "status": "requested",
+            "action_sent": True,
+            "closure_confirmed": False,
+            "still_mapped": None,
+            "action": "enter",
+            "x": 0, "y": 0, "w": 580, "h": 140,
+        }
+        p = unittest.mock.patch.object(
+            x11d, "find_dialogs",
+            lambda display: [
+                {"window_id": "0x10", "title": "a", "x": 0, "y": 0, "w": 10, "h": 10}
+            ],
+        )
+        p.start()
+        self.addCleanup(p.stop)
+        order = self._run_main([":7", "--dismiss"], lambda *a, **kw: dict(requested))
+        self.assertLess(
+            order.index("install"),
+            order.index("dismiss"),
+            "the X error handler must be installed before dismiss_window runs: %r" % (order,),
+        )
 
 
 if __name__ == "__main__":
