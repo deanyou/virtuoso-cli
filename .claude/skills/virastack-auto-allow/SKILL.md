@@ -153,7 +153,14 @@ the status line ("Running script...") above the option rows, which is the
 same for every prompt and would make every request look like a repeat of the
 same command. The code block is the only part of the card with its own
 background, so the band is the last text line whose background differs from
-the background of the status line.
+the background of the card. That background is read from the rows *below* the
+last text line — the gap between the card and the option rows — and not from
+the whole region: a long command fills the region with the colour of the code
+block, and the command would then be taken for the background.
+
+The band spans the whole client area, minus the scrollbar on the right: a
+command that runs past the crop would lose its tail, and two different
+commands would share a fingerprint.
 
 The fingerprint is a tolerant pixel comparison, not a hash: the band of two
 consecutive frames of the same command is aligned within a few pixels and the

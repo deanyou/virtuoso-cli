@@ -46,7 +46,9 @@ COMPOSER_CLICK_OFFSETS = (68, 74, 60)
 # and this tall. The command line is then picked out of that region by ink.
 COMMAND_REGION_ABOVE = 170
 COMMAND_REGION_HIGH = 140
-COMMAND_BAND_WIDE = 570
+# The band spans the whole client area, minus the scrollbar on the right.
+COMMAND_BAND_MAX = 1000
+SCROLLBAR_MARGIN = 24
 # Two bands of the same command match at least this fraction of their text.
 # A re-rendered glyph still matches within a 3x3 neighbourhood, a changed
 # character does not. Measured on the captured frames: the same command scores
@@ -169,6 +171,31 @@ def _row_background(row):
     return int(values[counts.argmax()])
 
 
+def _band_width(screenshot):
+    """Width of the band crop.
+
+    The command has to be cut off at the scrollbar, but not before it: a
+    command that runs past the crop would lose its tail and two different
+    commands would share a fingerprint.
+    """
+    width = Image.open(screenshot).size[0]
+    return max(200, min(width - SCROLLBAR_MARGIN, COMMAND_BAND_MAX))
+
+
+def _card_background(crop, groups):
+    """The grey level of the card the prompt is drawn on.
+
+    It is the colour of the rows between the last text line and the option
+    rows, not the most common colour of the whole region: a long command
+    fills the region with the code block colour, and the command would then
+    be mistaken for the background.
+    """
+    below = crop[groups[-1][1] + 1:]
+    if len(below) >= 3:
+        return _row_background(below.reshape(-1))
+    return _row_background(crop[-3:].reshape(-1))
+
+
 def command_band(screenshot, found):
     """The band of the screenshot that holds the command line of the prompt.
 
@@ -180,13 +207,16 @@ def command_band(screenshot, found):
 
     The code block is the only part of the card with its own background, so
     the command is the last text line that does not sit on the background of
-    the card itself.
+    the card itself. That background is read from the rows *below* the last
+    text line — the gap between the card and the option rows — and not from
+    the whole region: a long command fills the region with the code block
+    colour, and the command would then be taken for the background.
     """
     _, y, _ = found
     crop = crop_region(screenshot, (
         0,
         max(0, y - COMMAND_REGION_ABOVE),
-        COMMAND_BAND_WIDE,
+        _band_width(screenshot),
         COMMAND_REGION_HIGH,
     ))
     if crop is None:
@@ -195,7 +225,7 @@ def command_band(screenshot, found):
     groups = _text_groups(rows)
     if not groups:
         return None
-    card_bg = _row_background(crop.reshape(-1))
+    card_bg = _card_background(crop, groups)
     candidates = [g for g in groups if _row_background(crop[g[0]]) != card_bg]
     if not candidates:
         # No code block in sight: fall back to the last text line.

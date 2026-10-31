@@ -246,16 +246,68 @@ class CommandSignatureTests(unittest.TestCase):
         self.addCleanup(os.remove, path)
         return path
 
+    def _long_command_card(self, command_text):
+        """A card whose command fills the region that is searched for it.
+
+        The code block then covers more of the region than the card around
+        it, and the most common grey of the region is the colour of the code
+        block: the command must not be taken for the background.
+        """
+        allow_y = 694 + 16
+        img = Image.new("L", (780, 968), 75)
+        drawer = ImageDraw.Draw(img)
+        # the code block, from the top of the region down to the status line
+        drawer.rectangle((35, allow_y - 180, 740, allow_y - 70), fill=45)
+        drawer.text((40, allow_y - 174), command_text, fill=216)
+        drawer.text((40, allow_y - 154), "a second line of the command", fill=216)
+        drawer.text((40, allow_y - 134), "and a third line", fill=216)
+        # the status line, on the background of the card
+        drawer.text((35, allow_y - 60), "Running script...", fill=255)
+        img.paste(Image.open(aa.DEFAULT_TEMPLATE).convert("L"), (58, 694))
+        handle, path = tempfile.mkstemp(suffix=".png")
+        os.close(handle)
+        img.save(path)
+        self.addCleanup(os.remove, path)
+        return path
+
+    def _band_of(self, image):
+        template = aa.load_template(aa.DEFAULT_TEMPLATE)
+        found = aa.find_prompt(image, template)
+        self.assertIsNotNone(found)
+        return aa.command_band(image, found)
+
     def test_the_band_is_the_command_and_not_the_status_line(self):
         # The status line above the option rows is the same for every prompt:
         # fingerprinting it would make every request look like a repeat of
         # the same command.
-        template = aa.load_template(aa.DEFAULT_TEMPLATE)
-        a = aa.command_band(self._card_image("/tmp/mkdir.sh"),
-                            aa.find_prompt(self._card_image("/tmp/mkdir.sh"), template))
-        b = aa.command_band(self._card_image("/tmp/spectre_run.sh"),
-                            aa.find_prompt(self._card_image("/tmp/spectre_run.sh"), template))
+        a = self._band_of(self._card_image("/tmp/mkdir.sh"))
+        b = self._band_of(self._card_image("/tmp/spectre_run.sh"))
         self.assertFalse(aa.same_command(a, b))
+
+    def test_a_long_command_is_not_taken_for_the_background(self):
+        # The command fills the region it is searched for, so the colour of
+        # the region is the colour of the code block. The band must still be
+        # the command and not the status line above the option rows.
+        a = self._band_of(self._long_command_card("/tmp/mkdir.sh"))
+        b = self._band_of(self._long_command_card("/tmp/spectre_run.sh"))
+        self.assertFalse(aa.same_command(a, b))
+
+    def test_a_card_without_a_status_line_still_yields_the_command(self):
+        # Not every card renders a status line; the command is then the last
+        # text line above the option rows.
+        allow_y = 694 + 16
+        img = Image.new("L", (780, 968), 75)
+        drawer = ImageDraw.Draw(img)
+        drawer.rectangle((35, allow_y - 80, 600, allow_y - 50), fill=45)
+        drawer.text((40, allow_y - 74), "/tmp/mkdir.sh", fill=216)
+        img.paste(Image.open(aa.DEFAULT_TEMPLATE).convert("L"), (58, 694))
+        handle, path = tempfile.mkstemp(suffix=".png")
+        os.close(handle)
+        img.save(path)
+        self.addCleanup(os.remove, path)
+        band = self._band_of(path)
+        self.assertIsNotNone(band)
+        self.assertTrue(aa.same_command(band, self._band_of(self._card_image("/tmp/mkdir.sh"))))
 
 
 class GuideMessageTests(unittest.TestCase):
