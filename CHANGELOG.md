@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`vcli window geometry`** (also `window.geometry` over RPC) — reports the
+  **client-area** geometry of one X11 window, which is the coordinate space
+  `action-x11 --direct` validates `--x`/`--y` against. Callers previously had
+  no way to learn this space: `list-windows-x11` reports the window *frame*
+  geometry (WM decorations included), and the two differ by the title-bar and
+  border widths — so a click computed from the frame geometry lands outside
+  the client area. Only the `--direct` path bounds-checks against the client
+  geometry (its errors carry a `direct: ` prefix); the non-direct path checks
+  against the frame geometry, so a frame-derived coordinate is not rejected
+  there — it silently misses.
 - **MCP resources and prompts.** `vcli mcp serve` now publishes the repository's
   Claude skills as read-only MCP resources (`skill://<name>`) and three workflow
   prompts (`maestro-run-and-check`, `spectre-failure-triage`, `cell-design-review`).
@@ -21,9 +31,79 @@ All notable changes to this project will be documented in this file.
   `virtuoso-daemon` into `$PREFIX/bin` and `ramic_bridge.il` into
   `$PREFIX/share/virtuoso-cli/` with `__DAEMON_PATH__` baked to the real daemon path,
   so one shared install serves every user with zero per-user setup.
+- **`virastack-auto-allow` skill** —
+  `.claude/skills/virastack-auto-allow/scripts/auto_allow.py` polls a target
+  window for the ViraStack permission prompt, matches it against a template
+  that spans both option rows (so "Don't Allow" can never be matched on its
+  own), and clicks "Allow" through `vcli window action-x11`. A post-click
+  pixel check aborts instead of hammering a coordinate that did not land.
+  The loop survives a long cellview run (`--idle-polls 0` never stops on
+  idle) and re-resolves the daemon session and the X11 window id by itself
+  after a Virtuoso or daemon restart.
+  When the agent keeps re-running the same command, the loop fingerprints the
+  command line above the option rows — a pixel-tolerant comparison of the text
+  band, so a re-rendered command still counts as the same one — and, after
+  `--guide-threshold` consecutive identical approvals, types a guidance message
+  into the chat composer telling the agent to diagnose the root cause. The
+  message is only sent while no permission prompt is pending: the composer
+  itself is the guard, and a composer that already holds text is never typed
+  into, so neither a pending prompt nor the user's own text is overwritten.
+  The one exception is the text the loop itself typed and could not submit:
+  the loop keeps a snapshot of the composer holding its own message and
+  compares the composer with it before clearing it, so text the user has
+  typed over it is never wiped.
+  The delivery is verified with a screenshot.
+  `--timeout 0` runs the loop until it is stopped.
 
 ### Fixed
 
+- **RPC/MCP `window.screenshot` works under the default (Window) capability
+  again.** The RPC dispatcher routes the capture through the *unchecked* SKILL
+  executor: the dispatcher's own capability check (`permits_method` → Window)
+  is the permission check for that method. The checked executor demands the
+  Admin capability on top of it, so `vcli rpc call window.screenshot` and the
+  MCP `window_screenshot` tool failed for every default (non-Admin) client
+  with "raw SKILL exec is not permitted: use 'vcli rpc call' instead". The
+  CLI (`vcli window screenshot`) still runs raw SKILL and therefore still
+  needs Admin.
+- **The GUI-debug skill's CIW_INPUT step now fails loudly when the client
+  geometry cannot be read.** `vcli window geometry` used to be asked for the
+  client-area geometry and, when that failed, the step fell back to the
+  window *frame* geometry from `list-windows-x11` — the very coordinate space
+  this change exists to eliminate (WM decorations included). A click computed
+  from it lands outside the client area and silently misses. The step now
+  aborts with the reason instead.
+- **The screenshot fallback validates the artifact it captured.** `import
+  -window` can exit 0 and still leave nothing usable behind (an empty file, a
+  truncated PNG); the fallback reported `{"status": "saved", "capture":
+  "x11"}` regardless. It now runs the same PNG check the action-path
+  screenshot uses, deletes an invalid file, and reports the failure.
+- **`vcli window geometry` and the screenshot fallback pass the XAUTHORITY to
+  the X11 tools.** Both built an `env DISPLAY=… ` prefix without it, so
+  `xwininfo`/`import` failed with "No protocol specified" on a host whose
+  cookie is not at the default `~/.Xauthority`. The DISPLAY/XAUTHORITY are now
+  resolved exactly as the action path resolves them.
+- **`vcli window screenshot` failed on hosts whose X server refuses a root-window
+  grab.** The SKILL capture path runs `import -window root`, which some X servers
+  reject — ImageMagick reports "missing an image filename", while `xwd -root` on
+  the same display fails with `BadMatch`, so the daemon returned nil and the
+  command failed even though the session was healthy. A per-window grab
+  (`import -window <id>`) works on those hosts, so `vcli window screenshot`
+  now takes `--window-id` and falls back to a per-window capture when the root
+  grab fails. The fallback is reported as `"capture": "x11"` alongside the
+  original error. Without `--window-id` there is no window to fall back to, and
+  the error says so.
+- **`vcli window list-windows-x11` (and every other X11 helper call) failed with
+  `cannot open display XAUTHORITY=...`.** The Rust side appends
+  `XAUTHORITY=<path>` to the helper command line as a bare token, and the
+  helper treated *every* non-flag token as the DISPLAY — so the XAUTHORITY
+  value overwrote the display and the helper aborted before enumerating any
+  window. The helper now parses `KEY=VALUE` tokens as environment overrides
+  (and `DISPLAY=…` as the display), and the parsing was extracted into
+  `parse_args()` so it is unit-tested.
+- **The `XAUTHORITY=` token was not shell-escaped.** A path containing a space
+  was split into two arguments, and the second one was parsed as the DISPLAY —
+  the same failure mode as the bug above. The token is now quoted as a whole.
 - **The daemon-identity probe ignored the configured timeout.**
   `VirtuosoClient::get_daemon_user()` hardcoded a 5-second budget and
   `vcli session show` built its probe client with a hardcoded 3-second

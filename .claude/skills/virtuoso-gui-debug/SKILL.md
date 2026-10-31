@@ -232,6 +232,19 @@ python3 scripts/xdotool_cli.py click --x 100 --y 50
 python3 scripts/xdotool_cli.py scroll --direction down --count 5
 ```
 
+End-to-end live smoke scenario (`live_smoke_scenario.json`): activate the CIW,
+evaluate `6*7` and a variable assignment through the CIW input line, send a
+key, scroll, and capture a screenshot — each step verified against the live
+session. Before running it, set `session_id`, `pid`, `display` and the
+`--window-id` of the CIW to the target session:
+
+```bash
+vcli session list
+vcli window list-windows-x11 --display :0   # find the CIW window id
+python3 scripts/gui_runner.py run live_smoke_scenario.json --output /tmp/gui-live \
+    --executor live --session <session-id> --vcli $(which vcli) --window-id <ciw-window-id>
+```
+
 ## Live-Mode Contract (fail-closed rules)
 
 Before any GUI input is sent, precheck verifies in order:
@@ -246,6 +259,10 @@ Before any GUI input is sent, precheck verifies in order:
 The DISPLAY lock is not just for safety - it is required for correctness. `xdotool type` sends key events one character at a time; two concurrent runs interleave their keystrokes, producing garbled input (observed: `dualTestA=100` + `dualTestB=200` merged into `dualTestBA=1200`). Additionally, concurrent `windowactivate` calls fight for X focus. Multi-session / multi-window GUI operations MUST be serialized either through this lock or by running scenarios sequentially. The lock also prevents ibus engine state from being toggled mid-input by another run.
 
 Every GUI action (`KEY`, `TYPE`, `CLICK_REL`, `CLICK_ABS`, `DOUBLE_CLICK`, `DRAG_REL`, `WINDOW_ACTIVATE`, `MINIMIZE`, `MAXIMIZE`, `CLOSE`, `SCROLL`) maps to a fixed `vcli window action-x11` argv carrying the resolved window id, PID, and DISPLAY. **`--direct` is enabled by default** (~5x faster, skips helper upload/env resolution/list-windows); use `--no-direct` for full server-side re-validation. `--pid` is optional since v1.3.1 (windows without `_NET_WM_PID` are reachable). `verify` prefers database-first predicates via vcli; the `ciw_eval` predicate executes SKILL via `vcli skill exec` and compares output. `recover` executes only rollback operations that pass scenario validation.
+
+**Click coordinates live in the client area.** `list-windows-x11` reports the window *frame* geometry (WM decorations included), while the click coordinates are relative to the window's *client* area. The two differ by the title-bar and border widths, so a click computed from the frame geometry lands outside the client area. Ask `vcli window geometry --window-id <hex>` for the client geometry before computing coordinates. Only the `--direct` path bounds-checks against it — its errors carry a `direct: ` prefix ("direct: coordinates (330, 604) out of bounds for window size 641x584"). The non-direct path checks against the *frame* geometry, so a frame-derived coordinate is not rejected there: it silently misses.
+
+**Screenshots.** The live executor captures through `vcli window screenshot --path <file> --window-id <hex>`. vcli owns both capture routes: it first tries the SKILL-side grab of the X11 root window, then falls back to a per-window grab (`import -window <id>`) when the X server refuses a root-window grab (ImageMagick: "missing an image filename"; `xwd -root` fails with BadMatch on the same display). Passing the window id is what makes the fallback available. The response reports which route was used (`"capture": "skill"` or `"x11"`).
 
 Typed input text never appears in error payloads or logs — it is replaced by `text_length` markers.
 
@@ -426,7 +443,7 @@ sleep 1
 **CIW input line coordinates** (must be re-verified if the CIW window moves):
 - The input line is at the **bottom** of the CIW window; compute `y = height - 20` (approximate), then verify with a screenshot crop.
 - Always `xwininfo -id <ciw_wid>` before typing — the CIW can be moved/resized by the user.
-- **Geometry pitfall**: `vcli window list-windows-x11` reports window geometry including WM decorations (e.g. 730x743 for a 720x709 CIW). Using this for click-y coordinates lands outside the content area. The `CIW_INPUT` DSL operation reads the precise geometry from vcli's `/tmp/vcli_geom_<display>_<wid>.json` cache (written by `activate --direct`). For manual operations, use `xwininfo` not `list-windows`.
+- **Geometry pitfall**: `vcli window list-windows-x11` reports window geometry including WM decorations (e.g. 730x743 for a 720x709 CIW). Using this for click-y coordinates lands outside the content area. The `CIW_INPUT` DSL operation asks vcli for the client-area geometry of the bound window (`vcli window geometry --window-id <hex>`) — the space the coordinates are interpreted in. For manual operations, use `xwininfo` not `list-windows`.
 
 ### Recommended Debug Loop
 
@@ -638,7 +655,7 @@ Reading a field value via CIW (`form->field->value`) costs ~425ms and is determi
 
 - `ctrl+a` does NOT select-all in Virtuoso form fields. Use `Escape` to clear the CIW input line.
 - **`ciw_eval` verifier format**: `expected` must be a dict, not a string. Use `{"expression": "varName", "equals": "42"}` or `{"expression": "func()", "contains": "substring"}`. A bare string `"42"` fails with `ciw_eval predicate requires expected.expression`.
-- **CIW_INPUT geometry fix** (v1.3.4+): The operation now reads precise window geometry from vcli's `/tmp/vcli_geom_*.json` cache after `activate`, instead of using `list-windows` geometry which includes WM decorations. Click-y is computed as `height - 20` (the CIW input line).
+- **CIW_INPUT geometry fix**: The operation now asks vcli for the client-area geometry of the bound window (`vcli window geometry --window-id <hex>`), instead of using `list-windows` geometry which includes WM decorations. Click-y is computed as `height - 20` (the CIW input line). A geometry query that fails aborts the step: falling back to the frame geometry would compute a click that lands outside the client area and silently misses.
 - `vcli skill load` times out on large files (>~50 lines). Use CIW `load("/path/file.il")` instead.
 - Semicolon-separated multi-expression CIW input: the second assignment may not execute. Run expressions one at a time.
 - `lambda((x) body)` fails — must be `lambda( (x) body)` with a space after `lambda(`.
@@ -1068,6 +1085,12 @@ python3 -m unittest tests.test_cli tests.test_command_runner \
 
 See `references/scenario-schema.md` for the complete JSON DSL specification.
 See `references/xdotool-cheatsheet.md` for xdotool command reference (local mode).
+
+## Related Skills
+
+- `virastack-auto-allow` — keeps the ViraStack permission prompt approved
+  unattended: it polls a ViraStack window through `vcli window action-x11`
+  and clicks "Allow" whenever the prompt block appears.
 
 ## RSI (Recursive Self-Improvement) Knowledge Base
 

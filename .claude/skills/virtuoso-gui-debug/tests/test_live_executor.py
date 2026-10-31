@@ -19,7 +19,7 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from vgui_runner.command_runner import CommandResult  # noqa: E402
+from vgui_runner.command_runner import CommandResult, SshRunner  # noqa: E402
 from vgui_runner.engine import Executor, StepPhase  # noqa: E402
 from vgui_runner.live_executor import LiveExecutor, LockHeldError  # noqa: E402
 from vgui_runner.model import CellView, Scenario, Step  # noqa: E402
@@ -148,6 +148,33 @@ def make_executor(runner, tmpdir, **kwargs):
     )
     params.update(kwargs)
     return LiveExecutor(**params)
+
+
+class FakeSshRunner(SshRunner):
+    """An SSH runner whose capture only exists after the download.
+
+    In SSH mode vcli writes the PNG on the *remote* host and the executor
+    pulls it down with scp — so the local file appears only when
+    ``scp_download`` runs.  A check for the local file before that download
+    always fails the step.
+    """
+
+    def __init__(self, vcli_path=VCLI, ssh_host="compute-eda-42",
+                 remote_path="/tmp/remote_shot.png"):
+        super().__init__(vcli_path, ssh_host)
+        self.remote_path = remote_path
+        self.argvs = []
+        self.downloads = []
+
+    def run(self, argv, timeout_seconds):
+        self.argvs.append(list(argv))
+        return res(stdout=json.dumps({"status": "saved", "path": self.remote_path}))
+
+    def scp_download(self, remote_path, local_path, timeout_seconds=60):
+        self.downloads.append((remote_path, local_path))
+        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(local_path).write_bytes(b"\x89PNG\r\n\x1a\n")
+        return res(stdout="")
 
 
 class TestLiveExecutorConstruction(unittest.TestCase):
@@ -330,9 +357,11 @@ class TestBaseline(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
+            png = Path(tmp) / "baseline.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\n")
             runner = FakeRunner(
                 [res(stdout=SESSIONS_OK), res(stdout=WINDOWS_ONE),
-                 res(stdout=json.dumps({"status": "success", "operation": "screenshot"}))]
+                 res(stdout=json.dumps({"status": "saved", "path": str(png)}))]
             )
             ex = make_executor(runner, tmp)
             self.assertIsNone(ex.precheck(make_scenario()))
@@ -340,6 +369,41 @@ class TestBaseline(unittest.TestCase):
             self.assertIsNone(err, f"baseline failed: {err}")
             argv = " ".join(runner.argvs[-1])
             self.assertIn("screenshot", argv)
+
+    def test_baseline_passes_the_bound_window_id(self):
+        """The window id is always passed, so vcli can fall back to a
+        per-window capture on hosts that refuse a root-window grab."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            png = Path(tmp) / "baseline.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\n")
+            runner = FakeRunner(
+                [res(stdout=SESSIONS_OK), res(stdout=WINDOWS_ONE),
+                 res(stdout=json.dumps({"status": "saved", "path": str(png)}))]
+            )
+            ex = make_executor(runner, tmp)
+            self.assertIsNone(ex.precheck(make_scenario()))
+            self.assertIsNone(ex.baseline(make_scenario()))
+            argv = " ".join(runner.argvs[-1])
+            self.assertIn("screenshot", argv)
+            self.assertIn(WINDOW_ID, argv)
+            self.assertIn("--window-id", argv)
+
+    def test_baseline_reports_a_failed_capture(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeRunner([
+                res(stdout=SESSIONS_OK),
+                res(stdout=WINDOWS_ONE),
+                res(exit_code=1, stderr="screenshot failed: nil"),
+            ])
+            ex = make_executor(runner, tmp)
+            self.assertIsNone(ex.precheck(make_scenario()))
+            err = ex.baseline(make_scenario())
+            self.assertIsNotNone(err)
+            self.assertIn("screenshot failed", err["error"])
 
     def test_baseline_requires_precheck(self):
         import tempfile
@@ -430,7 +494,11 @@ class TestExecuteMapping(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            ex, runner = self._with_action(tmp)
+            png = Path(tmp) / f"window_{WINDOW_ID}.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\n")
+            ex, runner = self._with_action(
+                tmp, res(stdout=json.dumps({"status": "saved", "path": str(png)}))
+            )
             step = make_step(operation="SCREENSHOT", arguments={"path": "shot.png"})
             self.assertIsNone(ex.execute(step, 0))
             argv = " ".join(runner.argvs[-1])
@@ -994,6 +1062,110 @@ class TestDynamicCiwCoordinates(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 ex._ciw_input("1+1")
             self.assertIn("geometry", str(ctx.exception))
+
+
+class TestSshScreenshotDownload(unittest.TestCase):
+    """In SSH mode the PNG is written on the remote host.
+
+    The local file only exists after the scp, so the existence check has to
+    run *after* the download — otherwise every SSH capture fails with "no PNG
+    was written to ...".
+    """
+
+    def test_the_png_is_downloaded_and_then_checked(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FakeSshRunner()
+            ex = make_executor(runner, tmp, ssh_host="compute-eda-42")
+            ex.window_id = WINDOW_ID
+            result = ex._capture_screenshot("baseline.png", None, 5)
+            self.assertEqual(len(runner.downloads), 1,
+                             "the capture must be pulled down from the remote host")
+            self.assertTrue(
+                (Path(tmp) / "baseline.png").exists(),
+                "the downloaded PNG must be exposed under the requested name",
+            )
+            self.assertEqual(result.get("status"), "success")
+
+    def test_a_failed_download_is_reported(self):
+        import tempfile
+
+        class FailingSshRunner(FakeSshRunner):
+            def scp_download(self, remote_path, local_path, timeout_seconds=60):
+                return res(exit_code=1, stderr="scp: no such file")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = FailingSshRunner()
+            ex = make_executor(runner, tmp, ssh_host="compute-eda-42")
+            ex.window_id = WINDOW_ID
+            with self.assertRaises(RuntimeError) as ctx:
+                ex._capture_screenshot("baseline.png", None, 5)
+            self.assertIn("download failed", str(ctx.exception))
+
+
+class TestClientGeometryFailsClosed(unittest.TestCase):
+    """The client geometry must never fall back to the frame geometry.
+
+    The frame geometry (from list-windows-x11) includes the WM decorations:
+    a click computed from it lands outside the client area and silently
+    misses.  Failing closed aborts the step instead.
+    """
+
+    def _executor(self, tmp, script):
+        runner = FakeRunner(script)
+        ex = make_executor(runner, tmp)
+        ex.window_id = WINDOW_ID
+        # The precheck geometry is the frame geometry.
+        ex._window_width = 800
+        ex._window_height = 600
+        return ex, runner
+
+    def test_a_failing_geometry_query_aborts(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, _ = self._executor(tmp, [res(exit_code=1, stderr="boom")])
+            with self.assertRaises(RuntimeError) as ctx:
+                ex._client_geometry()
+            self.assertIn("boom", str(ctx.exception))
+
+    def test_a_geometry_without_a_size_aborts(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, _ = self._executor(
+                tmp, [res(stdout=json.dumps({"status": "success", "geometry": {}}))]
+            )
+            with self.assertRaises(RuntimeError) as ctx:
+                ex._client_geometry()
+            self.assertIn("client geometry", str(ctx.exception))
+
+    def test_the_frame_geometry_is_not_used_as_a_fallback(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, _ = self._executor(
+                tmp, [res(stdout=json.dumps({"status": "success", "geometry": {}}))]
+            )
+            with self.assertRaises(RuntimeError):
+                ex._client_geometry()
+            # The precheck (frame) geometry must not have been handed out.
+            self.assertEqual(ex._window_width, 800)
+            self.assertEqual(ex._window_height, 600)
+
+    def test_the_client_geometry_is_used_when_it_is_available(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ex, _ = self._executor(
+                tmp,
+                [res(stdout=json.dumps({"status": "success",
+                                        "geometry": {"w": 641, "h": 584}}))],
+            )
+            w, h = ex._client_geometry()
+            self.assertEqual((w, h), (641, 584))
+            self.assertEqual(ex._window_width, 641)
 
 
 if __name__ == "__main__":
