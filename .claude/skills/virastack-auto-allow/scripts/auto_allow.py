@@ -13,7 +13,6 @@ Usage:
 """
 
 import argparse
-import hashlib
 import json
 import os
 import subprocess
@@ -275,18 +274,6 @@ def band_similarity(a, b):
 def same_command(a, b):
     """True when two command bands show the same command."""
     return band_similarity(a, b) >= COMMAND_SIMILARITY
-
-
-def command_signature(screenshot, found):
-    """Fingerprint of the command line the pending prompt belongs to.
-
-    Only used for logging: the repeat counter compares the bands themselves,
-    because a byte-exact hash changes whenever the text is re-rendered.
-    """
-    band = command_band(screenshot, found)
-    if band is None:
-        return None
-    return hashlib.md5(band.tobytes()).hexdigest()
 
 
 def format_guide_message(template, repeats):
