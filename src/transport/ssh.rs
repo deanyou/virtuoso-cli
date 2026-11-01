@@ -39,8 +39,58 @@ fn validate_directory_download(
     Ok(())
 }
 
-fn should_retry_cm_failure(attempt_used_control_master: bool, stderr: &str) -> bool {
-    attempt_used_control_master && SSHRunner::is_cm_failure(stderr)
+/// One SSH attempt, for the ControlMaster retry decision.
+///
+/// `stdout` is `None` when this path did not capture it. Uncaptured output
+/// cannot prove the remote command never started.
+struct CmRetryEvidence<'a> {
+    attempt_used_control_master: bool,
+    exit_code: Option<i32>,
+    stdout: Option<&'a str>,
+    stderr: &'a str,
+}
+
+/// Whether the ssh process's stdout was really captured.
+///
+/// Two named variants instead of a `bool`: the caller must say which kind of
+/// path it is, and getting it wrong is a compile error rather than a silent
+/// retry of an already-started remote command.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StdoutEvidence {
+    /// stdout was piped to `Stdio::null()` — always empty, proves nothing.
+    Uncaptured,
+    /// stdout was piped and read — empty means the command printed nothing.
+    Captured,
+}
+
+fn distinctive_ssh_mux_failure(stderr: &str) -> bool {
+    stderr.contains("mux_client_request_session")
+        || stderr.contains("could not create named pipe")
+        || stderr.contains("ControlPath")
+        || stderr.contains("Control socket connect")
+        || stderr.contains("multiplexing not supported")
+        || stderr.contains("mux_client_hello_exchange")
+}
+
+fn ambiguous_windows_mux_text(stderr: &str) -> bool {
+    stderr.contains("getsockname failed") || stderr.contains("muxclient socket")
+}
+
+/// OpenSSH exits 255 when the client fails before a remote status exists.
+/// Empty captured stdout means that command printed nothing.
+fn remote_command_never_started(exit_code: Option<i32>, stdout: Option<&str>) -> bool {
+    exit_code == Some(255) && stdout == Some("")
+}
+
+fn should_retry_cm_failure(evidence: &CmRetryEvidence<'_>) -> bool {
+    if !evidence.attempt_used_control_master {
+        return false;
+    }
+    if distinctive_ssh_mux_failure(evidence.stderr) {
+        return true;
+    }
+    ambiguous_windows_mux_text(evidence.stderr)
+        && remote_command_never_started(evidence.exit_code, evidence.stdout)
 }
 
 #[derive(Debug)]
@@ -252,12 +302,7 @@ impl SSHRunner {
     /// These typically appear on Windows/WSL2 when the CM socket path contains
     /// non-ASCII characters or the named pipe cannot be created.
     pub fn is_cm_failure(stderr: &str) -> bool {
-        stderr.contains("mux_client_request_session")
-            || stderr.contains("could not create named pipe")
-            || stderr.contains("ControlPath")
-            || stderr.contains("Control socket connect")
-            || stderr.contains("multiplexing not supported")
-            || stderr.contains("mux_client_hello_exchange")
+        distinctive_ssh_mux_failure(stderr) || ambiguous_windows_mux_text(stderr)
     }
 
     /// Build an SSHRunner from a Config. Empty host is allowed (will be caught
@@ -297,7 +342,13 @@ impl SSHRunner {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-            if should_retry_cm_failure(attempt_used_control_master, &stderr) {
+            if should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master,
+                exit_code: output.status.code(),
+                // stdout is discarded; the remote argv is `exit 0`.
+                stdout: Some(""),
+                stderr: &stderr,
+            }) {
                 tracing::warn!(
                     "ControlMaster failure in test_connection, retrying without CM: {}",
                     stderr.lines().next().unwrap_or("")
@@ -327,7 +378,14 @@ impl SSHRunner {
     pub fn run_command(&self, command: &str, timeout: Option<u64>) -> Result<RemoteTaskResult> {
         let attempt_used_control_master = *self.use_control_master.lock().unwrap();
         let result = self.run_command_inner(command, timeout, attempt_used_control_master)?;
-        if !result.success && should_retry_cm_failure(attempt_used_control_master, &result.stderr) {
+        if !result.success
+            && should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master,
+                exit_code: Some(result.returncode),
+                stdout: Some(&result.stdout),
+                stderr: &result.stderr,
+            })
+        {
             tracing::warn!(
                 "ControlMaster failure detected, retrying without CM: {}",
                 result.stderr.lines().next().unwrap_or("")
@@ -338,11 +396,39 @@ impl SSHRunner {
         Ok(result)
     }
 
-    /// Apply ControlMaster fallback to file-transfer operations.
-    /// If the first attempt fails with a CM failure pattern, disables CM and retries once.
-    /// `attempt` must be callable multiple times (each call rebuilds the SSH command via
-    /// `build_ssh_cmd()`, which respects the updated `use_control_master` flag).
-    fn attempt_with_cm_fallback<F>(&self, mut attempt: F) -> Result<std::process::Output>
+    /// Apply ControlMaster fallback to a file transfer whose ssh stdout was
+    /// piped to `Stdio::null()`.
+    ///
+    /// `Output.stdout` is then always empty, and empty stdout proves nothing
+    /// about whether the remote command started — so the retry gate stays
+    /// closed and an already-started command is never replayed.
+    fn attempt_with_cm_fallback_null_stdout<F>(&self, attempt: F) -> Result<std::process::Output>
+    where
+        F: FnMut(bool) -> Result<std::process::Output>,
+    {
+        self.attempt_with_cm_fallback(StdoutEvidence::Uncaptured, attempt)
+    }
+
+    /// Apply ControlMaster fallback to a file transfer whose ssh stdout was
+    /// really captured (`Stdio::piped()`).
+    ///
+    /// Here an empty stdout is evidence: the remote command printed nothing,
+    /// so it had nothing to print if it never ran.
+    fn attempt_with_cm_fallback_captured_stdout<F>(
+        &self,
+        attempt: F,
+    ) -> Result<std::process::Output>
+    where
+        F: FnMut(bool) -> Result<std::process::Output>,
+    {
+        self.attempt_with_cm_fallback(StdoutEvidence::Captured, attempt)
+    }
+
+    fn attempt_with_cm_fallback<F>(
+        &self,
+        stdout_evidence: StdoutEvidence,
+        mut attempt: F,
+    ) -> Result<std::process::Output>
     where
         F: FnMut(bool) -> Result<std::process::Output>,
     {
@@ -350,7 +436,16 @@ impl SSHRunner {
         let output = attempt(attempt_used_control_master)?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if should_retry_cm_failure(attempt_used_control_master, &stderr) {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master,
+                exit_code: output.status.code(),
+                stdout: match stdout_evidence {
+                    StdoutEvidence::Captured => Some(&stdout),
+                    StdoutEvidence::Uncaptured => None,
+                },
+                stderr: &stderr,
+            }) {
                 tracing::warn!(
                     "ControlMaster failure in file transfer, retrying without CM: {}",
                     stderr.lines().next().unwrap_or("")
@@ -471,7 +566,8 @@ impl SSHRunner {
         // breaking commands with &&.
         let inner_cmd = format!("mkdir -p {quoted_dir} && cd {quoted_dir} && tar xf -");
 
-        let output = self.attempt_with_cm_fallback(|use_control_master| {
+        // ssh stdout is piped to null here: the tar stream owns stdout.
+        let output = self.attempt_with_cm_fallback_null_stdout(|use_control_master| {
             let tar = Command::new("tar")
                 .arg("cf")
                 .arg("-")
@@ -552,7 +648,8 @@ impl SSHRunner {
         // Must pass "sh -c 'command'" as a single argument to SSH,
         // otherwise "sh", "-c", "command" are concatenated without quotes,
         // breaking commands with &&.
-        let output = self.attempt_with_cm_fallback(|use_control_master| {
+        // ssh stdout is piped to null here: stdin carries the payload.
+        let output = self.attempt_with_cm_fallback_null_stdout(|use_control_master| {
             let mut cmd = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
             cmd.arg(format!("sh -c {}", shell_quote(&publish_cmd)));
 
@@ -588,7 +685,8 @@ impl SSHRunner {
                 .map_err(|e| VirtuosoError::Ssh(format!("failed to create local dir: {e}")))?;
         }
 
-        let output = self.attempt_with_cm_fallback(|use_control_master| {
+        // stdout carries the downloaded file and is captured for real.
+        let output = self.attempt_with_cm_fallback_captured_stdout(|use_control_master| {
             let mut cmd = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
             cmd.arg("cat").arg(remote);
             cmd.stdout(Stdio::piped())
@@ -652,7 +750,13 @@ impl SSHRunner {
             )?;
             let ssh_stderr = String::from_utf8_lossy(&output.producer_stderr);
             if !output.producer_status.success()
-                && should_retry_cm_failure(attempt_used_control_master, &ssh_stderr)
+                && should_retry_cm_failure(&CmRetryEvidence {
+                    attempt_used_control_master,
+                    exit_code: output.producer_status.code(),
+                    // ssh stdout is the tar stream and is not captured.
+                    stdout: None,
+                    stderr: &ssh_stderr,
+                })
             {
                 tracing::warn!(
                     "ControlMaster failure in directory download, retrying without CM: {}",
@@ -948,14 +1052,188 @@ mod tests {
 
     #[test]
     fn cm_failure_retry_depends_on_attempt_snapshot_not_shared_flag() {
-        let attempt_used_control_master = true;
-        assert!(should_retry_cm_failure(
-            attempt_used_control_master,
-            "mux_client_request_session failed"
-        ));
-        assert!(!should_retry_cm_failure(
-            false,
-            "mux_client_request_session failed"
-        ));
+        assert!(should_retry_cm_failure(&CmRetryEvidence {
+            attempt_used_control_master: true,
+            exit_code: Some(255),
+            stdout: Some(""),
+            stderr: "mux_client_request_session failed",
+        }));
+        assert!(!should_retry_cm_failure(&CmRetryEvidence {
+            attempt_used_control_master: false,
+            exit_code: Some(255),
+            stdout: Some(""),
+            stderr: "mux_client_request_session failed",
+        }));
+    }
+
+    #[test]
+    fn uncaptured_stdout_cannot_prove_the_remote_command_never_started() {
+        // A caller that pipes stdout to null always sees an empty
+        // `Output.stdout`, so "empty stdout" carries no information about
+        // whether the remote command ran. The retry gate must stay closed for
+        // such a path, or an already-started remote command gets replayed.
+        let stderr = "getsockname failed: Not a socket\nmuxclient socket(): Unknown error\n";
+        assert!(
+            !should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master: true,
+                exit_code: Some(255),
+                stdout: None,
+                stderr,
+            }),
+            "uncaptured stdout cannot prove the command never started"
+        );
+        // The same stderr with genuinely captured, genuinely empty stdout
+        // still retries — that is the `download` path.
+        assert!(should_retry_cm_failure(&CmRetryEvidence {
+            attempt_used_control_master: true,
+            exit_code: Some(255),
+            stdout: Some(""),
+            stderr,
+        }));
+    }
+
+    /// The two helpers must differ on exactly the ambiguous-Windows case:
+    /// the same stderr and the same empty stdout replay when stdout was
+    /// captured, and must not replay when stdout went to null.
+    #[test]
+    fn null_stdout_transfer_does_not_replay_an_ambiguous_mux_failure() {
+        use std::process::Output;
+
+        /// An exit status with code 255 — the code ssh uses when the client
+        /// fails before a remote status exists.
+        fn exit_255() -> std::process::ExitStatus {
+            // There is no portable way to synthesise an arbitrary exit
+            // status (`from_raw` is unix-only, `from` takes no integer), so
+            // ask a real process to exit with 255.
+            std::process::Command::new(if cfg!(windows) { "cmd" } else { "sh" })
+                .args(if cfg!(windows) {
+                    ["/C", "exit 255"]
+                } else {
+                    ["-c", "exit 255"]
+                })
+                .status()
+                .expect("exit 255 runs")
+        }
+
+        let runner = SSHRunner::new("compute");
+        let stderr = "getsockname failed: Not a socket\nmuxclient socket(): Unknown error\n";
+
+        let mut null_attempts = 0;
+        let output = runner
+            .attempt_with_cm_fallback_null_stdout(|_| {
+                null_attempts += 1;
+                Ok(Output {
+                    status: exit_255(),
+                    stdout: Vec::new(),
+                    stderr: stderr.as_bytes().to_vec(),
+                })
+            })
+            .expect("attempt succeeds");
+        assert_eq!(null_attempts, 1, "a null-stdout transfer must not replay");
+        assert!(!output.status.success());
+
+        let mut captured_attempts = 0;
+        runner
+            .attempt_with_cm_fallback_captured_stdout(|_| {
+                captured_attempts += 1;
+                Ok(Output {
+                    status: exit_255(),
+                    stdout: Vec::new(),
+                    stderr: stderr.as_bytes().to_vec(),
+                })
+            })
+            .expect("attempt succeeds");
+        assert_eq!(
+            captured_attempts, 2,
+            "a captured-stdout transfer still retries"
+        );
+    }
+
+    /// Pin which helper each file-transfer call site uses.
+    ///
+    /// The behaviour test above proves the two helpers differ, but it cannot
+    /// see which one a given call site picked — a call site wired to the
+    /// wrong helper still compiles and still passes every other test. The
+    /// mapping is what the safety argument rests on, so it is asserted
+    /// directly: `upload` and `upload_text` pipe ssh stdout to null, so they
+    /// must use the null-stdout helper; `download` captures stdout for real.
+    #[test]
+    fn file_transfer_call_sites_use_the_matching_stdout_helper() {
+        let source = include_str!("ssh.rs");
+
+        // The three production file-transfer call sites.
+        let production_calls: Vec<&str> = source
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with("let output = self.attempt_with_cm_fallback_"))
+            .collect();
+        assert_eq!(
+            production_calls.len(),
+            3,
+            "expected three file-transfer call sites, found {production_calls:?}"
+        );
+        assert_eq!(
+            production_calls
+                .iter()
+                .filter(|line| line.contains("_null_stdout("))
+                .count(),
+            2,
+            "upload and upload_text pipe stdout to null"
+        );
+        assert_eq!(
+            production_calls
+                .iter()
+                .filter(|line| line.contains("_captured_stdout("))
+                .count(),
+            1,
+            "only the download path captures stdout"
+        );
+    }
+
+    #[test]
+    fn windows_mux_text_does_not_replay_a_started_command() {
+        let stderr = "getsockname failed: Not a socket\nmuxclient socket(): Unknown error\n";
+        assert!(
+            !should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master: true,
+                exit_code: Some(1),
+                stdout: Some("partial"),
+                stderr,
+            }),
+            "stdout means the remote command already ran"
+        );
+        assert!(
+            !should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master: true,
+                exit_code: Some(1),
+                stdout: Some(""),
+                stderr,
+            }),
+            "exit 1 is the remote command, not ssh failing before it"
+        );
+        assert!(
+            !should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master: true,
+                exit_code: Some(255),
+                stdout: Some("partial"),
+                stderr,
+            }),
+            "command output means it started before ssh exited 255"
+        );
+        assert!(
+            !should_retry_cm_failure(&CmRetryEvidence {
+                attempt_used_control_master: true,
+                exit_code: Some(255),
+                stdout: None,
+                stderr: "getsockname failed: Not a socket",
+            }),
+            "uncaptured stdout cannot prove the command never started"
+        );
+        assert!(should_retry_cm_failure(&CmRetryEvidence {
+            attempt_used_control_master: true,
+            exit_code: Some(255),
+            stdout: Some(""),
+            stderr: "getsockname failed: Not a socket\r\n",
+        }));
     }
 }
