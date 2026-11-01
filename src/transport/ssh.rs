@@ -1102,15 +1102,17 @@ mod tests {
         /// An exit status with code 255 — the code ssh uses when the client
         /// fails before a remote status exists.
         fn exit_255() -> std::process::ExitStatus {
-            #[cfg(unix)]
-            {
-                use std::os::unix::process::ExitStatusExt;
-                std::process::ExitStatus::from_raw(255 << 8)
-            }
-            #[cfg(not(unix))]
-            {
-                std::process::ExitStatus::from_raw(255)
-            }
+            // There is no portable way to synthesise an arbitrary exit
+            // status (`from_raw` is unix-only, `from` takes no integer), so
+            // ask a real process to exit with 255.
+            std::process::Command::new(if cfg!(windows) { "cmd" } else { "sh" })
+                .args(if cfg!(windows) {
+                    ["/C", "exit 255"]
+                } else {
+                    ["-c", "exit 255"]
+                })
+                .status()
+                .expect("exit 255 runs")
         }
 
         let runner = SSHRunner::new("compute");
