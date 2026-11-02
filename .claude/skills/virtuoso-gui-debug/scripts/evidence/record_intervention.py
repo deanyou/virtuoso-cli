@@ -755,14 +755,34 @@ def list_candidate_decisions(
     return result
 
 
-def get_adopted_candidates(db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
-    """Get currently adopted candidates."""
+def get_adopted_candidates(
+    db_path: Optional[Path] = None,
+    current_snapshot_hash: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Get currently adopted candidates.
+
+    Args:
+        db_path: Database path (default: skill internal or ~/.cache)
+        current_snapshot_hash: If provided, only return ADOPTED decisions for
+            this exact snapshot hash.  This ensures the count shown in CLI
+            review and reports reflects only decisions made in the current
+            evidence snapshot, not adoptions from prior snapshots.
+    """
     conn = init_db(db_path)
-    cursor = conn.execute("""
-        SELECT * FROM candidate_decisions
-        WHERE decision = 'ADOPTED' AND revoked_at IS NULL
-        ORDER BY decided_at DESC
-    """)
+    if current_snapshot_hash:
+        cursor = conn.execute("""
+            SELECT * FROM candidate_decisions
+            WHERE decision = 'ADOPTED'
+              AND revoked_at IS NULL
+              AND snapshot_hash = ?
+            ORDER BY decided_at DESC
+        """, (current_snapshot_hash,))
+    else:
+        cursor = conn.execute("""
+            SELECT * FROM candidate_decisions
+            WHERE decision = 'ADOPTED' AND revoked_at IS NULL
+            ORDER BY decided_at DESC
+        """)
     columns = [d[0] for d in cursor.description]
     result = [dict(zip(columns, row)) for row in cursor]
     conn.close()
@@ -829,7 +849,7 @@ def cmd_review(args) -> int:
             status = "PENDING"
         print(f"{cand_id:<28} {support:>4} {strength:<10} {status:<18}")
     
-    adopted = get_adopted_candidates(db_path)
+    adopted = get_adopted_candidates(db_path, current_snapshot_hash=snapshot_hash)
     print(f"\n{len(adopted)} adopted | {candidates.get('total_cands', 0)} total candidates")
     return 0
 
