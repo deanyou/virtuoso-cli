@@ -50,10 +50,12 @@ python3 .claude/skills/virtuoso-gui-debug/scripts/probe_agent_desktop.py \
 ```
 
 The script runs only `status` and `snapshot --app ... -i --compact`, each with
-a bounded process timeout. It prints one JSON report with `availability`,
+a bounded process timeout. The 4 MB response check is applied after capture;
+it is a parsing guard, not a streaming memory limit. It prints one JSON report with `availability`,
 `snapshot_complete`, node/ref counts, and role counts. It keeps the raw tree
 in memory and emits no UI names, values, refs, screenshots, or command output.
-It returns exit 0 only for a complete snapshot; partial, inaccessible, and
+It returns exit 0 only for a valid complete snapshot with no reported
+`identity_unproven` flag; partial, inaccessible, and
 invalid responses return exit 2. A complete snapshot with zero actionable
 nodes is **not** a reason to promote an accessibility route.
 
@@ -85,3 +87,13 @@ SKILL → VCLI X11 path. A visual screenshot remains a human-inspection aid.
 Upstream references: [agent-desktop README](https://github.com/vercel-labs/agent-desktop/blob/main/README.md),
 [Linux platform guide](https://github.com/vercel-labs/agent-desktop/blob/main/skills/agent-desktop-linux/SKILL.md),
 [JSON/disposition contract](https://github.com/vercel-labs/agent-desktop/blob/main/docs/json-output.md).
+
+## Upstream 2.6 identity boundary
+
+The optional `data.identity_unproven: true` means that complete presentation
+does not establish the capture-time identity of refs. The probe preserves this
+flag, reports `partial` with reason `identity_unproven`, and exits 2. An omitted
+flag is not a VCLI identity proof: this read-only experiment never authorizes
+action routing. A future adapter must pin a tested upstream release and handle
+the 2.6 ref-identity semantics explicitly. Missing/malformed trees and mismatched
+command envelopes are rejected rather than counted as empty successful trees.

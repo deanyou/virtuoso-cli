@@ -16,7 +16,7 @@ SPEC.loader.exec_module(PROBE)
 def result(ok, command, data=None, error=None, returncode=None):
     envelope = {"version": "2.5", "ok": ok, "command": command}
     envelope["data" if ok else "error"] = data if ok else error
-    return subprocess.CompletedProcess([], 0 if ok else 1 if returncode is None else returncode,
+    return subprocess.CompletedProcess([], (0 if ok else 1) if returncode is None else returncode,
                                        json.dumps(envelope), "")
 
 
@@ -64,6 +64,43 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(report["reason_code"], "snapshot_APP_NOT_FOUND")
         self.assertNotIn("private", json.dumps(report))
         self.assertEqual(len(calls), 2)
+
+    def test_invalid_trees_never_report_observed(self):
+        for tree in (None, {}, [], {"role": "window", "children": [None]},
+                     {"role": "window", "children": {}}):
+            with self.subTest(tree=tree):
+                responses = iter([result(True, "status", {}), result(True, "snapshot", {
+                    "complete": True, "tree": tree})])
+                report = PROBE.probe("virtuoso", runner=lambda *a, **k: next(responses))
+                self.assertEqual(report["availability"], "unknown")
+                self.assertEqual(report["reason_code"], "invalid_envelope")
+
+    def test_complete_tree_with_unproven_identity_is_partial(self):
+        responses = iter([result(True, "status", {}), result(True, "snapshot", {
+            "complete": True, "identity_unproven": True,
+            "tree": {"role": "window", "ref_id": "@s1:e1"}})])
+        report = PROBE.probe("virtuoso", runner=lambda *a, **k: next(responses))
+        self.assertEqual(report["availability"], "partial")
+        self.assertEqual(report["reason_code"], "identity_unproven")
+        self.assertTrue(report["snapshot_complete"])
+
+    def test_wrong_command_and_inconsistent_exit_are_rejected(self):
+        for response in (result(True, "snapshot", {}),
+                         result(True, "status", {}, returncode=1)):
+            report = PROBE.probe("virtuoso", runner=lambda *a, **k: response)
+            self.assertEqual(report["reason_code"], "invalid_envelope")
+
+    def test_parse_error_and_start_failure_are_structured(self):
+        report = PROBE.probe("virtuoso", runner=lambda *a, **k: result(
+            False, "status", error={"code": "INVALID_ARGS"}, returncode=2))
+        self.assertEqual(report["reason_code"], "status_INVALID_ARGS")
+
+        def denied(*args, **kwargs):
+            raise PermissionError("private executable path")
+
+        report = PROBE.probe("virtuoso", runner=denied)
+        self.assertEqual(report["reason_code"], "process_start_failed")
+        self.assertNotIn("private", json.dumps(report))
 
     def test_unavailable_binary_is_explicit(self):
         def missing(*args, **kwargs):

@@ -28,10 +28,12 @@ def _run(argv: List[str], timeout: int, runner: Callable) -> Dict:
     data = json.loads(result.stdout)
     if not isinstance(data, dict) or not isinstance(data.get("ok"), bool):
         raise ValueError("invalid agent-desktop envelope")
-    if result.returncode not in (0, 1) or (result.returncode == 0) != data["ok"]:
+    if result.returncode not in (0, 1, 2) or (result.returncode == 0) != data["ok"]:
         raise ValueError("inconsistent agent-desktop exit status")
     if not isinstance(data.get("data" if data["ok"] else "error"), dict):
         raise ValueError("missing agent-desktop result payload")
+    if data.get("command") != argv[1]:
+        raise ValueError("unexpected command result")
     version = data.get("version")
     if not isinstance(version, str) or version.split(".")[0] != "2":
         raise ValueError("unsupported agent-desktop envelope version")
@@ -44,16 +46,17 @@ def _count_tree(tree: Dict) -> Dict:
     stack = [tree]
     while stack:
         node = stack.pop()
-        if not isinstance(node, dict):
-            continue
+        if not isinstance(node, dict) or not isinstance(node.get("role"), str):
+            raise ValueError("invalid snapshot node")
         if isinstance(node.get("ref_id"), str):
             actionable += 1
         role = node.get("role")
         if isinstance(role, str):
             roles[role if role in _ROLE_NAMES else "other"] += 1
         children = node.get("children", [])
-        if isinstance(children, list):
-            stack.extend(children)
+        if not isinstance(children, list):
+            raise ValueError("invalid snapshot children")
+        stack.extend(children)
     return {"node_count": sum(roles.values()), "actionable_count": actionable,
             "role_counts": dict(sorted(roles.items()))}
 
@@ -83,14 +86,22 @@ def probe(app: str, binary: str = "agent-desktop", timeout: int = 20,
         data = snapshot.get("data", {})
         if not isinstance(data, dict) or not isinstance(data.get("complete"), bool):
             raise ValueError("snapshot completeness is missing")
+        identity_unproven = data.get("identity_unproven", False)
+        if not isinstance(identity_unproven, bool):
+            raise ValueError("invalid identity evidence")
         counts = _count_tree(data.get("tree"))
         report.update(counts)
         report["snapshot_complete"] = data["complete"]
-        report["availability"] = "observed" if data["complete"] else "partial"
-        report["reason_code"] = "complete_snapshot" if data["complete"] else "partial_snapshot"
+        report["identity_unproven"] = identity_unproven
+        report["availability"] = "observed" if data["complete"] and not identity_unproven else "partial"
+        report["reason_code"] = ("identity_unproven" if identity_unproven else
+                                 "complete_snapshot" if data["complete"] else "partial_snapshot")
     except FileNotFoundError:
         report["availability"] = "unavailable"
         report["reason_code"] = "binary_missing"
+    except OSError:
+        report["availability"] = "unavailable"
+        report["reason_code"] = "process_start_failed"
     except subprocess.TimeoutExpired:
         report["reason_code"] = "timeout"
     except (UnicodeError, ValueError, TypeError, KeyError, json.JSONDecodeError):
