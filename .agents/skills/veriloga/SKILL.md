@@ -1,7 +1,7 @@
 ---
 name: veriloga
 description: Design, write, and debug Verilog-A behavioral models for Cadence Virtuoso/Spectre simulation. Use when creating Verilog-A modules (voltage sources, behavioral models, testbench stimuli, ideal components), debugging Spectre simulation errors with Verilog-A, or when the user mentions veriloga, behavioral model, or ideal component.
-allowed-tools: Bash(*/virtuoso *) Bash(vcli *) Bash(spectre *) Read Write Edit
+allowed-tools: Bash(*/virtuoso *) Bash(*/vcli *) Bash(*/spectre *) Read Write Edit
 ---
 
 # Verilog-A Design & Debug

@@ -89,19 +89,19 @@ BASH_GLOB_RE = re.compile(r"Bash\(([^()\s]+) \*\)")
 # The commands whose glob the Codex tree carries with a "*/" path prefix.
 #
 # Induced from the tree itself: every SKILL.md that the Codex side adapted
-# prefixes exactly one command -- "virtuoso" -- e.g.
+# prefixes the EDA wrapper binaries, e.g.
 #     .claude  allowed-tools: Bash(virtuoso *) Read Write
 #     .agents  allowed-tools: Bash(*/virtuoso *) Read Write
 # and no Codex-tree file prefixes "cat", "ls", "jq", "grep", "find", "wc",
-# "python", "python3", "vcli" or "spectre".  Restricting the rewrite to this
-# list therefore reproduces the Codex convention that is already in the tree
-# and changes nothing the tree currently leaves alone -- it cannot tighten an
-# allow-list that is working today.
+# "python" or "python3".  Restricting the rewrite to this list therefore
+# reproduces the Codex convention that is already in the tree and leaves the
+# system-utility globs alone -- it cannot tighten an allow-list that is
+# working today.
 #
-# Whether "vcli" and "spectre" belong here is a question about how the Codex
-# matcher resolves a command, not something the repository records; widening
-# this tuple is an explicit, one-line decision by the repository owner.
-CODEX_GLOB_PREFIX_COMMANDS = ("virtuoso",)
+# Widened by owner ruling (2026-11): "vcli" and "spectre" are EDA binaries
+# reached the same way "virtuoso" is, so they take the prefix too.  System
+# utilities stay bare.
+CODEX_GLOB_PREFIX_COMMANDS = ("virtuoso", "vcli", "spectre")
 
 
 def _split_frontmatter(text: str) -> Tuple[Optional[str], str]:
@@ -255,6 +255,9 @@ ADAPTATIONS: Sequence[Adaptation] = (
 #   exclude  the skill belongs to the Claude host only and is never mirrored
 #   pending  ownership is undecided -- the skill is NOT mirrored and NOT
 #            touched; the tool reports it instead of guessing
+#
+# A skill listed here with mode "mirror" may still opt out of individual
+# adaptation rules (see SkillRule.skiprules).
 
 MODE_MIRROR = "mirror"
 MODE_LINK = "link"
@@ -270,6 +273,11 @@ class SkillRule:
     mode: str
     reason: str
     link_target: str = ""
+    # Adaptation rule ids this skill opts out of.  Used when a skill names a
+    # product that merely happens to be called "Claude Code": renaming it to
+    # the driving host would make the file describe something that does not
+    # exist.
+    skiprules: Tuple[str, ...] = ()
 
 
 SKILL_RULES: Dict[str, SkillRule] = {
@@ -299,14 +307,13 @@ SKILL_RULES: Dict[str, SkillRule] = {
     ),
     "virastack-auto-allow": SkillRule(
         skill="virastack-auto-allow",
-        mode=MODE_PENDING,
+        mode=MODE_MIRROR,
         reason=(
-            "Its subject is the Claude Code permission dialog ('ViraStack "
-            "(Claude Code UI)'), which has no Codex counterpart, yet the "
-            "mechanism underneath is host-neutral vcli GUI automation with a "
-            "unittest suite. Both readings are defensible, so the tool does "
-            "not guess."
+            "Owner ruling (2026-11): mirror it. The skill drives vcli GUI "
+            "automation, which is host-neutral, so the Codex side gets the "
+            "full skill -- SKILL.md, data, scripts and tests."
         ),
+        skiprules=("A3", "A4"),
     ),
 }
 
@@ -442,16 +449,30 @@ def transform_text(rel_path: str, text: str) -> Tuple[str, List[str]]:
     Frontmatter-scoped rules run on the frontmatter block only; text-scoped
     rules run over the whole document (frontmatter included), because e.g.
     ``author: Claude Code`` lives in the frontmatter.
+
+    A skill may opt out of individual rules (see ``SkillRule.skiprules``);
+    the opt-out is honoured here, before the rule is even considered.
     """
     applied: List[str] = []
     result = text
+    skipped = _skiprules_for(rel_path)
     for adaptation in ADAPTATIONS:
+        if adaptation.id in skipped:
+            continue
         if not adaptation.matches(rel_path):
             continue
         result, hits = adaptation.apply(result)
         if hits:
             applied.append("%s(x%d)" % (adaptation.id, hits))
     return result, applied
+
+
+def _skiprules_for(rel_path: str) -> frozenset:
+    """Adaptation rule ids the owning skill has opted out of."""
+    rule = _rule_for(_skill_of(rel_path))
+    if rule is None:
+        return frozenset()
+    return frozenset(rule.skiprules)
 
 
 def expected_bytes(rel_path: str, source_bytes: bytes) -> Tuple[bytes, List[str]]:
@@ -611,7 +632,7 @@ def apply_plan(root: Path, result: SyncResult, prune: bool) -> int:
 
 def print_report(result: SyncResult, root: Path) -> None:
     """Print the classification tables and the verdict."""
-    print("== adaptation table (%d rules) ==" % len(ADAPTATIONS))
+    print("== adaptation table (%d rules) == [n] = files touched ==" % len(ADAPTATIONS))
     for adaptation in ADAPTATIONS:
         hits = result.adaptation_hits.get(adaptation.id, 0)
         print("   %-3s %-4s %s" % (adaptation.id, "[%d]" % hits if hits else "[0]", adaptation.summary))
@@ -620,7 +641,10 @@ def print_report(result: SyncResult, root: Path) -> None:
     print("== skill manifest ==")
     for skill in sorted(SKILL_RULES):
         rule = SKILL_RULES[skill]
-        print("   %-22s %-8s %s" % (skill, rule.mode, _first_sentence(rule.reason)))
+        note = ""
+        if rule.skiprules:
+            note = "  [skips %s]" % ", ".join(rule.skiprules)
+        print("   %-22s %-8s %s%s" % (skill, rule.mode, _first_sentence(rule.reason), note))
 
     print()
     print("== file exclusions (%d) ==" % len(FILE_EXCLUSIONS))

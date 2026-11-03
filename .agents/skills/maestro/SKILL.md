@@ -1,7 +1,7 @@
 ---
 name: maestro
 description: "Maestro (ADE Assembler) session management and simulation. Use when: running simulations via Maestro, configuring tests/analyses/outputs, updating design variables, reading results."
-allowed-tools: Bash(vcli *)
+allowed-tools: Bash(*/vcli *)
 ---
 
 # Maestro (ADE Assembler) — Quick Reference

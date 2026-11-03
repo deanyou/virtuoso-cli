@@ -1,7 +1,7 @@
 ---
 name: skill-exec
 description: Execute SKILL code on Virtuoso. Use when running SKILL expressions, querying cellview data, listing libraries/cells, or interacting with Virtuoso programmatically.
-allowed-tools: Bash(vcli *) Bash(*/virtuoso *)
+allowed-tools: Bash(*/vcli *) Bash(*/virtuoso *)
 ---
 
 # Execute SKILL Code on Virtuoso

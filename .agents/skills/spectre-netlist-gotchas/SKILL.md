@@ -14,7 +14,7 @@ description: |
 author: Codex
 version: 1.0.0
 date: 2026-04-07
-allowed-tools: Bash(spectre *) Read Write
+allowed-tools: Bash(*/spectre *) Read Write
 ---
 
 # Spectre Netlist-Mode Gotchas

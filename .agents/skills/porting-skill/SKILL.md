@@ -11,7 +11,7 @@ description: |
   voltage", "our .sdb corners don't match new PDK", or any mention of PDK/process
   transition. Invoke this skill proactively when you detect PDK-specific paths or
   corner names in netlists that don't match the target environment.
-allowed-tools: Bash(vcli *) Bash(*/virtuoso *) Bash(spectre *) Read Write Edit Grep
+allowed-tools: Bash(*/vcli *) Bash(*/virtuoso *) Bash(*/spectre *) Read Write Edit Grep
 ---
 
 # PDK / Process Technology Migration

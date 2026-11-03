@@ -13,7 +13,7 @@ description: |
 author: Codex
 version: 2.3.0
 date: 2026-04-20
-allowed-tools: Bash(*/virtuoso *) Bash(vcli *) Bash(spectre *) Read Write
+allowed-tools: Bash(*/virtuoso *) Bash(*/vcli *) Bash(*/spectre *) Read Write
 ---
 
 # Ocean run() Reliability & Netlist Regeneration
