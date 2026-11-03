@@ -5,9 +5,11 @@
 CI：`.github/scripts/run-skill-tests.sh`（两棵树 + 漂移闸门）
 workflow 改动：**未改**，补丁见 `WORKFLOW-PATCH.md`
 
-> **本轮（补漏轮）**：落地两条用户裁决 —— ① `virastack-auto-allow` 由 PENDING 改为
-> **镜像**；② Codex glob 前缀扩围到 `("virtuoso", "vcli", "spectre")`。
-> `vcli-architecture` **保持 PENDING**。详见第 4 节。
+> **本轮（收尾轮）**：落地三条用户裁决 —— ① `virastack-auto-allow` 的 A3/A4 豁免**保留**
+> （上一轮我提出偏离、用户批准）；② `vcli-architecture` 定为 **Claude 独占**
+> （`MODE_EXCLUDE`）；③ 报告待裁决节同步更新。
+> **待裁决清单至此清零**（0 条）。本轮 `.agents` 侧零改动。
+> 详见第 4 节与 9.2。
 
 ---
 
@@ -20,7 +22,7 @@ workflow 改动：**未改**，补丁见 `WORKFLOW-PATCH.md`
 |---|---|---|
 | **纯过期**（canonical 前进、Codex 侧落后） | 89 个文件 | 内容是同一份代码/文档的旧版本：`.agents` 侧的 Python、HTML、SQLite 都在 `.claude` 侧有更新版本，且差异是纯粹的代码演进（新增 import、新增分支、重构），没有任何宿主相关字样。 |
 | **适配**（有意的宿主差异） | 6 条规则 / 分别命中 25、19、7、3、6、1 个文件 | 见第 2 节变换表。全部集中在 `SKILL.md` 的 frontmatter 与散文中。 |
-| **独占**（只属于一侧） | `.claude` 侧 3 个 skill + 1 个字节码文件 | `pstack-vcli` 在 `.agents` 侧是**相对符号链接** `../../.claude/skills/pstack-vcli`（不是拷贝）—— 这是仓库已有的防漂移机制，AGENTS.md 与 `docs/pstack-vcli-assessment.md` 都写明 Codex 通过它发现同一 skill；`vcli-architecture` 归属未定，见第 4 节。 |
+| **独占**（只属于一侧） | `.claude` 侧 3 个 skill + 1 个字节码文件 | `pstack-vcli` 在 `.agents` 侧是**相对符号链接** `../../.claude/skills/pstack-vcli`（不是拷贝）—— 这是仓库已有的防漂移机制，AGENTS.md 与 `docs/pstack-vcli-assessment.md` 都写明 Codex 通过它发现同一 skill；`vcli-architecture` 为 **Claude 独占**（用户裁决 2026-11-03），不镜像；`virastack-auto-allow` 归为镜像（用户裁决 2026-11）。 |
 
 ### 1.1 关键事实：`.agents` 是手工维护的拷贝，不是自动镜像
 
@@ -180,7 +182,29 @@ no drift: .agents/skills mirrors .claude/skills
 | `scripts/resolve_target.py` | 逐字节相同 | 同上 |
 | `tests/test_auto_allow.py` | 逐字节相同 | 同上；`.agents` 侧实跑 42 个测试全绿 |
 
-### 3.3 抽查：amp-copilot（宿主适配未被抹掉）
+### 3.3 本轮（收尾轮）
+
+```
+$ python3 scripts/sync_skills.py --check
+no drift: .agents/skills mirrors .claude/skills
+（无 PENDING 段，exit 0）
+```
+
+| 项 | 数值 |
+|---|---|
+| **本轮改动文件数** | **2** = `scripts/sync_skills.py` **1** + `SKILL-TREE-SYNC-REPORT.md` **1** |
+| `.agents/skills` 改动 | **0**（独占不生成镜像，符合预期） |
+| `.claude` 改动 | 0 |
+| `.github/workflows/` 改动 | 0 |
+| 删除 | 0 |
+| 累计（相对 `origin/main`） | `.agents/skills` 新建 **65** + 更新 **29** = **94** 个文件 |
+
+本轮唯一的代码改动：manifest 里 `vcli-architecture` 由 `MODE_PENDING` 改为
+`MODE_EXCLUDE`。该 skill 此前处于 PENDING（同样不镜像），因此切换到独占模式
+**不产生任何 `.agents` 变化**——实测 `git status -- .agents` 为空。
+`.agents/skills/vcli-architecture` 目录不存在（正确，Codex 侧无副本）。
+
+### 3.4 抽查：amp-copilot（宿主适配未被抹掉）
 
 ```yaml
 # .claude/skills/amp-copilot/SKILL.md
@@ -194,7 +218,7 @@ allowed-tools: Bash(*/virtuoso *) Read Write
 `.agents` 侧**无** `argument-hint`，`allowed-tools` **保持 Codex 写法**
 `Bash(*/virtuoso *)`。该文件在两次同步中字节未变，说明变换表完全复现了既有 Codex 形态。
 
-### 3.4 抽查：virastack-auto-allow（本轮新镜像）
+### 3.5 抽查：virastack-auto-allow（第二轮镜像）
 
 ```yaml
 # .agents/skills/virastack-auto-allow/SKILL.md
@@ -216,22 +240,23 @@ allowed-tools: Bash(python3 *) Bash(*/vcli *) Read
 
 ## 4. 待裁决清单
 
-### 4.1 已裁决
+### 4.1 已裁决（全部 4 条，待裁决清单清零）
 
 | # | 对象 | 裁决 | 落地 |
 |---|---|---|---|
+| **P1** | `vcli-architecture`（`.claude/skills/vcli-architecture/SKILL.md`，1 个文件） | **Claude 独占**（2026-11-03 用户裁决） | manifest 由 `MODE_PENDING` 改为 `MODE_EXCLUDE`；不镜像、不删除、不生成副本。理由（已写入 manifest 条目）：用户裁决独占；`pstack-vcli` 以仓库根相对路径引用该文件，双宿主均可读，Codex 侧不镜像。**本轮 `.agents` 零改动。** |
 | **P2** | `virastack-auto-allow`（5 个文件） | **镜像**（2026-11 用户裁决） | manifest 由 `MODE_PENDING` 改为 `MODE_MIRROR`；全量镜像 SKILL.md / data / scripts / tests，适配规则照常应用；`.agents` 侧新增 42 个测试 |
 | **P3** | `allowed-tools` glob 命令集合 | **扩围**（2026-11 用户裁决） | `CODEX_GLOB_PREFIX_COMMANDS` 由 `("virtuoso",)` 改为 `("virtuoso", "vcli", "spectre")`；8 个受影响的 skill 重新同步；系统工具类 glob 保持裸写 |
+| **P4** | `virastack-auto-allow` 的 A3/A4 豁免 | **保留**（2026-11-03 用户裁决） | `SkillRule.skiprules=("A3", "A4")` 原样保留，代码不动；理由见 9.2 |
 
 ### 4.2 仍待裁决
 
-| # | 对象 | 问题 | 可选项 | 影响面 |
-|---|---|---|---|---|
-| **P1** | `vcli-architecture`（`.claude/skills/vcli-architecture/SKILL.md`，1 个文件） | Codex 是否应加载这个架构治理 skill？ | (a) 镜像（改为 `MODE_MIRROR`，1 个文件）；(b) 保持 `.claude` 独占（改为 `MODE_EXCLUDE`）；(c) 维持现状（`MODE_PENDING`） | frontmatter 只有 `name` + `description`，正文宿主中立。**关键连带**：`pstack-vcli/SKILL.md` 里写着「再读 `.claude/skills/vcli-architecture/SKILL.md`」——今天两边都能读到，**仅仅因为 pstack-vcli 是符号链接**。若 P1 选 (a)，则 pstack-vcli 的那份引用在 Codex 侧需要一并改写（或把 pstack-vcli 也改成真实拷贝）。 |
+**无。待裁决清单已清零（0 条）。**
 
 工具行为：`pending` 的 skill **不会被镜像，也不会被删除**，只在
 `--check` / `--report` 输出里列出。默认不阻断 CI；加 `--strict-pending`
-可让待裁决项直接失败（退出码 2）。
+可让待裁决项直接失败（退出码 2）。当前没有 `pending` 条目，
+因此 `--check` 不再输出 PENDING 段，`--strict-pending` 也不再触发退出码 2。
 
 ---
 
@@ -266,7 +291,82 @@ allowed-tools: Bash(python3 *) Bash(*/vcli *) Read
 
 ## 6. 测试结论（原文）
 
-本轮（补漏轮）实跑：
+本轮（收尾轮）实跑：
+
+```
+### .claude/skills
+--- .claude/skills/pstack-vcli (exit=0)
+Ran 17 tests in 12.294s
+OK
+--- .claude/skills/verify-virtuoso-cli (exit=0)
+Ran 6 tests in 0.434s
+OK
+--- .claude/skills/virastack-auto-allow (exit=0)
+Ran 42 tests in 11.017s
+OK
+--- .claude/skills/virtuoso-gui-debug (exit=0)
+Ran 370 tests in 8.055s
+OK
+### .agents/skills
+--- .agents/skills/pstack-vcli (exit=0)
+Ran 17 tests in 12.329s
+OK
+--- .agents/skills/verify-virtuoso-cli (exit=0)
+Ran 6 tests in 0.427s
+OK
+--- .agents/skills/virastack-auto-allow (exit=0)
+Ran 42 tests in 11.362s
+OK
+--- .agents/skills/virtuoso-gui-debug (exit=0)
+Ran 370 tests in 8.333s
+OK
+```
+
+CI 脚本整跑（`bash .github/scripts/run-skill-tests.sh`，exit 0）：
+
+```
+== sync check: .agents/skills mirrors .claude/skills ==
+   OK
+== syntax check: .claude/skills/**/*.py ==
+   OK
+== unittest discover: .claude/skills/pstack-vcli ==
+Ran 17 tests in 12.369s
+   OK
+== unittest discover: .claude/skills/verify-virtuoso-cli ==
+Ran 6 tests in 0.451s
+   OK
+== unittest discover: .claude/skills/virastack-auto-allow ==
+Ran 42 tests in 11.482s
+   OK
+== unittest discover: .claude/skills/virtuoso-gui-debug ==
+Ran 370 tests in 8.271s
+   OK
+OK: 4 skill suite(s) passed in .claude/skills.
+== syntax check: .agents/skills/**/*.py ==
+   OK
+== unittest discover: .agents/skills/pstack-vcli ==
+Ran 17 tests in 12.285s
+   OK
+== unittest discover: .agents/skills/verify-virtuoso-cli ==
+Ran 6 tests in 0.447s
+   OK
+== unittest discover: .agents/skills/virastack-auto-allow ==
+Ran 42 tests in 11.431s
+   OK
+== unittest discover: .agents/skills/virtuoso-gui-debug ==
+Ran 370 tests in 8.289s
+   OK
+OK: 4 skill suite(s) passed in .agents/skills.
+OK: 8 skill suite(s) passed across 2 tree(s).
+```
+
+- `.claude/skills`：4 个套件 / **435** 个测试，全绿。
+- `.agents/skills`：4 个套件 / **435** 个测试，全绿（与上一轮完全一致——
+  本轮 `.agents` 零改动，测试数字理应不变，实测确实不变）。
+- 两棵树都没有「0 测试的假绿」：每个套件都有正的 `Ran N tests`。
+- `.agents/skills/pstack-vcli` 的套件经符号链接解析后运行，等于额外验证了那个链接可用。
+
+### 6.1 前一轮（补漏轮）实跑，留档
 
 ```
 ### .claude/skills
@@ -297,20 +397,6 @@ Ran 370 tests in 8.205s
 OK
 ```
 
-CI 脚本整跑（`bash .github/scripts/run-skill-tests.sh`，exit 0）：
-
-```
-OK: 4 skill suite(s) passed in .claude/skills.
-OK: 4 skill suite(s) passed in .agents/skills.
-OK: 8 skill suite(s) passed across 2 tree(s).
-```
-
-- `.claude/skills`：4 个套件 / **435** 个测试，全绿。
-- `.agents/skills`：4 个套件 / **435** 个测试，全绿（本轮起与正本持平——上轮少
-  `virastack-auto-allow` 是因为它处于待裁决状态未被镜像，现已镜像）。
-- 两棵树都没有「0 测试的假绿」：每个套件都有正的 `Ran N tests`。
-- `.agents/skills/pstack-vcli` 的套件经符号链接解析后运行，等于额外验证了那个链接可用。
-
 ---
 
 ## 7. 逐项验证证据
@@ -318,9 +404,13 @@ OK: 8 skill suite(s) passed across 2 tree(s).
 | 验证项 | 命令 | 结果 |
 |---|---|---|
 | 同步后 `--check` 干净退出 0 | `python3 scripts/sync_skills.py --check` | `no drift: .agents/skills mirrors .claude/skills`，exit 0 |
-| PENDING 只剩 vcli-architecture | 同上 | `PENDING DECISION (1 skill(s) left untouched): vcli-architecture` |
+| **PENDING 列表为空** | 同上 | 输出中**无** PENDING 段（待裁决清单已清零） |
 | 两棵树 unittest 全绿 | `bash .github/scripts/run-skill-tests.sh` | `OK: 8 skill suite(s) passed across 2 tree(s).` exit 0 |
-| `.agents` 侧新落的 virastack 套件 | `cd .agents/skills/virastack-auto-allow && python3 -m unittest discover tests` | `Ran 42 tests in 10.849s` / `OK` |
+| 测试数字与上一轮一致 | 各树逐套件实跑 | `.claude` **435** / `.agents` **435**，与上一轮完全相同 |
+| **`.agents` 本轮零改动** | `git status --porcelain -uall -- .agents` | 空（独占不生成镜像） |
+| 独占 skill 在 Codex 侧无副本 | `ls .agents/skills/ \| grep vcli-architecture` | 无匹配（正确） |
+| manifest 条目状态 | `python3 scripts/sync_skills.py --report --check` | `vcli-architecture  exclude  Owner ruling (2026-11-03): Claude-only, never mirrored into .agents.` |
+| A3/A4 豁免保留（代码未动） | `grep -n 'skiprules' scripts/sync_skills.py` | `skiprules=("A3", "A4")` 仍在，`virastack-auto-allow` 的 manifest 条目 `mirror` |
 | amp-copilot 抽查 | `head -5 .agents/skills/amp-copilot/SKILL.md` | 无 `argument-hint`；`allowed-tools: Bash(*/virtuoso *) Read Write` |
 | virastack-auto-allow 抽查 | `head -12 .agents/skills/virastack-auto-allow/SKILL.md` | `argument-hint` 计数 0；`allowed-tools: Bash(python3 *) Bash(*/vcli *) Read` |
 | 模板路径随镜像可解析 | `auto_allow.py` 的 `DEFAULT_TEMPLATE` | 解析到 `.agents/skills/virastack-auto-allow/data/allow_prompt_template.png`，`exists: True` |
@@ -346,6 +436,12 @@ OK: 8 skill suite(s) passed across 2 tree(s).
 > （`ADAPTATIONS`）、每个 skill 的处置（`SKILL_RULES`）、单 skill 规则豁免
 > （`SkillRule.skiprules`）、glob 命令集合（`CODEX_GLOB_PREFIX_COMMANDS`）；
 > 改一项适配 = 改一行常量 + 重跑一次同步，没有藏在人脑里的隐式约定。
+> **收尾轮补充**：待裁决清单已清零，于是工具里那个一直备着没人用的
+> `--strict-pending` 开关第一次具备意义——它现在是一个真的绿：
+> 「manifest 里还有 MODE_PENDING 条目就让检查退出码 2」。
+> 以后新增 skill 若忘了定处置，`--strict-pending` 会当场挡住，
+> 而不是等它静默地漂半年才被发现。要真正启用，把 CI 里的
+> `sync_skills.py --check` 换成 `--check --strict-pending` 即可。
 
 ---
 
@@ -365,10 +461,26 @@ OK: 8 skill suite(s) passed across 2 tree(s).
 本分支 **Rust 侧改动为零**（`git status -- src/ Cargo.toml` 为空），
 三个门禁的输入未变，故其结论与基线一致；此事实一并记录在此，不作「已验证」宣称。
 
-### 9.2 与裁决原文的一处偏离（已显式记录，可一行回退）
+### 9.2 `virastack-auto-allow` 的 A3/A4 豁免 —— **用户裁决保留（2026-11-03）**
 
-裁决要求「适配规则照常应用」。对 `virastack-auto-allow` 而言，A3/A4 若照常套用，
+**状态：已裁决，不是偏离。** 上一轮我把它记为「与裁决原文的一处偏离，待裁量」；
+本轮用户裁决**保留该豁免**，代码不动（`SkillRule.skiprules=("A3", "A4")` 原样）。
+
+裁决原文要求「适配规则照常应用」。对 `virastack-auto-allow` 而言，A3/A4 若照常套用，
 会把正文里的 **内嵌产品名** "ViraStack (Claude Code UI)" 改成并不存在的
-"ViraStack (Codex UI)"。已改为在 manifest 中对该 skill 显式豁免 A3/A4
-（`SkillRule.skiprules=("A3", "A4")`），其余规则（尤其 A1、A2）照常应用。
-如需恢复「照常应用」，删除该 tuple 即可，代价是 Codex 侧 skill 描述里的产品名失真。
+"ViraStack (Codex UI)"。该 skill 的 3 处 "Claude Code" 全部指向 Virtuoso 里
+内嵌的 ViraStack/Claude Code 弹窗，而非驱动本 skill 的宿主：
+
+```
+description: Auto-approve the ViraStack (Claude Code UI) permission prompt …
+description_zh: … 自动批准 ViraStack（Claude Code UI）的权限提示 …
+- "auto click the Allow button in ViraStack / Claude Code"
+```
+
+保留豁免的另一个理由：`scripts/auto_allow.py` 的模块 docstring 写的是同一个产品名，
+而该文件是非 SKILL.md 文件、逐字节镜像（不参与适配），照常套用 A3/A4 会让
+SKILL.md 与它自己的脚本说明对不上。
+
+其余规则（尤其 A1 剥 `argument-hint`、A2 改写 `allowed-tools` glob）**照常应用**。
+如需恢复「A3/A4 也照常应用」，删除 `skiprules` 那个 tuple 即可，
+代价是 Codex 侧 skill 描述里的产品名失真。
