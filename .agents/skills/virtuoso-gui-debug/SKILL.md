@@ -47,6 +47,25 @@ Live mode additionally requires: `--session` (must equal the scenario's `session
 
 Local mode requires: `xdotool` on PATH, `DISPLAY` reachable, and `--output DIR`. `--window-id WID` optionally overrides PID-based window discovery. ImageMagick `import` is required for screenshots.
 
+### Input Method (ibus) — Critical for Text Input
+
+On systems with `ibus` + `ibus-engine-libpinyin` (common on Chinese-localized RHEL/CentOS), `xdotool type` and `vcli window action-x11 --operation type` **produce Chinese garbled text** because ibus intercepts keycodes and converts letter sequences to Chinese characters. This affects ALL text input paths, not just CIW.
+
+**Before any `TYPE` / `CIW_INPUT` / text-bearing operation, verify and set the English engine:**
+
+```bash
+# Check current engine
+ibus engine 2>/dev/null   # expect "xkb:us::eng", NOT "libpinyin" or "xkb:cn"
+
+# Switch to English (must run on the same DISPLAY as Virtuoso)
+DISPLAY=:5.0 ibus engine xkb:us::eng
+
+# If ibus-daemon was killed, restart first:
+DISPLAY=:5.0 ibus-daemon -drx && sleep 2 && DISPLAY=:5.0 ibus engine xkb:us::eng
+```
+
+Symptoms of ibus interference: `xdotoolTestA` appears as `现代哦他哦哦`, `retryTestB` as `热土日夜斯特`. Numbers and symbols usually pass through; only letters are corrupted. The live executor should check `ibus engine` in precheck and fail with a clear error if not English, rather than silently sending garbled text.
+
 ## Auto-Discovery (SSH Remote)
 
 自动发现 Virtuoso 的 DISPLAY 和 PID：
@@ -213,6 +232,19 @@ python3 scripts/xdotool_cli.py click --x 100 --y 50
 python3 scripts/xdotool_cli.py scroll --direction down --count 5
 ```
 
+End-to-end live smoke scenario (`live_smoke_scenario.json`): activate the CIW,
+evaluate `6*7` and a variable assignment through the CIW input line, send a
+key, scroll, and capture a screenshot — each step verified against the live
+session. Before running it, set `session_id`, `pid`, `display` and the
+`--window-id` of the CIW to the target session:
+
+```bash
+vcli session list
+vcli window list-windows-x11 --display :0   # find the CIW window id
+python3 scripts/gui_runner.py run live_smoke_scenario.json --output /tmp/gui-live \
+    --executor live --session <session-id> --vcli $(which vcli) --window-id <ciw-window-id>
+```
+
 ## Live-Mode Contract (fail-closed rules)
 
 Before any GUI input is sent, precheck verifies in order:
@@ -221,9 +253,16 @@ Before any GUI input is sent, precheck verifies in order:
 2. the session PID is positive — a zero PID (old bridge metadata) falls back to the scenario PID via window discovery, and is rejected if no unique window binds to it;
 3. the DISPLAY reported by the X server matches the scenario exactly;
 4. exactly one window is bound to the PID on that DISPLAY — zero or multiple matches abort;
+   On a real Virtuoso session, a single Virtuoso process owns 80+ windows (CIW, Layout Suite, dialogs, toolbars). The PID-only precheck will therefore abort with "N windows bound to PID". **Always pass `--window-id <hex>` to the live executor** to bind a specific window. The scenario's `pid` is still required for server-side re-validation, but `--window-id` disambiguates the X11 target.
 5. an exclusive lock on the DISPLAY (lock file under `~/.cache/virtuoso_bridge/x11-locks/`) is acquired and held for the whole run.
 
+The DISPLAY lock is not just for safety - it is required for correctness. `xdotool type` sends key events one character at a time; two concurrent runs interleave their keystrokes, producing garbled input (observed: `dualTestA=100` + `dualTestB=200` merged into `dualTestBA=1200`). Additionally, concurrent `windowactivate` calls fight for X focus. Multi-session / multi-window GUI operations MUST be serialized either through this lock or by running scenarios sequentially. The lock also prevents ibus engine state from being toggled mid-input by another run.
+
 Every GUI action (`KEY`, `TYPE`, `CLICK_REL`, `CLICK_ABS`, `DOUBLE_CLICK`, `DRAG_REL`, `WINDOW_ACTIVATE`, `MINIMIZE`, `MAXIMIZE`, `CLOSE`, `SCROLL`) maps to a fixed `vcli window action-x11` argv carrying the resolved window id, PID, and DISPLAY. **`--direct` is enabled by default** (~5x faster, skips helper upload/env resolution/list-windows); use `--no-direct` for full server-side re-validation. `--pid` is optional since v1.3.1 (windows without `_NET_WM_PID` are reachable). `verify` prefers database-first predicates via vcli; the `ciw_eval` predicate executes SKILL via `vcli skill exec` and compares output. `recover` executes only rollback operations that pass scenario validation.
+
+**Click coordinates live in the client area.** `list-windows-x11` reports the window *frame* geometry (WM decorations included), while the click coordinates are relative to the window's *client* area. The two differ by the title-bar and border widths, so a click computed from the frame geometry lands outside the client area. Ask `vcli window geometry --window-id <hex>` for the client geometry before computing coordinates. Only the `--direct` path bounds-checks against it — its errors carry a `direct: ` prefix ("direct: coordinates (330, 604) out of bounds for window size 641x584"). The non-direct path checks against the *frame* geometry, so a frame-derived coordinate is not rejected there: it silently misses.
+
+**Screenshots.** The live executor captures through `vcli window screenshot --path <file> --window-id <hex>`. vcli owns both capture routes: it first tries the SKILL-side grab of the X11 root window, then falls back to a per-window grab (`import -window <id>`) when the X server refuses a root-window grab (ImageMagick: "missing an image filename"; `xwd -root` fails with BadMatch on the same display). Passing the window id is what makes the fallback available. The response reports which route was used (`"capture": "skill"` or `"x11"`).
 
 Typed input text never appears in error payloads or logs — it is replaced by `text_length` markers.
 
@@ -236,6 +275,7 @@ Before any GUI input is sent, precheck verifies:
 1. `xdotool` is on PATH;
 2. the scenario's `DISPLAY` is reachable (`xdotool getdisplaygeometry`);
 3. a visible window is bound to the scenario PID — or the explicit `--window-id` is used.
+   The local executor's `window_exists` predicate searches by window title via `xdotool search --onlyvisible --name`. Virtuoso window titles (e.g. "CIW" may not appear in the title) can cause false negatives. Prefer `--window-id` and `state_matches` / `geometry_matches` predicates for local-mode verification.
 
 Actions are sent directly via `xdotool` with the bound window activated first. `SCROLL` maps to xdotool mouse buttons 4 (up), 5 (down), 6 (left), 7 (right). Screenshots use ImageMagick `import -window <id>`.
 
@@ -272,9 +312,12 @@ Only these operations are permitted:
 - `MINIMIZE` — minimize/iconify the window
 - `MAXIMIZE` — maximize the window (requires xdotool ≥ 3.20210804.1; clear error on older versions)
 - `CIW_INPUT` — type a SKILL expression into the CIW input line and press Return (encapsulates activate→click input line→clear→type→Return)
+   **Verification must use `ciw_eval`, not `window_exists`.** The live executor maps `TYPE` to `vcli window action-x11 --operation type`, which is unreliable on IC25.1 (injects garbled or truncated text). A `window_exists` verifier only confirms the window is still open — it passes even when the input was silently corrupted. Use `ciw_eval` with the expected value to catch input failures. Example: `{"predicate": "ciw_eval", "expected": "42"}` after `CIW_INPUT` with text `myVar = 42`.
 - `SCREENSHOT` — capture screenshot
 - `VERIFY` — verify state (predicates: window_exists, state_matches, title_matches, geometry_matches, ciw_eval)
 - `RECOVER` — recovery action (auto-dismiss for KEY/TYPE/CLICK_REL when no rollback)
+
+> **Known limitation (verified 2026-09-09):** The `rollback` field on steps and the `RECOVER` operation are defined in the scenario schema and accepted by the validator, but `gui_runner.py` does **not** execute them. When a step fails (EXECUTE_ERROR or VERIFY_ERROR), the run transitions directly to `FAILED` — no `recover` phase is logged and no rollback action is performed. The `recover` phase exists only as a valid value in `ActionLog` phase validation. Do not rely on rollback for state cleanup; design scenarios to be idempotent or include explicit cleanup steps before the failing operation. Tracked as a future enhancement.
 
 ## Constraints
 
@@ -344,6 +387,8 @@ Use these directly with `xdotool mousemove --window <wid>` (method 3B) — no xw
 | **C (most reliable, bypasses GUI)** | In CIW: `form->field->value = "text"` | ✅ Highest — direct object assignment; no focus needed |
 | ❌ `vcli window action-x11 --operation type --text` | — | ❌ **Unreliable** — injected garbled/clipboard content instead of specified text on IC25.1. Do not use. |
 
+**Prerequisite for all text input:** ibus must be on the English engine (`xkb:us::eng`). See "Input Method (ibus)" in Prerequisites above. With libpinyin active, even `xdotool type` produces Chinese garbled text (`xdotoolTestA` appears as 现代哦他哦哦). `setxkbmap us` alone is NOT sufficient - it changes XKB layout but ibus still intercepts at the input-method layer.
+
 ### 5. Button Submit / Confirm (3 methods)
 
 | Method | How | Notes |
@@ -398,7 +443,7 @@ sleep 1
 **CIW input line coordinates** (must be re-verified if the CIW window moves):
 - The input line is at the **bottom** of the CIW window; compute `y = height - 20` (approximate), then verify with a screenshot crop.
 - Always `xwininfo -id <ciw_wid>` before typing — the CIW can be moved/resized by the user.
-- **Geometry pitfall**: `vcli window list-windows-x11` reports window geometry including WM decorations (e.g. 730x743 for a 720x709 CIW). Using this for click-y coordinates lands outside the content area. The `CIW_INPUT` DSL operation reads the precise geometry from vcli's `/tmp/vcli_geom_<display>_<wid>.json` cache (written by `activate --direct`). For manual operations, use `xwininfo` not `list-windows`.
+- **Geometry pitfall**: `vcli window list-windows-x11` reports window geometry including WM decorations (e.g. 730x743 for a 720x709 CIW). Using this for click-y coordinates lands outside the content area. The `CIW_INPUT` DSL operation asks vcli for the client-area geometry of the bound window (`vcli window geometry --window-id <hex>`) — the space the coordinates are interpreted in. For manual operations, use `xwininfo` not `list-windows`.
 
 ### Recommended Debug Loop
 
@@ -610,7 +655,7 @@ Reading a field value via CIW (`form->field->value`) costs ~425ms and is determi
 
 - `ctrl+a` does NOT select-all in Virtuoso form fields. Use `Escape` to clear the CIW input line.
 - **`ciw_eval` verifier format**: `expected` must be a dict, not a string. Use `{"expression": "varName", "equals": "42"}` or `{"expression": "func()", "contains": "substring"}`. A bare string `"42"` fails with `ciw_eval predicate requires expected.expression`.
-- **CIW_INPUT geometry fix** (v1.3.4+): The operation now reads precise window geometry from vcli's `/tmp/vcli_geom_*.json` cache after `activate`, instead of using `list-windows` geometry which includes WM decorations. Click-y is computed as `height - 20` (the CIW input line).
+- **CIW_INPUT geometry fix**: The operation now asks vcli for the client-area geometry of the bound window (`vcli window geometry --window-id <hex>`), instead of using `list-windows` geometry which includes WM decorations. Click-y is computed as `height - 20` (the CIW input line). A geometry query that fails aborts the step: falling back to the frame geometry would compute a click that lands outside the client area and silently misses.
 - `vcli skill load` times out on large files (>~50 lines). Use CIW `load("/path/file.il")` instead.
 - Semicolon-separated multi-expression CIW input: the second assignment may not execute. Run expressions one at a time.
 - `lambda((x) body)` fails — must be `lambda( (x) body)` with a space after `lambda(`.
@@ -1041,6 +1086,12 @@ python3 -m unittest tests.test_cli tests.test_command_runner \
 See `references/scenario-schema.md` for the complete JSON DSL specification.
 See `references/xdotool-cheatsheet.md` for xdotool command reference (local mode).
 
+## Related Skills
+
+- `virastack-auto-allow` — keeps the ViraStack permission prompt approved
+  unattended: it polls a ViraStack window through `vcli window action-x11`
+  and clicks "Allow" whenever the prompt block appears.
+
 ## RSI (Recursive Self-Improvement) Knowledge Base
 
 ### What it is
@@ -1102,4 +1153,181 @@ sqlite3 /tmp/skill_db.sqlite3 "SELECT name FROM functions WHERE name LIKE 'dbCre
 8. **Zero-area rect** — silently returns nil; always check bbox
 9. **Dead session** — check port alive before skill exec
 10. **"Unavailable" functions** — dbCreateLabel/Pin/Contact/Text ALL exist
+11. **Dialog blockers** — *Hi* prefix, cph*, mae*, sev*, lx* pop modal dialogs that block IPC permanently. Cannot be dismissed via xdotool/ESC. Must skip via RSI blacklist.
+12. **View context matters** — dbGet* safe in layout, hangs in schematic. schGet* safe in schematic. Always record view_context when testing.
+13. **RSI is context-aware** — use `rsi.py --view schematic|layout|ciw` for context-filtered results. `undefined_in_ciw` ≠ doesn't exist.
 
+
+
+---
+
+## Architecture Maturity Assessment (2026-09-18)
+
+Correct assessment — do NOT use a single "85%" number:
+
+| Layer | Maturity | Notes |
+|-------|----------|-------|
+| Execution base | 80-90% | engine.py state machine complete: PRECHECK -> BASELINE -> EXECUTE -> VERIFY -> RECOVER |
+| Verify & Recover | 60% | Has predicates (window_exists, state_matches, ciw_eval) but not unified postcondition framework |
+| Auto-routing & planning | 20-30% | Executor is CLI-selected (--executor fake/live/local), not auto-routed |
+| Full closed-loop | 60-70% | Missing cross-channel decision, resource lifecycle, verifiable contracts |
+
+### What already exists (do not re-invent)
+
+- **State machine**: `vgui_runner/engine.py` - PRECHECK -> BASELINE -> EXECUTE -> VERIFY -> RECOVER/FAILED
+- **Verifiers**: window_exists, state_matches, title_matches, geometry_matches, ciw_eval
+- **Recovery**: explicit rollback steps in scenario DSL
+- **Evidence**: task.json, summary.json, JSONL trace, baseline/step screenshots
+- **Executors**: fake (offline replay), live (vcli/SSH/X11), local (xdotool)
+- **RSI knowledge**: SQLite with function verified/undefined status, param examples, error history
+
+### What is genuinely missing (prioritized)
+
+1. **Action Router** - pure function: ActionRequest + CapabilitySnapshot -> RouteDecision
+   - channel: skill | vcli_x11 | local_x11 | vision | rejected
+   - reason, confidence, required_capabilities, fallbacks, risk_class
+   - vision must stay behind explicit opt-in
+
+2. **Unified Verifier result model** - {predicate, expected, observed, status, evidence}
+   - Distinguish: action failed vs postcondition failed vs unverifiable vs channel unavailable
+   - Do not treat "command returned success" as "Virtuoso state changed"
+
+3. **Recovery safety policy** - risk classes: read_only / idempotent_write / non_idempotent_write / destructive
+   - Only read_only + idempotent ops get auto-retry
+   - Channel fallback only for explicitly safe error classes
+   - Recovery budget + total deadline
+
+4. **Evidence Bundle manifest** - stable contract:
+   - manifest.json (run id, session, executor, route, start/end, final status, sha256 per artifact)
+   - One-shot output directory; failure still produces manifest; atomic writes; redact secrets
+
+5. **Template Planner** (deferred) - task type -> fixed action graph -> param fill -> static validation
+   - RSI recommends verified action graphs, not arbitrary GUI operations
+
+### Non-priorities
+
+- **Rust rewrite**: not needed for architecture completeness. Python orchestration is fine. Rust should only take over SSH/daemon connection pooling, X11 boundary, auth - directly tied to SSH rate-limit issues.
+- **Automatic Planner**: defer until routing/verify/evidence/recovery contracts stabilize.
+
+### Acceptance criteria (measurable, not "has module")
+
+- Same action + same capability snapshot -> stable route decision
+- Unavailable channels never selected
+- Verify failure never misreported as execute failure
+- Non-idempotent ops never auto-replayed
+- Every run produces complete manifest
+- Every failure path links to trace + evidence
+- Concurrency does not cause SSH connection storm
+- Route fallback has explicit reason + bounded count
+
+## Stable Stage Status (2026-09-19)
+
+### Verified
+- Offline contract: 161/161 tests pass
+- Single-SSH batch runner: 5 ops in 1 SSH connection, 0 MaxStartups
+- Window identity: --window regex matching verified
+- vcli→daemon TCP: each process opens and closes connection (no cross-process reuse)
+
+### Not Yet Verified
+- Screenshot visual content: X11 black screen (occlusion/compositing, not vcli bug)
+- PR #87 native SSH long connection: requires vcli on a separate host
+  - Windows build blocked: missing MSVC linker (link.exe)
+  - Remote build: vcli runs on same host as daemon, uses TCP not SSH
+- vcli batch (in-process multi-op): not implemented
+- Evidence manifest cross-version compatibility: not tested
+- Recovery E2E on live Virtuoso: not tested
+
+### Known Limitations
+- MaxStartups: 2-3 rapid SSH connections triggers rate limit; use batch_runner.py
+- Screenshot black: X11 compositing issue when window not fully visible
+- CRLF: Windows Python scripts must use bytes mode when piping to SSH
+
+### P0 Follow-up Defects (do not fix now, track for P0 real-environment phase)
+
+1. **Recovery retry budget not checked** - when recovery policy decides RETRY but
+   step.max_retries is already exhausted, the loop falls through to the generic
+   EXECUTE_ERROR branch instead of preserving the correct phase-specific error
+   (VERIFY_UNAVAILABLE / VERIFY_ERROR). Fix: check remaining retry budget inside
+   the recovery decision path before continuing. Do NOT refactor Recovery until
+   Gate 1/2 real-environment validation.
+
+2. **Three-valued terminal semantics (UNKNOWN not yet first-class)** - current
+   manifest only has running/passed/failed. For destructive ops where SSH drops
+   mid-execution, failed may cause recovery to replay a non-idempotent action
+   that actually completed. Future: add unknown as terminal state. Deferred.
+
+### P0 Runtime Validation Baseline (2026-09-19, commit 9cf5fc4)
+
+    Gate 1  Native SSH reuse       BLOCKED - real SSH fixture needed
+    Gate 2  Screenshot semantics    BLOCKED - visible Virtuoso/X11 needed
+    Gate 3  Failure corpus          PASS - 9/9
+    Regression suite                185/185
+    Architecture                   FROZEN
+    New feature development        HOLD
+
+### Gate 2 Screenshot Semantics (2026-09-19, commit 4d2b0de)
+
+Result: PASS with known limitation.
+
+- Screenshot transport: verified (PNG downloads via scp)
+- Visual content: verified (non-black, Virtuoso GUI visible)
+- --window regex: validates window existence, does NOT activate/raise
+- Per-window capture: known X11 limitation
+
+Do NOT use hiSetCurrentWindow before screenshot. It changes Cadence internal
+focus but not X11 stacking order, causing black root captures. The correct
+path for per-window capture is X11 layer (xdotool/wmctrl/import -window <id>).
+
+Future approach:
+  1. window discovery -> PID + DISPLAY + window_id + title
+  2. optional explicit --activate-window (xdotool windowactivate --sync)
+  3. per-window capture via import -window <window_id> (no focus change needed)
+  4. Do not let screenshot auto-change focus
+
+### Gate 1 Native SSH Reuse (2026-09-19, 18/18 tests pass)
+
+Split into two layers:
+
+- Gate 1A: native SSH protocol behavior via in-process russh server fixture
+  - Run on Linux/CI: cargo test --features native-ssh --lib transport::native::tests
+  - 18/18 pass: connection reuse, concurrent channels, keepalive,
+    remote disconnect detection, SFTP roundtrip, deadline, generation cleanup
+  - PASS
+
+- Gate 1B: Windows MSVC build/run
+  - CI windows-latest job: check + test + clippy --features native-ssh
+  - PASS (CI run 35424420048, 9m23s)
+
+External real SSH host acceptance: optional, not required for baseline.
+
+### P0 Final Status (2026-09-19)
+
+Gate 1A native SSH protocol: in-process russh fixture, 18/18 pass on Linux
+Gate 1B Windows MSVC: check + test + clippy --features native-ssh all pass on windows-latest
+Gate 2  Screenshot: transport + visual content + window identity pass; X11 stacking = known limitation
+Gate 3  Failure corpus: 9/9 fault injection pass
+Regression: 185/185+
+
+External real SSH host interop: not required, optional future test.
+
+### P1 Router Wiring Complete (2026-09-19)
+
+- Runner calls route() per attempt before execute
+- ROUTE_DECIDED trace event per (step_id, attempt)
+- ROUTE_REJECTED terminates step, executor not called
+- Recovery uses Router decision.risk_class (no hardcoded reclassification)
+- ROUTE_PROVENANCE event records capability_source (legacy_default / executor_probe)
+  and policy_mode (compatibility / strict)
+- Recovery fallback continue() triggers fresh route() on next attempt
+- mismatch test: rejected route does not call executor
+
+Test suites (P1-related, all pass):
+  engine 23, failure_corpus 9, full_chain 9, evidence_compat 15,
+  evidence_manifest 20, recovery_e2e 10, verifier_integration 19,
+  verifier_result 29, recovery 19, router_simple 12, router_trace 20,
+  router_mismatch 3, model OK, command_runner OK, local_executor OK
+
+Windows env limitations (not Router regressions):
+  test_live_executor: fcntl unavailable on Windows
+  test_cli: requires real vcli binary path
+  test_router: requires pytest

@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Generate RSI status report HTML with tabs."""
-import sqlite3, json
+import sqlite3, json, sys
 from pathlib import Path
+
+# Add evidence scripts path for mine_candidates and decisions
+EVIDENCE_DIR = Path(__file__).parent / "evidence"
+if str(EVIDENCE_DIR) not in sys.path:
+    sys.path.insert(0, str(EVIDENCE_DIR))
 
 DB = Path(__file__).parent.parent / "data" / "skill_db.sqlite3"
 OUT = Path(__file__).parent.parent / "report" / "rsi_report.html"
@@ -82,6 +87,12 @@ snippet_runs = [dict(r) for r in conn.execute("""
     FROM snippet_executions ORDER BY executed_at DESC LIMIT 10
 """)]
 
+# Replay insights (Dream-RSI)
+insights = [dict(r) for r in conn.execute("""
+    SELECT insight_type, pattern, context, success_rate, sample_count, recommendation, created_at
+    FROM replay_insights ORDER BY sample_count DESC
+""")]
+
 # All functions for search (IC251 only, top 2000 by name)
 search_funcs = [dict(r) for r in conn.execute("""
     SELECT name, syntax, description, category, confidence
@@ -92,6 +103,29 @@ search_snippets = [dict(r) for r in conn.execute("""
     SELECT name, description, category, code, promoted_to
     FROM snippets ORDER BY name
 """)]
+
+# Experience Platform: cases + events (Phase B.2)
+exp_cases = []
+exp_stats = {"gold": 0, "negative": 0, "unknown": 0, "total": 0}
+exp_top_failures = []
+try:
+    for r in conn.execute("SELECT * FROM experience_cases ORDER BY created_at DESC LIMIT 200"):
+        d = dict(r)
+        vs = d.get("verification_status", "")
+        ct = d.get("case_type", "unknown")
+        if vs == "PASSED" and ct in ("success", "recovery"):
+            pool = "GOLD"; exp_stats["gold"] += 1
+        elif vs == "FAILED":
+            pool = "NEGATIVE"; exp_stats["negative"] += 1
+        else:
+            pool = "UNKNOWN"; exp_stats["unknown"] += 1
+        d["pool"] = pool
+        exp_cases.append(d)
+    exp_stats["total"] = exp_stats["gold"] + exp_stats["negative"] + exp_stats["unknown"]
+    for r in conn.execute("SELECT failure_type, COUNT(*) as cnt FROM experience_cases WHERE failure_type IS NOT NULL GROUP BY failure_type ORDER BY cnt DESC LIMIT 10"):
+        exp_top_failures.append((r["failure_type"], r["cnt"]))
+except Exception:
+    pass
 
 # Common pitfalls (hardcoded from experience)
 pitfalls = [
@@ -108,6 +142,89 @@ pitfalls = [
     ("LIKE case-sensitive", "SQLite LIKE is case-sensitive. Use LOWER()."),
     ("errors[] not output[]", "vcli errors are in errors[] array, not output."),
 ]
+
+# P3: Candidate decisions for review
+import html
+
+def _esc(s):
+    """Escape HTML special characters."""
+    if s is None:
+        return ""
+    return html.escape(str(s), quote=True)
+
+def _parse_sig(sig):
+    """Parse signature JSON to extract reason/action/context."""
+    try:
+        data = json.loads(sig)
+        return {
+            "reason": data.get("reason", ""),
+            "action": data.get("action", ""),
+            "context": data.get("context", {}),
+        }
+    except:
+        return {"reason": sig[:50], "action": "", "context": {}}
+
+
+def _fmt_context(ctx, max_len=80):
+    """Format context dict as truncated string."""
+    if not ctx:
+        return ""
+    parts = [f"{k}={v}" for k, v in sorted(ctx.items())]
+    s = ", ".join(parts)
+    if len(s) > max_len:
+        s = s[:max_len-3] + "..."
+    return s
+
+candidates_data = {"candidates": [], "adopted": [], "total_cands": 0}
+try:
+    from mine_candidates import mine
+    from record_intervention import get_adopted_candidates, list_candidate_decisions
+    
+    result = mine(min_verified=0, db_path=DB)
+    decisions = list_candidate_decisions(include_revoked=True, db_path=DB)
+    adopted = get_adopted_candidates(db_path=DB)
+    
+    # Build decision map
+    decision_map = {}
+    for d in decisions:
+        key = (d["candidate_id"], d["snapshot_hash"])
+        decision_map[key] = d
+    
+    # Attach decision status to each candidate
+    snapshot_hash = result.get("h", "")
+    
+    # Count adopted in CURRENT snapshot only
+    adopted_current = [d for d in adopted if d.get("snapshot_hash") == snapshot_hash]
+    
+    for c in result.get("candidates", []):
+        cand_id = c.get("candidate_id", "")
+        
+        # Parse sig to extract reason/action/context
+        sig_data = _parse_sig(c.get("sig", ""))
+        c["reason"] = sig_data["reason"]
+        c["action"] = sig_data["action"]
+        c["context"] = sig_data["context"]
+        # Pre-compute context string for template
+        c["_context_str"] = _fmt_context(sig_data["context"])
+        
+        dec = decision_map.get((cand_id, snapshot_hash), {})
+        if dec:
+            c["decision_status"] = dec["decision"]
+            c["decision_revoked"] = dec.get("revoked_at")
+            c["decision_reason"] = dec.get("reason")
+        else:
+            c["decision_status"] = "PENDING"
+            c["decision_revoked"] = None
+            c["decision_reason"] = None
+    
+    candidates_data = {
+        "candidates": result.get("candidates", []),
+        "adopted": adopted_current,  # Only current snapshot
+        "total_cands": result.get("total_cands", 0),
+        "snapshot_hash": snapshot_hash,
+    }
+except Exception as e:
+    candidates_data = {"error": str(e), "candidates": [], "adopted": [], "total_cands": 0}
 
 conn.close()
 
@@ -167,6 +284,29 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
 .search-box {{ margin-bottom: 16px; }}
 .search-box input {{ width: 100%; padding: 10px 14px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px; color: #e4e4e7; font-size: 13px; }}
 .search-box input:focus {{ outline: none; border-color: #8b5cf6; }}
+
+/* Candidates */
+.cand-card {{ background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 14px; margin-bottom: 12px; }}
+.cand-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }}
+.cand-id {{ font-family: monospace; color: #a5b4fc; font-size: 11px; }}
+.cand-status {{ padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }}
+.cand-status.adopted {{ background: #052c16; color: #52c41a; }}
+.cand-status.rejected {{ background: #2d0000; color: #ef4444; }}
+.cand-status.pending {{ background: #2a2010; color: #faad14; }}
+.cand-stats {{ display: flex; gap: 16px; font-size: 12px; color: #9ca3af; }}
+.cand-stats span {{ color: #e4e4e7; font-weight: 600; }}
+.cand-refs {{ margin-top: 10px; font-size: 11px; color: #6b7280; }}
+.cand-refs code {{ color: #8b5cf6; }}
+.cand-reason {{ margin: 8px 0; font-size: 12px; }}
+.cand-reason b {{ color: #f87171; }}
+.cand-action {{ margin: 4px 0; font-size: 12px; }}
+.cand-action b {{ color: #52c41a; }}
+.cand-context {{ margin: 4px 0 8px; font-size: 11px; color: #6b7280; font-family: monospace; }}
+
+/* Expandable candidate cards */
+details.cand-card {{ background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 14px; margin-bottom: 12px; }}
+details.cand-card summary {{ list-style: none; cursor: pointer; }}
+details.cand-card summary::-webkit-details-marker {{ display: none; }}
 </style></head><body>
 <div class="container">
 <h1>Virtuoso SKILL RSI</h1>
@@ -176,12 +316,15 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
   <button class="tab-btn" onclick="showTab('progress')">Progress</button>
   <button class="tab-btn" onclick="showTab('snippets')">Snippets</button>
+  <button class="tab-btn" onclick="showTab('insights')">Insights</button>
   <button class="tab-btn" onclick="showTab('search')">Search</button>
   <button class="tab-btn" onclick="showTab('recordings')">Recordings</button>
   <button class="tab-btn" onclick="showTab('categories')">Categories</button>
   <button class="tab-btn" onclick="showTab('params')">Param Templates</button>
   <button class="tab-btn" onclick="showTab('pitfalls')">Pitfalls</button>
   <button class="tab-btn" onclick="showTab('verified')">Verified</button>
+  <button class="tab-btn" onclick="showTab('experience')">Experience</button>
+  <button class="tab-btn" onclick="showTab('candidates')">Candidates</button>
 </div>
 
 <div id="tab-overview" class="tab-panel active">
@@ -206,6 +349,17 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
       {''.join(f'<tr><td>{k}</td><td>{v:,}</td></tr>' for k, v in sorted(ic251_conf.items()))}
       <tr><td><b>Synonyms</b></td><td>{syn_count}</td></tr>
     </table>
+  </div>
+  <div class="card">
+    <h2>Quick Search Suggestions</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='draw polygon';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">draw polygon</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='get cell';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">get cell</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='create rect';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">create rect</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='list layers';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">list layers</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='select shape';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">select shape</span>
+      <span style="padding:6px 12px;background:#1a1a2e;border:1px solid #2a2a4a;border-radius:20px;font-size:12px;color:#8b5cf6;cursor:pointer;" onclick="document.getElementById('searchBox').value='save design';document.getElementById('searchBox').dispatchEvent(new Event('input'));showTab('search');">save design</span>
+    </div>
   </div>
   <div class="card">
     <h2>RSI Efficiency</h2>
@@ -258,6 +412,19 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   </div>''' if snippet_runs else '')}
 </div>
 
+<div id="tab-insights" class="tab-panel">
+  <div class="card">
+    <h2>Dream-RSI: Auto-Learned Insights ({len(insights)})</h2>
+    <p style="font-size:12px;color:#6b7280;margin-bottom:12px;">Automatically discovered from exploration history via replay simulator.</p>
+    {''.join(f'''
+    <div style="padding:10px;background:{"#0a1a0a" if "pattern" in i["insight_type"] else "#1a0a0a" if "blocker" in i["insight_type"] else "#1a1a2e"};border-left:3px solid {"#52c41a" if "pattern" in i["insight_type"] else "#ef4444" if "blocker" in i["insight_type"] else "#8b5cf6"};border-radius:4px;margin:8px 0;">
+      <div style="font-size:12px;"><b style="color:{"#52c41a" if "pattern" in i["insight_type"] else "#ef4444" if "blocker" in i["insight_type"] else "#8b5cf6"}">{i["pattern"]}</b>
+      <span style="color:#6b7280;font-size:11px;"> in {i["context"]} · {i["sample_count"]} samples · {int(i["success_rate"]*100)}% success</span></div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;">{i["recommendation"]}</div>
+    </div>''' for i in insights) if insights else '<p style="color:#6b7280">No insights yet. Run dream_rsi.py to generate.</p>'}
+  </div>
+</div>
+
 <div id="tab-search" class="tab-panel">
   <div class="card">
     <h2>Search Functions & Snippets</h2>
@@ -294,6 +461,7 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
           html += '<code style="color:#52c41a;">snippet:' + s.name + '</code> ';
           if (s.promoted_to) html += '<span style="font-size:11px;color:#8b5cf6;">→ ' + s.promoted_to + '</span>';
           html += '<br><span style="font-size:11px;color:#9ca3af;">' + (s.description||'') + '</span>';
+          if (s.code) html += '<br><code style="font-size:10px;color:#6b7280;display:block;margin-top:4px;padding:4px;background:#0f1117;border-radius:4px;">' + s.code.substring(0,100) + (s.code.length>100?'...':'') + '</code>';
           html += '</div>';
           sc++;
         }}
@@ -361,6 +529,85 @@ code {{ color: #a5b4fc; font-family: 'Cascadia Code', monospace; }}
   </div>
 </div>
 
+<div id="tab-experience" class="tab-panel">
+  <div class="stats">
+    <div class="stat"><div class="n">{exp_stats["total"]}</div><div class="l">Total Cases</div></div>
+    <div class="stat"><div class="n green">{exp_stats["gold"]}</div><div class="l">GOLD</div></div>
+    <div class="stat"><div class="n red">{exp_stats["negative"]}</div><div class="l">NEGATIVE</div></div>
+    <div class="stat"><div class="n" style="color:#faad14">{exp_stats["unknown"]}</div><div class="l">UNKNOWN</div></div>
+  </div>
+  <div class="card">
+    <h2>Top Failure Types</h2>
+    {''.join(f'<div class="bar"><span class="n">{k}</span><div class="b"><div class="f" style="width:{v/(exp_top_failures[0][1] if exp_top_failures else 1)*100}%"></div></div><span class="c">{v}</span></div>' for k, v in exp_top_failures) if exp_top_failures else '<p style="color:#6b7280">No cases yet.</p>'}
+  </div>
+  <div class="card">
+    <h2>Experience Cases (latest 200)</h2>
+    <div class="search-box"><input type="text" id="searchExp" placeholder="Filter cases..." onkeyup="filterExpTable()"></div>
+    <table id="expTable">
+      <tr><th>Pool</th><th>Type</th><th>Failure</th><th>Verification</th><th>Outcome</th><th>Run ID</th></tr>
+      {''.join(f'<tr><td><span style="color:{"#52c41a" if c["pool"]=="GOLD" else "#ef4444" if c["pool"]=="NEGATIVE" else "#faad14"};font-weight:600">{c["pool"]}</span></td><td>{c["case_type"]}</td><td style="font-size:11px">{c.get("failure_type") or "—"}</td><td style="font-size:11px">{c.get("verification_status") or "—"}</td><td style="font-size:11px">{c["outcome"]}</td><td style="font-size:10px;color:#6b7280">{c["run_id"]}</td></tr>' for c in exp_cases)}
+    </table>
+  </div>
+</div>
+
+<div id="tab-candidates" class="tab-panel">
+  <div class="stats">
+    <div class="stat"><div class="n">{candidates_data["total_cands"]}</div><div class="l">Total Candidates</div></div>
+    <div class="stat"><div class="n green">{len(candidates_data.get("adopted", []))}</div><div class="l">Adopted (this snapshot)</div></div>
+    <div class="stat"><div class="n yellow">{sum(1 for c in candidates_data.get("candidates", []) if c.get("decision_status") == "PENDING")}</div><div class="l">Pending</div></div>
+    <div class="stat"><div class="n red">{sum(1 for c in candidates_data.get("candidates", []) if c.get("decision_status") == "REJECTED")}</div><div class="l">Rejected</div></div>
+  </div>
+  <div class="card">
+    <h2>Snapshot: <code>{_esc(candidates_data.get("snapshot_hash", ""))}</code></h2>
+    {f'<p style="color:#ef4444">Error: {_esc(str(candidates_data.get("error", "")))}</p>' if candidates_data.get("error") else ""}
+    {''.join(f'''<details class="cand-card">
+      <summary class="cand-header">
+        <span class="cand-id">{_esc(c.get("candidate_id", "unknown"))}</span>
+        <span class="cand-status {_esc(c.get("decision_status", "PENDING").lower())}">{_esc(c.get("decision_status", "PENDING"))}</span>
+      </summary>
+      {f'<div class="cand-reason"><b>Reason:</b> {_esc(c.get("reason", ""))}</div>' if c.get("reason") else ""}
+      {f'<div class="cand-action"><b>Action:</b> {_esc(c.get("action", ""))}</div>' if c.get("action") else ""}
+      <div class="cand-context">{_esc(c.get("_context_str", ""))}</div>
+      <div class="cand-stats">
+        <div>Attempts: <span>{c.get("stats", {}).get("attempts", 0)}</span></div>
+        <div>Support: <span>{c.get("stats", {}).get("verified_count", 0)}</span></div>
+        <div>Failed: <span>{c.get("stats", {}).get("failed_count", 0)}</span></div>
+        <div>Conflict: <span>{c.get("stats", {}).get("conflict_count", 0)}</span></div>
+        <div>Strength: <span>{_esc(c.get("strength", "unknown"))}</span></div>
+      </div>
+      <div class="cand-refs">
+        Evidence refs: vrefs={len(c.get("vrefs", []))} frefs={len(c.get("frefs", []))} cref={len(c.get("cref", []))}
+      </div>
+      {f'<div class="cand-refs"><b>Decision reason:</b> {_esc(c.get("decision_reason", ""))}</div>' if c.get("decision_reason") else ""}
+      <details>
+        <summary style="cursor:pointer;color:#8b5cf6;font-size:11px;margin-top:8px">Show {len(c.get("vrefs", []))} verified / {len(c.get("frefs", []))} failed / {len(c.get("cref", []))} conflict refs</summary>
+        <div style="font-size:10px;color:#6b7280;margin-top:6px">
+          <div><b>VERIFIED ({len(c.get("vrefs", []))}):</b></div>
+          {''.join(f'<div style="margin-left:10px">run={_esc(r.get("run",""))} fid={_esc(r.get("fid",""))} id={_esc(r.get("id",""))}</div>' for r in c.get("vrefs", []))}
+          <div style="margin-top:6px"><b>FAILED ({len(c.get("frefs", []))}):</b></div>
+          {''.join(f'<div style="margin-left:10px">run={_esc(r.get("run",""))} fid={_esc(r.get("fid",""))} id={_esc(r.get("id",""))}</div>' for r in c.get("frefs", []))}
+          <div style="margin-top:6px"><b>CONFLICT ({len(c.get("cref", []))}):</b></div>
+          {''.join(f'<div style="margin-left:10px">run={_esc(r.get("run",""))} fid={_esc(r.get("fid",""))} id={_esc(r.get("id",""))}</div>' for r in c.get("cref", []))}
+        </div>
+      </details>
+    </details>''' for c in candidates_data.get("candidates", [])) if candidates_data.get("candidates") else '<p style="color:#6b7280">No candidates yet. Run "python mine_candidates.py mine" to generate candidates.</p>'}
+  </div>
+  <div class="card">
+    <h2>CLI Commands for Review</h2>
+    <pre style="background:#0f1117;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto"># Review candidates (current snapshot: {candidates_data.get("snapshot_hash", "N/A")})
+python scripts/evidence/record_intervention.py review --min-verified 1
+
+# Adopt a candidate (use IDs from above)
+python scripts/evidence/record_intervention.py adopt {_esc('<candidate_id>')} {candidates_data.get("snapshot_hash", _esc('<hash>'))} --reason "..."
+
+# Reject a candidate
+python scripts/evidence/record_intervention.py reject {_esc('<candidate_id>')} {candidates_data.get("snapshot_hash", _esc('<hash>'))} --reason "..."
+
+# List decisions
+python scripts/evidence/record_intervention.py list-decisions</pre>
+  </div>
+</div>
+
 </div>
 <script>
 function showTab(name) {{
@@ -372,6 +619,13 @@ function showTab(name) {{
 function filterTable() {{
   var q = document.getElementById('searchVerified').value.toLowerCase();
   document.querySelectorAll('#verifiedTable tr').forEach(function(tr, i) {{
+    if (i === 0) return;
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  }});
+}}
+function filterExpTable() {{
+  var q = document.getElementById('searchExp').value.toLowerCase();
+  document.querySelectorAll('#expTable tr').forEach(function(tr, i) {{
     if (i === 0) return;
     tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
   }});
