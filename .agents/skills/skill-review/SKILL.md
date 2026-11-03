@@ -1,7 +1,6 @@
 ---
 name: skill-review
 description: Audit a Codex skill file against the official skills specification. Use when the user asks to review, audit, or check a skill for spec compliance, or when a skill file may be too long, have wrong frontmatter, or needs structural improvement.
-argument-hint: '[skill name or path, e.g. "veriloga" or ".Codex/skills/veriloga/SKILL.md"]'
 allowed-tools: Read Bash(wc *) Bash(find *) Bash(ls *)
 ---
 

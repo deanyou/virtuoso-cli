@@ -11,6 +11,7 @@ description: |
 author: Codex
 version: 1.0.0
 date: 2026-04-06
+allowed-tools: Bash(python *) Read Write
 ---
 
 # sim-plot: Matplotlib Visualization

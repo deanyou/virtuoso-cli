@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "task_id": "virastack-allow-prompt",
+  "session_id": "xunipc-userone-34269",
+  "pid": 5730,
+  "display": ":0",
+  "cellview": {"lib": "virastack", "cell": "permission_prompt", "view": "prompt"},
+  "steps": [
+    {
+      "id": "click-allow",
+      "operation": "CLICK_REL",
+      "arguments": {"x": 90, "y": 712},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 30,
+      "max_retries": 0
+    },
+    {
+      "id": "screenshot-after",
+      "operation": "SCREENSHOT",
+      "arguments": {},
+      "verifier": {"predicate": "window_exists", "expected": true},
+      "timeout_seconds": 30,
+      "max_retries": 0
+    }
+  ]
+}

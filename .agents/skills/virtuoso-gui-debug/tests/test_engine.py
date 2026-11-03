@@ -78,7 +78,8 @@ class TestFakeExecutorPerPhase(unittest.TestCase):
         self.assertIsNone(executor.baseline(scenario))
         step = scenario.steps[0]
         self.assertIsNone(executor.execute(step, 0))
-        self.assertIsNone(executor.verify(step, 0))
+        result = executor.verify(step, 0)
+        self.assertEqual(result.status.value, "passed")
         self.assertIsNone(executor.recover(step, 0, None))
 
     def test_fake_executor_execute_failure_attempt_0(self):
@@ -360,7 +361,7 @@ class TestRollbackFailure(unittest.TestCase):
 
             self.assertFalse(summary.passed)
             self.assertEqual(summary.failed_step_id, "step1")
-            self.assertEqual(summary.error_code, ERROR_RECOVER)
+            self.assertEqual(summary.error_code, "MANUAL_INTERVENTION_REQUIRED")
         finally:
             cleanup_temp_dir(tmpdir)
 

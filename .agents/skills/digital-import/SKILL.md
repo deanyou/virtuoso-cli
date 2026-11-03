@@ -10,7 +10,6 @@ description: |
   ihdl / digital import / P&R-to-schematic flow.
 allowed-tools:
   - Bash(vcli *)
-argument-hint: "[step, e.g. 'import GDS' or 'restyle labels for DIG_OUTPUT/LFSR_32BIT']"
 ---
 
 # Digital Import — 4-Step Pipeline
