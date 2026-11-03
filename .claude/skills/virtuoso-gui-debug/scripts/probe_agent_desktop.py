@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Read-only AT-SPI capability probe for an explicitly named desktop app.
 
-The snapshot is processed in memory. Raw names, values, refs and tree content
-are never written to disk or included in the JSON report.
+Snapshot sends no input; on older at-spi2-atk it can still SIGABRT the target
+(see docs/agent-desktop-gui-debug.md). The snapshot is processed in memory.
+Raw names, values, refs and tree content are never written to disk or included
+in the JSON report.
 """
 
 import argparse
