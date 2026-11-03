@@ -295,14 +295,12 @@ SKILL_RULES: Dict[str, SkillRule] = {
     ),
     "vcli-architecture": SkillRule(
         skill="vcli-architecture",
-        mode=MODE_PENDING,
+        mode=MODE_EXCLUDE,
         reason=(
-            "Host-neutral governance skill (frontmatter has only name and "
-            "description), but nothing in the repo states whether Codex "
-            "should load it. Note: pstack-vcli/SKILL.md points at "
-            ".claude/skills/vcli-architecture/SKILL.md, which exists for both "
-            "hosts today only because pstack-vcli is a symlink. Deciding this "
-            "one decides whether pstack-vcli may become a real copy."
+            "Owner ruling (2026-11-03): Claude-only, never mirrored into "
+            ".agents. pstack-vcli references this file by a repo-root-relative "
+            "path, which both hosts can read because pstack-vcli is a symlink "
+            "into the canonical tree, so the Codex side needs no copy."
         ),
     ),
     "virastack-auto-allow": SkillRule(
