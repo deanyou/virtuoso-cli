@@ -6,7 +6,7 @@ description: |
   (2) after a debugging session to capture what went wrong,
   (3) periodic skill maintenance to close knowledge gaps revealed by real usage.
   Reads cmd.jsonl + per-session SKILL logs, finds failure/correction/gap signals,
-  maps them to skills in .Codex/skills/, and writes concrete improvements.
+  maps them to skills in .agents/skills/, and writes concrete improvements.
 author: Codex
 version: 1.0.0
 date: 2026-05-02
@@ -126,7 +126,7 @@ For each signal, identify the relevant skill using this table:
 
 For each signal-to-skill mapping, read the full skill content:
 ```bash
-cat /home/meow/git/virtuoso-cli/.Codex/skills/<skill-name>/SKILL.md
+cat /home/meow/git/virtuoso-cli/.agents/skills/<skill-name>/SKILL.md
 ```
 
 Identify the specific section to improve:
@@ -164,8 +164,8 @@ mkdir -p /home/meow/git/virtuoso-cli/.pensieve/knowledge/<name>
 # write content.md following the knowledge format
 
 # Then sync state:
-PENSIEVE_SKILL_ROOT="$HOME/.Codex/skills/pensieve" \
-  bash "$HOME/.Codex/skills/pensieve/.src/scripts/maintain-project-state.sh" \
+PENSIEVE_SKILL_ROOT="$HOME/.claude/skills/pensieve" \
+  bash "$HOME/.claude/skills/pensieve/.src/scripts/maintain-project-state.sh" \
   --event self-improve --note "<one-line description>"
 ```
 

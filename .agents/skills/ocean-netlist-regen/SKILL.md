@@ -302,4 +302,4 @@ Or in SKILL: `openResults("/psf/path") selectResult('acSweep) VF("net1")`
 - `system("find / ...")` hangs the SKILL daemon — blocked by virtuoso-cli bridge
 - After bridge hang, restart: Ctrl+C in CIW, reload bridge.il + RBStart
 
-See also: SKILL bridge scoping rules in `~/.Codex/projects/.../memory/feedback_skill_bridge_scoping.md`
+See also: SKILL bridge scoping rules in `~/.claude/projects/.../memory/feedback_skill_bridge_scoping.md`

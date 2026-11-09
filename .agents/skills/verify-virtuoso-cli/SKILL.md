@@ -107,7 +107,7 @@ the first drive, on every fresh session, and again after any failed drive.
 "${CLAUDE_SKILL_DIR}/scripts/doctor.sh"
 ```
 
-`${CLAUDE_SKILL_DIR}` is this skill's own directory (`.Codex/skills/verify-virtuoso-cli`).
+`${CLAUDE_SKILL_DIR}` is this skill's own directory (`.agents/skills/verify-virtuoso-cli`).
 The helper prints a JSON verdict and exits `0` when the host is drivable.
 
 The four probes, and what each one buys you:
@@ -193,7 +193,7 @@ Use the shipped helper to capture this properly, including the side-effect diff:
 GUI features go through the repo's scenario harness, not ad-hoc `xdotool`:
 
 ```bash
-python3 .Codex/skills/virtuoso-gui-debug/scripts/gui_runner.py run <scenario.json> \
+python3 .agents/skills/virtuoso-gui-debug/scripts/gui_runner.py run <scenario.json> \
     --output "$EVIDENCE_DIR/gui" --executor fake
 ```
 
@@ -307,7 +307,7 @@ Run cleanup after **every** failed iteration too, so a broken attempt does not
 strand a process or a port.
 
 **One repo file is not yours to leave dirty.** A `fake` GUI scenario run writes to
-the repo's tracked `.Codex/skills/virtuoso-gui-debug/data/skill_db.sqlite3`. After
+the repo's tracked `.agents/skills/virtuoso-gui-debug/data/skill_db.sqlite3`. After
 any GUI-scenario drive, check `git status` and restore that file so the verification
 run leaves no tracked file modified.
 
@@ -367,6 +367,6 @@ under `/tmp` unless `VB_HOME` is already exported.
 
 The feature map rots as the app changes. After `vcli` gains a command, changes an
 exit code, or moves a path, re-audit this skill and the map under `features/`:
-run the review workflow in `.Codex/skills/pstack-vcli/` and then manually
+run the review workflow in `.agents/skills/pstack-vcli/` and then manually
 re-verify every assertion in `features/*.md` against the current source under
 `src/`.

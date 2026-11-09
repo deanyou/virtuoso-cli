@@ -11,7 +11,7 @@ Audit the skill named "$ARGUMENTS". If no argument was given, ask the user which
 ## Step 1 — Locate the skill file
 
 ```bash
-find .Codex/skills ~/.Codex/skills -name "SKILL.md" 2>/dev/null | head -30
+find .claude/skills ~/.claude/skills -name "SKILL.md" 2>/dev/null | head -30
 wc -l <path/to/SKILL.md>
 ls -la <skill-dir>/
 ```

@@ -20,7 +20,7 @@ file:
     FILE_EXCLUSIONS  files that must never be mirrored
 
 Nothing is inferred at runtime.  A skill whose disposition is not listed is
-mirrored with the default adaptation set; a skill whose disposition is
+treated as pending; a skill whose disposition is
 ``pending`` is reported and left untouched rather than guessed at.
 
 Usage:
@@ -189,6 +189,12 @@ def _rewrite_allowed_tools_globs(text: str) -> Tuple[str, int]:
     return _join_frontmatter("\n".join(kept), rest), hits
 
 
+def _rewrite_skill_paths(text: str) -> Tuple[str, int]:
+    # Home-directory paths refer to a different installation and must not be
+    # silently relocated as if they were repository-relative paths.
+    return re.subn(r"(?<!~/)(?<!\$HOME/)\.claude/skills/", ".agents/skills/", text)
+
+
 def _literal_replace(old: str, new: str) -> Callable[[str], Tuple[str, int]]:
     """Build a rule function that replaces a literal substring."""
     def _apply(text: str) -> Tuple[str, int]:
@@ -230,9 +236,9 @@ ADAPTATIONS: Sequence[Adaptation] = (
     ),
     Adaptation(
         id="A5",
-        summary="prose: '.claude/' -> '.Codex/' (skill-root references)",
+        summary="prose: repository skill-root references use .agents/skills/",
         applies_to=_is_skill_md,
-        apply=_literal_replace(".claude/", ".Codex/"),
+        apply=_rewrite_skill_paths,
         scope="text",
     ),
     Adaptation(
@@ -315,6 +321,40 @@ SKILL_RULES: Dict[str, SkillRule] = {
     ),
 }
 
+
+# Existing mirror dispositions reviewed in this PR. New top-level entries are
+# pending until explicitly classified here or in SKILL_RULES.
+APPROVED_MIRRORS = frozenset((
+    '_shared',
+    'amp-copilot',
+    'cell-explore',
+    'circuit-optimizer',
+    'diag',
+    'digital-import',
+    'gm-over-id',
+    'history-evolve',
+    'maestro',
+    'maestro-read-results',
+    'ocean-netlist-regen',
+    'porting-skill',
+    'references',
+    'schematic-gen',
+    'sim-measure',
+    'sim-plot',
+    'sim-run',
+    'sim-setup',
+    'sim-sweep',
+    'skill-exec',
+    'skill-review',
+    'skill-shell-gotchas',
+    'spec-driven-circuit-design',
+    'spectre-netlist-gotchas',
+    'spectre-netlist-template',
+    'tunnel-connect',
+    'verify-virtuoso-cli',
+    'veriloga',
+    'virtuoso-gui-debug',
+ ))
 
 # --------------------------------------------------------------------------
 # Manifest: file-level exclusions
@@ -431,7 +471,11 @@ def _skill_of(rel_path: str) -> str:
 
 
 def _rule_for(skill: str) -> Optional[SkillRule]:
-    return SKILL_RULES.get(skill)
+    if skill in SKILL_RULES:
+        return SKILL_RULES[skill]
+    if skill in APPROVED_MIRRORS:
+        return SkillRule(skill, MODE_MIRROR, "Existing approved mirror")
+    return SkillRule(skill, MODE_PENDING, "New skill requires an explicit disposition")
 
 
 def _exclusion_for(rel_path: str) -> Optional[FileExclusion]:
@@ -713,7 +757,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument(
         "--strict-pending", action="store_true",
-        help="treat pending-decision skills as a failure (exit 1)",
+        help="treat pending-decision skills as a failure (exit 2)",
     )
     parser.add_argument(
         "--json", action="store_true", dest="as_json",

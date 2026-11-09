@@ -10,19 +10,25 @@ on:
     branches: [main]
     paths:
       - ".claude/skills/**"
+      - ".agents/skills/**"
+      - "scripts/sync_skills.py"
+      - "tests/test_sync_skills.py"
       - ".github/workflows/skill-tests.yml"
       - ".github/scripts/run-skill-tests.sh"
   pull_request:
     branches: [main]
     paths:
       - ".claude/skills/**"
+      - ".agents/skills/**"
+      - "scripts/sync_skills.py"
+      - "tests/test_sync_skills.py"
       - ".github/workflows/skill-tests.yml"
       - ".github/scripts/run-skill-tests.sh"
 
 jobs:
   python:
     name: Skill tests (py${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -36,7 +42,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install skill test dependencies
-        run: python3 -m pip install 'pytest>=8,<9'
+        run: python3 -m pip install 'pytest>=8,<9' 'numpy<3' 'Pillow<13' 'scipy<2'
 
       - name: Run skill test suites
         run: bash .github/scripts/run-skill-tests.sh

@@ -484,3 +484,12 @@ SKILL.md 与它自己的脚本说明对不上。
 其余规则（尤其 A1 剥 `argument-hint`、A2 改写 `allowed-tools` glob）**照常应用**。
 如需恢复「A3/A4 也照常应用」，删除 `skiprules` 那个 tuple 即可，
 代价是 Codex 侧 skill 描述里的产品名失真。
+
+
+## Follow-up: disposition and CI hardening
+
+Existing mirror entries are explicitly approved; new top-level skill entries
+are pending until classified. The skill test runner checks strict pending and
+runs the synchronization regression tests. Repository skill references are
+rewritten to `.agents/skills/`, while home-directory references are preserved.
+The workflow includes both trees in path filters and installs test dependencies.

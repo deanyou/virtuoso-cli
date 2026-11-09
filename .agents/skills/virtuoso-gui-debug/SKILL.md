@@ -1019,7 +1019,7 @@ function signatures from Cadence .fnd docs (IC231/IC251/IC618 versions).
 ### Quick query commands
 
 ```bash
-cd .Codex/skills/virtuoso-gui-debug/scripts
+cd .agents/skills/virtuoso-gui-debug/scripts
 
 # Search by natural language (FTS5 full-text)
 python3 rsi_query.py "draw rectangle"

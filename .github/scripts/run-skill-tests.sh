@@ -29,11 +29,13 @@ TREES=(".claude/skills" ".agents/skills")
 # more confusing failure.
 # ---------------------------------------------------------------------------
 echo "== sync check: .agents/skills mirrors .claude/skills =="
-if ! python3 scripts/sync_skills.py --check; then
+if ! python3 scripts/sync_skills.py --check --strict-pending; then
     echo "ERROR: the skill trees have drifted; run 'python3 scripts/sync_skills.py'." >&2
     exit 1
 fi
 echo "   OK"
+
+python3 -m unittest discover -s tests -p test_sync_skills.py
 
 total_suites=0
 total_failures=0
