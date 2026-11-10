@@ -1,7 +1,6 @@
 ---
 name: skill-review
 description: Audit a Codex skill file against the official skills specification. Use when the user asks to review, audit, or check a skill for spec compliance, or when a skill file may be too long, have wrong frontmatter, or needs structural improvement.
-argument-hint: '[skill name or path, e.g. "veriloga" or ".Codex/skills/veriloga/SKILL.md"]'
 allowed-tools: Read Bash(wc *) Bash(find *) Bash(ls *)
 ---
 
@@ -12,7 +11,7 @@ Audit the skill named "$ARGUMENTS". If no argument was given, ask the user which
 ## Step 1 — Locate the skill file
 
 ```bash
-find .Codex/skills ~/.Codex/skills -name "SKILL.md" 2>/dev/null | head -30
+find .claude/skills ~/.claude/skills -name "SKILL.md" 2>/dev/null | head -30
 wc -l <path/to/SKILL.md>
 ls -la <skill-dir>/
 ```

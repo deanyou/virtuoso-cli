@@ -11,11 +11,35 @@ One command to search, call, and learn:
   rsi status                   # knowledge base stats
   rsi report                   # regenerate HTML report
 """
-import argparse, json, sqlite3, subprocess, sys
+import argparse, json, sqlite3, subprocess, sys, socket
 from datetime import datetime
 from pathlib import Path
 
 DB = Path(__file__).parent.parent / "data" / "skill_db.sqlite3"
+PORT_FILE = Path(__file__).parent.parent / "data" / "rsid.port"
+
+# ── Daemon client (optional, ~20ms vs ~500ms) ──
+
+def _daemon_req(cmd, **kw):
+    """Try daemon first; return None if not running."""
+    try:
+        if not PORT_FILE.exists():
+            return None
+        port = int(PORT_FILE.read_text().strip())
+        s = socket.socket()
+        s.settimeout(2)
+        s.connect(('127.0.0.1', port))
+        s.sendall(json.dumps({'cmd': cmd, **kw}).encode() + b'\n')
+        data = b''
+        while True:
+            chunk = s.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        s.close()
+        return json.loads(data.decode())
+    except Exception:
+        return None
 
 # ── DB helpers ──────────────────────────────────────────────────────────────
 
@@ -79,6 +103,20 @@ def expand(c, query):
 def search(c, query, version="IC251", limit=8):
     words = expand(c, query)
     results = {}
+    
+    # 加载 insights：blocker 和 safe 前缀
+    blocker_prefixes = set()
+    safe_prefixes = set()
+    try:
+        for row in c.execute("SELECT pattern, insight_type FROM replay_insights"):
+            pat = row['pattern'].rstrip('*').lower()
+            if 'blocker' in row['insight_type']:
+                blocker_prefixes.add(pat)
+            elif 'safe' in row['insight_type']:
+                safe_prefixes.add(pat)
+    except:
+        pass
+    
     for word in words:
         for pfx in PREFIXES:
             pattern = f"{pfx}%{word}%"
@@ -102,6 +140,23 @@ def search(c, query, version="IC251", limit=8):
                         score += 100
                     # Shorter names preferred
                     score -= len(nl) * 0.1
+                    
+                    # Insights 调整分数
+                    is_danger = False
+                    is_safe = False
+                    for bp in blocker_prefixes:
+                        if nl.startswith(bp):
+                            score -= 100  # 大幅降权
+                            is_danger = True
+                            break
+                    for sp in safe_prefixes:
+                        if nl.startswith(sp):
+                            score += 20  # 安全加分
+                            is_safe = True
+                            break
+                    d['danger'] = is_danger
+                    d['safe'] = is_safe
+                    
                     n = d['name']
                     results[n] = {**d, 'score': results[n]['score'] + score} if n in results else {**d, 'score': score}
             except: pass
@@ -550,6 +605,9 @@ def main():
     ap.add_argument("--success", action="store_true")
     ap.add_argument("--error", help="Error message to record")
     ap.add_argument("--status", action="store_true")
+    ap.add_argument("--view", default="any",
+                    choices=["any", "ciw", "schematic", "layout"],
+                    help="Current view context for context-aware filtering")
     parsed = ap.parse_args(args)
 
     c = conn()
@@ -563,15 +621,30 @@ def main():
         return
 
     if parsed.record:
+        from datetime import datetime
         func = parsed.record
         if parsed.error:
             record_failure(c, func, "runtime", parsed.error)
             print(f"Recorded error for {func}")
         else:
+            # Record success: update confidence in fnd_functions
+            c.execute("""UPDATE fnd_functions SET confidence='verified', last_verified_at=?
+                        WHERE name=? AND version=?""",
+                      (datetime.now().isoformat(), func, parsed.version))
+            c.commit()
             print(f"Recorded success for {func}")
         return
 
     if parsed.function:
+        # Fast path: daemon
+        dr = _daemon_req('lookup', version=parsed.version, name=parsed.function)
+        if dr and dr.get('result'):
+            r = dr['result']
+            print(f"=== {r['name']} ({parsed.version}) ===")
+            print(f"  Syntax: {r.get('syntax','')}")
+            print(f"  Desc:   {r.get('description','')}")
+            return
+        # Slow path: direct DB
         r = lookup(c, parsed.function, parsed.version)
         if r:
             print(f"=== {r['name']} ({parsed.version}) ===")
@@ -586,6 +659,11 @@ def main():
                 except: pass
             elif r.get('confidence') == 'ported':
                 print("  ⚠ PORTED: not verified in this version (copied from IC231)")
+            elif r.get('confidence', '').startswith('undefined_in_'):
+                vc = r.get('view_context', 'unknown')
+                print(f"  ⚠ UNDEFINED in {vc} — may exist in other views")
+            if parsed.view != 'any' and r.get('view_context') not in ('any', parsed.view):
+                print(f"  ⚠ This function was tested in '{r.get('view_context')}', not '{parsed.view}'")
             print(f"  Syntax: {r['syntax']}")
             print(f"  Desc:   {r['description']}")
             # Show version differences
@@ -622,13 +700,28 @@ def main():
         return
 
     if parsed.query:
-        # Search functions
+        # Fast path: daemon
+        dr = _daemon_req('search', query=parsed.query, version=parsed.version, limit=parsed.limit)
+        if dr and dr.get('results'):
+            print(f"=== Functions: '{parsed.query}' ===\n")
+            for r in dr['results']:
+                print(f"  {r['name']}")
+                print(f"    {r.get('description','')[:70]}")
+                print()
+            return
+        # Slow path: direct DB
         results = search(c, parsed.query, parsed.version, parsed.limit)
         print(f"=== Functions: '{parsed.query}' ===\n")
         if not results:
             print("  (no functions found)")
         for r in results:
-            print(f"  {r['name']}")
+            # 安全标记
+            mark = ""
+            if r.get('danger'):
+                mark = " ⚠️ BLOCKER"
+            elif r.get('safe'):
+                mark = " ✓ SAFE"
+            print(f"  {r['name']}{mark}")
             print(f"    {r['description'][:70]}")
             print()
 

@@ -11,6 +11,30 @@ from typing import Any, Dict, Optional
 
 from .model import Scenario, Step
 from .trace import Trace
+from .verifier_result import VerifierResult, VerifyStatus, from_legacy_error
+from .recovery import RecoveryPolicy, RecoveryRequest, RecoveryAction, ErrorCategory, decide_recovery
+from .router import RiskClass, Channel, ActionRequest, CapabilitySnapshot, RoutePolicy, route, emit_route_decision
+from .experience import init_schema, compile_run, write_experience
+from .empirical_calibration import empirical_to_dict, load_calibration
+
+
+def _op_risk_class(operation) -> RiskClass:
+    """Map operation to risk class for recovery decisions."""
+    from .model import Operation
+    read_only_ops = {Operation.SCREENSHOT, Operation.WINDOW_WAIT,
+                     Operation.WINDOW_DISCOVER, Operation.WINDOW_ACTIVATE,
+                     Operation.MINIMIZE, Operation.MAXIMIZE}
+    destructive_ops = {Operation.CLOSE, Operation.DISMISS_DIALOG}
+    idempotent_ops = {Operation.KEY, Operation.TYPE, Operation.CLICK_REL,
+                      Operation.CLICK_ABS, Operation.DOUBLE_CLICK,
+                      Operation.DRAG_REL, Operation.SCROLL}
+    if operation in read_only_ops:
+        return RiskClass.READ_ONLY
+    if operation in destructive_ops:
+        return RiskClass.DESTRUCTIVE
+    if operation in idempotent_ops:
+        return RiskClass.IDEMPOTENT_WRITE
+    return RiskClass.NON_IDEMPOTENT_WRITE
 
 
 class RunState(str, Enum):
@@ -41,6 +65,7 @@ ERROR_BASELINE = "BASELINE_ERROR"
 ERROR_EXECUTE = "EXECUTE_ERROR"
 ERROR_RECOVER = "RECOVER_ERROR"
 ERROR_VERIFY = "VERIFY_ERROR"
+ERROR_VERIFY_UNAVAILABLE = "VERIFY_UNAVAILABLE"
 ERROR_ROLLBACK = "ROLLBACK_ERROR"
 
 
@@ -114,10 +139,28 @@ class FakeExecutor(Executor):
             return {"error": f"execute failed for step {step.id}"}
         return None
 
-    def verify(self, step: Step, attempt: int) -> Optional[Dict[str, Any]]:
+    def verify(self, step: Step, attempt: int) -> VerifierResult:
+        """Return VerifierResult (new contract)."""
+        predicate = dict(step.verifier).get("predicate", "unknown")
+        expected = dict(step.verifier).get("expected")
         if self.outcome(step.id, StepPhase.VERIFY, attempt) == StepOutcome.FAILURE:
-            return {"error": f"verify failed for step {step.id}"}
-        return None
+            return VerifierResult(
+                predicate=predicate,
+                status=VerifyStatus.FAILED,
+                expected=expected,
+                observed="<not measured>",
+                reason_code="fake_verify_failed",
+                step_id=step.id,
+                attempt=attempt,
+            )
+        return VerifierResult(
+            predicate=predicate,
+            status=VerifyStatus.PASSED,
+            expected=expected,
+            observed=expected,
+            step_id=step.id,
+            attempt=attempt,
+        )
 
     def recover(self, step: Step, attempt: int, rollback: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if self.outcome(step.id, StepPhase.RECOVER, attempt) == StepOutcome.FAILURE:
@@ -128,11 +171,33 @@ class FakeExecutor(Executor):
 class Runner:
     """State machine runner that executes scenarios step-by-step."""
 
-    def __init__(self, executor: Executor):
+    def __init__(self, executor: Executor, recovery_policy: Optional[RecoveryPolicy] = None,
+                 caps: Optional[CapabilitySnapshot] = None, route_policy: Optional[RoutePolicy] = None,
+                 calibration=None):
         self._executor = executor
+        self._recovery_policy = recovery_policy or RecoveryPolicy()
+        self._caps = caps or CapabilitySnapshot(
+            vcli_available=True, session_alive=True, pid_valid=True,
+            display_available=True, window_identity_known=True,
+            remote_x11_allowed=True, local_x11_available=True,
+            vision_enabled=False, ssh_budget_remaining=10, daemon_healthy=True,
+        )
+        self._caps_source = "executor_probe" if caps else "legacy_default"
+        self._route_policy = route_policy or RoutePolicy()
+        self._policy_mode = "strict" if caps else "compatibility"
+        # P0.5：经验校准。显式注入则直接使用；否则在 run() 时惰性加载，
+        # DB 缺失/损坏时降级为 None（trace 不加 empirical 字段，行为不变）。
+        self._calibration = calibration
+        self._cal = calibration
 
     def run(self, scenario: Scenario, output_dir: Path) -> RunSummary:
         output_dir.mkdir(parents=True, exist_ok=False)
+
+        if self._cal is None:
+            try:
+                self._cal = load_calibration()
+            except Exception:
+                self._cal = None
 
         task_path = output_dir / "task.json"
         tmp_task = output_dir / ".task.json.tmp"
@@ -202,8 +267,10 @@ class Runner:
         trace.emit(RunState.BASELINE.value, outcome="SUCCESS", duration_ms=duration_ms)
         state = RunState.EXECUTE
 
-        # Step execution loop
+        # Step execution loop — RecoveryPolicy driven
         step_index = 0
+        run_deadline = time.monotonic() + self._recovery_policy.total_deadline_ms / 1000.0
+
         while state == RunState.EXECUTE:
             if step_index >= len(scenario.steps):
                 state = RunState.PASSED
@@ -216,6 +283,24 @@ class Runner:
 
             # Single finite for-attempt loop per step
             for attempt in range(max_retries + 1):
+                # P1 Router: decide channel before execute
+                req = ActionRequest(operation=step.operation, step_id=step.id, arguments=dict(step.arguments))
+                decision = route(req, self._caps, self._route_policy)
+                emit_route_decision(trace, step.id, attempt, decision,
+                                    extra_details=self._empirical_for(decision.channel, attempt))
+                # Augment trace with capability provenance
+                trace.emit("ROUTE_PROVENANCE", step_id=step.id, attempt=attempt,
+                           details={"capability_source": self._caps_source, "policy_mode": self._policy_mode})
+                if decision.rejected:
+                    trace.emit(RunState.EXECUTE.value, step_id=step.id, attempt=attempt, outcome="REJECTED",
+                               details={"reason": decision.reason, "channel": decision.channel.value})
+                    state = RunState.FAILED
+                    failed_step_id = step.id
+                    error_code = "ROUTE_REJECTED"
+                    phase = "ROUTE"
+                    step_failed = True
+                    break
+
                 # Execute phase
                 trace.emit(RunState.EXECUTE.value, step_id=step.id, attempt=attempt)
                 start = time.monotonic()
@@ -224,25 +309,54 @@ class Runner:
 
                 if err:
                     trace.emit(RunState.EXECUTE.value, step_id=step.id, attempt=attempt, outcome="FAILURE", duration_ms=duration_ms, details=err)
-                    if attempt < max_retries:
-                        # More attempts available: recover and try again
-                        trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt)
-                        start = time.monotonic()
-                        rec_err = self._executor.recover(step, attempt, dict(step.rollback) if step.rollback else None)
-                        duration_ms = int((time.monotonic() - start) * 1000)
-                        if rec_err:
-                            trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="FAILURE", duration_ms=duration_ms, details=rec_err)
-                            state = RunState.FAILED
-                            failed_step_id = step.id
-                            error_code = ERROR_RECOVER
-                            phase = "RECOVER"
-                            step_failed = True
-                            break
-                        else:
-                            trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="SUCCESS", duration_ms=duration_ms)
-                            # continue to next attempt
-                    else:
-                        # No more attempts
+                    # Use risk_class from Router decision (consistent with trace)
+                    op_risk = decision.risk_class
+                    elapsed_ms = int((run_deadline - time.monotonic()) * 1000 * -1)
+                    req = RecoveryRequest(
+                        step_id=step.id, attempt=attempt,
+                        risk_class=op_risk,
+                        error_category=ErrorCategory.UNKNOWN,
+                        error_message=str(err)[:200],
+                        elapsed_ms=elapsed_ms,
+                        has_rollback=step.rollback is not None,
+                    )
+                    decision = decide_recovery(req, self._recovery_policy)
+                    trace.emit("RECOVERY_DECIDED", step_id=step.id, attempt=attempt,
+                               details=self._recovery_details(decision, req))
+
+                    if decision.action in (RecoveryAction.ROLLBACK, RecoveryAction.RETRY):
+                        if step.rollback:
+                            start = time.monotonic()
+                            rec_err = self._executor.recover(step, attempt, dict(step.rollback))
+                            rb_dur = int((time.monotonic() - start) * 1000)
+                            if rec_err:
+                                trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt,
+                                           outcome="FAILURE", duration_ms=rb_dur, details=rec_err)
+                                trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                           details={"result": "rollback_failed_terminal"})
+                                state = RunState.FAILED
+                                failed_step_id = step.id
+                                error_code = "MANUAL_INTERVENTION_REQUIRED"
+                                phase = "RECOVER"
+                                step_failed = True
+                                break
+                        trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                   details={"result": "ok"})
+                        continue
+                    elif decision.action == RecoveryAction.FALLBACK:
+                        trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                   details={"result": "fallback"})
+                        continue
+                    elif decision.action == RecoveryAction.MANUAL:
+                        trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                   details={"result": "manual_required"})
+                        state = RunState.FAILED
+                        failed_step_id = step.id
+                        error_code = "MANUAL_INTERVENTION_REQUIRED"
+                        phase = "RECOVER"
+                        step_failed = True
+                        break
+                    else:  # ABORT
                         state = RunState.FAILED
                         failed_step_id = step.id
                         error_code = ERROR_EXECUTE
@@ -252,30 +366,141 @@ class Runner:
                 else:
                     trace.emit(RunState.EXECUTE.value, step_id=step.id, attempt=attempt, outcome="SUCCESS", duration_ms=duration_ms)
 
-                    # Verify phase (same attempt)
+                    # Verify phase (same attempt) — VerifierResult contract
                     trace.emit(RunState.VERIFY.value, step_id=step.id, attempt=attempt)
                     start = time.monotonic()
-                    err = self._executor.verify(step, attempt)
+                    vresult_raw = self._executor.verify(step, attempt)
                     duration_ms = int((time.monotonic() - start) * 1000)
 
-                    if err:
-                        trace.emit(RunState.VERIFY.value, step_id=step.id, attempt=attempt, outcome="FAILURE", duration_ms=duration_ms, details=err)
-                        if step.rollback and attempt < max_retries:
-                            trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="ROLLED_BACK")
-                            start = time.monotonic()
-                            rec_err = self._executor.recover(step, attempt, dict(step.rollback) if step.rollback else None)
-                            duration_ms = int((time.monotonic() - start) * 1000)
-                            if rec_err:
-                                trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="FAILURE", duration_ms=duration_ms, details=rec_err)
+                    # Adapt legacy dict return to VerifierResult if needed
+                    if isinstance(vresult_raw, dict) or vresult_raw is None:
+                        predicate = dict(step.verifier).get("predicate", "unknown")
+                        expected = dict(step.verifier).get("expected")
+                        vresult = from_legacy_error(predicate, expected, vresult_raw,
+                                                    step_id=step.id, attempt=attempt)
+                    else:
+                        vresult = vresult_raw
+
+                    # Emit structured verify result to trace
+                    trace.emit(RunState.VERIFY.value, step_id=step.id, attempt=attempt,
+                               outcome=vresult.status.value.upper(),
+                               duration_ms=duration_ms,
+                               details=vresult.to_trace_details())
+
+                    if vresult.status == VerifyStatus.PASSED:
+                        step_succeeded = True
+                        step_index += 1
+                        break
+                    elif vresult.status == VerifyStatus.SKIPPED:
+                        # Policy decides: skipped does not fail the run by default.
+                        # Future: consult skip_policy. For now, treat as success.
+                        step_succeeded = True
+                        step_index += 1
+                        break
+                    elif vresult.status == VerifyStatus.UNAVAILABLE:
+                        # P1 fix: use operation risk class, not hardcoded read_only
+                        op_risk = decision.risk_class
+                        elapsed_ms = int((run_deadline - time.monotonic()) * 1000 * -1)
+                        req = RecoveryRequest(
+                            step_id=step.id, attempt=attempt,
+                            risk_class=op_risk,
+                            error_category=ErrorCategory.VERIFY_UNAVAILABLE,
+                            elapsed_ms=elapsed_ms,
+                            has_rollback=step.rollback is not None,
+                        )
+                        decision = decide_recovery(req, self._recovery_policy)
+                        trace.emit("RECOVERY_DECIDED", step_id=step.id, attempt=attempt,
+                                   details=self._recovery_details(decision, req))
+
+                        if decision.action == RecoveryAction.MANUAL:
+                            trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                       details={"result": "manual_required"})
+                            state = RunState.FAILED
+                            failed_step_id = step.id
+                            error_code = "MANUAL_INTERVENTION_REQUIRED"
+                            phase = "RECOVER"
+                            step_failed = True
+                            break
+                        elif decision.action in (RecoveryAction.ROLLBACK, RecoveryAction.RETRY):
+                            if step.rollback:
+                                start = time.monotonic()
+                                rec_err = self._executor.recover(step, attempt, dict(step.rollback))
+                                rb_dur = int((time.monotonic() - start) * 1000)
+                                if rec_err:
+                                    trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt,
+                                               outcome="FAILURE", duration_ms=rb_dur, details=rec_err)
+                                    trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                               details={"result": "rollback_failed_terminal"})
+                                    state = RunState.FAILED
+                                    failed_step_id = step.id
+                                    error_code = "MANUAL_INTERVENTION_REQUIRED"
+                                    phase = "RECOVER"
+                                    step_failed = True
+                                    break
+                            trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                       details={"result": "ok"})
+                            if attempt >= max_retries:
                                 state = RunState.FAILED
                                 failed_step_id = step.id
-                                error_code = ERROR_ROLLBACK
-                                phase = "RECOVER"
+                                error_code = ERROR_VERIFY_UNAVAILABLE
+                                phase = "VERIFY"
                                 step_failed = True
                                 break
-                            else:
-                                trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt, outcome="SUCCESS", duration_ms=duration_ms)
-                                # continue to next attempt
+                        else:
+                            state = RunState.FAILED
+                            failed_step_id = step.id
+                            error_code = ERROR_VERIFY_UNAVAILABLE
+                            phase = "VERIFY"
+                            step_failed = True
+                            break
+                    else:  # FAILED
+                        op_risk = decision.risk_class
+                        elapsed_ms = int((run_deadline - time.monotonic()) * 1000 * -1)
+                        req = RecoveryRequest(
+                            step_id=step.id, attempt=attempt,
+                            risk_class=op_risk,
+                            error_category=ErrorCategory.VERIFY_FAILED,
+                            elapsed_ms=elapsed_ms,
+                            has_rollback=step.rollback is not None,
+                        )
+                        decision = decide_recovery(req, self._recovery_policy)
+                        trace.emit("RECOVERY_DECIDED", step_id=step.id, attempt=attempt,
+                                   details=self._recovery_details(decision, req))
+
+                        if decision.action == RecoveryAction.MANUAL:
+                            trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                       details={"result": "manual_required"})
+                            state = RunState.FAILED
+                            failed_step_id = step.id
+                            error_code = "MANUAL_INTERVENTION_REQUIRED"
+                            phase = "RECOVER"
+                            step_failed = True
+                            break
+                        elif decision.action in (RecoveryAction.ROLLBACK, RecoveryAction.RETRY):
+                            if step.rollback:
+                                start = time.monotonic()
+                                rec_err = self._executor.recover(step, attempt, dict(step.rollback))
+                                rb_dur = int((time.monotonic() - start) * 1000)
+                                if rec_err:
+                                    trace.emit(RunState.RECOVER.value, step_id=step.id, attempt=attempt,
+                                               outcome="FAILURE", duration_ms=rb_dur, details=rec_err)
+                                    trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                               details={"result": "rollback_failed_terminal"})
+                                    state = RunState.FAILED
+                                    failed_step_id = step.id
+                                    error_code = "MANUAL_INTERVENTION_REQUIRED"
+                                    phase = "RECOVER"
+                                    step_failed = True
+                                    break
+                            trace.emit("RECOVERY_APPLIED", step_id=step.id, attempt=attempt,
+                                       details={"result": "ok"})
+                            if attempt >= max_retries:
+                                state = RunState.FAILED
+                                failed_step_id = step.id
+                                error_code = ERROR_VERIFY
+                                phase = "VERIFY"
+                                step_failed = True
+                                break
                         else:
                             state = RunState.FAILED
                             failed_step_id = step.id
@@ -283,18 +508,9 @@ class Runner:
                             phase = "VERIFY"
                             step_failed = True
                             break
-                    else:
-                        trace.emit(RunState.VERIFY.value, step_id=step.id, attempt=attempt, outcome="SUCCESS", duration_ms=duration_ms)
-                        # Both execute and verify succeeded for this attempt
-                        step_succeeded = True
-                        step_index += 1
-                        break
 
             # If we exhausted all attempts without success and didn't fail explicitly
             if not step_succeeded and not step_failed:
-                # This happens when for loop completes but no explicit success/failure break
-                # Only possible if max_retries=0 and first execute succeeds but verify fails without rollback
-                # Or if all attempts exhausted with recover success (which shouldn't reach here if logic is correct)
                 state = RunState.FAILED
                 failed_step_id = step.id
                 error_code = ERROR_EXECUTE
@@ -319,7 +535,44 @@ class Runner:
         )
 
         self._write_summary(output_dir, scenario.task_id, summary.passed, summary.failed_step_id, summary.error_code, summary.phase)
+
+        # P1 Experience writeback (fast loop: compile + store, never modify Skills)
+        try:
+            from pathlib import Path as _P
+            import sqlite3 as _sq
+            db_path = _P(__file__).parent.parent / "data" / "skill_db.sqlite3"
+            if db_path.exists():
+                _conn = _sq.connect(str(db_path))
+                _conn.row_factory = __import__("sqlite3").Row
+                init_schema(_conn)
+                _events, _case = compile_run(
+                    output_dir, run_id=scenario.task_id, task_id=scenario.task_id)
+                _e, _c = write_experience(_conn, _events, _case)
+                _conn.close()
+        except Exception:
+            pass  # Experience writeback must never break the run
+
         return summary
+
+    def _empirical_for(self, channel, attempt: int, failure: Optional[str] = None) -> Optional[dict]:
+        """查经验校准并序列化为 trace 附加字段；不可用返回 None（不破坏 run）。"""
+        cal = self._cal
+        if cal is None:
+            return None
+        try:
+            ch = channel.value if hasattr(channel, "value") else channel
+            est = cal.estimate(ch, failure or "", attempt)
+        except Exception:
+            return None
+        return {"empirical": empirical_to_dict(est)} if est is not None else None
+
+    def _recovery_details(self, decision, req) -> dict:
+        """RECOVERY_DECIDED details：规则决策 + 经验校准 support（附加，不覆盖既有键）。"""
+        details = decision.to_trace_details()
+        emp = self._empirical_for(req.current_channel, req.attempt, req.error_category.value)
+        if emp:
+            details = {**details, **emp}
+        return details
 
     def _write_summary(self, output_dir: Path, task_id: str, passed: bool, failed_step: Optional[str], error_code: Optional[str], phase: Optional[str]) -> None:
         summary_path = output_dir / "summary.json"

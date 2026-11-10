@@ -17,7 +17,6 @@ allowed-tools:
   - Bash(find *)
   - Bash(grep *)
   - Read
-argument-hint: "[maestro_dir] [--run <run_name>] [--test <test_name>] [--list]"
 ---
 
 ## Arguments routing

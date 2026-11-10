@@ -11,12 +11,13 @@ description: |
 author: Codex
 version: 1.0.0
 date: 2026-04-06
+allowed-tools: Bash(python *) Read Write
 ---
 
 # sim-plot: Matplotlib Visualization
 
 Pipe `--format json` output into `plot_sim.py` to get charts. The script
-lives at `.Codex/skills/sim-plot/scripts/plot_sim.py`.
+lives at `.agents/skills/sim-plot/scripts/plot_sim.py`.
 
 ## Usage by Chart Type
 
@@ -28,7 +29,7 @@ virtuoso sim sweep \
   --analysis dc \
   --expr 'openResults("/tmp/opt/psf") selectResult('"'"'acSweep) dB20(value(VF("net1") 1))' \
   --format json | \
-  python3 .Codex/skills/sim-plot/scripts/plot_sim.py \
+  python3 .agents/skills/sim-plot/scripts/plot_sim.py \
     --output plots/w34_sweep.png \
     --title "5T OTA: Gain vs W34"
 ```
@@ -36,7 +37,7 @@ virtuoso sim sweep \
 Or save JSON first then plot:
 ```bash
 virtuoso sim sweep ... --format json > /tmp/sweep.json
-python3 .Codex/skills/sim-plot/scripts/plot_sim.py \
+python3 .agents/skills/sim-plot/scripts/plot_sim.py \
   --input /tmp/sweep.json --output plots/sweep.png
 ```
 
@@ -58,7 +59,7 @@ python3 .Codex/skills/sim-plot/scripts/plot_sim.py \
 
 ```bash
 virtuoso sim corner --file corners.json --format json | \
-  python3 .Codex/skills/sim-plot/scripts/plot_sim.py \
+  python3 .agents/skills/sim-plot/scripts/plot_sim.py \
     --output plots/corner.png --title "PVT Corner Results"
 ```
 
@@ -84,7 +85,7 @@ virtuoso sim measure --analysis dcOp \
   --expr 'getData("I0.NM0:gm" ?result "dcOpInfo")' \
   --expr 'getData("I0.NM0:gds" ?result "dcOpInfo")' \
   --format json | \
-  python3 .Codex/skills/sim-plot/scripts/plot_sim.py \
+  python3 .agents/skills/sim-plot/scripts/plot_sim.py \
     --output plots/oppoint.png
 ```
 
@@ -133,7 +134,7 @@ The plot shows:
 ### 5. gm/Id Lookup Table → Transistor Curves
 
 ```bash
-python3 .Codex/skills/sim-plot/scripts/plot_sim.py \
+python3 .agents/skills/sim-plot/scripts/plot_sim.py \
   --input process_data/smic13mmrf/nmos_lookup.json \
   --output plots/nmos_gmid.png \
   --title "NMOS gm/Id Lookup (SMIC 0.13µm)"
@@ -163,13 +164,13 @@ echo '{
     {"W34": "16e-06","gain_dB": "43.2", "gbw_hz": "1.15e7","gm_uS": "372", "gmId": "11.9"},
     {"W34": "24e-06","gain_dB": "43.3", "gbw_hz": "1.14e7","gm_uS": "372", "gmId": "11.9"}
   ]
-}' | python3 .Codex/skills/sim-plot/scripts/plot_sim.py \
+}' | python3 .agents/skills/sim-plot/scripts/plot_sim.py \
   --output plots/5t_ota_w34.png --title "5T OTA: Gain & GBW vs W34 (PMOS load)"
 ```
 
 ### After process char
 ```bash
-python3 .Codex/skills/sim-plot/scripts/plot_sim.py \
+python3 .agents/skills/sim-plot/scripts/plot_sim.py \
   --input process_data/smic13mmrf/nmos_lookup.json \
   --output plots/nmos_char.png
 ```
@@ -179,7 +180,7 @@ python3 .Codex/skills/sim-plot/scripts/plot_sim.py \
 ## Script Location
 
 ```
-.Codex/skills/sim-plot/scripts/plot_sim.py
+.agents/skills/sim-plot/scripts/plot_sim.py
 ```
 
 **Requirements**: Python 3.8+, matplotlib, numpy  
