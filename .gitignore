@@ -37,3 +37,4 @@ gmid_test*.log
 .verify-artifacts/
 
 /0
+evidence/

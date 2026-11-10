@@ -1,5 +1,6 @@
 pub mod bridge;
 /// Everything in this crate that can destroy design data, in one auditable file.
+pub mod cell_ops;
 pub mod delete_ops;
 pub mod editor;
 pub mod layout_ops;
