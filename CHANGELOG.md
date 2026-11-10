@@ -43,9 +43,10 @@ All notable changes to this project will be documented in this file.
 - **`vcli maestro job submit / status / list / logs / cancel`** — persistent Maestro
   simulation job management. Jobs are stored as JSON in
   `~/.cache/virtuoso_bridge/maestro/jobs/<id>.json`. Submit is fail-closed
-  (read-only session, profile mismatch, duplicate run_id are errors). Status
-  polling reads only the local run_dir filesystem, never contacts CIW. Persisted
-  from Arcadia-1/virtuoso-bridge-lite PR #173.
+  (an unwritable session, a client-id mismatch and a duplicate run id are
+  all errors). Status reads the run directory — locally, or on the run host
+  when the job runs there — and never contacts CIW. Persisted from
+  Arcadia-1/virtuoso-bridge-lite PR #173.
 - **`vcli cell verify-native <lib/cell/view>`** — read-only cellview grid audit
   and decorative supply-rail tail detection. Reports per-layer on/off-grid
   shape counts and VDD*/VSS*/VPWR*/VGND* decorative tails. Exits non-zero only
@@ -55,44 +56,83 @@ All notable changes to this project will be documented in this file.
 - **`src/client/cell_ops.rs`** — SKILL builders for `tech_grid_precision_skill`
   and `shape_grid_audit_skill` (read-only grid drift detection).
 
-### Changed (round 2 — safety-semantic fixes, MY-138 follow-up)
+### Changed (MY-138 — persistent Maestro jobs and native cell verification)
 
-The first cut of MY-138 left several fail-closed contracts unfilled. Round 2
-tightens them and adds tests that exercise the real production paths:
+The first cut of MY-138 shipped SKILL that could never have produced a
+correct result, and fail-closed contracts that were not actually closed.
+This round rewrites the SKILL against the OpenAccess APIs that exist
+(verified against a live Virtuoso), closes the gates, and adds tests that
+exercise the real production paths:
 
-- **`vcli maestro job submit` is now exactly-once.** A pre-flight phase
-  (`maeGetSetup(?runId t)` + on-disk store lookup) runs **before**
-  `maeRunSimulation`. If the run id Maestro is about to assign is already
-  in the store, submit returns `Err` and the simulation never starts —
-  there is no orphan Spectre child. A second duplicate check after submit
-  catches the loser of a race that snuck through the pre-flight window.
-- **Terminal statuses are sticky.** `derive_status_from_run_dir` returns
-  the persisted `Completed`/`Failed`/`Cancelled` status unchanged, even
-  if the run_dir filesystem later looks like a healthy completion.
-  Cancellation cannot be silently overwritten by `psf/spectre.out` showing
-  up on disk.
+- **`vcli cell verify-native` now works.** The first cut called
+  `axlOpenCellViewByMode` and `axlGetTech` — neither exists in the OA
+  function database, and the shape accessors it used (`s~>layer~>name`,
+  `b~>x1`, `s~>kind`, `car(p)~>objType`) do not exist on real shapes. The
+  audit now opens the cellview with `dbOpenCellViewByType(lib cell view
+  viewType mode)` — the `viewType` argument is what makes the call return a
+  cellview rather than a window id — reads the grid from
+  `techGetMfgGridResolution(techGetTechFile(ddGetObj(lib)))`, and takes the
+  layer from `car(s~>lpp)`, the box from `s~>bBox` and the vertices from
+  `s~>points`. It was run end-to-end against a live bridge
+  (`st02/qvp20/layout`, 497 shapes, grid 0.005) and reports per-layer
+  on/off-grid counts.
+- **The audit's output format now matches its parser.** The SKILL emitted
+  one `(layer on)` tuple per *shape* with no counts and no aggregation, while
+  the parser read `(layer onCount offCount)` per *layer* — so the off-grid
+  count was always zero and the drift verdict could never fire. The SKILL now
+  aggregates per layer and the tests pin the SKILL's output format and the
+  parser's reading of it together.
+- **`vcli maestro job submit` records every simulation it starts.** The
+  first cut checked for a duplicate run id *after* `maeRunSimulation` had
+  already forked the Spectre child and then returned an error without writing
+  a record — an orphan simulation invisible to `job status`, `job list` and
+  `job cancel`. A record now always exists once the submit has been issued;
+  when the run id belongs to another job, the record says so instead of
+  being dropped. The run id is read from the submit itself
+  (`maeRunSimulation(?returnRunId t)`): `maeGetSetup` has no `?runId`
+  keyword, so the first cut's pre-submit probe could never have worked.
+- **The read-only gate fails closed.** The first cut judged the probe with
+  `ok()`, which only reports the transport layer — a probe that returned nil
+  or raised still counted as success. The probe now reports one of three
+  outcomes, and the session's existence is established before "not
+  read-only" is read as "writable" (`axlIsSessionReadOnly` returns nil for a
+  session that does not exist). Anything short of an explicit "writable"
+  refuses the submit.
+- **The profile gate compares the right identifier.** It compared the raw
+  `VB_PROFILE` against the session's client id, which both mis-fires (when
+  `VB_CLIENT_ID` is set) and is skipped entirely (when `VB_PROFILE` is not).
+  It now compares `resolve_client_id()` — the same resolution the rest of
+  the CLI uses — against the client ids recorded for the session.
+- **Job status works on a remote run host.** The status was derived by
+  stat-ing the run directory on the local filesystem, which in this repo's
+  primary deployment is on the compute host — so every remote job reported
+  `unknown`. The run host is now asked directly, over the same transport
+  `job logs` already uses. CIW is still never contacted, and a terminal
+  status is still sticky.
+- **`--status` filters on the status that is shown.** The filter used the
+  stored status while the list showed the derived one, and `completed` /
+  `failed` were never written back, so `--status completed` always came back
+  empty. Terminal states are now persisted when first observed.
+- **`job cancel` refuses to cancel a finished job** and reports that
+  `maeCloseSession` is session-wide — every other job in the session dies
+  with it and unsaved session state is lost.
+- **Terminal statuses are sticky.** A cancelled job never comes back as
+  completed, however healthy the run directory later looks.
 - **`vcli cell verify-native` exits non-zero on drift.** The dispatch in
   `src/main.rs` converts the command's `Ok(json!({"status":"drift"}))`
   into `Err(VirtuosoError::Execution(...))` so CI scripts and `set -e`
   pipelines see the failure. `verify_native` itself still returns the
   JSON breakdown so callers can read layer-by-layer off-grid counts.
-- **`parse_grid_audit_output` is now `pub` (re-exported via
+- **`parse_grid_audit_output` is `pub` (re-exported via
   `virtuoso_cli::parse_grid_audit_output`).** Integration tests in
   `tests/cell_verify.rs` exercise the real parser; the previous test-only
   clone ("Mirrors the logic in commands/cell.rs") is gone.
-- **`shape_grid_audit_skill` walks polygon / path vertices** in addition
-  to bBox corners, so vertex drift inside a polygon whose bbox is on-grid
-  is now caught (was: a pure-bBox approximation).
-- **Find-tails endpoint analysis is now real.** Single-segment paths on
-  `annotate` layer only, with exactly one free endpoint (route-anchor with
-  refcount = 1) and the other endpoint on a VDD*/VSS*/VPWR*/VGND* net.
-  Multi-segment paths and ambiguous crossings remain electrical (no
-  decorative flag). "drawing" was a purpose, not a layer name — removed
-  from the candidate match.
-- **Atomic save.** `MaestroJobStore::save` writes to `<id>.json.tmp` then
-  renames; torn writes no longer leave half-written JSON for `list()` to
-  silently skip. `load` rejects non-UUID job_id shapes (defence against
-  `--job-id ../../x`); `validate_job_id` is the gate.
+- **`MaestroJobStore::save` is atomic.** It writes `<id>.json.tmp` and
+  renames it onto `<id>.json` without removing the destination first — the
+  remove step opened a window in which the job record did not exist at all,
+  and that record is the only proof the job was submitted. `load` rejects
+  non-UUID job_id shapes (defence against `--job-id ../../x`);
+  `validate_job_id` is the gate.
 - **`vcli maestro job logs` single-quotes the remote path** so a path
   with spaces / `;` / `$()` cannot inject a second command. The integer
   `n` is `usize` from clap and is embedded unquoted.

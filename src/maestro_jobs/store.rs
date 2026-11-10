@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -13,9 +14,11 @@ use crate::runtime_paths::cache_subdir;
 /// Mirrors virtuoso-bridge-lite's `MaestroJobStatus`:
 /// - `Pending`: job submitted but not yet started
 /// - `Running`: Spectre is executing
-/// - `Completed`: Cadence callback ran (≠ sim success)
-/// - `Failed`: Cadence callback error
-/// - `Unknown`: submit acknowledged but persistence failed
+/// - `Completed`: the run finished (a log file exists — this says the run
+///   ended, not that the simulation succeeded)
+/// - `Failed`: the run died before it produced results
+/// - `Unknown`: the outcome could not be determined (the submit failed, the
+///   transport broke, or the run id turned out to belong to another job)
 /// - `Cancelled`: operator cancelled
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -39,7 +42,7 @@ pub struct MaestroJob {
     pub session: String,
     /// Test name within the session.
     pub test: Option<String>,
-    /// Run id assigned by Maestro (from `maeGetSetup(?runId ...)`).
+    /// Run id assigned by Maestro (from `maeRunSimulation(?returnRunId t)`).
     pub run_id: Option<String>,
     /// Maestro's Virtuoso PID.
     pub pid: Option<u32>,
@@ -53,10 +56,17 @@ pub struct MaestroJob {
     pub created_at: DateTime<Utc>,
     /// Last status update.
     pub updated_at: DateTime<Utc>,
-    /// Error message when status is Failed or Unknown.
+    /// Error message when the status is `Failed` or `Unknown`, or a note on a
+    /// record that exists only so a submitted simulation is not orphaned.
     pub error_message: Option<String>,
-    /// Client profile under which this job was created.
-    pub profile: Option<String>,
+    /// Client identity under which this job was created.
+    ///
+    /// This is the resolved client id (`resolve_client_id()`:
+    /// `VB_CLIENT_ID` → `VB_PROFILE` → hostname → `"default"`), not the raw
+    /// `VB_PROFILE`. The store directory is shared by every profile, so the
+    /// record itself is what carries the identity.
+    #[serde(default)]
+    pub client_id: Option<String>,
 }
 
 impl MaestroJob {
@@ -75,7 +85,7 @@ impl MaestroJob {
             created_at: now,
             updated_at: now,
             error_message: None,
-            profile: std::env::var("VB_PROFILE").ok(),
+            client_id: Some(crate::client::bridge::resolve_client_id()),
         }
     }
 
@@ -155,24 +165,24 @@ impl MaestroJobStore {
 
     /// Save a job to disk atomically.
     ///
-    /// Writes to `<id>.json.tmp` first, then renames onto `<id>.json`.
-    /// `rename` is atomic on the same filesystem on both Linux and macOS
-    /// (and on Windows when the destination does not exist), so a torn
-    /// write never leaves a half-written JSON behind for `list()` to
-    /// silently skip — `load()` returns `InvalidData` and surfaces it
-    /// to the caller instead. Existing files are replaced.
+    /// Writes to `<id>.json.tmp` first, then renames it onto `<id>.json`.
+    /// A rename within one filesystem is atomic, so a reader sees either the
+    /// previous record or the new one — never a half-written JSON and never
+    /// no record at all.
+    ///
+    /// The destination is deliberately NOT removed first. Removing it would
+    /// open a window in which the job record does not exist, and that record
+    /// is the only proof that the job was submitted: a reader that polls in
+    /// that window would see the job as never submitted. `std::fs::rename`
+    /// replaces an existing destination (it maps to `MoveFileEx` with
+    /// `MOVEFILE_REPLACE_EXISTING` on Windows), so the remove step was never
+    /// needed.
     pub fn save(&self, job: &MaestroJob) -> std::io::Result<()> {
         let path = self.path(&job.job_id)?;
         let json = serde_json::to_string_pretty(job)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         let tmp = path.with_extension("json.tmp");
         fs::write(&tmp, json)?;
-        // On Windows, rename fails if the destination exists. Remove first
-        // only when the destination is present; the gap is bounded by the
-        // tmp write having succeeded.
-        if path.exists() {
-            fs::remove_file(&path)?;
-        }
         fs::rename(&tmp, &path)
     }
 
@@ -218,40 +228,86 @@ impl MaestroJobStore {
         Ok(jobs)
     }
 
-    /// List jobs filtered by status.
+    /// Filter `jobs` by their **effective** status.
+    ///
+    /// The effective status is the derived one — what the run host reports
+    /// about the run directory — and not the persisted one. A job whose run
+    /// has finished is `completed` even though its record still says
+    /// `running`, so filtering on the persisted status would make
+    /// `--status completed` miss every job that finished since it was
+    /// written. `effective` maps job id to the derived status; a job with no
+    /// entry falls back to its persisted status.
     ///
     /// Library/cell/view filtering was removed in round 2 — the previous
     /// substring stub could match false positives in unrelated paths.
     /// Round 3 should parse `run_dir/maestro.sdb` (or equivalent) to get
     /// reliable per-row library / cell / view metadata.
-    pub fn list_filtered(
-        &self,
+    pub fn filter_by_status(
+        jobs: &[MaestroJob],
+        effective: &HashMap<String, MaestroJobStatus>,
         status_filter: Option<MaestroJobStatus>,
-    ) -> std::io::Result<Vec<MaestroJob>> {
+    ) -> Vec<MaestroJob> {
+        jobs.iter()
+            .filter(|j| match status_filter {
+                Some(s) => effective.get(&j.job_id).copied().unwrap_or(j.status) == s,
+                None => true,
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Find the job that owns `run_id`.
+    ///
+    /// The **oldest** non-terminal job wins. When two submits are handed the
+    /// same run id, the first submitter is the authoritative owner and the
+    /// later one is the duplicate record; `list()` is newest-first, so the
+    /// owner is picked explicitly rather than by accident.
+    ///
+    /// Failed and cancelled jobs do not own their run id: they are over, so
+    /// they must not block a later submit.
+    pub fn find_by_run_id(&self, run_id: &str) -> std::io::Result<Option<MaestroJob>> {
         let all = self.list()?;
         Ok(all
             .into_iter()
             .filter(|j| {
-                if let Some(s) = status_filter {
-                    if j.status != s {
-                        return false;
-                    }
-                }
-                true
+                j.run_id.as_deref() == Some(run_id)
+                    && !matches!(
+                        j.status,
+                        MaestroJobStatus::Failed | MaestroJobStatus::Cancelled
+                    )
             })
-            .collect())
+            .min_by_key(|j| j.created_at))
     }
 
-    /// Find a job by run_id. Returns `None` if not found.
-    pub fn find_by_run_id(&self, run_id: &str) -> std::io::Result<Option<MaestroJob>> {
-        let all = self.list()?;
-        Ok(all.into_iter().find(|j| {
-            j.run_id.as_deref() == Some(run_id)
-                && !matches!(
-                    j.status,
-                    MaestroJobStatus::Failed | MaestroJobStatus::Cancelled
-                )
-        }))
+    /// Every non-terminal job recorded for `session`, oldest first.
+    ///
+    /// Used by the submit gate to find out which client id already owns the
+    /// session: the store directory is shared by every profile, so the
+    /// records are the only record of who has submitted on a session.
+    pub fn find_active_by_session(&self, session: &str) -> std::io::Result<Vec<MaestroJob>> {
+        let mut jobs: Vec<MaestroJob> = self
+            .list()?
+            .into_iter()
+            .filter(|j| j.session == session && !Self::is_terminal(j.status))
+            .collect();
+        jobs.sort_by_key(|j| j.created_at);
+        Ok(jobs)
+    }
+
+    /// Map a status token reported by a status probe onto a job status.
+    ///
+    /// The probe (local filesystem or remote host) reports one of
+    /// `completed` / `running` / `failed` / `unknown`; anything else is
+    /// `Unknown` rather than a guess.
+    pub fn status_from_token(token: &str) -> MaestroJobStatus {
+        match token {
+            "completed" => MaestroJobStatus::Completed,
+            "running" => MaestroJobStatus::Running,
+            "failed" => MaestroJobStatus::Failed,
+            "pending" => MaestroJobStatus::Pending,
+            "cancelled" => MaestroJobStatus::Cancelled,
+            _ => MaestroJobStatus::Unknown,
+        }
     }
 
     /// Whether a status is terminal (cannot transition further).

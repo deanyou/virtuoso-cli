@@ -175,7 +175,7 @@ fn find_by_run_id_skips_failed_jobs() {
 }
 
 #[test]
-fn list_filtered_by_status() {
+fn filter_by_status_matches_the_stored_status_when_nothing_was_derived() {
     let (_tmp, store) = temp_store();
 
     let mut j1 = MaestroJob::new("s1".into(), None, None);
@@ -186,15 +186,84 @@ fn list_filtered_by_status() {
     j2.status = MaestroJobStatus::Failed;
     store.save(&j2).unwrap();
 
-    let running: Vec<_> = store
-        .list_filtered(Some(MaestroJobStatus::Running))
-        .unwrap();
+    let jobs = store.list().unwrap();
+    let no_derivations = std::collections::HashMap::new();
+
+    let running =
+        MaestroJobStore::filter_by_status(&jobs, &no_derivations, Some(MaestroJobStatus::Running));
     assert_eq!(running.len(), 1);
     assert_eq!(running[0].session, "s1");
 
-    let failed: Vec<_> = store.list_filtered(Some(MaestroJobStatus::Failed)).unwrap();
+    let failed =
+        MaestroJobStore::filter_by_status(&jobs, &no_derivations, Some(MaestroJobStatus::Failed));
     assert_eq!(failed.len(), 1);
     assert_eq!(failed[0].session, "s2");
+}
+
+#[test]
+fn filter_by_status_uses_the_derived_status() {
+    // The whole point: a job whose run has finished is `completed` even
+    // though its record still says `running`. Filtering on the stored status
+    // made `--status completed` return nothing.
+    let (_tmp, store) = temp_store();
+
+    let mut job = MaestroJob::new("s1".into(), None, None);
+    job.status = MaestroJobStatus::Running;
+    store.save(&job).unwrap();
+
+    let jobs = store.list().unwrap();
+    let mut derived = std::collections::HashMap::new();
+    derived.insert(job.job_id.clone(), MaestroJobStatus::Completed);
+
+    let completed =
+        MaestroJobStore::filter_by_status(&jobs, &derived, Some(MaestroJobStatus::Completed));
+    assert_eq!(
+        completed.len(),
+        1,
+        "the derived status must drive the filter"
+    );
+    assert_eq!(completed[0].job_id, job.job_id);
+
+    let running =
+        MaestroJobStore::filter_by_status(&jobs, &derived, Some(MaestroJobStatus::Running));
+    assert!(
+        running.is_empty(),
+        "the stored status must not drive the filter"
+    );
+}
+
+#[test]
+fn find_by_run_id_returns_the_oldest_owner() {
+    // Two submits can be handed the same run id. The first submitter owns
+    // it; the later record is the duplicate. The store must name the owner
+    // deterministically, not "whichever the newest-first list happens to
+    // produce".
+    let (_tmp, store) = temp_store();
+
+    let mut owner = MaestroJob::new("s".into(), None, None);
+    owner.run_id = Some("run_dup".into());
+    owner.status = MaestroJobStatus::Running;
+    owner.created_at = chrono::Utc::now() - chrono::Duration::seconds(60);
+    store.save(&owner).unwrap();
+
+    let mut duplicate = MaestroJob::new("s".into(), None, None);
+    duplicate.run_id = Some("run_dup".into());
+    duplicate.status = MaestroJobStatus::Unknown;
+    store.save(&duplicate).unwrap();
+
+    assert_eq!(
+        store.find_by_run_id("run_dup").unwrap().unwrap().job_id,
+        owner.job_id
+    );
+}
+
+#[test]
+fn a_new_job_records_the_resolved_client_id() {
+    let job = MaestroJob::new("s".into(), None, None);
+    assert_eq!(
+        job.client_id.as_deref(),
+        Some(virtuoso_cli::client::bridge::resolve_client_id().as_str())
+    );
 }
 
 #[test]
@@ -204,43 +273,82 @@ fn job_id_is_unique() {
     assert_ne!(job1.job_id, job2.job_id);
 }
 
-// ---- additional m3/minor tests: list_filtered signature (no lib/cell/view) ---
+// ---- m1: the run id comes from the submit itself ---------------------
 
 #[test]
-fn list_filtered_takes_only_status() {
-    // round 2 dropped the silent lib/cell/view no-op arguments from
-    // `job_list`; this test pins the new signature.
-    let tmp = tempfile::tempdir().unwrap();
-    let dir = tmp.path().join("jobs");
-    std::fs::create_dir_all(&dir).unwrap();
-    let store = virtuoso_cli::maestro_jobs::MaestroJobStore::with_dir(dir).unwrap();
-
-    let mut j1 = virtuoso_cli::maestro_jobs::MaestroJob::new("s1".into(), None, None);
-    j1.status = virtuoso_cli::maestro_jobs::MaestroJobStatus::Running;
-    let mut j2 = virtuoso_cli::maestro_jobs::MaestroJob::new("s2".into(), None, None);
-    j2.status = virtuoso_cli::maestro_jobs::MaestroJobStatus::Failed;
-    store.save(&j1).unwrap();
-    store.save(&j2).unwrap();
-
-    let running = store
-        .list_filtered(Some(virtuoso_cli::maestro_jobs::MaestroJobStatus::Running))
-        .unwrap();
-    assert_eq!(running.len(), 1);
-    assert_eq!(running[0].session, "s1");
-}
-
-// ---- m1: submit_skill + read_run_id_skill don't collide -----------------
-
-#[test]
-fn submit_skill_runs_mae_run_simulation_but_read_run_id_skill_does_not() {
+fn submit_skill_reads_the_run_id_from_the_submit() {
     use virtuoso_cli::client::maestro_ops::MaestroOps;
 
     let submit = MaestroOps.submit_skill("fnxSession4");
     assert!(submit.contains("maeRunSimulation"), "{submit}");
+    // The run id has to come from the submit itself: `maeGetSetup` has no
+    // `?runId` keyword, so there is no pre-submit probe for it.
+    assert!(submit.contains("?returnRunId"), "{submit}");
+    assert!(!submit.contains("maeGetSetup"), "{submit}");
+}
 
-    let read = MaestroOps.read_run_id_skill("fnxSession4");
-    assert!(
-        !read.contains("maeRunSimulation"),
-        "read_run_id_skill must NOT fire the simulation: {read}"
+#[test]
+fn job_helpers_use_only_functions_that_exist() {
+    use virtuoso_cli::client::maestro_ops::MaestroOps;
+
+    let submit = MaestroOps.submit_skill("sess");
+    assert!(submit.contains("ipcGetPid"), "{submit}");
+    assert!(!submit.contains("ipcGetProcessID"), "{submit}");
+    assert!(!submit.contains("ipcGetStdin"), "{submit}");
+
+    let pid = MaestroOps.pid_skill();
+    assert!(pid.contains("ipcGetPid"), "{pid}");
+    assert!(!pid.contains("ipcGetProcessID"), "{pid}");
+    assert!(!pid.contains("ipcGetStdin"), "{pid}");
+}
+
+// ---- m7: the record is never absent while it is being written ---------
+
+#[test]
+fn save_never_leaves_the_record_missing() {
+    // The job record is the only proof that the job was submitted, so a
+    // reader must never see it disappear while it is being replaced. The
+    // old save removed the destination and renamed the temporary file in
+    // its place, which opens exactly that window.
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let (_tmp, store) = temp_store();
+    let mut job = MaestroJob::new("s".into(), None, None);
+    store.save(&job).unwrap();
+
+    let path = store.dir.join(format!("{}.json", job.job_id));
+    let stop = Arc::new(AtomicBool::new(false));
+    let missing = Arc::new(AtomicUsize::new(0));
+
+    let reader = {
+        let stop = Arc::clone(&stop);
+        let missing = Arc::clone(&missing);
+        let path = path.clone();
+        std::thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                if !path.exists() {
+                    missing.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        })
+    };
+
+    for i in 0..500 {
+        job.status = if i % 2 == 0 {
+            MaestroJobStatus::Running
+        } else {
+            MaestroJobStatus::Pending
+        };
+        store.save(&job).unwrap();
+    }
+
+    stop.store(true, Ordering::Relaxed);
+    reader.join().unwrap();
+
+    assert_eq!(
+        missing.load(Ordering::Relaxed),
+        0,
+        "the job record must never be absent between saves"
     );
 }

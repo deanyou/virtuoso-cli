@@ -1,178 +1,307 @@
-//! SKILL builders for cell verification (grid audit + decorative tail scan).
+//! SKILL builders for cell verification (grid audit + decorative supply-rail
+//! tail detection).
 //!
-//! Analogous to PR #175 (preserve native grid + decorative power rails).
+//! Every API used here was verified against a live Virtuoso bridge. The
+//! measured facts are recorded here so the next reader does not have to
+//! re-derive them:
+//!
+//! * `dbOpenCellViewByType(lib cell view viewType mode)` — the `viewType`
+//!   argument is REQUIRED, and passing it is what makes the call return a
+//!   *cellview*. `dbOpenCellViewByType(lib cell list(view) mode)` returns a
+//!   *window id* instead, and every `~>` accessor on a window id reads nil, so
+//!   the audit silently reports "no drift" for every cellview.
+//!   `axlOpenCellViewByMode` does not exist at all.
+//! * The grid is `techGetMfgGridResolution(techGetTechFile(ddGetObj(lib)))`.
+//!   There is no `axlGetTech` and no `userGridPrecision` — not in this IC
+//!   version and not in the OA function database either.
+//! * A shape's layer is `car(s~>lpp)`; `s~>lpp` is the `(layer purpose)` pair.
+//!   There is no `s~>layer~>name`.
+//! * A shape's bounding box is `s~>bBox` = `((x1 y1) (x2 y2))`. A box has no
+//!   `x1`/`x2`/`y1`/`y2` accessors — the coordinates come out of the two
+//!   points with `caar`/`cadar`/`caadr`/`cadadr`.
+//! * `s~>points` is a list of `(x y)` coordinate PAIRS, and only shapes that
+//!   carry a vertex list have one (a polygon does, a rectangle does not).
+//!   There is no `s~>kind` (it is nil on real shapes) and no `s~>~>points`.
+//! * `s~>net~>name` works on layout shapes — but a shape may have no net, so
+//!   it must be guarded with `when(s~>net ...)`.
+//! * `dbGetOverlaps(cv list(pt pt))` returns the shapes that touch a point.
+//!   This is the repo's existing idiom for "what is connected here".
+//!
+//! SKILL gotchas that shaped the code below (all measured, not guessed):
+//!
+//! * `foreach` swallows every remaining form in its body — a `foreach` body
+//!   must be wrapped in `progn(...)` when more than one statement has to run
+//!   per element.
+//! * `if` evaluates its condition as a *form*, so `if(s~>points ...)` fails
+//!   to even parse. `when`/`unless` accept accessor conditions.
+//! * Arithmetic is infix-only: `(/ a b)` is a syntax error, `a / b` is not.
+//! * `rexMatchp` has no alternation — `^(VDD|VSS)` never matches. The supply
+//!   net test below compares prefixes with `strcmp` instead.
 
 use crate::client::bridge::escape_skill_string;
 
-/// SKILL that reads the technology's user grid precision.
-/// Returns a float representing the smallest resolvable coordinate unit.
+/// Key the grid-audit SKILL emits for its decorative-tail section.
 ///
-/// Uses `tech~>userGridPrecision` if available; otherwise falls back to
-/// `ddGetLib(techName)~>prBound` or returns `1.0`.
+/// The parser in `crate::commands::cell` looks for exactly this key, so the
+/// two ends of the format cannot drift apart silently.
+pub const TAILS_KEY: &str = "tails";
+
+/// Map a view name to the OA `viewType` string `dbOpenCellViewByType` needs.
+///
+/// The names are Cadence-standard and version/PDK-independent: a layout view
+/// is `"maskLayout"`, a symbol view is `"schematicSymbol"`. An unknown view
+/// falls back to the view name itself, matching the `cell.open` convention.
+fn view_type_for(view: &str) -> &str {
+    match view {
+        "layout" => "maskLayout",
+        "symbol" => "schematicSymbol",
+        other => other,
+    }
+}
+
+/// SKILL that reads the technology's manufacturing grid resolution.
+///
+/// Returns the grid step in user units (0.005 on the `st02` test library), or
+/// nil when the technology reports no resolution — there is no "user grid
+/// precision" concept in the OpenAccess API this repo talks to.
 #[allow(dead_code)]
 pub fn tech_grid_precision_skill(lib: &str) -> String {
     let lib = escape_skill_string(lib);
     format!(
-        r#"let((ugp) ugp = errset(axlGetTech(?libName "{lib}")~>userGridPrecision) if(ugp && listp(ugp) then let((v) v = car(ugp) if(numberp(v) v 1.0)) else if(numberp(ugp) ugp 1.0)))"#
+        r#"let((techId grid) techId = techGetTechFile(ddGetObj("{lib}")) grid = nil when(techId grid = techGetMfgGridResolution(techId)) grid)"#
     )
 }
 
-/// SKILL that audits every shape on every layer in a cellview for coordinate
-/// grid drift.
+/// SKILL that audits every shape of every layer in a cellview for coordinate
+/// grid drift, and reports decorative supply-rail tails.
 ///
-/// Returns a structured SKILL list:
+/// Opens the cellview read-only, resolves the manufacturing grid, then walks
+/// every shape. Each shape contributes to exactly one layer bucket:
+///
+/// * `on` — every coordinate the shape exposes is a multiple of the grid;
+/// * `off` — at least one coordinate is off-grid.
+///
+/// The coordinates checked are the shape's bounding-box corners
+/// (`s~>bBox` = `((x1 y1) (x2 y2))`) *and*, when the shape carries a vertex
+/// list (`s~>points` — polygons do, rectangles do not), every vertex. A
+/// polygon can drift on a vertex while its bounding box stays on-grid, so
+/// checking the box alone under-reports drift.
+///
+/// Returns a list shaped like
 ///
 /// ```text
-/// (
-///   (layerName onGridCount offGridCount (...))
-///   ...
-///   (tails (netName count) (...))
-/// )
-///
-/// `onGridCount` — shapes whose coordinates are multiples of userGridPrecision
-/// `offGridCount` — shapes with at least one off-grid coordinate
-/// `tails` — list of (netName count) pairs for decorative supply tail detection
+/// ((layerName onCount offCount) ... (tails ((netName count) ...)))
 /// ```
 ///
-/// The function is read-only — it does NOT modify the cellview.
+/// which is exactly what `crate::commands::cell::parse_grid_audit_output`
+/// reads. The counts are per *layer* — the previous version of this builder
+/// emitted one tuple per *shape*, which made the off-grid count
+/// unreachable and the drift verdict impossible.
+///
+/// ## Decorative supply tails
+///
+/// A *decorative supply tail* is a shape that
+///
+/// * belongs to a supply net — its net name starts with `VDD`, `VSS`, `VPWR`
+///   or `VGND` (compared with `strcmp`, because `rexMatchp` cannot do
+///   alternation), and
+/// * has a **free end** — a terminal point of the shape (its `~>points`
+///   vertices, or the corners of its bounding box) where `dbGetOverlaps`
+///   finds no other shape. A piece of rail that stops in mid-air is
+///   decorative; one that reaches a device pin is electrical.
+///
+/// The original PR #175 rule was stricter: a *single straight segment* on the
+/// `annotate` layer, anchored on a `route-anchor`. Neither half of that is
+/// checkable with the accessors that exist — `s~>kind` is nil on real layout
+/// shapes (their `objType` is only `"rect"` or `"polygon"`), a layout shape
+/// exposes no route-anchor or pin dbobject to compare against, and the
+/// `annotate` layer does not exist in every technology. This implementation
+/// therefore reports broader set — every supply-net shape with a free end
+/// — and the counts are an upper bound on the true tail count.
+///
+/// ## What was verified against a live bridge, and what was not
+///
+/// The grid audit was run end-to-end against a live Virtuoso
+/// (`st02/qvp20/layout`, 497 shapes, grid 0.005) and returned
+/// `(("TO" 3 0) ("SP" 2 0) ("A1" 3 0) ("BJT" 1 0) ("W1" 487 0) ("TB" 1 0)
+/// ("tails" nil))` — per-layer counts in the format the parser reads.
+///
+/// The tails branch could **not** be run end-to-end there: no layout
+/// cellview reachable from that host carries a `VDD*`/`VSS*`/`VPWR*`/`VGND*`
+/// net, so no shape can take the supply-net branch. Its two halves were
+/// each verified against the live tool instead — the prefix test
+/// (`substring` + `strcmp`) and the free-end test (`dbGetOverlaps` over a
+/// degenerate bbox, excluding the shape itself). The end-to-end path over a
+/// real supply net remains unexercised.
+///
+/// The function is read-only: it opens the cellview with mode `"r"` and
+/// closes it again. The close is the cleanup form of an `unwindProtect`, so
+/// it runs even when the audit raises.
 pub fn shape_grid_audit_skill(lib: &str, cell: &str, view: &str) -> String {
+    let view_type = escape_skill_string(view_type_for(view));
     let lib = escape_skill_string(lib);
     let cell = escape_skill_string(cell);
     let view = escape_skill_string(view);
 
-    // Shape grid audit:
-    // For each shape, we walk the actual vertices of paths/polygons/rects
-    // (not only the bbox) so a polygon vertex can drift off-grid even when
-    // the bbox corners line up. Each shape's points are concatenated through
-    // `flatten(axl)`. We approximate polygon vertices via `points`/`~>points`
-    // when the shape exposes them; for paths we use `~>points`; for rects
-    // we use the bbox corners. This catches strictly more drift than bbox-only
-    // checking and stays within O(N) per shape.
-    //
-    // Returns `((layer on off) ...)` per layer; on+off counts shapes on/off grid.
-    let grid_check = r#"
-procedure(checkGrid(cv ugp)
-let((shapes result)
-shapes = cv~>shapes
-result = nil
-when(shapes
-foreach(s shapes
-let((b x1 y1 x2 y2 on pts p x y)
-b = s~>bBox
-x1 = cast(b~>x1)
-y1 = cast(b~>y1)
-x2 = cast(b~>x2)
-y2 = cast(b~>y2)
-on = t
-foreach(coord list(x1 y1 x2 y2)
-  unless(abs((coord/ugp - round(coord/ugp))*ugp) < 1e-9
-    on = nil))
-; also walk polygon / path vertices when available
-pts = if(member(s~>objType list("polygon" "path" "rect")) s~>points nil)
-when(pts
-foreach(p pts
-  x = cast(car(p))
-  y = cast(cadr(p))
-  unless(and(abs((x/ugp - round(x/ugp))*ugp) < 1e-9
-             abs((y/ugp - round(y/ugp))*ugp) < 1e-9)
-    on = nil)))
-result = cons(list(s~>layer~>name on) result))))
-result)
-"#;
-
-    // Decorative supply tail detection (round-2 m5).
-    //
-    // The first cut just counted any path on `annotate`/`drawing` whose net
-    // started with VDD/VSS/VPWR/VGND — that misclassified every signal wire
-    // that happened to be on the annotate layer and gave "drawing" as a
-    // layer name (it's a purpose, not a layer).
-    //
-    // Tightened definition: a decorative tail is a *single straight segment*
-    // path whose *one* endpoint is a `route-anchor` not connected to any
-    // other figure (free end), and whose other endpoint touches a
-    // VDD*/VSS*/VPWR*/VGND* net. Ambiguous cases (multi-segment paths, paths
-    // that overlap another figure, paths without a net) are *not* counted
-    // as decorative — they remain electrical. Mirrors PR #175 `_display_only_
-    // power_rails`.
-    let tail_check = r#"
-procedure(findTails(cv)
-let((shapes candidates tails refs)
-shapes = cv~>shapes
-refs = makeTable('refs nil)
-when(shapes
-foreach(s shapes
-  when(and(s~>kind == "path"
-          s~>objType == "path"
-          s~>net
-          s~>lpp
-          s~>lpp~>layer == "annotate"
-          s~>net~>name
-          rexMatchp("^(VDD|VSS|VPWR|VGND)" s~>net~>name))
-    refs[s] = s)))
-when(shapes
-; anchor refs: count how many paths share an endpoint pin. Free end == refcount 1.
-foreach(s shapes
-  when(s~>objType == "path"
-      foreach(p s~>~>points
-        unless(pairs="" and(car(p)~>objType == "pin") refs[car(p)~>name] = (refs[car(p)~>name] || 0) + 1)))))
-; candidates = straight, single-segment paths (s~>points has exactly 2 elements)
-when(shapes
-foreach(s shapes
-  when(and(s~>kind == "path"
-          s~>objType == "path"
-          s~>net
-          s~>lpp~>layer == "annotate"
-          s~>net~>name
-          rexMatchp("^(VDD|VSS|VPWR|VGND)" s~>net~>name)
-          length(s~>points) == 2)
-    candidates = cons(s candidates))))
-tails = nil
-when(candidates
-foreach(s candidates
-  let((a b aRef bRef freeEnd)
-  a = car(s~>points)
-  b = cadr(s~>points)
-  aRef = if(a~>objType == "pin" refs[a~>name] else 0)
-  bRef = if(b~>objType == "pin" refs[b~>name] else 0)
-  freeEnd = if(aRef == 1 a if(bRef == 1 b nil))
-  when(freeEnd
-    tails = cons(list(s~>net~>name 1) tails)))))
-tails))
-"#;
-
     format!(
-        r#"let((cv ugp gridResult tailResult out)
-cv = axlOpenCellViewByMode("{lib}" "{cell}" "{view}" "" "r")
-when(cv
-ugp = errset(axlGetTech(?libName "{lib}")~>userGridPrecision)
-ugp = if(ugp && listp(ugp) car(ugp) ugp)
-ugp = if(numberp(ugp) ugp 1.0)
-gridResult = {grid_check} checkGrid(cv ugp)
-tailResult = {tail_check} findTails(cv)
-dbClose(cv)
-out = append(gridResult list(list("tails" tailResult)))
-out))"#,
-        grid_check = grid_check.trim(),
-        tail_check = tail_check.trim()
+        r#"let((cv techId gridRes pg
+     layerEntries tailEntries
+     shp lyr on off ent newEntries entName found
+     bbox x1 y1 x2 y2 pts p0 pt vx vy
+     netName supply pre3 pre4 cmp
+     terms others free res)
+cv = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "{view_type}" "r")
+unless(cv error("cell.verify-native: cannot open {lib}/{cell}/{view}"))
+techId = techGetTechFile(ddGetObj("{lib}"))
+gridRes = nil
+when(techId gridRes = techGetMfgGridResolution(techId))
+unless(gridRes
+  pg = dbGetPlacementGrid(cv)
+  when(pg gridRes = cadr(car(pg))))
+unless(gridRes gridRes = 1.0)
+layerEntries = nil
+tailEntries = nil
+res = unwindProtect(progn(
+  foreach(shp cv~>shapes
+    progn(
+      lyr = nil
+      when(shp~>lpp lyr = car(shp~>lpp))
+      unless(lyr lyr = "unknown")
+      on = 1
+      bbox = shp~>bBox
+      when(bbox
+        x1 = caar(bbox)
+        y1 = cadar(bbox)
+        x2 = caadr(bbox)
+        y2 = cadadr(bbox)
+        foreach(pt list(list(x1 y1) list(x2 y2) list(x2 y1) list(x1 y2))
+          progn(
+            vx = car(pt)
+            vy = cadr(pt)
+            unless(abs(vx / gridRes - round(vx / gridRes)) < 0.001 on = 0)
+            unless(abs(vy / gridRes - round(vy / gridRes)) < 0.001 on = 0))))
+      pts = shp~>points
+      when(pts
+        p0 = car(pts)
+        when(listp(p0)
+          foreach(pt pts
+            progn(
+              vx = car(pt)
+              vy = cadr(pt)
+              unless(abs(vx / gridRes - round(vx / gridRes)) < 0.001 on = 0)
+              unless(abs(vy / gridRes - round(vy / gridRes)) < 0.001 on = 0)))))
+      off = 1
+      when(on == 1 off = 0)
+      newEntries = nil
+      found = nil
+      foreach(ent layerEntries
+        progn(
+          entName = car(ent)
+          when(entName == lyr
+            found = t
+            newEntries = cons(list(lyr (cadr(ent) + on) (caddr(ent) + off)) newEntries))
+          unless(entName == lyr
+            newEntries = cons(ent newEntries))))
+      unless(found
+        newEntries = cons(list(lyr on off) newEntries))
+      layerEntries = newEntries
+      netName = nil
+      supply = nil
+      when(shp~>net
+        progn(
+          netName = shp~>net~>name
+          when(netName
+            progn(
+              pre3 = substring(netName 1 3)
+              pre4 = substring(netName 1 4)
+              cmp = strcmp(pre3 "VDD")
+              when(cmp == 0 supply = 1)
+              cmp = strcmp(pre3 "VSS")
+              when(cmp == 0 supply = 1)
+              cmp = strcmp(pre4 "VPWR")
+              when(cmp == 0 supply = 1)
+              cmp = strcmp(pre4 "VGND")
+              when(cmp == 0 supply = 1)))))
+      when(supply
+        progn(
+          terms = nil
+          pts = shp~>points
+          when(pts
+            p0 = car(pts)
+            when(listp(p0) terms = pts))
+          unless(terms
+            bbox = shp~>bBox
+            when(bbox
+              x1 = caar(bbox)
+              y1 = cadar(bbox)
+              x2 = caadr(bbox)
+              y2 = cadadr(bbox)
+              terms = list(list(x1 y1) list(x2 y2) list(x2 y1) list(x1 y2))))
+          free = nil
+          foreach(pt terms
+            progn(
+              others = nil
+              foreach(ent dbGetOverlaps(cv list(pt pt))
+                unless(ent == shp others = cons(ent others)))
+              unless(others free = 1)))
+          when(free
+            newEntries = nil
+            found = nil
+            foreach(ent tailEntries
+              progn(
+                entName = car(ent)
+                when(entName == netName
+                  found = t
+                  newEntries = cons(list(netName (cadr(ent) + 1)) newEntries))
+                unless(entName == netName
+                  newEntries = cons(ent newEntries))))
+            unless(found
+              newEntries = cons(list(netName 1) newEntries))
+            tailEntries = newEntries)))))
+  append(layerEntries list(list("{TAILS_KEY}" tailEntries))))
+ dbClose(cv))
+res)"#
     )
 }
 
 /// SKILL that opens a cellview read-only and returns basic cell metadata.
 ///
-/// Returns: `(lib cell view layerCount shapeCount)`
+/// Returns: `(lib cell view shapeCount)`, or nil when the cellview does not
+/// exist. The cellview is closed again before the value is returned.
 #[allow(dead_code)]
 pub fn cell_info_skill(lib: &str, cell: &str, view: &str) -> String {
+    let view_type = escape_skill_string(view_type_for(view));
     let lib = escape_skill_string(lib);
     let cell = escape_skill_string(cell);
     let view = escape_skill_string(view);
     format!(
-        r#"let((cv) cv = axlOpenCellViewByMode("{lib}" "{cell}" "{view}" "" "r") if(cv list("{lib}" "{cell}" "{view}" length(cv~>layers) length(cv~>shapes)) nil))"#
+        r#"let((cv info) cv = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "{view_type}" "r") when(cv info = list("{lib}" "{cell}" "{view}" length(cv~>shapes)) dbClose(cv)) info)"#
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Count the parentheses of a SKILL string, ignoring the ones inside
+    /// double-quoted SKILL strings.
+    fn paren_balance(skill: &str) -> i32 {
+        let mut depth = 0i32;
+        let mut in_string = false;
+        let mut chars = skill.chars().peekable();
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' if in_string => {
+                    chars.next();
+                }
+                '"' => in_string = !in_string,
+                '(' if !in_string => depth += 1,
+                ')' if !in_string => depth -= 1,
+                _ => {}
+            }
+        }
+        depth
+    }
 
     #[test]
     fn tech_grid_precision_escapes() {
@@ -181,44 +310,128 @@ mod tests {
     }
 
     #[test]
-    fn tech_grid_precision_reads_user_grid_precision() {
+    fn tech_grid_precision_reads_the_mfg_grid() {
         let s = tech_grid_precision_skill("myLib");
-        assert!(s.contains("userGridPrecision"), "{s}");
+        assert!(s.contains("techGetMfgGridResolution"), "{s}");
+        assert!(s.contains("techGetTechFile(ddGetObj("), "{s}");
+        assert!(!s.contains("userGridPrecision"), "{s}");
+        assert!(!s.contains("axlGetTech"), "{s}");
     }
 
     #[test]
     fn shape_grid_audit_is_read_only() {
-        let s = shape_grid_audit_skill("lib", "cell", "schematic");
-        assert!(s.contains("\"r\""), "must open read-only: {s}");
+        let s = shape_grid_audit_skill("lib", "cell", "layout");
+        assert!(s.contains(r#""r""#), "must open read-only: {s}");
     }
 
     #[test]
-    fn shape_grid_audit_checks_b_box() {
+    fn shape_grid_audit_opens_the_cellview_with_a_view_type() {
+        // The 4-argument form returns a window id, not a cellview, and every
+        // accessor on it reads nil.
+        let s = shape_grid_audit_skill("st02", "qvp20", "layout");
+        assert!(
+            s.contains(r#"dbOpenCellViewByType("st02" "qvp20" "layout" "maskLayout" "r")"#),
+            "{s}"
+        );
+        assert!(!s.contains("axlOpenCellViewByMode"), "{s}");
+    }
+
+    #[test]
+    fn shape_grid_audit_checks_b_box_corners_and_vertices() {
         let s = shape_grid_audit_skill("lib", "cell", "view");
         assert!(s.contains("bBox"), "{s}");
+        assert!(s.contains("caar(bbox)"), "{s}");
+        assert!(s.contains("caadr(bbox)"), "{s}");
+        assert!(s.contains("shp~>points"), "{s}");
+        assert!(!s.contains("~>x1"), "{s}");
+        assert!(!s.contains("~>kind"), "{s}");
+        assert!(!s.contains("~>~>points"), "{s}");
     }
 
     #[test]
     fn shape_grid_audit_checks_grid_precision() {
         let s = shape_grid_audit_skill("lib", "cell", "view");
-        assert!(s.contains("userGridPrecision"), "{s}");
+        assert!(s.contains("techGetMfgGridResolution"), "{s}");
+        assert!(!s.contains("userGridPrecision"), "{s}");
+    }
+
+    #[test]
+    fn shape_grid_audit_aggregates_per_layer() {
+        let s = shape_grid_audit_skill("lib", "cell", "view");
+        // One (layer on off) entry per layer, not one per shape.
+        assert!(s.contains("cons(list(lyr on off) newEntries)"), "{s}");
+        assert!(s.contains("(cadr(ent) + on)"), "{s}");
+        assert!(s.contains("(caddr(ent) + off)"), "{s}");
+    }
+
+    #[test]
+    fn shape_grid_audit_emits_the_tails_marker() {
+        let s = shape_grid_audit_skill("lib", "cell", "view");
+        assert!(
+            s.contains(&format!(r#"list("{TAILS_KEY}" tailEntries)"#)),
+            "{s}"
+        );
     }
 
     #[test]
     fn shape_grid_audit_detects_vdd_vss_nets() {
         let s = shape_grid_audit_skill("lib", "cell", "view");
-        assert!(s.contains("VDD") && s.contains("VSS"), "{s}");
+        for prefix in ["VDD", "VSS", "VPWR", "VGND"] {
+            assert!(s.contains(prefix), "must check {prefix}: {s}");
+        }
+    }
+
+    #[test]
+    fn shape_grid_audit_finds_free_ends_with_real_accessors() {
+        let s = shape_grid_audit_skill("lib", "cell", "view");
+        assert!(s.contains("shp~>net~>name"), "{s}");
+        assert!(s.contains("dbGetOverlaps(cv list(pt pt))"), "{s}");
+        // The old endpoint analysis used accessors that can never evaluate.
+        assert!(!s.contains("s~>kind"), "{s}");
+        assert!(!s.contains("~>objType == \"pin\""), "{s}");
+        assert!(!s.contains("~>layer~>name"), "{s}");
+    }
+
+    #[test]
+    fn shape_grid_audit_closes_the_cellview_on_every_path() {
+        let s = shape_grid_audit_skill("lib", "cell", "view");
+        assert!(s.contains("dbClose(cv)"), "must close cellview: {s}");
+        // The close is the cleanup form of unwindProtect, so it also runs
+        // when the audit raises.
+        assert!(s.contains("unwindProtect("), "{s}");
+    }
+
+    #[test]
+    fn shape_grid_audit_parentheses_are_balanced() {
+        let s = shape_grid_audit_skill("st02", "qvp20", "layout");
+        assert_eq!(paren_balance(&s), 0, "unbalanced SKILL parens: {s}");
     }
 
     #[test]
     fn cell_info_escapes() {
-        let s = cell_info_skill("myLib", r#"cell"name"#, "schematic");
+        let s = cell_info_skill("lib", r#"cell"name"#, "schematic");
         assert!(s.contains(r#"cell\"name"#), "{s}");
     }
 
     #[test]
     fn cell_info_opens_read_only() {
         let s = cell_info_skill("lib", "cell", "view");
-        assert!(s.contains("\"r\""), "{s}");
+        assert!(s.contains(r#""r""#), "{s}");
+        assert!(s.contains("dbClose(cv)"), "must close cellview: {s}");
+    }
+
+    #[test]
+    fn tmp_dump_skills() {
+        std::fs::write(
+            "/tmp/skill_audit.il",
+            shape_grid_audit_skill("st02", "qvp20", "layout"),
+        )
+        .unwrap();
+        std::fs::write(
+            "/tmp/skill_info.il",
+            cell_info_skill("st02", "qvp20", "layout"),
+        )
+        .unwrap();
+        std::fs::write("/tmp/skill_grid.il", tech_grid_precision_skill("st02")).unwrap();
     }
 }
