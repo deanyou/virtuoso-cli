@@ -6,6 +6,20 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Dual skill-tree sync with a CI drift gate.** The repository keeps two copies
+  of every agent skill — `.claude/skills/` (canonical, Claude Code host) and
+  `.agents/skills/` (Codex host) — and they had drifted apart: 89 files in the
+  Codex tree were stale copies, and its suites were never run by CI.
+  `scripts/sync_skills.py` now mirrors the canonical tree into the Codex tree
+  through an explicit, auditable table (6 host-adaptation rules, a per-skill
+  disposition manifest of mirror / link / exclude / pending, and file-level
+  exclusions) instead of a blind copy, so a new skill is never mirrored by
+  guesswork: an unclassified skill is reported as pending and left untouched.
+  `python3 scripts/sync_skills.py --check --strict-pending` is the drift gate;
+  CI runs it before the test suites and then runs **both** trees' unittest
+  suites (8 suites, Python 3.9 and 3.13), so a Codex-side-only skill can no
+  longer ship untested. Changing `.claude/skills/` now requires running
+  `python3 scripts/sync_skills.py` to update the mirror.
 - **`vcli window geometry`** (also `window.geometry` over RPC) — reports the
   **client-area** geometry of one X11 window, which is the coordinate space
   `action-x11 --direct` validates `--x`/`--y` against. Callers previously had

@@ -163,10 +163,13 @@ nearest `.claude/skills` — a set-but-invalid value fails the server startup).
 场景 DSL 规范见 `references/scenario-schema.md`，xdotool 命令参考见 `references/xdotool-cheatsheet.md`。
 测试：`cd .claude/skills/virtuoso-gui-debug && python3 -m unittest discover tests`。
 
-**CI 会跑这些测试**：`.github/workflows/skill-tests.yml` 在 `.claude/skills/**` 变更时触发，
-对 Python 3.9 / 3.13 各跑一次（语法检查 + 全部 skill 的 unittest 套件，脚本见
-`.github/scripts/run-skill-tests.sh`）。纯 Rust 的 PR 不会触发它，因此它仍是 skill 类改动的
-唯一自动化验证 —— 但**不要**因为 Rust 工作流全绿就假定 skill 脚本没问题。
+**CI 会跑这些测试**：`.github/workflows/skill-tests.yml` 在 `.claude/skills/**`、`.agents/skills/**`、
+`scripts/sync_skills.py` 或 `tests/test_sync_skills.py` 变更时触发，对 Python 3.9 / 3.13 各跑一次
+（脚本见 `.github/scripts/run-skill-tests.sh`）：先过**双树漂移闸门**
+（`sync_skills.py --check --strict-pending`），再对两棵树分别做语法检查与 unittest 套件。
+纯 Rust 的 PR 不会触发它，因此它仍是 skill 类改动的唯一自动化验证 —— 但**不要**因为 Rust
+工作流全绿就假定 skill 脚本没问题。改动 `.claude/skills/` 后必须跑一次
+`python3 scripts/sync_skills.py` 把 Codex 侧镜像同步上，否则闸门会红。
 
 ## Project Engineering Workflow
 

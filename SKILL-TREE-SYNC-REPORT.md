@@ -3,7 +3,8 @@
 分支：`feat/skill-tree-sync`（基于 `origin/main` @ `1990f04`）
 工具：`scripts/sync_skills.py`（仅 Python 3 标准库）
 CI：`.github/scripts/run-skill-tests.sh`（两棵树 + 漂移闸门）
-workflow 改动：**未改**，补丁见 `WORKFLOW-PATCH.md`
+workflow 改动：**已改**（`.github/workflows/skill-tests.yml`：两棵树的路径过滤 + runner 固定
+`ubuntu-24.04` + 图像依赖），不再以补丁形式交付。
 
 > **本轮（收尾轮）**：落地三条用户裁决 —— ① `virastack-auto-allow` 的 A3/A4 豁免**保留**
 > （上一轮我提出偏离、用户批准）；② `vcli-architecture` 定为 **Claude 独占**
@@ -21,7 +22,7 @@ workflow 改动：**未改**，补丁见 `WORKFLOW-PATCH.md`
 | 类别 | 数量 | 判定依据 |
 |---|---|---|
 | **纯过期**（canonical 前进、Codex 侧落后） | 89 个文件 | 内容是同一份代码/文档的旧版本：`.agents` 侧的 Python、HTML、SQLite 都在 `.claude` 侧有更新版本，且差异是纯粹的代码演进（新增 import、新增分支、重构），没有任何宿主相关字样。 |
-| **适配**（有意的宿主差异） | 6 条规则 / 分别命中 25、19、7、3、6、1 个文件 | 见第 2 节变换表。全部集中在 `SKILL.md` 的 frontmatter 与散文中。 |
+| **适配**（有意的宿主差异） | 6 条规则 / 分别命中 25、19、7、3、4、1 个文件 | 见第 2 节变换表。全部集中在 `SKILL.md` 的 frontmatter 与散文中。 |
 | **独占**（只属于一侧） | `.claude` 侧 3 个 skill + 1 个字节码文件 | `pstack-vcli` 在 `.agents` 侧是**相对符号链接** `../../.claude/skills/pstack-vcli`（不是拷贝）—— 这是仓库已有的防漂移机制，AGENTS.md 与 `docs/pstack-vcli-assessment.md` 都写明 Codex 通过它发现同一 skill；`vcli-architecture` 为 **Claude 独占**（用户裁决 2026-11-03），不镜像；`virastack-auto-allow` 归为镜像（用户裁决 2026-11）。 |
 
 ### 1.1 关键事实：`.agents` 是手工维护的拷贝，不是自动镜像
@@ -59,7 +60,7 @@ workflow 改动：**未改**，补丁见 `WORKFLOW-PATCH.md`
 | **A2** | `Bash(<cmd> *)` → `Bash(*/<cmd> *)` | frontmatter 的 `allowed-tools` 行 | **19** |
 | **A3** | `Claude Code` → `Codex` | 全文 | **7** |
 | **A4** | `Claude` → `Codex` | 全文 | **3** |
-| **A5** | `.claude/` → `.Codex/` | 全文 | **6** |
+| **A5** | `.claude/skills/` → `.agents/skills/`（`~/` 与 `$HOME/` 前缀保留） | 全文 | **4** |
 | **A6** | `CLAUDE.md` → `AGENTS.md` | 全文 | **1** |
 
 ### 2.1 A1：`argument-hint` 剥离
@@ -126,6 +127,9 @@ description_zh: … 自动批准 ViraStack（Claude Code UI）的权限提示 �
 ---
 
 ## 3. 同步结果
+> **轮次说明**：3.1 / 3.2 / 3.3 分别是首轮、补漏轮、收尾轮的**历史**记录，其中的命中数按
+> 当时的变换表计。**当前**的规则与命中数见第 2 节；收尾轮之后的改动见文末「Follow-up」。
+
 
 ### 3.1 首轮（首次同步）
 
@@ -264,7 +268,7 @@ allowed-tools: Bash(python3 *) Bash(*/vcli *) Read
 
 `.github/scripts/run-skill-tests.sh` 改为对**两棵树**做同样的事：
 
-1. **漂移闸门**（新增，最先跑）：`python3 scripts/sync_skills.py --check`。
+1. **漂移闸门**（新增，最先跑）：`python3 scripts/sync_skills.py --check --strict-pending`。
    不通过 → 立刻 `exit 1` 并提示 `run 'python3 scripts/sync_skills.py'`。
    放在测试之前，避免「用过期内容测完再报第二个更费解的错」。
 2. **语法检查**：两棵树都做（`ast.parse`，不写 `__pycache__`；`find` 不跟随符号
@@ -283,13 +287,14 @@ allowed-tools: Bash(python3 *) Bash(*/vcli *) Read
 | 某棵树没有任何 `tests/` | `ERROR: no .claude/skills/*/tests directory found; refusing to pass.` exit 1 |
 | 两棵树漂移 | `ERROR: the skill trees have drifted; run 'python3 scripts/sync_skills.py'.` exit 1 |
 
-`WORKFLOW-PATCH.md` 给出 `skill-tests.yml` 的路径过滤补丁
-（新增 `.agents/skills/**` 与 `scripts/sync_skills.py`）。
-**`.github/workflows/` 下没有任何文件被修改**（`git status` 验证为空）。
+`skill-tests.yml` 的路径过滤已直接落在 `.github/workflows/skill-tests.yml`：新增
+`.agents/skills/**`、`scripts/sync_skills.py`、`tests/test_sync_skills.py`，并把 runner 固定到
+`ubuntu-24.04`、补装 `virastack-auto-allow` 用的图像依赖。因此只改 Codex 侧、或只改同步工具的
+PR 也会触发这个 job —— 否则新增的覆盖面就是死代码。
 
 ---
 
-## 6. 测试结论（原文）
+## 6. 测试结论（收尾轮原文记录）
 
 本轮（收尾轮）实跑：
 
@@ -415,7 +420,7 @@ OK
 | virastack-auto-allow 抽查 | `head -12 .agents/skills/virastack-auto-allow/SKILL.md` | `argument-hint` 计数 0；`allowed-tools: Bash(python3 *) Bash(*/vcli *) Read` |
 | 模板路径随镜像可解析 | `auto_allow.py` 的 `DEFAULT_TEMPLATE` | 解析到 `.agents/skills/virastack-auto-allow/data/allow_prompt_template.png`，`exists: True` |
 | `.claude` 正本未被改 | `git status --porcelain -- .claude` | 空 |
-| workflow 未被改 | `git status --porcelain -- .github/workflows` | 空 |
+| workflow 已随本 PR 改动 | `git diff origin/main...HEAD -- .github/workflows/` | 仅 `skill-tests.yml`（路径过滤 / runner 镜像 / 依赖） |
 | 符号链接未被替换 | `ls -la .agents/skills/pstack-vcli` | `pstack-vcli -> ../../.claude/skills/pstack-vcli` |
 | 无文件被删 | 对比 `origin/main` 的 `.agents/skills` 文件集 | `deleted: []` |
 | 防假绿：0 测试（`.claude` 树） | 临时夹具：套件文件只有 `import unittest` | `ERROR: 1 of 1 skill suite(s) failed in .claude/skills.`，exit 1 |
@@ -429,8 +434,8 @@ OK
 
 > **机械检查**：`python3 scripts/sync_skills.py --check` 已接入
 > `.github/scripts/run-skill-tests.sh`（两棵树都跑测试，漂移闸门先行），
-> 并由 `WORKFLOW-PATCH.md` 的路径过滤保证 `.agents/skills/**` 与
-> `scripts/sync_skills.py` 的改动会触发该 job——从此「双树漂移」在 CI 里
+> 并由 `skill-tests.yml` 的路径过滤保证 `.agents/skills/**`、
+> `scripts/sync_skills.py` 与 `tests/test_sync_skills.py` 的改动会触发该 job——从此「双树漂移」在 CI 里
 > 是一条可复现的红，而不是靠人记得同步。
 > **本轮补充**：宿主适配的每一项都是可审计的显式声明——变换表 6 条规则
 > （`ADAPTATIONS`）、每个 skill 的处置（`SKILL_RULES`）、单 skill 规则豁免
@@ -440,8 +445,8 @@ OK
 > `--strict-pending` 开关第一次具备意义——它现在是一个真的绿：
 > 「manifest 里还有 MODE_PENDING 条目就让检查退出码 2」。
 > 以后新增 skill 若忘了定处置，`--strict-pending` 会当场挡住，
-> 而不是等它静默地漂半年才被发现。要真正启用，把 CI 里的
-> `sync_skills.py --check` 换成 `--check --strict-pending` 即可。
+> 而不是等它静默地漂半年才被发现。CI 里的漂移闸门已按
+> `sync_skills.py --check --strict-pending` 启用（见 `.github/scripts/run-skill-tests.sh`）。
 
 ---
 
@@ -450,16 +455,15 @@ OK
 - 只用 Python 3 标准库 + bash，未安装任何工具链或包。
 - 未改任何 Rust 代码；`.claude/` 侧零改动（git 验证为空）。
 - `.agents/` 侧所有改动均由 `scripts/sync_skills.py` 生成，无手编。
-- 未 push、未开 PR；仅本地提交到 `feat/skill-tree-sync`。
-- `.github/workflows/` 下零改动，改动以 `WORKFLOW-PATCH.md` 交付。
+- 改动已提交到 `feat/skill-tree-sync` 并开出 PR #136。
+- `.github/workflows/skill-tests.yml` 已随本 PR 改动（见第 5 节），不再以补丁交付。
 
-### 9.1 Rust 门禁未跑（说明）
+### 9.1 Rust 门禁
 
 `AGENTS.md` 要求收工前跑 `cargo test && cargo clippy -- -D warnings && cargo fmt --check`。
-本机 **没有 cargo**（`command -v cargo` 无输出），而本任务的负约束明令
-「不许安装任何工具链或包」，因此没有安装 Rust 工具链、也没有跑这三个门禁。
-本分支 **Rust 侧改动为零**（`git status -- src/ Cargo.toml` 为空），
-三个门禁的输入未变，故其结论与基线一致；此事实一并记录在此，不作「已验证」宣称。
+本分支 **Rust 侧改动为零**（`git diff origin/main...HEAD -- src/ Cargo.toml` 为空），三个门禁的
+输入与基线一致；该 PR 的 CI 在 head 提交上跑齐了 Rust 门禁（`Check & Lint`、`Build`、`Test`
+三项全绿），故 Rust 侧的结论由 CI 给出，而非由本机复跑给出。
 
 ### 9.2 `virastack-auto-allow` 的 A3/A4 豁免 —— **用户裁决保留（2026-11-03）**
 
