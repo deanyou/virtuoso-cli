@@ -49,10 +49,37 @@ fn isolated_targets(dir: &std::path::Path) -> std::path::PathBuf {
     path
 }
 
+/// Isolate the CLI from the ambient session registry.
+///
+/// Without this, a developer workstation with one live Virtuoso session
+/// makes the CLI auto-select it and log an INFO line to **stderr** ahead of
+/// the JSON error document. The stderr channel then carries a log line
+/// plus JSON, so a whole-stderr JSON parse fails — the test would depend
+/// on the ambient machine state instead of on the contract it pins.
+fn isolated_cache(dir: &std::path::Path) -> std::path::PathBuf {
+    let path = dir.join("cache");
+    std::fs::create_dir_all(&path).expect("create cache dir");
+    path
+}
+
+/// The JSON error document the CLI writes to stderr.
+///
+/// stderr is the diagnostics channel, so it may also carry log lines. The
+/// error document is the last JSON value on the channel.
+fn error_document(stderr: &str) -> serde_json::Value {
+    let json_line = stderr
+        .lines()
+        .rev()
+        .find(|line| line.trim_start().starts_with('{'))
+        .expect("stderr must carry a JSON error document");
+    serde_json::from_str(json_line.trim()).expect("stderr must carry a JSON error document")
+}
+
 #[test]
 fn failing_command_reports_the_error_on_stderr_and_exits_nonzero() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let targets = isolated_targets(tmp.path());
+    let cache = isolated_cache(tmp.path());
     let port = closed_port();
 
     let output = vcli()
@@ -60,6 +87,7 @@ fn failing_command_reports_the_error_on_stderr_and_exits_nonzero() {
             "--format", "json", "cell", "open", "--lib", "demo", "--cell", "top",
         ])
         .env("VB_TARGETS_FILE", &targets)
+        .env("VB_CACHE_DIR", &cache)
         .env("VB_HOST", "127.0.0.1")
         .env("VB_PORT", port.to_string())
         .env("VB_TIMEOUT", "5")
@@ -90,8 +118,7 @@ fn failing_command_reports_the_error_on_stderr_and_exits_nonzero() {
     );
 
     // 4. The stderr payload is a structured error document.
-    let error: serde_json::Value =
-        serde_json::from_str(stderr.trim()).expect("stderr must carry a JSON error document");
+    let error = error_document(&stderr);
     assert!(
         error.get("error").and_then(|v| v.as_str()).is_some(),
         "error document must carry an `error` field, got: {error}"
@@ -109,10 +136,12 @@ fn failing_command_reports_the_error_on_stderr_and_exits_nonzero() {
 fn succeeding_command_writes_the_result_to_stdout_and_exits_zero() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let targets = isolated_targets(tmp.path());
+    let cache = isolated_cache(tmp.path());
 
     let output = vcli()
         .args(["--format", "json", "schema", "--all"])
         .env("VB_TARGETS_FILE", &targets)
+        .env("VB_CACHE_DIR", &cache)
         .output()
         .expect("vcli schema --all should spawn");
 
