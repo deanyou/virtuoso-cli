@@ -1767,7 +1767,7 @@ mod tests {
         async fn auth_publickey(
             &mut self,
             _user: &str,
-            _key: &russh::keys::PublicKey,
+            _key: russh::server::VerifiedPublicKey<'_>,
         ) -> Result<Auth, Self::Error> {
             if self.behavior.hold_auth {
                 return std::future::pending::<Result<Auth, Self::Error>>().await;
