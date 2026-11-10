@@ -419,19 +419,4 @@ mod tests {
         assert!(s.contains(r#""r""#), "{s}");
         assert!(s.contains("dbClose(cv)"), "must close cellview: {s}");
     }
-
-    #[test]
-    fn tmp_dump_skills() {
-        std::fs::write(
-            "/tmp/skill_audit.il",
-            shape_grid_audit_skill("st02", "qvp20", "layout"),
-        )
-        .unwrap();
-        std::fs::write(
-            "/tmp/skill_info.il",
-            cell_info_skill("st02", "qvp20", "layout"),
-        )
-        .unwrap();
-        std::fs::write("/tmp/skill_grid.il", tech_grid_precision_skill("st02")).unwrap();
-    }
 }
