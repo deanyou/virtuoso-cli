@@ -354,6 +354,7 @@ APPROVED_MIRRORS = frozenset((
     'verify-virtuoso-cli',
     'veriloga',
     'virtuoso-gui-debug',
+    'workflow-exec',
  ))
 
 # --------------------------------------------------------------------------
