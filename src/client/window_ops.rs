@@ -186,10 +186,13 @@ impl WindowOps {
     /// filename"). Hosts like that need the per-window capture in
     /// `transport::x11`, which is where the window id is known.
     ///
-    /// No fallback is attempted here on purpose: a shell substitution that
+    /// No fallback is attempted *here* on purpose: a shell substitution that
     /// yields an empty window id turns into `import -window -silent file`,
     /// which HANGS inside the Virtuoso SKILL interpreter and blocks the
-    /// daemon for the whole SKILL timeout.
+    /// daemon for the whole SKILL timeout. The fallback therefore lives in
+    /// Rust, not in SKILL: when this capture fails (or times out, or the
+    /// evaluation channel is hung) the caller retries through X11
+    /// (`transport::x11`), which never enters the SKILL interpreter at all.
     fn skill_capture(path_escaped: &str) -> String {
         format!(
             r#"let((cmd) cmd = strcat("import -window root -silent " "{path}") system(cmd) if(isFile("{path}") "{path}" nil))"#,

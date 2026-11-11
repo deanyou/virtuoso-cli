@@ -445,12 +445,17 @@ pub fn dismiss_window_x11(
 ///    so it works for a caller that has none — but it fails outright on X
 ///    servers that refuse `XGetImage` on the root window (observed on an
 ///    IC26.1 host: `xwd -root` fails with BadMatch, and ImageMagick reports
-///    that as the misleading "missing an image filename").
-/// 2. The X11 route grabs one named window by id. It works on those hosts.
+///    that as the misleading "missing an image filename"), and it cannot work
+///    at all once the SKILL evaluation channel is hung.
+/// 2. The X11 route grabs one named window by id. It works on those hosts,
+///    and it does not go through the SKILL interpreter, so it still works on
+///    a hung channel.
 ///
-/// The fallback needs a window id, so it only applies when the caller supplied
-/// one (`--window-id`). Without a window id there is nothing to fall back to,
-/// and the SKILL route's failure is reported as-is.
+/// The second route is the fallback for *every* failure of the first — a
+/// failed grab, a timeout, a hung channel. With `--window-id` it captures
+/// that window; without one it finds a window itself through the X11 window
+/// list (matching `--pattern` when one is given). Only when both routes fail
+/// does the command report an error, and then it names both failures.
 ///
 /// This is the CLI entry point: the SKILL route runs raw SKILL, so it needs
 /// the Admin capability. The RPC dispatcher uses [`screenshot_unchecked`].
@@ -542,48 +547,282 @@ fn screenshot_with(
         Some(pat) => client.window.screenshot_by_pattern(path, pat),
         None => client.window.screenshot(path),
     };
-    let r = execute_screenshot_skill(client, &skill, route)?;
-    if r.skill_ok() {
-        if r.output.trim_matches('"') == "no-match" {
-            return Err(VirtuosoError::NotFound(format!(
-                "no window matching pattern '{}'",
-                window_pattern.unwrap_or("")
-            )));
+    let mut backend = LiveScreenshotBackend::new(client, ctx, route, explicit_display);
+    screenshot_via_backend(&mut backend, &skill, path, window_pattern, window_id)
+}
+
+/// One X11 window the fallback may capture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct X11Candidate {
+    /// The X11 window id — what `import -window <id>` takes.
+    pub window_id: String,
+    /// The window title, used to pick the interesting window.
+    pub title: String,
+}
+
+/// What the SKILL half of a screenshot produced.
+pub(crate) enum SkillCapture {
+    /// The root-window grab worked.
+    Captured,
+    /// The pattern matched no Virtuoso window.
+    NoMatch,
+    /// The grab failed; the message says why (timeout, hung channel, ...).
+    Failed(String),
+    /// The SKILL route is not available at all — the caller lacks the
+    /// capability, or the auth check refused. The X11 route must not paper
+    /// over this one.
+    Unavailable(VirtuosoError),
+}
+
+/// How a screenshot is captured.
+///
+/// Split out from the decision logic so the fallback can be exercised
+/// offline: a fake backend stands in for the SKILL route and for X11.
+pub(crate) trait ScreenshotBackend {
+    /// Run the SKILL (root-window) capture.
+    fn skill_capture(&mut self, skill: &str) -> SkillCapture;
+
+    /// Capture one window by X11 id.
+    fn capture_window(&mut self, window_id: &str, path: &str) -> Result<()>;
+
+    /// The windows the X11 side can see.
+    fn list_windows(&mut self) -> Result<Vec<X11Candidate>>;
+}
+
+/// Capture a screenshot, SKILL route first and X11 route second.
+///
+/// The SKILL route grabs the X11 **root** window. It is the route that needs
+/// no window id, and the one that works when the caller has none — but it
+/// fails outright on X servers that refuse `XGetImage` on the root window
+/// (observed on an IC26.1 host: `xwd -root` fails with BadMatch), and it
+/// cannot work at all once the SKILL channel is hung.
+///
+/// The X11 route grabs one named window. It works on those hosts, and it
+/// does not go through the SKILL interpreter, so it still works when the
+/// channel is dead.
+///
+/// So the two are complementary, and a failure of the first is not the end of
+/// the story: the second route is tried, and only when *both* fail does the
+/// command report an error — with the reason from each route.
+fn screenshot_via_backend(
+    backend: &mut dyn ScreenshotBackend,
+    skill: &str,
+    path: &str,
+    window_pattern: Option<&str>,
+    window_id: Option<&str>,
+) -> Result<Value> {
+    // ── Route 1: SKILL (root window) ─────────────────────────────────────
+    let (skill_detail, no_match) = match backend.skill_capture(skill) {
+        SkillCapture::Captured => {
+            return Ok(json!({
+                "status": "saved",
+                "path": path,
+                "capture": "skill",
+            }));
         }
-        return Ok(json!({
-            "status": "saved",
-            "path": path,
-            "capture": "skill",
-        }));
-    }
-    let detail = if r.output.is_empty() {
-        r.errors.join("; ")
-    } else {
-        r.output.clone()
+        SkillCapture::NoMatch => ("no-match".to_string(), true),
+        SkillCapture::Failed(msg) => (msg, false),
+        SkillCapture::Unavailable(e) => return Err(e),
     };
 
-    // The root-window grab failed. Fall back to a per-window capture when the
-    // caller told us which window to grab.
-    if let Some(wid) = window_id {
-        use crate::transport::x11;
-        let config = ctx.config();
-        let runner = x11::transport_for_config(config)?;
-        let user = config.remote_user.as_deref();
-        x11::capture_window(runner.as_ref(), user, explicit_display, wid, path)?;
-        return Ok(json!({
-            "status": "saved",
-            "path": path,
-            "capture": "x11",
-            "window_id": wid,
-            "skill_error": detail,
-        }));
+    // ── Route 2: X11 (one named window) ──────────────────────────────────
+    // The caller told us which window to grab.
+    if let Some(wid) = window_id.filter(|w| !w.is_empty()) {
+        return match backend.capture_window(wid, path) {
+            Ok(()) => Ok(json!({
+                "status": "saved",
+                "path": path,
+                "capture": "x11",
+                "window_id": wid,
+                "skill_error": skill_detail,
+            })),
+            Err(e) => Err(VirtuosoError::Execution(format!(
+                "screenshot failed: skill route: {skill_detail}; \
+                 x11 route (window {wid}): {e}"
+            ))),
+        };
     }
 
-    Err(VirtuosoError::Execution(format!(
-        "screenshot failed: {} (the root-window capture is unsupported on this \
-         display; pass --window-id to capture a specific window instead)",
-        detail
-    )))
+    // No window id: find one through the X11 window list — the same scan
+    // `vcli window list-windows-x11` uses.
+    let candidates = match backend.list_windows() {
+        Ok(c) => c,
+        Err(e) => {
+            return Err(VirtuosoError::Execution(format!(
+                "screenshot failed: skill route: {skill_detail}; \
+                 x11 route: cannot list windows: {e}"
+            )))
+        }
+    };
+
+    match select_x11_window(&candidates, window_pattern) {
+        Some(w) => match backend.capture_window(&w.window_id, path) {
+            Ok(()) => Ok(json!({
+                "status": "saved",
+                "path": path,
+                "capture": "x11",
+                "window_id": w.window_id,
+                "window_title": w.title,
+                "skill_error": skill_detail,
+            })),
+            Err(e) => Err(VirtuosoError::Execution(format!(
+                "screenshot failed: skill route: {skill_detail}; \
+                 x11 route (window {}): {e}",
+                w.window_id
+            ))),
+        },
+        None => {
+            if no_match {
+                Err(VirtuosoError::NotFound(format!(
+                    "no window matching pattern '{}' (skill route: {skill_detail}; \
+                     x11 route: no matching window)",
+                    window_pattern.unwrap_or("")
+                )))
+            } else {
+                Err(VirtuosoError::Execution(format!(
+                    "screenshot failed: skill route: {skill_detail}; \
+                     x11 route: no Virtuoso window found to capture"
+                )))
+            }
+        }
+    }
+}
+
+/// Pick the window the X11 fallback should capture.
+///
+/// With a pattern, the same pattern the SKILL route used is matched against
+/// the window title. Without one, the window an engineer is most likely
+/// looking at wins: a schematic editor, then a layout editor, then an ADE
+/// window, then anything Virtuoso owns.
+fn select_x11_window(candidates: &[X11Candidate], pattern: Option<&str>) -> Option<X11Candidate> {
+    if candidates.is_empty() {
+        return None;
+    }
+
+    if let Some(pat) = pattern.filter(|p| !p.is_empty()) {
+        let re = Regex::new(pat).ok();
+        return candidates
+            .iter()
+            .find(|c| match &re {
+                Some(r) => r.is_match(&c.title),
+                None => c.title.contains(pat),
+            })
+            .cloned();
+    }
+
+    const PREFERRED: [&str; 6] = [
+        "Schematic Editor",
+        "Layout Editor",
+        "ADE Explorer",
+        "ADE Assembler",
+        "Virtuoso",
+        "CIW",
+    ];
+    for key in PREFERRED {
+        if let Some(c) = candidates.iter().find(|c| c.title.contains(key)) {
+            return Some(c.clone());
+        }
+    }
+    candidates.first().cloned()
+}
+
+/// The production screenshot backend: the SKILL route and the X11 route.
+struct LiveScreenshotBackend<'a> {
+    client: &'a VirtuosoClient,
+    ctx: &'a crate::context::CommandContext,
+    route: ScreenshotRoute,
+    explicit_display: Option<&'a str>,
+    runner: Option<Arc<dyn RemoteTransport>>,
+}
+
+impl<'a> LiveScreenshotBackend<'a> {
+    fn new(
+        client: &'a VirtuosoClient,
+        ctx: &'a crate::context::CommandContext,
+        route: ScreenshotRoute,
+        explicit_display: Option<&'a str>,
+    ) -> Self {
+        Self {
+            client,
+            ctx,
+            route,
+            explicit_display,
+            runner: None,
+        }
+    }
+
+    /// The transport used for the X11 route, opened on first use.
+    fn runner(&mut self) -> Result<Arc<dyn RemoteTransport>> {
+        if self.runner.is_none() {
+            use crate::transport::x11;
+            self.runner = Some(x11::transport_for_config(self.ctx.config())?);
+        }
+        Ok(self.runner.as_ref().unwrap().clone())
+    }
+}
+
+impl ScreenshotBackend for LiveScreenshotBackend<'_> {
+    fn skill_capture(&mut self, skill: &str) -> SkillCapture {
+        // The raw-SKILL route needs the Admin capability. That is a
+        // permission decision, not a capture failure: falling back to X11
+        // would quietly answer a request the caller was not allowed to make.
+        if let Some(reason) = self.client.check_capability(skill) {
+            return SkillCapture::Unavailable(VirtuosoError::Execution(reason));
+        }
+        match execute_screenshot_skill(self.client, skill, self.route) {
+            Ok(r) => {
+                if r.skill_ok() {
+                    if r.output.trim_matches('"') == "no-match" {
+                        SkillCapture::NoMatch
+                    } else {
+                        SkillCapture::Captured
+                    }
+                } else {
+                    let detail = if r.output.is_empty() {
+                        r.errors.join("; ")
+                    } else {
+                        r.output.clone()
+                    };
+                    SkillCapture::Failed(detail)
+                }
+            }
+            Err(VirtuosoError::Auth(msg)) => SkillCapture::Unavailable(VirtuosoError::Auth(msg)),
+            Err(e) => SkillCapture::Failed(e.to_string()),
+        }
+    }
+
+    fn capture_window(&mut self, window_id: &str, path: &str) -> Result<()> {
+        use crate::transport::x11;
+        let runner = self.runner()?;
+        let user = self.ctx.config().remote_user.as_deref();
+        x11::capture_window(
+            runner.as_ref(),
+            user,
+            self.explicit_display,
+            window_id,
+            path,
+        )
+    }
+
+    fn list_windows(&mut self) -> Result<Vec<X11Candidate>> {
+        use crate::transport::x11;
+        let runner = self.runner()?;
+        let config = self.ctx.config();
+        let user = config.remote_user.as_deref();
+        let (_env, windows) = x11::list_windows(
+            runner.as_ref(),
+            &x11::client_id_for(config),
+            user,
+            self.explicit_display,
+        )?;
+        Ok(windows
+            .into_iter()
+            .map(|w| X11Candidate {
+                window_id: w.window_id,
+                title: w.title,
+            })
+            .collect())
+    }
 }
 
 /// Execute a fixed-semantics X11 action on a specific window.
@@ -954,5 +1193,233 @@ mod tests {
             crate::exit_codes::exit_code_for_value(&payload),
             crate::exit_codes::SUCCESS
         );
+    }
+}
+
+#[cfg(test)]
+mod screenshot_fallback_tests {
+    use super::*;
+
+    /// A backend that stands in for the SKILL route and for X11.
+    struct FakeBackend {
+        skill: SkillCapture,
+        windows: Vec<X11Candidate>,
+        captured: Vec<String>,
+        capture_error: Option<String>,
+        list_error: Option<String>,
+    }
+
+    impl FakeBackend {
+        /// A backend whose SKILL route fails with `skill_error`.
+        fn skill_failed(skill_error: &str) -> Self {
+            Self {
+                skill: SkillCapture::Failed(skill_error.to_string()),
+                windows: vec![X11Candidate {
+                    window_id: "0x1400010".into(),
+                    title: "Schematic Editor — amp".into(),
+                }],
+                captured: Vec::new(),
+                capture_error: None,
+                list_error: None,
+            }
+        }
+
+        fn capturing(skill: SkillCapture) -> Self {
+            Self {
+                skill,
+                windows: Vec::new(),
+                captured: Vec::new(),
+                capture_error: None,
+                list_error: None,
+            }
+        }
+    }
+
+    impl ScreenshotBackend for FakeBackend {
+        fn skill_capture(&mut self, _skill: &str) -> SkillCapture {
+            match &self.skill {
+                SkillCapture::Captured => SkillCapture::Captured,
+                SkillCapture::NoMatch => SkillCapture::NoMatch,
+                SkillCapture::Failed(m) => SkillCapture::Failed(m.clone()),
+                SkillCapture::Unavailable(e) => SkillCapture::Unavailable(match e {
+                    VirtuosoError::Execution(m) => VirtuosoError::Execution(m.clone()),
+                    other => {
+                        let _ = other;
+                        VirtuosoError::Execution("unavailable".into())
+                    }
+                }),
+            }
+        }
+
+        fn capture_window(&mut self, window_id: &str, _path: &str) -> Result<()> {
+            if let Some(e) = &self.capture_error {
+                return Err(VirtuosoError::Execution(e.clone()));
+            }
+            self.captured.push(window_id.to_string());
+            Ok(())
+        }
+
+        fn list_windows(&mut self) -> Result<Vec<X11Candidate>> {
+            if let Some(e) = &self.list_error {
+                return Err(VirtuosoError::Execution(e.clone()));
+            }
+            Ok(self.windows.clone())
+        }
+    }
+
+    /// A SKILL timeout must not end the story: the X11 route takes over.
+    #[test]
+    fn screenshot_falls_back_to_x11_on_skill_timeout_without_window_id() {
+        let mut backend = FakeBackend::skill_failed("timeout after 30s");
+        let out = screenshot_via_backend(&mut backend, "skill", "/tmp/a.png", None, None)
+            .expect("the X11 route must recover the screenshot");
+
+        assert_eq!(out["capture"], json!("x11"));
+        assert_eq!(out["window_id"], json!("0x1400010"));
+        assert_eq!(out["skill_error"], json!("timeout after 30s"));
+        assert_eq!(backend.captured, vec!["0x1400010".to_string()]);
+    }
+
+    /// A hung channel is the case this fallback exists for: the SKILL route
+    /// can never come back, but X11 does not go through the SKILL interpreter.
+    #[test]
+    fn screenshot_falls_back_to_x11_when_the_channel_is_hung() {
+        let hung = crate::channel_state::hung_message(&crate::channel_state::StuckCall::new(
+            "maeOpenSetup(\"L\" \"C\" \"maestro\")",
+            "2026-11-10T22:29:33Z",
+            1_762_792_173,
+            30,
+        ));
+        let mut backend = FakeBackend::skill_failed(&hung);
+        let out = screenshot_via_backend(&mut backend, "skill", "/tmp/a.png", None, None)
+            .expect("the X11 route must recover the screenshot");
+
+        assert_eq!(out["capture"], json!("x11"));
+        assert!(out["skill_error"]
+            .as_str()
+            .unwrap()
+            .contains(crate::channel_state::HUNG_TEXT_ZH));
+        assert_eq!(backend.captured, vec!["0x1400010".to_string()]);
+    }
+
+    /// When both routes fail, the error must name both failures: the
+    /// operator needs to know that the SKILL route failed *and* why the X11
+    /// route could not pick it up.
+    #[test]
+    fn screenshot_reports_both_routes_when_both_fail() {
+        let mut backend = FakeBackend::skill_failed("timeout after 30s");
+        backend.capture_error = Some("import -window failed: missing an image filename".into());
+
+        let err = screenshot_via_backend(&mut backend, "skill", "/tmp/a.png", None, None)
+            .expect_err("both routes failed");
+        let text = err.to_string();
+        assert!(
+            text.contains("timeout after 30s"),
+            "skill reason missing: {text}"
+        );
+        assert!(
+            text.contains("import -window failed"),
+            "x11 reason missing: {text}"
+        );
+    }
+
+    /// A caller that named a window gets that window — the fallback must not
+    /// second-guess it.
+    #[test]
+    fn screenshot_uses_the_window_id_the_caller_gave() {
+        let mut backend = FakeBackend::skill_failed("timeout after 30s");
+        let out = screenshot_via_backend(
+            &mut backend,
+            "skill",
+            "/tmp/a.png",
+            None,
+            Some("0xdeadbeef"),
+        )
+        .expect("the X11 route must recover the screenshot");
+
+        assert_eq!(out["capture"], json!("x11"));
+        assert_eq!(out["window_id"], json!("0xdeadbeef"));
+        assert_eq!(backend.captured, vec!["0xdeadbeef".to_string()]);
+    }
+
+    /// The SKILL route still wins when it works — the fallback must not
+    /// change the normal path.
+    #[test]
+    fn a_working_skill_route_is_used_as_before() {
+        let mut backend = FakeBackend::capturing(SkillCapture::Captured);
+        let out = screenshot_via_backend(&mut backend, "skill", "/tmp/a.png", None, None)
+            .expect("the skill route must succeed");
+
+        assert_eq!(out["capture"], json!("skill"));
+        assert!(backend.captured.is_empty(), "X11 must not be touched");
+    }
+
+    /// A missing capability is a permission decision, not a capture failure:
+    /// the X11 route must not quietly answer a request the caller was not
+    /// allowed to make.
+    #[test]
+    fn a_missing_capability_is_not_papered_over_by_the_x11_route() {
+        let mut backend = FakeBackend::capturing(SkillCapture::Unavailable(
+            VirtuosoError::Execution("raw SKILL exec is not permitted".into()),
+        ));
+        let err = screenshot_via_backend(&mut backend, "skill", "/tmp/a.png", None, None)
+            .expect_err("the permission error must surface");
+        assert!(err.to_string().contains("raw SKILL exec is not permitted"));
+        assert!(backend.captured.is_empty(), "X11 must not be touched");
+    }
+
+    /// Without a pattern the fallback picks the window an engineer is most
+    /// likely looking at.
+    #[test]
+    fn the_fallback_prefers_the_schematic_editor() {
+        let candidates = vec![
+            X11Candidate {
+                window_id: "0x1".into(),
+                title: "CIW".into(),
+            },
+            X11Candidate {
+                window_id: "0x2".into(),
+                title: "Virtuoso Schematic Editor L1".into(),
+            },
+            X11Candidate {
+                window_id: "0x3".into(),
+                title: "ADE Explorer".into(),
+            },
+        ];
+        let picked = select_x11_window(&candidates, None).expect("a window must be picked");
+        assert_eq!(picked.window_id, "0x2");
+    }
+
+    /// With a pattern the same pattern is matched against the title.
+    #[test]
+    fn the_fallback_honours_the_window_pattern() {
+        let candidates = vec![
+            X11Candidate {
+                window_id: "0x1".into(),
+                title: "CIW".into(),
+            },
+            X11Candidate {
+                window_id: "0x2".into(),
+                title: "ADE Explorer Loading".into(),
+            },
+        ];
+        let picked = select_x11_window(&candidates, Some("ADE")).expect("a window must be picked");
+        assert_eq!(picked.window_id, "0x2");
+        assert!(select_x11_window(&candidates, Some("nothing-matches")).is_none());
+    }
+
+    /// "No window matched" keeps its old meaning when the X11 route finds
+    /// nothing either.
+    #[test]
+    fn a_pattern_that_matches_nothing_stays_a_not_found() {
+        let mut backend = FakeBackend::capturing(SkillCapture::NoMatch);
+        backend.windows = vec![X11Candidate {
+            window_id: "0x1".into(),
+            title: "CIW".into(),
+        }];
+        let err =
+            screenshot_via_backend(&mut backend, "skill", "/tmp/a.png", Some("nomatch"), None)
+                .expect_err("nothing matched");
+        assert!(matches!(err, VirtuosoError::NotFound(_)), "got: {err}");
     }
 }

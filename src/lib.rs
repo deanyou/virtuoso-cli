@@ -1,12 +1,14 @@
 pub mod async_runtime;
 pub mod auth;
 pub mod capability;
+pub mod channel_state;
 pub mod client;
 pub mod command_log;
 pub mod commands;
 pub mod config;
 pub mod config_file;
 pub mod context;
+pub mod daemon;
 pub mod error;
 pub mod exit_codes;
 pub mod history;

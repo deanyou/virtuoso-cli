@@ -179,6 +179,23 @@ pub struct DaemonStats {
     pub calls: u64,
     pub errors: u64,
     pub uptime_secs: u64,
+    /// True when the daemon declared the SKILL evaluation channel dead: an
+    /// evaluation never came back, so the daemon refuses further SKILL
+    /// requests until the session is restarted.
+    ///
+    /// `None` on a daemon that predates the hung-channel state (or on a
+    /// healthy channel, which does not write the field at all).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_hung: Option<bool>,
+    /// Summary of the evaluation that never returned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stuck_skill: Option<String>,
+    /// When that evaluation was delivered (UTC, RFC 3339).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stuck_started_at: Option<String>,
+    /// The deadline that expired for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stuck_timeout_secs: Option<u64>,
 }
 
 impl DaemonStats {

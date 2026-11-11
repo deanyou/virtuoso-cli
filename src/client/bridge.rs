@@ -22,6 +22,26 @@ const STX: u8 = 0x02;
 const NAK: u8 = 0x15;
 const MAX_RESPONSE_SIZE: usize = 100 * 1024 * 1024; // 100MB
 
+/// Grace added to the socket read timeout.
+///
+/// The daemon starts its own deadline a moment *after* the client does (it
+/// has to accept the connection and deliver the SKILL first). Without a
+/// grace the client would therefore always give up first and never see the
+/// daemon's verdict — which is the one message that says "the channel is
+/// dead, restart the session". The grace costs two seconds on a genuine
+/// timeout and buys the operator the actual diagnosis.
+const READ_TIMEOUT_GRACE_SECS: u64 = 2;
+
+/// The socket read timeout for a request with a `timeout`-second budget.
+///
+/// The budget plus a grace, so the daemon's own answer can still arrive.
+/// The grace never exceeds half the requested budget: a one-second probe
+/// must still fail inside its own second, not three seconds later.
+fn read_timeout_secs(timeout: u64) -> u64 {
+    let grace = READ_TIMEOUT_GRACE_SECS.min(timeout / 2);
+    timeout.saturating_add(grace)
+}
+
 /// SKILL listing every cellview this Virtuoso holds open, and whether a window
 /// shows it. Emits a JSON array of `{lib, cell, view, mode, window}`.
 ///
@@ -335,7 +355,9 @@ impl VirtuosoClient {
                 TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(timeout))
                     .map_err(|e| VirtuosoError::Connection(e.to_string()))?;
             stream
-                .set_read_timeout(Some(std::time::Duration::from_secs(timeout)))
+                .set_read_timeout(Some(std::time::Duration::from_secs(read_timeout_secs(
+                    timeout,
+                ))))
                 .ok();
             stream
                 .write_all(req_bytes.as_bytes())
@@ -416,10 +438,15 @@ impl VirtuosoClient {
             // The daemon sends NAK+"TimeoutError" (no RS) on deadline — no need to
             // text-match under STX. Doing so would reject any SKILL function that
             // legitimately returns the string "TimeoutError".
+            let mut channel_hung = false;
             if status_byte == STX {
                 result.output = payload;
             } else if status_byte == NAK {
                 result.status = ExecutionStatus::Error;
+                // A hung channel is not a SKILL failure: the evaluation pipe is
+                // dead and only a session restart clears it. Remember the
+                // verdict so it can be surfaced verbatim below.
+                channel_hung = crate::channel_state::is_hung_message(&payload);
                 result.errors.push(payload);
             } else {
                 result.output = String::from_utf8_lossy(&data).into_owned();
@@ -435,6 +462,15 @@ impl VirtuosoClient {
 
             if let Some(ref sid) = self.session_id {
                 crate::history::append_skill(sid, skill_code, result.skill_ok(), &result.output);
+            }
+
+            // The daemon's verdict on a dead channel *is* the diagnosis: which
+            // call hung it, when it was delivered, and that the session has to
+            // be restarted. Hand it to the operator unchanged — rewording it
+            // into a generic "execution failed" would throw away the only
+            // information that says what to do next.
+            if channel_hung {
+                return Err(VirtuosoError::Execution(result.errors.join("; ")));
             }
 
             return Ok(result);
@@ -2148,5 +2184,150 @@ mod client_id_tests {
         std::env::remove_var("VB_CACHE_DIR");
         std::env::remove_var("VB_STATE_DIR");
         clear_env();
+    }
+}
+
+#[cfg(test)]
+mod hung_channel_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::time::Instant;
+
+    /// Start a fake daemon that answers every request with `response`.
+    ///
+    /// The listener is moved into the thread, so the port stays bound for the
+    /// lifetime of the test.
+    fn fake_daemon(response: Vec<u8>) -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            // Serve two requests: the client may open a second connection.
+            for _ in 0..2 {
+                let Ok((mut conn, _)) = listener.accept() else {
+                    return;
+                };
+                let mut buf = [0u8; 4096];
+                let _ = conn.read(&mut buf);
+                let _ = conn.write_all(&response);
+            }
+        });
+        port
+    }
+
+    /// Start a fake daemon that accepts the request and never answers.
+    fn silent_daemon() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for _ in 0..2 {
+                let Ok((mut conn, _)) = listener.accept() else {
+                    return;
+                };
+                let mut buf = [0u8; 4096];
+                let _ = conn.read(&mut buf);
+                // Hold the connection open without answering.
+                std::thread::sleep(std::time::Duration::from_secs(30));
+            }
+        });
+        port
+    }
+
+    fn hung_frame() -> Vec<u8> {
+        let msg = crate::channel_state::hung_message(&crate::channel_state::StuckCall::new(
+            "maeOpenSetup(\"LIB\" \"CELL\" \"maestro\")",
+            "2026-11-10T22:29:33Z",
+            1_762_792_173,
+            30,
+        ));
+        let mut frame = vec![0x15u8];
+        frame.extend_from_slice(msg.as_bytes());
+        frame
+    }
+
+    /// The client must hand the daemon's verdict to the operator unchanged:
+    /// the message names the stuck call and says the session has to be
+    /// restarted. Rewriting it would throw that away.
+    #[test]
+    fn the_client_surfaces_a_hung_channel_verbatim() {
+        let port = fake_daemon(hung_frame());
+        let client = VirtuosoClient::new("127.0.0.1", port, 5);
+
+        let err = client
+            .execute_skill_unchecked("1+1", Some(5))
+            .expect_err("a hung channel is an error, not a result");
+        let text = err.to_string();
+
+        assert!(
+            text.contains(crate::channel_state::HUNG_TEXT_ZH),
+            "the Chinese verdict must survive: {text}"
+        );
+        assert!(
+            text.contains(crate::channel_state::HUNG_TEXT_EN),
+            "the English verdict must survive: {text}"
+        );
+        assert!(
+            text.contains("maeOpenSetup"),
+            "the stuck call must be named: {text}"
+        );
+    }
+
+    /// A hung channel must not be reported as a plain SKILL failure: the
+    /// caller has to be able to tell "this expression failed" from "the
+    /// channel is dead".
+    #[test]
+    fn a_hung_channel_is_not_reported_as_a_skill_result() {
+        let port = fake_daemon(hung_frame());
+        let client = VirtuosoClient::new("127.0.0.1", port, 5);
+        let err = client.execute_skill_unchecked("1+1", Some(5)).unwrap_err();
+        assert!(
+            !matches!(err, VirtuosoError::Execution(ref m) if m == "TimeoutError"),
+            "a hung channel must not look like a generic failure: {err}"
+        );
+    }
+
+    /// An ordinary NAK keeps its old shape: a result whose `skill_ok()` is
+    /// false. Only the hung-channel verdict is promoted to an error.
+    #[test]
+    fn an_ordinary_nak_is_still_a_result() {
+        let port = fake_daemon(b"\x15TimeoutError".to_vec());
+        let client = VirtuosoClient::new("127.0.0.1", port, 5);
+        let result = client
+            .execute_skill_unchecked("1+1", Some(5))
+            .expect("an ordinary NAK stays a result");
+        assert!(!result.skill_ok());
+        assert_eq!(result.errors, vec!["TimeoutError".to_string()]);
+    }
+
+    /// The client waits a little longer than the daemon's deadline, so the
+    /// daemon's own verdict ("the channel is dead") reaches the operator
+    /// instead of a bare socket timeout.
+    #[test]
+    fn the_client_outlasts_the_daemon_deadline_by_a_grace() {
+        let port = silent_daemon();
+        let client = VirtuosoClient::new("127.0.0.1", port, 2);
+        let started = Instant::now();
+        let err = client
+            .execute_skill_unchecked("1+1", Some(2))
+            .expect_err("a silent daemon must time out");
+        let elapsed = started.elapsed();
+        assert!(
+            matches!(err, VirtuosoError::Timeout(2)),
+            "expected a timeout, got: {err}"
+        );
+        assert!(
+            elapsed >= std::time::Duration::from_secs(2),
+            "the client must wait for the daemon's verdict, waited {elapsed:?}"
+        );
+    }
+
+    /// A short budget must not be stretched: a one-second probe still fails
+    /// inside its own second.
+    #[test]
+    fn the_grace_never_exceeds_half_the_budget() {
+        assert_eq!(read_timeout_secs(1), 1);
+        assert_eq!(read_timeout_secs(2), 3);
+        assert_eq!(read_timeout_secs(30), 32);
+        assert_eq!(read_timeout_secs(0), 0);
     }
 }
