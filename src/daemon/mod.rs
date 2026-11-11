@@ -42,6 +42,22 @@ pub const RS: u8 = 0x1e;
 /// Default evaluation deadline when a request does not carry one.
 pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
+/// Deadline for the request bytes to arrive on a connection.
+///
+/// A client that connects and then says nothing must not be able to hold the
+/// accept loop hostage: while the loop is blocked, no other client is served
+/// — including the instant "the channel is dead" answer that every later
+/// request on a hung channel is owed.
+///
+/// The client writes a small JSON object immediately after connecting and
+/// then shuts down its write side, so a healthy read finishes in
+/// milliseconds. Two seconds is a backstop, not a budget: short enough that
+/// a later request on a hung channel still gets the daemon's verdict inside
+/// its own timeout, and long enough to absorb a slow link or a busy host. A
+/// full fix would serve each connection on its own thread; that is a larger
+/// change than this P0 warrants.
+pub const REQUEST_READ_TIMEOUT_SECS: u64 = 2;
+
 static CALLS: AtomicU64 = AtomicU64::new(0);
 static ERRORS: AtomicU64 = AtomicU64::new(0);
 static START: OnceLock<Instant> = OnceLock::new();
@@ -281,9 +297,39 @@ pub fn handle_connection(
     state: &mut ChannelState,
     port: u16,
 ) -> io::Result<()> {
+    handle_connection_with_read_timeout(
+        conn,
+        channel,
+        state,
+        port,
+        Duration::from_secs(REQUEST_READ_TIMEOUT_SECS),
+    )
+}
+
+/// [`handle_connection`] with an explicit deadline for the request bytes.
+///
+/// The deadline is a parameter so the behaviour can be tested without
+/// spending the production backstop in a unit test.
+pub fn handle_connection_with_read_timeout(
+    conn: &mut TcpStream,
+    channel: &mut dyn EvalChannel,
+    state: &mut ChannelState,
+    port: u16,
+    read_timeout: Duration,
+) -> io::Result<()> {
     CALLS.fetch_add(1, Ordering::Relaxed);
 
     let mut req_bytes = Vec::new();
+    // The request must arrive within a deadline. A client that connects and
+    // then says nothing would otherwise block this loop inside `read_to_end`
+    // for as long as it keeps the socket open — and while the loop is blocked,
+    // no other client is served, not even the instant "channel is dead"
+    // answer that a hung channel owes every later request.
+    //
+    // The client writes the request immediately after connecting and then
+    // shuts down its write side, so the read completes in milliseconds; the
+    // deadline is a backstop, not a budget.
+    conn.set_read_timeout(Some(read_timeout))?;
     conn.read_to_end(&mut req_bytes)?;
 
     let req: SkillRequest = serde_json::from_slice(&req_bytes)
@@ -621,5 +667,67 @@ mod tests {
             !state.is_hung(),
             "a delivery failure is not a stuck evaluation"
         );
+    }
+
+    /// A client that connects and then says nothing must not be able to hold
+    /// the accept loop hostage.
+    ///
+    /// While the loop is blocked inside the request read, no other client is
+    /// served — not even the instant "the channel is dead" answer that every
+    /// later request on a hung channel is owed. The deadline is what keeps
+    /// that promise.
+    #[test]
+    fn a_client_that_never_sends_does_not_hold_the_loop() {
+        use std::io::Read;
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        // The daemon's accept loop, with a deadline on the request read.
+        let daemon = std::thread::spawn(move || {
+            let mut served = 0;
+            for stream in listener.incoming() {
+                let mut conn = stream.unwrap();
+                let mut channel = FakeChannel::answering(vec![0x02, b'x']);
+                let mut state = ChannelState::new();
+                let _ = handle_connection_with_read_timeout(
+                    &mut conn,
+                    &mut channel,
+                    &mut state,
+                    port,
+                    Duration::from_millis(300),
+                );
+                served += 1;
+                if served == 2 {
+                    break;
+                }
+            }
+        });
+
+        // A client that connects and never says anything.
+        let _half_open = TcpStream::connect(("127.0.0.1", port)).unwrap();
+
+        // The client that must still be served.
+        std::thread::sleep(Duration::from_millis(100));
+        let mut conn = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        conn.write_all(b"{\"skill\":\"1+1\",\"timeout\":3}")
+            .unwrap();
+        let _ = conn.shutdown(Shutdown::Write);
+
+        let start = Instant::now();
+        let mut answer = Vec::new();
+        conn.read_to_end(&mut answer).unwrap();
+        let elapsed = start.elapsed();
+
+        assert!(
+            !answer.is_empty(),
+            "the second client was not served — the loop was held by the first"
+        );
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "the second client waited {elapsed:?} — the request read has no deadline"
+        );
+        let _ = daemon.join();
     }
 }
