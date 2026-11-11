@@ -2571,6 +2571,84 @@ mod schema_tests {
         let schema = crate::commands::schema::show(&crate::Cli::command(), None, None);
         assert_eq!(schema["version"], env!("CARGO_PKG_VERSION"));
     }
+
+    /// Visit every argument the schema publishes, wherever it sits.
+    ///
+    /// The tree nests commands under `subcommands`; each command carries
+    /// `flags` (named options) and `args` (positionals).
+    fn for_each_arg(
+        node: &serde_json::Value,
+        path: &str,
+        visit: &mut impl FnMut(&str, &serde_json::Value),
+    ) {
+        for group in [&node["flags"], &node["args"]] {
+            if let Some(map) = group.as_object() {
+                for (name, arg) in map {
+                    visit(&format!("{path} {name}"), arg);
+                }
+            }
+        }
+        if let Some(subs) = node["subcommands"].as_object() {
+            for (name, sub) in subs {
+                for_each_arg(sub, &format!("{path} {name}"), visit);
+            }
+        }
+    }
+
+    /// Every published default must carry the JSON type its own `type` promises.
+    ///
+    /// A stringified boolean is not a cosmetic difference: an agent that copies
+    /// the default onto the command line writes `--dry-run=false`, and clap
+    /// rejects that outright ("unexpected value 'false' for '--dry-run'").
+    #[test]
+    fn schema_defaults_carry_the_json_type_they_promise() {
+        let schema = crate::commands::schema::show(&crate::Cli::command(), None, None);
+        let mut checked = 0usize;
+        let mut visit = |name: &str, arg: &serde_json::Value| {
+            let kind = arg["type"]
+                .as_str()
+                .expect("every published argument carries a type");
+            let default = &arg["default"];
+            if default.is_null() {
+                return;
+            }
+            checked += 1;
+            let matches_type = match kind {
+                "bool" => default.is_boolean(),
+                "u8" | "u16" | "u32" | "u64" | "usize" | "i8" | "i16" | "i32" | "i64" | "isize"
+                | "f32" | "f64" => default.is_number(),
+                _ => default.is_string(),
+            };
+            assert!(
+                matches_type,
+                "{name}: type `{kind}` must have a default of that JSON type, got {default}"
+            );
+        };
+
+        for_each_arg(&schema["commands"], "", &mut visit);
+        if let Some(map) = schema["global_flags"].as_object() {
+            for (name, arg) in map {
+                visit(name, arg);
+            }
+        }
+        assert!(checked > 0, "the schema must publish defaults to check");
+    }
+
+    /// The schema must publish the concrete type of an argument, not collapse
+    /// everything that is neither a flag nor an enum into "string".
+    #[test]
+    fn schema_publishes_concrete_argument_types() {
+        let schema = crate::commands::schema::show(&crate::Cli::command(), None, None);
+
+        let tunnel_start = &schema["commands"]["tunnel"]["subcommands"]["start"]["flags"];
+        assert_eq!(tunnel_start["--timeout"]["type"], "u64");
+        assert_eq!(tunnel_start["--dry-run"]["type"], "bool");
+        assert_eq!(tunnel_start["--format"]["type"], "enum");
+
+        let skill_exec = &schema["commands"]["skill"]["subcommands"]["exec"];
+        assert_eq!(skill_exec["flags"]["--file"]["type"], "path");
+        assert_eq!(skill_exec["args"]["code"]["type"], "string");
+    }
 }
 
 #[cfg(test)]

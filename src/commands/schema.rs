@@ -8,6 +8,8 @@
 use clap::builder::ArgAction;
 use clap::{Arg, Command};
 use serde_json::{json, Map, Value};
+use std::any::TypeId;
+use std::path::PathBuf;
 
 /// Exit codes the CLI can return — mirrors `src/exit_codes.rs`.
 fn exit_codes() -> Value {
@@ -22,26 +24,89 @@ fn exit_codes() -> Value {
     })
 }
 
-/// Best-effort JSON type name for a clap argument.
+/// JSON type name for a clap argument.
 ///
-/// clap does not expose the concrete Rust type of an argument, so this
-/// reports what an agent actually needs: whether the flag is a boolean
-/// switch, a closed set of values, or free-form text.
+/// clap does not hand out the Rust type of an argument, but
+/// `ValueParser::type_id()` returns an id that compares equal to a
+/// `std::any::TypeId`, which recovers the concrete type without naming
+/// clap's internal `AnyValueId`. That type's `Debug` output would have been
+/// the easy way in, but it is only populated in debug builds — reading it
+/// would make the schema differ between a debug and a release binary.
 fn arg_type(arg: &Arg) -> &'static str {
+    // A closed set of values is an enum whatever the Rust type behind it.
+    if !arg.get_possible_values().is_empty() {
+        return "enum";
+    }
+    // `SetTrue`/`SetFalse` are boolean switches by construction.
     match arg.get_action() {
         ArgAction::SetTrue | ArgAction::SetFalse => return "bool",
         _ => {}
     }
-    if !arg.get_possible_values().is_empty() {
-        return "enum";
+    let id = arg.get_value_parser().type_id();
+    if id == TypeId::of::<bool>() {
+        "bool"
+    } else if id == TypeId::of::<PathBuf>() {
+        "path"
+    } else if id == TypeId::of::<u8>() {
+        "u8"
+    } else if id == TypeId::of::<u16>() {
+        "u16"
+    } else if id == TypeId::of::<u32>() {
+        "u32"
+    } else if id == TypeId::of::<u64>() {
+        "u64"
+    } else if id == TypeId::of::<usize>() {
+        "usize"
+    } else if id == TypeId::of::<i8>() {
+        "i8"
+    } else if id == TypeId::of::<i16>() {
+        "i16"
+    } else if id == TypeId::of::<i32>() {
+        "i32"
+    } else if id == TypeId::of::<i64>() {
+        "i64"
+    } else if id == TypeId::of::<isize>() {
+        "isize"
+    } else if id == TypeId::of::<f32>() {
+        "f32"
+    } else if id == TypeId::of::<f64>() {
+        "f64"
+    } else {
+        "string"
     }
-    "string"
+}
+
+/// The default value of an argument, typed the way its own parser types it.
+///
+/// A boolean switch defaults to a JSON boolean and a numeric argument to a
+/// JSON number, so a consumer reads the scalars they are instead of parsing
+/// a string. A stringified `false` is not merely ugly: an agent that copies
+/// the default onto the command line writes `--dry-run=false`, which clap
+/// rejects outright ("unexpected value 'false' for '--dry-run'").
+fn default_value(arg: &Arg, kind: &str) -> Option<Value> {
+    let text = arg
+        .get_default_values()
+        .first()?
+        .to_string_lossy()
+        .into_owned();
+    match kind {
+        "bool" => match text.as_str() {
+            "true" => Some(json!(true)),
+            "false" => Some(json!(false)),
+            _ => Some(json!(text)),
+        },
+        "u8" | "u16" | "u32" | "u64" | "usize" => text.parse::<u64>().ok().map(Value::from),
+        "i8" | "i16" | "i32" | "i64" | "isize" => text.parse::<i64>().ok().map(Value::from),
+        "f32" | "f64" => text.parse::<f64>().ok().map(Value::from),
+        _ => Some(json!(text)),
+    }
 }
 
 /// Describe a single clap argument.
 fn arg_schema(arg: &Arg) -> Value {
     let mut m = Map::new();
-    m.insert("type".into(), json!(arg_type(arg)));
+    let kind = arg_type(arg);
+    m.insert("type".into(), json!(kind));
     m.insert("required".into(), json!(arg.is_required_set()));
 
     if let Some(help) = arg.get_help() {
@@ -51,13 +116,8 @@ fn arg_schema(arg: &Arg) -> Value {
         }
     }
 
-    let defaults: Vec<String> = arg
-        .get_default_values()
-        .iter()
-        .map(|v| v.to_string_lossy().into_owned())
-        .collect();
-    if !defaults.is_empty() {
-        m.insert("default".into(), json!(defaults[0]));
+    if let Some(default) = default_value(arg, kind) {
+        m.insert("default".into(), default);
     }
 
     let possible: Vec<String> = arg
