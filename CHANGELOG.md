@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-11-11
+
+Reliability and verification release. Four strands:
+
+- **SKILL channel hang is now contained** (`#137`): after an evaluation
+  deadline expires the daemon records the in-flight call, stops delivering
+  SKILL to that pipe, declares the channel dead, and fails every later request
+  immediately with a bilingual diagnosis. The client surfaces that verdict
+  verbatim instead of a generic timeout. `window screenshot` now falls back
+  to a per-window X11 capture when the SKILL route fails, times out, or the
+  channel is hung; the accept loop also has a request-read deadline so a
+  half-open client cannot wedge it.
+- **Dual skill-tree sync** (`#136`): `.claude/skills/` is mirrored into
+  `.agents/skills/` through an explicit adaptation/manifest table, with a CI
+  drift gate that runs both trees' test suites.
+- **Persistent Maestro jobs and native cell verification** (`#122`): five
+  `vcli maestro job` subcommands and a read-only `vcli cell verify-native`
+  grid audit, rewritten against OpenAccess APIs verified on a live Virtuoso.
+- **Dependency** (`#135`): `russh` 0.64.1 → 0.65.0, picking up three SSH
+  security advisories.
+
 ### Added
 
 - **Dual skill-tree sync with a CI drift gate.** The repository keeps two copies
@@ -171,6 +192,31 @@ exercise the real production paths:
   `--timeout 0` runs the loop until it is stopped.
 
 ### Fixed
+
+- **A timed-out SKILL evaluation no longer wedges the session with no
+  diagnosis** (`#137`). The daemon now writes an in-flight marker from the
+  IPC callback (`RBMarkEvalStart`), records the stuck call to
+  `/tmp/.ramic_hung_<port>.json` and into the stats file, and stops delivering
+  any further SKILL to that pipe. Once the channel is declared dead, every
+  later request gets an immediate NAK carrying a bilingual
+  `skill_channel_hung` message that names the stuck expression, its start
+  time and the deadline; the client surfaces it verbatim instead of rewriting
+  it into a generic "execution failed". Measured against a standalone daemon:
+  the second request drops from 5019 ms (and a second write into the dead
+  pipe) to 17 ms (and no write at all).
+- **`vcli window screenshot` falls back to X11 on SKILL failure, timeout or a
+  hung channel** (`#137`). It previously short-circuited on a timeout and
+  never tried the alternate route. The fallback picks `--window-id` when
+  supplied, otherwise scans the X11 window list, and reports both failure
+  reasons when neither route works. A missing capability or auth error is
+  deliberately not papered over. Verified live: with the SKILL route made
+  unreachable, the X11 route produced a 646×784 PNG in 0.48 s.
+- **A half-open TCP client can no longer hold the daemon's accept loop**
+  (`#137`). A connection that never sent its request blocked `read_to_end`
+  indefinitely, so no later client was served — including the fast "channel
+  is dead" answer owed on a hung channel. The request read now has a 2-second
+  backstop; in the measured case the next request went from a 4261 ms
+  client-side timeout to the daemon's verdict in 85 ms.
 
 - **RPC/MCP `window.screenshot` works under the default (Window) capability
   again.** The RPC dispatcher routes the capture through the *unchecked* SKILL

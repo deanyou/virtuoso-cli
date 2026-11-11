@@ -126,8 +126,8 @@ If $BIN_DIR is not on PATH, add it (e.g. in ~/.bashrc):
 
     export PATH="$BIN_DIR:\$PATH"
 
-Verify:
+Verify (both must print the same version):
 
-    "$BIN_DIR/vcli" --version        # expect 1.3.4
-    "$DAEMON_BIN" --version          # expect 1.3.4
+    "$BIN_DIR/vcli" --version
+    "$DAEMON_BIN" --version
 EOF
