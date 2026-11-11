@@ -193,6 +193,16 @@ exercise the real production paths:
 
 ### Fixed
 
+- **The crates.io package no longer ships repository-only agent tooling.**
+  The dual skill-tree work added `.agents/skills/` (the Codex mirror of
+  `.claude/skills/`) and the `.ua/` analysis archives, but `Cargo.toml`'s
+  `exclude` list only named `.claude/`. The 1.3.6 package would have been
+  50.5 MiB unpacked / 10.18 MiB compressed — eight times the 1.3.5 release
+  and just under crates.io's size cap — for files the binary never reads
+  (only `resources/` is embedded at compile time). The exclude list now names
+  the repository/agent directories explicitly; `cargo publish --dry-run`
+  reports 1.34 MiB compressed with `resources/`, `src/` and `tests/` intact.
+
 - **A timed-out SKILL evaluation no longer wedges the session with no
   diagnosis** (`#137`). The daemon now writes an in-flight marker from the
   IPC callback (`RBMarkEvalStart`), records the stuck call to

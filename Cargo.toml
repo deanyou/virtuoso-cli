@@ -8,7 +8,28 @@ repository = "https://github.com/deanyou/virtuoso-cli"
 homepage = "https://github.com/deanyou/virtuoso-cli"
 keywords = ["eda", "cadence", "virtuoso", "analog-ic", "spectre"]
 categories = ["command-line-utilities", "development-tools"]
-exclude = [".cadence/", ".claude/", ".pensieve/", "plots/", "docs/plans/", "sim/", "process_data/", "CLAUDE.md"]
+# Only `resources/` is embedded at compile time (include_dir!); everything
+# else here is repository/agent tooling that must not ship in the crate.
+# `.agents/` is the Codex mirror of `.claude/skills/` and is by far the
+# largest: leaving it in took the package from ~1.3 MB to 10.2 MB, just under
+# crates.io's size cap.
+exclude = [
+    ".agents/",
+    ".cadence/",
+    ".claude/",
+    ".codex/",
+    ".evoontology/",
+    ".pensieve/",
+    ".ua/",
+    ".workbuddy/",
+    ".trash-*/",
+    "plots/",
+    "docs/plans/",
+    "sim/",
+    "process_data/",
+    "SKILL-TREE-SYNC-REPORT.md",
+    "CLAUDE.md",
+]
 
 [[bin]]
 name = "vcli"
