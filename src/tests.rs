@@ -1008,12 +1008,36 @@ mod daemon_stats_tests {
             calls: 100,
             errors: 5,
             uptime_secs: 3661,
+            channel_hung: Some(true),
+            stuck_skill: Some("maeOpenSetup(...)".into()),
+            stuck_started_at: Some("2026-11-10T22:29:33Z".into()),
+            stuck_timeout_secs: Some(30),
         };
         let json = serde_json::to_string(&stats).unwrap();
         let stats2: DaemonStats = serde_json::from_str(&json).unwrap();
         assert_eq!(stats2.calls, 100);
         assert_eq!(stats2.errors, 5);
         assert_eq!(stats2.uptime_secs, 3661);
+        assert_eq!(stats2.channel_hung, Some(true));
+        assert_eq!(stats2.stuck_skill.as_deref(), Some("maeOpenSetup(...)"));
+        assert_eq!(
+            stats2.stuck_started_at.as_deref(),
+            Some("2026-11-10T22:29:33Z")
+        );
+        assert_eq!(stats2.stuck_timeout_secs, Some(30));
+    }
+
+    /// A stats file written by a daemon that predates the hung-channel state
+    /// must still parse — the new fields are optional.
+    #[test]
+    fn legacy_stats_files_still_parse() {
+        let port: u16 = 59993;
+        let path = DaemonStats::path(port);
+        fs::write(&path, r#"{"calls":1,"errors":0,"uptime_secs":2}"#).unwrap();
+        let stats = DaemonStats::load(port).expect("a legacy stats file must parse");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(stats.calls, 1);
+        assert_eq!(stats.channel_hung, None);
     }
 }
 

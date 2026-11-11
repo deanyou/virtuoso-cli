@@ -107,13 +107,36 @@ procedure(RBSendCallback(msg)
   )
 )
 
+procedure(RBMarkEvalStart()
+  ; P0-1: record that an evaluation was ENTERED.
+  ; The daemon gives every evaluation a deadline. When it expires the daemon
+  ; declares the channel dead and stops delivering new evaluations, because
+  ; this handler runs evalstring() synchronously inside the IPC callback and
+  ; nothing outside the SKILL interpreter can interrupt it.
+  ; This marker is how the daemon tells "the evaluation never started" from
+  ; "the evaluation started and never returned". The daemon deletes it before
+  ; it delivers the next request, so a marker found at deadline time always
+  ; belongs to the request that timed out.
+  let((startedFile port)
+    startedFile = sprintf(nil "/tmp/.ramic_cb_%d.started" RBPort + 1)
+    port = outfile(startedFile "w")
+    when(port fprintf(port "%s" getCurrentTime()) close(port))
+  )
+)
+
 procedure(RBIpcDataHandler(ipcId data)
   ; IPC data handler: eval SKILL expression, send STX (success) or NAK (error) via callback file.
   ; evalstring() bypasses CIW's interactive loop — printf output is line-buffered
   ; and won't appear until a "\n" is received or hiFlush() is called explicitly.
   ; We call hiFlush() after every evalstring to force CIW UI refresh.
+  ;
+  ; A hung evaluation (one that never returns) blocks this handler, and with
+  ; it the whole SKILL interpreter — the CIW stops answering too. It cannot be
+  ; cancelled from the outside: the daemon's answer to a timeout is to stop
+  ; writing to this pipe and to report that the session must be restarted.
   let((result resultStr)
     when(RBEcho printf("[RAMIC Bridge (%L)] receive:%L\n" ipcId data))
+    RBMarkEvalStart()
     if(errset(result=evalstring(strcat("(progn " data ")"))) then
         resultStr = sprintf(nil "%c%L%c" intToChar(2) result intToChar(30))
         when(RBEcho printf("[RAMIC Bridge (%L)] return:%L\n" ipcId result))

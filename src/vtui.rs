@@ -3,6 +3,10 @@
 mod async_runtime;
 mod auth;
 mod capability;
+// The binary uses only part of the shared hung-channel vocabulary; the rest
+// is used by the daemon (see the library crate).
+#[allow(dead_code)]
+mod channel_state;
 mod client;
 mod command_log;
 mod commands;
