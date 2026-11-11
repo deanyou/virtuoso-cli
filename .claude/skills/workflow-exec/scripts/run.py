@@ -15,15 +15,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+sys.path.insert(0, str(Path(__file__).parent))
 
-def run_vcli_command(cmd: str, timeout: int = 300) -> Dict[str, Any]:
+from vcli_cmd import build_argv, display
+
+
+def run_vcli_command(argv: List[str], timeout: int = 300) -> Dict[str, Any]:
     """
     Execute vcli command and return result.
-    
+
+    The invocation is passed as an argv list with no shell, so a value that
+    carries shell syntax arrives at vcli as one argument instead of running
+    as a second command.
+
     Args:
-        cmd: vcli command string
+        argv: argument list, starting with "vcli"
         timeout: Command timeout in seconds
-    
+
     Returns:
         Result dict with stdout, stderr, returncode, duration_ms
     """
@@ -31,16 +39,16 @@ def run_vcli_command(cmd: str, timeout: int = 300) -> Dict[str, Any]:
     
     try:
         result = subprocess.run(
-            cmd,
-            shell=True,
+            argv,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=timeout
         )
         duration_ms = int((time.time() - start_time) * 1000)
-        
+
         return {
-            'command': cmd,
+            'command': display(argv),
             'stdout': result.stdout,
             'stderr': result.stderr,
             'returncode': result.returncode,
@@ -50,7 +58,7 @@ def run_vcli_command(cmd: str, timeout: int = 300) -> Dict[str, Any]:
     except subprocess.TimeoutExpired:
         duration_ms = int((time.time() - start_time) * 1000)
         return {
-            'command': cmd,
+            'command': display(argv),
             'stdout': '',
             'stderr': f'Command timed out after {timeout}s',
             'returncode': -1,
@@ -61,7 +69,7 @@ def run_vcli_command(cmd: str, timeout: int = 300) -> Dict[str, Any]:
     except Exception as e:
         duration_ms = int((time.time() - start_time) * 1000)
         return {
-            'command': cmd,
+            'command': display(argv),
             'stdout': '',
             'stderr': str(e),
             'returncode': -1,
@@ -71,74 +79,53 @@ def run_vcli_command(cmd: str, timeout: int = 300) -> Dict[str, Any]:
         }
 
 
-def action_to_vcli(action: str, args: Dict[str, Any]) -> str:
-    """Convert action to vcli command."""
-    action_map = {
-        'maestro.open_session': 'maestro open-session',
-        'maestro.run': 'maestro run',
-        'maestro.save': 'maestro save',
-        'maestro.set_var': 'maestro set-var',
-        'maestro.get_var': 'maestro get-var',
-        'maestro.list_sessions': 'maestro list-sessions',
-        'skill.exec': 'skill exec',
-        'spectre.run': 'spectre run',
-        'cell.open': 'cell open',
-        'cell.info': 'cell info',
-    }
-    
-    base = action_map.get(action, action.replace('.', ' '))
-    cmd_parts = [f'vcli {base}']
-    
-    for key, value in args.items():
-        if isinstance(value, bool):
-            if value:
-                cmd_parts.append(f'--{key}')
-        elif isinstance(value, (int, float)):
-            cmd_parts.append(f'--{key}')
-            cmd_parts.append(str(value))
-        elif isinstance(value, str):
-            if ' ' in value or '"' in value:
-                cmd_parts.append(f'--{key}')
-                cmd_parts.append(f'"{value}"')
-            else:
-                cmd_parts.append(f'--{key}')
-                cmd_parts.append(value)
-    
-    return ' '.join(cmd_parts)
+def substitute(value: Any, context: Dict[str, Any]) -> Any:
+    """
+    Replace {{name}} placeholders with values from the execution context.
+
+    The substitution walks the structure rather than the JSON text, so a
+    context value containing a quote cannot corrupt the document.
+    """
+    if isinstance(value, str):
+        for key, replacement in context.items():
+            value = value.replace(f'{{{{{key}}}}}', str(replacement))
+        return value
+    if isinstance(value, dict):
+        return {k: substitute(v, context) for k, v in value.items()}
+    if isinstance(value, list):
+        return [substitute(v, context) for v in value]
+    return value
 
 
 def execute_command(command: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     Execute a single command from brief.
-    
+
     Args:
         command: Command dict with 'action' and optional 'args'
         context: Execution context (artifacts from previous commands)
-    
+
     Returns:
         Execution result dict
     """
     action = command.get('action')
     args = command.get('args', {})
     timeout = command.get('timeout', 300)
-    
+
     # Substitute template variables
-    args_str = json.dumps(args)
-    for key, value in context.items():
-        args_str = args_str.replace(f'{{{{{key}}}}}', str(value))
-    args = json.loads(args_str)
-    
+    args = substitute(args, context)
+
     # Build vcli command
-    cmd = action_to_vcli(action, args)
-    
+    argv = build_argv(action, args)
+
     # Handle Maestro session context
     if action == 'maestro.open_session':
         # Expect result to be session name
         pass
-    
-    print(f"  → {cmd}")
-    
-    result = run_vcli_command(cmd, timeout=timeout)
+
+    print(f"  → {display(argv)}")
+
+    result = run_vcli_command(argv, timeout=timeout)
     
     # Extract artifacts
     artifacts = {}

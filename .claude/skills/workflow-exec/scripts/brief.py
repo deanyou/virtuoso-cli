@@ -19,6 +19,10 @@ try:
 except ImportError:
     yaml = None
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+from vcli_cmd import build_argv, display
+
 
 def _parse_value(value: str) -> Any:
     """Parse string value to appropriate Python type (NO eval)."""
@@ -183,46 +187,20 @@ def verify_brief(brief: Dict[str, Any], requirement_yaml: Optional[str] = None) 
 
 def command_to_vcli(action: str, args: Dict[str, Any]) -> str:
     """
-    Convert action to vcli command.
-    
+    Render the vcli command for one action, for display.
+
+    The argv itself is built by `vcli_cmd.build_argv` — the same builder
+    `run.py` executes from — and only quoted here, so what a reader sees is
+    what would run, and the two cannot drift apart.
+
     Args:
         action: Action name (e.g., "maestro.open_session")
         args: Action arguments
-    
+
     Returns:
-        vcli command string
+        vcli command string, shell-quoted
     """
-    action_map = {
-        'maestro.open_session': 'vcli maestro open-session',
-        'maestro.run': 'vcli maestro run',
-        'maestro.save': 'vcli maestro save',
-        'maestro.set_var': 'vcli maestro set-var',
-        'maestro.get_var': 'vcli maestro get-var',
-        'skill.exec': 'vcli skill exec',
-        'spectre.run': 'vcli spectre run',
-        'cell.open': 'vcli cell open',
-        'cell.info': 'vcli cell info',
-    }
-    
-    if action not in action_map:
-        return f"vcli {action.replace('.', ' ')}"
-    
-    base_cmd = action_map.get(action, f"vcli {action}")
-    
-    # Build argument string
-    arg_parts = []
-    for key, value in args.items():
-        if isinstance(value, bool):
-            if value:
-                arg_parts.append(f"--{key}")
-        elif isinstance(value, (int, float)):
-            arg_parts.append(f"--{key} {value}")
-        else:
-            arg_parts.append(f"--{key} '{value}'")
-    
-    if arg_parts:
-        return f"{base_cmd} {' '.join(arg_parts)}"
-    return base_cmd
+    return display(build_argv(action, args))
 
 
 def main():

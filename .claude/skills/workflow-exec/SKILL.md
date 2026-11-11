@@ -130,10 +130,10 @@ requirement.yaml
 |------|------|
 | `scripts/brief.py` | 解析 YAML，生成带哈希的 brief |
 | `scripts/run.py` | 执行 vcli 命令序列 |
+| `scripts/vcli_cmd.py` | 把 action 装配成 argv（唯一事实来源） |
 | `scripts/verify.py` | SHA-256 校验和规格验证 |
 
 ## 局限性
 
 - **模板语法**: 不支持 `{{variable}}` 替换，参数需直接写在 YAML 中
 - **Spec 验证**: 是 stub 实现，需要结合 maestro-read-results skill
-- **Shell 执行**: 命令通过 shell=True 执行，需注意注入风险
