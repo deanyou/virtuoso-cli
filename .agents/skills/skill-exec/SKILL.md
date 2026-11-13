@@ -39,16 +39,75 @@ vcli skill exec 'let((cv result n) cv=geGetEditCellView() result=nil n=0 foreach
 vcli skill exec 'let((cv) cv=dbOpenCellViewByType("lib" "cell" "schematic" nil "r") sprintf(nil "inst=%d nets=%d" length(cv~>instances) length(cv~>nets)))' --format json
 ```
 
-## Multi-session usage
+## 会话选择与实例核验
 
-When multiple Virtuoso instances are running, specify the session explicitly:
+### 选哪个 Virtuoso 实例
+
+当同时有多个 Virtuoso 实例在跑时，显式指定：
 
 ```bash
-vcli session list                                          # find alive session IDs
-vcli --session meowu-meow-38371 skill exec 'getCurrentTime()'
-export VB_SESSION=meowu-meow-38371                        # or set once for the shell
-vcli skill exec 'getCurrentTime()'
+vcli session list                                          # 列出 alive 的 session ID
+export VB_SESSION=meowu-meow-38371                        # 合法用法：export 设一次，整条 shell 生效
+VB_SESSION=meowu-meow-38371 vcli skill exec '1+1'         # 或者用单命令前缀
 ```
+
+- `export VB_SESSION=...` 是**合法用法**，不是缺陷——它就是官方文档里的写法。
+- 禁止 `export` 的是 `VCLI_CAPABILITY=admin`：admin 是提权能力，只用**单命令前缀**，
+  不要 export 到后续每一条命令的环境里。
+
+```bash
+# ✓ 单命令前缀
+VCLI_CAPABILITY=admin vcli skill exec '1+1' --format json
+```
+
+### Maestro 子命令的会话是两回事
+
+| 要选的东西 | 用什么 |
+|-----------|--------|
+| 哪个 Virtuoso 实例（bridge 会话，id 形如 `<host>-<user>-<port>`） | `VB_SESSION`，或全局 `--session` |
+| 哪个 Maestro 会话（`fnxSessionN`） | 子命令自己的 `--session` |
+
+- Maestro 子命令的 `--session fnxSession0` **不会**写进 `VB_SESSION`——它是 Maestro
+  会话名，不是 bridge 会话 id。
+- 全局 `--session` 的值会按形态自动判定：像 bridge 会话 id → 选中该 Virtuoso；
+  像 `fnxSession*` → 只当作 Maestro 会话；两者都看不出来 → vcli **直接报错**（exit 2），
+  要求你用 `VB_SESSION` 选 Virtuoso、用子命令的 `--session` 选 `fnxSession`，
+  **不会**默默连到别的实例。
+- 两个 `--session` 同名，**子命令位置的值会覆盖全局位置的值**。需要同时指定时用环境变量：
+
+```bash
+VB_SESSION=meowu-meow-38371 vcli maestro run --session fnxSession0
+```
+
+### 确认"我连的就是我以为的那个 Virtuoso"
+
+> ⚠️ **新端口 ≠ 独立 Virtuoso。** Virtuoso 重启后端口会变、会话 id 也会变，
+> 但同一台机器上可能仍然只有一个 Virtuoso 实例。要判定"是不是同一个 Virtuoso"，
+> 交叉核验下面四项：
+
+| 核验项 | 怎么看 | 说明 |
+|-------|-------|------|
+| session 文件里的 pid | `jq -r .pid <sessions_dir>/<id>.json` | daemon 进程 pid |
+| 该 pid 的 PPID | `ps -o pid,ppid,cmd -p <pid>` | PPID 指向启动 daemon 的父进程 |
+| `CDS_MPS_SESSION` | `tr '\0' '\n' < /proc/<ppid>/environ \| grep CDS_MPS_SESSION` | Virtuoso 的 MPS session 名，区分不同 Virtuoso 实例 |
+| 监听端口 | `ss -ltnp \| grep <port>` | 确认端口属于哪个 pid |
+
+四项要**互相印证**，只看一项会误判：
+
+- 端口属于 pid A，但 session 文件记的是 pid B → session 文件已过期；
+- `CDS_MPS_SESSION` 与你以为的不同 → 是另一个 Virtuoso 实例；
+- PPID 变了 → Virtuoso 重启过，端口和会话 id 都已经换了。
+
+### 健康探测只用 `1+1`
+
+```bash
+VCLI_CAPABILITY=admin vcli skill exec '1+1' --format json
+# → {"status":"success","output":"2",...}
+```
+
+健康探测**只**用 `1+1`。**不要**为了"再多确认一下"去调 `ipcGetPid()`：它不是公开 API，
+而且每多一次 SKILL 往返，就多一次卡在 GUI 模态框上的机会。要 pid 就走上面的
+`/proc` / `ps` / `ss` 交叉核验，不要占用 SKILL 通道。
 
 ## Connection failure recovery
 
