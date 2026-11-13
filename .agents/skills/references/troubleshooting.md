@@ -136,14 +136,19 @@ Stale `.cdslck` lock files prevent opening Maestro in edit mode. Symptoms:
 - `deOpenCellView(... "a")` returns `nil` instead of a window
 - Window title stays `"Reading"` even after `maeMakeEditable()`
 
-**Fix:**
-```python
-# Delete the lock file first
-client.execute_skill('system("rm -f /path/to/library/cell/maestro/maestro.sdb.cdslck")')
+**Fix:** the lock belongs to whoever currently holds the cellview — do **not** delete it
+just because the open failed.
 
-# Then reopen
-client.execute_skill('deOpenCellView("LIB" "CELL" "maestro" "maestro" nil "a")')
+```python
+# ✗ Do not delete the lock file (via shell) — it belongs to the current holder.
+
+# ✓ Observe read-only first: no edit lock taken, the holder is unaffected
+client.execute_skill('deOpenCellView("LIB" "CELL" "maestro" "maestro" nil "r")')
 ```
+
+Only after confirming that (a) you are the holder, (b) the holder's process is gone,
+and (c) the current run is authorized to clear the lock may the lock be removed.
+Otherwise stop and report — see the `maestro` skill's "锁归属与当次授权" section.
 
 ### Outputs "Save" checkbox cannot be enabled via SKILL
 Maestro's **Outputs Setup pane** has a "Save" checkbox per output that controls whether waveform data is written to the results database. There is **no SKILL API** to set this checkbox — `maeAddOutput()` creates the output but does not check "Save".

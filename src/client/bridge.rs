@@ -210,10 +210,17 @@ impl VirtuosoClient {
                     }
                     n if n > 1 => {
                         let ids: Vec<&str> = live_sessions.iter().map(|s| s.id.as_str()).collect();
+                        // Name BOTH selectors, and say what each one selects.
+                        // "--session" alone is ambiguous for Maestro commands,
+                        // where the subcommand's own --session names a Maestro
+                        // session ("fnxSessionN") and not a Virtuoso instance;
+                        // pointing at VB_SESSION first keeps the advice
+                        // unambiguous for every command family.
                         return Err(crate::error::VirtuosoError::Config(format!(
-                        "multiple Virtuoso sessions active: {}. Use --session <id> to select one.",
-                        ids.join(", ")
-                    )));
+                            "multiple Virtuoso sessions active: {}. \
+                         Select the Virtuoso instance with VB_SESSION=<id> or --session <id>.",
+                            ids.join(", ")
+                        )));
                     }
                     _ => (cfg.port, None, None), // 0 live sessions → use VB_PORT
                 }

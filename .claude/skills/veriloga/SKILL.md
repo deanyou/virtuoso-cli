@@ -21,15 +21,42 @@ Available templates in reference.md: vsrc (1), cmirror (2), opamp (3), bandgap (
 
 ```bash
 # Compile a .va file into a Virtuoso cellview
-virtuoso skill exec 'ahdlCompile("myLib" "myModel" "veriloga")'
+VCLI_CAPABILITY=admin vcli skill exec 'ahdlCompile("myLib" "myModel" "veriloga")'
 
 # Check compilation log
-virtuoso skill exec 'ahdlGetLog("myLib" "myCell" "veriloga")'
+VCLI_CAPABILITY=admin vcli skill exec 'ahdlGetLog("myLib" "myCell" "veriloga")'
 
 # Standalone: Spectre reads .va directly (no Virtuoso needed)
 spectre /tmp/tb.scs -format psfascii -raw /tmp/psf +mt
 tail -2 /tmp/psf/spectre.out   # confirm "0 errors"
 ```
+
+> `VCLI_CAPABILITY=admin` 用**单命令前缀**，不要 `export`——export 会把 admin 能力留在
+> 后续每一条命令的环境里，失去最小权限。裸 SKILL exec 需要 admin 能力，
+> 所以每个 `vcli skill exec` 都要带上这个前缀。
+
+### 生成 symbol：缺 symbol 时不要直接 `ahdlSaveFile`
+
+`ahdlSaveFile` 在目标 cellview **还没有 symbol view** 时，会弹出一个模态
+"Save Symbol" 对话框，要求你确认/编辑 pin。这个弹窗是 **GUI 模态**：它会把
+SKILL channel **卡死**——命令既不返回也不报错，daemon 侧只表现为超时，
+而不是一个清晰的失败。
+
+**规则：缺 symbol 时不要直接 `ahdlSaveFile`。** 先用非交互的方式把 symbol 建出来，
+再保存（此时 symbol 已存在，保存走"已存在"分支，不再弹框）：
+
+```bash
+# 1) 先非交互地由 schematic pin 列表生成 symbol
+VCLI_CAPABILITY=admin vcli skill exec \
+  'schPinListToSymbol("myLib" "myCell" "symbol" schSchemToPinList("myLib" "myCell" "schematic"))'
+
+# 2) 再保存（symbol 已存在，不会再弹模态框）
+VCLI_CAPABILITY=admin vcli skill exec 'ahdlSaveFile("myLib" "myCell" "veriloga")'
+```
+
+`schPinListToSymbol` 或等价的非交互 symbol 生成函数均可；关键是**先建后存**。
+如果确实必须走"新建"分支，请在有 GUI 的人旁边执行，不要把它放进无人值守的
+SKILL 通道。
 
 ## Language Reference
 
@@ -159,12 +186,12 @@ vripple = laplace_nd(vin_ripple, {psrr_lin, tau_p}, {1.0, tau_p});
 ### Debug Commands
 
 ```bash
-virtuoso skill exec 'ahdlCompile("myLib" "myCell" "veriloga")'
-virtuoso skill exec 'ahdlGetLog("myLib" "myCell" "veriloga")'
+VCLI_CAPABILITY=admin vcli skill exec 'ahdlCompile("myLib" "myCell" "veriloga")'
+VCLI_CAPABILITY=admin vcli skill exec 'ahdlGetLog("myLib" "myCell" "veriloga")'
 
 # Spectre convergence options
-virtuoso skill exec 'option(quote(spectre) quote(reltol) 1e-4)'
-virtuoso skill exec 'option(quote(spectre) quote(gmin) 1e-14)'
+VCLI_CAPABILITY=admin vcli skill exec 'option(quote(spectre) quote(reltol) 1e-4)'
+VCLI_CAPABILITY=admin vcli skill exec 'option(quote(spectre) quote(gmin) 1e-14)'
 ```
 
 ## End-to-End Flow (standalone spectre)

@@ -15,7 +15,37 @@ allowed-tools: Bash(vcli *)
 | `ADE Explorer Editing: ...` | 编辑 | ✅ (IC23+，使用 mae* API) |
 | `ADE Assembler Editing: ...` | 编辑 | ✅ |
 
+## 会话选择：Virtuoso 用 `VB_SESSION`，Maestro 用子命令 `--session`
+
+两套会话命名空间是**不同的东西**，不要混用：
+
+| 要选的东西 | 用什么 | 例子 |
+|-----------|--------|------|
+| 哪个 Virtuoso 实例（bridge 会话） | `VB_SESSION` 环境变量 | `VB_SESSION=xunipc-userone-38371 vcli maestro ...` |
+| 哪个 Maestro 会话（ADE session） | 子命令自己的 `--session` | `vcli maestro run --session fnxSession0` |
+
+- `export VB_SESSION=...` 是**合法用法**，不是缺陷——它就是官方文档里的写法。
+- 禁止 `export` 的只有 `VCLI_CAPABILITY=admin`：admin 是提权能力，用**单命令前缀**，
+  不要 export 到后续每一条命令的环境里。
+- Maestro 子命令的 `--session`（`fnxSession*`）**不会**写入 `VB_SESSION`——它是 Maestro
+  会话名，不是 bridge 会话 id。写进去会让客户端去找一个不存在的会话文件，然后回落到
+  `VB_PORT=0`，报 `ECONNREFUSED`。
+- 全局 `--session`（`vcli --session <id> maestro ...`）会按值的形态自动判定：
+  - 像 bridge 会话 id（`<host>-<user>-<port>`，如 `xunipc-userone-38371`）→ 选中该
+    Virtuoso 实例（写入 `VB_SESSION`）；
+  - 像 `fnxSession*` → 只当作 Maestro 会话，不写 `VB_SESSION`；
+  - 两者都看不出来 → vcli **直接报错**（exit 2），要求你用 `VB_SESSION` 选 Virtuoso、
+    用子命令的 `--session` 选 `fnxSession`；**不会**默默连到别的实例。
+
+> ⚠️ 全局 `--session` 和子命令 `--session` 同名：子命令位置的值会覆盖全局位置的值。
+> 需要同时指定时，用环境变量选 Virtuoso：
+> `VB_SESSION=xunipc-userone-38371 vcli maestro run --session fnxSession0`。
+
 ## 快速流程
+
+> 下例假设 `VB_SESSION` 已经指向目标 Virtuoso 实例（`export VB_SESSION=...`
+> 或单命令前缀 `VB_SESSION=... vcli ...`）。`--session fnxSession0` 是 **Maestro 会话**，
+> 不是 Virtuoso 实例——两者别混。
 
 ```bash
 # 1. 确认窗口模式（新：直接用 vcli window list）
@@ -177,22 +207,76 @@ print(f'{len(freqs)} points exported')
 
 ## 全新 cell 的前置步骤（ensure_maestro_view）
 
-> ⚠️ `vcli maestro open` / `deOpenCellView("a")` 假设 maestro view **已经存在磁盘上**。
-> 对于从未在 Maestro 中打开过的全新 cell，该目录不存在，`deOpenCellView` 返回 nil 并弹出
-> **"Data file does not exist"** GUI dialog，阻塞 SKILL channel。
+> ⚠️ 全新 cell 的 maestro view 目录一开始不存在，直接开 GUI 会弹出
+> **"Data file does not exist"** 对话框，阻塞 SKILL channel。
+> `vcli maestro open --mode a` 会把 view 建出来并写入磁盘。
 
-bootstrap 模式（两步，idempotent）：
+**只走这一条命令**（单命令前缀，不要 export admin）：
 
 ```bash
-# 步骤 1：创建 maestro view 并写入磁盘
-vcli skill exec 'let((sess)
-  sess=maeOpenSetup("LIB" "CELL" "maestro")
-  maeSaveSetup(?session sess)
-  close_session(sess))'
-
-# 步骤 2：正常打开 GUI
-vcli maestro open --lib LIB --cell CELL
+# 新建 / 打开 maestro view（后台 setup 会话，可编辑，会持有 OA edit lock）
+VB_SESSION=xunipc-userone-38371 VCLI_CAPABILITY=admin VB_TIMEOUT=120 \
+  vcli maestro open --lib LIB --cell CELL --mode a
 ```
+
+- `VB_SESSION=...`：选哪个 Virtuoso 实例。
+- `VCLI_CAPABILITY=admin`：**单命令前缀**。`maestro open --mode a` 需要 admin 能力，
+  但不要 `export VCLI_CAPABILITY=admin`——那会把提权能力留在后续所有命令里。
+- `VB_TIMEOUT=...`：可选。服务端忙时调大（默认 30s）。
+- `--mode a` 取 edit lock；只读观察用 `--mode r`。
+
+> ⚠️ `vcli maestro open` 开的是**后台 setup 会话**（底层就是 `maeOpenSetup`）：
+> **没有 GUI 窗口**，也无法 attach 到已有窗口。所以它开出来的 "a" 模式会话会
+> **占住 edit lock**，而 Virtuoso 那边看不到任何可以点的界面。
+> 详见下方「窗口是 Reading 模式」。
+
+### ⚠️ 不要用裸的 Maestro setup bootstrap
+
+后台直接建 Maestro setup、再存盘、再关会话的那套两步 bootstrap（不经 `vcli maestro open`）
+是**禁止**的。
+
+理由：它绕过了 `vcli maestro open` 的会话与锁管理，容易留下悬空的 edit lock；
+失败时它只返回 nil，没有可读的错误上下文。一切走 `vcli maestro open --mode a`。
+
+### ⚠️ 不要用 shell 删锁
+
+不要用 shell 的 `rm` 去删 `*.cdslck` 锁文件。
+
+见下方「锁归属与当次授权」。
+
+## 执行者预检（发任何 SKILL 之前）
+
+以下三项是**执行者要自己做的预检**，不是 vcli 的自动拦截——本文档本身没有拦截效力，
+绕过它直接发 SKILL 依然可能连错会话、连错机器或抢别人的锁。
+
+1. **hosts 正确**：`VB_REMOTE_HOST` 必须指向**跑 Virtuoso 的那台机器**（compute host），
+   不是 jump/bastion。检查：
+
+   ```bash
+   vcli tunnel status --format json | jq '.daemon.hostname_check'
+   # {"configured": "jump-bastion-01", "actual": "compute-eda-42", "mismatch": true}
+   ```
+
+   `mismatch: true` → **停下**，先修 `VB_REMOTE_HOST`（不是 `VB_JUMP_HOST`）。
+   hosts 不对时发 SKILL 只会连到错误的机器（或根本连不上）。
+
+2. **JobManager 可达**：`vcli maestro run` 靠 JobManager 提交仿真。JobManager 不可达时
+   提交会失败或挂住。**停下并报告**，不要用 SKILL 硬闯——硬闯的结果通常是一个
+   看起来成功、实际没有任何结果的 run。
+
+3. **会话归属**：确认你选中的是本次任务授权的那个 Virtuoso 实例（`VB_SESSION`）、
+   那个 cellview。
+
+任一项不通过 → **停下并报告**，不要继续发 SKILL。
+
+## 锁归属与当次授权
+
+- OA edit lock（`*.cdslck`）属于**当前持有者**。
+- **禁止擅清锁**：不要用 shell 删 `.cdslck`，也不要为了绕开锁而换 session/换机器。
+  锁在，很可能是**另一个人或另一个进程**正在编辑这个 cellview。
+- 只有在**你就是该 cellview 的持有者**、对方进程已经退出、**且本次授权明确包含
+  "清理锁"** 这三个条件同时成立时，才可以处理锁。
+- 拿不准就**停下报告**，等授权，不要自己决定。
 
 ## 常见问题
 
@@ -212,16 +296,64 @@ vcli skill exec 'maeGetSetup(?session "fnxSession0")'
 
 ### 锁文件导致打不开编辑模式
 
+**不要用 shell 删掉 `.cdslck`。** 锁属于当前持有者；见上方「锁归属与当次授权」。
+正确做法：先确认持有者与本次授权，再决定是换用只读模式
+（`vcli maestro open --mode r`）、联系持有者，还是在授权明确时清理。
+
 ```bash
-vcli skill exec 'system("rm -f /path/to/library/cell/maestro/maestro.sdb.cdslck")'
+# 只读观察：不取 edit lock，也不影响持有者
+VB_SESSION=xunipc-userone-38371 VCLI_CAPABILITY=admin \
+  vcli maestro open --lib LIB --cell CELL --mode r
 ```
 
 ### 窗口是 Reading 模式
+
+> ⚠️ **`vcli maestro open --mode a` 不能把已有 GUI Reading 窗口改成可编辑。**
+> 它走的是 `maeOpenSetup`，建的是**后台 setup 会话**：没有窗口、无法 attach 到
+> 已有窗口，而且 "a" 模式会**占住 edit lock**——原来的 Reading 窗口照样只读，
+> 新后台会话的锁还可能挡住后面在 GUI 里重开。
+
+所以分情况处理：
+
+**1. 只想读 setup / 看分析，不碰锁** —— 用只读后台会话（不取 edit lock，
+不影响持有者，也不会挡住 GUI）：
+
+```bash
+VB_SESSION=xunipc-userone-38371 VCLI_CAPABILITY=admin \
+  vcli maestro open --lib LIB --cell CELL --mode r
+```
+
+**2. 要让 GUI 里那个窗口变成可编辑** —— 只能走 **GUI 打开路径**
+（`deOpenCellView`），即关掉旧的 ADE 窗口后重新打开：
 
 ```bash
 vcli skill exec 'foreach(w hiGetWindowList() when(rexMatchp("ADE" hiGetWindowName(w)) hiCloseWindow(w)))'
 vcli skill exec 'deOpenCellView("LIB" "CELL" "maestro" "maestro" nil "a")'
 ```
+
+这一步的前提是**锁是空的**。如果之前已经用 `--mode a` 开过后台会话，
+先把它关掉、把锁还回去，否则 GUI 重开会被自己的后台锁挡住：
+
+```bash
+vcli maestro list-sessions                     # 找到那个 fnxSessionN
+vcli maestro close --session fnxSessionN       # 释放 edit lock
+```
+
+**3. 只在自己开的后台会话上就地切锁** —— `vcli maestro set-mode` 走的是
+`maeMakeEditable` / `maeMakeReadonly`，在**同一个会话**上就地取锁/还锁，不用重开：
+
+```bash
+vcli maestro set-mode --session fnxSessionN --mode a   # 取 edit lock
+# ... 只读/写 setup 的那几段 ...
+vcli maestro set-mode --session fnxSessionN --mode r   # 还回 edit lock
+```
+
+> 这是针对**后台会话**的锁卫生手段，**不是**"把 GUI Reading 窗口变可编辑"——
+> 后台会话没有窗口，也不会 attach 到已有窗口。
+
+> 本节不给"一步把 Reading 变可编辑"的承诺：没有在活 Virtuoso 上验证过的
+> 路径，就不要写成能修。遇到读不到 / 改不了的情况，按上方「锁归属与当次授权」
+> 停下报告。
 
 ### maeAddOutput 成功但 maeGetResultOutputs 返回 nil
 

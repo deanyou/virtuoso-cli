@@ -315,6 +315,67 @@ ls <resultsDir>/psf/*.dc 2>/dev/null || echo "NO DATA FILES — sim failed"
 ```
 
 ---
+## 9. PVT / LVT 角与 MC：section 要配对，交付要说清口径
+
+### 9.1 实例化 LVT 器件 → 检查同角的 `*_lvt` section
+
+`nch_lvt` / `pch_lvt` 这类 LVT 器件通常挂在**独立的 LVT section**（如 `tt_lvt`、
+`ss_lvt`、`ff_lvt`）下。把 LVT 器件实例化在普通角 section（`tt`/`ss`/`ff`）里，
+结果通常不是干脆的报错，而是**默默用错模型**：要么 PDK 找不到该器件而失败，
+要么仿真跑完了、指标却来自普通 VT 的模型文件（偏乐观）。
+
+所以：**实例化 `nch_lvt` 等时，先确认当前角有对应的 `*_lvt` section**，
+并确认网表里的 `include` 行带的是 LVT 模型文件：
+
+```spectre
+// ✗ LVT 器件 + 普通角 section —— 器件与 section 不匹配
+include "....lib" section=tt
+nch_lvt m1 (d g s b) nch_lvt w=1u l=0.18u
+
+// ✓ LVT 器件 + 同角 LVT section
+include "....lib" section=tt_lvt
+nch_lvt m1 (d g s b) nch_lvt w=1u l=0.18u
+```
+
+自检：网表里所有 `nch_lvt`/`pch_lvt` 实例，与 `include ... section=...` 行的角名一一对应。
+
+### 9.2 `stat_mis_lvt` 只属 mismatch / MC 路径
+
+`stat_mis_lvt` 是 **mismatch / MC**（失配统计、Monte Carlo）路径用的 section/开关，
+**不是**"跑一个 LVT 前仿"就必须存在的东西：
+
+- 单角 LVT 前仿（PVT 里的一个角）→ 用该角的 `*_lvt` section 就够了，
+  不需要 `stat_mis_lvt`；
+- 只有要跑**失配 / 统计 MC**（per-instance mismatch、Monte Carlo 收敛统计）时，
+  `stat_mis_lvt` 才是必需的。
+
+把它当成所有 LVT 前仿的前置条件，要么白跑一次（section 找不到直接失败），
+要么把普通前仿误当成 MC 流程。
+
+### 9.3 交付口径：必须写清这四项
+
+交付仿真结果时，**每一项都要写明**，不能只贴一个指标数字：
+
+| 必须写清 | 含义 | 不合格写法 |
+|-----------|------|-----------|
+| **网表来源** | vcli 闭环 / SKILL 生成 / 手写 Spectre | 手写 netlist 却写成"vcli 跑通" |
+| **C&S / 连线检查** | Connectivity & Schematic 检查是否做过、结论是什么 | 只写"仿真通过" |
+| **PSF 或指标** | 实际产出的是 PSF 文件，还是解析出来的指标 | 两者都没有 |
+| **各自进程终态** | 每个子进程（netlist / spectre / MC）最终是退出、超时还是被杀 | MC 还在跑就写"全部完成" |
+
+**三条硬红线：**
+
+1. **手写 Spectre 不算 vcli 闭环。** 手写 `.scs` + `spectre` 跑出来的结果，只能写成
+   "手写 netlist + standalone Spectre"，不能写成"vcli 仿真通过 / vcli 闭环验证"。
+   两者流程不同：前者没有 OA 数据、没有 C&S、没有 vcli 的 netlist 生成与回写链路。
+2. **缺模型 / SFE-23 / `no tran output` 不得入指标。** 模型文件缺失（include 找不到）、
+   SFE-23 之类的致命错误、或 "no tran output"（分析没产出结果）出现时，这次仿真的
+   结果**一律不进指标表**——只能进"失败 / 未完成"清单。先把错误修掉再重跑。
+3. **MC 未退出不得标全部完成。** Monte Carlo 只要还有一个进程在跑（或被超时杀掉），
+   状态就是"未完成"，不能写"全部完成 / 已收敛"。要写清楚：已完成多少 / 总共多少、
+   进程终态是什么。
+
+---
 ## Quick Reference: Spectre Help
 
 ```bash
