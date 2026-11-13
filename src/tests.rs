@@ -2449,13 +2449,237 @@ mod profile_dispatch_tests {
     }
 }
 
+/// Regression tests for `vcli schema` (finding: `schema --all` covered only
+/// 5 of the CLI's commands while the help text promised the full tree).
+///
+/// The schema is generated from the clap command tree, so the contract is
+/// now mechanical: the set of commands in `schema --all` must equal the set
+/// of commands the binary actually exposes.
+#[cfg(test)]
+mod schema_tests {
+    use clap::CommandFactory;
+    use std::collections::BTreeSet;
+
+    /// Visible top-level command names, straight from the clap definition.
+    ///
+    /// The tree is built first because clap injects its own `help` subcommand
+    /// during `build()` — the schema is generated from the built tree, so the
+    /// reference has to be built the same way.
+    fn clap_commands() -> BTreeSet<String> {
+        let mut cli = crate::Cli::command();
+        cli.build();
+        cli.get_subcommands()
+            .filter(|c| !c.is_hide_set())
+            .map(|c| c.get_name().to_string())
+            .collect()
+    }
+
+    fn schema_command_names() -> BTreeSet<String> {
+        let schema = crate::commands::schema::show(&crate::Cli::command(), None, None);
+        schema["commands"]
+            .as_object()
+            .expect("schema must expose a commands object")
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn schema_all_covers_every_cli_command() {
+        let clap_cmds = clap_commands();
+        let schema_cmds = schema_command_names();
+
+        // The headline regression: the schema must not be a curated subset.
+        // Every command the CLI exposes has to be introspectable.
+        let missing: Vec<_> = clap_cmds.difference(&schema_cmds).collect();
+        assert!(
+            missing.is_empty(),
+            "schema --all is missing commands the CLI exposes: {missing:?}\n\
+             clap commands: {clap_cmds:?}\n\
+             schema commands: {schema_cmds:?}"
+        );
+
+        // ...and it must not invent commands the CLI does not have.
+        let extra: Vec<_> = schema_cmds.difference(&clap_cmds).collect();
+        assert!(
+            extra.is_empty(),
+            "schema --all exposes commands the CLI does not have: {extra:?}"
+        );
+    }
+
+    #[test]
+    fn schema_all_covers_the_whole_command_surface_not_a_curated_subset() {
+        // A guard against regressing to a hand-maintained subset: the number
+        // of introspectable commands must track the CLI, which currently
+        // exposes 22 real commands (plus clap's own `help` subcommand).
+        let count = schema_command_names().len();
+        assert!(
+            count >= 22,
+            "schema --all only covers {count} commands — expected the full CLI surface"
+        );
+
+        // Spot-check the commands that were missing from the old curated
+        // subset, so a future regression cannot quietly drop them again.
+        let covered = schema_command_names();
+        for expected in [
+            "init",
+            "config",
+            "target",
+            "tunnel",
+            "skill",
+            "cell",
+            "sim",
+            "process",
+            "design",
+            "maestro",
+            "schematic",
+            "symbol",
+            "library",
+            "session",
+            "tx",
+            "rpc",
+            "schema",
+            "window",
+            "diag",
+            "tui",
+            "mcp",
+            "profile",
+        ] {
+            assert!(
+                covered.contains(expected),
+                "schema --all must cover the `{expected}` command; covered: {covered:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn schema_noun_verb_resolves_every_command_with_subcommands() {
+        let cli = crate::Cli::command();
+        for cmd in cli.get_subcommands() {
+            if cmd.is_hide_set() {
+                continue;
+            }
+            let name = cmd.get_name();
+            let subs: Vec<String> = cmd
+                .get_subcommands()
+                .filter(|c| !c.is_hide_set())
+                .map(|c| c.get_name().to_string())
+                .collect();
+            if subs.is_empty() {
+                continue;
+            }
+            for sub in subs {
+                let out = crate::commands::schema::show(&cli, Some(name), Some(&sub));
+                assert!(
+                    out.get("error").is_none(),
+                    "schema {name} {sub} should resolve, got: {out}"
+                );
+                assert!(
+                    out.get(format!("{name} {sub}")).is_some(),
+                    "schema {name} {sub} should be keyed by its full name, got: {out}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn schema_unknown_command_reports_not_found() {
+        let cli = crate::Cli::command();
+        let out = crate::commands::schema::show(&cli, Some("no-such-command"), None);
+        assert_eq!(out["error"], "not_found");
+        assert!(out["message"].as_str().unwrap().contains("no-such-command"));
+    }
+
+    #[test]
+    fn schema_version_matches_crate_version() {
+        let schema = crate::commands::schema::show(&crate::Cli::command(), None, None);
+        assert_eq!(schema["version"], env!("CARGO_PKG_VERSION"));
+    }
+
+    /// Visit every argument the schema publishes, wherever it sits.
+    ///
+    /// The tree nests commands under `subcommands`; each command carries
+    /// `flags` (named options) and `args` (positionals).
+    fn for_each_arg(
+        node: &serde_json::Value,
+        path: &str,
+        visit: &mut impl FnMut(&str, &serde_json::Value),
+    ) {
+        for group in [&node["flags"], &node["args"]] {
+            if let Some(map) = group.as_object() {
+                for (name, arg) in map {
+                    visit(&format!("{path} {name}"), arg);
+                }
+            }
+        }
+        if let Some(subs) = node["subcommands"].as_object() {
+            for (name, sub) in subs {
+                for_each_arg(sub, &format!("{path} {name}"), visit);
+            }
+        }
+    }
+
+    /// Every published default must carry the JSON type its own `type` promises.
+    ///
+    /// A stringified boolean is not a cosmetic difference: an agent that copies
+    /// the default onto the command line writes `--dry-run=false`, and clap
+    /// rejects that outright ("unexpected value 'false' for '--dry-run'").
+    #[test]
+    fn schema_defaults_carry_the_json_type_they_promise() {
+        let schema = crate::commands::schema::show(&crate::Cli::command(), None, None);
+        let mut checked = 0usize;
+        let mut visit = |name: &str, arg: &serde_json::Value| {
+            let kind = arg["type"]
+                .as_str()
+                .expect("every published argument carries a type");
+            let default = &arg["default"];
+            if default.is_null() {
+                return;
+            }
+            checked += 1;
+            let matches_type = match kind {
+                "bool" => default.is_boolean(),
+                "u8" | "u16" | "u32" | "u64" | "usize" | "i8" | "i16" | "i32" | "i64" | "isize"
+                | "f32" | "f64" => default.is_number(),
+                _ => default.is_string(),
+            };
+            assert!(
+                matches_type,
+                "{name}: type `{kind}` must have a default of that JSON type, got {default}"
+            );
+        };
+
+        for_each_arg(&schema["commands"], "", &mut visit);
+        if let Some(map) = schema["global_flags"].as_object() {
+            for (name, arg) in map {
+                visit(name, arg);
+            }
+        }
+        assert!(checked > 0, "the schema must publish defaults to check");
+    }
+
+    /// The schema must publish the concrete type of an argument, not collapse
+    /// everything that is neither a flag nor an enum into "string".
+    #[test]
+    fn schema_publishes_concrete_argument_types() {
+        let schema = crate::commands::schema::show(&crate::Cli::command(), None, None);
+
+        let tunnel_start = &schema["commands"]["tunnel"]["subcommands"]["start"]["flags"];
+        assert_eq!(tunnel_start["--timeout"]["type"], "u64");
+        assert_eq!(tunnel_start["--dry-run"]["type"], "bool");
+        assert_eq!(tunnel_start["--format"]["type"], "enum");
+
+        let skill_exec = &schema["commands"]["skill"]["subcommands"]["exec"];
+        assert_eq!(skill_exec["flags"]["--file"]["type"], "path");
+        assert_eq!(skill_exec["args"]["code"]["type"], "string");
+    }
+}
+
 #[cfg(test)]
 mod skill_exec_schema_tests {
     use clap::CommandFactory;
 
-    /// Input surface `vcli schema skill exec` must publish. Scoped to this
-    /// command: the hand-written schema is a subset of clap, so a tree-wide
-    /// compare would fail on commands this schema never claimed to list.
+    /// Input surface `vcli schema skill exec` must publish.
     #[derive(Debug, PartialEq)]
     struct SkillExecInput {
         code_required: bool,
@@ -2492,7 +2716,8 @@ mod skill_exec_schema_tests {
     }
 
     fn from_schema() -> SkillExecInput {
-        let schema = crate::commands::schema::show(Some("skill"), Some("exec"));
+        let cli = crate::Cli::command();
+        let schema = crate::commands::schema::show(&cli, Some("skill"), Some("exec"));
         let node = &schema["skill exec"];
         let text = node.to_string();
         SkillExecInput {

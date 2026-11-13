@@ -1,6 +1,7 @@
 """vgui_runner.engine - State machine, fake executor, and runner."""
 
 import json
+import os
 import time
 from abc import ABC
 from abc import abstractmethod
@@ -540,8 +541,8 @@ class Runner:
         try:
             from pathlib import Path as _P
             import sqlite3 as _sq
-            db_path = _P(__file__).parent.parent / "data" / "skill_db.sqlite3"
-            if db_path.exists():
+            db_path = self._experience_db_path(output_dir)
+            if db_path is not None:
                 _conn = _sq.connect(str(db_path))
                 _conn.row_factory = __import__("sqlite3").Row
                 init_schema(_conn)
@@ -553,6 +554,25 @@ class Runner:
             pass  # Experience writeback must never break the run
 
         return summary
+
+    def _experience_db_path(self, output_dir: Path) -> Optional[Path]:
+        """Resolve the Experience DB the writeback step writes into.
+
+        Offline (fake) replays must never write into the skill package's
+        `data/skill_db.sqlite3` — that file is tracked in the repository, so a
+        replay would leave the working tree dirty. Fake runs therefore land in
+        a per-run file inside their (temporary) output directory.
+
+        Live/local runs keep writing to the skill's own DB, and only when it
+        already exists (unchanged behaviour).
+        """
+        override = os.environ.get("VGUI_EXPERIENCE_DB")
+        if override:
+            return Path(override)
+        if isinstance(self._executor, FakeExecutor):
+            return output_dir / "experience.db"
+        skill_db = Path(__file__).parent.parent / "data" / "skill_db.sqlite3"
+        return skill_db if skill_db.exists() else None
 
     def _empirical_for(self, channel, attempt: int, failure: Optional[str] = None) -> Optional[dict]:
         """查经验校准并序列化为 trace 附加字段；不可用返回 None（不破坏 run）。"""
