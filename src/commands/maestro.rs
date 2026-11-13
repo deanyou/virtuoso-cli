@@ -9,6 +9,124 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// Prefix every Maestro (ADE) session name carries.
+const MAESTRO_SESSION_PREFIX: &str = "fnxSession";
+
+/// What a `--session` value names, when the command is a Maestro subcommand.
+///
+/// Maestro subcommands carry their own `--session` flag for the *Maestro*
+/// session name (`fnxSessionN`), while the global `--session` selects the
+/// *Virtuoso bridge* session (`<host>-<user>-<port>`). Clap folds both flags
+/// into one value, so the value has to be classified before it can be used —
+/// writing a Maestro session name into `VB_SESSION` makes the client look for
+/// a bridge session file that does not exist and fall back to `VB_PORT=0`
+/// (ECONNREFUSED), and ignoring a bridge session id makes the client pick a
+/// *different* Virtuoso instance than the one the user named.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionArgKind {
+    /// A bridge session id (`<host>-<user>-<port>`) — selects the Virtuoso
+    /// instance and must be written to `VB_SESSION`.
+    Bridge,
+    /// A Maestro session name (`fnxSessionN`) — Maestro only, never
+    /// `VB_SESSION`.
+    Maestro,
+    /// Undecidable — the caller must fail loudly instead of guessing.
+    Unknown,
+}
+
+/// Classify a `--session` value by shape alone (no filesystem access).
+///
+/// The bridge session id is built by the SKILL bridge as
+/// `sprintf(nil "%s-%d" RBSessionBase RBPort)` where `RBSessionBase` is
+/// `<hostname>-<username>` (see `resources/ramic_bridge.il`), so a bridge id
+/// always ends in a numeric port and carries at least three dash-separated
+/// fields.
+pub fn classify_session_arg(value: &str) -> SessionArgKind {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return SessionArgKind::Unknown;
+    }
+    if trimmed.starts_with(MAESTRO_SESSION_PREFIX) {
+        return SessionArgKind::Maestro;
+    }
+    if looks_like_bridge_session_id(trimmed) {
+        return SessionArgKind::Bridge;
+    }
+    SessionArgKind::Unknown
+}
+
+/// `<host>-<user>-<port>` → the trailing field is the port.
+fn looks_like_bridge_session_id(value: &str) -> bool {
+    let mut fields = value.rsplitn(2, '-');
+    let port = match fields.next() {
+        Some(p) => p,
+        None => return false,
+    };
+    let head = match fields.next() {
+        Some(h) => h,
+        None => return false,
+    };
+    // `<host>-<user>-<port>` needs at least three dash-separated fields; a
+    // bare `name-1234` is not enough to call something a bridge session id.
+    if !head.contains('-') {
+        return false;
+    }
+    match port.parse::<u16>() {
+        Ok(p) => p > 0,
+        Err(_) => false,
+    }
+}
+
+/// Is this id registered as a live Virtuoso session (`vcli session list`)?
+///
+/// The registry is the authoritative answer to "does this id name a Virtuoso
+/// instance"; the shape heuristic above is only a fallback for ids that are
+/// not registered (yet).
+fn is_registered_bridge_session(value: &str) -> bool {
+    crate::models::SessionInfo::list()
+        .map(|sessions| sessions.iter().any(|s| s.id == value))
+        .unwrap_or(false)
+}
+
+/// Resolve the `VB_SESSION` value implied by a Maestro command's `--session`.
+///
+/// * `Ok(Some(id))` — the value names a Virtuoso bridge session: write it to
+///   `VB_SESSION` so the client connects to *that* instance.
+/// * `Ok(None)` — the value names a Maestro session (`fnxSessionN`): it must
+///   never reach `VB_SESSION`.
+/// * `Err(msg)` — the value cannot be classified. The caller must fail
+///   instead of silently connecting to some other Virtuoso instance.
+pub fn resolve_maestro_session_env(value: &str) -> std::result::Result<Option<String>, String> {
+    match classify_session_arg(value) {
+        SessionArgKind::Bridge => Ok(Some(value.trim().to_string())),
+        SessionArgKind::Maestro => Ok(None),
+        SessionArgKind::Unknown => {
+            if is_registered_bridge_session(value.trim()) {
+                Ok(Some(value.trim().to_string()))
+            } else {
+                Err(ambiguous_session_arg_message(value))
+            }
+        }
+    }
+}
+
+/// Error text for a `--session` value that names neither a bridge session nor a
+/// Maestro session.
+///
+/// The message must stay unambiguous: it points at `VB_SESSION` for the
+/// Virtuoso instance and at the *subcommand's* `--session` for the Maestro
+/// session, so it never tells the user to "use --session" for the wrong thing.
+pub fn ambiguous_session_arg_message(value: &str) -> String {
+    format!(
+        "cannot tell what '--session {value}' refers to: it is neither a Virtuoso bridge \
+         session id (<host>-<user>-<port>) nor a Maestro session name ({MAESTRO_SESSION_PREFIX}N).\n\
+         Select the Virtuoso instance with VB_SESSION=<bridge-session-id> \
+         (e.g. 'VB_SESSION=host-user-1234 vcli maestro ...'),\n\
+         and select the Maestro session with the subcommand's own --session \
+         (e.g. 'vcli maestro run --session {MAESTRO_SESSION_PREFIX}0')."
+    )
+}
+
 /// Rejects anything but `"r"` / `"a"` before it reaches SKILL.
 ///
 /// `maeOpenSetup` ignores an unrecognised `?mode` and falls back to its own
@@ -2670,6 +2788,75 @@ mod tests {
     fn tokenizer_empty_list() {
         assert_eq!(parse_skill_list_top_level("nil"), vec![] as Vec<String>);
         assert_eq!(parse_skill_list_top_level("()"), vec![] as Vec<String>);
+    }
+
+    // --- Maestro --session classification ---------------------------------
+    //
+    // A Maestro command's --session may name either namespace. The three
+    // cases below are the whole contract:
+    //   1. bridge session id  → selects the Virtuoso instance (VB_SESSION)
+    //   2. fnxSessionN        → Maestro session only, never VB_SESSION
+    //   3. anything else      → hard error, never a silent guess
+
+    #[test]
+    fn session_arg_bridge_shape_selects_virtuoso() {
+        assert_eq!(
+            classify_session_arg("xunipc-userone-38371"),
+            SessionArgKind::Bridge
+        );
+        // A host containing a dash must still classify as a bridge id.
+        assert_eq!(
+            classify_session_arg("my-host-userone-38371"),
+            SessionArgKind::Bridge
+        );
+        // The id must be routed to VB_SESSION so the client connects to
+        // exactly that Virtuoso instance.
+        assert_eq!(
+            resolve_maestro_session_env("xunipc-userone-38371"),
+            Ok(Some("xunipc-userone-38371".to_string()))
+        );
+    }
+
+    #[test]
+    fn session_arg_fnx_session_is_maestro_only() {
+        assert_eq!(classify_session_arg("fnxSession0"), SessionArgKind::Maestro);
+        assert_eq!(classify_session_arg("fnxSession4"), SessionArgKind::Maestro);
+        // A Maestro session name must NEVER reach VB_SESSION: the bridge
+        // client would look for a session file that does not exist and fall
+        // back to VB_PORT=0 (ECONNREFUSED).
+        assert_eq!(resolve_maestro_session_env("fnxSession0"), Ok(None));
+        assert_eq!(resolve_maestro_session_env("fnxSession4"), Ok(None));
+    }
+
+    #[test]
+    fn session_arg_unknown_is_rejected_with_actionable_message() {
+        assert_eq!(classify_session_arg("mystery"), SessionArgKind::Unknown);
+        let err = resolve_maestro_session_env("mystery").unwrap_err();
+        // The message must point at VB_SESSION for the Virtuoso instance and
+        // at the subcommand's own --session for the Maestro session.
+        assert!(err.contains("VB_SESSION"), "{err}");
+        assert!(err.contains("fnxSession"), "{err}");
+        // ...and it must never tell the user to "use --session" for the
+        // Virtuoso instance, which would be the contradictory advice the
+        // multi-session error used to give.
+        assert!(!err.contains("Use --session"), "{err}");
+    }
+
+    #[test]
+    fn session_arg_empty_or_partial_is_unknown() {
+        assert_eq!(classify_session_arg(""), SessionArgKind::Unknown);
+        assert_eq!(classify_session_arg("   "), SessionArgKind::Unknown);
+        // Two dash-separated fields is not enough: only <host>-<user>-<port>
+        // is a bridge session id.
+        assert_eq!(
+            classify_session_arg("userone-38371"),
+            SessionArgKind::Unknown
+        );
+        // A port of 0 is never a real bridge port.
+        assert_eq!(
+            classify_session_arg("xunipc-userone-0"),
+            SessionArgKind::Unknown
+        );
     }
 
     #[test]

@@ -3070,11 +3070,34 @@ fn main() {
     // (e.g. "fnxSession0"), which are NOT bridge session IDs. Propagating a
     // Maestro session name to VB_SESSION causes VirtuosoClient::from_env() to
     // look for a non-existent bridge session file and fall back to VB_PORT=0,
-    // producing ECONNREFUSED. Skip propagation for Maestro commands entirely.
+    // producing ECONNREFUSED. Maestro commands therefore need the extra
+    // classification step below instead of a blanket skip.
+    //
+    // A Maestro command's --session may legitimately name EITHER namespace
+    // (clap folds the global flag and the subcommand flag into one value), so
+    // the value is classified before it is used:
+    //   - bridge session id (<host>-<user>-<port>) → select that Virtuoso
+    //   - "fnxSessionN"                         → Maestro session only
+    //   - anything else                          → hard error, never a guess
+    //
+    // An explicit VB_SESSION always wins: exporting it is a documented,
+    // supported way to pick the Virtuoso instance, and then there is nothing
+    // left to disambiguate.
     let session_from_env = std::env::var("VB_SESSION").ok();
-    if session_from_env.is_none() && !matches!(&cli.command, Commands::Maestro(_)) {
+    let mut session_arg_error: Option<error::VirtuosoError> = None;
+    if session_from_env.is_none() {
         if let Some(ref s) = cli.session {
-            std::env::set_var("VB_SESSION", s);
+            if matches!(&cli.command, Commands::Maestro(_)) {
+                match commands::maestro::resolve_maestro_session_env(s) {
+                    Ok(Some(id)) => std::env::set_var("VB_SESSION", id),
+                    Ok(None) => {}
+                    Err(msg) => {
+                        session_arg_error = Some(error::VirtuosoError::Config(msg));
+                    }
+                }
+            } else {
+                std::env::set_var("VB_SESSION", s);
+            }
         }
     }
 
@@ -3082,6 +3105,16 @@ fn main() {
 
     let cli_args: Vec<String> = std::env::args().collect();
     let cli_session = cli.session.clone();
+
+    // An unclassifiable --session on a Maestro command must fail before any
+    // connection is attempted: quietly connecting to some *other* Virtuoso
+    // instance is exactly the failure mode this guard exists to prevent.
+    if let Some(e) = session_arg_error {
+        let exit_code = e.exit_code();
+        history::append_cmd(&cli_args, cli_session.as_deref(), exit_code);
+        e.to_cli_error().print(format);
+        std::process::exit(exit_code);
+    }
 
     let result = match cli.command {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
