@@ -84,20 +84,33 @@ VB_SESSION=meowu-meow-38371 vcli maestro run --session fnxSession0
 
 > ⚠️ **新端口 ≠ 独立 Virtuoso。** Virtuoso 重启后端口会变、会话 id 也会变，
 > 但同一台机器上可能仍然只有一个 Virtuoso 实例。要判定"是不是同一个 Virtuoso"，
-> 交叉核验下面四项：
+> 交叉核验下面几项。
+
+> ⚠️ **会话注册文件里的 `pid` 恒为 `0`，不是 daemon 的真实 PID。**
+> `resources/ramic_bridge.il` 的 `RBWriteSession` 写注册文件时固定写 `"pid":0`
+> —— 那是"未知"的占位符，不是进程号。远端同步（`SessionInfo::sync_from_remote`）
+> 也是原样拷贝远端的注册文件，所以远程会话同样是 `0`。
+> **不要**拿它去比进程、算 PPID、或据此判断会话是否 stale。
+
+真实 PID 只能从**监听端口**反查：
 
 | 核验项 | 怎么看 | 说明 |
 |-------|-------|------|
-| session 文件里的 pid | `jq -r .pid <sessions_dir>/<id>.json` | daemon 进程 pid |
-| 该 pid 的 PPID | `ps -o pid,ppid,cmd -p <pid>` | PPID 指向启动 daemon 的父进程 |
+| 监听端口 → 真实 PID | `ss -ltnp \| grep <port>` | 端口属于哪个 pid（这一步拿到的才是真 PID） |
+| 该 PID 的 PPID | `ps -o pid,ppid,cmd -p <pid>` | PPID 指向启动 daemon 的父进程（即 Virtuoso） |
 | `CDS_MPS_SESSION` | `tr '\0' '\n' < /proc/<ppid>/environ \| grep CDS_MPS_SESSION` | Virtuoso 的 MPS session 名，区分不同 Virtuoso 实例 |
-| 监听端口 | `ss -ltnp \| grep <port>` | 确认端口属于哪个 pid |
+| 注册文件里的 `pid` | `jq -r .pid <sessions_dir>/<id>.json` | **恒为 `0`（未知）**，只能当"没记录"，不能当进程号 |
 
-四项要**互相印证**，只看一项会误判：
+各项要**互相印证**，只看一项会误判：
 
-- 端口属于 pid A，但 session 文件记的是 pid B → session 文件已过期；
+- 端口反查出的 pid 与你预期不符 → 不是那个 daemon；
 - `CDS_MPS_SESSION` 与你以为的不同 → 是另一个 Virtuoso 实例；
 - PPID 变了 → Virtuoso 重启过，端口和会话 id 都已经换了。
+
+> vcli 自己判断"会话还活着不"**不看**这个 `pid`：它用的是端口探测
+> （`SessionInfo::is_alive` 连 `127.0.0.1:<port>`）加一个 `<id>.stale` 标记文件。
+> 所以注册 pid 为 `0` 不会让 vcli 误判 stale —— 但它也意味着**光看会话文件
+> 你永远拿不到进程身份**，只能按上表从端口反查。
 
 ### 健康探测只用 `1+1`
 

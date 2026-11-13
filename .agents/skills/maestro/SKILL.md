@@ -213,7 +213,7 @@ print(f'{len(freqs)} points exported')
 **只走这一条命令**（单命令前缀，不要 export admin）：
 
 ```bash
-# 新建 / 打开 maestro view，并进入可编辑模式（会持有 OA edit lock）
+# 新建 / 打开 maestro view（后台 setup 会话，可编辑，会持有 OA edit lock）
 VB_SESSION=xunipc-userone-38371 VCLI_CAPABILITY=admin VB_TIMEOUT=120 \
   vcli maestro open --lib LIB --cell CELL --mode a
 ```
@@ -223,6 +223,11 @@ VB_SESSION=xunipc-userone-38371 VCLI_CAPABILITY=admin VB_TIMEOUT=120 \
   但不要 `export VCLI_CAPABILITY=admin`——那会把提权能力留在后续所有命令里。
 - `VB_TIMEOUT=...`：可选。服务端忙时调大（默认 30s）。
 - `--mode a` 取 edit lock；只读观察用 `--mode r`。
+
+> ⚠️ `vcli maestro open` 开的是**后台 setup 会话**（底层就是 `maeOpenSetup`）：
+> **没有 GUI 窗口**，也无法 attach 到已有窗口。所以它开出来的 "a" 模式会话会
+> **占住 edit lock**，而 Virtuoso 那边看不到任何可以点的界面。
+> 详见下方「窗口是 Reading 模式」。
 
 ### ⚠️ 不要用裸的 Maestro setup bootstrap
 
@@ -302,19 +307,52 @@ VB_SESSION=xunipc-userone-38371 VCLI_CAPABILITY=admin \
 
 ### 窗口是 Reading 模式
 
-先用子命令接管（不要直接发 SKILL 去开 view）：
+> ⚠️ **`vcli maestro open --mode a` 不能把已有 GUI Reading 窗口改成可编辑。**
+> 它走的是 `maeOpenSetup`，建的是**后台 setup 会话**：没有窗口、无法 attach 到
+> 已有窗口，而且 "a" 模式会**占住 edit lock**——原来的 Reading 窗口照样只读，
+> 新后台会话的锁还可能挡住后面在 GUI 里重开。
+
+所以分情况处理：
+
+**1. 只想读 setup / 看分析，不碰锁** —— 用只读后台会话（不取 edit lock，
+不影响持有者，也不会挡住 GUI）：
 
 ```bash
 VB_SESSION=xunipc-userone-38371 VCLI_CAPABILITY=admin \
-  vcli maestro open --lib LIB --cell CELL --mode a
+  vcli maestro open --lib LIB --cell CELL --mode r
 ```
 
-实在需要手工关窗口重开时（例如旧版本 GUI 残留）：
+**2. 要让 GUI 里那个窗口变成可编辑** —— 只能走 **GUI 打开路径**
+（`deOpenCellView`），即关掉旧的 ADE 窗口后重新打开：
 
 ```bash
 vcli skill exec 'foreach(w hiGetWindowList() when(rexMatchp("ADE" hiGetWindowName(w)) hiCloseWindow(w)))'
 vcli skill exec 'deOpenCellView("LIB" "CELL" "maestro" "maestro" nil "a")'
 ```
+
+这一步的前提是**锁是空的**。如果之前已经用 `--mode a` 开过后台会话，
+先把它关掉、把锁还回去，否则 GUI 重开会被自己的后台锁挡住：
+
+```bash
+vcli maestro list-sessions                     # 找到那个 fnxSessionN
+vcli maestro close --session fnxSessionN       # 释放 edit lock
+```
+
+**3. 只在自己开的后台会话上就地切锁** —— `vcli maestro set-mode` 走的是
+`maeMakeEditable` / `maeMakeReadonly`，在**同一个会话**上就地取锁/还锁，不用重开：
+
+```bash
+vcli maestro set-mode --session fnxSessionN --mode a   # 取 edit lock
+# ... 只读/写 setup 的那几段 ...
+vcli maestro set-mode --session fnxSessionN --mode r   # 还回 edit lock
+```
+
+> 这是针对**后台会话**的锁卫生手段，**不是**"把 GUI Reading 窗口变可编辑"——
+> 后台会话没有窗口，也不会 attach 到已有窗口。
+
+> 本节不给"一步把 Reading 变可编辑"的承诺：没有在活 Virtuoso 上验证过的
+> 路径，就不要写成能修。遇到读不到 / 改不了的情况，按上方「锁归属与当次授权」
+> 停下报告。
 
 ### maeAddOutput 成功但 maeGetResultOutputs 返回 nil
 
