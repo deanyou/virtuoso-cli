@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--display` never carried the X11 cookie.** `vcli window`'s X11 commands
+  pass the display to the vendored helper as a **positional** argument and the
+  cookie as an **environment variable** —
+  `env XAUTHORITY=<cookie> python3 <helper> <display> …`. The explicit
+  `--display` path used to look up *no* cookie at all: it returned
+  `xauthority: None` without even scanning the process table, so the helper
+  ran on the requested display with no cookie of its own and inherited only
+  whatever the login shell happened to carry. On a display that requires
+  authentication, `xwininfo` fails with "cannot open display" and the command
+  fails — `list-windows-x11` and the dismiss paths exit non-zero,
+  `list-dialogs-x11` reports it as an `x11 helper error` row — but nothing in
+  the output says that the missing cookie was the cause. On a display that
+  lets the local user in, the command works and vcli still reports
+  `xauthority: None`, so there is no way to tell which cookie was actually in
+  effect.
+
+  The explicit path now takes the cookie from the running `virtuoso`
+  processes on that display, comparing displays by **identity** rather than
+  by string (`:0`, `:0.0` and `unix:0` name one display; `localhost:0` names
+  another — upstream Arcadia #241), and when a display carries several
+  cookies it uses the one the display actually accepts: the first candidate
+  `xwininfo -root` authorizes, not the first one found. A failing cookie
+  lookup degrades to "no cookie" with a warning instead of aborting the
+  command.
+
+  The cookie also stops travelling through the helper's argv. It used to be a
+  trailing `XAUTHORITY=<path>` token, whose meaning depended on the helper's
+  own token grammar: before the helper learned to read `KEY=VALUE` tokens it
+  swallowed the cookie as the display (`cannot open display XAUTHORITY=…`).
+  The env prefix carries it independently of that grammar — and carries the
+  cookie alone, since `DISPLAY` in it would be dead weight (the helper
+  overwrites `os.environ["DISPLAY"]` with the positional value anyway).
+
+- **An empty `--display` acted on a different display.** The display travels
+  as a positional argument, and an empty one left the helper with no
+  argument at all — so it fell back to its own `find_x11_env()` probe and
+  acted on whatever display *it* picked. The empty display is now rejected
+  before any X11 helper command is built.
+
+- **The X11 process scan interpolated the user name into a remote shell
+  command.** `detect_envs` built `pgrep -u <user> -x virtuoso` with the user
+  name spliced in raw. The value now goes through the same escaping as every
+  other value that reaches a shell.
+
 ## [1.3.6] - 2026-11-11
 
 Reliability and verification release. Four strands:

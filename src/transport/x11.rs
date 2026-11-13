@@ -463,8 +463,12 @@ pub fn detect_env(runner: &dyn RemoteTransport, user: Option<&str>) -> Result<X1
 
 /// Discover all interactive Virtuoso DISPLAY/XAUTHORITY pairs.
 pub fn detect_envs(runner: &dyn RemoteTransport, user: Option<&str>) -> Result<Vec<X11Env>> {
+    // The user filter goes into a remote shell command, so it is escaped like
+    // every other value that reaches one. A user name may legitimately
+    // contain a backslash (`DOMAIN\user`), and it must not be able to close
+    // the argument and append commands of its own.
     let user_filter = match user {
-        Some(u) => format!("-u {u} "),
+        Some(u) => format!("-u {} ", shell_escape(u)),
         None => "".to_string(),
     };
     let cmd = format!(
@@ -3129,18 +3133,164 @@ fn unverified_dismissal_error(val: &serde_json::Value) -> Option<String> {
     ))
 }
 
+/// Do two DISPLAY strings name the same X display?
+///
+/// The process table stores whatever spelling the session happened to start
+/// with, so a session that started as `DISPLAY=unix:0` must still be found
+/// by a caller asking for `:0`. Upstream Arcadia #241 states the rule:
+/// `:7`, `:7.0` and `unix:7` are one display, while `localhost:7` is another
+/// (a network display, not the local one).
+///
+/// The screen number is not part of the identity: `:0.1` is a second screen
+/// of the same server, and the cookie belongs to the server.
+fn same_display(a: &str, b: &str) -> bool {
+    fn split(display: &str) -> Option<(&str, &str)> {
+        let (host, rest) = display.rsplit_once(':')?;
+        let number = rest.split('.').next().unwrap_or(rest);
+        Some((host, number))
+    }
+    let (Some((host_a, number_a)), Some((host_b, number_b))) = (split(a), split(b)) else {
+        return a == b;
+    };
+    let is_local = |host: &str| host.is_empty() || host == "unix";
+    let same_host = (is_local(host_a) && is_local(host_b)) || host_a == host_b;
+    same_host && number_a == number_b
+}
+
+/// The outcome of asking a display whether a cookie lets it open.
+enum CookieProbe {
+    /// The cookie authorizes the connection.
+    Works,
+    /// The cookie does not authorize the connection.
+    Rejected,
+    /// The probe could not run — `xwininfo` is missing, or the remote
+    /// command failed. This says nothing about the cookie.
+    Unavailable,
+}
+
+/// Ask the display whether a cookie lets a client connect.
+///
+/// `xwininfo -root` is the probe the helper itself uses to enumerate
+/// windows: it succeeds only when the cookie authorizes the connection.
+fn probe_cookie(runner: &dyn RemoteTransport, display: &str, cookie: &str) -> CookieProbe {
+    let cmd = format!(
+        "env DISPLAY={} XAUTHORITY={} xwininfo -root",
+        shell_escape(display),
+        shell_escape(cookie)
+    );
+    match runner.run_command(&CommandRequest::with_exec_timeout(
+        &cmd,
+        Duration::from_secs(10),
+    )) {
+        // 126 = "found but not executable", 127 = "command not found": the
+        // probe never ran, so neither must be read as a rejected cookie.
+        Ok(out) if out.exit_status == 126 || out.exit_status == 127 => CookieProbe::Unavailable,
+        Ok(out) if out.exit_status == 0 => CookieProbe::Works,
+        Ok(_) => CookieProbe::Rejected,
+        Err(_) => CookieProbe::Unavailable,
+    }
+}
+
+/// Pick the cookie to use for an explicitly requested display.
+///
+/// One candidate is taken as it is — there is nothing to choose, and probing
+/// would add remote I/O to the common path. With several candidates the
+/// first one the display accepts is kept: taking the first entry blindly can
+/// pick a cookie that no longer works, and the helper then fails with
+/// "cannot open display".
+///
+/// When the probe cannot run at all, the candidate being probed is kept —
+/// its status is simply unknown, which is a better guess than a candidate
+/// the display has already refused.
+fn select_cookie(
+    runner: &dyn RemoteTransport,
+    display: &str,
+    detected: &[X11Env],
+) -> Option<String> {
+    // Only the candidates that carry a cookie can be used, and two processes
+    // may well share one cookie file — probing the same path twice would
+    // cost a remote round trip for nothing.
+    let mut cookies: Vec<&str> = Vec::new();
+    for env in detected {
+        if !env
+            .display
+            .as_deref()
+            .is_some_and(|found| same_display(found, display))
+        {
+            continue;
+        }
+        if let Some(cookie) = env.xauthority.as_deref() {
+            if !cookies.contains(&cookie) {
+                cookies.push(cookie);
+            }
+        }
+    }
+    let first = cookies.first()?;
+    if cookies.len() < 2 {
+        return Some((*first).to_string());
+    }
+    for cookie in &cookies {
+        match probe_cookie(runner, display, cookie) {
+            CookieProbe::Works => return Some((*cookie).to_string()),
+            CookieProbe::Rejected => continue,
+            CookieProbe::Unavailable => {
+                eprintln!(
+                    "vcli: cannot probe display {display} for a usable cookie; using {cookie}"
+                );
+                return Some((*cookie).to_string());
+            }
+        }
+    }
+    eprintln!("vcli: no cookie on display {display} authorizes a connection");
+    None
+}
+
 /// Shared env-resolution: explicit display, else auto-detect from the running
-/// virtuoso process. Returns the resolved env and the display string.
+/// virtuoso process.
+///
+/// On the explicit-display path the cookie is sourced from a virtuoso process
+/// whose DISPLAY names the same display (mirror of upstream Arcadia #241):
+/// otherwise the helper would run on the requested display with no
+/// XAUTHORITY at all and xwininfo/xauth would fail. If no matching process is
+/// found — or the lookup fails — we fall back to `xauthority: None` and let
+/// the existing error/help path surface the missing cookie.
 fn resolve_envs(
     runner: &dyn RemoteTransport,
     user: Option<&str>,
     explicit_display: Option<&str>,
 ) -> Result<Vec<X11Env>> {
     let envs = match explicit_display {
-        Some(d) => vec![X11Env {
-            display: Some(d.to_string()),
-            xauthority: None,
-        }],
+        Some(d) => {
+            // An empty display would leave the helper with no positional
+            // argument at all, and it would then fall back to its own
+            // find_x11_env() probe and act on whatever display IT picks —
+            // the exact failure this path exists to prevent. Reject it here,
+            // where every caller passes through.
+            if d.trim().is_empty() {
+                return Err(VirtuosoError::Config(
+                    "the display must not be empty: the helper takes it as a \
+                     positional argument, and an empty one makes it fall back \
+                     to its own DISPLAY probe and act on a different display."
+                        .into(),
+                ));
+            }
+            // The cookie lookup is an addition to a path that used to do no
+            // remote I/O at all, so a failing probe must not take the whole
+            // command down: without a cookie the helper may still connect
+            // (many displays authorize the local user), and it certainly used
+            // to. Degrade to "no cookie" with a warning instead of aborting.
+            let xauthority = match detect_envs(runner, user) {
+                Ok(detected) => select_cookie(runner, d, &detected),
+                Err(e) => {
+                    eprintln!("vcli: cannot look up the X11 cookie for display {d}: {e}");
+                    None
+                }
+            };
+            vec![X11Env {
+                display: Some(d.to_string()),
+                xauthority,
+            }]
+        }
         None => detect_envs(runner, user)?,
     };
     if envs.is_empty() {
@@ -3168,7 +3318,30 @@ fn build_helper_cmd(
     window_id: Option<&str>,
 ) -> String {
     // Quote the remote path with single quotes; the helper is ASCII so this is safe.
-    let mut s = format!("python3 '{}'", helper_remote_path);
+    //
+    // The contract is a hybrid: the DISPLAY travels as a POSITIONAL argv
+    // argument and the cookie as an environment variable. The helper selects
+    // its display from argv (resources/x11_dismiss_dialog.py parses argv and
+    // never reads os.environ["DISPLAY"]) — without the positional argument it
+    // falls back to its own find_x11_env() probe and silently acts on a
+    // different display.
+    //
+    // The cookie cannot travel that way. The helper's argv parser does
+    // understand a `KEY=VALUE` token, but that grammar belongs to the helper
+    // and it changed once already: before the branch existed, a trailing
+    // ' XAUTHORITY=/path' token was taken for a positional display and
+    // xwininfo failed with "cannot open display XAUTHORITY=...". Xlib reads
+    // XAUTHORITY from the environment, so the env prefix carries it
+    // independently of whatever the helper's argv grammar happens to be.
+    //
+    // The prefix carries the cookie and nothing else: DISPLAY in it would be
+    // dead weight, because the helper overwrites os.environ["DISPLAY"] with
+    // the positional value anyway.
+    let prefix = match xauthority {
+        Some(xa) => format!("env XAUTHORITY={} ", shell_escape(xa)),
+        None => String::new(),
+    };
+    let mut s = format!("{}python3 '{}'", prefix, helper_remote_path);
     s.push(' ');
     s.push_str(&shell_escape(display));
     if let Some(wid) = window_id {
@@ -3183,10 +3356,6 @@ fn build_helper_cmd(
         s.push_str(" --action ");
         s.push_str(action);
     }
-    if let Some(xa) = xauthority {
-        s.push(' ');
-        s.push_str(&shell_escape(&format!("XAUTHORITY={xa}")));
-    }
     s
 }
 
@@ -3196,14 +3365,16 @@ fn build_helper_cmd_list_windows(
     display: &str,
     xauthority: Option<&str>,
 ) -> String {
-    let mut s = format!("python3 '{}'", helper_remote_path);
+    // See build_helper_cmd: the display is positional, the cookie rides in
+    // the env prefix, and the prefix carries the cookie alone.
+    let prefix = match xauthority {
+        Some(xa) => format!("env XAUTHORITY={} ", shell_escape(xa)),
+        None => String::new(),
+    };
+    let mut s = format!("{}python3 '{}'", prefix, helper_remote_path);
     s.push(' ');
     s.push_str(&shell_escape(display));
     s.push_str(" --list-windows");
-    if let Some(xa) = xauthority {
-        s.push(' ');
-        s.push_str(&shell_escape(&format!("XAUTHORITY={xa}")));
-    }
     s
 }
 
@@ -3258,17 +3429,19 @@ fn build_helper_cmd_dismiss_window(
     window_id: &str,
     action: &str,
 ) -> String {
-    let mut s = format!("python3 '{}'", helper_remote_path);
+    // See build_helper_cmd: the display is positional, the cookie rides in
+    // the env prefix, and the prefix carries the cookie alone.
+    let prefix = match xauthority {
+        Some(xa) => format!("env XAUTHORITY={} ", shell_escape(xa)),
+        None => String::new(),
+    };
+    let mut s = format!("{}python3 '{}'", prefix, helper_remote_path);
     s.push(' ');
     s.push_str(&shell_escape(display));
     s.push_str(" --dismiss-window ");
     s.push_str(&shell_escape(window_id));
     s.push_str(" --action ");
     s.push_str(action);
-    if let Some(xa) = xauthority {
-        s.push(' ');
-        s.push_str(&shell_escape(&format!("XAUTHORITY={xa}")));
-    }
     s
 }
 
@@ -4069,7 +4242,9 @@ mod tests {
         // An unquoted value would split into two argv tokens and the second
         // one would be parsed as the DISPLAY by the helper.
         let cmd = build_helper_cmd_list_windows("/h.py", ":0", Some("/tmp/my xauth/file"));
-        assert!(cmd.contains("'XAUTHORITY=/tmp/my xauth/file'"));
+        assert!(cmd.contains("XAUTHORITY='/tmp/my xauth/file'"));
+        // The cookie travels in the env prefix, never as an argv token.
+        assert_eq!(cmd.matches("XAUTHORITY=").count(), 1, "got: {cmd}");
     }
 
     #[test]
@@ -4084,6 +4259,719 @@ mod tests {
     fn build_helper_cmd_dismiss_window_quotes_window_id_with_spaces() {
         let cmd = build_helper_cmd_dismiss_window("/h.py", ":0", None, "0x a", "enter");
         assert!(cmd.contains("'0x a'"));
+    }
+
+    // =============================================================================
+    // Regression tests: X11 cookie handling (defects fixed)
+    // =============================================================================
+    //
+    // Two related defects in the X11 helper command construction were fixed:
+    //
+    // (A) resolve_envs with explicit_display was skipping the detect_envs()
+    //     process-table scan entirely — the cookie was never sourced from the
+    //     Virtuoso process on the requested display.
+    //
+    // (B) build_helper_cmd* appended ` XAUTHORITY=<path>` as a TRAILING shell
+    //     token, so the cookie's fate depended on the helper's argv grammar:
+    //     before the helper learned to read a `KEY=VALUE` token it took such a
+    //     token for a positional DISPLAY arg, overwriting the real display
+    //     with the literal "XAUTHORITY=/path" and xwininfo then failed. The
+    //     fix moves XAUTHORITY into the env prefix — the channel Xlib itself
+    //     reads — so the cookie no longer travels through the helper's argv.
+
+    /// Helper command must place `XAUTHORITY=` BEFORE `python3` (env-prefix form),
+    /// and must never emit a trailing ` XAUTHORITY=...` argv token that the
+    /// helper's parser would misinterpret as a positional DISPLAY.
+    #[test]
+    fn build_helper_cmd_uses_env_prefix_for_xauthority() {
+        let cmd = build_helper_cmd(
+            "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py",
+            ":99",
+            Some("/tmp/xauth-cookie"),
+            true,
+            "enter",
+            None,
+        );
+        let xauth_pos = cmd
+            .find("XAUTHORITY=")
+            .expect("command must contain XAUTHORITY=");
+        let py_pos = cmd.find("python3").expect("command must contain python3");
+        assert!(
+            xauth_pos < py_pos,
+            "XAUTHORITY must precede python3 (env-prefix form); got: {cmd}"
+        );
+        // The cookie must appear exactly once, in the env prefix. A second
+        // occurrence would be a trailing argv token — in the quoted form of
+        // current main or the unquoted form of the older one — and the helper
+        // would take it for the display.
+        assert_eq!(
+            cmd.matches("XAUTHORITY=").count(),
+            1,
+            "the cookie must appear exactly once, in the env prefix; got: {cmd}"
+        );
+        // The existing presence-assertion must still hold.
+        assert!(cmd.contains("XAUTHORITY=/tmp/xauth-cookie"));
+        assert!(cmd.contains("--dismiss"));
+        assert!(cmd.contains("--action enter"));
+        assert!(cmd.contains("'/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py'"));
+    }
+
+    #[test]
+    fn build_helper_cmd_list_windows_uses_env_prefix_for_xauthority() {
+        let cmd = build_helper_cmd_list_windows(
+            "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py",
+            ":99",
+            Some("/tmp/xauth-cookie"),
+        );
+        let xauth_pos = cmd
+            .find("XAUTHORITY=")
+            .expect("XAUTHORITY= must be present");
+        let py_pos = cmd.find("python3").expect("python3 must be present");
+        assert!(
+            xauth_pos < py_pos,
+            "XAUTHORITY must precede python3; got: {cmd}"
+        );
+        // Exactly once: a trailing argv token would be a second occurrence,
+        // in the quoted form of current main or the unquoted form of the
+        // older one, and the helper would take it for the display.
+        assert_eq!(
+            cmd.matches("XAUTHORITY=").count(),
+            1,
+            "the cookie must appear exactly once, in the env prefix; got: {cmd}"
+        );
+        assert!(cmd.contains("--list-windows"));
+        assert!(cmd.contains("XAUTHORITY=/tmp/xauth-cookie"));
+    }
+
+    #[test]
+    fn build_helper_cmd_dismiss_window_uses_env_prefix_for_xauthority() {
+        let cmd = build_helper_cmd_dismiss_window(
+            "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py",
+            ":99",
+            Some("/tmp/xauth-cookie"),
+            "0x2600013",
+            "enter",
+        );
+        let xauth_pos = cmd
+            .find("XAUTHORITY=")
+            .expect("XAUTHORITY= must be present");
+        let py_pos = cmd.find("python3").expect("python3 must be present");
+        assert!(
+            xauth_pos < py_pos,
+            "XAUTHORITY must precede python3; got: {cmd}"
+        );
+        // Exactly once: a trailing argv token would be a second occurrence,
+        // in the quoted form of current main or the unquoted form of the
+        // older one, and the helper would take it for the display.
+        assert_eq!(
+            cmd.matches("XAUTHORITY=").count(),
+            1,
+            "the cookie must appear exactly once, in the env prefix; got: {cmd}"
+        );
+        assert!(cmd.contains("--dismiss-window 0x2600013"));
+        assert!(cmd.contains("--action enter"));
+        assert!(cmd.contains("XAUTHORITY=/tmp/xauth-cookie"));
+    }
+
+    /// Review B1: the helper selects its display from a POSITIONAL argv
+    /// argument — `resources/x11_dismiss_dialog.py` parses argv and never
+    /// reads `os.environ["DISPLAY"]`. The env prefix only carries the cookie,
+    /// so dropping the positional arg turns `--display` into a silent no-op:
+    /// the helper falls back to its own `find_x11_env()` probe and acts on a
+    /// different display than the one requested.
+    ///
+    /// Lock the contract: the first argv token after the script path must be
+    /// the display.
+    #[test]
+    fn build_helper_cmd_keeps_display_as_positional_arg_after_script_path() {
+        let helper = "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py";
+        let cmds = vec![
+            build_helper_cmd(helper, ":99", Some("/tmp/cookie"), true, "enter", None),
+            build_helper_cmd(helper, ":99", None, true, "enter", None),
+            build_helper_cmd_list_windows(helper, ":99", Some("/tmp/cookie")),
+            build_helper_cmd_list_windows(helper, ":99", None),
+            build_helper_cmd_dismiss_window(
+                helper,
+                ":99",
+                Some("/tmp/cookie"),
+                "0x2600013",
+                "enter",
+            ),
+            build_helper_cmd_dismiss_window(helper, ":99", None, "0x2600013", "enter"),
+        ];
+        for cmd in &cmds {
+            // The env prefix carries the cookie and nothing else: DISPLAY in
+            // it would be dead weight, because the helper overwrites
+            // os.environ["DISPLAY"] with the positional value anyway.
+            assert!(
+                !cmd.contains("env DISPLAY="),
+                "the env prefix must not carry DISPLAY; got: {cmd}"
+            );
+            assert!(
+                cmd.starts_with("env XAUTHORITY=") || cmd.starts_with("python3 '"),
+                "command must start with the env prefix or the script; got: {cmd}"
+            );
+            // The helper argv starts after `python3 '<script>'`.
+            let after_python3 = cmd
+                .split_once("python3 '")
+                .unwrap_or_else(|| panic!("command must contain `python3 '<script>'`; got: {cmd}"))
+                .1;
+            let argv = after_python3
+                .split_once('\'')
+                .unwrap_or_else(|| panic!("script path must be single-quoted; got: {cmd}"))
+                .1;
+            let first = argv
+                .split_whitespace()
+                .next()
+                .unwrap_or_else(|| panic!("helper argv must not be empty; got: {cmd}"));
+            assert_eq!(
+                first, ":99",
+                "the first argv token after the script path must be the display \
+                 (the helper takes the display from argv, not the environment); got: {cmd}"
+            );
+        }
+    }
+
+    /// The exact wire form the fixed builders must produce: the env prefix
+    /// carries the cookie, the display stays a positional argv argument.
+    #[test]
+    fn build_helper_cmd_emits_display_positionally_and_cookie_in_the_env_prefix() {
+        let cmd = build_helper_cmd(
+            "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py",
+            ":99",
+            Some("/tmp/xauth-cookie"),
+            true,
+            "enter",
+            None,
+        );
+        assert_eq!(
+            cmd, "env XAUTHORITY=/tmp/xauth-cookie \
+                 python3 '/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py' :99 --dismiss --action enter"
+        );
+    }
+
+    /// Without a cookie there is no prefix at all: the command must not
+    /// depend on the remote `env` binary to reach the helper.
+    #[test]
+    fn build_helper_cmd_without_a_cookie_has_no_env_prefix() {
+        let cmd = build_helper_cmd(
+            "/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py",
+            ":99",
+            None,
+            true,
+            "enter",
+            None,
+        );
+        assert_eq!(
+            cmd, "python3 '/tmp/virtuoso_bridge/x/x11_dismiss_dialog_abc.py' :99 --dismiss --action enter"
+        );
+    }
+
+    /// xauthority values that contain spaces or single quotes must be shell-
+    /// escaped. The previous trailing-token form pushed xa raw, which would
+    /// have broken under any unusual cookie path.
+    #[test]
+    fn build_helper_cmd_shell_escapes_xauthority_with_special_chars() {
+        let cmd = build_helper_cmd(
+            "/h.py",
+            ":0",
+            Some("/path with spaces/xauth"),
+            false,
+            "enter",
+            None,
+        );
+        assert!(
+            cmd.contains("XAUTHORITY='/path with spaces/xauth'"),
+            "spaces must be single-quoted; got: {cmd}"
+        );
+        // And the unescaped variant must not appear (would split into two args).
+        assert!(
+            !cmd.contains(" XAUTHORITY=/path with spaces/"),
+            "raw unquoted path with spaces must not appear; got: {cmd}"
+        );
+
+        let cmd2 = build_helper_cmd(
+            "/h.py",
+            ":0",
+            Some("/path/with'quote"),
+            false,
+            "enter",
+            None,
+        );
+        assert!(
+            cmd2.contains("XAUTHORITY='/path/with'\\''quote'"),
+            "embedded single quote must be escaped via '\\''; got: {cmd2}"
+        );
+    }
+
+    /// No argv token passed to the helper may begin with `XAUTHORITY=` — the
+    /// helper's parser has no such branch and would overwrite `display` with
+    /// the literal `"XAUTHORITY=/path"` (the exact bug class).
+    ///
+    /// Shell semantics: `env DISPLAY=X XAUTHORITY=Y python3 <script> <args...>`
+    /// is parsed by the shell such that `env` consumes the `KEY=val` tokens
+    /// and execs `python3 <script> <args...>` — the env-var tokens never
+    /// reach the helper's argv. So we assert that EVERY token AFTER the first
+    /// `python3` is not a `KEY=` env-var assignment that the helper would
+    /// misinterpret.
+    #[test]
+    fn helper_argv_never_sees_xauthority_token() {
+        let cmds = vec![
+            build_helper_cmd("/h.py", ":99", Some("/tmp/cookie"), true, "enter", None),
+            build_helper_cmd("/h.py", ":99", Some("/tmp/cookie"), false, "enter", None),
+            build_helper_cmd(
+                "/h.py",
+                ":99",
+                Some("/tmp/cookie"),
+                true,
+                "enter",
+                Some("0x1"),
+            ),
+            build_helper_cmd_list_windows("/h.py", ":99", Some("/tmp/cookie")),
+            build_helper_cmd_dismiss_window("/h.py", ":99", Some("/tmp/cookie"), "0x1", "enter"),
+            // Also exercise the None-xauthority variants — those never had the
+            // defect but must remain clean for symmetry.
+            build_helper_cmd("/h.py", ":99", None, true, "enter", None),
+            build_helper_cmd_list_windows("/h.py", ":99", None),
+            build_helper_cmd_dismiss_window("/h.py", ":99", None, "0x1", "enter"),
+        ];
+        for cmd in &cmds {
+            // The env prefix carries the cookie and nothing else. DISPLAY in
+            // it would be dead weight — the helper overwrites
+            // os.environ["DISPLAY"] with the positional value anyway — and it
+            // would leave two DISPLAYs in the command, so a reader could not
+            // tell which one the helper acts on.
+            assert!(
+                !cmd.contains("env DISPLAY="),
+                "the env prefix must not carry DISPLAY; got: {cmd}"
+            );
+            // A regression to the trailing-token form would fail here: with no
+            // cookie there is no prefix at all.
+            assert!(
+                cmd.starts_with("env XAUTHORITY=") || cmd.starts_with("python3 "),
+                "command must start with the env prefix or the script; got: {cmd}"
+            );
+            // Find the first `python3` occurrence — tokens BEFORE it are env-var
+            // assignments consumed by `env`; tokens AFTER it are the helper's argv.
+            let py_pos = cmd
+                .find("python3")
+                .unwrap_or_else(|| panic!("command must contain python3; got: {cmd}"));
+            let after_python3 = &cmd[py_pos..];
+            for tok in after_python3.split_whitespace() {
+                assert!(
+                    !tok.starts_with("XAUTHORITY="),
+                    "argv token after `python3` must not start with XAUTHORITY= \
+                     (helper has no branch for it); token={tok:?} in cmd={cmd:?}"
+                );
+                assert!(
+                    !tok.starts_with("DISPLAY="),
+                    "argv token after `python3` must not start with DISPLAY= \
+                     (helper would treat it as positional display); token={tok:?} \
+                     in cmd={cmd:?}"
+                );
+            }
+        }
+    }
+
+    /// resolve_envs with an explicit display must source xauthority from a
+    /// virtuoso process whose DISPLAY matches (mirror of upstream #241). The
+    /// fake transport returns the detect_envs output for one process bound
+    /// to :99 with a known cookie.
+    #[test]
+    fn resolve_envs_with_explicit_display_sources_xauthority_from_process_table() {
+        let transport = RecordingTransport::new();
+        // detect_envs parses stdout line-by-line: __PID__=<n>\nDISPLAY=...\nXAUTHORITY=...
+        transport.enqueue_response(mk_result(
+            "__PID__=1234\nDISPLAY=:99\nXAUTHORITY=/tmp/cookie-from-virtuoso\n",
+            "",
+            0,
+        ));
+        let envs = resolve_envs(&transport, None, Some(":99")).expect("resolve_envs must succeed");
+        assert_eq!(envs.len(), 1, "explicit display must yield a single env");
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/cookie-from-virtuoso"),
+            "explicit display must inherit XAUTHORITY from the matching virtuoso process"
+        );
+    }
+
+    /// If no virtuoso process matches the requested display, xauthority stays
+    /// None — preserves the pre-fix error/help path for missing cookies.
+    #[test]
+    fn resolve_envs_with_explicit_display_falls_back_when_no_matching_process() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1234\nDISPLAY=:5\nXAUTHORITY=/tmp/other-cookie\n",
+            "",
+            0,
+        ));
+        let envs = resolve_envs(&transport, None, Some(":99")).expect("resolve_envs must succeed");
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert!(
+            envs[0].xauthority.is_none(),
+            "fallback to xauthority=None when no process matches; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// Multiple virtuoso processes — pick the first whose DISPLAY matches.
+    /// (detect_envs is order-preserving over the pgrep output.)
+    #[test]
+    fn resolve_envs_with_explicit_display_picks_first_matching_process() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=100\nDISPLAY=:5\nXAUTHORITY=/tmp/cookie-A\n\
+             __PID__=200\nDISPLAY=:99\nXAUTHORITY=/tmp/cookie-B\n\
+             __PID__=300\nDISPLAY=:99\nXAUTHORITY=/tmp/cookie-C\n",
+            "",
+            0,
+        ));
+        let envs = resolve_envs(&transport, None, Some(":99")).expect("resolve_envs must succeed");
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/cookie-B"),
+            "first matching DISPLAY wins; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// If the user's requested display has no XAUTHORITY set on the matching
+    /// virtuoso process, the resolved env carries through xauthority: None
+    /// (the helper will then fall back to its own find_x11_env()).
+    #[test]
+    fn resolve_envs_with_explicit_display_no_xauthority_on_matching_process() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("__PID__=42\nDISPLAY=:99\n", "", 0));
+        let envs = resolve_envs(&transport, None, Some(":99")).expect("resolve_envs must succeed");
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert!(
+            envs[0].xauthority.is_none(),
+            "no XAUTHORITY on the matching process → None; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// If no virtuoso process is visible at all (detect_envs empty), the
+    /// explicit-display path still returns Ok with xauthority: None — the
+    /// helper then runs without a cookie and falls back to its own
+    /// find_x11_env() (or surfaces the missing-cookie error from there).
+    /// The Config error fires only on the AUTO-DETECT path (explicit_display
+    /// is None AND detect_envs returns empty).
+    #[test]
+    fn resolve_envs_with_explicit_display_no_virtuoso_process_at_all_returns_ok_with_none() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0));
+        let envs = resolve_envs(&transport, None, Some(":99"))
+            .expect("explicit display with no process must still return Ok");
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].display.as_deref(), Some(":99"));
+        assert!(
+            envs[0].xauthority.is_none(),
+            "no process at all → xauthority: None; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// Upstream Arcadia #241: `:7`, `:7.0` and `unix:7` are one display,
+    /// while `localhost:7` is another. The process table stores whatever
+    /// spelling the session happened to start with, so a caller asking for
+    /// `:0` must still find a session that started as `unix:0`.
+    #[test]
+    fn display_spellings_that_name_the_same_display_match() {
+        assert!(same_display(":0", ":0"));
+        assert!(same_display(":0", ":0.0"));
+        assert!(same_display(":0", "unix:0"));
+        assert!(same_display(":7", ":7.0"));
+        // A second screen of the same server shares the cookie.
+        assert!(same_display(":0", ":0.1"));
+        // A network display is not the local one.
+        assert!(!same_display(":0", "localhost:0"));
+        assert!(!same_display(":0", ":1"));
+        assert!(!same_display(":0", "unix:1"));
+        // Without a colon there is nothing to normalize, so the strings must
+        // be equal as they are.
+        assert!(same_display("0", "0"));
+        assert!(!same_display("0", ":0"));
+    }
+
+    /// The cookie must come from the process on the requested display even
+    /// when that process spells the display differently.
+    #[test]
+    fn resolve_envs_matches_the_display_across_its_spellings() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1\nDISPLAY=unix:0\nXAUTHORITY=/tmp/cookie\n",
+            "",
+            0,
+        ));
+        let envs = resolve_envs(&transport, None, Some(":0")).expect("resolve_envs must succeed");
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/cookie"),
+            "`:0` and `unix:0` name the same display, so the cookie must be found"
+        );
+    }
+
+    /// Two virtuoso processes can share a display with different cookies.
+    /// Taking the first one blindly can pick a cookie that no longer works,
+    /// and the helper then fails with "cannot open display" — so the cookie
+    /// the display actually accepts is the one to keep.
+    #[test]
+    fn resolve_envs_picks_the_cookie_the_display_accepts() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1\nDISPLAY=:0\nXAUTHORITY=/tmp/stale-cookie\n\
+             __PID__=2\nDISPLAY=:0\nXAUTHORITY=/tmp/live-cookie\n",
+            "",
+            0,
+        ));
+        // The stale cookie is refused by the display ...
+        transport.enqueue_response(mk_result("", "Authorization required", 1));
+        // ... and the live one is accepted.
+        transport.enqueue_response(mk_result("xwininfo: Window id 0x1", "", 0));
+
+        let envs = resolve_envs(&transport, None, Some(":0")).expect("resolve_envs must succeed");
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/live-cookie"),
+            "the cookie the display accepts must win over the first one found"
+        );
+    }
+
+    /// When the probe cannot run at all — `xwininfo` is not installed on the
+    /// remote host — the probe says nothing about the cookie, so the first
+    /// candidate is kept rather than dropped.
+    #[test]
+    fn resolve_envs_keeps_the_first_cookie_when_the_probe_cannot_run() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1\nDISPLAY=:0\nXAUTHORITY=/tmp/first\n\
+             __PID__=2\nDISPLAY=:0\nXAUTHORITY=/tmp/second\n",
+            "",
+            0,
+        ));
+        // 127 is the shell's "command not found".
+        transport.enqueue_response(mk_result("", "xwininfo: not found", 127));
+
+        let envs = resolve_envs(&transport, None, Some(":0")).expect("resolve_envs must succeed");
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/first"),
+            "an unavailable probe must not cost us the cookie"
+        );
+    }
+
+    /// A candidate the display has already refused is worse than one whose
+    /// status nobody could determine — so an unavailable probe must not send
+    /// us back to a rejected cookie.
+    #[test]
+    fn resolve_envs_does_not_fall_back_to_a_rejected_cookie() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1\nDISPLAY=:0\nXAUTHORITY=/tmp/rejected\n\
+             __PID__=2\nDISPLAY=:0\nXAUTHORITY=/tmp/unknown\n",
+            "",
+            0,
+        ));
+        // The first candidate is refused by the display ...
+        transport.enqueue_response(mk_result("", "Authorization required", 1));
+        // ... and the probe for the second one cannot run at all.
+        transport.enqueue_response(mk_result("", "xwininfo: not found", 127));
+
+        let envs = resolve_envs(&transport, None, Some(":0")).expect("resolve_envs must succeed");
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/unknown"),
+            "a cookie the display refused must not be preferred over an unknown one"
+        );
+    }
+
+    /// If no cookie authorizes a connection, there is no cookie to pass on:
+    /// claiming one would only make the helper fail with a misleading
+    /// "cannot open display".
+    #[test]
+    fn resolve_envs_reports_no_cookie_when_none_is_accepted() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1\nDISPLAY=:0\nXAUTHORITY=/tmp/one\n\
+             __PID__=2\nDISPLAY=:0\nXAUTHORITY=/tmp/two\n",
+            "",
+            0,
+        ));
+        transport.enqueue_response(mk_result("", "Authorization required", 1));
+        transport.enqueue_response(mk_result("", "Authorization required", 1));
+
+        let envs = resolve_envs(&transport, None, Some(":0")).expect("resolve_envs must succeed");
+        assert!(
+            envs[0].xauthority.is_none(),
+            "no accepted cookie → xauthority: None; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// A single candidate is taken as it is: there is nothing to choose, and
+    /// probing would add a remote round trip to the common path.
+    #[test]
+    fn resolve_envs_does_not_probe_when_there_is_only_one_candidate() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1\nDISPLAY=:0\nXAUTHORITY=/tmp/only\n",
+            "",
+            0,
+        ));
+        let envs = resolve_envs(&transport, None, Some(":0")).expect("resolve_envs must succeed");
+        assert_eq!(envs[0].xauthority.as_deref(), Some("/tmp/only"));
+        let commands = transport.commands.lock().unwrap().clone();
+        assert_eq!(
+            commands.len(),
+            1,
+            "one candidate must not trigger a probe; commands: {commands:?}"
+        );
+    }
+
+    /// 126 is "found but not executable" — the probe did not run, so it says
+    /// nothing about the cookie. Reading it as a rejection would send us
+    /// past a candidate that might well be the right one.
+    #[test]
+    fn resolve_envs_treats_a_non_executable_probe_as_unknown() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1\nDISPLAY=:0\nXAUTHORITY=/tmp/first\n\
+             __PID__=2\nDISPLAY=:0\nXAUTHORITY=/tmp/second\n",
+            "",
+            0,
+        ));
+        // "Permission denied" / "not executable": the probe never ran.
+        transport.enqueue_response(mk_result("", "cannot execute", 126));
+        // The second candidate would have been accepted.
+        transport.enqueue_response(mk_result("xwininfo: Window id 0x1", "", 0));
+
+        let envs = resolve_envs(&transport, None, Some(":0")).expect("resolve_envs must succeed");
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/first"),
+            "a probe that could not run must not be read as a rejected cookie"
+        );
+    }
+
+    /// An empty display would leave the helper with no positional argument,
+    /// and it would then act on whatever display its own probe picks. The
+    /// whole point of the explicit path is that it does not.
+    #[test]
+    fn resolve_envs_rejects_an_empty_display() {
+        let transport = RecordingTransport::new();
+        let err = resolve_envs(&transport, None, Some(""))
+            .expect_err("an empty display must be rejected");
+        assert!(
+            err.to_string().contains("must not be empty"),
+            "the error must name the problem; got: {err}"
+        );
+        let commands = transport.commands.lock().unwrap().clone();
+        assert!(
+            commands.is_empty(),
+            "an empty display must be rejected before any remote command; got: {commands:?}"
+        );
+    }
+
+    /// The user filter reaches a remote shell command, so it must be escaped
+    /// like every other value that ends up in one. The explicit-display path
+    /// now runs this scan, where it used to run no remote command at all —
+    /// the interpolation was already there, but this path gave it a new
+    /// reach.
+    #[test]
+    fn detect_envs_escapes_the_user_filter() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result("", "", 0));
+        detect_envs(&transport, Some("user; id")).expect("detect_envs must succeed");
+        let commands = transport.commands.lock().unwrap().clone();
+        assert_eq!(commands.len(), 1);
+        assert!(
+            commands[0].contains("-u 'user; id' "),
+            "the user filter must be shell-escaped; got: {}",
+            commands[0]
+        );
+        assert!(
+            commands[0].starts_with("pgrep -u 'user; id' -x virtuoso"),
+            "the injected text must stay inside the quoted argument; got: {}",
+            commands[0]
+        );
+    }
+
+    /// The cookie lookup is new remote I/O on a path that used to do none,
+    /// so a broken connection must not abort the command: the helper may
+    /// still connect without a cookie, and it certainly used to.
+    #[test]
+    fn resolve_envs_degrades_to_no_cookie_when_the_lookup_fails() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_failure(
+            crate::transport::contract::TransportError::ConnectionFailed("probe timed out".into()),
+        );
+        let envs = resolve_envs(&transport, None, Some(":0")).expect("resolve_envs must succeed");
+        assert_eq!(envs.len(), 1);
+        assert_eq!(envs[0].display.as_deref(), Some(":0"));
+        assert!(
+            envs[0].xauthority.is_none(),
+            "a failing lookup must degrade to xauthority: None; got: {:?}",
+            envs[0].xauthority
+        );
+    }
+
+    /// The same, one level deeper: the *probe* of a candidate cookie fails.
+    /// A probe that cannot run says nothing about the cookie, so the first
+    /// candidate is kept rather than dropped.
+    #[test]
+    fn resolve_envs_keeps_the_cookie_when_the_probe_fails_to_run() {
+        let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_result(
+            "__PID__=1\nDISPLAY=:0\nXAUTHORITY=/tmp/one\n\
+             __PID__=2\nDISPLAY=:0\nXAUTHORITY=/tmp/two\n",
+            "",
+            0,
+        ));
+        transport.enqueue_failure_for(
+            crate::transport::contract::TransportError::ConnectionFailed("probe timed out".into()),
+            "xwininfo",
+        );
+        let envs = resolve_envs(&transport, None, Some(":0")).expect("resolve_envs must succeed");
+        assert_eq!(
+            envs[0].xauthority.as_deref(),
+            Some("/tmp/one"),
+            "a probe that could not run must not cost us the cookie"
+        );
+    }
+
+    /// Argument-parsing sanity check: given the helper argv `[":99", "--list-windows"]`,
+    /// the helper's parser correctly assigns display=":99" (no XAUTHORITY token
+    /// ever reaches argv). This documents why the env-prefix form is mandatory.
+    #[test]
+    fn helper_argv_parse_assigns_display_when_only_flags_follow() {
+        // Simulate the helper's argv parser by hand on the argv our builders
+        // would produce when shell-tokenized. We don't ship the helper as a
+        // library; the point of this test is to *document* the invariant at
+        // the Rust side: the trailing form would have produced a token starting
+        // with "XAUTHORITY=", which we now guarantee never happens.
+        let argv_no_xa: Vec<&str> = vec!["python3", "/h.py", ":99", "--list-windows"];
+        // Hand-rolled mini-parser mirroring the helper main():
+        let mut display = None;
+        let mut list_windows = false;
+        let mut i = 0;
+        let args: Vec<&str> = argv_no_xa.iter().skip(2).copied().collect();
+        while i < args.len() {
+            let a = args[i];
+            if a == "--list-windows" {
+                list_windows = true;
+            } else if !a.starts_with('-') {
+                display = Some(a);
+            }
+            i += 1;
+        }
+        assert_eq!(display, Some(":99"));
+        assert!(list_windows);
     }
 
     #[test]
@@ -4189,6 +5077,7 @@ mod tests {
         // Helper exit 1 + a record with no `dismissed` key: the key was sent but
         // the window was not verified closed. Must not land in `dismissed`.
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":99", "/tmp/cookie"));
         transport.enqueue_response(mk_result("", "", 0)); // install -d
         transport.enqueue_response(mk_result(
             r#"{"window_id":"0x1","child":"0x2","title":"Save Changes","action":"escape","status":"requested","closure_confirmed":false,"action_sent":true,"still_mapped":true,"x":0,"y":0,"w":580,"h":140}
@@ -4225,6 +5114,7 @@ mod tests {
         // pushing it into `found` would report the same dialog twice and
         // double-count `n_found` at the command layer.
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":99", "/tmp/cookie"));
         transport.enqueue_response(mk_result("", "", 0)); // install -d
         transport.enqueue_response(mk_result(
             r#"{"window_id":"0x1","title":"Save Changes","x":1010,"y":378,"w":239,"h":142}
@@ -4285,6 +5175,7 @@ mod tests {
         // "x11 helper exited with code 1" line does not — it says nothing
         // about what actually went wrong.
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":99", "/tmp/cookie"));
         transport.enqueue_response(mk_result("", "", 0)); // install -d
         transport.enqueue_response(mk_result(
             r#"{"window_id":"0x1","child":"0x2","action":"escape","status":"requested","closure_confirmed":false,"action_sent":true,"still_mapped":true,"x":0,"y":0,"w":580,"h":140}
@@ -4326,6 +5217,7 @@ mod tests {
         // a bare `dismissed` id is a claim, not evidence. Only
         // `closure_confirmed: true` makes a record a verified dismissal.
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":99", "/tmp/cookie"));
         transport.enqueue_response(mk_result("", "", 0)); // install -d
         transport.enqueue_response(mk_result(
             r#"{"dismissed":"0x2","child":"0x2","window_id":"0x1","title":"Save Changes","action":"escape","status":"closed","action_sent":true,"still_mapped":false,"x":0,"y":0,"w":580,"h":140}
@@ -4376,6 +5268,7 @@ mod tests {
     #[test]
     fn dismiss_verified_closed_record_is_reported_as_dismissed() {
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":99", "/tmp/cookie"));
         transport.enqueue_response(mk_result("", "", 0)); // install -d
         transport.enqueue_response(mk_result(
             r#"{"dismissed":"0x2","child":"0x2","requested_window_id":"0x1","title":"Save Changes","action":"escape","status":"closed","closure_confirmed":true,"action_sent":true,"still_mapped":false,"x":0,"y":0,"w":580,"h":140}
@@ -4408,6 +5301,7 @@ mod tests {
         // The single-window path drops non-dismissed records; the outcome must
         // still be reported as an error instead of vanishing.
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":99", "/tmp/cookie"));
         transport.enqueue_response(mk_result("", "", 0)); // install -d
         transport.enqueue_response(mk_result(
             r#"{"window_id":"0x1","child":"0x2","title":"Save Changes","action":"enter","status":"requested","closure_confirmed":false,"action_sent":true,"still_mapped":null,"verification_error":"cannot read exact X11 window attributes for 0x2","x":0,"y":0,"w":580,"h":140}
@@ -4471,6 +5365,7 @@ mod tests {
         // Exit 1 with an `action_sent` record: the specific per-record error
         // survives, the generic exit-code line does not.
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":99", "/tmp/cookie"));
         transport.enqueue_response(mk_result("", "", 0)); // install -d
         transport.enqueue_response(mk_result(
             r#"{"window_id":"0x1","child":"0x2","action":"enter","status":"requested","closure_confirmed":false,"action_sent":true,"still_mapped":true,"x":0,"y":0,"w":580,"h":140}
@@ -4860,6 +5755,10 @@ mod tests {
         responses: std::sync::Mutex<Vec<CommandResult>>,
         /// Payloads handed out by `download_file` — the fetched artifact.
         downloads: std::sync::Mutex<Vec<Vec<u8>>>,
+        /// Transport errors handed out by `run_command`, each optionally
+        /// restricted to commands whose text contains the given needle.
+        failures:
+            std::sync::Mutex<Vec<(Option<String>, crate::transport::contract::TransportError)>>,
     }
 
     impl RecordingTransport {
@@ -4873,6 +5772,25 @@ mod tests {
         /// Enqueue the bytes the next `download_file` call hands out.
         fn enqueue_download(&self, bytes: Vec<u8>) {
             self.downloads.lock().unwrap().push(bytes);
+        }
+        /// Enqueue a transport error for the next command(s).
+        ///
+        /// Without this the only failure `run_command` can report is a
+        /// non-zero exit status, which is not what a broken connection or a
+        /// probe timeout looks like.
+        fn enqueue_failure(&self, e: crate::transport::contract::TransportError) {
+            self.failures.lock().unwrap().push((None, e));
+        }
+        /// Enqueue a transport error for the next command whose text
+        /// contains `needle`.
+        ///
+        /// A command that does not match is left to the response queue, so
+        /// a test can fail one step of a sequence and not the others.
+        fn enqueue_failure_for(&self, e: crate::transport::contract::TransportError, needle: &str) {
+            self.failures
+                .lock()
+                .unwrap()
+                .push((Some(needle.to_string()), e));
         }
     }
 
@@ -4898,6 +5816,13 @@ mod tests {
         ) -> std::result::Result<CommandResult, crate::transport::contract::TransportError>
         {
             self.commands.lock().unwrap().push(req.command.clone());
+            let mut failures = self.failures.lock().unwrap();
+            if let Some(idx) = failures
+                .iter()
+                .position(|(needle, _)| needle.as_deref().is_none_or(|n| req.command.contains(n)))
+            {
+                return Err(failures.remove(idx).1);
+            }
             let responses = &mut self.responses.lock().unwrap();
             if responses.is_empty() {
                 return Ok(CommandResult {
@@ -4953,6 +5878,19 @@ mod tests {
                 ),
             )
         }
+    }
+
+    /// A `detect_envs` answer: one virtuoso process on the given display,
+    /// carrying the given cookie.
+    ///
+    /// The explicit-display path scans the process table for the cookie, so
+    /// a test that drives it has to answer that scan before its own command.
+    fn mk_process_table(display: &str, cookie: &str) -> CommandResult {
+        mk_result(
+            &format!("__PID__=1234\nDISPLAY={display}\nXAUTHORITY={cookie}\n"),
+            "",
+            0,
+        )
     }
 
     fn mk_result(stdout: &str, stderr: &str, exit_status: i32) -> CommandResult {
@@ -5052,6 +5990,7 @@ mod tests {
         // healthy state and must come back as an empty list, not a helper error.
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result("", "", 1)); // helper: no dialogs → exit 1
         let (_, dialogs) = list_dialogs(&transport, "client1", Some("user1"), Some(":99"))
             .expect("list_dialogs should succeed");
@@ -5062,6 +6001,7 @@ mod tests {
     fn list_dialogs_with_dialog_exit0_returns_dialog() {
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result(
             "{\"window_id\":\"0x1\",\"title\":\"Save?\",\"x\":10,\"y\":10,\"w\":300,\"h\":120}\n",
             "",
@@ -5079,6 +6019,7 @@ mod tests {
         // so callers can distinguish it from the healthy "no dialogs" state.
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result("", "xwininfo: unable to open display", 2));
         let (_, dialogs) = list_dialogs(&transport, "client1", Some("user1"), Some(":99"))
             .expect("list_dialogs should succeed");
@@ -5094,6 +6035,7 @@ mod tests {
         // helper failure (same semantics as list_dialogs).
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result("", "", 1)); // helper: no windows → exit 1
         let (_, windows) = list_windows(&transport, "client1", Some("user1"), Some(":99"))
             .expect("list_windows should succeed");
@@ -5104,6 +6046,7 @@ mod tests {
     fn list_windows_with_window_exit0_returns_window() {
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result(
             r#"{"frame_id":"0x1","window_id":"0x2","dismiss_id":"0x2","title":"Virtuoso","class":["virtuoso"],"geometry":{"x":0,"y":0,"w":800,"h":600},"pid":12345,"visible":true}"#,
             "",
@@ -5122,6 +6065,7 @@ mod tests {
         // helper crashed".
         let transport = RecordingTransport::new();
         transport.enqueue_response(mk_result("", "", 0)); // install -d
+        transport.enqueue_response(mk_result("", "", 0)); // detect_envs (no virtuoso on :99 → fallback xauthority=None)
         transport.enqueue_response(mk_result("", "xwininfo: unable to open display", 2));
         let err = list_windows(&transport, "client1", Some("user1"), Some(":99"))
             .expect_err("expected an error for real helper failure");
@@ -6349,6 +7293,7 @@ mod tests {
     #[test]
     fn client_geometry_parses_xwininfo_output() {
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":0", "/tmp/cookie"));
         transport.enqueue_response(CommandResult {
             exit_status: 0,
             stdout: "  Absolute upper-left X:  1124\n  Absolute upper-left Y:  54\n  Width: 641\n  Height: 584\n".to_string(),
@@ -6364,22 +7309,23 @@ mod tests {
         assert_eq!(geom.window_id, "0x1400010");
         // The command must target the requested window on the requested display.
         let commands = transport.commands.lock().unwrap().clone();
-        assert_eq!(commands.len(), 1);
+        assert_eq!(commands.len(), 2);
         assert!(
-            commands[0].contains("xwininfo -id 0x1400010"),
+            commands[1].contains("xwininfo -id 0x1400010"),
             "expected xwininfo on the target window, got: {}",
-            commands[0]
+            commands[1]
         );
         assert!(
-            commands[0].contains("DISPLAY=:0"),
+            commands[1].contains("DISPLAY=:0"),
             "expected the DISPLAY to be set, got: {}",
-            commands[0]
+            commands[1]
         );
     }
 
     #[test]
     fn client_geometry_reports_xwininfo_failure() {
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":0", "/tmp/cookie"));
         transport.enqueue_response(CommandResult {
             exit_status: 1,
             stdout: String::new(),
@@ -6410,6 +7356,7 @@ mod tests {
     #[test]
     fn capture_window_imports_the_named_window() {
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":0", "/tmp/cookie"));
         transport.enqueue_response(CommandResult {
             exit_status: 0,
             stdout: String::new(),
@@ -6420,29 +7367,30 @@ mod tests {
         capture_window(&transport, None, Some(":0"), "0x1400010", "/tmp/shot.png")
             .expect("capture_window should succeed");
         let commands = transport.commands.lock().unwrap().clone();
-        assert_eq!(commands.len(), 1);
+        assert_eq!(commands.len(), 2);
         assert!(
-            commands[0].contains("import -window 0x1400010"),
+            commands[1].contains("import -window 0x1400010"),
             "expected a per-window import, got: {}",
-            commands[0]
+            commands[1]
         );
         assert!(
-            commands[0].contains("/tmp/shot.png"),
+            commands[1].contains("/tmp/shot.png"),
             "expected the output path, got: {}",
-            commands[0]
+            commands[1]
         );
         // It must never grab the root window: that is exactly what fails on
         // the hosts this fallback exists for.
         assert!(
-            !commands[0].contains("-window root"),
+            !commands[1].contains("-window root"),
             "the per-window capture must not target the root window, got: {}",
-            commands[0]
+            commands[1]
         );
     }
 
     #[test]
     fn capture_window_reports_import_failure() {
         let transport = RecordingTransport::new();
+        transport.enqueue_response(mk_process_table(":0", "/tmp/cookie"));
         transport.enqueue_response(CommandResult {
             exit_status: 1,
             stdout: String::new(),

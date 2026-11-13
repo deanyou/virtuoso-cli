@@ -43,6 +43,39 @@ jobs:
       - run: cargo build
       - run: cargo build --features daemon
 
+  helper-tests:
+    # The vendored X11 helper (resources/x11_dismiss_dialog.py) is uploaded to
+    # the remote host by src/transport/x11.rs, and its argv/env contract is
+    # half of the fix for the wrong-display bug — the Rust tests assert the
+    # command we build, these assert how the helper reads it. Without this job
+    # the helper side of that contract was only ever checked locally.
+    name: X11 helper tests
+    # ubuntu-24.04, not ubuntu-latest: `ubuntu-latest` has moved on to a
+    # release whose setup-python manifest no longer carries 3.9, and 3.9 is
+    # the oldest interpreter this suite supports. skill-tests.yml pins the
+    # same image for the same reason.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          # 3.9 = oldest supported system python (see skill-tests.yml).
+          python-version: "3.9"
+      - name: Run the helper's unit tests
+        run: |
+          set -euo pipefail
+          out="$(python3 -m unittest discover -s tests/docs -p 'test_*.py' 2>&1)" || {
+            printf '%s\n' "$out"
+            exit 1
+          }
+          printf '%s\n' "$out"
+          # unittest exits 0 when it discovers no tests at all, which would
+          # turn this job green while verifying nothing.
+          printf '%s\n' "$out" | grep -qE '^Ran [1-9][0-9]* tests?' || {
+            echo "::error::no helper test was discovered"
+            exit 1
+          }
+
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
