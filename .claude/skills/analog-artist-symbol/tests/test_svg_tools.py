@@ -51,6 +51,30 @@ BAD_SVG = """<?xml version='1.0' encoding='utf-8'?>
 </svg>
 """
 
+ELLIPSE_SVG = """<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>ELLIPSE</title>
+  <desc>Two-port functional symbol whose ports are marked with ellipses.</desc>
+  <metadata>{"terminal_order":["VIP","Q"]}</metadata>
+  <style>
+    .wire{fill:none;stroke:#425d4a;stroke-width:0.1}
+    .pin{fill:#df4638}
+    .label{fill:#25613b}
+    .port-label{fill:#c53e32}
+  </style>
+  <path class="wire" d="M64 64 H192"/>
+  <text class="label" x="128" y="40">ELLIPSE</text>
+  <g data-port="VIP" data-side="left" data-direction="input">
+    <ellipse class="pin" cx="64" cy="64" rx="8" ry="8"/>
+    <text class="port-label" x="80" y="60">VIP</text>
+  </g>
+  <g data-port="Q" data-side="right" data-direction="output">
+    <ellipse class="pin" cx="192" cy="64" rx="8" ry="8"/>
+    <text class="port-label" x="176" y="60" text-anchor="end">Q</text>
+  </g>
+</svg>
+"""
+
 
 def run_tool(script, *args, check=True):
     env = os.environ.copy()
@@ -227,6 +251,40 @@ class SvgToolsTest(unittest.TestCase):
         self.assertEqual(module.snap_text_height(19 * scale), 0.075)
         self.assertEqual(module.snap_text_height(13 * scale), 0.05)
         self.assertEqual(module.snap_text_height(0.001), 0.03125)
+
+    def test_ellipse_port_markers_keep_their_terminal(self):
+        """check_svg accepts an ellipse as a port marker, so the converter has
+        to read one as well. An unread marker leaves the port without a centre,
+        the port is dropped and the symbol loses that terminal entirely."""
+        with tempfile.TemporaryDirectory() as tmp:
+            svg = Path(tmp) / "ellipse.svg"
+            il = Path(tmp) / "ellipse.il"
+            ports = Path(tmp) / "ports.json"
+            svg.write_text(ELLIPSE_SVG, encoding="utf-8")
+
+            report = json.loads(run_tool("check_svg.py", svg, "--json").stdout)
+            self.assertTrue(report["ok"], report["errors"])
+            self.assertEqual([p["name"] for p in report["ports"]], ["VIP", "Q"])
+            self.assertEqual(report["warnings"], [])
+
+            run_tool("svg2oa.py", svg, "--lib", "testLib", "--cell", "testCell",
+                     "--view", "symbol", "--pins", "--pin-json", ports, "-o", il)
+            text = il.read_text(encoding="utf-8")
+            self.assertEqual(text.count("schCreateSymbolPin(cv symPin "), 2)
+            self.assertIn('schCreateSymbolPin(cv symPin "VIP" "input" '
+                          "list(0.25 0.75)", text)
+            self.assertIn('schCreateSymbolPin(cv symPin "Q" "output" '
+                          "list(0.75 0.75)", text)
+            self.assertIn('schEditPinOrder(cv list("VIP" "Q") nil)', text)
+
+            table = json.loads(ports.read_text(encoding="utf-8"))
+            self.assertEqual([p["name"] for p in table["ports"]], ["VIP", "Q"])
+            by_name = {p["name"]: p for p in table["ports"]}
+            # The pin sits on the ellipse centre, not on the group origin.
+            self.assertAlmostEqual(by_name["VIP"]["svg_x"], 64.0, places=6)
+            self.assertAlmostEqual(by_name["VIP"]["svg_y"], 64.0, places=6)
+            self.assertAlmostEqual(by_name["Q"]["svg_x"], 192.0, places=6)
+            self.assertAlmostEqual(by_name["Q"]["svg_y"], 64.0, places=6)
 
     def test_apply_skill_dry_run_builds_rpc_params(self):
         with tempfile.TemporaryDirectory() as tmp:

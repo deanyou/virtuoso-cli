@@ -294,6 +294,12 @@ def raw_points(el) -> list[tuple[float, float]]:
         cy = float(el.get("cy", 0))
         r = float(el.get("r", 0))
         return [(cx - r, cy - r), (cx + r, cy + r)]
+    if tag == "ellipse":
+        cx = float(el.get("cx", 0))
+        cy = float(el.get("cy", 0))
+        rx = float(el.get("rx", 0))
+        ry = float(el.get("ry", 0))
+        return [(cx - rx, cy - ry), (cx + rx, cy + ry)]
     if tag == "line":
         return [(float(el.get("x1", 0)), float(el.get("y1", 0))),
                 (float(el.get("x2", 0)), float(el.get("y2", 0)))]
@@ -315,7 +321,13 @@ class Extractor:
         self.skip_port_labels = skip_port_labels
 
     def record_port(self, el, transform, group_style):
-        """A port is a <g data-port=...> group holding the pin square and its label."""
+        """A port is a <g data-port=...> group holding the pin marker and its label.
+
+        The marker may be any shape the checker accepts: a rect, circle or
+        ellipse, or a line/polyline/polygon/path. The port centre is the
+        centre of the marker, so every marker kind puts the pin on the same
+        place the artist drew it.
+        """
         name = el.get("data-port")
         side = el.get("data-side", "left")
         direction = el.get("data-direction", "inputOutput")
@@ -333,6 +345,9 @@ class Extractor:
                 h = float(child.get("height", 0))
                 px, py = x + w / 2, y + h / 2
             elif tag == "circle" and px is None:
+                px = float(child.get("cx", 0))
+                py = float(child.get("cy", 0))
+            elif tag == "ellipse" and px is None:
                 px = float(child.get("cx", 0))
                 py = float(child.get("cy", 0))
             elif tag in ("line", "polyline", "polygon", "path") and px is None:
