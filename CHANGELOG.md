@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **The `analog-artist-symbol` skill.** It draws a compact, readable functional
+  symbol for an analog block from that block's real interface, netlist and
+  topology, and converts the SVG back into native Cadence OA geometry
+  (`dbCreatePath` / `dbCreatePolygon` / `schCreateSymbolPin` / dynamic
+  `[@instanceName]` / `[@partName]` labels), so the symbol carries signal
+  direction, control role and output polarity into the parent schematic
+  instead of a generic block. The converter pins the drawing to an existing pin
+  frame (`--origin-x` / `--origin-y`) and fixes the terminal order
+  (`--pin-order`), which is what makes rewriting a library symbol in place
+  safe: the ports keep the coordinates the parent schematic is already wired
+  to. `references/verification.md` records the live Virtuoso evaluation and
+  the corrections the converter needed on a real library cell. The skill is
+  registered in `scripts/sync_skills.py` as a mirror, so the Codex tree gets
+  it too and CI runs both trees' suites.
+
 ## [1.3.6] - 2026-11-11
 
 Reliability and verification release. Four strands:

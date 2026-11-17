@@ -319,6 +319,18 @@ SKILL_RULES: Dict[str, SkillRule] = {
         ),
         skiprules=("A3", "A4"),
     ),
+    "analog-artist-symbol": SkillRule(
+        skill="analog-artist-symbol",
+        mode=MODE_MIRROR,
+        reason=(
+            "Owner ruling (2026-11): mirror it. The skill draws a functional "
+            "SVG symbol from a real netlist and converts it back into native "
+            "OA geometry through skill.eval. The work is host-neutral -- "
+            "Python scripts, a generated SKILL script and offline unit tests "
+            "-- so the Codex side gets the full skill: SKILL.md, references, "
+            "scripts, tests and examples."
+        ),
+    ),
 }
 
 
