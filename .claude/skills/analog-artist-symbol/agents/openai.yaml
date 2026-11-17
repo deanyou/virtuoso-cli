@@ -1,0 +1,4 @@
+interface:
+  display_name: "Analog artist symbol for vcli"
+  short_description: "Draw functional SVG symbols and rebuild native Virtuoso symbols"
+  default_prompt: "Use $analog-artist-symbol to draw, review, or rebuild a circuit symbol in Virtuoso."

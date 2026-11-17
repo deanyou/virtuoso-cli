@@ -1,0 +1,142 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="470" viewBox="0 0 820 470" role="img" aria-labelledby="svg-title svg-desc">
+  <title id="svg-title">CMP_STRONGARM</title>
+  <desc id="svg-desc">Functional symbol of the strong-arm (latch-type) comparator cell cmp_strongarm. VIP and VIN are the differential inputs, CLK the evaluation clock, CLKB the complementary clock for the latch source, VDD and VSS the supplies, and Q and QB the differential outputs. VIP and VIN drive an NMOS differential pair with a CLK-controlled tail switch; CLK also gates the PMOS precharge switches that pull internal nodes X and Y to VDD. CLKB enables the VDD switch for the latch source. X and Y feed the cross-coupled regenerative latch and then inverting output buffers. With the NMOS input pair, Q is high while VIP exceeds VIN, and QB is high while VIN exceeds VIP. Crossed feedback paths are not joined at the crossing. No buses are used.</desc>
+  <metadata>{"cell":"cmp_strongarm","library":"FT0001A_SH","ports":[{"name":"VIP","direction":"input","side":"left"},{"name":"VIN","direction":"input","side":"left"},{"name":"CLK","direction":"input","side":"bottom"},{"name":"CLKB","direction":"input","side":"top"},{"name":"VDD","direction":"inputOutput","side":"top"},{"name":"VSS","direction":"inputOutput","side":"bottom"},{"name":"Q","direction":"output","side":"right"},{"name":"QB","direction":"output","side":"right"}],"terminal_order":["VIP","VIN","CLKB","CLK","QB","Q","VSS","VDD"],"internal":"NMOS input pair with CLK tail -> nodes X,Y -> cross-coupled regenerative latch -> inverting output buffers","control":{"CLK":"PMOS precharge switches on X,Y and NMOS tail switch; active-high evaluation","CLKB":"VDD switch for latch source"},"nodes":{"X":"drain node of the VIP branch","Y":"drain node of the VIN branch"},"polarity":"Q high while VIP exceeds VIN; QB high while VIN exceeds VIP"}</metadata>
+  <defs>
+    <style>
+      text { font-family: 'DejaVu Sans Mono', 'Liberation Mono', Consolas, monospace; fill: #216038; font-size: 16px; }
+      .title { font-size: 19px; font-weight: 600; fill: #287740; }
+      .port-label { fill: #c53e32; font-size: 16px; }
+      .label { fill: #216038; font-size: 16px; }
+      .wire { fill: none; stroke: #425d4a; stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: round; }
+      .shape { fill: none; stroke: #287740; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      .gate { fill: #ffffff; stroke: #287740; stroke-width: 1.8; stroke-linejoin: round; }
+      .contact { fill: #ffffff; stroke: #425d4a; stroke-width: 1.5; }
+      .dot { fill: #425d4a; }
+      .pin { fill: #df4638; }
+      .module { fill: none; stroke: #287740; stroke-width: 1.4; stroke-linejoin: miter; }
+      .ctrl { fill: none; stroke: #69846f; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    </style>
+  </defs>
+
+  <rect id="background" x="0" y="0" width="820" height="470" fill="#ffffff"/>
+  <rect id="symbol-boundary" class="module" x="24" y="52" width="772" height="372"/>
+
+  <!-- body blocks (fill first, wires and internal graphics on top) -->
+  <g id="pmos-input-pair">
+    <rect class="gate" x="100" y="116" width="136" height="188"/>
+  </g>
+  <g id="regenerative-latch">
+    <rect class="gate" x="360" y="116" width="140" height="188"/>
+  </g>
+
+  <!-- supply and signal wiring -->
+  <g id="wiring">
+    <path class="wire" d="M150 52V108"/>
+    <path class="wire" d="M150 108H320"/>
+    <path class="wire" d="M150 108V116"/>
+    <path class="wire" d="M260 108V124"/>
+    <path class="wire" d="M320 108V124"/>
+    <path class="wire" d="M24 160H100"/>
+    <path class="wire" d="M24 260H100"/>
+    <path class="wire" d="M236 160H520"/>
+    <path class="wire" d="M236 260H520"/>
+    <path class="wire" d="M260 152V160"/>
+    <path class="wire" d="M320 152V260"/>
+    <path class="ctrl" d="M268 136H328"/>
+    <text class="label" x="298" y="130" text-anchor="middle">CLK</text>
+    <path class="ctrl" d="M340 52V84H392V116"/>
+    <text class="label" x="350" y="72" text-anchor="start">CLKB: latch_src</text>
+    <path class="wire" d="M480 160V180L400 214V260"/>
+    <path class="wire" d="M480 260V240L400 206V160"/>
+    <path class="wire" d="M460 304V324"/>
+    <path class="wire" d="M460 352V366"/>
+    <path class="wire" d="M420 424V338H448"/>
+    <path class="wire" d="M500 424V366H472"/>
+    <path class="wire" d="M566 160H796"/>
+    <path class="wire" d="M566 260H796"/>
+  </g>
+
+  <!-- internal graphics -->
+  <g id="precharge-switches">
+    <path class="shape" d="M260 124L276 148"/>
+    <path class="shape" d="M320 124L336 148"/>
+    <circle class="contact" cx="260" cy="124" r="3"/>
+    <circle class="contact" cx="260" cy="152" r="3"/>
+    <circle class="contact" cx="320" cy="124" r="3"/>
+    <circle class="contact" cx="320" cy="152" r="3"/>
+  </g>
+  <g id="tail-switch">
+    <path class="shape" d="M460 324V352"/>
+    <path class="shape" d="M448 331V345"/>
+    <path class="shape" d="M448 366H472"/>
+    <path class="shape" d="M452 372H468"/>
+    <path class="shape" d="M456 378H464"/>
+  </g>
+  <g id="output-inverters">
+    <path class="gate" d="M520 144L556 160L520 176Z"/>
+    <circle class="gate" cx="561" cy="160" r="5"/>
+    <path class="gate" d="M520 244L556 260L520 276Z"/>
+    <circle class="gate" cx="561" cy="260" r="5"/>
+  </g>
+
+  <!-- connection nodes (crossing of the latch feedback carries no node) -->
+  <g id="nodes">
+    <circle class="dot" cx="260" cy="160" r="2.5"/>
+    <circle class="dot" cx="320" cy="260" r="2.5"/>
+    <circle class="dot" cx="268" cy="136" r="2.5"/>
+    <circle class="dot" cx="328" cy="136" r="2.5"/>
+    <circle class="dot" cx="400" cy="160" r="2.5"/>
+    <circle class="dot" cx="480" cy="160" r="2.5"/>
+    <circle class="dot" cx="400" cy="260" r="2.5"/>
+    <circle class="dot" cx="480" cy="260" r="2.5"/>
+  </g>
+
+  <!-- functional names -->
+  <g id="names">
+    <text id="label-title" class="title" x="410" y="30" text-anchor="middle">CMP_STRONGARM</text>
+    <text id="label-pair" class="label" x="168" y="196" text-anchor="middle">NMOS PAIR</text>
+    <text id="label-gm" class="label" x="168" y="224" text-anchor="middle">gm</text>
+    <text id="label-precharge" class="label" x="290" y="96" text-anchor="middle">PRECHARGE</text>
+    <text id="label-latch" class="label" x="430" y="292" text-anchor="middle">LATCH</text>
+    <text id="label-node-x" class="label" x="348" y="150" text-anchor="middle">X</text>
+    <text id="label-node-y" class="label" x="348" y="250" text-anchor="middle">Y</text>
+    <text id="label-clk" class="label" x="432" y="330" text-anchor="middle">CLK</text>
+    <text id="label-tail" class="label" x="490" y="330" text-anchor="start">TAIL</text>
+  </g>
+
+  <!-- ports (last) -->
+  <g data-port="VDD" data-side="top" data-direction="inputOutput">
+    <rect class="pin" x="146" y="48" width="8" height="8"/>
+    <text class="port-label" x="158" y="72" text-anchor="start">VDD</text>
+  </g>
+  <g data-port="CLKB" data-side="top" data-direction="input">
+    <rect class="pin" x="336" y="48" width="8" height="8"/>
+    <text class="port-label" x="332" y="72" text-anchor="end">CLKB</text>
+  </g>
+  <g data-port="VIP" data-side="left" data-direction="input">
+    <rect class="pin" x="20" y="156" width="8" height="8"/>
+    <text class="port-label" x="36" y="150" text-anchor="start">VIP</text>
+  </g>
+  <g data-port="VIN" data-side="left" data-direction="input">
+    <rect class="pin" x="20" y="256" width="8" height="8"/>
+    <text class="port-label" x="36" y="250" text-anchor="start">VIN</text>
+ </g>
+  <g data-port="CLK" data-side="bottom" data-direction="input">
+    <rect class="pin" x="416" y="420" width="8" height="8"/>
+    <text class="port-label" x="408" y="444" text-anchor="start">CLK</text>
+  </g>
+  <g data-port="VSS" data-side="bottom" data-direction="inputOutput">
+    <rect class="pin" x="496" y="420" width="8" height="8"/>
+    <text class="port-label" x="496" y="444" text-anchor="start">VSS</text>
+  </g>
+  <g data-port="Q" data-side="right" data-direction="output">
+    <rect class="pin" x="792" y="156" width="8" height="8"/>
+    <text class="port-label" x="784" y="150" text-anchor="end">Q</text>
+  </g>
+  <g data-port="QB" data-side="right" data-direction="output">
+    <rect class="pin" x="792" y="256" width="8" height="8"/>
+    <text class="port-label" x="784" y="250" text-anchor="end">QB</text>
+  </g>
+</svg>
