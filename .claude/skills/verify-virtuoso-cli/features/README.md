@@ -96,3 +96,8 @@ required state, commands, and observable proof.
   files a run emits, and the intervention record -> mine -> adopt loop with its
   SQLite side effect. **Tier A** for the `fake` executor and the evidence loop;
   `live` is **Tier B**, `local` needs X11.
+- [Drive a Virtuoso window over X11](./x11-window-actions.md) covers
+  `vcli window list-windows-x11`, `vcli window geometry`, `vcli window
+  action-x11` and `action-x11-batch`, the exact-window-id and exact-DISPLAY
+  contract, and the screenshot artifact. **Tier B** — it drives the live X11
+  windows of a running Virtuoso.
