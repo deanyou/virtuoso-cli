@@ -118,7 +118,6 @@ fn client_id_sanitizes_hostname() {
 fn client_id_no_env_falls_back_to_default() {
     let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
-    // Set HOSTNAME to empty to force the inner None branch
     env::set_var("HOSTNAME", "");
     // Both VB_CLIENT_ID and VB_PROFILE unset, HOSTNAME empty
     // → gethostname() called, but we can't control that in tests.
@@ -218,7 +217,6 @@ fn save_to_session_file_writes_to_sessions_dir() {
 
     let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
-    // Save and restore the env var that save() uses for cache_dir resolution
     let original_xdg = env::var_os("XDG_CACHE_HOME").and_then(|s| s.into_string().ok());
 
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -245,13 +243,11 @@ fn save_to_session_file_writes_to_sessions_dir() {
         .join(format!("{}.json", s.id));
     assert!(path.exists(), "save_to_session_file should create {path:?}");
 
-    // Reload and verify round-trip
     let loaded = SessionInfo::load(&s.id).expect("load should succeed");
     assert_eq!(loaded.daemon_user.as_deref(), Some("alice"));
     assert_eq!(loaded.id, s.id);
     assert_eq!(loaded.port, s.port);
 
-    // Cleanup
     if let Some(v) = original_xdg {
         env::set_var("XDG_CACHE_HOME", v);
     } else {
@@ -278,17 +274,14 @@ fn bridge_ping_uses_plus_one_one_not_ipc_is_process_running() {
     )
     .expect("read bridge.rs");
 
-    // Find the `pub fn ping` block and check its body uses plus(1 1).
     let ping_start = src
         .find("pub fn ping")
         .expect("bridge.rs should have pub fn ping");
-    // Look ahead ~600 chars for the skill literal
     let window = &src[ping_start..ping_start.saturating_add(600)];
     assert!(
         window.contains("plus(1 1)"),
         "bridge::ping should use plus(1 1) — verified live on daemon: ipcIsProcessRunning() without a process handle returns nil"
     );
-    // Ensure the broken call is NOT present in the ping body
     assert!(
         !window.contains("ipcIsProcessRunning"),
         "bridge::ping should not call ipcIsProcessRunning() — the no-arg form returns nil on live daemons"
@@ -424,11 +417,9 @@ fn ramic_bridge_recovery_hint_strings_present() {
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
 
-    // Find the "is already running" branch
     let already_running_idx = src
         .find("is already running")
         .expect("ramic_bridge.il should still have the 'is already running' branch");
-    // We just need a window after the print to look for the recovery hint.
     let after = &src[already_running_idx..];
 
     assert!(
@@ -544,7 +535,6 @@ fn ramic_bridge_has_rb_version_stamp() {
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
 
-    // Stamp must exist somewhere near the top of the file.
     let head = src.lines().take(15).collect::<Vec<_>>().join("\n");
     assert!(
         head.contains("; RB_VERSION:"),
@@ -554,7 +544,6 @@ fn ramic_bridge_has_rb_version_stamp() {
 
 #[test]
 fn ramic_bridge_version_stamp_matches_cargo_toml() {
-    // Read the stamp from .il
     let il_path =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/ramic_bridge.il");
     let il_src = std::fs::read_to_string(&il_path)
@@ -573,11 +562,9 @@ fn ramic_bridge_version_stamp_matches_cargo_toml() {
         .trim_start_matches("RB_VERSION:")
         .trim();
 
-    // Read the version from Cargo.toml of the workspace root
     let toml_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let toml_src = std::fs::read_to_string(&toml_path)
         .unwrap_or_else(|e| panic!("read {}: {e}", toml_path.display()));
-    // Find the first `version = "..."` in [package] section
     let cli_version = toml_src
         .lines()
         .skip_while(|l| !l.trim_start().starts_with("[package]"))
@@ -635,7 +622,6 @@ fn sessions_dir_respects_vb_cache_dir_env_override() {
     let sessions = runtime_paths::cache_subdir(&["sessions"]);
     assert_eq!(sessions, tmp.path().join("virtuoso_bridge/sessions"));
 
-    // Restore
     match original_xdg {
         Some(v) => env::set_var("XDG_CACHE_HOME", v),
         None => env::remove_var("XDG_CACHE_HOME"),
@@ -768,7 +754,6 @@ fn legacy_state_file_tracks_active_cache_root() {
         tmp2.path().join("cache/virtuoso_bridge/state.json")
     );
 
-    // Restore
     match original_xdg {
         Some(v) => env::set_var("XDG_CACHE_HOME", v),
         None => env::remove_var("XDG_CACHE_HOME"),

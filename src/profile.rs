@@ -94,7 +94,6 @@ fn user_env_path_in(dir: &std::path::Path) -> PathBuf {
 /// Get the profile binding file path for the active virtualenv.
 /// Returns `None` if no virtualenv is active.
 fn venv_profile_path() -> Option<PathBuf> {
-    // Check VIRTUAL_ENV first
     if let Ok(venv) = env::var("VIRTUAL_ENV") {
         if !venv.is_empty() {
             return Some(PathBuf::from(&venv).join(PROFILE_BINDING_FILENAME));
@@ -117,7 +116,6 @@ fn read_profile_file(path: &PathBuf) -> Option<String> {
     let content = fs::read_to_string(path).ok()?;
     for line in content.lines() {
         let trimmed = line.trim();
-        // Skip comments
         if trimmed.starts_with('#') {
             continue;
         }
@@ -141,11 +139,9 @@ fn read_profile_from_env_file(path: &PathBuf) -> Option<String> {
     let content = fs::read_to_string(path).ok()?;
     for line in content.lines() {
         let trimmed = line.trim();
-        // Skip comments and empty lines
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        // Parse KEY=VALUE
         if let Some((key, value)) = trimmed.split_once('=') {
             if key.trim() == "VB_PROFILE" {
                 return clean_profile(value.trim());
@@ -165,7 +161,6 @@ pub fn resolve_profile(explicit: Option<&str>) -> Option<String> {
 
 /// Resolve the connection profile with full provenance information.
 pub fn resolve_profile_info(explicit: Option<&str>) -> ProfileResolution {
-    // 1. Explicit argument (CLI -p/--profile)
     if let Some(p) = explicit {
         if let Some(profile) = clean_profile(p) {
             return ProfileResolution {
@@ -176,7 +171,6 @@ pub fn resolve_profile_info(explicit: Option<&str>) -> ProfileResolution {
         }
     }
 
-    // 2. Process environment VB_PROFILE
     if let Ok(v) = env::var("VB_PROFILE") {
         if let Some(profile) = clean_profile(&v) {
             return ProfileResolution {
@@ -187,7 +181,6 @@ pub fn resolve_profile_info(explicit: Option<&str>) -> ProfileResolution {
         }
     }
 
-    // 3. Runtime --env file (check for VCLI_ENV_PATH)
     if let Ok(env_path) = env::var("VCLI_ENV_PATH") {
         let path = PathBuf::from(&env_path);
         if let Some(profile) = read_profile_from_env_file(&path) {
@@ -199,7 +192,6 @@ pub fn resolve_profile_info(explicit: Option<&str>) -> ProfileResolution {
         }
     }
 
-    // 4. Virtualenv binding file ($VIRTUAL_ENV/.vcli-profile)
     if let Some(venv_path) = venv_profile_path() {
         if let Some(profile) = read_profile_file(&venv_path) {
             return ProfileResolution {
@@ -232,7 +224,6 @@ pub fn resolve_profile_info(explicit: Option<&str>) -> ProfileResolution {
         };
     }
 
-    // 6. Default (legacy behaviour)
     ProfileResolution {
         profile: None,
         source: "default",
@@ -475,7 +466,6 @@ mod tests {
         let dir = dir.path();
         let profile_path = user_profile_path_in(dir);
 
-        // Bind.
         let path = bind_user_profile_in(dir, "t28_digital").unwrap();
         assert_eq!(path, profile_path);
         let content = fs::read_to_string(&profile_path).unwrap();
@@ -490,7 +480,6 @@ mod tests {
             "old entry should be replaced"
         );
 
-        // Clear.
         clear_user_profile_in(dir).unwrap();
         assert!(
             !profile_path.exists(),
@@ -507,7 +496,6 @@ mod tests {
         let dir = dir.path();
         let env_path = user_env_path_in(dir);
 
-        // Seed the legacy file with a VB_PROFILE line plus other settings.
         fs::write(
             &env_path,
             "VB_PROFILE=stale\nVB_REMOTE_HOST=eda-lab\nVB_PORT=12345\n",
@@ -550,7 +538,6 @@ mod tests {
             "read-only legacy VB_PROFILE= must surface an error, got Ok"
         );
 
-        // Restore writability so the temp dir can be cleaned up.
         let mut perms = fs::metadata(&env_path).unwrap().permissions();
         perms.set_mode(0o600);
         fs::set_permissions(&env_path, perms).unwrap();

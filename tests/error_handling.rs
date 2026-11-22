@@ -66,7 +66,6 @@ fn test_error_from_io() {
 /// Test VirtuosoResult::ok() vs skill_ok().
 #[test]
 fn test_virtuoso_result_types() {
-    // Create a mock result where SKILL returned nil (but transport succeeded)
     let result = VirtuosoResult {
         status: ExecutionStatus::Success,
         output: "nil".to_string(),
@@ -76,9 +75,7 @@ fn test_virtuoso_result_types() {
         metadata: HashMap::new(),
     };
 
-    // Transport layer succeeded
     assert!(result.ok());
-    // But SKILL returned nil
     assert!(!result.skill_ok());
 }
 

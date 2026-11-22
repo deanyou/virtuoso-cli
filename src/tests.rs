@@ -456,7 +456,6 @@ mod session_info_tests {
 
     #[test]
     fn session_load_missing_returns_error() {
-        // Point to a temp dir with no files
         let _tmp = TempDir::new().unwrap();
         let fake_id = "nonexistent-session-xyz";
         // load() uses the real cache dir, so just verify the error message shape
@@ -830,7 +829,6 @@ mod cm_tests {
         *r.use_control_master.lock().unwrap() = false;
         assert!(!*r.use_control_master.lock().unwrap());
 
-        // Verify SSH command no longer contains ControlMaster options
         let args = cmd_args(&r.build_ssh_cmd());
         assert!(
             !args.iter().any(|a| a.contains("ControlMaster")),
@@ -976,7 +974,6 @@ mod daemon_stats_tests {
 
     #[test]
     fn load_missing_file_returns_none() {
-        // Use an unlikely port to avoid collision with a real daemon
         assert!(DaemonStats::load(1).is_none());
     }
 
@@ -1949,7 +1946,6 @@ mod skill_command_tests {
     /// Test that eval's progn wrapping is correct for various inputs.
     #[test]
     fn eval_progn_wrapping_single_expression() {
-        // Verify that wrapping single expression in progn works correctly
         let code = "1+1";
         let wrapped = format!("progn(\n{}\n)", code);
         assert_eq!(wrapped, "progn(\n1+1\n)");
@@ -2063,13 +2059,11 @@ mod spectre_integration_tests {
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create sweep directories with multiple signals
         for sweep_idx in 1..=3 {
             let sweep_dir = raw.join(format!("sw1.sweep{}", sweep_idx));
             let point_dir = sweep_dir.join(sweep_idx.to_string());
             fs::create_dir_all(&point_dir).unwrap();
 
-            // Create tran.tran.tran with SWEEP/TRACE/VALUE sections
             let tran_file = point_dir.join("tran.tran.tran");
             let content = r#"SWEEP
 "time"
@@ -2091,21 +2085,17 @@ END"#
             fs::write(&tran_file, content).unwrap();
         }
 
-        // Parse the sweep directory
         let sweep_data =
             crate::spectre::parsers::parse_sweep_psf_directory(&raw).expect("parse should succeed");
 
-        // Verify we have 3 sweep points
         assert_eq!(sweep_data.len(), 3);
         for idx in 1..=3 {
             assert!(sweep_data.contains_key(&idx), "Missing sweep point {}", idx);
         }
 
-        // Parse as flat sweep points
         let points = crate::spectre::parsers::parse_sweep_flat(&raw).expect("parse should succeed");
         assert_eq!(points.len(), 3);
 
-        // Verify sweep point structure
         for (i, point) in points.iter().enumerate() {
             assert_eq!(point.index, i + 1);
             // Each point should have signal data
@@ -2124,7 +2114,6 @@ END"#
             let filename = format!("sw1-{:03}_tran.tran", i);
             let path = raw.join(filename);
 
-            // Create PSF content with time values
             let time_values: Vec<String> = (0..=100)
                 .map(|j| format!("{:.6}", j as f64 * 1e-8))
                 .collect();
@@ -2144,17 +2133,14 @@ END"#
 
     #[test]
     fn test_end_to_end_psf_ascii_regular() {
-        // Simulate regular (non-sweep) PSF output
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         let psf_dir = raw.join("psf");
         fs::create_dir_all(&psf_dir).unwrap();
 
-        // Create time signal
         let time_file = psf_dir.join("time.tran");
         fs::write(&time_file, "0.0\n1.0\n2.0\n").unwrap();
 
-        // Create voltage signals
         let vout_file = psf_dir.join("V(out).tran");
         fs::write(&vout_file, "0.0\n0.5\n1.0\n").unwrap();
 
@@ -2172,7 +2158,6 @@ END"#
 
     #[test]
     fn test_end_to_end_results_dir_fallback() {
-        // Test that results/ directory is used as fallback
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         let results_dir = raw.join("results");
@@ -2188,19 +2173,16 @@ END"#
 
     #[test]
     fn test_end_to_end_sweep_with_params() {
-        // Test sweep where each point has a parameter value
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Simulate VDS sweep with varying VGS values
         let sweep_params = [0.5, 1.0, 1.5, 2.0];
         for (idx, vgs) in sweep_params.iter().enumerate() {
             let sweep_dir = raw.join(format!("sw1.sweep{}", idx + 1));
             let point_dir = sweep_dir.join((idx + 1).to_string());
             fs::create_dir_all(&point_dir).unwrap();
 
-            // Create DC operating point output
             let dc_file = point_dir.join("dc_op.dc");
             let content = format!("SWEEP\n\"vgs\"\n{}\nTRACE\nVALUE\nEND", vgs);
             fs::write(&dc_file, content).unwrap();
@@ -2208,7 +2190,6 @@ END"#
 
         let points = crate::spectre::parsers::parse_sweep_flat(&raw).expect("parse should succeed");
 
-        // Verify we extracted the sweep parameter values
         assert_eq!(points.len(), 4);
         for (i, point) in points.iter().enumerate() {
             let expected_vgs = sweep_params[i];
@@ -2225,12 +2206,10 @@ END"#
 
     #[test]
     fn test_end_to_end_mixed_sweep_and_dc() {
-        // Test directory with both sweep and regular analysis
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create sweep structure
         let sweep_dir = raw.join("sw1.sweep1");
         let point_dir = sweep_dir.join("1");
         fs::create_dir_all(&point_dir).unwrap();
@@ -2238,18 +2217,15 @@ END"#
         let tran_file = point_dir.join("tran.tran.tran");
         fs::write(&tran_file, "SWEEP\n0.0\n1.0\n2.0\nTRACE\nVALUE\nEND").unwrap();
 
-        // Also create regular psf directory with DC analysis
         let psf_dir = raw.join("psf");
         fs::create_dir_all(&psf_dir).unwrap();
         let dc_file = psf_dir.join("dc_op.dc");
         fs::write(&dc_file, "0.5\n").unwrap();
 
-        // Sweep data should be returned
         let sweep_data =
             crate::spectre::parsers::parse_sweep_psf_directory(&raw).expect("parse should succeed");
         assert!(!sweep_data.is_empty());
 
-        // Verify psf data also works
         let psf_data =
             crate::spectre::parsers::parse_psf_ascii(&raw).expect("parse should succeed");
         assert!(!psf_data.is_empty());
@@ -2261,7 +2237,6 @@ END"#
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Empty directory should not cause errors
         let sweep_data =
             crate::spectre::parsers::parse_sweep_psf_directory(&raw).expect("parse should succeed");
         assert!(sweep_data.is_empty());
@@ -2273,7 +2248,6 @@ END"#
 
     #[test]
     fn test_sweep_point_scalar_extraction() {
-        // Test extracting scalar values from sweep points
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
@@ -2286,7 +2260,6 @@ END"#
             let point_dir = sweep_dir.join(i.to_string());
             fs::create_dir_all(&point_dir).unwrap();
 
-            // Use simple file name
             let dc_file = point_dir.join("dc.dc");
             // Format: SWEEP with parameter values, TRACE, VALUE (signal), signal value
             let content = format!(
@@ -2319,7 +2292,6 @@ END"#,
 
     #[test]
     fn test_psf_ascii_delta_compressed() {
-        // Test parsing delta-compressed PSF (stores only changes)
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         let psf_dir = raw.join("psf");
@@ -2348,7 +2320,6 @@ END"#;
 
     #[test]
     fn test_psf_signal_names_preserved() {
-        // Verify that signal names from file stems are preserved
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         let psf_dir = raw.join("psf");
@@ -2374,7 +2345,6 @@ END"#;
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create sweep directory
         let sweep_dir = raw.join("sw1.sweep1");
         let point_dir = sweep_dir.join("1");
         fs::create_dir_all(&point_dir).unwrap();
@@ -2384,7 +2354,6 @@ END"#;
         )
         .unwrap();
 
-        // Create flat file (should be ignored since sweep directories exist)
         fs::write(raw.join("sw1-000_tran.tran"), "0.0\n1.0\n2.0\n").unwrap();
 
         let sweep_data =

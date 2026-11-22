@@ -54,7 +54,6 @@ impl Auth {
             return Ok(());
         }
 
-        // Check lockout
         let lockout = self.lockout_until.load(Ordering::SeqCst);
         if lockout > 0 {
             let now = std::time::SystemTime::now()
@@ -67,7 +66,6 @@ impl Auth {
                     lockout - now
                 )));
             }
-            // Lockout expired
             self.lockout_until.store(0, Ordering::SeqCst);
             self.failed_attempts.store(0, Ordering::SeqCst);
         }

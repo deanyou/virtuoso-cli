@@ -29,7 +29,7 @@ fn tunnel_status_unreachable(port: u16) -> serde_json::Value {
         .args(["tunnel", "status", "--format", "json"])
         .env("VB_PORT", port.to_string())
         .env("VB_REMOTE_HOST", "compute-eda-42")
-        .env_remove("VB_SESSION") // ensure we don't pick up a real session
+        .env_remove("VB_SESSION")
         .output()
         .expect("vcli tunnel status should run");
 

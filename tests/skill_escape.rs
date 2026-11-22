@@ -29,10 +29,8 @@ fn test_escape_backslash() {
 /// Test complex strings with multiple special chars.
 #[test]
 fn test_escape_complex() {
-    // String with quotes and backslashes
     let input = r#"my"Lib\tool""#;
     let escaped = escape_skill_string(input);
-    // Backslash first, then quote
     assert!(escaped.contains(r#"\\"#));
     assert!(escaped.contains(r#"\""#));
 }

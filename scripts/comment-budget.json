@@ -4,7 +4,7 @@
   "examples": 207,
   "root": 105,
   "scripts": 143,
-  "src": 1904,
+  "src": 1845,
   "src/capability": 138,
   "src/client": 2420,
   "src/commands": 2654,
@@ -24,8 +24,8 @@
   "src/transaction": 24,
   "src/transport": 3574,
   "src/tui": 107,
-  "tests": 687,
+  "tests": 654,
   "tests/docs": 19
  },
- "markers": 145
+ "markers": 142
 }

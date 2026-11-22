@@ -26,7 +26,6 @@ class SyncContractTests(unittest.TestCase):
             source.parent.mkdir(parents=True)
             source.write_text('new skill')
             (root / '.agents/skills').mkdir(parents=True)
-            # Exclude existing link rule to isolate this fixture.
             saved = MODULE.SKILL_RULES
             try:
                 MODULE.SKILL_RULES = {}

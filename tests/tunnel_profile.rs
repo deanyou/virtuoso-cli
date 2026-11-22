@@ -133,7 +133,6 @@ fn vcli_profile_bind_user_then_clear() {
     let test_profile = "vcli_test_profile_xyz";
     let bin = vcli_bin();
 
-    // 1. Bind
     let bind = Command::new(&bin)
         .args([
             "profile",
@@ -165,7 +164,6 @@ fn vcli_profile_bind_user_then_clear() {
         profile_file.display()
     );
 
-    // 3. Show
     let show = Command::new(&bin)
         .args(["profile", "show", "--format", "json"])
         .env("HOME", home)
@@ -180,7 +178,6 @@ fn vcli_profile_bind_user_then_clear() {
         "VB_PROFILE env var should win"
     );
 
-    // 4. Clear
     let clear = Command::new(&bin)
         .args(["profile", "clear", "--user", "--format", "json"])
         .env("HOME", home)
@@ -192,7 +189,6 @@ fn vcli_profile_bind_user_then_clear() {
         String::from_utf8_lossy(&clear.stderr)
     );
 
-    // 5. Verify gone
     assert!(
         !profile_file.exists(),
         "the user binding should be removed; still there: {content}",

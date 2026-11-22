@@ -379,7 +379,6 @@ enum McpCmd {
 
 impl McpCmd {
     fn dispatch(&self) -> error::Result<serde_json::Value> {
-        // Initialize auth before serving (reads VCLI_API_KEY from env)
         Auth::init();
         match self {
             McpCmd::Serve => crate::mcp::server::run().map(|_| serde_json::json!({})),
@@ -2269,7 +2268,6 @@ fn dispatch_target(cmd: TargetCmd, format: OutputFormat) -> error::Result<serde_
                 )));
             }
 
-            // If we removed the active target, clear active_target
             if manager.active_target_name() == name {
                 manager.clear_active();
             }
@@ -2465,7 +2463,6 @@ fn dispatch_sim(
                         }
                         Some((label, path))
                     } else {
-                        // No colon — treat whole string as path, derive label from filename
                         let p = std::path::Path::new(s);
                         let label = p
                             .file_stem()
@@ -2908,7 +2905,6 @@ fn dispatch_rpc(
             // Build the session‑bound client from the SAME resolved context so
             // target identity (client_id, session‑binding) is preserved.
             let client = crate::client::bridge::VirtuosoClient::from_context(ctx)?;
-            // Read API key from environment if set (VCLI_API_KEY)
             let api_key = std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty());
             let request = crate::rpc::dispatcher::RpcRequest {
                 method,
@@ -3055,7 +3051,6 @@ fn main() {
         .with_writer(std::io::stderr)
         .init();
 
-    // Initialize auth (reads VCLI_API_KEY from env)
     Auth::init();
 
     let format = match &cli.format {
@@ -3176,7 +3171,6 @@ fn main() {
                 let hb = virtuoso_cli::session::SessionHeartbeat::new(interval);
                 hb.start();
                 tracing::info!("heartbeat daemon started (interval={}s)", interval);
-                // Keep the main thread alive — the heartbeat runs in background
                 loop {
                     std::thread::park();
                 }

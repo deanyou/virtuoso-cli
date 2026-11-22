@@ -953,7 +953,6 @@ impl Config {
     /// `pub(crate)` so that `commands::profile::show()` and integration
     /// tests can introspect resolution without going through `from_env`.
     pub(crate) fn resolve_profile() -> Option<String> {
-        // 1. Process environment VB_PROFILE
         if let Ok(v) = env::var("VB_PROFILE") {
             let trimmed = v.trim();
             if !trimmed.is_empty() {
@@ -961,7 +960,6 @@ impl Config {
             }
         }
 
-        // 2. Virtualenv binding ($VIRTUAL_ENV/.vcli-profile)
         if let Ok(venv) = env::var("VIRTUAL_ENV") {
             if !venv.is_empty() {
                 let binding_path = std::path::PathBuf::from(&venv).join(".vcli-profile");
@@ -1751,7 +1749,6 @@ remote_host = "eda-prod"
         let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
         let (_tmp, prev) = isolate_config_dir();
         let _restore = ConfigDirGuard(prev);
-        // Write a targets.yaml with one explicit target.
         let target_yaml = r#"
 active_target: prod
 targets:
@@ -1787,15 +1784,12 @@ targets:
     #[cfg(unix)]
     fn report_legacy_env_dotenv_fallback_emits_warning() {
         let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
-        // Pretend `~/.vcli/.env` exists with VB_PROFILE=set, by setting HOME
-        // to a tempdir.
         let prev_home = std::env::var_os("HOME");
         let dir = tempfile::tempdir().expect("home");
         std::fs::create_dir_all(dir.path().join(".vcli")).expect("mkdir");
         std::fs::write(dir.path().join(".vcli/.env"), "VB_PROFILE=stale-binding\n")
             .expect("write env");
         std::env::set_var("HOME", dir.path());
-        // Force a fresh config dir so the file lookup is consistent.
         let (_cfg, prev_cfg) = isolate_config_dir();
         let _restore = ConfigDirGuard(prev_cfg);
         let report = Config::build_report(None, Ok(())).expect("build_report");

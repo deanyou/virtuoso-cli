@@ -114,12 +114,10 @@ fn shape_grid_audit_reads_the_real_grid() {
 #[test]
 fn shape_grid_audit_uses_real_shape_accessors() {
     let s = ops::shape_grid_audit_skill("lib", "cell", "view");
-    // layer name, bounding box, vertices
     assert!(s.contains("car(shp~>lpp)"), "{s}");
     assert!(s.contains("caar(bbox)"), "{s}");
     assert!(s.contains("cadadr(bbox)"), "{s}");
     assert!(s.contains("shp~>points"), "{s}");
-    // accessors that do not exist / cannot evaluate
     assert!(!s.contains("~>layer~>name"), "{s}");
     assert!(!s.contains("~>x1"), "{s}");
     assert!(!s.contains("~>kind"), "{s}");
@@ -256,7 +254,6 @@ fn off_grid_counts_are_per_layer_and_reach_the_totals() {
     let raw = r#"(("M1" 100 3) ("M2" 100 200) ("M3" 100 20))"#;
     let (layers, _) = parse_grid_audit_output(raw);
     assert_eq!(layers.len(), 3);
-    // sorted by off_grid descending
     assert_eq!(layers[0], GridLayer("M2".into(), 100, 200));
     assert_eq!(layers[1], GridLayer("M3".into(), 100, 20));
     assert_eq!(layers[2], GridLayer("M1".into(), 100, 3));
@@ -276,13 +273,11 @@ fn empty_cellview_is_well_formed_and_reports_nothing() {
 
 #[test]
 fn parser_rejects_an_unreadable_result() {
-    // Not a list at all.
     assert!(!grid_audit_output_is_well_formed("not a sexp"));
     // A layer entry that is not the three-element (layer on off) tuple.
     assert!(!grid_audit_output_is_well_formed(r#"(("M1" 100))"#));
     // A count that is not a number.
     assert!(!grid_audit_output_is_well_formed(r#"(("M1" "foo" "bar"))"#));
-    // Garbage.
     let (layers, tails) = parse_grid_audit_output("(this is not s-expr at all");
     assert!(layers.is_empty());
     assert!(tails.is_empty());

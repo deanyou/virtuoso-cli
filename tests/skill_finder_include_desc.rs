@@ -117,7 +117,6 @@ fn include_desc_suffix_still_filters_by_name_shape() {
 #[test]
 fn include_desc_exact_still_uses_name_only() {
     let f = corpus();
-    // Exact name match
     let r = f.search("dbOpenCellView", SearchMode::Exact, 50, true);
     assert_eq!(names(&r), vec!["dbOpenCellView".to_string()]);
 

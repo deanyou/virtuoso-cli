@@ -334,7 +334,6 @@ fn prompts_get_rejects_missing_required_arguments() {
 #[test]
 fn mcp_serve_fails_fast_on_an_invalid_skills_dir() {
     let tmp = tempfile::tempdir().expect("tempdir");
-    // A file, not a directory.
     let not_a_dir = tmp.path().join("skills-file");
     std::fs::write(&not_a_dir, "not a directory").expect("write file");
 

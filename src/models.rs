@@ -501,7 +501,6 @@ impl TunnelState {
         } else if legacy.exists() {
             legacy
         } else {
-            // Default to primary for new writes; create the dir on demand.
             let _ = std::fs::create_dir_all(primary.parent().unwrap_or(&primary));
             primary
         }
