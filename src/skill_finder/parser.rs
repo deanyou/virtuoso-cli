@@ -88,7 +88,6 @@ pub fn parse_fnd_content(content: &str, source_file: &str) -> Vec<SkillEntry> {
     let mut i = 0;
 
     while i < bytes.len() {
-        // Skip whitespace and `;`-comments between entries.
         i = skip_ws_and_comments(bytes, i);
 
         if i >= bytes.len() {
@@ -101,7 +100,7 @@ pub fn parse_fnd_content(content: &str, source_file: &str) -> Vec<SkillEntry> {
             i += 1;
             continue;
         }
-        i += 1; // consume `(`
+        i += 1;
 
         // Inside the list: read 3 strings. Strings may contain any
         // character including `(` and `)`, so we don't try to
@@ -112,7 +111,6 @@ pub fn parse_fnd_content(content: &str, source_file: &str) -> Vec<SkillEntry> {
             if i >= bytes.len() || bytes[i] != b'"' {
                 break;
             }
-            // Consume opening `"`
             i += 1;
             let start = i;
             // Find closing `"`. Strings here are simple (no `\"` escapes
@@ -122,7 +120,6 @@ pub fn parse_fnd_content(content: &str, source_file: &str) -> Vec<SkillEntry> {
                 i += 1;
             }
             let end = i;
-            // Consume closing `"`
             if i < bytes.len() {
                 i += 1;
             }
@@ -163,7 +160,6 @@ fn skip_ws_and_comments(bytes: &[u8], start: usize) -> usize {
         if b.is_ascii_whitespace() {
             i += 1;
         } else if b == b';' {
-            // Skip to end of line
             while i < bytes.len() && bytes[i] != b'\n' {
                 i += 1;
             }
@@ -379,7 +375,6 @@ mod tests {
             "expected many entries from abstract.fnd, got {}",
             entries.len()
         );
-        // Spot-check a well-known function
         let gds = entries.iter().find(|e| e.name == "absImportGDS");
         assert!(gds.is_some(), "absImportGDS should be present");
         let gds = gds.unwrap();

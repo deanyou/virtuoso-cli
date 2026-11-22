@@ -169,14 +169,11 @@ impl CapabilitySet {
         plugin: Option<&CapabilityPlugin>,
         client_ip: Option<&IpAddr>,
     ) -> Result<(), CapabilityError> {
-        // First check basic capability permission
         if !self.permits_method(method) {
             return Err(CapabilityError::NotPermitted(method.to_string()));
         }
 
-        // If plugin is available, check extended rules
         if let Some(pl) = plugin {
-            // Check rate limiting
             for cap_name in &self.0 {
                 let name = format!("{:?}", cap_name).to_lowercase();
                 if !pl.check_rate_limit(&name) {
@@ -189,7 +186,6 @@ impl CapabilitySet {
                 }
             }
 
-            // Check IP whitelist
             for cap_name in &self.0 {
                 let name = format!("{:?}", cap_name).to_lowercase();
                 if !pl.permits_ip(&name, client_ip.unwrap_or(&"127.0.0.1".parse().unwrap())) {
@@ -201,7 +197,6 @@ impl CapabilitySet {
                 }
             }
 
-            // Check expiration
             for cap_name in &self.0 {
                 let name = format!("{:?}", cap_name).to_lowercase();
                 if pl.is_expired(&name) {
@@ -410,7 +405,7 @@ mod tests {
             "skill.eval",
             "skill.load",
             "skill.broadcast",
-            "skill",             // bare domain, no op
+            "skill",
             "skill.some_new_op", // unknown ops stay closed by default
         ] {
             assert!(!sch.permits_method(m), "{m} must stay Admin-only");
@@ -508,7 +503,6 @@ mod tests {
 
         let ip: IpAddr = "127.0.0.1".parse().unwrap();
 
-        // Set expiration explicitly
         plugin.set_expiration("schematic", 1);
 
         // Should pass initially
@@ -516,7 +510,6 @@ mod tests {
             .permits_with_plugin("schematic.list", Some(&plugin), Some(&ip))
             .is_ok());
 
-        // Wait for expiration
         std::thread::sleep(std::time::Duration::from_secs(2));
 
         // Should now fail due to expiration

@@ -107,7 +107,6 @@ impl PluginRegistry {
         if result.output.trim().is_empty() {
             Ok(Value::Null)
         } else {
-            // Try to parse as JSON, fall back to string
             match serde_json::from_str(&result.output) {
                 Ok(v) => Ok(v),
                 Err(_) => Ok(Value::String(result.output.trim().to_string())),

@@ -541,7 +541,6 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mut job = MaestroJob::new("s".into(), None, None);
         job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
-        // Cancel first.
         job.status = MaestroJobStatus::Cancelled;
         // Then the run completes on disk — terminal must win.
         std::fs::create_dir(tmp.path().join("psf")).unwrap();

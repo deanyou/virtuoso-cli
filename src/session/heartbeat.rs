@@ -86,7 +86,6 @@ impl SessionHeartbeat {
                     );
                 }
                 Ok(false) => {
-                    // Session is still stale — mark it
                     tracing::warn!(
                         "session '{}' on port {} is stale (Virtuoso pid={} may have crashed)",
                         session.id,

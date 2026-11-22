@@ -61,7 +61,6 @@ impl JobProgressTracker {
 
         let lines: Vec<&str> = content.lines().collect();
 
-        // Check for completion or errors first
         for line in lines.iter().rev() {
             let trimmed = line.trim();
             if trimmed.contains("completes with 0 errors") {
@@ -79,7 +78,6 @@ impl JobProgressTracker {
             }
         }
 
-        // Extract progress from simulation output
         let mut percent = None;
         let mut message = String::new();
         let mut iteration = None;
@@ -93,7 +91,6 @@ impl JobProgressTracker {
                 if let Some(end) = rest.find(char::is_whitespace) {
                     if let Ok(n) = rest[..end].parse::<u64>() {
                         iteration = Some(n);
-                        // Rough percent estimate based on iteration
                         if let Some(total) = self.total_iterations {
                             percent = Some((n as f32 / total as f32) * 100.0);
                         }
@@ -156,7 +153,6 @@ pub fn spawn_progress_tracker(
             match tracker.poll() {
                 Ok(Some(event)) => {
                     sink.emit(event);
-                    // Stop polling on terminal events
                     match &event {
                         JobEvent::Completed { .. }
                         | JobEvent::Failed { .. }

@@ -85,14 +85,12 @@ pub fn corner_skill(config: &CornerConfig) -> String {
     let model_file = escape_skill_string(&config.model_file);
     let analysis = analysis_skill(&config.analysis);
 
-    // Build corner data list
     let _corner_entries: Vec<String> = config
         .corners
         .iter()
         .map(|c| {
             let _name = escape_skill_string(&c.name);
             let section = escape_skill_string(&c.section);
-            // Collect extra vars
             let vars: Vec<String> = c
                 .vars
                 .iter()
@@ -124,7 +122,6 @@ pub fn corner_skill(config: &CornerConfig) -> String {
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Build corner names for identification
     let _corner_names: Vec<String> = config
         .corners
         .iter()
@@ -241,7 +238,6 @@ pub fn parse_skill_list(output: &str) -> Vec<Vec<String>> {
         }
     }
 
-    // Handle single value case
     if results.is_empty() && !output.starts_with('(') {
         results.push(vec![output.trim_matches('"').to_string()]);
     }

@@ -179,11 +179,9 @@ impl SKILLFinder {
             }
         };
 
-        // Sort by name
         let mut sorted: Vec<_> = results;
         sorted.sort_by(|a, b| a.name.cmp(&b.name));
 
-        // Apply limit
         sorted.into_iter().take(limit).collect()
     }
 
@@ -342,7 +340,6 @@ where
         )
     })?;
 
-    // Create cache directory
     std::fs::create_dir_all(&cache)?;
 
     // Find every remote SKILL Finder directory (DFII tree first, Spectre tree
@@ -397,7 +394,6 @@ where
             ));
         }
 
-        // Download each file
         for remote_file in &files {
             let base = std::path::Path::new(remote_file)
                 .file_name()
@@ -407,7 +403,6 @@ where
             let file_name = cache_file_name(remote_dir, base);
             let local_path = cache.join(&file_name);
 
-            // Build SCP command
             let scp_result = crate::transport::ssh::doc_transfer_command("scp", ssh_key)
                 .arg(format!("{}:{}", ssh_target, remote_file))
                 .arg(&local_path)
@@ -615,7 +610,6 @@ pub fn load_or_sync(
     ssh_key: Option<&str>,
     cadence_cshrc: Option<&str>,
 ) -> std::io::Result<PathBuf> {
-    // Try cache first
     if let Some(cache) = cache_dir(host) {
         if cache.exists() {
             let count = cache_file_count(host);
@@ -626,10 +620,8 @@ pub fn load_or_sync(
         }
     }
 
-    // Sync from remote with empty progress function
     let _ = sync_from_remote(host, ssh_target, ssh_key, cadence_cshrc, Some(|_: &str| ()))?;
 
-    // Load from cache
     let cache = cache_dir(host).ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::NotFound, "Cache directory not found")
     })?;
