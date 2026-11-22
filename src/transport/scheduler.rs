@@ -216,8 +216,6 @@ pub fn validate_capacity(config: &crate::config::Config) -> Result<(), Transport
             config.ssh_max_sessions, config.spectre_max_workers
         )));
     }
-    // Built directly rather than via `Self::from_config`, which calls back
-    // into this function.
     SchedulerLimits {
         total: config.ssh_max_sessions,
         bulk: config.ssh_max_bulk_sessions,
@@ -253,7 +251,7 @@ struct Waiter {
     seq: u64,
     priority: Priority,
     enqueued_at: Instant,
-    #[allow(dead_code)] // kept for diagnostics once `tunnel status` reports the queue
+    #[allow(dead_code)]
     request: RequestId,
 }
 
@@ -402,8 +400,6 @@ impl SessionScheduler {
                     after_secs: now.saturating_duration_since(deadline.0).as_secs().max(1),
                 });
             }
-            // Wake on the next release, or at the poll cap so the bulk
-            // starvation promotion is re-evaluated even without a release.
             let budget = deadline.remaining().min(POLL_CAP);
             let (guard, _) = self
                 .ready
@@ -475,8 +471,6 @@ impl SessionScheduler {
         if priority == Priority::Bulk {
             state.active_bulk = state.active_bulk.saturating_sub(1);
         }
-        // Every waiter re-evaluates `chosen_seq`, so a plain broadcast is
-        // correct even though at most one waiter can proceed.
         self.ready.notify_all();
     }
 }
@@ -552,9 +546,6 @@ mod tests {
 
     #[test]
     fn validate_rejects_a_reserve_that_starves_normal_work() {
-        // A reserve as large as the total leaves ordinary work nowhere to go:
-        // every normal and bulk request would queue forever. That is a
-        // deadlock, so it must be caught at configuration time.
         let bad = SchedulerLimits {
             total: 2,
             bulk: 1,
@@ -567,9 +558,6 @@ mod tests {
 
     #[test]
     fn validate_distinguishes_deadlock_from_a_legitimate_small_config() {
-        // Neither is a deadlock: total=1 serializes everything, and a bulk
-        // limit above the non-reserved pool merely lets bulk occupy all of it
-        // when bulk is the only work offered.
         SchedulerLimits {
             total: 1,
             bulk: 1,
@@ -695,7 +683,6 @@ mod tests {
 
     #[test]
     fn the_documented_defaults_satisfy_the_capacity_invariant() {
-        // The design: "10 >= 8 + 2".
         assert_eq!(SchedulerLimits::DEFAULT_TOTAL, 10);
         assert_eq!(CONTROL_RESERVE, 2);
         validate_capacity(&config_with(8, 10, 2)).expect("defaults must validate");
@@ -703,8 +690,6 @@ mod tests {
 
     #[test]
     fn too_few_sessions_for_the_worker_count_is_rejected() {
-        // The design requires this to be caught at configuration time rather
-        // than degrading into spurious QueueTimeouts during a sweep.
         let err = validate_capacity(&config_with(16, 10, 2)).expect_err("16 + 2 > 10");
         assert!(matches!(err, TransportError::Configuration(_)), "{err:?}");
         assert!(err.to_string().contains("16"), "must name the worker count");
@@ -716,11 +701,8 @@ mod tests {
 
     #[test]
     fn the_invariant_is_a_bound_not_an_equality() {
-        // More headroom than the minimum is fine.
         validate_capacity(&config_with(8, 12, 2)).expect("extra headroom is allowed");
-        // Exactly at the bound is fine.
         validate_capacity(&config_with(8, 10, 2)).expect("exactly at the bound");
-        // One below the bound is not.
         assert!(validate_capacity(&config_with(8, 9, 2)).is_err());
     }
 
@@ -730,14 +712,11 @@ mod tests {
         assert_eq!(l.total, 8);
         assert_eq!(l.bulk, 3);
         assert_eq!(l.urgent_reserve, 1);
-        // The capacity invariant is enforced on the way through.
         assert!(SchedulerLimits::from_config(&config_with(32, 8, 3)).is_err());
     }
 
     #[test]
     fn a_scheduler_built_from_a_validated_config_admits_a_full_worker_complement() {
-        // End-to-end: 8 workers must be able to hold 8 sessions at once and
-        // still leave the reserve free for urgent work.
         let cfg = config_with(8, 10, 2);
         let s = SessionScheduler::new(SchedulerLimits::from_config(&cfg).unwrap()).unwrap();
         let held: Vec<_> = (0..8)
@@ -762,7 +741,6 @@ mod tests {
 
     #[test]
     fn permits_up_to_the_total_are_granted_immediately() {
-        // total=4 with reserve=1 → three non-urgent slots plus the reserve.
         let s = sched(4, 2);
         let a = s.try_acquire(Priority::Normal).unwrap();
         let b = s.try_acquire(Priority::Normal).unwrap();
@@ -776,7 +754,6 @@ mod tests {
 
     #[test]
     fn non_urgent_work_cannot_take_the_reserved_slot() {
-        // total=3 with reserve=1 leaves 2 slots for normal work.
         let s = sched(3, 1);
         let _a = s.try_acquire(Priority::Normal).unwrap();
         let _b = s.try_acquire(Priority::Normal).unwrap();
@@ -796,13 +773,11 @@ mod tests {
             s.try_acquire(Priority::Bulk).is_none(),
             "bulk limit is 2 even though the total is 10"
         );
-        // Normal work is unaffected: it has its own headroom.
         assert!(s.try_acquire(Priority::Normal).is_some());
     }
 
     #[test]
     fn permit_release_returns_capacity() {
-        // total=3, reserve=1 → two non-urgent slots.
         let s = sched(3, 1);
         let a = s.try_acquire(Priority::Normal).unwrap();
         let _b = s.try_acquire(Priority::Normal).unwrap();
@@ -815,7 +790,6 @@ mod tests {
 
     #[test]
     fn expired_deadline_reports_queue_timeout_not_a_hang() {
-        // total=2, reserve=1 → the single non-urgent slot is held.
         let s = sched(2, 1);
         let _held = s.try_acquire(Priority::Normal).unwrap();
         let past = Deadline(Instant::now() - Duration::from_secs(1));
@@ -826,8 +800,6 @@ mod tests {
             matches!(err, TransportError::QueueTimeout { .. }),
             "got {err:?}"
         );
-        // QueueTimeout is precisely the error that proves nothing started, so
-        // the caller may resubmit.
         assert!(err.retryable());
         assert_eq!(s.stats().queued, 0, "the timed-out waiter must be removed");
     }
@@ -855,7 +827,6 @@ mod tests {
 
     #[test]
     fn equal_priority_work_is_fifo() {
-        // One non-urgent slot, three waiters: admitted in arrival order.
         let s = sched(2, 1);
         let held = s.try_acquire(Priority::Normal).unwrap();
         let order = Arc::new(Mutex::new(Vec::new()));
@@ -869,14 +840,6 @@ mod tests {
                     .unwrap();
                 ord.lock().unwrap().push(i);
             }));
-            // Stagger the spawns so arrival order is deterministic. Without
-            // this the assertion would be about the OS thread scheduler rather
-            // than about our own FIFO: a waiter that happens to enqueue second
-            // is legitimately served second.
-            //
-            // The *recording* order needs no such care: with a single slot,
-            // waiter `i` cannot return from `acquire` until waiter `i-1` has
-            // dropped its permit, which happens after it recorded itself.
             thread::sleep(Duration::from_millis(50));
         }
         drop(held);
@@ -888,9 +851,6 @@ mod tests {
 
     #[test]
     fn urgent_work_passes_queued_normal_work() {
-        // total=3, reserve=1 → two non-urgent slots, both held by normal work,
-        // with normal waiters queued behind them. An urgent waiter must go
-        // first once a slot frees.
         let s = sched(3, 1);
         let _h1 = s.try_acquire(Priority::Normal).unwrap();
         let h2 = s.try_acquire(Priority::Normal).unwrap();
@@ -935,9 +895,6 @@ mod tests {
 
     #[test]
     fn running_work_is_never_interrupted() {
-        // Urgent work may overtake *queued* work only. A running request keeps
-        // its slot until it finishes — including the reserved slot, once it is
-        // taken: filling the total blocks even urgent work.
         let s = sched(2, 1);
         let _normal = s.try_acquire(Priority::Normal).unwrap();
         let running_urgent = s.try_acquire(Priority::Urgent).unwrap();
@@ -949,24 +906,6 @@ mod tests {
 
     #[test]
     fn bulk_waiter_is_promoted_after_the_starvation_grace() {
-        // Strict priority would let a steady stream of normal commands starve
-        // bulk transfers forever, because bulk is the lowest class and has no
-        // reserved slot. This asserts the escape valve: once a bulk waiter has
-        // waited past the grace it is scheduled as `Normal`.
-        //
-        // Both non-reserved slots are held for the whole test, so the waiter
-        // cannot be admitted either way — what is observed is the promotion
-        // itself, not an admission.
-        //
-        // Both phases anchor on `enqueued_at`, the timestamp the spawned thread
-        // stamps when it acquires the mutex. The previous version used a fixed
-        // `thread::sleep(30ms)` which raced with the OS scheduler: on slow CI
-        // runners the test thread's lock acquisition could land >100ms past
-        // `enqueued_at`, making Phase 1 observe `Normal` instead of `Bulk` for
-        // a reason unrelated to the promotion logic. `enqueued_at` is captured
-        // in the same critical section as the observed `now`, which makes the
-        // elapsed-at-observation a *property of the data* and not of the
-        // *moment we happened to grab the lock*.
         let grace = Duration::from_millis(100);
         let s = SessionScheduler::new(SchedulerLimits {
             total: 3,
@@ -984,18 +923,10 @@ mod tests {
                 .expect("admitted once a slot frees")
         });
 
-        // Phase 1: wait for the bulk waiter to be enqueued, then verify it is
-        // still inside the grace window. If the wait's not in the queue within
-        // a generous deadline, panic with a clear message; if it is but the
-        // scheduling latency already exceeds the grace, panic with the
-        // *observable* cause instead of an opaque `left: Normal, right: Bulk`.
         let observed_deadline = Instant::now() + Duration::from_secs(2);
         let enqueued_at = loop {
             let state = s.state.lock().unwrap();
             if let Some(w) = state.waiters.first() {
-                // Same critical section: read both timestamps while the state
-                // is held, so `effective_priority(now, enqueued_at)` uses a
-                // `now` that cannot race with the waiter's continued waiting.
                 let now = Instant::now();
                 let elapsed = now.saturating_duration_since(w.enqueued_at);
                 let effective = state.effective_priority(w, now);
@@ -1020,12 +951,6 @@ mod tests {
             thread::sleep(Duration::from_millis(1));
         };
 
-        // Phase 2: sleep until we are *deterministically* past `enqueued_at +
-        // grace`, then verify the waiter is promoted to `Normal`. The `+ 50ms`
-        // margin absorbs the latency between waking from `sleep` and the test
-        // thread grabbing the mutex; the anchor makes the total wall-clock
-        // duration independent of how slow the scheduler is — only the
-        // arithmetic `target - now` matters.
         let target = enqueued_at + grace + Duration::from_millis(50);
         let now = Instant::now();
         if now < target {
@@ -1051,7 +976,6 @@ mod tests {
         let s = sched(10, 2);
         assert_eq!(s.effective_total(), 10);
         assert_eq!(s.reduce_capacity(4), 4);
-        // Reduction is permanent and never creates a second connection.
         assert_eq!(s.reduce_capacity(10), 4, "must not climb back up");
         assert_eq!(s.stats().effective_total, 4);
     }
@@ -1059,8 +983,6 @@ mod tests {
     #[test]
     fn capacity_is_never_reduced_below_the_urgent_reserve() {
         let s = sched(10, 2);
-        // A server reporting zero usable channels must not leave control work
-        // with nowhere to go.
         assert_eq!(s.reduce_capacity(0), 1);
     }
 
@@ -1069,7 +991,6 @@ mod tests {
         let s = sched(4, 1);
         let _a = s.try_acquire(Priority::Normal).unwrap();
         s.reduce_capacity(2);
-        // 2 total, 1 reserved → normal is full, urgent still has a slot.
         assert!(s.try_acquire(Priority::Normal).is_none());
         assert!(s.try_acquire(Priority::Urgent).is_some());
     }
@@ -1078,7 +999,6 @@ mod tests {
 
     #[test]
     fn one_hundred_concurrent_requests_never_exceed_the_limit() {
-        // "Tests prove … configured session and bulk limits are never exceeded."
         let s = sched(4, 2);
         let live = Arc::new(AtomicUsize::new(0));
         let peak = Arc::new(AtomicUsize::new(0));

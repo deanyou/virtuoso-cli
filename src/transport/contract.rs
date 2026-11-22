@@ -666,9 +666,6 @@ pub(crate) mod test_support {
 
     /// Assertions every implementation must satisfy. Runs without a network.
     pub fn shared_contract_suite(t: &dyn RemoteTransport) {
-        // An expired deadline fails before any remote work is attempted, and the
-        // failure is classified as QueueTimeout — which is what makes it safe
-        // to retry.
         let expired = Deadline(Instant::now() - Duration::from_secs(1));
         let req = CommandRequest::new("true", expired);
         match t.run_command(&req) {
@@ -677,8 +674,6 @@ pub(crate) mod test_support {
             Ok(_) => panic!("expired deadline must not execute"),
         }
 
-        // Forwarding is not yet provided by any shipping backend; the contract
-        // requires it to be reported, not panicked on.
         assert!(matches!(
             t.health(),
             Err(TransportError::UnsupportedOperation(_))
@@ -721,8 +716,6 @@ mod tests {
     fn with_exec_timeout_derives_deadline_and_keeps_timeout() {
         let req = CommandRequest::with_exec_timeout("true", Duration::from_secs(60));
         assert_eq!(req.timeout, Some(Duration::from_secs(60)));
-        // Deadline must outlast the execution timeout by the startup
-        // allowance, so a request is never doomed by its own timeout.
         let remaining = req.deadline.remaining();
         assert!(remaining > Duration::from_secs(60), "got {remaining:?}");
         assert!(remaining <= Duration::from_secs(60) + STARTUP_ALLOWANCE);
@@ -779,8 +772,6 @@ mod tests {
 
     #[test]
     fn retry_classification_ignores_message_text() {
-        // Two OutcomeUnknown errors with contradictory messages must classify
-        // identically — that is what "no message-string matching" means.
         let a = TransportError::OutcomeUnknown {
             request: RequestId::new(),
             reason: "connection reset".into(),
@@ -859,8 +850,6 @@ mod tests {
 
     #[test]
     fn virtuoso_error_mapping_preserves_exit_codes() {
-        // Configuration-ish failures stay usage errors; everything else stays a
-        // general error, matching VirtuosoError's existing classification.
         assert_eq!(
             TransportError::Configuration("x".into()).exit_code(),
             exit_codes::USAGE_ERROR

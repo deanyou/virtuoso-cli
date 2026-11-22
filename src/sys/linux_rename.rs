@@ -66,10 +66,10 @@ pub unsafe fn rename_noreplace(
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     let sys_num: libc::c_long = libc::SYS_renameat2 as libc::c_long;
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-    let sys_num: libc::c_long = -1; // sentinel: unknown arch — skip to fallback
+    let sys_num: libc::c_long = -1;
 
     if sys_num > 0 {
-        let pad: libc::c_long = 0; // renameat2 really takes 5 args; pad to 6
+        let pad: libc::c_long = 0;
         let res = unsafe {
             libc::syscall(
                 sys_num,
@@ -86,14 +86,8 @@ pub unsafe fn rename_noreplace(
         }
         let en = negate_err(res);
         if libc::ENOSYS != en {
-            // A real failure (EEXIST, ENOTEMPTY, EACCES…). Return and let the
-            // caller read errno.
             return -1;
         }
-        // ENOSYS means the syscall instruction is unsupported; the path below
-        // handles it. There is no arch with syscalls but no errno write, so
-        // the kernel has already set errno for us above via the libc crate's
-        // internal mechanism.
     }
 
     // ---- Slow path: lstat + renameat (present since glibc 2.0) ----
@@ -185,7 +179,6 @@ mod tests {
         assert_eq!(negate_err(-42), 42);
         assert_eq!(negate_err(0), 0);
         assert_eq!(negate_err(100), 0);
-        // Out-of-range negative (not an errno) → 0
         assert_eq!(negate_err(-5000), 0);
     }
 }

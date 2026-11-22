@@ -84,7 +84,6 @@ pub fn broadcast(code: &str, timeout: u64) -> Result<Value> {
         return Err(VirtuosoError::NotFound("no live sessions found".into()));
     }
 
-    // Collect results preserving original session order (by index)
     let results: Vec<(usize, Value)> = std::thread::scope(|s| {
         let handles: Vec<_> = sessions
             .iter()
@@ -221,10 +220,6 @@ pub fn eval(
         c
     };
 
-    // Wrap in progn on its own lines so that:
-    // - Multi-statement inputs work without user adding progn
-    // - Trailing `; comment` doesn't swallow the closing paren
-    // - Embedded newlines flow through unchanged
     let wrapped = format!("progn(\n{}\n)", skill);
 
     let client = VirtuosoClient::from_context(ctx)?;
@@ -247,8 +242,6 @@ fn load_finder(cfg: &Config, refresh: bool) -> Result<SKILLFinder> {
     let mut finder = SKILLFinder::new();
 
     if cfg.is_remote() {
-        // Remote mode: use cache or sync. Reject an explicit `native` backend
-        // before any ssh/scp sync runs, so the mismatch is never swallowed.
         crate::transport::backend::require_openssh(cfg)?;
         let host = cfg.remote_host.clone().unwrap_or_default();
         let target = cfg.ssh_target();
@@ -360,8 +353,6 @@ pub fn info(ctx: &crate::context::CommandContext, func_name: &str) -> Result<Val
         }));
     }
 
-    // Not documented. Offer near misses so the caller has somewhere to go, and
-    // say plainly what "not found" means here.
     let suggestions: Vec<_> = finder
         .search(func_name, SearchMode::Fuzzy, 10, false)
         .into_iter()
@@ -393,10 +384,6 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
         }
     }
 
-    // 2. For local, walk up from the Cadence binaries on PATH. `virtuoso`
-    //    first: a Spectre-only install has a `doc/finder/SKILL` too, but it
-    //    holds 2 databases instead of the DFII tree's 39 — stopping there is
-    //    what left every db/dd/ge/sch/hi lookup unanswerable.
     if !cfg.is_remote() {
         for bin in ["virtuoso", "spectre"] {
             let Ok(out) = std::process::Command::new("command")
@@ -410,9 +397,6 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
             if path.is_empty() || path == bin {
                 continue;
             }
-            // Walk up until a doc/finder/SKILL turns up, rather than assuming
-            // a fixed depth — `tools/dfII/bin/virtuoso` and
-            // `tools/spectre/bin/spectre` do not sit at the same level.
             let mut cur = std::path::Path::new(&path).parent();
             while let Some(dir) = cur {
                 let finder_dir = dir.join("doc/finder/SKILL");
@@ -578,8 +562,6 @@ mod tests {
 
     #[test]
     fn dash_reads_stdin_and_keeps_inner_quotes() {
-        // PowerShell 5.x drops the quotes in `vcli skill exec 'getShellEnvVar("USER")'`.
-        // `vcli skill exec -` must deliver the expression bytes unchanged.
         let raw = r#"getShellEnvVar("USER")"#;
         let mut input = Cursor::new(raw.as_bytes());
         let got = resolve_skill_exec_code(Some("-"), None, &mut input).unwrap();

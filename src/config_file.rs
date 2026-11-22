@@ -216,9 +216,6 @@ impl ConfigFile {
     /// the resolution layer, or the friendly file name (`remote_host`) passed by
     /// the TUI. Both spellings are accepted so a hand-edited file is robust.
     pub fn get(&self, key: &str, profile: Option<&str>) -> Option<String> {
-        // Layer-first, then key-spelling — same precedence as `get_with_loc`.
-        // Keep the two in sync by delegating; any change to lookup order must
-        // live in ONE place.
         self.get_with_loc(key, profile).map(|(v, _)| v)
     }
 
@@ -245,12 +242,6 @@ impl ConfigFile {
         let env = env_var_for(&friendly);
         let candidates = [friendly.as_str(), env.as_str()];
 
-        // Layer-first, then key-spelling. Within a layer we try every
-        // candidate key before falling through to the next layer — otherwise
-        // `timeout` in `[global]` would shadow `VB_TIMEOUT` in
-        // `[profile.<name>]` even though the latter is the higher-precedence
-        // layer. The correct order is: ALL profile candidates, THEN all
-        // global candidates.
         if let Some(p) = profile {
             if let Some(section) = self.profiles.get(p) {
                 for candidate in candidates {
@@ -288,7 +279,6 @@ impl ConfigFile {
     /// matching [`ConfigFile::get`].
     #[allow(dead_code)]
     pub fn has(&self, key: &str, profile: Option<&str>) -> bool {
-        // Same symmetric spelling handling as [`ConfigFile::get`].
         let friendly = file_key(key);
         let env = env_var_for(&friendly);
         let candidates = [friendly.as_str(), env.as_str()];
@@ -487,7 +477,6 @@ mod tests {
             "globals must come first: {rendered}"
         );
         assert!(rendered.contains("[profile.prod]\n"));
-        // And it must re-parse to the same thing.
         assert_eq!(parse(&rendered).unwrap(), f);
     }
 
@@ -506,16 +495,13 @@ mod tests {
     #[test]
     fn env_var_key_maps_to_friendly_file_key() {
         let f = parse("remote_host = \"eda\"\n").unwrap();
-        // Resolution layer passes the env-var name…
         assert_eq!(f.get("VB_REMOTE_HOST", None).as_deref(), Some("eda"));
         assert!(f.has("VB_REMOTE_HOST", None));
-        // …the TUI / init pass the friendly name directly.
         assert_eq!(f.get("remote_host", None).as_deref(), Some("eda"));
     }
 
     #[test]
     fn legacy_upper_case_file_key_is_also_accepted() {
-        // A buggy early build wrote VB_REMOTE_HOST; accept it so nothing breaks.
         let f = parse("VB_REMOTE_HOST = \"eda\"\n").unwrap();
         assert_eq!(f.get("VB_REMOTE_HOST", None).as_deref(), Some("eda"));
         assert_eq!(f.get("remote_host", None).as_deref(), Some("eda"));
@@ -523,7 +509,6 @@ mod tests {
 
     #[test]
     fn friendly_query_finds_upper_case_file_key() {
-        // Symmetric to the above: a friendly query finds an env-var-spelled key.
         let f = parse("VB_REMOTE_HOST = \"eda\"\n").unwrap();
         assert_eq!(f.get("remote_host", None).as_deref(), Some("eda"));
     }
@@ -545,9 +530,6 @@ mod tests {
         let mut f = ConfigFile::default();
         f.set(None, "spectre_args", "line1\nline2");
         let rendered = f.to_toml_string().unwrap();
-        // The official serializer never emits an invalid bare string: it uses a
-        // multiline string (`"""…"""`) or an escaped `\n`, both of which re-parse
-        // to the same value. The real guarantee is that the result round-trips.
         assert_eq!(parse(&rendered).unwrap(), f);
     }
 

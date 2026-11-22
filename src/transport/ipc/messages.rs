@@ -513,8 +513,6 @@ mod tests {
 
     #[test]
     fn ipc_error_round_trips_through_transport_error() {
-        // Exercise every variant, including the owned-string UnsupportedOperation
-        // that motivated making the contract variant owned.
         let samples: Vec<TransportError> = vec![
             TransportError::Configuration("c".into()),
             TransportError::DaemonUnavailable,
@@ -592,15 +590,12 @@ mod tests {
         assert_eq!(IpcError::UnsupportedBackend.code(), "unsupported_backend");
     }
 
-    // Guards against an accidental deadline that cannot be expressed on the wire.
     #[test]
     fn deadline_ms_fits_u64() {
         let d = Deadline::from_now(Duration::from_secs(30));
         let _ms: u64 = (d.0.elapsed().as_millis() as u64) + 30_000;
     }
 
-    // The pool drops a pooled connection exactly on connection-level errors,
-    // and keeps it for everything else. This classifies the full vocabulary.
     #[test]
     fn connection_level_classification() {
         assert!(IpcError::ConnectionFailed("tcp reset".into()).is_connection_level());
@@ -608,7 +603,6 @@ mod tests {
         assert!(IpcError::ProxyFailed("proxy refused".into()).is_connection_level());
         assert!(IpcError::DaemonUnavailable.is_connection_level());
 
-        // Business failures must never evict a healthy pooled connection.
         assert!(!IpcError::RemoteExit {
             status: 2,
             stderr: "ls: no such file".into()

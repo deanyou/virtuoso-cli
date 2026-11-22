@@ -57,9 +57,6 @@ pub fn render_detail(frame: &mut Frame, app: &App, theme: &Theme, area: Rect) {
         kv_line("  Value: ", val, theme, Some(theme.accent)),
     ];
 
-    // The value above is the one in config.toml. Say so explicitly when an
-    // environment variable outranks it — otherwise the field looks editable
-    // but has no effect.
     if let Some((var, value)) = &f.env_override {
         let notice = format!("overridden by {var}={value}");
         lines.push(Line::from(Span::styled(

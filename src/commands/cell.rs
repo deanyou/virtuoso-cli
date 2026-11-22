@@ -119,9 +119,6 @@ fn parse_grid_audit_sexp(raw: &str) -> Option<(Vec<GridLayer>, Vec<GridTail>)> {
             _ => return None,
         };
 
-        // The tails section is marked by a literal key. The SKILL emits it
-        // as a quoted string, so it is matched on the string value and not
-        // on the s-expression atom type.
         if sub.first().and_then(|v| v.as_str()) == Some(cell_ops::TAILS_KEY) {
             if let Some(SexpVal::List(tail_items)) = sub.get(1) {
                 for tail_item in tail_items {
@@ -140,9 +137,6 @@ fn parse_grid_audit_sexp(raw: &str) -> Option<(Vec<GridLayer>, Vec<GridTail>)> {
             continue;
         }
 
-        // A layer entry is exactly (layer on off) — `on` and `off` are
-        // per-LAYER shape counts, which is what makes the off-grid total
-        // (and therefore the drift verdict) reachable at all.
         if sub.len() != 3 {
             return None;
         }
@@ -235,7 +229,6 @@ pub fn verify_native(
     let total_off: u32 = layers.iter().map(|l| l.2).sum();
     let total_tails: u32 = tails.iter().map(|t| t.1).sum();
 
-    // Build details per layer (already sorted by off_grid desc inside the parser).
     let details: Vec<Value> = layers
         .iter()
         .map(|layer| {

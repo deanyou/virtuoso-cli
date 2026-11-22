@@ -355,10 +355,8 @@ impl MaestroJobStore {
         if canonical.exists() {
             MaestroJobStatus::Completed
         } else if psf.exists() {
-            // psf directory is up but the log is not yet — mid-run.
             MaestroJobStatus::Running
         } else if legacy.exists() {
-            // psf never materialised; this is a real early failure.
             MaestroJobStatus::Failed
         } else {
             MaestroJobStatus::Unknown
@@ -422,7 +420,6 @@ mod tests {
         let mut job = job;
         job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
         std::fs::create_dir(tmp.path().join("psf")).unwrap();
-        // no spectre.out → still running
         assert_eq!(
             MaestroJobStore::derive_status_from_run_dir(&job),
             MaestroJobStatus::Running
@@ -435,8 +432,6 @@ mod tests {
         let job = MaestroJob::new("s".into(), None, None);
         let mut job = job;
         job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
-        // Legacy signal: psf/ never came up, but a top-level spectre.out
-        // exists (Spectre died early). Canonical psf/spectre.out absent.
         std::fs::write(tmp.path().join("spectre.out"), "error").unwrap();
         assert_eq!(
             MaestroJobStore::derive_status_from_run_dir(&job),
@@ -447,7 +442,6 @@ mod tests {
     #[test]
     fn derive_status_unknown_missing_run_dir() {
         let job = MaestroJob::new("s".into(), None, None);
-        // No run_dir set → returns input status unchanged
         assert_eq!(
             MaestroJobStore::derive_status_from_run_dir(&job),
             MaestroJobStatus::Pending
@@ -479,7 +473,6 @@ mod tests {
 
         let list = store.list().unwrap();
         assert_eq!(list.len(), 2);
-        // Newest first: j2 comes before j1
         assert_eq!(list[0].session, "s2");
         assert_eq!(list[1].session, "s1");
     }
@@ -531,7 +524,6 @@ mod tests {
         let _id = job.job_id.clone();
         store.save(&job).unwrap();
 
-        // Failed jobs should not block resubmission
         assert!(store.find_by_run_id("run_xyz").unwrap().is_none());
     }
     // ---- M2: terminal status is sticky ------------------------------
@@ -542,7 +534,6 @@ mod tests {
         let mut job = MaestroJob::new("s".into(), None, None);
         job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
         job.status = MaestroJobStatus::Cancelled;
-        // Then the run completes on disk — terminal must win.
         std::fs::create_dir(tmp.path().join("psf")).unwrap();
         std::fs::write(tmp.path().join("psf").join("spectre.out"), "done").unwrap();
         assert_eq!(
@@ -558,7 +549,6 @@ mod tests {
         let mut job = MaestroJob::new("s".into(), None, None);
         job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
         job.status = MaestroJobStatus::Failed;
-        // psf appears later; Failed must remain.
         std::fs::create_dir(tmp.path().join("psf")).unwrap();
         std::fs::write(tmp.path().join("psf").join("spectre.out"), "x").unwrap();
         assert_eq!(
@@ -573,7 +563,6 @@ mod tests {
         let mut job = MaestroJob::new("s".into(), None, None);
         job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
         job.status = MaestroJobStatus::Completed;
-        // Operator marks Completed; later removal of psf/ must not flip back.
         assert_eq!(
             MaestroJobStore::derive_status_from_run_dir(&job),
             MaestroJobStatus::Completed
@@ -591,7 +580,6 @@ mod tests {
         let job = MaestroJob::new("s".into(), None, None);
         let id = job.job_id.clone();
         store.save(&job).unwrap();
-        // The .json exists; the .tmp must NOT.
         assert!(dir.join(format!("{id}.json")).exists());
         assert!(!dir.join(format!("{id}.json.tmp")).exists());
     }
@@ -605,7 +593,6 @@ mod tests {
         let mut job = MaestroJob::new("s".into(), None, None);
         job.name = Some("v1".into());
         store.save(&job).unwrap();
-        // Roundtrip + overwrite + reload should yield the latest snapshot.
         job.name = Some("v2".into());
         store.save(&job).unwrap();
         let reloaded = store.load(&job.job_id).unwrap().unwrap();
@@ -619,7 +606,6 @@ mod tests {
         let store = MaestroJobStore {
             dir: std::path::PathBuf::from("/tmp"),
         };
-        // path traversal: 36 chars but not a UUID
         let bad = "../../../tmp/evil"; // 20 chars
         let res = store.path(bad);
         assert!(res.is_err(), "must reject non-UUID job_id");

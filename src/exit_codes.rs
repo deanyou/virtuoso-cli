@@ -58,7 +58,6 @@ mod tests {
 
     #[test]
     fn explicit_exit_code_is_used() {
-        // A failed dismissal must not read as success.
         assert_eq!(exit_code_for_value(&json!({"exit_code": 1})), 1);
         assert_ne!(
             exit_code_for_value(&json!({"exit_code": 1, "status": "failed"})),

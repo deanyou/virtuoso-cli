@@ -345,7 +345,6 @@ impl SSHRunner {
             if should_retry_cm_failure(&CmRetryEvidence {
                 attempt_used_control_master,
                 exit_code: output.status.code(),
-                // stdout is discarded; the remote argv is `exit 0`.
                 stdout: Some(""),
                 stderr: &stderr,
             }) {
@@ -559,12 +558,8 @@ impl SSHRunner {
             .to_string_lossy()
             .into_owned();
         let quoted_dir = shell_quote(&remote_dir);
-        // Must pass "sh -c 'command'" as a single argument to SSH,
-        // otherwise "sh", "-c", "command" are concatenated without quotes,
-        // breaking commands with &&.
         let inner_cmd = format!("mkdir -p {quoted_dir} && cd {quoted_dir} && tar xf -");
 
-        // ssh stdout is piped to null here: the tar stream owns stdout.
         let output = self.attempt_with_cm_fallback_null_stdout(|use_control_master| {
             let tar = Command::new("tar")
                 .arg("cf")
@@ -643,10 +638,6 @@ impl SSHRunner {
             expected_size = expected_size,
             expected_sha_q = shell_quote(&expected_sha),
         );
-        // Must pass "sh -c 'command'" as a single argument to SSH,
-        // otherwise "sh", "-c", "command" are concatenated without quotes,
-        // breaking commands with &&.
-        // ssh stdout is piped to null here: stdin carries the payload.
         let output = self.attempt_with_cm_fallback_null_stdout(|use_control_master| {
             let mut cmd = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
             cmd.arg(format!("sh -c {}", shell_quote(&publish_cmd)));
@@ -683,7 +674,6 @@ impl SSHRunner {
                 .map_err(|e| VirtuosoError::Ssh(format!("failed to create local dir: {e}")))?;
         }
 
-        // stdout carries the downloaded file and is captured for real.
         let output = self.attempt_with_cm_fallback_captured_stdout(|use_control_master| {
             let mut cmd = self.build_ssh_cmd_with_mode(self.connect_timeout, use_control_master);
             cmd.arg("cat").arg(remote);
@@ -751,7 +741,6 @@ impl SSHRunner {
                 && should_retry_cm_failure(&CmRetryEvidence {
                     attempt_used_control_master,
                     exit_code: output.producer_status.code(),
-                    // ssh stdout is the tar stream and is not captured.
                     stdout: None,
                     stderr: &ssh_stderr,
                 })
@@ -813,8 +802,6 @@ impl SSHRunner {
             "StrictHostKeyChecking=accept-new",
             "-o",
             &format!("ConnectTimeout={connect_timeout}"),
-            // EDA lab KDC stalls masquerade as banner-exchange timeouts;
-            // disable both auth methods we never use.
             "-o",
             "GSSAPIAuthentication=no",
             "-o",
@@ -822,9 +809,6 @@ impl SSHRunner {
         ]);
 
         if use_control_master {
-            // ControlMaster: reuse SSH connections to avoid repeated handshakes.
-            // Disabled at runtime if a CM failure is detected (WSL2/Windows paths
-            // with non-ASCII characters, named pipe creation failures, etc.).
             let control_dir = crate::runtime_paths::cache_subdir(&["ssh"]);
             let _ = std::fs::create_dir_all(&control_dir);
             let control_path = control_dir.join("%h-%p-%r");
@@ -913,10 +897,6 @@ mod tests {
             .collect()
     }
 
-    // The doc caches used to spawn a bare `ssh <target>`, so a `VB_REMOTE_HOST`
-    // that is an address rather than an `~/.ssh/config` alias had no identity
-    // at all — the probe failed on authentication and got reported as "no
-    // Cadence manual found on the remote server".
     #[test]
     fn doc_transfer_command_passes_the_configured_identity() {
         let cmd = doc_transfer_command("scp", Some("/home/u/.ssh/id_ed25519"));
@@ -930,8 +910,6 @@ mod tests {
         assert!(args.contains(&"BatchMode=yes".to_string()), "{args:?}");
     }
 
-    // No key configured (or an empty one) means "let ssh decide" — an `-i` with
-    // an empty path is not the same thing, it is a file ssh cannot read.
     #[test]
     fn doc_transfer_command_omits_the_identity_when_there_is_none() {
         for key in [None, Some("")] {
@@ -1008,9 +986,6 @@ mod tests {
             .arg("-C")
             .arg(destination.path());
 
-        // 20s is a deadlock-detection bound, not a performance bound: a real
-        // deadlock never completes regardless of the budget. 5s was too tight
-        // and flaky on loaded machines.
         let output = run_streaming_pipeline(producer, consumer, Duration::from_secs(20)).unwrap();
         assert!(output.producer_status.success());
         assert!(output.consumer_status.success());
@@ -1066,10 +1041,6 @@ mod tests {
 
     #[test]
     fn uncaptured_stdout_cannot_prove_the_remote_command_never_started() {
-        // A caller that pipes stdout to null always sees an empty
-        // `Output.stdout`, so "empty stdout" carries no information about
-        // whether the remote command ran. The retry gate must stay closed for
-        // such a path, or an already-started remote command gets replayed.
         let stderr = "getsockname failed: Not a socket\nmuxclient socket(): Unknown error\n";
         assert!(
             !should_retry_cm_failure(&CmRetryEvidence {
@@ -1080,8 +1051,6 @@ mod tests {
             }),
             "uncaptured stdout cannot prove the command never started"
         );
-        // The same stderr with genuinely captured, genuinely empty stdout
-        // still retries — that is the `download` path.
         assert!(should_retry_cm_failure(&CmRetryEvidence {
             attempt_used_control_master: true,
             exit_code: Some(255),
@@ -1100,9 +1069,6 @@ mod tests {
         /// An exit status with code 255 — the code ssh uses when the client
         /// fails before a remote status exists.
         fn exit_255() -> std::process::ExitStatus {
-            // There is no portable way to synthesise an arbitrary exit
-            // status (`from_raw` is unix-only, `from` takes no integer), so
-            // ask a real process to exit with 255.
             std::process::Command::new(if cfg!(windows) { "cmd" } else { "sh" })
                 .args(if cfg!(windows) {
                     ["/C", "exit 255"]
@@ -1159,7 +1125,6 @@ mod tests {
     fn file_transfer_call_sites_use_the_matching_stdout_helper() {
         let source = include_str!("ssh.rs");
 
-        // The three production file-transfer call sites.
         let production_calls: Vec<&str> = source
             .lines()
             .map(str::trim)

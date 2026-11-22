@@ -145,11 +145,8 @@ mod imp {
                 IdentityError::Unreadable(format!("{stat_path}: {e}"))
             }
         })?;
-        // `comm` is parenthesised and may contain spaces and parens, so split
-        // on the *last* ')' and index from there.
         let after_comm = stat.rsplit_once(')').map(|(_, rest)| rest).unwrap_or(&stat);
         let fields: Vec<&str> = after_comm.split_whitespace().collect();
-        // Field 3 is `state`, so field 22 (`starttime`) is index 19.
         let start_identity = fields
             .get(19)
             .and_then(|s| s.parse::<u64>().ok())
@@ -189,10 +186,6 @@ mod imp {
             )
         };
         if ret != 0 {
-            // Return the raw errno so callers can distinguish "no such
-            // process" from a genuine read failure. Matching on the formatted
-            // `io::Error` text would never match: it renders as
-            // "No such process (os error 3)", not "ESRCH".
             return Err(std::io::Error::last_os_error().raw_os_error().unwrap_or(0));
         }
         Ok(len)
@@ -216,9 +209,6 @@ mod imp {
         let mut buf = [0u8; 1024];
         let len = sysctl_bytes(&mut mib, &mut buf)
             .map_err(|errno| map_errno(errno, "KERN_PROC_PID", pid))?;
-        // On macOS an absent PID is *not* an error: sysctl succeeds with a
-        // zero-length result (errno ESRCH is not reported). Verified against
-        // pids 41000 / 99999 / 999999, which return ret=0 len=0.
         if len == 0 {
             return Err(IdentityError::NoSuchProcess(pid));
         }
@@ -234,13 +224,10 @@ mod imp {
     /// Executable path via `KERN_PROCARGS2`: an `int argc` followed by
     /// NUL-terminated strings, the first of which is the exec path.
     fn exe_path(pid: u32) -> Result<PathBuf, IdentityError> {
-        // KERN_PROCARGS2 is a top-level KERN_* entry, not a KERN_PROC
-        // subcommand: three elements, not four.
         let mut mib = [CTL_KERN, KERN_PROCARGS2, pid as libc::c_int];
         let mut buf = vec![0u8; 64 * 1024];
         let len = sysctl_bytes(&mut mib, &mut buf)
             .map_err(|errno| map_errno(errno, "KERN_PROCARGS2", pid))?;
-        // Same zero-length convention as `start_time`.
         if len == 0 {
             return Err(IdentityError::NoSuchProcess(pid));
         }
@@ -264,8 +251,6 @@ mod imp {
     }
 
     pub(super) fn of_pid(pid: u32) -> Result<ProcessIdentity, IdentityError> {
-        // Both attributes are mandatory: a partially-read identity must fail
-        // closed rather than compare as "empty equals empty".
         let start_identity = start_time(pid)?;
         let executable_path = exe_path(pid)?;
         Ok(ProcessIdentity {
@@ -326,15 +311,10 @@ mod imp {
     pub(super) fn of_pid(pid: u32) -> Result<ProcessIdentity, IdentityError> {
         use ffi::*;
 
-        // All fallible Win32 calls are written out sequentially rather than
-        // inside a closure: an `unsafe` block does not extend into a closure
-        // body, and this module cannot be compiled off-Windows to catch that.
         unsafe {
             let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
             if handle.is_null() {
                 let err = GetLastError();
-                // A pid that is not in use fails this way; anything else
-                // (access denied on a protected process) is a read failure.
                 return if err == ERROR_INVALID_PARAMETER {
                     Err(IdentityError::NoSuchProcess(pid))
                 } else {
@@ -377,7 +357,6 @@ mod imp {
                     "QueryFullProcessImageNameW({pid}) failed: {err}"
                 )));
             }
-            // `size` is the written length in u16 code units.
             let path = String::from_utf16_lossy(&buffer[..size as usize]);
             CloseHandle(handle);
 
@@ -437,7 +416,6 @@ mod tests {
 
     #[test]
     fn pid_reuse_is_detected_by_start_identity() {
-        // Same PID, different process: the whole reason PID alone is rejected.
         let recorded = identity(42, "/usr/bin/vcli", 1000);
         let reused = identity(42, "/usr/bin/vcli", 9999);
         assert!(!recorded.matches(&reused));
@@ -473,8 +451,6 @@ mod tests {
 
     #[test]
     fn unknown_platform_is_unverifiable_not_silent_success() {
-        // The property that closes the Windows `taskkill /F` gap: where the
-        // identity cannot be read, the answer is a refusal.
         let recorded = identity(999_999, "/usr/bin/vcli", 1);
         let result = authorize_signal(&recorded);
         assert!(matches!(
@@ -495,7 +471,6 @@ mod tests {
             !me.executable_path.as_os_str().is_empty(),
             "executable path must be resolved"
         );
-        // The same PID looked up again yields the same identity.
         let again = ProcessIdentity::of_pid(me.pid).expect("re-read own identity");
         assert!(me.matches(&again));
     }
@@ -512,9 +487,6 @@ mod tests {
     fn macos_start_time_is_plausible_and_agrees_with_ps_when_available() {
         let me = ProcessIdentity::current().unwrap();
 
-        // Always true: the parsed start time must be in the past and, for a
-        // test process, within the last day. This alone catches an
-        // endianness or offset mistake in the kinfo_proc read.
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -526,9 +498,6 @@ mod tests {
             me.start_identity
         );
 
-        // Cross-check against `ps`, which reads the same value through
-        // libproc. Sandboxed runners may forbid spawning it, in which case the
-        // plausibility checks above are the assertion.
         let Ok(ps) = std::process::Command::new("ps")
             .args(["-o", "lstart=", "-p", &me.pid.to_string()])
             .output()
@@ -542,7 +511,6 @@ mod tests {
         if lstart.is_empty() {
             return;
         }
-        // ps prints e.g. "Sun Aug 30 05:20:00 2026" — the trailing year.
         let ps_year = lstart.split_whitespace().last().unwrap_or("");
         let ours = chrono::DateTime::<chrono::Utc>::from_timestamp(me.start_identity as i64, 0)
             .expect("start time must be a valid timestamp")
@@ -559,8 +527,6 @@ mod tests {
     fn macos_exe_path_matches_current_exe() {
         let me = ProcessIdentity::current().unwrap();
         let real = std::env::current_exe().unwrap();
-        // `KERN_PROCARGS2` may report the path the process was invoked with, so
-        // compare the resolved file name rather than the full path.
         assert_eq!(
             me.executable_path.file_name(),
             real.file_name(),
@@ -582,18 +548,12 @@ mod tests {
             0x0000_0002_0000_0003
         );
         assert_eq!(filetime_to_u64(u32::MAX, u32::MAX), u64::MAX);
-        // Distinct processes must produce distinct markers.
         assert_ne!(filetime_to_u64(1, 2), filetime_to_u64(1, 3));
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn missing_pid_reports_no_such_process_not_unreadable() {
-        // Regression guard: errno must be mapped by *code* (ESRCH), not by
-        // matching the formatted `io::Error` text, which reads
-        // "No such process (os error 3)" and never contains "ESRCH".
-        // Not `u32::MAX`: as a `c_int` that is -1, which the kernel handles
-        // specially rather than reporting ESRCH. macOS pid_max is 100000.
         match ProcessIdentity::of_pid(999_999) {
             Err(IdentityError::NoSuchProcess(_)) => {}
             other => panic!("expected NoSuchProcess for a dead pid, got {other:?}"),

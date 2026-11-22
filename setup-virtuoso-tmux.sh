@@ -20,7 +20,6 @@ CLI_DIR="${VIRTUOSO_CLI_DIR:-$HOME/git/virtuoso-cli}"
 
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 
-# Capture pane IDs instead of assuming the user's base-index/pane-base-index.
 LEFT_PANE="$(tmux new-session -d -P -F '#{pane_id}' -s "$SESSION" -x 180 -y 45)"
 RIGHT_PANE="$(tmux split-window -d -h -P -F '#{pane_id}' -t "$LEFT_PANE")"
 

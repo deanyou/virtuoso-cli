@@ -144,10 +144,8 @@ mod tests {
 
     #[test]
     fn wrap_cjk_counts_2_cols() {
-        // "中文" is 2 chars, 4 display cols. width=4 fits on one line.
         let out = wrap_message_lines("中文", 4);
         assert_eq!(out, vec!["中文".to_string()]);
-        // width=2 fits just one CJK char per line
         let out2 = wrap_message_lines("中文", 2);
         assert_eq!(out2, vec!["中".to_string(), "文".to_string()]);
     }

@@ -71,9 +71,6 @@ pub fn run(if_not_exists: bool) -> Result<Value> {
         )));
     }
 
-    // Parse the template the same way a real config file is parsed: if the
-    // shipped template is ever not valid TOML, `vcli init` fails here instead
-    // of handing the user a file that breaks their next command.
     ConfigFile::parse(CONFIG_TEMPLATE, &path)?;
 
     if let Some(dir) = path.parent() {

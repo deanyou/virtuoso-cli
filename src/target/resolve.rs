@@ -63,15 +63,8 @@ pub fn resolve_selection(
                     return Ok(Selection::EnvTarget(value));
                 }
             }
-            // With no explicit flags we implicitly rely on the active target, so
-            // a missing/corrupt targets.yaml is a real error here (the report's
-            // rule: only report corrupt config on paths that actually need it —
-            // explicit --profile never reaches this branch).
             let manager = TargetManager::load()
                 .map_err(|e| VirtuosoError::Config(format!("failed to load targets: {e}")))?;
-            // Distinguish "active_target unset" (fall back to legacy) from
-            // "active_target set but its definition is missing" (error). The
-            // latter is an inconsistent config and must not silently degrade.
             if let Some(name) = manager.active_target_raw() {
                 if manager.get(name).is_none() {
                     return Err(VirtuosoError::Config(format!(
@@ -273,8 +266,6 @@ mod tests {
     #[serial]
     #[test]
     fn invalid_active_target_errors() {
-        // active_target is set to a name whose definition was deleted: this is
-        // an inconsistent config and must error, not silently fall back.
         std::env::remove_var("VB_TARGET");
         let err = with_targets_dir(|home| {
             write_targets(
@@ -307,8 +298,6 @@ mod tests {
     #[serial]
     #[test]
     fn unset_active_target_does_not_implicitly_select_default() {
-        // An unset active_target must fall back to legacy env even when a
-        // target literally named "default" exists — no implicit default pick.
         std::env::remove_var("VB_TARGET");
         let sel = with_targets_dir(|home| {
             write_targets(
@@ -380,10 +369,6 @@ mod tests {
     #[serial]
     #[test]
     fn resolve_profile_flow_ignores_vb_target() {
-        // Regression: resolve(None, Some(profile)) must NOT be hijacked by a
-        // leftover ambient VB_TARGET. The old from_env_with_profile read
-        // VB_TARGET first and would have resolved to the "test" target here.
-        // Assert the final config comes from the profile/legacy path.
         std::env::set_var("VB_TARGET", "test");
         std::env::set_var("VB_REMOTE_HOST", "sentinel-host");
         std::env::set_var("VB_PORT", "65432");

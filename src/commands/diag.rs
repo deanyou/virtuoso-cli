@@ -151,9 +151,6 @@ fn batch_read_locks(transport: &dyn RemoteTransport, paths: &[String]) -> Result
     if paths.is_empty() {
         return Ok(Vec::new());
     }
-    // Build a single command that for each path echoes a delimiter, then the
-    // cat contents, then the stat mtime. NULL-delimited output keeps us safe
-    // from newlines in owner records.
     let mut script = String::from("set -e\n");
     for p in paths {
         let qp = shell_quote(p);
@@ -171,15 +168,12 @@ fn batch_read_locks(transport: &dyn RemoteTransport, paths: &[String]) -> Result
 }
 
 fn parse_batch_output(stdout: &str, paths: &[String]) -> Vec<CdsLockInfo> {
-    // Output is a sequence of ---LOCK---\n<contents>\n---STAT---\n<mtime>\n---END---\n
-    // We split on ---LOCK--- and then ---STAT--- / ---END--- to extract each record.
     let mut out = Vec::new();
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs_f64())
         .unwrap_or(0.0);
     for chunk in stdout.split("---LOCK---").skip(1) {
-        // chunk looks like: "\n<contents>\n---STAT---\n<mtime>\n---END---\n"
         let stat_split: Vec<&str> = chunk.splitn(2, "---STAT---").collect();
         if stat_split.len() != 2 {
             continue;
@@ -221,12 +215,9 @@ fn parse_batch_output(stdout: &str, paths: &[String]) -> Vec<CdsLockInfo> {
 }
 
 fn parse_owner_record(rec: &str) -> (Option<String>, Option<String>, Option<u32>) {
-    // Cadence writes: owner@host:pid:start_time  (e.g. "meow@eda:12345:1717820000")
-    // start_time is itself ":"-separated so we split from the right.
     if rec.is_empty() {
         return (None, None, None);
     }
-    // owner@host:pid:start_time  →  at most 3 colons.
     let mut iter = rec.rsplit(':');
     let start_time = iter.next(); // ignore
     let pid_str = iter.next().unwrap_or("");
@@ -241,7 +232,7 @@ fn parse_owner_record(rec: &str) -> (Option<String>, Option<String>, Option<u32>
         Some((o, h)) => (Some(o.to_string()), Some(h.to_string())),
         None => (None, Some(rest.to_string())),
     };
-    let _ = start_time; // start_time is informational; not surfaced separately.
+    let _ = start_time;
     (owner, host, pid)
 }
 

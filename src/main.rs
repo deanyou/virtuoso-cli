@@ -3,8 +3,6 @@ use tracing_subscriber::EnvFilter;
 mod async_runtime;
 mod auth;
 mod capability;
-// The binary uses only part of the shared hung-channel vocabulary; the rest
-// is used by the daemon (see the library crate).
 #[allow(dead_code)]
 mod channel_state;
 mod client;
@@ -1998,9 +1996,6 @@ fn dispatch_profile(
     use virtuoso_cli::profile::{BindScope, ProfileResolution};
     match cmd {
         ProfileCmd::Show => {
-            // `--profile`/`-p` must win over the ambient VB_PROFILE. Config
-            // management skips full connection-target resolution, so the CLI
-            // profile is threaded here explicitly.
             let info: ProfileResolution =
                 virtuoso_cli::profile::resolve_profile_info(cli_profile.as_deref());
             Ok(serde_json::json!({
@@ -2357,13 +2352,6 @@ fn dispatch_cell(
         CellCmd::Close { discard } => commands::cell::close(ctx, !discard),
         CellCmd::Info => commands::cell::info(ctx),
         CellCmd::VerifyNative { lib, cell, view } => {
-            // The command returns Ok(json!({"status": "drift"|"ok"|"dangling", ...}))
-            // so callers always get the JSON breakdown. For CI scripts the
-            // documented contract is "off_grid > 0 → non-zero exit", which we
-            // satisfy at the dispatch layer (rather than process::exit(2)
-            // inside the command) so the framework's error reporting +
-            // ledger records the failure with the standard error_type and
-            // exit_code paths.
             let v = commands::cell::verify_native(ctx, &lib, &cell, &view)?;
             if v.get("status").and_then(|s| s.as_str()) == Some("drift") {
                 let off = v.get("off_grid").and_then(|n| n.as_u64()).unwrap_or(0);
@@ -2444,10 +2432,6 @@ fn dispatch_sim(
         SimCmd::JobList => commands::sim::job_list(),
         SimCmd::JobCancel { id } => commands::sim::job_cancel(&id),
         SimCmd::RunParallel { inputs } => {
-            // Parse "label:path" pairs. Label may contain colons if path is absolute.
-            // Strategy: for each input, split on first ':' — the part before is label,
-            // the part after (if any) is path. If no ':' found, use the whole string as
-            // both label and path (error if path doesn't exist).
             let parsed: Vec<(String, String)> = inputs
                 .iter()
                 .filter_map(|s| {
@@ -2902,8 +2886,6 @@ fn dispatch_rpc(
         RpcCmd::Call { method, params } => {
             let params: serde_json::Value =
                 serde_json::from_str(&params).map_err(crate::error::VirtuosoError::Json)?;
-            // Build the session‑bound client from the SAME resolved context so
-            // target identity (client_id, session‑binding) is preserved.
             let client = crate::client::bridge::VirtuosoClient::from_context(ctx)?;
             let api_key = std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty());
             let request = crate::rpc::dispatcher::RpcRequest {
@@ -2923,37 +2905,13 @@ fn dispatch_rpc(
 fn main() {
     let cli = Cli::parse();
 
-    // Target/profile selection: resolve the precedence once here so the rest
-    // of the process sees a single, consistent selection. `--target` and
-    // `--profile` are mutually exclusive (see target::resolve).
-    //
-    // P0-A: the effective Config is resolved exactly once and handed to
-    // migrated command families (tunnel) via CommandContext. Not-yet-migrated
-    // families still call Config::from_env(), so they are driven through the
-    // VB_TARGET/VB_PROFILE bridge — set from the SAME single selection to keep
-    // every path consistent until their migration lands.
-    //
-    // Target/profile/init management commands skip connection-target
-    // resolution — they manipulate targets/profiles rather than connect
-    // through them. `Config` (i.e. `config check`) is intentionally NOT
-    // excluded: it must report the config that the selected target/profile
-    // would produce, so `--target prod config check` diagnoses the prod
-    // target's settings.
     use crate::target::resolve::{resolve_from_selection, resolve_selection, Selection};
     let needs_config = !matches!(
         &cli.command,
         Commands::Target(_) | Commands::Profile(_) | Commands::Init { .. }
     );
-    // Pre-check error captured during selection/resolve so Config commands
-    // can surface it in the structured report (valid=false + ILLEGAL_CONFIG
-    // diagnostic) without aborting. Non-Config commands already exited above.
     let mut pre_check: Option<error::VirtuosoError> = None;
     let ctx: Option<crate::context::CommandContext> = if needs_config {
-        // Resolve the selection FIRST so the env-var bridge can be set.
-        // For Config commands, a selection failure must NOT exit — otherwise
-        // a broken active_target or corrupt targets.yaml would block
-        // diagnostics. We capture the error and let build_report() surface
-        // it as JSON.
         let selection = match resolve_selection(cli.target.as_deref(), cli.profile.as_deref()) {
             Ok(s) => Some(s),
             Err(e) => {
@@ -2970,7 +2928,6 @@ fn main() {
         if let Some(selection) = selection {
             match &selection {
                 Selection::CliTarget(name) => {
-                    // Existence validated below by resolve_from_selection.
                     std::env::set_var("VB_TARGET", name);
                 }
                 Selection::ActiveTarget(name) => {
@@ -2986,11 +2943,6 @@ fn main() {
                 }
             }
 
-            // P0-A: single immutable Config for this invocation. Migrated
-            // commands receive it via CommandContext and must not re-read env.
-            //
-            // Config commands defer resolve errors to build_report so the
-            // structured JSON payload is always emitted — never a stderr exit.
             let resolved = match resolve_from_selection(selection) {
                 Ok(r) => Some(r),
                 Err(e) => {
@@ -3040,9 +2992,6 @@ fn main() {
         "info"
     };
 
-    // Diagnostics go to **stderr**, never stdout: every command has a
-    // `--format json` mode whose stdout is meant to be piped (`| jq`), and a
-    // single tracing line on stdout would make that output unparseable.
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level)),
@@ -3059,25 +3008,6 @@ fn main() {
         None => OutputFormat::resolve(None),
     };
 
-    // Propagate --session so VirtuosoClient::from_env() picks it up.
-    //
-    // Maestro subcommands define their own --session for Maestro session names
-    // (e.g. "fnxSession0"), which are NOT bridge session IDs. Propagating a
-    // Maestro session name to VB_SESSION causes VirtuosoClient::from_env() to
-    // look for a non-existent bridge session file and fall back to VB_PORT=0,
-    // producing ECONNREFUSED. Maestro commands therefore need the extra
-    // classification step below instead of a blanket skip.
-    //
-    // A Maestro command's --session may legitimately name EITHER namespace
-    // (clap folds the global flag and the subcommand flag into one value), so
-    // the value is classified before it is used:
-    //   - bridge session id (<host>-<user>-<port>) → select that Virtuoso
-    //   - "fnxSessionN"                         → Maestro session only
-    //   - anything else                          → hard error, never a guess
-    //
-    // An explicit VB_SESSION always wins: exporting it is a documented,
-    // supported way to pick the Virtuoso instance, and then there is nothing
-    // left to disambiguate.
     let session_from_env = std::env::var("VB_SESSION").ok();
     let mut session_arg_error: Option<error::VirtuosoError> = None;
     if session_from_env.is_none() {
@@ -3101,9 +3031,6 @@ fn main() {
     let cli_args: Vec<String> = std::env::args().collect();
     let cli_session = cli.session.clone();
 
-    // An unclassifiable --session on a Maestro command must fail before any
-    // connection is attempted: quietly connecting to some *other* Virtuoso
-    // instance is exactly the failure mode this guard exists to prevent.
     if let Some(e) = session_arg_error {
         let exit_code = e.exit_code();
         history::append_cmd(&cli_args, cli_session.as_deref(), exit_code);
@@ -3115,10 +3042,6 @@ fn main() {
         Commands::Init { if_not_exists } => commands::init::run(if_not_exists),
         Commands::Config(cmd) => dispatch_config(cmd, format, pre_check),
         Commands::Target(cmd) => dispatch_target(cmd, format),
-        // Compiled only with `native-ssh`; other builds have no such subcommand
-        // at all, so there is nothing to dispatch. `run_with` blocks forever
-        // (it is the daemon process); returning here is fine because nothing
-        // useful follows in the daemon's lifetime.
         #[cfg(feature = "native-ssh")]
         Commands::TransportDaemon {
             ipc_endpoint,
@@ -3132,8 +3055,6 @@ fn main() {
             format,
         ),
         Commands::Profile(cmd) => {
-            // Config management skips full target resolution, but the
-            // `--target`/`--profile` exclusivity contract still holds.
             if cli.target.is_some() {
                 Err(error::VirtuosoError::Config(
                     "--target and --profile are mutually exclusive".into(),
@@ -3206,9 +3127,6 @@ fn main() {
     };
 
     let exit_code = match &result {
-        // An `Ok` value may still carry a failure in its payload (e.g.
-        // `status: "failed"` from an unverified X11 dismissal). The mapping
-        // lives in `exit_codes::exit_code_for_value` so it stays testable.
         Ok(value) => exit_codes::exit_code_for_value(value),
         Err(e) => e.exit_code(),
     };

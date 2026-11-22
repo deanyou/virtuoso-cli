@@ -100,8 +100,6 @@ fn venv_profile_path() -> Option<PathBuf> {
         }
     }
 
-    // Fallback: check for common venv patterns
-    // If there's a .venv directory in cwd, assume that's the venv
     let cwd = std::env::current_dir().ok()?;
     let venv_marker = cwd.join(".venv");
     if venv_marker.exists() {
@@ -202,7 +200,6 @@ pub fn resolve_profile_info(explicit: Option<&str>) -> ProfileResolution {
         }
     }
 
-    // 5. User-level ~/.vcli/profile (deprecated fallback: ~/.vcli/.env)
     let user_profile = user_profile_path();
     if let Some(profile) = read_profile_file(&user_profile) {
         return ProfileResolution {
@@ -276,14 +273,6 @@ pub fn read_venv_profile() -> (Option<PathBuf>, Option<String>) {
     (path, profile)
 }
 
-// =============================================================================
-// Multi-scope binding API: --venv, --user, --local
-//
-// Extends the venv-only binding from PR #87 to cover the same
-// "ladder of scope" that virtuoso-bridge-lite's profile resolver uses
-// in resolution. All three scopes write the same file format so that
-// resolution can be uniform.
-// =============================================================================
 
 /// Where to (un)bind a profile. Mirrors the resolution ladder:
 /// - `Venv`: $VIRTUAL_ENV/.vcli-profile  (project Python venv)
@@ -437,7 +426,6 @@ mod tests {
 
     #[test]
     fn test_clean_profile_comments_skipped() {
-        // This is tested via read_profile_file
         let content = "# comment\nt28_digital\n";
         for line in content.lines() {
             let trimmed = line.trim();
@@ -452,11 +440,6 @@ mod tests {
         panic!("Expected to find profile");
     }
 
-    // ---- Multi-scope binding tests ----
-    //
-    // The user-scope tests used to write the real `~/.vcli`; they now run
-    // against a `tempfile::tempdir()` through the `*_in(dir, ...)` variants,
-    // so they are hermetic and safe to run in parallel.
 
     /// Test that `bind_user_profile` writes the profile name into
     /// `<config dir>/profile` and `clear_user_profile` removes it again.
@@ -471,7 +454,6 @@ mod tests {
         let content = fs::read_to_string(&profile_path).unwrap();
         assert_eq!(content.trim(), "t28_digital", "got: {content:?}");
 
-        // Re-bind: should replace, not append.
         bind_user_profile_in(dir, "analog_default").unwrap();
         let content = fs::read_to_string(&profile_path).unwrap();
         assert_eq!(content.trim(), "analog_default", "got: {content:?}");

@@ -174,19 +174,12 @@ pub fn load_skills(skills_dir: &Path) -> Vec<SkillResource> {
             if name.starts_with('.') {
                 return None;
             }
-            // Symlinked skill directories are refused with the same rule the
-            // read path applies: a directory that resolves outside the skills
-            // root must not be published, because reading it would fail
-            // anyway — listing it would advertise a resource that cannot be
-            // read and leak its frontmatter description.
             if let Some(root) = canonical_root.as_ref() {
                 match path.canonicalize() {
                     Ok(resolved) if resolved.starts_with(root) => {}
                     _ => return None,
                 }
             }
-            // Resolve the skill file through the read path so a symlinked
-            // SKILL.md is skipped here exactly as it is refused on read.
             let skill_file = match resolve_skill_path(skills_dir, &name) {
                 Ok(path) => path,
                 Err(_) => return None,
@@ -202,7 +195,6 @@ pub fn load_skills(skills_dir: &Path) -> Vec<SkillResource> {
         })
         .collect();
 
-    // Stable, deterministic order — clients list resources in this order.
     skills.sort_by(|a, b| a.name.cmp(&b.name));
     skills
 }
@@ -311,7 +303,6 @@ pub fn frontmatter_description(content: &str) -> String {
             break;
         }
         if in_block {
-            // A blank line is part of the block scalar — it does not end it.
             if trimmed.is_empty() {
                 block.push(String::new());
                 continue;
@@ -320,7 +311,6 @@ pub fn frontmatter_description(content: &str) -> String {
                 block.push(trimmed.to_string());
                 continue;
             }
-            // The first non-empty, non-indented line ends the block.
             in_block = false;
         }
         let Some((candidate_key, value)) = trimmed.split_once(':') else {
@@ -344,8 +334,6 @@ pub fn frontmatter_description(content: &str) -> String {
     }
 
     match key {
-        // Blank lines inside the block are structural, not content: they are
-        // dropped from the one-line description.
         Some(_) if !block.is_empty() => block
             .iter()
             .filter(|line| !line.is_empty())
@@ -575,7 +563,6 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         write_skill(&root, "demo", "body");
 
-        // A symlink inside the root must not become a read primitive.
         #[cfg(unix)]
         {
             let link_dir = root.join("linked");
@@ -585,7 +572,6 @@ mod tests {
             assert_eq!(err.code(), -32602, "symlinked SKILL.md must not be served");
         }
 
-        // `..` never even reaches the filesystem.
         let err = read_skill(&root, "skill://../secret").unwrap_err();
         assert_eq!(err.code(), -32602);
     }

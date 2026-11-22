@@ -141,8 +141,6 @@ impl StdoutEvalChannel {
 
 impl EvalChannel for StdoutEvalChannel {
     fn submit(&mut self, skill: &str) -> io::Result<()> {
-        // Drop stale callback files first: a late answer from a previous
-        // request must never be mistaken for this request's answer.
         let _ = std::fs::remove_file(self.data_file());
         let _ = std::fs::remove_file(self.done_file());
         let _ = std::fs::remove_file(self.started_file());
@@ -165,7 +163,6 @@ impl EvalChannel for StdoutEvalChannel {
                     Ok(mut data) => {
                         let _ = std::fs::remove_file(self.data_file());
                         let _ = std::fs::remove_file(self.done_file());
-                        // Strip trailing RS marker written by RBSendCallback's sprintf %c
                         if data.last() == Some(&RS) {
                             data.pop();
                         }
@@ -230,9 +227,6 @@ pub fn handle_request(
 ) -> Vec<u8> {
     let timeout = req.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS);
 
-    // ── Hung channel ────────────────────────────────────────────────────
-    // Answer immediately. Nothing is written to the Virtuoso pipe: the
-    // evaluation that is stuck there is still holding it.
     if let Some(stuck) = state.stuck_call() {
         ERRORS.fetch_add(1, Ordering::Relaxed);
         let msg = channel_state::hung_message(stuck);
@@ -256,8 +250,6 @@ pub fn handle_request(
     match channel.wait_for_callback(timeout) {
         Ok(Some(answer)) => answer,
         Ok(None) => {
-            // The evaluation never came back. The channel is dead from here
-            // on: the SKILL interpreter may still be inside that evalstring.
             ERRORS.fetch_add(1, Ordering::Relaxed);
             let stuck = StuckCall::new(&req.skill, started_at, started_at_unix, timeout);
             let entered = channel.eval_entered();
@@ -320,15 +312,6 @@ pub fn handle_connection_with_read_timeout(
     CALLS.fetch_add(1, Ordering::Relaxed);
 
     let mut req_bytes = Vec::new();
-    // The request must arrive within a deadline. A client that connects and
-    // then says nothing would otherwise block this loop inside `read_to_end`
-    // for as long as it keeps the socket open — and while the loop is blocked,
-    // no other client is served, not even the instant "channel is dead"
-    // answer that a hung channel owes every later request.
-    //
-    // The client writes the request immediately after connecting and then
-    // shuts down its write side, so the read completes in milliseconds; the
-    // deadline is a backstop, not a budget.
     conn.set_read_timeout(Some(read_timeout))?;
     conn.read_to_end(&mut req_bytes)?;
 
@@ -427,14 +410,10 @@ pub fn run_cli() {
     });
 
     let actual_port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
-    // Print version and port to stderr so ramic_bridge.il can read them.
-    // VERSION must come before PORT so it is stored before the banner fires.
     eprintln!("VERSION:{}", env!("CARGO_PKG_VERSION"));
     eprintln!("PORT:{actual_port}");
     eprintln!("[virtuoso-daemon] listening on {host}:{actual_port}");
 
-    // cb_port mirrors RBCallbackPort in ramic_bridge.il (RBPort + 1).
-    // Must use actual_port, not the argv port (which may be 0 for OS-assigned).
     let cb_port = actual_port + 1;
 
     START.get_or_init(std::time::Instant::now);
@@ -539,7 +518,6 @@ mod tests {
             "the first request is delivered once"
         );
 
-        // The second request must be refused *without* touching the pipe.
         let started = Instant::now();
         let second = handle_request(&mut channel, &mut state, &request("1+1"), 0);
         assert!(
@@ -684,7 +662,6 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
 
-        // The daemon's accept loop, with a deadline on the request read.
         let daemon = std::thread::spawn(move || {
             let mut served = 0;
             for stream in listener.incoming() {
@@ -705,10 +682,8 @@ mod tests {
             }
         });
 
-        // A client that connects and never says anything.
         let _half_open = TcpStream::connect(("127.0.0.1", port)).unwrap();
 
-        // The client that must still be served.
         std::thread::sleep(Duration::from_millis(100));
         let mut conn = TcpStream::connect(("127.0.0.1", port)).unwrap();
         conn.write_all(b"{\"skill\":\"1+1\",\"timeout\":3}")

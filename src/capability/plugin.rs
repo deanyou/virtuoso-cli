@@ -213,7 +213,6 @@ impl CapabilityPlugin {
     fn resolve_inheritance(&mut self) {
         let mut resolved = HashMap::new();
 
-        // First pass: add all capabilities without inheritance
         for cap in &self.config.capabilities {
             if cap.inherits.is_none() {
                 let domains = cap.domains.clone();
@@ -233,7 +232,6 @@ impl CapabilityPlugin {
             }
         }
 
-        // Second pass: resolve inheritance
         for cap in &self.config.capabilities {
             if let Some(ref inherits) = cap.inherits {
                 let mut domains = cap.domains.clone();
@@ -296,7 +294,6 @@ impl CapabilityPlugin {
                 if d == "*" {
                     true
                 } else if d.ends_with(".*") {
-                    // Wildcard match: "schematic.*" matches "schematic.list_instances"
                     let prefix = &d[..d.len() - 2];
                     domain.starts_with(prefix) && domain.len() > prefix.len()
                 } else {
@@ -517,13 +514,11 @@ mod tests {
             description: None,
         });
 
-        // Initially no limiter exists
         assert!(plugin.rate_limit_status("revoke_test").is_none());
 
         plugin.check_rate_limit("revoke_test");
         assert_eq!(plugin.rate_limit_status("revoke_test").unwrap().0, 0);
 
-        // After revoke, limiter is removed
         plugin.revoke("revoke_test");
         assert!(plugin.rate_limit_status("revoke_test").is_none());
     }

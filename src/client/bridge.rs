@@ -127,11 +127,9 @@ impl VirtuosoClient {
     /// Check if a raw SKILL string is permitted given current capabilities.
     /// Returns None if permitted, Some(reason) if blocked.
     pub fn check_capability(&self, _skill_code: &str) -> Option<String> {
-        // Admin capability allows everything
         if self.capabilities.allows_raw_skill() {
             return None;
         }
-        // Without Admin, block any raw SKILL exec attempt — must go through RPC
         Some("raw SKILL exec is not permitted: use 'vcli rpc call' instead".to_string())
     }
 
@@ -149,23 +147,13 @@ impl VirtuosoClient {
     }
 
     fn from_config(cfg: Config, target_id: Option<String>) -> Result<Self> {
-        // One shared ownership-validation context (F05). A `CommandContext` is
-        // cheap (digest computation only); building it here keeps every check
-        // below on the same identity rule implemented in `context.rs`.
         let ctx = crate::context::CommandContext::new(cfg.clone(), target_id)?;
 
         let tunnel = if cfg.is_remote() {
-            // Load tunnel state under the *config's* profile namespace, never the
-            // ambient `VB_PROFILE` — otherwise `--target prod` could reuse a
-            // tunnel recorded for `test`.
             let state = crate::models::TunnelState::load_with_profile(cfg.profile.as_deref())
                 .ok()
                 .flatten();
             if let Some(ref s) = state {
-                // Validate the tunnel belongs to this target *before* reusing it.
-                // This is a tunnel-ownership check, not a substitute for the
-                // session check below — an existing tunnel bypasses session
-                // selection entirely.
                 ctx.validate_tunnel_ownership(s)?;
                 if is_port_open(s.port) {
                     tracing::info!("reusing existing tunnel on port {}", s.port);
@@ -181,10 +169,6 @@ impl VirtuosoClient {
             None
         };
 
-        // Session-aware port resolution:
-        // 1. --session / VB_SESSION → load port from session file
-        // 2. No session specified → auto-select if exactly one live session exists
-        // 3. Fallback to VB_PORT / config.port for backward compat
         let (port, resolved_session_id, resolved_session) =
             if let Some(base_port) = tunnel.as_ref().and_then(|t| t.saved_port()) {
                 (base_port, None, None)
@@ -210,23 +194,16 @@ impl VirtuosoClient {
                     }
                     n if n > 1 => {
                         let ids: Vec<&str> = live_sessions.iter().map(|s| s.id.as_str()).collect();
-                        // Name BOTH selectors, and say what each one selects.
-                        // "--session" alone is ambiguous for Maestro commands,
-                        // where the subcommand's own --session names a Maestro
-                        // session ("fnxSessionN") and not a Virtuoso instance;
-                        // pointing at VB_SESSION first keeps the advice
-                        // unambiguous for every command family.
                         return Err(crate::error::VirtuosoError::Config(format!(
                             "multiple Virtuoso sessions active: {}. \
                          Select the Virtuoso instance with VB_SESSION=<id> or --session <id>.",
                             ids.join(", ")
                         )));
                     }
-                    _ => (cfg.port, None, None), // 0 live sessions → use VB_PORT
+                    _ => (cfg.port, None, None),
                 }
             };
 
-        // Warn if the selected session is stale (Virtuoso may have crashed)
         if let Some(ref sid) = resolved_session_id {
             if Self::session_is_stale(sid) {
                 tracing::warn!(
@@ -237,18 +214,6 @@ impl VirtuosoClient {
             }
         }
 
-        // Cross-user daemon guard: verify the daemon was started by the same Unix
-        // user we expect before connecting. This prevents accidentally connecting
-        // to a daemon started by a different user (e.g., a colleague's session).
-        //
-        // The expected user and the override come from the RESOLVED config
-        // (env → config.toml → target overrides) — the same values every
-        // other command sees. The guard never re-parses the environment.
-        //
-        // A session whose daemon user is not yet known is NOT a pass: the
-        // identity is unconfirmed, and the guard says so at WARN level
-        // (never a silent pass; not a hard error either — `daemon_user` is
-        // only populated by `session show`).
         if let Some(ref session) = resolved_session {
             guard_cross_user(
                 session,
@@ -257,10 +222,6 @@ impl VirtuosoClient {
             )?;
         }
 
-        // P0-A ownership (F05): when a target is selected, a session recorded
-        // against a different host or a different bridge port (same host, other
-        // target) is an ownership violation. Single rule lives in
-        // `CommandContext::validate_session_ownership`.
         if let Some(session) = resolved_session.as_ref() {
             ctx.validate_session_ownership(session)?;
         }
@@ -330,16 +291,12 @@ impl VirtuosoClient {
         skip_whitelist: bool,
         policy: RetryPolicy,
     ) -> Result<VirtuosoResult> {
-        // Explicit readonly mode takes precedence even on Admin execution paths.
         let skip_whitelist = skip_whitelist && !self.whitelist.is_sandbox();
-        // Phase 0: evalstring whitelist check — bypassed only by authorized callers.
         if !skip_whitelist {
             if let Some(warning) = self.whitelist.check(skill_code) {
                 return Err(VirtuosoError::Execution(warning));
             }
         }
-        // Guard: block SKILL expressions that can hang the daemon
-        // Bypassed when skip_whitelist=true (Admin capability).
         if !skip_whitelist {
             if let Some(warning) = check_blocking_skill(skill_code) {
                 return Err(VirtuosoError::Execution(warning));
@@ -355,8 +312,6 @@ impl VirtuosoClient {
         let req = serde_json::json!({"skill": skill_code, "timeout": timeout});
         let req_bytes = serde_json::to_string(&req).map_err(VirtuosoError::Json)?;
 
-        // Drain loop: a new session may find stale "sync_N" responses queued in the
-        // daemon from a previous client. Detect and transparently discard up to 10.
         for _ in 0..10u8 {
             let mut stream =
                 TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(timeout))
@@ -400,16 +355,9 @@ impl VirtuosoClient {
             let status_byte = data[0];
             let payload = String::from_utf8_lossy(&data[1..]).into_owned();
 
-            // A queued-ticket marker: the daemon answered with `sync_N`. The
-            // client cannot prove whether the ticket belongs to *this*
-            // request or is stale from a previous session — so whether it may
-            // transmit again is a policy decision, not an implementation
-            // detail (design: "SKILL request retry policy").
             if status_byte == STX && is_stale_sync(&payload) {
                 match policy {
                     RetryPolicy::Never => {
-                        // Transmitted once; outcome unproven. Never resent —
-                        // a non-idempotent SKILL (commit!) must not replay.
                         return Err(VirtuosoError::OutcomeUnknown(
                             "observed a queued-ticket marker (sync_N); the request was \
                              transmitted once and will not be resent because it is not \
@@ -418,10 +366,6 @@ impl VirtuosoClient {
                         ));
                     }
                     RetryPolicy::IdempotentProbe => {
-                        // Explicitly idempotent: resending cannot corrupt
-                        // state. Still bounded by the original timeout
-                        // budget — one logical probe must not open an
-                        // unbounded number of connections.
                         let budget = std::time::Duration::from_secs(timeout);
                         if start.elapsed() >= budget {
                             return Err(VirtuosoError::Timeout(timeout));
@@ -441,18 +385,11 @@ impl VirtuosoClient {
                 metadata: Default::default(),
             };
 
-            // STX = transport success; NAK = transport error (includes daemon timeout).
-            // The daemon sends NAK+"TimeoutError" (no RS) on deadline — no need to
-            // text-match under STX. Doing so would reject any SKILL function that
-            // legitimately returns the string "TimeoutError".
             let mut channel_hung = false;
             if status_byte == STX {
                 result.output = payload;
             } else if status_byte == NAK {
                 result.status = ExecutionStatus::Error;
-                // A hung channel is not a SKILL failure: the evaluation pipe is
-                // dead and only a session restart clears it. Remember the
-                // verdict so it can be surfaced verbatim below.
                 channel_hung = crate::channel_state::is_hung_message(&payload);
                 result.errors.push(payload);
             } else {
@@ -471,11 +408,6 @@ impl VirtuosoClient {
                 crate::history::append_skill(sid, skill_code, result.skill_ok(), &result.output);
             }
 
-            // The daemon's verdict on a dead channel *is* the diagnosis: which
-            // call hung it, when it was delivered, and that the session has to
-            // be restarted. Hand it to the operator unchanged — rewording it
-            // into a generic "execution failed" would throw away the only
-            // information that says what to do next.
             if channel_hung {
                 return Err(VirtuosoError::Execution(result.errors.join("; ")));
             }
@@ -571,8 +503,6 @@ impl VirtuosoClient {
     }
 
     pub fn test_connection(&self, timeout: Option<u64>) -> Result<bool> {
-        // `1+1` is a read-only probe: idempotent by construction, so it may
-        // drain a stale ticket and retry within the budget.
         let result = self.execute_skill_idempotent_probe("1+1", timeout)?;
         Ok(result.output.trim() == "2")
     }
@@ -589,16 +519,6 @@ impl VirtuosoClient {
     }
 
     pub fn save_current_cellview(&self) -> Result<VirtuosoResult> {
-        // Uses the same resolution as `schematic.*` (see `cv_guard`): without
-        // it `cell.save` cannot save a cellview opened by
-        // `schematic.open_cell_view`, which opens no window.
-        //
-        // The save itself is `dbSave(cv)` — cellview-scoped — and not
-        // `geSaveEdit()`, which is window-scoped and saves whatever the
-        // *current window* shows. Those are the same cellview only by luck:
-        // resolving `cv` and then saving through the current window reintroduces
-        // exactly the mis-targeting `cv_guard` exists to prevent, and here it
-        // would write one cell's edits while reporting success for another.
         let guard = cv_guard();
         let skill = format!("let((cv) cv = {EDIT_CV} {guard} dbSave(cv))");
         self.execute_skill_unchecked(&skill, None)
@@ -677,16 +597,11 @@ impl VirtuosoClient {
                   (getd('geDiscardEdits) geDiscardEdits(w)) \
                   (t error(\"cell.close: no way to discard edits on this Virtuoso\")))"
         };
-        // Headless: discard explicitly rather than leaning on `dbClose` to do
-        // it, so the write lock is dropped even if the close needs `dbPurge`.
         let headless_resolve = if save {
             "when(!dbSave(hcv) error(\"cell.close: dbSave failed — refusing to close and lose the edits\"))"
         } else {
             "when(getd('dbReopen) dbReopen(hcv \"r\"))"
         };
-        // `dbGetOpenCellViews` is the only trustworthy witness that the close
-        // actually happened; probe for it rather than assume it, in keeping
-        // with hazard 1.
         let still_open = "getd('dbGetOpenCellViews) && memq(hcv dbGetOpenCellViews())";
         let guard = cv_guard();
         let skill = format!(
@@ -709,8 +624,6 @@ impl VirtuosoClient {
     }
 
     pub fn get_current_design(&self) -> Result<(String, String, String)> {
-        // GUI-then-headless, same as `schematic.*` — otherwise `cell.info`
-        // cannot name a cellview opened without a window.
         let guard = cv_guard();
         let result = self.execute_skill_unchecked(
             &format!(
@@ -754,12 +667,8 @@ impl VirtuosoClient {
     ///   not seen — see `RBDVersion = ""` default at the top of the .il)
     /// - `Err(_)` on transport failure (caller decides whether to surface)
     pub fn get_daemon_version(&self) -> Result<Option<String>> {
-        // SKILL: read the global RBDVersion. Defensive: boundp() guards
-        // against SKILL that has never set it (e.g. very old .il without
-        // the RBDVersion default initializer).
         const SKILL: &str = r#"let((v) v = if(boundp('RBDVersion) then RBDVersion else nil) \
             if(v && v != "" && v != "?" then v else nil))"#;
-        // Idempotent probe: fixed read-only literal, may drain a stale ticket.
         let r = self.execute_skill_idempotent_probe(SKILL, Some(5))?;
         if !r.skill_ok() {
             return Ok(None);
@@ -792,14 +701,10 @@ impl VirtuosoClient {
     pub fn get_daemon_user(&self) -> Result<Option<String>> {
         const SKILL: &str =
             r#"let((u) u = getShellEnvVar("USER") if(u && u != "" then u else nil))"#;
-        // Idempotent probe: fixed read-only literal, may drain a stale ticket.
-        // `None` → the probe spends the client's configured timeout budget.
         let r = self.execute_skill_idempotent_probe(SKILL, None)?;
         if !r.skill_ok() {
-            // nil/empty = no USER env var on daemon — treat as unknown, not error
             return Ok(None);
         }
-        // output is already unquoted by SKILL when string returned
         let user = r.output.trim().trim_matches('"').to_string();
         if user.is_empty() || user == "nil" {
             Ok(None)
@@ -820,8 +725,6 @@ impl VirtuosoClient {
     /// missing argument. Do not "fix" it by passing a process handle.
     pub fn daemon_alive(&self) -> bool {
         const SKILL: &str = r#"plus(1 1)"#;
-        // Explicitly idempotent probe: it must survive a stale queued ticket,
-        // which is exactly the stuck-state it exists to detect.
         match self.execute_skill_idempotent_probe(SKILL, Some(3)) {
             Ok(r) => r.skill_ok(),
             Err(_) => false,
@@ -829,7 +732,6 @@ impl VirtuosoClient {
     }
 
     pub fn load_il(&self, local_path: &str, skillpp: bool) -> Result<VirtuosoResult> {
-        // Loading executes arbitrary code: authorize before filesystem/SSH side effects.
         self.require_raw_skill_access()?;
         if self.whitelist.is_sandbox() {
             return Err(VirtuosoError::Execution(
@@ -837,7 +739,6 @@ impl VirtuosoClient {
             ));
         }
 
-        // Do not resolve the final symlink: its .ils suffix selects SKILL++ mode.
         let path = std::path::absolute(local_path)?;
         let metadata = std::fs::metadata(&path).map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
@@ -852,10 +753,6 @@ impl VirtuosoClient {
             )));
         }
 
-        // --skillpp: if the file is .il but contains SKILL++ code, copy to a
-        // temp .ils file so Virtuoso's load() selects SKILL++ mode. The .il
-        // extension forces standard SKILL mode, where globalProc/defclass/
-        // defmethod are undefined. .ils files are already SKILL++ — no copy needed.
         let effective_path = if skillpp && path.extension().and_then(|e| e.to_str()) == Some("il") {
             let tmp = std::env::temp_dir().join(format!(
                 "vcli_skillpp_{}.ils",
@@ -1024,7 +921,6 @@ impl VirtuosoClient {
     pub fn reconnect_session(&self, session_id: &str) -> Result<bool> {
         match self.ping() {
             Ok(()) => {
-                // Session is alive — clear stale flag if it was set
                 if Self::session_is_stale(session_id) {
                     let dir = SessionInfo::sessions_dir();
                     let stale_flag = dir.join(format!("{}.stale", session_id));
@@ -1092,20 +988,11 @@ fn guard_cross_user(
     expected_user: Option<&str>,
     allow_cross_user: bool,
 ) -> Result<()> {
-    // Expected user comes from the resolved config. A blank value means
-    // "not configured" — there is nothing to compare against.
     let expected = match expected_user.map(str::trim).filter(|s| !s.is_empty()) {
         Some(e) => e.to_string(),
         None => return Ok(()),
     };
 
-    // If daemon_user is not yet known (None), we can't perform the check.
-    // This is NOT a pass: the identity is unconfirmed (the probe timed out or
-    // the daemon reported no USER), so the cross-user check was skipped
-    // entirely. Warn loudly — the user configured a remote_user precisely
-    // because they want to know who the daemon runs as. Not a hard error:
-    // daemon_user is only populated by `session show`, so failing here would
-    // break the first connect of every session.
     let daemon_user = match session.daemon_user.as_deref() {
         Some(u) => u,
         None => {
@@ -1125,7 +1012,6 @@ fn guard_cross_user(
         return Ok(());
     }
 
-    // Explicit override (config field / VB_ALLOW_CROSS_USER_DAEMON=1).
     if allow_cross_user {
         tracing::warn!(
             "cross-user guard: allow_cross_user_daemon is enabled, allowing daemon user '{}' (expected '{}')",
@@ -1236,8 +1122,6 @@ fn build_open_cell_view_skill(lib: &str, cell: &str, view: &str, mode: &str) -> 
     let view_type = escape_skill_string(view_type);
     let view = escape_skill_string(view);
     let mode = escape_skill_string(mode);
-    // deOpenCellView(libName cellName viewName viewType winSpec mode);
-    // winSpec = nil -> open in a new window.
     format!(
         r#"let((exists writable) writable = !(strcmp("{mode}" "r")==0) exists = ddGetObj("{lib}" "{cell}" "{view}") when(!exists if(writable then let((ncv) ncv = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "{view_type}" "a") when(ncv dbSave(ncv) dbClose(ncv))) else error("cell.open: {lib}/{cell}/{view} not found and mode is read-only — create it first"))) deOpenCellView("{lib}" "{cell}" "{view}" "{view_type}" nil "{mode}"))"#
     )
@@ -1416,24 +1300,17 @@ mod tests {
 
     #[test]
     fn open_cell_view_probes_before_opening() {
-        // The whole point of the guard: ddGetObj (metadata, no GUI) must be
-        // evaluated before deOpenCellView, which pops a modal dialog — and
-        // hangs the bridge — if the cell is missing.
         let s = build_open_cell_view_skill("LIB", "CELL", "schematic", "a");
         let probe = s.find("ddGetObj(").expect("guard must probe with ddGetObj");
         let open = s
             .find("deOpenCellView(")
             .expect("must open via deOpenCellView");
         assert!(probe < open, "ddGetObj must precede deOpenCellView: {s}");
-        // geOpenCellView is undefined on IC23 — it must not reappear.
         assert!(!s.contains("geOpenCellView"), "{s}");
     }
 
     #[test]
     fn open_cell_view_read_only_errors_instead_of_creating() {
-        // Missing + read-only must take the error branch, never the create
-        // branch: creating a cell the caller asked to only read is a silent
-        // write to someone else's library.
         let s = build_open_cell_view_skill("LIB", "CELL", "schematic", "r");
         assert!(s.contains(r#"strcmp("r" "r")"#), "{s}");
         assert!(s.contains("read-only"), "{s}");
@@ -1442,15 +1319,12 @@ mod tests {
 
     #[test]
     fn open_cell_view_maps_view_to_dfii_view_type() {
-        // deOpenCellView takes viewType positionally; these are the
-        // Cadence-standard names.
         let layout = build_open_cell_view_skill("L", "C", "layout", "a");
         assert!(layout.contains(r#""layout" "maskLayout""#), "{layout}");
 
         let symbol = build_open_cell_view_skill("L", "C", "symbol", "a");
         assert!(symbol.contains(r#""symbol" "schematicSymbol""#), "{symbol}");
 
-        // Unknown views fall back to the view name, per the maestro convention.
         let maestro = build_open_cell_view_skill("L", "C", "maestro", "a");
         assert!(maestro.contains(r#""maestro" "maestro""#), "{maestro}");
     }
@@ -1506,7 +1380,6 @@ mod tests {
             for (i, stream) in listener.incoming().enumerate() {
                 let Ok(mut stream) = stream else { break };
                 let answer = answers.get(i).cloned();
-                // Drain the request (bounded) so the client's write succeeds.
                 let mut buf = [0u8; 4096];
                 let _ = std::io::Read::read(&mut stream, &mut buf);
                 match answer {
@@ -1528,8 +1401,6 @@ mod tests {
             .chain(b"sync_1".iter().copied())
             .collect()]);
         let client = VirtuosoClient::new("127.0.0.1", port, 5);
-        // Bypass the auth gate directly (the policy under test lives below
-        // it); this is the exact path `execute_skill` takes after its check.
         let err = client
             .execute_skill_with_bypass("hiSetPoint(1 2)", Some(5), true)
             .expect_err("non-idempotent request must not be resent");
@@ -1537,7 +1408,6 @@ mod tests {
             matches!(err, VirtuosoError::OutcomeUnknown(_)),
             "got {err:?}"
         );
-        // And it must not look retryable to generic retry machinery.
         assert!(!err.retryable());
     }
 
@@ -1555,8 +1425,6 @@ mod tests {
 
     #[test]
     fn outcome_unknown_is_not_a_connection_error() {
-        // The error_type must be distinct so operators (and scripts keyed on
-        // JSON error_type) can tell "unproven" from "transport down".
         let e = VirtuosoError::OutcomeUnknown("x".into());
         assert_eq!(e.error_type(), "outcome_unknown");
         assert_eq!(e.exit_code(), crate::exit_codes::GENERAL_ERROR);
@@ -1576,21 +1444,18 @@ mod tests {
 
     #[test]
     fn blocking_skill_find_root_is_blocked() {
-        // SKILL syntax uses (system "command")
         assert!(check_blocking_skill("(system \"find /\")").is_some());
         assert!(check_blocking_skill("(sh \"find /\")").is_some());
     }
 
     #[test]
     fn blocking_skill_find_absolute_path_blocked() {
-        // Any system()/sh() with "find /" (absolute path) is blocked, not just root
         assert!(check_blocking_skill("(system \"find /home/meow\")").is_some());
         assert!(check_blocking_skill("(system \"find /tmp\")").is_some());
     }
 
     #[test]
     fn blocking_skill_find_relative_path_allowed() {
-        // Relative paths without "/" don't match "find /"
         assert!(check_blocking_skill("(system \"find . -name foo\")").is_none());
         assert!(check_blocking_skill("(system \"find sim -name *.psf\")").is_none());
     }
@@ -1608,7 +1473,6 @@ mod tests {
         assert!(skill.contains("infile("));
         assert!(skill.contains("gets(line p)"));
         assert!(skill.contains("close(p)"));
-        // Path should be escaped (backslashes before /)
         assert!(
             skill.contains("\\/path\\/to\\/log.txt") || skill.contains("/path/to/log.txt"),
             "Path should be escaped or present in skill: {}",
@@ -1618,7 +1482,6 @@ mod tests {
 
     #[test]
     fn decode_skill_string_with_quotes() {
-        // SKILL returns strings wrapped in quotes
         assert_eq!(decode_skill_string(r#""hello world""#), "hello world");
     }
 
@@ -1657,9 +1520,6 @@ mod tests {
     /// hardcoded 5-second cap.
     #[test]
     fn daemon_user_probe_budget_follows_client_timeout() {
-        // Bind but never accept/answer: the client's connect() succeeds
-        // (kernel backlog) and the read then blocks until the socket read
-        // timeout fires.
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
 
@@ -1785,7 +1645,6 @@ mod tests {
             .to_str()
             .expect("utf-8 temp config dir")
             .to_string();
-        // Restored on unwind — a panicking assert must not leak these.
         let _env = EnvVarGuard::apply(&[
             ("VB_REMOTE_USER", Some("expected-user")),
             ("VB_PROFILE", None),
@@ -1817,7 +1676,6 @@ mod tests {
             )
         });
 
-        // Not a hard failure: daemon_user is only known after `session show`.
         assert!(
             outcome.is_ok(),
             "unconfirmed identity must not break the connect path, got {:?}",
@@ -1928,7 +1786,6 @@ pub fn resolve_client_id() -> String {
             return sanitize_client_id(p);
         }
     }
-    // Fallback: hostname (or "default" if even that fails).
     let host = std::env::var("HOSTNAME")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -2022,9 +1879,6 @@ mod client_id_tests {
 
     #[test]
     fn sanitize_drops_unicode_replaces_with_underscore() {
-        // We only preserve ASCII alphanumeric; non-ASCII chars (including
-        // CJK ideographs) get replaced with '_'. The 2-byte UTF-8 sequence
-        // for '主' is 3 bytes, so "主机" (2 chars) yields 2 underscores.
         assert_eq!(sanitize_client_id("meow-主机"), "meow-__");
     }
 
@@ -2043,10 +1897,8 @@ mod client_id_tests {
     fn resolve_client_id_precedence() {
         clear_env();
         std::env::set_var("VB_PROFILE", "myprofile");
-        // No VB_CLIENT_ID, has VB_PROFILE → use profile
         assert_eq!(resolve_client_id(), "myprofile");
         std::env::set_var("VB_CLIENT_ID", "explicit");
-        // VB_CLIENT_ID wins over VB_PROFILE
         assert_eq!(resolve_client_id(), "explicit");
         clear_env();
     }
@@ -2057,7 +1909,6 @@ mod client_id_tests {
         clear_env();
         std::env::set_var("VB_CLIENT_ID", "  ");
         std::env::set_var("VB_PROFILE", "fallback-prof");
-        // Empty VB_CLIENT_ID falls through to VB_PROFILE
         assert_eq!(resolve_client_id(), "fallback-prof");
         clear_env();
     }
@@ -2097,8 +1948,6 @@ mod client_id_tests {
         let cache = dir.path().join("cache");
         let state = dir.path().join("state");
         std::fs::create_dir_all(cache.join("virtuoso_bridge/sessions")).unwrap();
-        // A session that belongs to `test` (bridge port 30002), sharing the
-        // same compute node as `prod` (bridge port 30001).
         let sess = serde_json::json!({
             "id": "sess-wrong-port",
             "port": 30002,
@@ -2120,7 +1969,7 @@ mod client_id_tests {
         std::env::set_var("VB_PORT_prodfix", "30001");
 
         let mut cfg = Config::from_env_with_profile(Some("prodfix")).unwrap();
-        cfg.profile = None; // state/tunnel reads key on the target namespace
+        cfg.profile = None;
         let ctx = crate::context::CommandContext::new(cfg.clone(), Some("prod".into())).unwrap();
 
         let error = match VirtuosoClient::from_context(&ctx) {
@@ -2200,7 +2049,6 @@ mod hung_channel_tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
-            // Serve two requests: the client may open a second connection.
             for _ in 0..2 {
                 let Ok((mut conn, _)) = listener.accept() else {
                     return;
@@ -2224,7 +2072,6 @@ mod hung_channel_tests {
                 };
                 let mut buf = [0u8; 4096];
                 let _ = conn.read(&mut buf);
-                // Hold the connection open without answering.
                 std::thread::sleep(std::time::Duration::from_secs(30));
             }
         });

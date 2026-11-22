@@ -92,8 +92,6 @@ impl VirtuosoError {
             self,
             Self::Connection(_) | Self::Timeout(_) | Self::TimeoutWithContext(_, _)
         )
-        // OutcomeUnknown is deliberately absent: an unproven outcome must not
-        // look resubmittable to generic retry machinery.
     }
 
     pub fn suggestion(&self) -> Option<String> {
@@ -254,9 +252,6 @@ mod tests {
 
     #[test]
     fn timeout_with_context_classification_matches_timeout() {
-        // A downstream classifier that branches on (exit_code, error_type,
-        // retryable) for `Timeout` must produce the same answer for
-        // `TimeoutWithContext`. This guards against accidental drift.
         let plain = VirtuosoError::Timeout(3);
         let ctx = VirtuosoError::TimeoutWithContext(3, "x".into());
         assert_eq!(plain.exit_code(), ctx.exit_code());

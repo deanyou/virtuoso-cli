@@ -57,9 +57,6 @@ impl OpenSshTransport {
 fn classify(id: &RequestId, e: VirtuosoError) -> TransportError {
     match e {
         VirtuosoError::Timeout(secs) | VirtuosoError::TimeoutWithContext(secs, _) => {
-            // `SSHRunner` kills the local ssh client on timeout, which does not
-            // prove the remote command stopped. A Spectre job can still be
-            // running. Unknown outcome, therefore not retryable.
             TransportError::ExecutionTimeout {
                 request: id.clone(),
                 after_secs: secs,
@@ -117,10 +114,6 @@ impl RemoteTransport for OpenSshTransport {
                 after_secs: 0,
             });
         }
-        // `SSHRunner::upload` takes `&str`. A non-UTF-8 local path cannot be
-        // represented without changing it to take a `&Path`, which would be a
-        // behaviour change, so the limitation is recorded rather than papered
-        // over. `download_dir` already accepts `&Path` and is unaffected.
         self.runner
             .upload(&req.local.to_string_lossy(), &req.remote)
             .map_err(|e| classify(&req.id, e))
@@ -234,8 +227,6 @@ mod tests {
 
     #[test]
     fn timeout_classifies_as_unproven_termination() {
-        // Killing the local ssh client does not prove the remote command
-        // stopped, so this must never be marked retryable.
         let e = classify(&RequestId::new(), VirtuosoError::Timeout(30));
         match e {
             TransportError::ExecutionTimeout {
@@ -250,8 +241,6 @@ mod tests {
 
     #[test]
     fn classification_does_not_read_message_text() {
-        // Same variant, messages that would push a substring matcher in
-        // opposite directions — classification must be identical.
         let a = classify(
             &RequestId::new(),
             VirtuosoError::Ssh("connection refused".into()),

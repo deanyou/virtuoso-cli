@@ -113,7 +113,6 @@ impl Handler for NativeClientHandler {
             PublicKeyOrCertificate::PublicKey { key, .. } => {
                 let key_bytes = match key.to_bytes() {
                     Ok(b) => b,
-                    // Unparseable key: treat as unverifiable and reject.
                     Err(_) => {
                         *self.verification.lock().unwrap() = Some(HostKeyCheck {
                             verification: Verification::Unknown,
@@ -131,7 +130,6 @@ impl Handler for NativeClientHandler {
                 );
                 (kt, b64, Some(fingerprint))
             }
-            // Host certificates are out of scope for step 3; reject.
             PublicKeyOrCertificate::Certificate(_) => {
                 *self.verification.lock().unwrap() = Some(HostKeyCheck {
                     verification: Verification::Unknown,
@@ -154,7 +152,7 @@ impl Handler for NativeClientHandler {
 /// Load a `known_hosts` store, falling back to an empty in-memory store on any
 /// read error. A missing file and a denied permission are both equivalent to
 /// "no prior trust" — the caller discovers an unknown host on first connection.
-#[allow(dead_code)] // wired on Unix by open_transport_for_daemon and the pooled daemon; non-Unix builds have neither
+#[allow(dead_code)]
 fn load_known_hosts_or_empty(path: &Path) -> KnownHosts {
     match KnownHosts::load(path) {
         Ok(kh) => kh,
@@ -277,10 +275,6 @@ async fn establish(
         verification: verification.clone(),
     };
 
-    // Map the design's keepalive policy onto russh: probe every `interval`,
-    // declare the connection dead after `max_failures` consecutive misses.
-    // russh then surfaces it as `KeepaliveTimeout`, which classifies as a
-    // transient failure and reconnects on the next operation.
     let client_cfg = Arc::new(client::Config {
         keepalive_interval: Some(cfg.keepalive.interval),
         keepalive_max: cfg.keepalive.max_failures as usize,
@@ -307,8 +301,6 @@ async fn establish(
         }
     };
 
-    // Re-check the captured host-key outcome (defensive: connect must have
-    // failed already if it was not Trusted, but surface a precise error anyway).
     if let Some(v) = verification.lock().unwrap().take() {
         if v.verification != Verification::Trusted {
             return Err(map_verification(&cfg.host, &v));
@@ -351,16 +343,10 @@ async fn establish_with_retry(
     loop {
         match establish(cfg).await {
             Ok(session) => return Ok(session),
-            // Only a network-path failure is worth re-establishing for. A
-            // request-level error cannot occur during establishment (nothing
-            // was sent), but the match keeps the classification authoritative.
             Err(e) if FailureClass::of(&e) == FailureClass::Transient => {
                 if !policy.may_retry(attempt) || deadline.is_expired() {
                     return Err(e);
                 }
-                // Spread retries with jitter, but never wait past the
-                // caller's deadline: a bounded budget must not grow because
-                // the network is flaky.
                 let seed = establishment_seed();
                 let wait = policy
                     .jittered_delay(attempt, seed)
@@ -504,14 +490,12 @@ impl NativeTransport {
     /// Build from the shared `Config`. Fails loudly (never falls back) when the
     /// native backend cannot satisfy the request: missing `VB_REMOTE_HOST`, or
     /// no `VB_SSH_KEY` (step 3 is public-key only).
-    #[allow(dead_code)] // wired on Unix by open_transport_for_daemon and the pooled daemon; non-Unix builds have neither
+    #[allow(dead_code)]
     pub fn from_config(config: &Config) -> Result<Self, TransportError> {
         let host = config.remote_host.clone().ok_or_else(|| {
             TransportError::Configuration("native backend requires VB_REMOTE_HOST".into())
         })?;
         let ssh_port = config.ssh_port.unwrap_or(22);
-        // Step 3 supports public-key auth only; a missing key is a configuration
-        // error, never a silent fallback to OpenSSH.
         let key_path = config.ssh_key.as_ref().map(PathBuf::from).ok_or_else(|| {
             TransportError::Configuration(
                 "native backend requires VB_SSH_KEY: agent, password, and keyboard-interactive \
@@ -520,9 +504,6 @@ impl NativeTransport {
             )
         })?;
 
-        // A missing or unreadable known_hosts is not fatal: the caller learns
-        // about an unknown host on first connection (HostKeyUnknown), and a
-        // permission error on the store must never block transport construction.
         let mut stores = Vec::new();
         if let Some(home) = dirs::home_dir() {
             stores.push(load_known_hosts_or_empty(
@@ -533,9 +514,6 @@ impl NativeTransport {
             "/etc/ssh/ssh_known_hosts",
         )));
 
-        // Lifecycle policies come from the same env surface; zero values are
-        // rejected here so a bad env fails loudly at construction, not on the
-        // first operation.
         let keepalive = KeepalivePolicy::from_config(config)?;
         let reconnect = ReconnectPolicy::from_config(config)?;
 
@@ -589,8 +567,6 @@ impl NativeTransport {
             let remaining = deadline.remaining();
             rt.block_on(async move {
                 tokio::time::timeout(remaining, async move {
-                    // Lock wait, establishment and channel-open all consume
-                    // the request's remaining budget (P1-2 / P1-3).
                     let mut guard = self.session.inner.lock().await;
                     if guard.as_ref().is_none_or(|(_, h)| h.is_closed()) {
                         let established = establish_with_retry(&self.config, deadline).await?;
@@ -615,17 +591,8 @@ impl NativeTransport {
                 })?
             })?
         };
-        // The handle lock was released above: the channel is independent, so
-        // another command can open its own channel and run concurrently.
         let result = f(channel, rt, deadline.remaining());
         if matches!(&result, Err(e) if FailureClass::of(e) == FailureClass::Transient) {
-            // Generation-matched eviction: never drop a replacement built by a
-            // concurrent request after our connection died. Bounded by the
-            // request's remaining deadline — a concurrent re-establishment
-            // holding the handle lock must never delay this request's error
-            // return. If the lock is not reachable in time the stale slot is
-            // left in place; the next operation re-detects it via is_closed()
-            // / lazy establishment, so failure marking stays effective.
             let remaining = deadline.remaining();
             let _ = rt.block_on(async move {
                 tokio::time::timeout(remaining, async move {
@@ -744,10 +711,6 @@ impl NativeTransport {
         let sftp = self.open_sftp(deadline, req_id)?;
         let remaining = deadline.remaining();
         let remote_str = remote.to_string_lossy().into_owned();
-        // Atomic upload: write to a staging file first, then rename into place.
-        // A failed upload leaves only the staging file (never a half-written
-        // target). Per-request UUID so concurrent uploads to the same target
-        // never share a staging file.
         let staging = format!("{remote_str}.tmp.{}", uuid::Uuid::new_v4());
         let staging_name = staging.clone();
         let rt = &self.session.runtime;
@@ -771,8 +734,6 @@ impl NativeTransport {
             })?
         });
         staged?;
-        // Atomic publish via exec `mv` — SFTP rename is not universally
-        // supported, and `mv` is atomic on the same filesystem.
         let mv_cmd = format!(
             "mv -f {src} {dst} && rm -f {src}",
             src = shell_quote(&staging),
@@ -850,8 +811,6 @@ impl NativeTransport {
 
 impl Drop for NativeTransport {
     fn drop(&mut self) {
-        // Only the last clone of a transport tears the shared connection down;
-        // an earlier clone must be able to keep using it.
         if Arc::strong_count(&self.session) > 1 {
             return;
         }
@@ -876,28 +835,18 @@ impl RemoteTransport for NativeTransport {
         }
         let req_id = RequestId::new();
         let rt = &self.session.runtime;
-        // test_connection is an explicit liveness probe. If a session already
-        // exists it is probed in place (an SSH ping/pong) and, when the remote
-        // has gone away, reported unhealthy — never silently re-established,
-        // so callers can observe the disconnect. Only when no session exists
-        // yet does the probe establish one, as a reachability check. Host-key
-        // / auth failures are real errors, not "unreachable".
         let (epoch, probe): (u64, Result<(), TransportError>) = {
             let remaining = deadline.remaining();
             rt.block_on(async move {
                 tokio::time::timeout(remaining, async move {
                     let mut guard = self.session.inner.lock().await;
                     match guard.as_ref() {
-                        // No session yet: this is the reachability case, so
-                        // establish (lazily) and ping the fresh handle.
                         None => {
                             let established = establish_with_retry(&self.config, deadline).await?;
                             self.session.connections.fetch_add(1, Ordering::Relaxed);
                             let epoch = self.session.epoch.fetch_add(1, Ordering::Relaxed) + 1;
                             *guard = Some((epoch, established));
                         }
-                        // Session ended: evict it and report unavailable. Do
-                        // not reconnect — the caller must observe the break.
                         Some((_, handle)) if handle.is_closed() => {
                             *guard = None;
                             return Ok::<(u64, Result<(), TransportError>), TransportError>((
@@ -913,9 +862,6 @@ impl RemoteTransport for NativeTransport {
                     let ping = handle.send_ping().await.map_err(map_russh_error);
                     let probe = match ping {
                         Ok(()) => {
-                            // russh's send_ping resolves its reply channel even
-                            // when the session is tearing down; only a session
-                            // that is still open proves the remote answered.
                             if handle.is_closed() {
                                 Err(TransportError::ConnectionFailed(
                                     "session closed during liveness probe".into(),
@@ -940,11 +886,6 @@ impl RemoteTransport for NativeTransport {
             Ok(()) => Ok(true),
             Err(e) => {
                 if FailureClass::of(&e) == FailureClass::Transient {
-                    // Generation-matched eviction: a stale request's failure
-                    // must not drop a replacement connection. Bounded by the
-                    // request's remaining deadline for the same reason as the
-                    // with_channel cleanup: never block the probe's error
-                    // return behind a concurrent re-establishment.
                     let remaining = deadline.remaining();
                     let _ = rt.block_on(async move {
                         tokio::time::timeout(remaining, async move {
@@ -994,14 +935,9 @@ impl RemoteTransport for NativeTransport {
         }
         let bytes = std::fs::read(&req.local)
             .map_err(|e| TransportError::LocalIo(format!("read {}: {e}", req.local.display())))?;
-        // Single files stream over the SFTP subsystem (design step 4). Where
-        // the remote does not advertise sftp, fall back to the exec `cat` pipe
-        // that directories already rely on. Clone for the SFTP attempt; the
-        // exec fallback still needs the original bytes.
         match self.upload_via_sftp(Path::new(&req.remote), bytes.clone(), req.deadline, &req.id) {
             Ok(()) => Ok(()),
             Err(e) if sftp_unavailable(&e) => {
-                // Atomic upload via exec: write to staging file, then mv.
                 let staging = format!("{}.tmp.{}", req.remote, uuid::Uuid::new_v4());
                 let cmd = format!("cat > {}", shell_quote(&staging));
                 let raw = self.exec_command(&cmd, Some(bytes), req.deadline, &req.id)?;
@@ -1099,8 +1035,6 @@ impl RemoteTransport for NativeTransport {
                 after_secs: 0,
             });
         }
-        // Atomic download: write to a local staging file, then rename.
-        // A failed download never leaves a half-written target file.
         let local_staging = format!("{}.tmp.{}", req.local.display(), uuid::Uuid::new_v4());
         let local_staging_path = std::path::PathBuf::from(&local_staging);
 
@@ -1166,9 +1100,6 @@ impl RemoteTransport for NativeTransport {
         }
         std::fs::create_dir_all(&req.local)
             .map_err(|e| TransportError::LocalIo(format!("create {}: {e}", req.local.display())))?;
-        // Untar locally. The remote side already produced the tar stream, so
-        // the local `tar` requirement mirrors the OpenSSH backend's remote
-        // `tar` requirement (no extra remote toolchain divergence).
         let tmp = req
             .local
             .join(format!(".vcli-dl-{}.tar", std::process::id()));
@@ -1245,11 +1176,6 @@ mod tests {
 
     #[test]
     fn transport_reuses_the_session_slot_between_operations() {
-        // P1-2 acceptance at the unit level: one transport owns one live
-        // session slot plus a handshake counter, and every clone shares it
-        // (the pool clones transports). Actual handshake reuse is verified
-        // end-to-end by the native-pool probe against a real host — this
-        // locks the structure that makes that reuse possible.
         let t = NativeTransport::from_config(&cfg_with("h", Some("/tmp/k"), None))
             .expect("from_config builds without a jump host");
         assert_eq!(
@@ -1263,7 +1189,6 @@ mod tests {
             "clones must share one SessionState (one live connection)"
         );
         assert_eq!(t2.session.connections.load(Ordering::Relaxed), 0);
-        // The slot starts empty: the first operation establishes lazily.
         assert!(
             t.session.inner.blocking_lock().is_none(),
             "connection must be lazy (nothing established at construction)"
@@ -1282,8 +1207,6 @@ mod tests {
 
     #[test]
     fn from_config_requires_key_for_step3() {
-        // Step 3 supports public-key auth only; no key is a configuration error,
-        // not a silent fallback to OpenSSH.
         assert!(matches!(
             NativeTransport::from_config(&cfg_with("h", None, None)),
             Err(TransportError::Configuration(_))
@@ -1292,8 +1215,6 @@ mod tests {
 
     #[test]
     fn sftp_unavailable_routes_only_to_the_exec_fallback() {
-        // The exec fallback for single-file transfer must trigger only when the
-        // remote lacks the sftp subsystem, never on a connection/auth failure.
         assert!(sftp_unavailable(&TransportError::UnsupportedOperation(
             "sftp subsystem unavailable".into()
         )));
@@ -1311,8 +1232,6 @@ mod tests {
 
     #[test]
     fn from_config_builds_and_passes_contract_suite() {
-        // The shared suite only exercises an expired deadline + health(), so a
-        // dummy (non-connectable) endpoint is sufficient — no network needed.
         let t = NativeTransport::from_config(&cfg_with(
             "compute-eda-42",
             Some("/tmp/id_ed25519"),
@@ -1540,8 +1459,6 @@ mod tests {
 
     #[test]
     fn sftp_roundtrip_against_in_process_server() {
-        // tokio's `macros` feature is not enabled, so drive the async test on the
-        // module's own current-thread runtime (same one production uses).
         let rt = make_runtime().expect("runtime");
         rt.block_on(async {
             let (client_stream, server_stream) = tokio::io::duplex(64 * 1024);
@@ -1552,21 +1469,16 @@ mod tests {
                 .await
                 .expect("sftp session init");
 
-            // Larger than SFTP_CHUNK (64 KiB) so the chunked streaming path is
-            // actually exercised (multiple writes + multiple reads).
             let payload: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
             let remote = "roundtrip.bin".to_string();
 
-            // upload — mirrors `upload_via_sftp`'s path through the shared helper
             {
                 let mut file = sftp.create(&remote).await.expect("sftp create");
                 super::sftp_write_all(&mut file, &payload)
                     .await
                     .expect("sftp upload stream");
-                // dropping `file` sends the CLOSE to the server
             }
 
-            // download — mirrors `download_via_sftp`'s path
             let got = {
                 let mut file = sftp.open(&remote).await.expect("sftp open");
                 super::sftp_read_all(&mut file)
@@ -1580,14 +1492,7 @@ mod tests {
 
     #[test]
     fn establish_rejects_jump_host_with_unsupported_operation() {
-        // Step 5 (ProxyJump / jump-host routing) is deferred. The native backend
-        // must fail closed with a clear UnsupportedOperation at connect time
-        // rather than silently attempting a single-hop connection. The guard
-        // returns before any russh connect, so no network is touched.
         let rt = make_runtime().expect("runtime");
-        // The transport owns a tokio runtime (SessionState); construct it
-        // outside the test's block_on so dropping it happens on a plain
-        // thread, not inside an async context (tokio rejects that).
         let t = NativeTransport::from_config(&cfg_with("h", Some("/tmp/k"), Some("jump")))
             .expect("from_config accepts a jump host (deferred, not rejected at construction)");
         rt.block_on(async {
@@ -1601,10 +1506,6 @@ mod tests {
 
     #[test]
     fn native_transport_does_not_implement_local_forward() {
-        // Step 6's RAMIC / X11 direct-tcpip forward is not implemented. The
-        // RemoteTransport trait default reports the gap as UnsupportedOperation
-        // so callers detect it structurally instead of panicking. This locks the
-        // documented scope boundary (design doc Status: step 6 ⚠️ Partial).
         let t = NativeTransport::from_config(&cfg_with("h", Some("/tmp/k"), None))
             .expect("from_config builds without a jump host");
         let req = crate::transport::contract::ForwardRequest {
@@ -1629,12 +1530,6 @@ mod tests {
         );
     }
 
-    // ===== In-process SSH server harness =====
-    //
-    // These tests drive the real native transport against an in-process russh
-    // SSH server, so the behaviour assertions — connection reuse, concurrent
-    // channels, deadline-bounded lock waits, establishment timeouts and
-    // liveness probes — run against actual SSH wire traffic, not mocks.
 
     #[derive(Clone, Default)]
     struct ServerBehavior {
@@ -1807,11 +1702,6 @@ mod tests {
             if let Some((needle, gate)) = &self.behavior.gate_on_exec {
                 if cmd == *needle {
                     gate.signal_started();
-                    // Schedule the delayed reply on a separate task so the
-                    // gated command does not block the connection's request
-                    // handling (a real sshd services channels independently;
-                    // the test server must behave the same or the client-side
-                    // concurrency claim cannot be exercised).
                     let handle = session.handle();
                     let gate = gate.clone();
                     let payload = self.behavior.exec_reply.clone();
@@ -2031,9 +1921,6 @@ mod tests {
             let t = t.clone();
             std::thread::spawn(move || t.exec_command("slow", None, dl(10), &slow_rid))
         };
-        // Deterministic: wait until the slow command has actually started on
-        // the server (its channel is open and the exec is being processed)
-        // before touching the fast command.
         gate.wait_started();
         let started = std::time::Instant::now();
         let fast = t
@@ -2045,8 +1932,6 @@ mod tests {
             fast_elapsed < Duration::from_millis(500),
             "fast command must not wait for the slow command's channel (got {fast_elapsed:?})"
         );
-        // The slow command is still blocked: release it and only then may it
-        // complete — proving the fast command finished first.
         gate.release();
         let slow_out = slow.join().expect("slow thread").expect("slow exec");
         assert_eq!(slow_out.stdout, b"ok");
@@ -2104,18 +1989,12 @@ mod tests {
     fn stale_failure_cleanup_is_bounded_by_the_request_deadline() {
         let server = TestServer::start(ServerBehavior {
             exec_reply: Some(b"ok".to_vec()),
-            // "die" sleeps 800 ms, then disconnects — a real connection death.
             disconnect_delay_for: Some(("die".to_string(), Duration::from_millis(800))),
             ..Default::default()
         });
         let (t, _dir) = test_transport(&server, Duration::from_secs(30), 3);
         let rid = RequestId::new();
         t.exec_command("warm", None, dl(10), &rid).expect("warmup");
-        // A: drive with_channel directly; its operation kills the connection
-        // mid-flight (server disconnect) and then fails with a transient
-        // connection error — the path whose cleanup must respect the
-        // deadline. B takes the handle lock while A's operation is still in
-        // flight.
         let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
         let a_rid = rid.clone();
         let a = {
@@ -2124,8 +2003,6 @@ mod tests {
             std::thread::spawn(move || {
                 let result: Result<(), TransportError> =
                     t.with_channel(dl(2), &a_rid, |channel, rt, _remaining| {
-                        // Real mid-use death: the server disconnects ~800 ms
-                        // after receiving "die".
                         rt.block_on(async move {
                             let mut ch = channel;
                             let _ = ch.exec(false, "die".to_string()).await;
@@ -2142,9 +2019,6 @@ mod tests {
                 result
             })
         };
-        // Take the handle lock while A's operation is in flight, simulating a
-        // concurrent re-establishment stuck in auth. Hold it well past A's
-        // deadline.
         std::thread::sleep(Duration::from_millis(150));
         let guard = t.session.inner.blocking_lock();
         std::thread::sleep(Duration::from_secs(3));
@@ -2160,9 +2034,6 @@ mod tests {
             a_res.is_err(),
             "the stale request must surface its connection failure"
         );
-        // Eviction may have been skipped (the lock was unreachable before the
-        // deadline); the dead handle must still be re-detected and replaced by
-        // the next operation — failure marking stays effective.
         let final_res = t
             .exec_command("final", None, dl(5), &rid)
             .expect("next operation rebuilds");
@@ -2191,8 +2062,6 @@ mod tests {
             t.test_connection(dl(10)).expect("healthy probe"),
             "probe is healthy while the server is up"
         );
-        // The remote tears the session down mid-use; the exec fails, and the
-        // liveness probe afterwards must not report healthy.
         let _ = t.exec_command("die", None, dl(5), &rid);
         std::thread::sleep(Duration::from_millis(800));
         let probe = t.test_connection(dl(3));
@@ -2213,18 +2082,11 @@ mod tests {
             exec_reply: Some(b"ok".to_vec()),
             ..Default::default()
         });
-        // 500 ms keepalive interval; idle across >3 periods.
         let (t, _dir) = test_transport(&server, Duration::from_millis(500), 3);
         let rid = RequestId::new();
         t.exec_command("warm", None, dl(10), &rid).expect("warmup");
-        // Let the warmup's channel teardown traffic (eof/close) drain before
-        // the baseline, so the observation cannot be attributed to it.
         std::thread::sleep(Duration::from_millis(600));
         let before = server.bytes_received.load(Ordering::Relaxed);
-        // No client operation: only the background keepalive loop may produce
-        // traffic. Sample across two consecutive keepalive periods and require
-        // sustained growth in each — a one-shot teardown burst can never
-        // satisfy both mid > before and after > mid.
         std::thread::sleep(Duration::from_millis(600));
         let mid = server.bytes_received.load(Ordering::Relaxed);
         std::thread::sleep(Duration::from_millis(600));

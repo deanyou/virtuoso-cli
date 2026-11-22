@@ -137,7 +137,6 @@ impl Job {
         }
         if let Some(pid) = self.pid {
             let alive = if let Some(ref host) = self.remote_host {
-                // Remote: check via SSH
                 std::process::Command::new("ssh")
                     .args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=3"])
                     .arg(host)
@@ -148,16 +147,12 @@ impl Job {
                     .map(|s| s.success())
                     .unwrap_or(false)
             } else {
-                // Local: direct signal check
                 local_process_alive(pid)
             };
 
             if !alive {
                 self.finish_from_log()?;
             } else if self.remote_host.is_none() {
-                // For local jobs: zombie processes answer kill -0 with "alive".
-                // Check the log directly — if spectre already printed its completion
-                // line, reap it regardless of PID status.
                 let log_dir = std::path::Path::new(&self.netlist_path)
                     .parent()
                     .unwrap_or(std::path::Path::new("."));
@@ -182,7 +177,6 @@ impl Job {
             .unwrap_or(std::path::Path::new("."));
         let log = log_dir.join("spectre.out");
 
-        // For remote jobs, try to fetch log via SSH first
         let content =
             if let (Some(ref host), Some(ref rdir)) = (&self.remote_host, &self.remote_dir) {
                 let out = std::process::Command::new("ssh")
@@ -224,7 +218,6 @@ impl Job {
             )));
         }
         if let Some(pid) = self.pid {
-            // Kill process group
             terminate_process_group(pid)?;
         }
         self.status = JobStatus::Cancelled;

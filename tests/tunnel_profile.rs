@@ -19,17 +19,11 @@ use std::process::Command;
 /// Resolve the path to the vcli binary built by `cargo test --release`.
 /// We use the same artifact path convention that `cargo` itself uses.
 fn vcli_bin() -> PathBuf {
-    // CARGO_BIN_EXE_vcli is set by cargo when running integration tests
-    // against the main binary, with the binary already built.
     PathBuf::from(env!("CARGO_BIN_EXE_vcli"))
 }
 
 #[test]
 fn profile_helpers_return_distinct_dirs() {
-    // Use the published vcli binary's transport helpers via the lib.
-    // We can't easily call pub(crate) items from an integration test,
-    // so we test the externally observable behavior: two profiles
-    // resolve to two different setup dirs.
     use virtuoso_cli::transport::tunnel as t;
 
     let a = t::setup_dir_for_profile(Some("analog"));
@@ -55,22 +49,11 @@ fn env_keys_are_profile_suffixed() {
 
 #[test]
 fn cleanup_scope_simulation() {
-    // Simulate the cleanup-scope fix without a live SSH:
-    //
-    // 1. Create two fake profile setup dirs locally (the same way
-    //    they would exist on the remote after `tunnel start`).
-    // 2. Run a cleanup that scopes to ONE profile.
-    // 3. Assert the OTHER profile's dir is untouched.
-    //
-    // The real `cleanup_remote()` runs over SSH; we test the path
-    // resolution and scoping logic directly by calling the helper
-    // and asserting the string we would `rm -rf`.
     use virtuoso_cli::transport::tunnel::setup_dir_for_profile;
 
     let target = setup_dir_for_profile(Some("analog"));
     let other = setup_dir_for_profile(Some("digital"));
 
-    // The cleanup command we would issue is:
     let cleanup_cmd = format!("rm -rf {target}");
     assert!(cleanup_cmd.contains("analog"));
     assert!(
@@ -82,11 +65,6 @@ fn cleanup_scope_simulation() {
 
 #[test]
 fn vcli_profile_subcommand_runs() {
-    // Smoke test: `vcli profile show` runs without crashing, returns
-    // valid JSON, and the JSON has the expected fields.
-    //
-    // This doesn't require a live SSH connection — it's a local-only
-    // introspection of env + binding files.
     let output = Command::new(vcli_bin())
         .args(["profile", "show", "--format", "json"])
         .env_remove("VB_PROFILE")
@@ -115,20 +93,11 @@ fn vcli_profile_subcommand_runs() {
 #[cfg(unix)]
 #[test]
 fn vcli_profile_bind_user_then_clear() {
-    // End-to-end: bind a profile to user-level, observe it via show,
-    // then clear. Verifies the CLI plumbing works all the way through.
-    // Redirect HOME to a scratch dir so the CLI's `~/.vcli` writes land in a
-    // throwaway location. This test used to write the *real* `~/.vcli/.env`,
-    // which both corrupted the developer's machine and made the assertions
-    // depend on whatever happened to be there.
     let scratch = tempfile::tempdir().expect("scratch home");
     let home = scratch.path();
     let profile_file = home.join(".vcli").join("profile");
     let env_file = home.join(".vcli").join(".env");
 
-    // Test is single-threaded for the duration via test-threads=1 in CI,
-    // OR the underlying lib's Mutex serializes its own tests. We
-    // accept best-effort coordination here.
 
     let test_profile = "vcli_test_profile_xyz";
     let bin = vcli_bin();
@@ -155,7 +124,6 @@ fn vcli_profile_bind_user_then_clear() {
     assert_eq!(parsed["scope"], "user");
     assert_eq!(parsed["profile"], test_profile);
 
-    // 2. Verify ~/.vcli/profile contains it (sole content is the name)
     let content = std::fs::read_to_string(&profile_file).unwrap();
     assert_eq!(
         content.trim(),
@@ -195,9 +163,6 @@ fn vcli_profile_bind_user_then_clear() {
         content = std::fs::read_to_string(&profile_file).unwrap_or_default()
     );
 
-    // 6. The deprecated `~/.vcli/.env` VB_PROFILE= is still honoured as a
-    //    fallback, and `clear` must neutralise it too — otherwise a stale
-    //    legacy line resurrects a profile the user just cleared.
     std::fs::write(&env_file, format!("VB_PROFILE={test_profile}\n")).unwrap();
     let show = Command::new(&bin)
         .args(["profile", "show", "--format", "json"])
@@ -229,9 +194,6 @@ fn vcli_profile_bind_user_then_clear() {
 #[cfg(unix)]
 #[test]
 fn vcli_profile_user_scope_does_not_touch_the_real_home() {
-    // Regression guard: the CLI must not create anything under the real
-    // `$HOME/.vcli` when HOME is redirected, and `profile show` must report
-    // the "default" source for a scratch home with no bindings.
     let scratch = tempfile::tempdir().expect("scratch home");
     let home = scratch.path();
 
@@ -252,8 +214,6 @@ fn vcli_profile_user_scope_does_not_touch_the_real_home() {
 
 #[test]
 fn vcli_profile_bind_user_rejects_no_scope() {
-    // `vcli profile bind X` (no --venv/--user/--local) must fail with
-    // a clear error.
     let output = Command::new(vcli_bin())
         .args(["profile", "bind", "test", "--format", "json"])
         .output()
@@ -268,9 +228,6 @@ fn vcli_profile_bind_user_rejects_no_scope() {
 
 #[test]
 fn vcli_profile_bind_user_rejects_multi_scope() {
-    // clap catches the multi-scope conflict before our handler runs.
-    // We just verify the binary rejected the call and the error
-    // mentions the conflicting flags.
     let output = Command::new(vcli_bin())
         .args([
             "profile", "bind", "test", "--user", "--venv", "--format", "json",
@@ -283,7 +240,6 @@ fn vcli_profile_bind_user_rejects_multi_scope() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    // clap's exact wording: "the argument '--user' cannot be used with '--venv'"
     assert!(
         combined.contains("cannot be used with") || combined.contains("only one of"),
         "expected conflict error; got: {combined}"

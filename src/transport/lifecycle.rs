@@ -54,38 +54,27 @@ impl FailureClass {
     /// Classify a transport error for lifecycle purposes.
     pub fn of(err: &TransportError) -> Self {
         match err {
-            // Configuration and capability errors are user action territory.
             TransportError::Configuration(_)
             | TransportError::UnsupportedOperation(_)
             | TransportError::UnsupportedBackend
             | TransportError::ProtocolMismatch { .. }
             | TransportError::RestartRequired(_) => FailureClass::Permanent,
 
-            // Security and policy events: the design is explicit that these
-            // are permanent until the user intervenes.
             TransportError::HostKeyUnknown { .. }
             | TransportError::HostKeyChanged { .. }
             | TransportError::HostKeyPolicyUnsupported(_) => FailureClass::Permanent,
 
-            // Credentials: rejection will not improve with retries, and
-            // prompting for interaction is user action by definition.
             TransportError::AuthenticationFailed(_) | TransportError::InteractionRequired => {
                 FailureClass::Permanent
             }
 
-            // Proxy policy failures are permanent per the design; the SOCKS
-            // route itself is a configured path, not a flaky network.
             TransportError::ProxyFailed(_) => FailureClass::Permanent,
 
-            // Network-path failures worth re-establishing the connection for.
             TransportError::ConnectionFailed(_)
             | TransportError::DaemonUnavailable
             | TransportError::JumpFailed(_)
             | TransportError::LocalIo(_) => FailureClass::Transient,
 
-            // Everything else belongs to one request. The connection may be
-            // perfectly fine; classifying these as connection failures would
-            // tear down a healthy path because a remote command exited 1.
             TransportError::QueueTimeout { .. }
             | TransportError::ExecutionTimeout { .. }
             | TransportError::RemoteExit { .. }
@@ -164,8 +153,6 @@ impl ReconnectPolicy {
     /// the clock) in production.
     pub fn jittered_delay(&self, attempt: u32, seed: u64) -> Duration {
         let base = self.delay_for_attempt(attempt);
-        // Spread the attempt across ±25% of the base delay. At the cap the
-        // jitter floor shrinks so `max_delay` is never exceeded.
         let spread = self.base.as_millis() as u64 / 4;
         let offset = (splitmix64(seed) % (2 * spread + 1)) as i64 - spread as i64;
         let millis = (base.as_millis() as i64 + offset).max(0) as u64;
@@ -462,9 +449,6 @@ mod tests {
 
     #[test]
     fn shutdown_coordinator_accepts_an_explicit_zero_grace() {
-        // Zero means "cancel immediately" — a deliberate operator choice, not
-        // a misconfiguration, so unlike the reconnect/keepalive values it is
-        // accepted.
         let c = ShutdownCoordinator::from_config(&config_with(8, 30, 30, 3, 0));
         assert_eq!(c.grace(), Duration::ZERO);
     }
@@ -560,9 +544,6 @@ mod tests {
 
     #[test]
     fn execution_timeout_with_unknown_outcome_is_still_request_level() {
-        // The request failed, not the connection. Reconnect policy must not
-        // tear down the path; the caller decides about resubmission, and the
-        // contract already forbids replay.
         let e = TransportError::ExecutionTimeout {
             request: RequestId::new(),
             after_secs: 3,
@@ -591,8 +572,6 @@ mod tests {
         assert_eq!(p.delay_for_attempt(1), Duration::from_secs(1));
         assert_eq!(p.delay_for_attempt(2), Duration::from_secs(2));
         assert_eq!(p.delay_for_attempt(3), Duration::from_secs(4));
-        // Cap: attempt 4 would be 8s raw, clamped to 6s; attempts beyond stay
-        // at the cap and never exceed it.
         assert_eq!(p.delay_for_attempt(4), Duration::from_secs(6));
         assert_eq!(p.delay_for_attempt(9), Duration::from_secs(6));
         assert_eq!(p.delay_for_attempt(100), Duration::from_secs(6));
@@ -611,7 +590,6 @@ mod tests {
         let p = policy();
         for seed in 0..1000u64 {
             let d = p.jittered_delay(1, seed);
-            // base is 1s; jitter is ±250ms.
             assert!(
                 d >= Duration::from_millis(750) && d <= Duration::from_millis(1250),
                 "seed {seed} produced {d:?}"
@@ -645,10 +623,8 @@ mod tests {
         assert!(!b.is_degraded());
         assert!(!b.record_failure());
         assert!(!b.record_failure());
-        // The third failure is the transition.
         assert!(b.record_failure());
         assert!(b.is_degraded());
-        // Further failures are not new transitions.
         assert!(!b.record_failure());
     }
 
@@ -660,7 +636,6 @@ mod tests {
         assert!(!b.record_failure(), "streak was reset");
         assert!(b.record_failure(), "second consecutive failure trips");
         assert!(b.is_degraded());
-        // Success cannot self-heal a degraded endpoint.
         b.record_success();
         assert!(b.is_degraded());
     }
@@ -674,8 +649,6 @@ mod tests {
         assert!(b.is_degraded());
         b.reset();
         assert!(!b.is_degraded());
-        // And the failure count restarts from zero: with threshold 1 the very
-        // next failure trips again, which proves the count did not carry over.
         assert!(b.record_failure());
         assert!(b.is_degraded());
     }
@@ -716,11 +689,9 @@ mod tests {
         let start = std::time::Instant::now();
         t.cancel();
         assert!(handle.join().unwrap());
-        // The waiter must have observed cancellation almost immediately.
         assert!(start.elapsed() < Duration::from_secs(1));
     }
 
-    // ── ShutdownCoordinator ──
 
     #[test]
     fn shutdown_runs_all_three_phases_in_order() {
@@ -731,10 +702,9 @@ mod tests {
         let l3 = std::sync::Arc::clone(&log);
         c.execute(
             move || l1.lock().unwrap().push("admission"),
-            || false, // work never finishes: grace must expire
+            || false,
             move || l3.lock().unwrap().push("cancel"),
         );
-        // (l2 unused when all_done is a constant; keep the clone honest.)
         drop(l2);
         assert_eq!(*log.lock().unwrap(), vec!["admission", "cancel"]);
     }
@@ -742,9 +712,6 @@ mod tests {
     #[test]
     fn shutdown_cancels_as_soon_as_work_quiesces() {
         let c = ShutdownCoordinator::new(Duration::from_secs(30));
-        // `all_done` returns false on the first poll and true afterwards,
-        // simulating work that finishes right after admission stops. The
-        // coordinator must not sit out the (30 s) grace.
         let polls = std::sync::Arc::new(AtomicBool::new(false));
         let log = std::sync::Arc::new(Mutex::new(Vec::new()));
         let l = std::sync::Arc::clone(&log);
@@ -754,8 +721,6 @@ mod tests {
             {
                 let polls = std::sync::Arc::clone(&polls);
                 move || {
-                    // False exactly once, then true: simulates work that
-                    // finishes right after admission stops.
                     !polls.swap(true, Ordering::SeqCst)
                 }
             },

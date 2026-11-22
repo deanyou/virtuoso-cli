@@ -80,8 +80,6 @@ pub fn pick_live_session(
         return Ok(None);
     }
 
-    // Sort newest-first. `created` is `Mon DD HH:MM:SS YYYY`; for two
-    // sessions from the same month this is wall-clock-ordered.
     let mut by_recency = sessions;
     by_recency.sort_by(|a, b| b.created.cmp(&a.created));
 
@@ -100,7 +98,6 @@ pub fn pick_live_session(
         by_recency
     };
 
-    // Walk in recency order; first one whose port is listening wins.
     while let Some(s) = candidates.first().cloned() {
         if remote_port_alive(runner, s.port)? {
             return Ok(Some(s));
@@ -163,10 +160,6 @@ mod tests {
                 });
             }
             self.commands.lock().unwrap().push(req.command.clone());
-            // Parse the port out of the bash /dev/tcp probe. The template
-            // emits `127.0.0.1/<port>)`, so splitting on `127.0.0.1/` and
-            // taking the segment right after it gets us `<port>)`; the
-            // trailing `)` and any non-digit characters are then stripped.
             let port = req
                 .command
                 .split("127.0.0.1/")
@@ -228,15 +221,11 @@ mod tests {
         let runner = StubRunner::new(&[]);
         let result = pick_live_session(vec![], &runner, None).unwrap();
         assert!(result.is_none());
-        // No port probes should have been issued.
         assert!(runner.commands.lock().unwrap().is_empty());
     }
 
     #[test]
     fn picks_live_session_when_present() {
-        // The newer-looking candidate is dead; the older-looking one is
-        // alive. Walking in recency order must probe the dead one first
-        // (and only that one, because the loop returns on the first hit).
         let runner = StubRunner::new(&[46075]);
         let sessions = vec![
             session("new", 41469, "h", "Aug 30 12:03:00 2026"),
@@ -246,7 +235,6 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(result.id, "older");
-        // The 41469 candidate was probed (dead) and 46075 was probed (live).
         let cmds = runner.commands.lock().unwrap();
         assert_eq!(cmds.len(), 2);
     }
@@ -264,10 +252,6 @@ mod tests {
 
     #[test]
     fn host_hint_prefers_matching_then_recency() {
-        // host=h has 46075 (live) and 41469 (dead);
-        // host=other has 39000 (live, newer).
-        // With hint=Some("h"), the matcher picks from h's pool first
-        // and returns 46075 (the live h-session, even though 39000 is newer).
         let runner = StubRunner::new(&[46075, 39000]);
         let sessions = vec![
             session("old-h", 41469, "h", "Aug 30 10:55:00 2026"),

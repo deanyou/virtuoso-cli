@@ -33,8 +33,6 @@ pub fn render_header(frame: &mut Frame, app: &App, theme: &Theme, area: Rect) {
     };
     let title_width = UnicodeWidthStr::width(TITLE) as u16;
 
-    // Layout: title (left) | tabs (center-ish) | status (right)
-    // If width is tight, truncate status first, then tabs; title never truncates.
     let total = inner.width;
     let gutter = 2u16;
     let title_right = inner.x + title_width.min(total);

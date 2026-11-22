@@ -1,15 +1,4 @@
 #!/bin/bash
-# Package the CentOS 7 build for offline transfer.
-#   ./package-centos7.sh <outdir> [bin_src]
-# Produces <outdir>/vcli-centos7-<version>/ containing:
-#   bin/{vcli,vtui,virtuoso-daemon}
-#   share/virtuoso-cli/ramic_bridge.il   (bridge template, __DAEMON_PATH__ token intact)
-#   install-offline.sh                     (target-side installer, prefix selectable)
-#   SHA256SUMS
-#
-# The package is prefix-agnostic: the bridge keeps its __DAEMON_PATH__ token and
-# install-offline.sh bakes the daemon path at install time, so the same drop
-# installs under /opt/virtuoso-cli, ~/.local or any custom prefix.
 set -euo pipefail
 
 OUTDIR="${1:?usage: package-centos7.sh <outdir> [bin_src]}"
@@ -26,8 +15,6 @@ for b in vcli vtui virtuoso-daemon; do
     install -m 0755 "$BIN_SRC/$b" "$PKG/bin/$b"
 done
 
-# Ship the bridge unbaked: the token is resolved by install-offline.sh against
-# the prefix actually used on the target machine.
 install -m 0644 "$REPO/resources/ramic_bridge.il" "$PKG/share/virtuoso-cli/ramic_bridge.il"
 grep -q '__DAEMON_PATH__' "$PKG/share/virtuoso-cli/ramic_bridge.il" \
     || { echo "ERROR: bridge has no __DAEMON_PATH__ token to bake" >&2; exit 1; }

@@ -81,7 +81,6 @@ impl CapabilitySet {
                     .collect()
             })
             .unwrap_or_else(|| {
-                // Default: allow all capabilities (existing behavior)
                 let mut set = HashSet::new();
                 set.insert(Capability::Schematic);
                 set.insert(Capability::Maestro);
@@ -117,39 +116,18 @@ impl CapabilitySet {
         let op = parts.next().unwrap_or("");
         match domain {
             "schematic" => self.permits(Capability::Schematic),
-            // Symbol generation/inspection is a schematic-editing operation:
-            // it reads a schematic and writes the cell's symbol view. Without
-            // this arm `symbol.*` fell through to `_ => false` and was denied
-            // to *every* caller — including Admin, because the fallthrough
-            // never reaches `permits()`, which is where the Admin bypass lives.
-            // That made hierarchical design impossible over typed RPC.
             "symbol" => self.permits(Capability::Schematic),
-            // Same fallthrough bug for `sim.*`. `Capability::Simulation` was
-            // declared and parseable from a token but no method domain ever
-            // mapped to it, so it granted nothing.
             "sim" => self.permits(Capability::Simulation),
             "maestro" => self.permits(Capability::Maestro),
             "window" => self.permits(Capability::Window),
             "cell" => self.permits(Capability::Cell),
             "tx" => self.permits(Capability::Transaction),
             "library" => self.permits(Capability::Library),
-            "file" => true, // File operations require full access
-            "util" => true, // Utility methods are always allowed
-            // The `skill` domain mixes two very different risk levels, and
-            // gating the whole domain on Admin gated the harmless half too:
-            // `find`/`info`/`sync`/`cache` only read `.fnd` documentation
-            // files — they execute no SKILL and never touch Virtuoso. Denying
-            // them to non-Admin callers meant a design-capability token could
-            // not look up an API signature, which is exactly backwards: the
-            // house rule is "read the manual, don't guess".
-            // `libref.*` only reads Cadence HTML documentation from a
-            // local cache. Like `util`, it executes nothing and contacts
-            // no Virtuoso, so gating it would only stop a designer from
-            // checking a CDF parameter name before setting it.
+            "file" => true,
+            "util" => true,
             "libref" => true,
             "skill" => match op {
                 "find" | "info" | "sync" | "cache" => true,
-                // `eval`/`exec`/`load`/`broadcast` run arbitrary SKILL.
                 _ => self.allows_raw_skill(),
             },
             _ => false,
@@ -287,9 +265,6 @@ mod tests {
 
     #[test]
     fn permits_symbol_methods_with_schematic_capability() {
-        // Regression: `symbol.*` had no match arm and fell through to
-        // `_ => false`, which denied it to everyone — Admin included, since
-        // the Admin bypass lives in `permits()` and the fallthrough skipped it.
         let caps = CapabilitySet(HashSet::from([Capability::Schematic]));
         assert!(caps.permits_method("symbol.generate"));
         assert!(caps.permits_method("symbol.inspect"));
@@ -303,8 +278,6 @@ mod tests {
 
     #[test]
     fn permits_sim_methods_with_simulation_capability() {
-        // Regression: `Capability::Simulation` was declared and parseable but
-        // no method domain mapped to it, so holding it granted nothing.
         let caps = CapabilitySet(HashSet::from([Capability::Simulation]));
         assert!(caps.permits_method("sim.check_license"));
 
@@ -328,7 +301,6 @@ mod tests {
     #[test]
     fn permits_file_methods() {
         let caps = CapabilitySet(HashSet::from([Capability::Schematic]));
-        // file operations should be permitted with any capability
         assert!(caps.permits_method("file.upload"));
         assert!(caps.permits_method("file.download"));
     }
@@ -336,7 +308,6 @@ mod tests {
     #[test]
     fn permits_util_methods() {
         let caps = CapabilitySet(HashSet::from([Capability::Schematic]));
-        // util methods should be permitted with any capability
         assert!(caps.permits_method("util.version"));
         assert!(caps.permits_method("util.ping"));
         assert!(caps.permits_method("util.ciw_print"));
@@ -345,7 +316,6 @@ mod tests {
     #[test]
     fn skill_methods_require_admin() {
         let caps = CapabilitySet(HashSet::from([Capability::Schematic]));
-        // skill methods should NOT be permitted without Admin
         assert!(!caps.permits_method("skill.exec"));
         assert!(!caps.permits_method("skill.load"));
         assert!(!caps.permits_method("skill.eval"));
@@ -353,15 +323,10 @@ mod tests {
 
     #[test]
     fn set_param_permitted_by_schematic_not_admin() {
-        // Sizing a device (schematic.set_param) is a structured schematic write:
-        // it must be reachable with the ordinary Schematic capability, WITHOUT
-        // Admin — the same gate as its read twin schematic.get_params. This is
-        // the crux of the self-lock the typed binding resolves.
         let sch = CapabilitySet(HashSet::from([Capability::Schematic]));
         assert!(sch.permits_method("schematic.set_param"));
         assert!(sch.permits_method("schematic.get_params"));
 
-        // Without Schematic (and without Admin), it is correctly denied.
         let other = CapabilitySet(HashSet::from([Capability::Maestro]));
         assert!(!other.permits_method("schematic.set_param"));
     }
@@ -385,14 +350,10 @@ mod tests {
 
     #[test]
     fn doc_lookup_needs_no_admin() {
-        // `skill.find|info|sync|cache` only read local `.fnd` documentation.
-        // Gating them on Admin (as the whole-domain arm used to) locked a
-        // design token out of the manual — the opposite of "read the manual".
         let sch = CapabilitySet(HashSet::from([Capability::Schematic]));
         for m in ["skill.find", "skill.info", "skill.sync", "skill.cache"] {
             assert!(sch.permits_method(m), "{m} must not require Admin");
         }
-        // Even an empty capability set can read docs.
         let none = CapabilitySet(HashSet::new());
         assert!(none.permits_method("skill.info"));
     }
@@ -406,7 +367,7 @@ mod tests {
             "skill.load",
             "skill.broadcast",
             "skill",
-            "skill.some_new_op", // unknown ops stay closed by default
+            "skill.some_new_op",
         ] {
             assert!(!sch.permits_method(m), "{m} must stay Admin-only");
         }
@@ -442,13 +403,11 @@ mod tests {
             description: None,
         });
 
-        // First request should pass
         let ip: IpAddr = "127.0.0.1".parse().unwrap();
         assert!(caps
             .permits_with_plugin("schematic.list", Some(&plugin), Some(&ip))
             .is_ok());
 
-        // Second request should be rate limited
         let result = caps.permits_with_plugin("schematic.list", Some(&plugin), Some(&ip));
         assert!(result.is_err());
         if let Err(CapabilityError::RateLimited { .. }) = result {
@@ -475,13 +434,11 @@ mod tests {
             description: None,
         });
 
-        // Internal IP should pass
         let internal_ip: IpAddr = "10.1.2.3".parse().unwrap();
         assert!(caps
             .permits_with_plugin("schematic.list", Some(&plugin), Some(&internal_ip))
             .is_ok());
 
-        // External IP should fail
         let external_ip: IpAddr = "8.8.8.8".parse().unwrap();
         let result = caps.permits_with_plugin("schematic.list", Some(&plugin), Some(&external_ip));
         assert!(matches!(result, Err(CapabilityError::IpNotAllowed(_))));
@@ -505,14 +462,12 @@ mod tests {
 
         plugin.set_expiration("schematic", 1);
 
-        // Should pass initially
         assert!(caps
             .permits_with_plugin("schematic.list", Some(&plugin), Some(&ip))
             .is_ok());
 
         std::thread::sleep(std::time::Duration::from_secs(2));
 
-        // Should now fail due to expiration
         let result = caps.permits_with_plugin("schematic.list", Some(&plugin), Some(&ip));
         assert!(matches!(result, Err(CapabilityError::Expired(_))));
     }
@@ -533,7 +488,6 @@ mod tests {
 
         let ip: IpAddr = "127.0.0.1".parse().unwrap();
 
-        // Cell methods not in Schematic capability
         let result = caps.permits_with_plugin("cell.open", Some(&plugin), Some(&ip));
         assert!(matches!(result, Err(CapabilityError::NotPermitted(_))));
     }

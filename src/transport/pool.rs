@@ -241,9 +241,6 @@ impl EndpointSlot {
             return Ok(Arc::clone(existing));
         }
         let transport = factory()?;
-        // Bump the global counter once per successful factory call. Reading
-        // the previous value and storing the next gives every newly-built
-        // `Endpoint` a strictly larger generation than its predecessor.
         let generation = Arc::new(AtomicU64::new(
             NEXT_ENDPOINT_GENERATION.fetch_add(1, Ordering::Relaxed),
         ));
@@ -329,8 +326,6 @@ impl EndpointPool {
             Ok(endpoint) => Ok(endpoint),
             Err(e) => {
                 let mut slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
-                // Drop the empty slot, but only if it is still the one we
-                // created — a concurrent success may have replaced it.
                 let still_empty = slots
                     .get(&key)
                     .and_then(|s| s.endpoint.lock().ok())
@@ -377,10 +372,6 @@ impl EndpointPool {
     /// [`remove`] is for `tunnel stop` only — it would otherwise race with
     /// reconnect in step 6.
     pub fn remove_if_matches(&self, key: &EndpointKey, expected_gen: u64) -> bool {
-        // One lock for the whole check-then-clear. `EndpointPool::slots` is a
-        // plain `Mutex`: a second `lock()` on this thread would deadlock
-        // because the first guard is still alive, so the comparison and the
-        // eviction must happen inside a single critical section.
         let slots = self.slots.lock().unwrap_or_else(|e| e.into_inner());
         let matches = slots
             .get(key)
@@ -498,8 +489,6 @@ mod tests {
 
     #[test]
     fn identical_resolutions_produce_one_key() {
-        // "GUI, deploy, daemon, and Spectre roles that resolve to the same key
-        // share one authenticated SSH Transport."
         let cfg = config_for("eda-1");
         let fb = cfg.remote_host.as_deref();
         let keys = [
@@ -526,7 +515,6 @@ mod tests {
 
     #[test]
     fn aliases_are_not_guessed_to_be_equivalent() {
-        // "Endpoint aliases are not guessed to be equivalent."
         assert_ne!(key("eda-1"), key("eda-1.corp.example.com"));
         assert_ne!(key("eda-1"), key("10.0.0.7"));
     }
@@ -557,8 +545,6 @@ mod tests {
 
     #[test]
     fn profiles_never_share_an_endpoint() {
-        // "Profiles are always isolated, even if their endpoint keys are
-        // otherwise identical."
         let mut a = config_for("eda-1");
         a.profile = Some("tapeout".into());
         let mut b = config_for("eda-1");
@@ -567,7 +553,6 @@ mod tests {
             EndpointKey::from_config(&a, "eda-1"),
             EndpointKey::from_config(&b, "eda-1")
         );
-        // And a profiled config never shares with an unprofiled one.
         let plain = config_for("eda-1");
         assert_ne!(
             EndpointKey::from_config(&a, "eda-1"),
@@ -577,8 +562,6 @@ mod tests {
 
     #[test]
     fn control_master_is_not_part_of_the_identity() {
-        // It is a path workaround, not a security switch: splitting a pooled
-        // connection over it would be pure waste.
         let mut cfg = config_for("eda-1");
         cfg.disable_control_master = true;
         assert_eq!(EndpointKey::from_config(&cfg, "eda-1"), key("eda-1"));
@@ -602,7 +585,6 @@ mod tests {
         assert!(!k.digest().contains("secret_key"));
         assert!(k.summary().contains("eda-1"));
         assert_eq!(k.digest().len(), 12);
-        // Stable across calls, and different per key.
         assert_eq!(k.digest(), k.digest());
         assert_ne!(k.digest(), key("eda-2").digest());
     }
@@ -653,8 +635,6 @@ mod tests {
 
     #[test]
     fn concurrent_callers_authenticate_once() {
-        // "Tests prove that 100 concurrent short commands use one
-        // authentication." The factory is the stand-in for that handshake.
         let pool = Arc::new(EndpointPool::new());
         let calls = Arc::new(AtomicUsize::new(0));
         let mut threads = Vec::new();
@@ -692,7 +672,6 @@ mod tests {
             })
             .expect_err("first attempt fails");
         assert!(matches!(err, TransportError::ConnectionFailed(_)));
-        // The slot must be gone, so the next caller really retries.
         assert_eq!(pool.len(), 0);
         let ep = pool
             .get_or_create(
@@ -759,7 +738,6 @@ mod tests {
                 ok_transport,
             )
             .unwrap();
-        // Acquiring on one endpoint must not consume the other's capacity.
         let _held: Vec<_> = (0..3)
             .map(|_| {
                 a.acquire(
@@ -785,9 +763,6 @@ mod tests {
 
     #[test]
     fn every_endpoint_carries_a_strictly_increasing_generation() {
-        // The generation is the safety net against late eviction callbacks,
-        // so the only invariant that matters here is "newer endpoint ⇒ larger
-        // generation" across calls.
         let pool = EndpointPool::new();
         let a = pool
             .get_or_create(
@@ -813,10 +788,6 @@ mod tests {
 
     #[test]
     fn a_late_eviction_does_not_drop_a_concurrent_replacement() {
-        // A request captured `gen_a` from the endpoint it was using. By the
-        // time the connection-error callback runs, a concurrent request has
-        // replaced that endpoint with `gen_b`. The callback's remove must be a
-        // no-op so the next caller still has a usable connection.
         let pool = EndpointPool::new();
         let first = pool
             .get_or_create(
@@ -827,9 +798,6 @@ mod tests {
             .unwrap();
         let gen_a = first.generation();
 
-        // Simulate the rebuild path: drop the slot, then re-create. The
-        // exact same effect would happen when a real factory errors and the
-        // pool re-tries on the next request.
         pool.remove(&key("eda-1"));
         let replacement = pool
             .get_or_create(
@@ -841,9 +809,6 @@ mod tests {
         let gen_b = replacement.generation();
         assert!(gen_b > gen_a);
 
-        // The late callback fires with the stale generation. It must NOT
-        // remove the replacement; otherwise the next request would retry the
-        // factory instead of reusing the freshly-built connection.
         assert!(
             !pool.remove_if_matches(&key("eda-1"), gen_a),
             "stale generation must not evict the replacement"
@@ -856,15 +821,12 @@ mod tests {
         );
         assert_eq!(observed.generation(), gen_b);
 
-        // The current generation evicts as expected.
         assert!(pool.remove_if_matches(&key("eda-1"), gen_b));
         assert!(pool.is_empty());
     }
 
     #[test]
     fn remove_if_matches_returns_false_when_the_slot_is_empty() {
-        // No slot at all: the conditional remove must be a no-op, never panic
-        // on a missing entry, and never synthesise a slot.
         let pool = EndpointPool::new();
         assert!(!pool.remove_if_matches(&key("eda-1"), 42));
         assert!(pool.is_empty());
@@ -872,17 +834,11 @@ mod tests {
 
     #[test]
     fn evicting_an_endpoint_keeps_its_scheduler_and_budget() {
-        // #79 ③: cleaning up a failed instance must not rebuild the
-        // endpoint's scheduler. The scheduler lives on the slot, so the
-        // endpoint built after an eviction shares one channel budget with
-        // requests that are still in flight — never two independent ones.
         let pool = EndpointPool::new();
         let limits = SchedulerLimits::default_limits();
         let first = pool
             .get_or_create(key("eda-1"), limits, ok_transport)
             .unwrap();
-        // Stand in for an in-flight request: one permit is checked out and
-        // will only be returned after the eviction.
         let permit = first
             .acquire(
                 Priority::Normal,
@@ -894,8 +850,6 @@ mod tests {
         let gen_a = first.generation();
         assert_eq!(first_scheduler.stats().active, 1);
 
-        // Conditional eviction (the path the IPC server takes on a
-        // connection-level failure) drops the instance but keeps the slot.
         assert!(
             pool.remove_if_matches(&key("eda-1"), gen_a),
             "the current generation must evict"
@@ -920,8 +874,6 @@ mod tests {
             "the in-flight permit is charged to the shared budget — it must not reset"
         );
 
-        // Releasing the old permit returns capacity to the one scheduler
-        // both endpoints share.
         drop(permit);
         assert_eq!(first_scheduler.stats().active, 0);
         assert_eq!(second.scheduler.stats().active, 0);

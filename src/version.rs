@@ -33,7 +33,6 @@ impl VirtuosoVersion {
 
 /// Parse the major IC version from a version string like "IC23.1-64b.500" or "IC25.1 ISR1".
 pub fn parse_ic_version(version_str: &str) -> VirtuosoVersion {
-    // Look for "IC" followed by digits — IC618 = 618, IC23 = 23, IC25 = 25
     let lower = version_str.to_lowercase();
     if let Some(pos) = lower.find("ic") {
         let digits: String = lower[pos + 2..]
@@ -47,7 +46,6 @@ pub fn parse_ic_version(version_str: &str) -> VirtuosoVersion {
             if major >= 23 {
                 return VirtuosoVersion::IC23;
             }
-            // IC6.1.x etc. — treat as IC23 (pre-25 API)
             return VirtuosoVersion::IC23;
         }
     }
@@ -57,9 +55,6 @@ pub fn parse_ic_version(version_str: &str) -> VirtuosoVersion {
 /// Detect Virtuoso version by querying the daemon.
 /// Tries getVersion(t) first (IC23/IC25), falls back to getVersionString() (if available).
 pub fn detect_version(client: &VirtuosoClient) -> Result<VirtuosoVersion> {
-    // getVersion(t) returns e.g. "sub-version  IC25.1-64b.ISR4.49 "
-    // Idempotent probe: fixed read-only literals (internal operation, and
-    // version detection must survive a stale queued ticket).
     let result = client.execute_skill_idempotent_probe("getVersion(t)", None)?;
     if result.skill_ok() {
         let version_str = result.output.trim().trim_matches('"');
@@ -67,7 +62,6 @@ pub fn detect_version(client: &VirtuosoClient) -> Result<VirtuosoVersion> {
             return Ok(parse_ic_version(version_str));
         }
     }
-    // Fallback: some builds may have getVersionString()
     let result2 = client.execute_skill_idempotent_probe("getVersionString()", None)?;
     if result2.skill_ok() {
         let version_str = result2.output.trim().trim_matches('"');

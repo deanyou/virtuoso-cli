@@ -53,7 +53,6 @@ Parameters: VDD=1.1
     );
     assert!(!result.all_pass()); // Last point failed
 
-    // Check raw value (get_scalar won't parse with suffix)
     let value = &result.points[0].outputs.get("Ileak_nA").unwrap().value;
     assert_eq!(value, "1.2");
 }
@@ -167,7 +166,6 @@ fn test_maestro_trailing_n_artifact() {
         result.points[0].parameters.get("VDD"),
         Some(&"1.2".to_string())
     );
-    // Value should have trailing n removed
     let value = &result.points[0].outputs.get("val").unwrap().value;
     assert_eq!(value, "3.5");
 }

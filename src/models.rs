@@ -486,9 +486,6 @@ impl TunnelState {
     }
 
     fn state_path(profile: Option<&str>) -> std::path::PathBuf {
-        // Default to state_root (XDG_STATE_HOME) and fall back to the legacy
-        // ~/.cache/virtuoso_bridge/state_*.json path so older daemon
-        // processes keep finding their state files after a refactor.
         let primary = crate::runtime_paths::state_root()
             .join(crate::runtime_paths::APP_DIR)
             .join(match profile {
@@ -576,10 +573,8 @@ mod tests {
             s.setup_path.as_deref(),
             Some("/home/u/.cache/virtuoso_bridge/setup")
         );
-        // v1 has no backend field → OpenSSH, and is not v2.
         assert_eq!(s.backend_or_openssh(), "openssh");
         assert!(!s.is_v2());
-        // v2-only fields default to None so v1 never fails to deserialize.
         assert!(s.daemon_nonce.is_none());
         assert!(s.ipc_endpoint.is_none());
         assert!(s.executable_path.is_none());
@@ -654,7 +649,6 @@ mod tests {
             attached_session_id: None,
         };
         let json = serde_json::to_string(&s).unwrap();
-        // An old reader that only knows v1 fields must still accept it.
         let legacy: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(legacy["port"], 20024);
         assert_eq!(legacy["pid"], 0);

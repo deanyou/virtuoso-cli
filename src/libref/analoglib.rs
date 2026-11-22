@@ -131,7 +131,7 @@ fn expand_range(name: &str) -> Vec<String> {
         return Vec::new();
     };
     if c[1] != c[3] {
-        return Vec::new(); // `F1 - N50` is not a range, it is a typo
+        return Vec::new();
     }
     let (Ok(from), Ok(to)) = (c[2].parse::<u32>(), c[4].parse::<u32>()) else {
         return Vec::new();
@@ -180,8 +180,6 @@ fn parse_params(
             }
             let (label, name) = (c[0].clone(), c[1].clone());
             let spectre = c.get(2).cloned().unwrap_or_default();
-            // Prefer the appendix record whose label matches this table's
-            // label; fall back to the first record for the name.
             let record = appendix.get(&name).and_then(|recs| {
                 recs.iter()
                     .find(|r| r.label == label)
@@ -209,8 +207,6 @@ pub fn parse_analoglib_directory_reported(dir: &Path) -> (Vec<LibSymbol>, ParseR
         return (symbols, report);
     };
 
-    // Cached files are namespaced `<RELEASE>__<basename>`; a directly-loaded
-    // Cadence tree has bare basenames. Both are just a prefix on every file.
     let mut prefixes: Vec<String> = read_dir
         .flatten()
         .filter_map(|e| {
@@ -270,8 +266,6 @@ fn parse_release(dir: &Path, prefix: &str) -> (Vec<LibSymbol>, ParseReport) {
             continue;
         }
 
-        // Locate every section first, then sort by offset: a section runs from
-        // its own anchor to the next one in the same file.
         let mut located: Vec<(usize, IndexEntry)> = Vec::new();
         for entry in entries {
             match find_anchor(&html, &entry.anchor) {
@@ -376,7 +370,6 @@ mod tests {
         assert_eq!(plain("<b>AC magnitude</b>"), "AC magnitude");
         assert_eq!(plain("a&nbsp;&amp;&nbsp;b"), "a & b");
         assert_eq!(plain("line one\n\n   line two"), "line one line two");
-        // `&amp;` is expanded last so an escaped entity survives intact.
         assert_eq!(plain("&amp;lt;"), "&lt;");
     }
 
@@ -389,8 +382,6 @@ mod tests {
             html.find("Symbol: bsource").is_none(),
             "the naive scan fails"
         );
-        // The offset lands inside the opening `<a …>`, i.e. at or before the
-        // section it introduces — that is all the section slicer needs.
         let at = find_anchor(html, "pgfId-1").expect("anchor is locatable");
         assert!(at < html.find("bol: bsource").unwrap());
         assert!(html[at..].starts_with(r#"id="pgfId-1""#));
@@ -437,8 +428,6 @@ mod tests {
         assert!(find_anchor(r#"<a id="other"></a>"#, "pgfId-9").is_none());
     }
 
-    // Extra hashes: the index JSON contains `"#"` (jstree's root parent) and
-    // `#pgfId-…` fragments, either of which ends an `r#"…"#` literal early.
     fn index_json() -> &'static str {
         r##"{"core":{"data":[
           {"id":"c1","parent":"#","text":"Passive Components"},

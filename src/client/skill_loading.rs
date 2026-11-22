@@ -10,9 +10,6 @@ pub(super) fn stage_remote_file(transport: &dyn RemoteTransport, local: &Path) -
         .and_then(|name| name.to_str())
         .ok_or_else(|| VirtuosoError::Config("SKILL filename must be UTF-8".into()))?;
 
-    // The tar-based transport archives symlinks rather than following them.
-    // Materialize their bytes under the original name so .ils still selects
-    // SKILL++, and never resolve a local link against the remote filesystem.
     let staging = if local.is_symlink() {
         let directory = tempfile::tempdir()?;
         let source = directory.path().join(filename);
@@ -23,9 +20,6 @@ pub(super) fn stage_remote_file(transport: &dyn RemoteTransport, local: &Path) -
     };
     let source = staging.as_ref().map_or(local, |(_, path)| path.as_path());
 
-    // mktemp creates a private, unique directory owned by the SSH user. Do not
-    // depend on /tmp/virtuoso_bridge, which may belong to another Unix user.
-    // Run through sh explicitly because the SSH login shell may be csh.
     let command = format!(
         "sh -c {}",
         shell_quote("umask 077; mktemp -d \"${TMPDIR:-/tmp}/vcli-skill-XXXXXXXXXX\"")
@@ -44,10 +38,8 @@ pub(super) fn stage_remote_file(transport: &dyn RemoteTransport, local: &Path) -
             "mktemp did not return a single absolute remote SKILL directory".into(),
         ));
     }
-    // Keep the original suffix: .ils selects SKILL++ rather than SKILL.
     let remote = format!("{directory}/{filename}");
     transport.upload_file(&UploadFileRequest::untimed(source, &remote))?;
-    // Retain the source for debugging and later callbacks, as load_il did before.
     Ok(remote)
 }
 

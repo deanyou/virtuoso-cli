@@ -34,15 +34,11 @@ fn fix_skill_octal_escapes(s: &str) -> String {
 /// Parse SKILL JSON output: bridge returns `"\"[...]\""`  — strip outer quotes, unescape inner.
 /// Returns `Err` if the output cannot be parsed as JSON after unescaping.
 pub(crate) fn parse_skill_json(output: &str) -> Result<Value> {
-    // output is like: "\"[{\\\"name\\\":\\\"M1\\\"}]\""
-    // Step 1: strip outer quotes from SKILL string
     let s = output.trim_matches('"');
-    // Step 2: fix SKILL octal escapes (\256 → \u00AE) and try parsing directly
     let fixed = fix_skill_octal_escapes(s);
     if let Ok(v) = serde_json::from_str(&fixed) {
         return Ok(v);
     }
-    // Step 3: unescape \" → " and \\\\ → \ then retry
     let unescaped = fixed.replace("\\\"", "\"").replace("\\\\", "\\");
     serde_json::from_str(&unescaped).map_err(|e| {
         VirtuosoError::Execution(format!(
@@ -182,7 +178,6 @@ impl RpcDispatcher {
         let result = reject_undeclared_params(&method, &params)
             .and_then(|()| Self::dispatch_inner(self, client, &method, params.clone()));
 
-        // Audit log — always log, regardless of success/failure
         let result_str = match &result {
             Ok(v) => serde_json::to_string(v).unwrap_or_default(),
             Err(e) => format!("error: {e}"),
@@ -284,19 +279,10 @@ impl RpcDispatcher {
                 let view = json_str_or(params.get("view"), "schematic")?;
                 let skill = ops.open_cellview(&lib, &cell, &view);
                 let r = execute_required_skill(client, &skill, "open cell view")?;
-                // Hand back the bound target and whether a window shows it.
-                // `status: ok` alone told the caller nothing about where the
-                // following `schematic.*` calls would actually land.
                 Ok(merge_status_ok(r.output.trim()))
             }
             "place" => {
                 let master = json_str(params.get("master"), "master")?;
-                // `master` is documented as "lib/cell" (see standard_schema()).
-                // Split it into the separate library and cell names dbOpenCellView-
-                // ByType needs; previously the whole "lib/cell" string was passed as
-                // BOTH the lib and the cell, so no real cell (lib != cell, e.g.
-                // analogLib/res) could ever be resolved. The view is always "symbol"
-                // — placing a symbol is the correct behaviour for an instance.
                 let (lib, cell) = master.split_once('/').ok_or_else(|| {
                     VirtuosoError::Execution(format!(
                         "master must be in lib/cell format (e.g. analogLib/res), got '{master}'"
@@ -312,18 +298,9 @@ impl RpcDispatcher {
             }
             "move_instance" => {
                 let name = json_str(params.get("name"), "name")?;
-                // Absolute target; the SKILL converts to the relative
-                // displacement dbMoveFig actually applies.
                 let x = json_f64(params.get("x"), "x")?;
                 let y = json_f64(params.get("y"), "y")?;
-                // Absolute orientation; omit to leave the placement as-is.
                 let orient = params.get("orient").and_then(|v| v.as_str());
-                // Default true: an instance whose terminals carry stubs is the
-                // normal case in a schematic built by `label_term`, and leaving
-                // the stubs where they were disconnects the symbol from its own
-                // wiring — a failure that only surfaces in the exported
-                // netlist. `false` is the pre-2026-09-12 behaviour, kept for
-                // callers who are deliberately moving the symbol alone.
                 let with_stubs = params
                     .get("with_stubs")
                     .and_then(|v| v.as_bool())
@@ -334,10 +311,6 @@ impl RpcDispatcher {
             }
             "wire" => {
                 let net = json_str(params.get("net"), "net")?;
-                // Every point must parse. The two `filter_map`s that used to be
-                // here dropped whatever did not — a typo in one coordinate
-                // shortened the wire and still reported ok, so the missing
-                // segment only showed up as a disconnected net much later.
                 let pts = parse_wire_points(params.get("points"))?;
                 let skill = ops.create_wire(&pts, &net);
                 execute_required_skill(client, &skill, "create wire")?;
@@ -360,10 +333,6 @@ impl RpcDispatcher {
                 let y = json_coord_or(params.get("y"), "y", 0.0)?;
                 let orient = params.get("orient").and_then(|v| v.as_str());
                 let sigtype = params.get("sigtype").and_then(|v| v.as_str());
-                // The unknown-direction/orient/sigtype rejections live in
-                // `create_pin`, which every caller reaches — the RPC layer, the
-                // CLI and the batch builder. A second copy here would be free to
-                // drift from the one that actually guards the SKILL.
                 let skill = ops.create_pin(&net, &dir, (x, y), orient, sigtype)?;
                 execute_required_skill(client, &skill, "create pin")?;
                 Ok(serde_json::json!({
@@ -429,17 +398,10 @@ impl RpcDispatcher {
                 }))
             }
             "delete_instance" => {
-                // Two-phase: the command layer answers `confirm_required` with
-                // a manifest when `confirm` is absent, and deletes when the
-                // token it issued comes back. It opens its own client, so the
-                // `client` this dispatch holds is unused here.
                 let inst = json_str(params.get("inst"), "inst")?;
                 crate::commands::delete::instance(&inst, confirm_of(&params))
             }
             "delete_figure" => {
-                // Two-phase, like the other deletes. Addressed by terminal or
-                // by point — `commands::delete::figure` insists on exactly one
-                // of the two pairs rather than guessing.
                 let inst = params.get("inst").and_then(|v| v.as_str());
                 let term = params.get("term").and_then(|v| v.as_str());
                 let x = params
@@ -518,18 +480,10 @@ impl RpcDispatcher {
                 let lib = json_str(params.get("lib"), "lib")?;
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str_or(params.get("view"), "maestro")?;
-                // Read-only by default: append mode takes an edit lock on a
-                // session that has no window, which locks a human out of the
-                // cell with nothing to click (EXPLORER-1642).
                 let mode = json_str_or(params.get("mode"), "r")?;
                 crate::commands::maestro::check_session_mode(&mode)?;
                 let skill = ops.open_session(&lib, &cell, &view, &mode);
                 let r = execute_required_skill(client, &skill, "open Maestro session")?;
-                // `output_unquoted`, not `output.trim()`: the bridge hands back
-                // the SKILL string literal `"fnxSession12"` with its quotes, and
-                // a caller who passes that straight into `close_session` or
-                // `set_session_mode` gets `nil` back, because the quotes end up
-                // inside the session name. Measured 2026-09-09.
                 Ok(serde_json::json!({
                     "status": "ok",
                     "session": r.output_unquoted(),
@@ -553,10 +507,6 @@ impl RpcDispatcher {
             "list_sessions" => {
                 let skill = ops.list_sessions();
                 let r = execute_query_skill(client, &skill, "list Maestro sessions")?;
-                // `parse_skill_json`, not a bare `from_str`: the bridge hands
-                // back the SKILL string still quoted, so `from_str` parsed it
-                // as the JSON *string* `"[]"` and the caller got a string
-                // where every other list method returns an array.
                 parse_skill_json(&r.output)
             }
             "list_tests" => {
@@ -568,9 +518,6 @@ impl RpcDispatcher {
             "list_corners" => {
                 let session = json_str(params.get("session"), "session")?;
                 let skill = ops.list_corners(&session);
-                // `ok_or_exec`, not the bare transport check: the SKILL raises
-                // `error()` for an unknown session, and that text lands in
-                // `errors` — a plain parse would report it as malformed JSON.
                 let r = execute_query_skill(client, &skill, "list Maestro corners")?
                     .ok_or_exec("list Maestro corners")?;
                 parse_skill_json(&r.output)
@@ -591,9 +538,6 @@ impl RpcDispatcher {
             "list_vars" => {
                 let skill = ops.list_vars();
                 let r = execute_query_skill(client, &skill, "list Maestro variables")?;
-                // `parse_skill_json`, not a bare `from_str`: the bridge hands
-                // back the SKILL string still quoted, which `from_str` would
-                // happily parse as a JSON *string* rather than the array.
                 parse_skill_json(&r.output)
             }
             "delete_var" => {
@@ -612,9 +556,6 @@ impl RpcDispatcher {
             "delete_analysis" => {
                 let analysis = json_str(params.get("analysis"), "analysis")?;
                 let skill = ops.delete_analysis(&analysis);
-                // Verified delete: `asiDeleteAnalysis` throws even when it
-                // succeeds, so the SKILL re-reads the enabled list and reports
-                // `"t"` only if the analysis is actually gone.
                 let r = execute_query_skill(client, &skill, "delete Maestro analysis")?;
                 if r.output.trim().trim_matches('"') == "t" {
                     Ok(serde_json::json!({ "status": "ok" }))
@@ -706,7 +647,6 @@ impl RpcDispatcher {
             "get_current_session" => {
                 let skill = ops.get_current_session();
                 let r = execute_query_skill(client, &skill, "get current Maestro session")?;
-                // SKILL returns: "nil" (quoted) when no session
                 let session = r.output.trim().trim_matches('"');
                 if session == "nil" {
                     Ok(serde_json::json!({ "session": null }))
@@ -739,7 +679,6 @@ impl RpcDispatcher {
                 let lib = json_str(params.get("lib"), "lib")?;
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str(params.get("view"), "view")?;
-                // Optional: without it every test in the session is retargeted.
                 let test = params
                     .get("test")
                     .and_then(|v| v.as_str())
@@ -788,9 +727,6 @@ impl RpcDispatcher {
                 Ok(r)
             }
             "create_corner_netlist" => {
-                // Dispatch the same helper the CLI uses. RPC params mirror
-                // the CLI flags exactly: `session`, `test`, `corner`, `output_dir`,
-                // all required and shell-quoted downstream by the helper.
                 let session = json_str(params.get("session"), "session")?;
                 let test = json_str(params.get("test"), "test")?;
                 let corner = json_str(params.get("corner"), "corner")?;
@@ -820,17 +756,9 @@ impl RpcDispatcher {
             }
             "screenshot" => {
                 let path = json_str(params.get("path"), "path")?;
-                // The SKILL route grabs the X11 root window; on servers that
-                // refuse a root-window grab it fails, and a per-window capture
-                // is used instead when the caller names a window.
                 let window_id = params.get("window_id").and_then(|v| v.as_str());
                 let display = params.get("display").and_then(|v| v.as_str());
                 let ctx = &self.ctx;
-                // The unchecked entry: the dispatcher's own capability gate
-                // (`permits_method` → Window) is the permission check here.
-                // The checked one demands the Admin capability on top of it,
-                // which locked this method — and the MCP `window_screenshot`
-                // tool — out for every default (non-Admin) client.
                 match crate::commands::window::screenshot_unchecked(
                     ctx, &path, None, window_id, display,
                 ) {
@@ -859,9 +787,6 @@ impl RpcDispatcher {
                 let action = json_str_or(params.get("action"), "cancel")?;
                 let skill = ops.dismiss_dialog(&action);
                 let r = execute_required_skill(client, &skill, "dismiss dialog")?;
-                // The bridge hands back the SKILL string with its quotes, so the
-                // sentinel only matches after trimming them — same as
-                // `commands::window`.
                 let out = r.output.trim().trim_matches('"');
                 if out == "no-dialog" {
                     Ok(serde_json::json!({ "status": "no-dialog" }))
@@ -880,8 +805,6 @@ impl RpcDispatcher {
                 }
             }
             "dismiss_dialog_x11" => {
-                // SKILL channel cannot unstick a deadlocked CIW; this dispatches
-                // to the SSH+X11 bypass (transport::x11::dismiss).
                 let action = json_str_or(params.get("action"), "enter")?;
                 let dry_run = params
                     .get("dry_run")
@@ -895,19 +818,11 @@ impl RpcDispatcher {
                 )
             }
             "list_windows_x11" => {
-                // Enumerate every Virtuoso-related X11 window (no keypress).
-                // Returns { display, windows, count }. Use the `dismiss_id`
-                // from each entry to feed `dismiss_window_x11` next.
                 let display = params.get("display").and_then(|v| v.as_str());
                 let ctx = &self.ctx;
                 crate::commands::window::list_windows_x11(ctx, display)
             }
             "dismiss_window_x11" => {
-                // Dismiss a SPECIFIC window by id (typically the dismiss_id
-                // returned by list_windows_x11). Unlike dismiss_dialog_x11
-                // this does NOT apply the dialog-size filter — the caller is
-                // expected to have already identified the target window.
-                // Accepts window_id, or --pid to resolve the window by PID.
                 let window_id = params.get("window_id").and_then(|v| v.as_str());
                 let pid = params.get("pid").and_then(|v| v.as_u64()).map(|n| n as u32);
                 let action = json_str_or(params.get("action"), "enter")?;
@@ -916,8 +831,6 @@ impl RpcDispatcher {
                 crate::commands::window::dismiss_window_x11(ctx, window_id, pid, &action, display)
             }
             "geometry" => {
-                // Client-area geometry of one window — the coordinate space
-                // action-x11 bounds-checks click coordinates against.
                 let window_id = json_str(params.get("window_id"), "window_id")?;
                 let display = params.get("display").and_then(|v| v.as_str());
                 let ctx = &self.ctx;
@@ -948,8 +861,6 @@ impl RpcDispatcher {
                 Ok(serde_json::json!({ "status": "ok", "output": r.output }))
             }
             "close" => {
-                // Default to saving: an unsaved close is the path that can pop
-                // a "save changes?" modal, and a modal freezes the bridge.
                 let save = params
                     .get("save")
                     .and_then(serde_json::Value::as_bool)
@@ -978,9 +889,6 @@ impl RpcDispatcher {
                 let lib = json_str(params.get("lib"), "lib")?;
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str_or(params.get("view"), "schematic")?;
-                // `dbOpenCellViewByType` refuses to *create* without a view
-                // type ("You need to specify a cellViewType to create a new
-                // cellview", skdfref), and the type is not the view name.
                 let view_type = match params.get("view_type").and_then(|v| v.as_str()) {
                     Some(t) => t.to_string(),
                     None => cell_view_type_for(&view).ok_or_else(|| {
@@ -992,14 +900,6 @@ impl RpcDispatcher {
                     })?,
                 };
                 let skill = format!(
-                    // Mode "w" *wipes* an existing cellview, so refuse when one
-                    // is already there rather than silently emptying it — the
-                    // old `dbCreateCell` never got far enough to have this
-                    // hazard, because it does not exist in IC23.1 at all
-                    // (`undefined function dbCreateCell`, verified live).
-                    // `dbOpenCellViewByType` only builds the cellview in
-                    // memory; `dbSave` is what puts it on disk, and `dbClose`
-                    // keeps the call from leaking an edit lock.
                     r#"let((existing cv) existing = nil errset(existing = ddGetObj("{lib}" "{cell}" "{view}")) when(existing error("cell.create: {lib}/{cell}/{view} already exists — delete it first, this would overwrite it")) cv = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "{view_type}" "w") when(!cv error("cell.create: dbOpenCellViewByType failed for {lib}/{cell}/{view} (type {view_type})")) when(!dbSave(cv) dbClose(cv) error("cell.create: dbSave failed for {lib}/{cell}/{view}")) dbClose(cv) sprintf(nil "{lib}/{cell}/{view} ({view_type})"))"#,
                     lib = escape_skill_string(&lib),
                     cell = escape_skill_string(&cell),
@@ -1013,8 +913,6 @@ impl RpcDispatcher {
                 }))
             }
             "delete_view" => {
-                // Two-phase. See `commands::delete`: without `confirm` this
-                // answers with a manifest and a token, with it the view goes.
                 let lib = json_str(params.get("lib"), "lib")?;
                 let cell = json_str(params.get("cell"), "cell")?;
                 let view = json_str(params.get("view"), "view")?;
@@ -1022,14 +920,10 @@ impl RpcDispatcher {
             }
             "delete" => {
                 let lib = json_str(params.get("lib"), "lib")?;
-                // Required, not defaulted: an absent cell name is what would
-                // turn the underlying `ddGetObj` into a library lookup.
                 let cell = json_str(params.get("cell"), "cell")?;
                 crate::commands::delete::cell(&lib, &cell, confirm_of(&params))
             }
             "read_path" => {
-                // Return the on-disk readPath of a registered library. Used by
-                // `vcli diag cdslck` to know where to look for lock files.
                 let lib = json_str(params.get("lib"), "lib")?;
                 let skill = format!(
                     r#"ddGetObj("{lib}")~>readPath"#,
@@ -1131,18 +1025,6 @@ impl RpcDispatcher {
                 }))
             }
             "ping" => {
-                // Ping uses the idempotent probe, NOT
-                // `execute_skill_unchecked`: a ping must survive a stale
-                // queued ticket — that is exactly the stuck state it is
-                // meant to detect.
-                // The probe expression is `plus(1 1)`: a no-op SKILL form
-                // that returns a non-nil integer on any responsive daemon.
-                // `ipcIsProcessRunning()` (previously used here) does not
-                // exist on IC23.1 — it is in none of the 41 SKILL Finder
-                // databases and `getd` returns nil — so the call errored and
-                // the ping failed spuriously on live daemons. The old note
-                // here blamed a missing process-handle argument; that was
-                // the wrong diagnosis for the right fix.
                 let r = client.execute_skill_idempotent_probe("plus(1 1)", Some(5000))?;
                 if r.skill_ok() {
                     Ok(serde_json::json!({ "status": "ok" }))
@@ -1174,7 +1056,6 @@ impl RpcDispatcher {
     fn dispatch_skill(&self, client: &VirtuosoClient, op: &str, params: Value) -> Result<Value> {
         match op {
             "exec" => {
-                // Admin capability is checked by execute_skill (not execute_skill_unchecked)
                 let code = json_str(params.get("code"), "code")?;
                 let timeout = params.get("timeout").and_then(|v| v.as_u64());
                 let r = client.execute_skill(&code, timeout)?;
@@ -1262,9 +1143,6 @@ impl RpcDispatcher {
                 let category = params.get("category").and_then(|v| v.as_str());
                 commands::libref::list(lib, category, refresh)
             }
-            // `symbol` is optional only when `lib` is given: `libref.info
-            // {lib: "rfLib"}` asks about the library itself, and the answer is
-            // why it has no symbols here.
             "info" => {
                 let symbol = match params.get("symbol").and_then(|v| v.as_str()) {
                     Some(s) => s.to_string(),
@@ -1410,9 +1288,6 @@ fn parse_wire_points(value: Option<&Value>) -> Result<Vec<(f64, f64)>> {
         })
         .collect::<Result<Vec<_>>>()
         .and_then(|pts| {
-            // One point is not a wire. Rejecting it here names the parameter;
-            // letting it through makes `schCreateWire` return nil, which the
-            // caller sees as a cellview problem.
             if pts.len() < 2 {
                 return Err(VirtuosoError::Execution(format!(
                     "field 'points' needs at least two points to make a wire, got {}",
@@ -1479,9 +1354,6 @@ mod tests {
         use crate::client::bridge::VirtuosoClient;
         use crate::commands::window::{execute_screenshot_skill, ScreenshotRoute};
 
-        // The default capability set: every domain except raw SKILL exec.
-        // VCLI_CAPABILITY must be out of the way for "default" to mean
-        // anything, so remove it for the duration of the test.
         let saved = std::env::var("VCLI_CAPABILITY").ok();
         std::env::remove_var("VCLI_CAPABILITY");
         let caps = CapabilitySet::from_env();
@@ -1498,9 +1370,6 @@ mod tests {
             "the default capability set must not grant raw SKILL exec"
         );
 
-        // A client with exactly that capability set. It points at a closed
-        // port, so the SKILL cannot run — but the permission check happens
-        // first, and that is what this test is about.
         let client = VirtuosoClient::new("127.0.0.1", 9, 1).with_capabilities(caps);
         let skill = client.window.screenshot("/tmp/vcli-screenshot-probe.png");
 
@@ -1527,8 +1396,6 @@ mod tests {
     #[test]
     fn the_dispatcher_screenshot_arm_uses_the_unchecked_entry() {
         let src = include_str!("dispatcher.rs");
-        // Only the implementation — this test module quotes the names it
-        // looks for, and would match itself.
         let code = src.split("#[cfg(test)]").next().unwrap();
         let window_arm = code
             .split("fn dispatch_window")
@@ -1560,7 +1427,6 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(err.contains("'cell'") && err.contains("'lib'"), "{err}");
-        // Say what it does instead, or the caller just guesses again.
         assert!(err.contains("takes no parameters"), "{err}");
         assert!(err.contains("open cellview"), "{err}");
 
@@ -1594,7 +1460,6 @@ mod tests {
         for params in [json!({}), json!(null), json!("nonsense")] {
             assert!(reject_undeclared_params("schematic.list_instances", &params).is_ok());
         }
-        // Not in the built-in schema => plugin contract, not ours to police.
         assert!(reject_undeclared_params("myplugin.do_thing", &json!({"anything": 1})).is_ok());
     }
 
@@ -1619,18 +1484,15 @@ mod tests {
         let mut checked = 0usize;
 
         for line in src.lines() {
-            // Stop before this very module: it quotes `params.get("…")` in a
-            // doc comment, and self-inclusion would scan that as real code.
             if line.starts_with("#[cfg(test)]") {
                 break;
             }
             let trimmed = line.trim_start();
             if let Some(rest) = trimmed.strip_prefix("fn ") {
-                // Any other function ends the arm-scanning window.
                 domain = rest
                     .strip_prefix("dispatch_")
                     .and_then(|r| r.split('(').next())
-                    .filter(|name| *name != "inner") // routes domains, owns no arms
+                    .filter(|name| *name != "inner")
                     .unwrap_or("")
                     .to_string();
                 method.clear();
@@ -1640,9 +1502,6 @@ mod tests {
                 continue;
             }
             let indent = line.len() - trimmed.len();
-            // A match arm on `op`: `"name" => ...`, possibly with `| "alias"`
-            // or an `if` guard between. Nested matches sit deeper and are
-            // skipped by the indent rule.
             if trimmed.starts_with('"') && line.contains("=>") && indent <= arm_indent {
                 if let Some(head) = line.split("=>").next() {
                     if let Some(op) = head.split('"').nth(1) {
@@ -1670,7 +1529,6 @@ mod tests {
                 }
             }
         }
-        // A parse that silently matched nothing would pass vacuously.
         assert!(
             checked > 100,
             "only {checked} param reads found — parser is broken"
@@ -1688,8 +1546,6 @@ mod tests {
             .map(|m| (m.name, m.params.into_iter().map(|p| p.name).collect()))
             .collect();
 
-        // Unfiltered: a tool hidden from the default capability set would still
-        // be advertised to an Admin client, so it has to satisfy the contract.
         for tool in crate::mcp::tools::all_tools_unfiltered() {
             let Some(names) = declared.get(&tool.rpc_method) else {
                 continue; // plugin tool
@@ -1741,7 +1597,6 @@ mod tests {
         let pts = parse_wire_points(Some(&json!(["0,0", "10,10", "-1.5, 4.0625"]))).unwrap();
         assert_eq!(pts, vec![(0.0, 0.0), (10.0, 10.0), (-1.5, 4.0625)]);
 
-        // The old filter_map answered ok with a two-point wire here.
         let err = parse_wire_points(Some(&json!(["0,0", "10,ten", "20,20"]))).unwrap_err();
         assert!(err.to_string().contains("points[1]"), "{err}");
         assert!(parse_wire_points(Some(&json!(["0,0", 5]))).is_err());
@@ -2192,8 +2047,6 @@ mod tests {
             .iter()
             .find(|m| m.name == "maestro.create_test")
             .expect("maestro.create_test should exist");
-        // lib/cell/view come from maeCreateTest's own keywords, so a fresh test
-        // needs no follow-up set_design call.
         let names: Vec<&str> = m.params.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(
             names,
@@ -2252,21 +2105,6 @@ mod tests {
     #[test]
     fn schema_total_method_count() {
         let schema = standard_schema();
-        // 76 upstream base
-        //  + 2 set_param packet   (schematic.set_param, schematic.assign_net)
-        //  + 4 maestro packet     (list_tests, delete_var, delete_output, delete_analysis)
-        //  + 4 this packet        (schematic.list_cdf_params, cell.list_open,
-        //                          maestro.set_session_mode, maestro.create_test)
-        //  + 3 libref             (list, info, find) — the library references
-        //  + 1 library.list_cells — the read side of the delete manifest
-        //  + 1 maestro.list_corners — what create_corner_netlist's `corner` accepts
-        //  + 1 schematic.move_instance — reposition without rebuilding the view
-        //  + 5 deletes            (schematic.delete_instance, schematic.delete_prop,
-        //                          schematic.delete_figure, cell.delete_view,
-        //                          cell.delete) — all two-phase
-        //  + 1 window.geometry — the client-area geometry that action-x11
-        //                    bounds-checks click coordinates against
-        //  = 98
         assert_eq!(schema.methods.len(), 98, "should have exactly 98 methods");
     }
 
@@ -2342,10 +2180,6 @@ mod tests {
 
     #[test]
     fn schema_contains_cell_list_open() {
-        // The diagnostic for orphaned edit locks: a cellview open in mode "a"
-        // with no window is invisible to both `cell.info` (current cellview
-        // only) and `window.list` (windows only), so without this method the
-        // only way to find one is to list OA lock files over SSH.
         let schema = standard_schema();
         let names: Vec<&str> = schema.methods.iter().map(|m| m.name.as_str()).collect();
         assert!(
@@ -2356,10 +2190,6 @@ mod tests {
 
     #[test]
     fn schema_maestro_open_session_defaults_to_read_only() {
-        // The default is the whole point: append mode takes an OA edit lock on
-        // a session that has no window, and a human then cannot open the cell
-        // in the GUI with nothing anywhere to click. Whoever changes this
-        // default should have to change this test too.
         let schema = standard_schema();
         let m = schema
             .methods
@@ -2381,8 +2211,6 @@ mod tests {
 
     #[test]
     fn schema_contains_maestro_set_session_mode() {
-        // This is what makes the read-only default affordable: the lock is
-        // taken for the duration of the writes instead of the session.
         let schema = standard_schema();
         let names: Vec<&str> = schema.methods.iter().map(|m| m.name.as_str()).collect();
         assert!(
@@ -2400,14 +2228,12 @@ mod tests {
             .find(|m| m.name == "maestro.create_corner_netlist")
             .expect("maestro.create_corner_netlist must be registered");
 
-        // All four params are required.
         for name in ["session", "test", "corner", "output_dir"] {
             assert!(
                 method.params.iter().any(|p| p.name == name && p.required),
                 "maestro.create_corner_netlist must require '{name}'"
             );
         }
-        // No optional params.
         assert_eq!(
             method.params.iter().filter(|p| !p.required).count(),
             0,
@@ -2461,8 +2287,6 @@ mod tests {
 
     #[test]
     fn parse_skill_json_handles_escaped_quotes() {
-        // SKILL output format: the bridge returns JSON arrays directly from SKILL's sprintf
-        // This test verifies the function can handle standard JSON output
         let output = r#"[{"name":"M1"}]"#;
         let result = parse_skill_json(output);
         assert!(result.is_ok(), "should parse JSON with objects");
@@ -2470,7 +2294,6 @@ mod tests {
 
     #[test]
     fn parse_skill_json_handles_plain_json() {
-        // Direct JSON (no escaping needed)
         let output = r#"["a", "b"]"#;
         let result = parse_skill_json(output);
         assert!(result.is_ok(), "should parse direct JSON");

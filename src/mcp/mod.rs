@@ -111,7 +111,6 @@ impl McpServer {
         skills_dir: Option<PathBuf>,
     ) -> Self {
         let mut tools = tools::all_tools(&config.capabilities);
-        // Merge in plugin tools if any
         if let Ok(registry) = super::plugins::PluginRegistry::get_global() {
             tools.extend(registry.mcp_tools());
         }
@@ -134,8 +133,6 @@ impl McpServer {
         let mut stdout = io::stdout().lock();
         let mut lines = stdin.lock().lines();
 
-        // Send initial handshake (empty JSON object followed by newline)
-        // or just start processing requests
         while let Some(Ok(line)) = lines.next() {
             if line.trim().is_empty() {
                 continue;
@@ -212,8 +209,6 @@ impl McpServer {
                 }
             }
             "prompts/list" => {
-                // A prompt is a workflow over the tools the server exposes, so
-                // a prompt that names an unavailable tool is not published.
                 let available: Vec<String> = self.tools.iter().map(|t| t.name.clone()).collect();
                 McpResponse::success(prompts::list_json(&available), request.id)
             }
@@ -231,9 +226,6 @@ impl McpServer {
                     .unwrap_or_default();
                 match prompts::find_prompt(name) {
                     Some(prompt) => {
-                        // Required arguments must be supplied: rendering a
-                        // placeholder instead would hand the agent a workflow
-                        // with a hole in it.
                         let missing = prompts::missing_required_arguments(prompt, &arguments);
                         if !missing.is_empty() {
                             McpResponse::error(

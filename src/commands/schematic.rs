@@ -190,8 +190,6 @@ pub fn net_stub(
     let skill = client
         .schematic
         .create_net_stub(net, x, y, direction, length, cosmetic);
-    // Unchecked — SKILL is generated from typed args, and the capability check
-    // already ran at RPC dispatch (see commands/window.rs for the same fix).
     let r = client.execute_skill_unchecked(&skill, None)?;
     Ok(json!({
         "status": if r.skill_ok() { "success" } else { "error" },
@@ -229,7 +227,6 @@ pub fn label_term(
     let skill = client
         .schematic
         .label_instance_term(inst, term, net, cosmetic, auto_rotate);
-    // Unchecked — see `net_stub` above.
     let r = client.execute_skill_unchecked(&skill, None)?;
     let ok = r.skill_ok();
     Ok(json!({
@@ -237,7 +234,6 @@ pub fn label_term(
         "instance": inst,
         "terminal": term,
         "net": net,
-        // `output_unquoted`: the bridge hands SKILL strings back still quoted.
         "already": ok && r.output_unquoted().starts_with("already:"),
         "output": r.output,
         "errors": r.errors,
@@ -371,8 +367,6 @@ pub fn build(spec_path: &str) -> Result<Value> {
         )));
     }
 
-    // 3. Connections — generate .il script with RB_connectTerminal calls
-    //    Bridge has limitations with complex SKILL, so we write to file and load().
     {
         let mut assignments: Vec<(String, String, String)> = Vec::new();
         for c in &spec.connections {
@@ -485,14 +479,10 @@ pub fn build(spec_path: &str) -> Result<Value> {
 /// Parse SKILL JSON output: bridge returns `"\"[...]\""`  — strip outer quotes, unescape inner.
 /// Returns `Err` if the output cannot be parsed as JSON after unescaping.
 pub fn parse_skill_json(output: &str) -> Result<Value> {
-    // output is like: "\"[{\\\"name\\\":\\\"M1\\\"}]\""
-    // Step 1: strip outer quotes from SKILL string
     let s = output.trim_matches('"');
-    // Step 2: try parsing directly (works if no extra escaping)
     if let Ok(v) = serde_json::from_str(s) {
         return Ok(v);
     }
-    // Step 3: unescape \" → " and \\\\ → \ then retry
     let unescaped = s.replace("\\\"", "\"").replace("\\\\", "\\");
     serde_json::from_str(&unescaped).map_err(|e| {
         VirtuosoError::Execution(format!(
@@ -568,10 +558,6 @@ pub fn set_param(inst: &str, param: &str, value: &str) -> Result<Value> {
         params: json!({ "inst": inst, "param": param, "value": value }),
         api_key: std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty()),
     };
-    // `schematic::*` has not been migrated to `CommandContext` yet (P0-A), so
-    // there is no ctx to thread down from `dispatch_schematic`. Resolve one
-    // here from the same environment `VirtuosoClient::from_env` just used, so
-    // the dispatcher sees the identical configuration.
     let ctx = crate::context::CommandContext::new(crate::config::Config::from_env()?, None)?;
     crate::rpc::dispatcher::RpcDispatcher::new(ctx).dispatch(&client, request)
 }
@@ -591,7 +577,6 @@ pub fn polish_label(
     let skill = client
         .schematic
         .polish_labels(net, preset, auto_rotate, offset);
-    // Unchecked — see `net_stub` above.
     let r = client.execute_skill_unchecked(&skill, None)?;
     let labels_updated = r.output_unquoted().parse::<usize>().unwrap_or(0);
     Ok(json!({

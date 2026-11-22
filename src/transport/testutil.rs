@@ -124,8 +124,6 @@ impl SshServerFixture {
             child,
         };
 
-        // Readiness: a real ssh round-trip, not just a TCP connect, because the
-        // server may listen yet reject connections (e.g. sandbox failures).
         if fixture.wait_until_reachable(Duration::from_secs(8)) {
             Some(fixture)
         } else {
@@ -218,13 +216,9 @@ mod tests {
         assert!(text.contains("AuthorizedKeysFile /k/auth"));
         assert!(text.contains("PubkeyAuthentication yes"));
         assert!(text.contains("PasswordAuthentication no"));
-        // No `UseSandbox` — it is unsupported on this OpenSSH build and would
-        // abort config parsing.
         assert!(!text.contains("UseSandbox"));
     }
 
-    // This test is meaningful where sshd can actually serve (Linux CI). On
-    // macOS it returns None and the test is a no-op.
     #[test]
     fn fixture_allows_open_ssh_transport_roundtrip() {
         let Some(fixture) = SshServerFixture::start() else {

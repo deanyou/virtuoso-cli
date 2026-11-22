@@ -70,8 +70,6 @@ pub fn parse_basiclib_directory_reported(dir: &Path) -> (Vec<LibSymbol>, ParseRe
         return (symbols, report);
     };
 
-    // Cached files are namespaced `<RELEASE>__<basename>`; a directly-loaded
-    // Cadence tree has bare basenames. Both are just a prefix on every file.
     let mut prefixes: Vec<String> = read_dir
         .flatten()
         .filter_map(|e| {
@@ -142,10 +140,6 @@ fn parse_release(dir: &Path, prefix: &str) -> (Vec<LibSymbol>, ParseReport) {
             };
             let body = &html[start..end];
 
-            // The heading must be the cell the index named. A mismatch means
-            // the anchor resolved into a neighbouring section, and attaching
-            // another cell's prose to this name is worse than admitting the
-            // miss — it is a wrong answer that reads like a right one.
             let heading = heading_text(body);
             if !heading.eq_ignore_ascii_case(&node.text) {
                 report.unresolved.push(format!(

@@ -342,9 +342,6 @@ where
 
     std::fs::create_dir_all(&cache)?;
 
-    // Find every remote SKILL Finder directory (DFII tree first, Spectre tree
-    // after). A site has several Cadence installs and they ship different
-    // databases, so we union them rather than stopping at the first hit.
     let remote_dirs = find_remote_skill_finder_dirs(ssh_target, ssh_key, cadence_cshrc)?;
 
     if let Some(p) = progress {
@@ -360,8 +357,6 @@ where
     let mut written: Vec<std::ffi::OsString> = Vec::new();
 
     for remote_dir in &remote_dirs {
-        // List remote .fnd files (recursive: IC231 groups them into
-        // Core_SKILL/, DFII_SKILL/, Schematics/, Virtuoso_ADE/, … subdirs)
         let list_script = format!(
             r#"find {} -name "*.fnd" -type f 2>/dev/null | head -200"#,
             remote_dir
@@ -432,9 +427,6 @@ where
         }
     }
 
-    // Drop cached databases the remote no longer offers, so a sync leaves the
-    // cache matching the server. Skipped when anything failed to download —
-    // a half-finished sync must not delete the copies we still have.
     if failed == 0 && synced > 0 {
         prune_stale_cache(&cache, &written, progress);
     }
@@ -699,8 +691,6 @@ mod tests {
             v < s,
             "virtuoso (DFII tree) must be probed first:\n{script}"
         );
-        // The old `which a || which b` short-circuit is what hid 37 of 39
-        // databases; make sure it does not come back — both must be walked.
         assert!(
             script.contains("for b in virtuoso spectre"),
             "must probe every binary, not short-circuit on the first:\n{script}"
@@ -734,7 +724,6 @@ mod tests {
 
     #[test]
     fn parse_finder_dirs_rejects_noise() {
-        // Blank lines, NOTFOUND markers and shell chatter are not paths.
         let out = "\nNOTFOUND\nbash: command not found\n  /opt/Cadence/IC231/doc/finder/SKILL  \n";
         assert_eq!(
             parse_finder_dirs(out),
@@ -758,14 +747,11 @@ mod tests {
 
     #[test]
     fn cache_file_name_keeps_colliding_basenames_apart() {
-        // caiskill.fnd ships in BOTH IC231 and SPECTRE231 — a flat cache let
-        // one silently overwrite the other.
         let a = cache_file_name("/opt/Cadence/IC231/doc/finder/SKILL", "caiskill.fnd");
         let b = cache_file_name("/opt/Cadence/SPECTRE231/doc/finder/SKILL", "caiskill.fnd");
         assert_eq!(a, "IC231__caiskill.fnd");
         assert_eq!(b, "SPECTRE231__caiskill.fnd");
         assert_ne!(a, b);
-        // Unrecognisable roots fall back to the plain basename.
         assert_eq!(cache_file_name("/weird/path", "x.fnd"), "x.fnd");
     }
 
@@ -825,7 +811,6 @@ mod tests {
 
     #[test]
     fn test_cache_exists_nonexistent() {
-        // Random host that doesn't exist should return false
         assert!(!cache_exists("nonexistent-host-xyz-12345"));
     }
 
@@ -864,7 +849,6 @@ mod tests {
     #[test]
     fn search_fuzzy_default_does_not_match_description_only() {
         let f = finder_with_corpus();
-        // "rectangle" appears in rodCreateRect's description but not its name
         let r = f.search("rectangle", SearchMode::Fuzzy, 50, false);
         assert!(
             r.is_empty(),
@@ -884,7 +868,6 @@ mod tests {
     #[test]
     fn search_fuzzy_with_desc_still_matches_name() {
         let f = finder_with_corpus();
-        // "dbOpen" is in dbOpenCellView's NAME; should also be found with desc
         let r = f.search("dbOpen", SearchMode::Fuzzy, 50, true);
         assert!(r.iter().any(|e| e.name == "dbOpenCellView"));
     }
@@ -893,7 +876,6 @@ mod tests {
     fn search_fuzzy_with_desc_case_insensitive() {
         let f = finder_with_corpus();
         let r = f.search("LAYOUT", SearchMode::Fuzzy, 50, true);
-        // matches "layout" in rodCreateRect's description
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].name, "rodCreateRect");
     }
@@ -901,11 +883,9 @@ mod tests {
     #[test]
     fn search_prefix_with_desc_still_uses_name_shape() {
         let f = finder_with_corpus();
-        // "db" prefix on names → should match dbOpenCellView even with include_desc
         let r = f.search("db", SearchMode::Prefix, 50, true);
         assert!(r.iter().any(|e| e.name == "dbOpenCellView"));
 
-        // "rectangle" is NOT a name prefix anywhere; should return empty for prefix
         let r = f.search("rectangle", SearchMode::Prefix, 50, true);
         assert!(
             r.is_empty(),
@@ -917,7 +897,6 @@ mod tests {
     #[test]
     fn search_suffix_with_desc_still_uses_name_shape() {
         let f = finder_with_corpus();
-        // "CellView" is a suffix of dbOpenCellView
         let r = f.search("CellView", SearchMode::Suffix, 50, true);
         let names: Vec<&str> = r.iter().map(|e| e.name.as_str()).collect();
         assert!(
@@ -927,7 +906,6 @@ mod tests {
         assert!(!names.contains(&"schOpen"));
         assert!(!names.contains(&"rodCreateRect"));
 
-        // "Open" is a suffix of schOpen only
         let r = f.search("Open", SearchMode::Suffix, 50, true);
         let names: Vec<&str> = r.iter().map(|e| e.name.as_str()).collect();
         assert!(names.contains(&"schOpen"), "schOpen ends with Open");
@@ -944,7 +922,6 @@ mod tests {
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].name, "dbOpenCellView");
 
-        // "Opens" is the first word in dbOpenCellView's description; not a name
         let r = f.search("Opens", SearchMode::Exact, 50, true);
         assert!(r.is_empty());
     }
@@ -952,7 +929,6 @@ mod tests {
     #[test]
     fn search_regex_with_desc_matches_description() {
         let f = finder_with_corpus();
-        // regex matching the description "layout editor"
         let r = f.search("layout.*editor", SearchMode::Regex, 50, true);
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].name, "rodCreateRect");
@@ -960,14 +936,10 @@ mod tests {
 
     #[test]
     fn search_with_desc_respects_limit() {
-        // The corpus has 2 entries whose name/description contains "cellView"
-        // (dbOpenCellView, schOpen). limit=1 must return exactly one,
-        // proving the cap is applied AFTER sort, not before filtering.
         let f = finder_with_corpus();
         let r = f.search("cellView", SearchMode::Fuzzy, 1, true);
         assert_eq!(r.len(), 1, "limit=1 must be respected");
 
-        // limit=2 returns both — verifies the cap is not stuck at 1.
         let r = f.search("cellView", SearchMode::Fuzzy, 2, true);
         assert_eq!(r.len(), 2, "limit=2 must allow both matches");
     }

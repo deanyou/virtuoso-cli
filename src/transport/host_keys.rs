@@ -105,8 +105,6 @@ impl HostPattern {
         match self {
             HostPattern::Any => true,
             HostPattern::Plain { host: h, port: p } => {
-                // A bare host entry matches regardless of port; a `[h]:p` entry
-                // is port-specific.
                 h == host && (p.is_none() || *p == port)
             }
             HostPattern::Hashed { .. } => false, // resolved by hashed_key_matches
@@ -166,7 +164,6 @@ impl KnownHosts {
         key_type: &KeyType,
         key: &str,
     ) -> Verification {
-        // OpenSSH hashes the host string as either `host` or `[host]:port`.
         let plain_string = host.to_string();
         let port_string = match port {
             Some(p) => format!("[{host}]:{p}"),
@@ -191,7 +188,6 @@ impl KnownHosts {
             if entry.key_type == *key_type && entry.key == key {
                 return Verification::Trusted;
             }
-            // Host matched but key did not → possible MITM.
             return Verification::Changed {
                 stored_key_type: entry.key_type.clone(),
                 stored_key: entry.key.clone(),
@@ -266,7 +262,6 @@ fn parse_known_hosts(text: &str) -> Vec<Entry> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        // OpenSSH: `@revoked host1 host2 type key` (or without `@revoked`).
         let tokens: Vec<&str> = line.split_whitespace().collect();
         if tokens.len() < 3 {
             continue;
@@ -295,7 +290,6 @@ fn parse_host_pattern(s: &str) -> HostPattern {
         return HostPattern::Any;
     }
     if let Some(rest) = s.strip_prefix("|1|") {
-        // |1|base64salt|base64hash
         let mut it = rest.split('|');
         let salt = it.next().and_then(b64_decode);
         let hash = it.next().and_then(b64_decode);
@@ -304,7 +298,6 @@ fn parse_host_pattern(s: &str) -> HostPattern {
         }
     }
     if let Some(rest) = s.strip_prefix('[') {
-        // `[host]:port` → split on the literal "]:".
         if let Some((host, port)) = rest.split_once("]:") {
             if let Ok(port) = port.parse::<u16>() {
                 return HostPattern::Plain {
@@ -406,9 +399,6 @@ fn hmac_sha1(key: &[u8], message: &[u8]) -> Vec<u8> {
     sha1(&outer).to_vec()
 }
 
-// Base64 for hashed known_hosts fields. Uses the `base64` crate (already a
-// dependency) rather than a hand-rolled codec. OpenSSH writes these fields
-// *without* '=' padding, so encoding is unpadded; decoding tolerates both.
 fn b64_encode(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD_NO_PAD.encode(bytes)
 }
@@ -425,14 +415,12 @@ mod tests {
 
     #[test]
     fn sha1_rfc_vector() {
-        // FIPS 180-1 example: "abc" -> a9993e364706816aba3e25717850c26c9cd0d89d
         let d = sha1(b"abc");
         assert_eq!(hex::encode(d), "a9993e364706816aba3e25717850c26c9cd0d89d");
     }
 
     #[test]
     fn hmac_sha1_rfc2202_case1() {
-        // key = 0x0b * 20, data = "Hi There"
         let key = vec![0x0b; 20];
         let digest = hmac_sha1(&key, b"Hi There");
         assert_eq!(
@@ -476,7 +464,6 @@ mod tests {
         let mut kh = KnownHosts::memory();
         kh.trust("host", Some(2222), &KeyType::SshEd25519, "k")
             .unwrap();
-        // Bare port 22 is not covered by the [host]:2222 entry.
         assert_eq!(
             kh.check("host", Some(22), &KeyType::SshEd25519, "k"),
             Verification::Unknown
@@ -491,7 +478,6 @@ mod tests {
     fn wildcard_matches_any_host() {
         let mut kh = KnownHosts::memory();
         kh.trust("*", None, &KeyType::SshEd25519, "star").unwrap();
-        // The stored host string is literally "*"; check matches any host.
         let parsed = parse_known_hosts("* ssh-ed25519 star");
         assert!(matches!(parsed[0].hosts[0], HostPattern::Any));
         assert_eq!(
@@ -531,12 +517,10 @@ mod tests {
             kh.check("host", Some(22), &KeyType::SshEd25519, "KEYXYZ"),
             Verification::Trusted
         );
-        // Wrong key for the same host → Changed (host matched, key differs).
         match kh.check("host", Some(22), &KeyType::SshEd25519, "WRONG") {
             Verification::Changed { .. } => {}
             other => panic!("expected Changed, got {other:?}"),
         }
-        // A different host is Unknown.
         assert_eq!(
             kh.check("other", Some(22), &KeyType::SshEd25519, "KEYXYZ"),
             Verification::Unknown

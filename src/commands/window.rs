@@ -67,11 +67,8 @@ pub fn classify_window(title: &str) -> WindowKind {
     WindowKind::Unknown
 }
 
-// Minimal lazy-compiled regex wrapper — avoids recomputing the regex on every call.
 lazy_static::lazy_static! {
     static ref PATTERNS: Vec<(Regex, WindowKind)> = vec![
-        // ADE Assembler/Explorer Editing/Reading — distinguish maestro vs schematic
-        // by the trailing VIEW token (maestro ends with "maestro", schematic with "schematic")
         (
             Regex::new(
                 r"ADE\s+(?:Assembler|Explorer)\s+(?:Editing|Reading):\s+\S+\s+\S+\s+maestro\b",
@@ -120,9 +117,6 @@ lazy_static::lazy_static! {
 ///   "Virtuoso Schematic Editor"
 pub fn list(ctx: &crate::context::CommandContext) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
-    // Unchecked — see `symbol::inspect`. The SKILL is generated internally and
-    // the capability check already ran at RPC dispatch; re-checking here locks
-    // non-Admin users out of their own typed RPC (`window.list`).
     let r = client.execute_skill_unchecked(&client.window.list_windows(), None)?;
     if !r.skill_ok() {
         return Err(VirtuosoError::Execution(format!(
@@ -265,8 +259,6 @@ pub(crate) fn x11_dismiss_payload(
         obj.insert((*key).to_string(), value.clone());
     }
     if status == "failed" {
-        // A dismissal that could not be verified must not read as success.
-        // Purely additive — the JSON shape dispatchers consume is unchanged.
         obj.insert("exit_code".into(), json!(crate::exit_codes::GENERAL_ERROR));
     }
     Ok(out)
@@ -380,15 +372,9 @@ pub fn dismiss_window_x11(
     let runner = x11::transport_for_config(config)?;
     let user = config.remote_user.as_deref();
 
-    // Resolve the target window id. Precedence: explicit --window-id (or the
-    // positional id) > --pid (resolve via list-windows-x11) > error.
     let id = match (window_id.filter(|s| !s.is_empty()), pid) {
         (Some(id), _) => id.to_string(),
         (None, Some(p)) => {
-            // A supplied PID is only a verification elsewhere; here it is the
-            // identity because no window id was given. Resolve it from the
-            // live window list — the same list-windows scan the caller uses
-            // to discover dismiss_ids.
             let (_env, windows) = x11::list_windows(
                 runner.as_ref(),
                 &x11::client_id_for(config),
@@ -641,8 +627,6 @@ fn screenshot_via_backend(
         };
     }
 
-    // No window id: find one through the X11 window list — the same scan
-    // `vcli window list-windows-x11` uses.
     let candidates = match backend.list_windows() {
         Ok(c) => c,
         Err(e) => {
@@ -761,9 +745,6 @@ impl<'a> LiveScreenshotBackend<'a> {
 
 impl ScreenshotBackend for LiveScreenshotBackend<'_> {
     fn skill_capture(&mut self, skill: &str) -> SkillCapture {
-        // The raw-SKILL route needs the Admin capability. That is a
-        // permission decision, not a capture failure: falling back to X11
-        // would quietly answer a request the caller was not allowed to make.
         if let Some(reason) = self.client.check_capability(skill) {
             return SkillCapture::Unavailable(VirtuosoError::Execution(reason));
         }
@@ -962,7 +943,6 @@ fn window_mode(name: &str) -> &'static str {
 /// Standard JSON parsers reject these, so we decode them first.
 fn parse_window_json(output: &str) -> Value {
     let s = output.trim_matches('"');
-    // Decode SKILL octal escapes (\NNN) → UTF-8, then un-escape \" and \\
     let decoded = decode_skill_octal(s);
     let unescaped = decoded.replace("\\\"", "\"").replace("\\\\", "\\");
     serde_json::from_str(&unescaped).unwrap_or_else(|_| json!([]))
@@ -1076,7 +1056,6 @@ mod tests {
     fn found_but_not_dismissed_is_not_a_failure() {
         let r = result(vec![dialog("0x1")], vec![], vec![]);
         assert_eq!(x11_dismiss_status(&r), "found");
-        // The single-window path has no "found" state: the target was explicit.
         assert_eq!(x11_dismiss_window_status(&r), "not-found");
     }
 
@@ -1098,8 +1077,6 @@ mod tests {
             x11_dismiss_payload(&r, x11_dismiss_status(&r), "escape", &[]).expect("payload");
         assert_eq!(payload["status"], json!("failed"));
         assert_eq!(payload["exit_code"], json!(1));
-        // The mapping from the payload to the process exit code is the one
-        // main() applies — pin it here so the two cannot drift apart.
         assert_ne!(
             crate::exit_codes::exit_code_for_value(&payload),
             crate::exit_codes::SUCCESS
@@ -1146,8 +1123,6 @@ mod tests {
 
     #[test]
     fn failed_window_payload_carries_a_non_zero_exit_code() {
-        // Mirrors the dialog path: `vcli window dismiss-window --x11` must
-        // not exit 0 when the dismissal could not be verified.
         let r = result(
             vec![],
             vec![],

@@ -57,7 +57,6 @@ fn test_escape_whitespace() {
 /// Test unicode characters (should pass through in Rust).
 #[test]
 fn test_escape_unicode() {
-    // Unicode letters should be preserved
     assert_eq!(escape_skill_string("cell_α"), "cell_α");
     assert_eq!(escape_skill_string("模块"), "模块");
 }
@@ -65,8 +64,6 @@ fn test_escape_unicode() {
 /// Test parentheses are preserved (not escaped by our function).
 #[test]
 fn test_escape_parentheses_preserved() {
-    // Note: escape_skill_string only escapes " and \
-    // Parentheses are not escaped by this function
     assert_eq!(escape_skill_string("(group)"), "(group)");
     assert_eq!(escape_skill_string("a(b)c"), "a(b)c");
 }

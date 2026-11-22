@@ -53,7 +53,6 @@ pub fn char(
             client.execute_skill("save('all)", None)?;
             client.execute_skill("run()", Some(timeout))?;
 
-            // Fetch all 5 oppoint params in one round-trip via SKILL list().
             let params = ["gm", "ids", "gds", "vth", "cgs"];
             let fetch_expr = {
                 let gets: Vec<String> = params
@@ -280,7 +279,6 @@ impl OpVals {
 
         let gmid = gm / id;
         let gain = gm / gds;
-        // vgs represents VSG for PMOS — overdrive is VSG - |Vtp|
         let vov = if is_pmos { vgs - vth.abs() } else { vgs - vth };
         let ft = gm / (2.0 * std::f64::consts::PI * cgs);
 

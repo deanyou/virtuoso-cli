@@ -6,10 +6,6 @@ use serde_json::{json, Value};
 
 pub fn list(ctx: &crate::context::CommandContext) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
-    // Use unchecked — capability check already passed at RPC dispatch level.
-    // `ok_or_exec` rather than a hand-rolled `skill_ok()` check: when SKILL
-    // raises, the text lands in `errors`, not `output`, and a hand-rolled check
-    // that only prints `output` reports the failure with an empty reason.
     let r = client
         .execute_skill_unchecked(&LibraryOps.list(), Some(client.read_timeout()))?
         .ok_or_exec("library list")?;
@@ -34,11 +30,6 @@ pub fn list_cells(
 ) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
     let skill = LibraryOps.list_cells(lib, pattern);
-    // Use unchecked — capability check already passed at RPC dispatch level.
-    // `ok_or_exec_nil_ok`, not `ok_or_exec`: `lib~>cells` is nil for a library
-    // with no cells, and an empty library is an empty answer, not a failure —
-    // `parse_cell_rows` says so too. A library that does not exist raises in
-    // SKILL, which arrives as a NAK and still errors here.
     let r = client
         .execute_skill_unchecked(&skill, Some(client.read_timeout()))?
         .ok_or_exec_nil_ok("library list_cells")?;
@@ -77,7 +68,6 @@ fn parse_cell_rows(val: &SexpVal) -> Result<Vec<Value>> {
             let name = parts.first().and_then(SexpVal::as_str).ok_or_else(|| {
                 VirtuosoError::Execution("library list_cells: cell with no name".into())
             })?;
-            // A cell whose views list is nil has no views — an empty list, not an error.
             let views: Vec<String> = match parts.get(1) {
                 Some(v @ SexpVal::List(_)) => sexp_to_str_list(v)
                     .unwrap_or_default()

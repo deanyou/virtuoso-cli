@@ -66,8 +66,6 @@ fn looks_like_bridge_session_id(value: &str) -> bool {
         Some(h) => h,
         None => return false,
     };
-    // `<host>-<user>-<port>` needs at least three dash-separated fields; a
-    // bare `name-1234` is not enough to call something a bridge session id.
     if !head.contains('-') {
         return false;
     }
@@ -252,7 +250,6 @@ pub fn get_analyses(session: &str, test: Option<&str>) -> Result<Value> {
         .execute_skill(&skill, None)?
         .ok_or_exec("get analyses")?;
 
-    // maeGetEnabledAnalysis returns a SKILL list e.g. ("ac" "dc") — parse to JSON array.
     use crate::client::skill_sexp::{parse_sexp, SexpVal};
     let analyses: Value = match parse_sexp(r.output_unquoted()) {
         Ok(SexpVal::List(items)) => {
@@ -340,7 +337,6 @@ pub fn run_with_analysis(
             .maestro
             .run_with_dec(session, at, alist.as_deref(), *dec_val)
     } else {
-        // No dec: existing path — set analysis then run
         if let Some(at) = analysis_type {
             let (alist, version) = match options {
                 None => (None, crate::version::VirtuosoVersion::IC23),
@@ -366,7 +362,6 @@ pub fn run_with_analysis(
         client.maestro.run_simulation(session)
     };
 
-    // dec injection uses system(sed) — requires Admin capability + whitelist bypass
     if dec.is_some() {
         client
             .execute_skill_admin(&skill, None)?
@@ -441,13 +436,11 @@ pub fn session_info(session: Option<&str>) -> Result<Value> {
     let skill = client.maestro.focused_window_skill();
     let r = client.execute_skill(&skill, None)?;
 
-    // SKILL output: (title davSession (all_titles...) (sessions...) run_dir_or_nil)
     let tokens = parse_skill_list_top_level(&r.output);
     let focused = tokens.first().and_then(|t| extract_skill_string_token(t));
     let dav_session = tokens.get(1).and_then(|t| extract_skill_string_token(t));
     let bundled_run_dir = tokens.get(4).and_then(|t| extract_skill_string_token(t));
 
-    // Parse all available Maestro sessions from token[3] = maeGetSessions()
     let available_sessions: Vec<String> = tokens
         .get(3)
         .map(|t| {
@@ -460,7 +453,6 @@ pub fn session_info(session: Option<&str>) -> Result<Value> {
 
     let parsed = focused.as_deref().and_then(parse_ade_title);
 
-    // Auto-select when focused window has no ADE info and exactly one session exists
     let auto_session = if parsed.is_none() && dav_session.is_none() && available_sessions.len() == 1
     {
         Some(available_sessions[0].clone())
@@ -468,13 +460,11 @@ pub fn session_info(session: Option<&str>) -> Result<Value> {
         None
     };
 
-    // Resolve effective session: explicit arg → davSession from window → auto-select
     let effective_session = session
         .map(str::to_owned)
         .or_else(|| dav_session.clone())
         .or_else(|| auto_session.clone());
 
-    // run_dir: bundled covers the focused-window case; second RTT for explicit/auto sessions
     let run_dir = if let Some(s) = session.filter(|s| Some(*s) != dav_session.as_deref()) {
         let skill2 = client.maestro.run_dir_skill(s);
         let r2 = client.execute_skill(&skill2, None)?;
@@ -791,15 +781,10 @@ pub fn snapshot(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| VirtuosoError::Execution("run_dir not found for session".into()))?;
 
-    // 2. Resolve history (default: newest by mtime sort)
     let history_name = match history {
         Some(h) => h.to_string(),
         None => {
             let skill = client.maestro.get_history_list();
-            // Unchecked — SKILL is generated internally, and the capability
-            // check already ran at RPC dispatch. `maestro.snapshot` is the
-            // forensics tool: gating it makes it unavailable to non-Admin
-            // callers exactly when something has gone wrong and they need it.
             let r = client.execute_skill_unchecked(&skill, None)?;
             let histories: Vec<String> = parse_skill_json(&r.output)
                 .and_then(|v| {
@@ -819,7 +804,6 @@ pub fn snapshot(
         }
     };
 
-    // 3. Load filter rules (built-in or custom YAML)
     #[derive(serde::Deserialize)]
     #[serde(default)]
     struct FilterRules {
@@ -905,7 +889,7 @@ pub fn snapshot(
     let run_base = Path::new(run_dir);
     let history_dir = run_base.join(&history_name);
 
-    let mut collected: Vec<(String, String)> = Vec::new(); // (src_path, rel_path)
+    let mut collected: Vec<(String, String)> = Vec::new();
 
     // Session-level files
     for pattern in rules
@@ -920,7 +904,6 @@ pub fn snapshot(
         }
     }
 
-    // Point-level files
     let pt_dirs: Vec<_> = std::fs::read_dir(&history_dir)
         .into_iter()
         .flatten()
@@ -932,7 +915,6 @@ pub fn snapshot(
         let pt_name = pt_entry.file_name().to_string_lossy().into_owned();
         let pt_path = pt_entry.path();
 
-        // Run-level logs: <pt>/run/<run_name>/<tb>/*.log etc.
         let run_dir_inner = pt_path.join("run");
         if run_dir_inner.exists() {
             if let Ok(run_dirs) = std::fs::read_dir(&run_dir_inner) {
@@ -976,7 +958,6 @@ pub fn snapshot(
                 for entry in entries.flatten() {
                     let name = entry.file_name().to_string_lossy().into_owned();
                     let rel = format!("{}/psf/{}", pt_name, name);
-                    // Always include spectre.out and logFile
                     let is_fixed = name == "spectre.out" || name == "logFile";
                     let matches_psf = matches_pattern(
                         &name,
@@ -1031,7 +1012,6 @@ pub fn snapshot(
 /// Resolve session name and run_dir from optional session arg.
 fn snapshot_resolve_session(client: &VirtuosoClient, session: Option<&str>) -> Result<Value> {
     let skill = client.maestro.focused_window_skill();
-    // Unchecked — called from `snapshot`; see the note there.
     let r = client.execute_skill_unchecked(&skill, None)?;
 
     let tokens = parse_skill_list_top_level(&r.output);
@@ -1042,7 +1022,6 @@ fn snapshot_resolve_session(client: &VirtuosoClient, session: Option<&str>) -> R
     let run_dir = if let Some(ref s) = effective {
         if Some(s.as_str()) != dav_session.as_deref() {
             let skill2 = client.maestro.run_dir_skill(s);
-            // Unchecked — called from `snapshot`; see the note there.
             let r2 = client.execute_skill_unchecked(&skill2, None)?;
             r2.output_unquoted().to_string()
         } else {
@@ -1246,14 +1225,9 @@ pub(crate) fn remote_dir_has_entries(find_output: &str) -> bool {
 /// other special file types (FIFO, socket, device, …) are skipped.
 fn enumerate_local_files(root: &Path) -> Vec<String> {
     fn walk(p: &Path, base: &Path, out: &mut Vec<String>) {
-        // `symlink_metadata` does NOT follow symlinks: for a symlink, the
-        // returned `file_type()` reports `is_symlink() == true`. That lets
-        // us skip links entirely (never recurse into a symlinked dir,
-        // never include a symlinked file's target contents).
         if let Ok(m) = std::fs::symlink_metadata(p) {
             let ft = m.file_type();
             if ft.is_symlink() {
-                // Intentionally skip; never follow.
                 return;
             }
             if ft.is_dir() {
@@ -1271,9 +1245,6 @@ fn enumerate_local_files(root: &Path) -> Vec<String> {
                     }
                 }
             }
-            // Other special file types (FIFO, socket, device, …) are
-            // intentionally skipped — they are not regular files and
-            // we cannot meaningfully enumerate their contents here.
         }
     }
 
@@ -1302,8 +1273,6 @@ pub(crate) fn validate_output_dir_for_download(output_dir: &str) -> Result<std::
     let path = Path::new(output_dir);
     match std::fs::metadata(path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // Nonexistent — atomic_publish_no_replace will materialize
-            // it via the rename. Safe.
             Ok(path.to_path_buf())
         }
         Err(e) => Err(VirtuosoError::Config(format!(
@@ -1316,9 +1285,6 @@ pub(crate) fn validate_output_dir_for_download(output_dir: &str) -> Result<std::
                      refusing to use it as a download destination"
                 )));
             }
-            // Path exists and is a directory. Whether empty or not,
-            // the atomic rename MUST refuse it (any pre-existing entry
-            // is preserved byte-for-byte via EEXIST / ENOTEMPTY).
             Err(VirtuosoError::Conflict(format!(
                 "output_dir '{output_dir}' already exists; \
                  refusing to overwrite (contents preserved byte-for-byte). \
@@ -1442,8 +1408,6 @@ impl Drop for StagingGuard {
         if self.disarmed {
             return;
         }
-        // Same-parent check first: refuse anything that no longer
-        // lives under the parent we were created for.
         match self.path.parent() {
             Some(p) if p == self.expected_parent.as_path() => {}
             _ => return,
@@ -1452,7 +1416,6 @@ impl Drop for StagingGuard {
             Some(n) => n,
             None => return,
         };
-        // Exact-length check: prefix + exactly 32 hex chars.
         let expected_len = CORNER_NETLIST_STAGING_PREFIX.len() + 32;
         if name.len() != expected_len {
             return;
@@ -1460,9 +1423,6 @@ impl Drop for StagingGuard {
         if !name.starts_with(CORNER_NETLIST_STAGING_PREFIX) {
             return;
         }
-        // Suffix check: 32 lowercase hex chars (`[0-9a-f]` only —
-        // uppercase `A-F` is rejected so the guard never confuses a
-        // tampered or non-UUID leaf with our own).
         let suffix = &name[CORNER_NETLIST_STAGING_PREFIX.len()..];
         if !suffix.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')) {
             return;
@@ -1583,9 +1543,6 @@ fn publish_path_cstrings(
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
 
-    // CString from raw OsStrExt bytes. We never let Rust do a
-    // lossy UTF-8 conversion or insert a NUL byte from a path that
-    // happens to contain one — a non-UTF-8 path is a Config error.
     let src_c = CString::new(src.as_os_str().as_bytes()).map_err(|e| {
         VirtuosoError::Config(format!(
             "atomic publish unsupported: staging path contains an interior NUL byte: {e}; \
@@ -1601,17 +1558,11 @@ fn publish_path_cstrings(
     Ok((src_c, dst_c))
 }
 
-// On platforms with no exclusive-rename syscall, `src`/`dst` are never read
-// — the function only reports "unsupported". Silence that one narrow case
-// instead of weakening the signature for platforms that do use them.
 #[cfg_attr(
     not(any(target_os = "macos", target_os = "linux")),
     allow(unused_variables)
 )]
 pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str) -> Result<()> {
-    // Only the platforms whose exclusive-rename syscall we call below need
-    // the C string arguments. Unsupported platforms take neither binding
-    // and fall through to the explicit Config error at the end.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     use std::io::Error as IoError;
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -1619,9 +1570,6 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
 
     #[cfg(target_os = "macos")]
     {
-        // RENAME_EXCL on macOS: 0x00000004. Returns 0 on success, -1
-        // on failure with errno set. EEXIST = destination already
-        // exists (file or non-empty directory); we map that to Conflict.
         const RENAME_EXCL: libc::c_uint = 0x00000004;
         let res = unsafe { libc::renamex_np(src_c.as_ptr(), dst_c.as_ptr(), RENAME_EXCL) };
         if res == 0 {
@@ -1629,9 +1577,6 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
         }
         let err = IoError::last_os_error();
         let errno = err.raw_os_error().unwrap_or(0);
-        // libc::EEXIST == 17 on Darwin; we still match the symbolic
-        // constant rather than the literal so cross-platform review is
-        // safer.
         if errno == libc::EEXIST {
             return Err(VirtuosoError::Conflict(format!(
                 "atomic publish refused: destination '{}' already exists; \
@@ -1653,10 +1598,6 @@ pub(crate) fn atomic_publish_no_replace(src: &Path, dst: &Path, remote_dir: &str
 
     #[cfg(target_os = "linux")]
     {
-        // renameat2 is a glibc 2.28+ symbol; CentOS 7 (glibc 2.17)
-        // links fail because the symbol is absent. Delegate to
-        // sys::linux_rename which resolves via dlsym / raw syscall /
-        // stat+renameat fallback transparently.
         let res = unsafe {
             crate::sys::linux_rename::rename_noreplace(
                 libc::AT_FDCWD,
@@ -1761,9 +1702,6 @@ pub fn create_corner_netlist(
     corner: &str,
     output_dir: &str,
 ) -> Result<Value> {
-    // 1. Validate config / remote host (no remote side effect yet).
-    //    Use `?` directly so the original `VirtuosoError` variant from
-    //    `Config::from_env` is preserved (no flattening into `Config`).
     let cfg = Config::from_env()?;
     if cfg
         .remote_host
@@ -1780,33 +1718,21 @@ pub fn create_corner_netlist(
         ));
     }
 
-    // 2. Validate output_dir BEFORE any remote side effect (best-effort
-    //    preflight). The authoritative guard is publish-time
-    //    `atomic_publish_no_replace`, which rejects an existing
-    //    destination as Conflict and preserves it byte-for-byte.
     let local_path = validate_output_dir_for_download(output_dir)?;
 
-    // 3. Initialize client early so connection/timeout/auth errors
-    //    surface with their original variant (not flattened into
-    //    `Execution`). This is still a pure local step — no remote
-    //    side effects until step 5.
     let client = VirtuosoClient::from_env()?;
 
     let ssh: Arc<dyn RemoteTransport> = crate::transport::backend::open_transport(&cfg)?;
 
-    // 5. Generate a unique remote temp dir (fixed prefix + UUIDv4 suffix)
     let remote_dir = corner_netlist_remote_path();
     tracing::info!(
         "create_corner_netlist: session={session} test={test} corner={corner} remote_dir={remote_dir}"
     );
 
-    // 6. mkdir on remote (quoted, never fails because of special chars in path)
     let mkdir_q = corner_netlist_mkdir_command(&remote_dir);
     let mkdir_r = ssh
         .run_command(&CommandRequest::untimed(&mkdir_q))
         .map_err(|e| {
-            // Prefix with the structured code so a consumer can classify the
-            // failure without substring-matching the message.
             VirtuosoError::Ssh(format!(
                 "{}: {e}; netlist artifacts preserved at remote_dir={remote_dir}",
                 e.code()
@@ -1819,12 +1745,6 @@ pub fn create_corner_netlist(
         )));
     }
 
-    // 7. Execute the SKILL builder via the existing daemon connection.
-    //    Preserve variant/exit-code semantics: Connection/Timeout/Ssh/etc
-    //    errors are NOT flattened into Execution. Only SKILL nil (via
-    //    ok_or_exec) is mapped to Execution. `with_remote_dir_context`
-    //    converts bare `Timeout(secs)` to `TimeoutWithContext(secs,
-    //    remote_dir)` so timeout semantics are preserved.
     let skill = client
         .maestro
         .create_netlist_for_corner(test, corner, &remote_dir, session);
@@ -1832,19 +1752,11 @@ pub fn create_corner_netlist(
         .execute_skill_unchecked(&skill, None)
         .map_err(|e| with_remote_dir_context(e, &remote_dir))?;
     if let Err(e) = exec_result.ok_or_exec("create netlist for corner") {
-        // The SKILL side said `nil` and nothing else. Whatever the netlister
-        // actually complained about is in the log it just wrote — read it back
-        // before reporting, otherwise the operator gets a path and a shrug.
-        // And when the netlister wrote no log at all (the usual case for a name
-        // it rejected outright), name the corners that would have worked.
         let e = with_netlister_log(e, ssh.as_ref(), &remote_dir);
         let e = with_available_corners(e, &client, session, corner);
         return Err(with_remote_dir_context(e, &remote_dir));
     }
 
-    // 8. Verify remote dir has at least one non-empty regular file:
-    //    `find <quoted> -mindepth 1 -type f -size +0c -print -quit`
-    //    (NOT `ls -la`.) Empty → preserve the remote dir for forensics.
     let verify_q = corner_netlist_verify_command(&remote_dir);
     let verify_r = ssh
         .run_command(&CommandRequest::untimed(&verify_q))
@@ -1861,10 +1773,6 @@ pub fn create_corner_netlist(
         )));
     }
     if !remote_dir_has_entries(&verify_r.stdout) {
-        // No non-empty regular files → preserve the remote dir so the
-        // user can decide what to do. Same reasoning as step 7: SKILL
-        // returned non-nil yet produced nothing, so the "why" is only in
-        // the netlister's log.
         return Err(with_netlister_log(
             VirtuosoError::Execution(format!(
                 "remote netlist dir {remote_dir} contains no non-empty regular files \
@@ -1875,24 +1783,13 @@ pub fn create_corner_netlist(
         ));
     }
 
-    // 9. Allocate a unique local staging directory owned by THIS
-    //    invocation, as a SIBLING of `output_dir` (same parent dir) so
-    //    the publish step is a single-filesystem atomic rename.
-    //    `download_dir` is NEVER called with the user `output_dir`; the
-    //    staging dir is the only place the network pipeline writes.
     let staging_path = corner_netlist_staging_path(&local_path);
-    // Pass the explicit sibling-staging parent to the guard so Drop's
-    // same-parent check cannot be subverted by a future refactor that
-    // hands the guard a path whose parent was derived somewhere else.
     let staging_expected_parent = staging_path
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
     let staging_guard = StagingGuard::new(staging_path.clone(), staging_expected_parent);
 
-    // 10. Stream the remote dir into the staging path (NOT output_dir).
-    //     On failure the RAII guard removes staging; the remote dir is
-    //     preserved upstream.
     if let Err(e) = ssh.download_dir(&DownloadDirRequest::untimed(&remote_dir, &staging_path)) {
         return Err(VirtuosoError::Ssh(format!(
             "{}: {e}; netlist artifacts preserved at remote_dir={remote_dir}",
@@ -1900,36 +1797,18 @@ pub fn create_corner_netlist(
         )));
     }
 
-    // 11. Validate the staging tree. `validate_staging_recursive` uses
-    //     `symlink_metadata` so it never follows links and rejects
-    //     symlinks, FIFOs, sockets, devices, etc. It also requires at
-    //     least one non-empty regular file.
     if let Err(e) = validate_staging_recursive(&staging_path) {
         return Err(VirtuosoError::Ssh(format!(
             "{e}; netlist artifacts preserved at remote_dir={remote_dir}"
         )));
     }
 
-    // 12. Atomically publish the staging tree as `output_dir` in a
-    //     single renamex_np RENAME_EXCL / renameat2 RENAME_NOREPLACE
-    //     syscall. Destination MUST NOT already exist (caller enforced
-    //     via `validate_output_dir_for_download`); if it does, EEXIST
-    //     or ENOTEMPTY is mapped to Conflict and the operator's existing
-    //     data is preserved byte-for-byte. ALL errors mention
-    //     `remote_dir`. NO `std::fs::rename` fallback — non-atomic
-    //     rename would risk partial-publish visibility.
     atomic_publish_no_replace(&staging_path, &local_path, &remote_dir)?;
 
-    // 13. The atomic rename succeeded — staging has been consumed and
-    //     is now `output_dir`. Explicitly disarm the guard so it does
-    //     NOT try to `remove_dir_all` the freshly-published output.
     drop(staging_guard);
 
     let files = enumerate_local_files(&local_path);
 
-    // 15. Remote cleanup — only after successful local publish/staging
-    //     drop. Existing contract: never pretend full success if the
-    //     remote cleanup itself failed.
     let cleanup_q = corner_netlist_cleanup_command(&remote_dir);
     let cleanup_outcome = match ssh.run_command(&CommandRequest::untimed(&cleanup_q)) {
         Ok(r) if r.success => (true, None),
@@ -1993,13 +1872,9 @@ fn with_remote_dir_context(err: VirtuosoError, remote_dir: &str) -> VirtuosoErro
         VirtuosoError::Connection(m) => VirtuosoError::Connection(format!("{m}{ctx}")),
         VirtuosoError::Ssh(m) => VirtuosoError::Ssh(format!("{m}{ctx}")),
         VirtuosoError::Execution(m) => VirtuosoError::Execution(format!("{m}{ctx}")),
-        // Convert bare Timeout → TimeoutWithContext so the user sees
-        // *which* remote dir was preserved when the timeout fired.
         VirtuosoError::Timeout(secs) => {
             VirtuosoError::TimeoutWithContext(secs, remote_dir.to_string())
         }
-        // If the context already mentions this remote_dir, leave it alone.
-        // Otherwise append the standard suffix exactly once.
         VirtuosoError::TimeoutWithContext(secs, m) => {
             if m.contains(&remote_dir_marker) {
                 VirtuosoError::TimeoutWithContext(secs, m)
@@ -2007,8 +1882,6 @@ fn with_remote_dir_context(err: VirtuosoError, remote_dir: &str) -> VirtuosoErro
                 VirtuosoError::TimeoutWithContext(secs, format!("{m}{ctx}"))
             }
         }
-        // Pass-through: Config(_), NotFound(_), Conflict(_), Auth(_),
-        // Io(_), Json(_) — keep original variant.
         other => other,
     }
 }
@@ -2067,9 +1940,6 @@ pub fn job_submit(session: &str, test: Option<&str>, name: Option<&str>) -> Resu
     let client = VirtuosoClient::from_env()?;
     let store = MaestroJobStore::new()?;
 
-    // 1. Writability probe. The probe establishes that the session exists
-    //    before "not read-only" can be read as "writable", and reports one
-    //    of three outcomes.
     let probe_skill = client.maestro.session_writability_skill(session);
     let probe = client.execute_skill(&probe_skill, None).map_err(|e| {
         VirtuosoError::Execution(format!(
@@ -2085,17 +1955,10 @@ pub fn job_submit(session: &str, test: Option<&str>, name: Option<&str>) -> Resu
     }
     check_writable(session, probe.output_unquoted())?;
 
-    // 2. Client identity. `resolve_client_id()` is the authoritative
-    //    resolution — the raw `VB_PROFILE` is only one of its inputs and is
-    //    never compared on its own.
     let current_client_id = resolve_client_id();
 
-    // 2a. The client id the session itself carries, when it has one.
     let session_client_id = read_session_client_id(&client, session);
 
-    // 2b. The client ids of the jobs already recorded for this session. The
-    //     store directory is shared by every profile, so those records are
-    //     the only record of who owns the session.
     let recorded_client_ids: Vec<String> = store
         .find_active_by_session(session)?
         .into_iter()
@@ -2107,8 +1970,6 @@ pub fn job_submit(session: &str, test: Option<&str>, name: Option<&str>) -> Resu
         &recorded_client_ids,
     )?;
 
-    // 3. Submit. This is the only side-effecting call and it is never
-    //    retried. The run id is read from the submit itself.
     let submit_skill = client.maestro.submit_skill(session);
     let (run_id, pid) = match client.execute_skill(&submit_skill, None) {
         Ok(r) => {
@@ -2116,9 +1977,6 @@ pub fn job_submit(session: &str, test: Option<&str>, name: Option<&str>) -> Resu
             match run_id {
                 Some(rid) => (Some(rid), pid),
                 None => {
-                    // No run id came back, so no run was started under an id
-                    // this command could record. The attempt is still
-                    // recorded: the operator has to be able to see it.
                     let job = record_unknown_submission(
                         &store,
                         session,
@@ -2135,9 +1993,6 @@ pub fn job_submit(session: &str, test: Option<&str>, name: Option<&str>) -> Resu
             }
         }
         Err(e) => {
-            // The transport broke: the submit may or may not have reached
-            // Maestro. The attempt is recorded either way, so a simulation
-            // that did start is never invisible.
             let job = record_unknown_submission(
                 &store,
                 session,
@@ -2153,12 +2008,8 @@ pub fn job_submit(session: &str, test: Option<&str>, name: Option<&str>) -> Resu
         }
     };
 
-    // 4. The run directory, needed for status polling.
     let run_dir = read_run_dir(&client, session);
 
-    // 5. Record the job. The Spectre child may already exist, so a record
-    //    MUST exist for this run — including when the run id belongs to a
-    //    job another submitter already owns.
     let mut job = MaestroJob::new(
         session.to_string(),
         test.map(String::from),
@@ -2173,12 +2024,10 @@ pub fn job_submit(session: &str, test: Option<&str>, name: Option<&str>) -> Resu
     let (job, duplicate) = match record_submitted_job(&store, job.clone()) {
         Ok(v) => v,
         Err(e) => {
-            // Persistence failed after acknowledgement → Unknown, caller can
-            // poll. The job id is reported so the operator can find it.
             job.status = MaestroJobStatus::Unknown;
             job.error_message = Some(format!("persistence failed after acknowledgement: {e}"));
             job.updated_at = Utc::now();
-            let _ = store.save(&job); // best-effort
+            let _ = store.save(&job);
             return Err(VirtuosoError::Execution(format!(
                 "maestro job submit: maeRunSimulation succeeded but persistence failed after \
                  acknowledgement; job_id={} recorded with status=unknown — poll it with maestro \
@@ -2221,9 +2070,6 @@ fn record_submitted_job(
         None => None,
     };
     if let Some(existing) = &duplicate {
-        // Another submitter already owns this run id. The simulation this
-        // call started is not a separate run, so the record says exactly
-        // that — but the record exists, so nothing is orphaned.
         job.status = MaestroJobStatus::Unknown;
         let rid = job.run_id.clone().unwrap_or_default();
         job.error_message = Some(format!(
@@ -2412,8 +2258,6 @@ fn parse_run_dir_status(output: &str) -> HashMap<String, MaestroJobStatus> {
         if line.is_empty() {
             continue;
         }
-        // A run directory may contain spaces; the status token never does,
-        // so the split is at the LAST space.
         let Some((dir, token)) = line.rsplit_once(' ') else {
             continue;
         };
@@ -2511,7 +2355,6 @@ fn job_status_in(
     let effective = derive_statuses(std::slice::from_ref(&job), run_host);
     let status = effective.get(&job.job_id).copied().unwrap_or(job.status);
 
-    // Persist a terminal status the first time it is observed.
     if MaestroJobStore::is_terminal(status) && !MaestroJobStore::is_terminal(job.status) {
         job.status = status;
         job.updated_at = Utc::now();
@@ -2572,8 +2415,6 @@ fn job_list_in(
     let jobs = store.list()?;
     let effective = derive_statuses(&jobs, run_host);
 
-    // Persist terminal states the first time they are observed, so the
-    // stored record and the derived status agree from now on.
     for job in &jobs {
         let derived = effective.get(&job.job_id).copied().unwrap_or(job.status);
         if MaestroJobStore::is_terminal(derived) && !MaestroJobStore::is_terminal(job.status) {
@@ -2584,7 +2425,6 @@ fn job_list_in(
         }
     }
 
-    // The filter runs on the same status the rows display.
     let rows = MaestroJobStore::filter_by_status(&jobs, &effective, status);
     let list: Vec<Value> = rows
         .iter()
@@ -2622,9 +2462,6 @@ pub fn job_logs(job_id: &str, tail: Option<usize>) -> Result<Value> {
 
     let n = tail.unwrap_or(100);
 
-    // Remote paths are absolute paths on the compute host. We detect a local
-    // path by whether it exists on the local filesystem; everything else is
-    // treated as remote (subject to `RemoteTransport::run_command`).
     let local_path = std::path::Path::new(run_dir);
     if local_path.exists() {
         let log_path = local_path.join("psf").join("spectre.out");
@@ -2643,18 +2480,12 @@ pub fn job_logs(job_id: &str, tail: Option<usize>) -> Result<Value> {
         }));
     }
 
-    // Remote run_dir — use RemoteTransport. The path comes from a persisted
-    // job JSON written by `job_submit` after a Maestro-confirmed run, but
-    // we still single-quote it for the shell so a malicious or unexpected
-    // character (space, `;`, `&`, `$(...)`) cannot inject a second command.
     let cfg = crate::config::Config::from_env()
         .map_err(|e| VirtuosoError::Config(format!("Config::from_env: {e}")))?;
     let ssh: Arc<dyn RemoteTransport> = backend::open_transport(&cfg)
         .map_err(|e| VirtuosoError::Connection(format!("transport: {e}")))?;
 
     let remote_log = format!("{run_dir}/psf/spectre.out");
-    // Single-quote the path and embed the integer `n` directly (already
-    // validated upstream by clap as a usize; no need to quote).
     let tail_cmd = format!("tail -n {n} '{}'", remote_log.replace('\'', "'\\''"));
     let req = CommandRequest::untimed(&tail_cmd);
     let result = ssh
@@ -2708,8 +2539,6 @@ fn job_cancel_in(
         .load(job_id)?
         .ok_or_else(|| VirtuosoError::NotFound(format!("job not found: {job_id}")))?;
 
-    // Derive the current status first: a job whose run has already finished
-    // must not be "cancelled".
     let effective = derive_statuses(std::slice::from_ref(&job), run_host);
     let status = effective.get(&job.job_id).copied().unwrap_or(job.status);
     if MaestroJobStore::is_terminal(status) {
@@ -2719,21 +2548,15 @@ fn job_cancel_in(
         )));
     }
 
-    // Close the session. `maeCloseSession` is session-wide: every other job
-    // in the session dies with it and unsaved session state is lost.
     let client = VirtuosoClient::from_env()?;
     let skill = client.maestro.close_session(&job.session);
     let r = client.execute_skill(&skill, None)?;
-    // maeCloseSession may return nil even on success; check bridge-level ok()
     if !r.ok() {
         return Err(VirtuosoError::Execution(format!(
             "maestro job cancel: maeCloseSession failed for session {}",
             job.session
         )));
     }
-    // `maeCloseSession` answers `t` when it closed the session and `nil` when
-    // there was no such session open — in that case the job cannot be
-    // running either, so it is still marked cancelled.
     let session_closed = r.skill_ok();
 
     job.status = MaestroJobStatus::Cancelled;
@@ -2767,7 +2590,6 @@ mod tests {
 
     #[test]
     fn tokenizer_with_backslash_escape_in_string() {
-        // SKILL octal escape \256 for ® char — must not confuse the tokenizer
         let input = r#"("Virtuoso\256 ADE Explorer Editing: LIB CELL V" "fnxSession0")"#;
         let tokens = parse_skill_list_top_level(input);
         assert_eq!(tokens.len(), 2, "{tokens:?}");
@@ -2794,13 +2616,10 @@ mod tests {
             classify_session_arg("xunipc-userone-38371"),
             SessionArgKind::Bridge
         );
-        // A host containing a dash must still classify as a bridge id.
         assert_eq!(
             classify_session_arg("my-host-userone-38371"),
             SessionArgKind::Bridge
         );
-        // The id must be routed to VB_SESSION so the client connects to
-        // exactly that Virtuoso instance.
         assert_eq!(
             resolve_maestro_session_env("xunipc-userone-38371"),
             Ok(Some("xunipc-userone-38371".to_string()))
@@ -2811,9 +2630,6 @@ mod tests {
     fn session_arg_fnx_session_is_maestro_only() {
         assert_eq!(classify_session_arg("fnxSession0"), SessionArgKind::Maestro);
         assert_eq!(classify_session_arg("fnxSession4"), SessionArgKind::Maestro);
-        // A Maestro session name must NEVER reach VB_SESSION: the bridge
-        // client would look for a session file that does not exist and fall
-        // back to VB_PORT=0 (ECONNREFUSED).
         assert_eq!(resolve_maestro_session_env("fnxSession0"), Ok(None));
         assert_eq!(resolve_maestro_session_env("fnxSession4"), Ok(None));
     }
@@ -2822,13 +2638,8 @@ mod tests {
     fn session_arg_unknown_is_rejected_with_actionable_message() {
         assert_eq!(classify_session_arg("mystery"), SessionArgKind::Unknown);
         let err = resolve_maestro_session_env("mystery").unwrap_err();
-        // The message must point at VB_SESSION for the Virtuoso instance and
-        // at the subcommand's own --session for the Maestro session.
         assert!(err.contains("VB_SESSION"), "{err}");
         assert!(err.contains("fnxSession"), "{err}");
-        // ...and it must never tell the user to "use --session" for the
-        // Virtuoso instance, which would be the contradictory advice the
-        // multi-session error used to give.
         assert!(!err.contains("Use --session"), "{err}");
     }
 
@@ -2836,13 +2647,10 @@ mod tests {
     fn session_arg_empty_or_partial_is_unknown() {
         assert_eq!(classify_session_arg(""), SessionArgKind::Unknown);
         assert_eq!(classify_session_arg("   "), SessionArgKind::Unknown);
-        // Two dash-separated fields is not enough: only <host>-<user>-<port>
-        // is a bridge session id.
         assert_eq!(
             classify_session_arg("userone-38371"),
             SessionArgKind::Unknown
         );
-        // A port of 0 is never a real bridge port.
         assert_eq!(
             classify_session_arg("xunipc-userone-0"),
             SessionArgKind::Unknown
@@ -2886,7 +2694,6 @@ mod tests {
 
     #[test]
     fn corner_remote_path_has_no_user_fragments() {
-        // Suffix is UUIDv4 hex — never derived from caller input.
         for _ in 0..16 {
             let p = corner_netlist_remote_path();
             assert!(!p.contains(".."), "no parent traversal: {p}");
@@ -2924,19 +2731,12 @@ mod tests {
 
     #[test]
     fn corner_mkdir_command_quotes_remote_dir_with_shell_metachars() {
-        // A user name / test / corner with shell metachars must still produce
-        // a quoted, injectable-safe mkdir command. The path itself is not
-        // derived from user input here, but the helper test ensures the
-        // quoting is engaged even when the value contains `;`, spaces, and quotes.
         let bad = "/tmp/would rm -rf /; touch pwned 'owned' \"q\"";
         let cmd = corner_netlist_mkdir_command(bad);
         assert!(cmd.starts_with("mkdir -p "), "{cmd}");
         let q = shell_quote(bad);
-        // q itself must contain single quotes
         assert!(q.contains('\''), "shell_quote must produce quotes: {q}");
-        // The cmd must embed the quoted form (so the raw `bad` does NOT appear)
         assert!(cmd.contains(&q), "command should embed quoted form: {cmd}");
-        // Defensive: ensure the unquoted version of the user value is gone.
         assert!(
             !cmd.contains(bad),
             "unquoted user value leaked into command: {cmd}"
@@ -2947,23 +2747,18 @@ mod tests {
     fn corner_verify_command_uses_find_mindepth_not_ls() {
         let cmd = corner_netlist_verify_command("/tmp/x");
         assert!(cmd.starts_with("find "), "{cmd}");
-        // Per spec:
-        //   find <quoted> -mindepth 1 -type f -size +0c -print -quit
         assert!(cmd.contains(" -mindepth 1"), "{cmd}");
         assert!(cmd.contains(" -type f"), "{cmd}");
         assert!(cmd.contains(" -size +0c"), "{cmd}");
         assert!(cmd.contains(" -print"), "{cmd}");
         assert!(cmd.contains(" -quit"), "{cmd}");
-        // MUST NOT use `ls -la` — the spec explicitly forbids it.
         assert!(!cmd.contains("ls "), "must not use ls: {cmd}");
         assert!(
             !cmd.contains("ls -la"),
             "must not use ls -la per spec: {cmd}"
         );
         assert!(!cmd.contains("-la"), "must not use any -la flag: {cmd}");
-        // Quote the remote dir
         assert!(cmd.contains(&shell_quote("/tmp/x")), "{cmd}");
-        // Quoted remote dir must appear before any flag
         let q = shell_quote("/tmp/x");
         let pos_q = cmd.find(&q).expect("quoted dir in cmd");
         let pos_mindepth = cmd.find(" -mindepth ").expect("-mindepth flag");
@@ -2972,16 +2767,9 @@ mod tests {
 
     #[test]
     fn corner_verify_command_quotes_remote_dir_with_metachars() {
-        // A user-controlled remote dir (with shell metachars) must be
-        // safely shell-quoted before find touches it.
         let path = "/tmp/x; rm -rf / 'owned' \"q\"";
         let quoted = shell_quote(path);
         let cmd = corner_netlist_verify_command(path);
-        // Exact-form contract: nothing else can be appended to the find argument.
-        // This alone proves the builder uses the `shell_quote` helper; any further
-        // assertion about its specific framing must be derived from the helper
-        // implementation in `src/transport/ssh.rs` and its existing tests there,
-        // not from a guessed quote style.
         assert_eq!(
             cmd,
             format!("find {quoted} -mindepth 1 -type f -size +0c -print -quit")
@@ -2993,11 +2781,6 @@ mod tests {
         let path = "/tmp/x; rm -rf /";
         let quoted = shell_quote(path);
         let cmd = corner_netlist_cleanup_command(path);
-        // Exact-form contract. This alone proves the builder uses the
-        // `shell_quote` helper; any further assertion about its specific
-        // framing must be derived from the helper implementation in
-        // `src/transport/ssh.rs` and its existing tests there, not from
-        // a guessed quote style.
         assert_eq!(cmd, format!("rm -rf {quoted}"));
     }
 
@@ -3006,8 +2789,6 @@ mod tests {
         assert!(!remote_dir_has_entries(""));
         assert!(!remote_dir_has_entries("\n"));
         assert!(!remote_dir_has_entries("   \n   \n"));
-        // `find` on an empty dir still prints the root itself by default;
-        // `-mindepth 1` ensures it prints nothing when nothing is present.
         assert!(!remote_dir_has_entries("\n\n"));
     }
 
@@ -3020,10 +2801,6 @@ mod tests {
 
     #[test]
     fn cleanup_strategy_independent_of_other_helpers() {
-        // The cleanup helper must produce a self-contained, runnable command
-        // regardless of the state of mkdir/verify commands. Failure paths in
-        // the export flow keep the remote dir alive; we verify that by
-        // confirming the helpers are pure (don't share mutable state).
         let dir1 = corner_netlist_remote_path();
         let dir2 = corner_netlist_remote_path();
         assert_ne!(dir1, dir2);
@@ -3031,7 +2808,6 @@ mod tests {
         let c2 = corner_netlist_cleanup_command(&dir2);
         assert!(c1.contains(&dir1) || c1.contains(&shell_quote(&dir1)));
         assert!(c2.contains(&dir2) || c2.contains(&shell_quote(&dir2)));
-        // The two cleanup commands must be independent (c1 does NOT mention c2's dir).
         assert!(
             !c1.contains(&dir2) && !c1.contains(&shell_quote(&dir2)),
             "cleanup cmd for dir1 must not target dir2: {c1}"
@@ -3061,22 +2837,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn enumerate_local_files_skips_symlinks_no_follow_no_include() {
-        // `enumerate_local_files` must use `symlink_metadata` so it
-        // does NOT follow symlinks. We prove this by:
-        //   1. placing an ordinary real file inside the enumeration root
-        //      (so we can prove the real file is still included),
-        //   2. placing a symlink at the root that points to an outside
-        //      FILE (its contents must never be read or enumerated),
-        //   3. placing a symlink at the root that points to an outside
-        //      DIRECTORY whose subtree contains a sentinel file (the
-        //      subtree must never be entered or enumerated),
-        // and asserting that the only entry returned is the real file.
 
         let root = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
 
-        // Outside target files that must NEVER appear in the result, even
-        // if the walker accidentally followed a symlink.
         std::fs::write(outside.path().join("outside_file.txt"), b"OUTSIDE FILE").unwrap();
         std::fs::create_dir_all(outside.path().join("outside_dir/sub")).unwrap();
         std::fs::write(
@@ -3103,13 +2867,10 @@ mod tests {
 
         let entries = enumerate_local_files(root.path());
 
-        // The real file must be included…
         assert!(
             entries.iter().any(|e| e == "real.txt"),
             "real file must be enumerated: {entries:?}"
         );
-        // …and NO entry from the outside targets must appear, including
-        // the symlink names themselves and any path under them.
         for e in &entries {
             assert!(
                 e != "link_file" && e != "link_dir",
@@ -3130,15 +2891,12 @@ mod tests {
                 "no entry from outside targets may leak: {e}"
             );
         }
-        // Tight size assertion: exactly the real file.
         assert_eq!(
             entries,
             vec!["real.txt".to_string()],
             "only the real file must be enumerated; got {entries:?}"
         );
 
-        // Provenance: the outside targets are untouched (the walker
-        // could not have read or followed them).
         assert_eq!(
             std::fs::read(outside.path().join("outside_file.txt")).unwrap(),
             b"OUTSIDE FILE"
@@ -3171,16 +2929,11 @@ mod tests {
             result.is_ok(),
             "nonexistent path should be allowed: {result:?}"
         );
-        // The returned path must round-trip exactly.
         assert_eq!(result.unwrap(), candidate);
     }
 
     #[test]
     fn validate_output_dir_existing_empty_dir_is_rejected_with_conflict() {
-        // Per the must-not-exist contract, even an existing EMPTY directory
-        // is rejected by the preflight. The atomic rename would otherwise
-        // fail at publish time (EEXIST / ENOTEMPTY); surfacing it up front
-        // lets the operator decide whether to remove it first.
         let tmp = tempfile::tempdir().unwrap();
         let empty = tmp.path().join("empty");
         std::fs::create_dir(&empty).unwrap();
@@ -3195,8 +2948,6 @@ mod tests {
             msg.contains("already exists") || msg.contains("refusing to overwrite"),
             "error must explain refusal: {msg}"
         );
-        // The empty directory must remain on disk byte-for-byte (no
-        // side effects from validation).
         assert!(empty.is_dir(), "empty dir must be preserved");
         assert_eq!(
             std::fs::read_dir(&empty).unwrap().count(),
@@ -3214,7 +2965,6 @@ mod tests {
         std::fs::write(busy.join("existing.txt"), b"DO NOT TOUCH").unwrap();
         let err = validate_output_dir_for_download(busy.to_str().unwrap())
             .expect_err("nonempty dir must be rejected");
-        // Must use the Conflict variant (preserves exit code CONFLICT).
         assert!(
             matches!(err, VirtuosoError::Conflict(_)),
             "expected Conflict variant, got {err:?}"
@@ -3225,8 +2975,6 @@ mod tests {
                 && msg.contains("preserved"),
             "error message must explain refusal + preservation: {msg}"
         );
-        // Contents must be preserved byte-for-byte (NO remote side
-        // effect happened, but also nothing on disk changed).
         let contents = std::fs::read(busy.join("existing.txt")).unwrap();
         assert_eq!(
             contents, b"DO NOT TOUCH",
@@ -3250,17 +2998,11 @@ mod tests {
             msg.contains("not a directory"),
             "error must explain non-directory: {msg}"
         );
-        // File contents preserved.
         assert_eq!(std::fs::read(&file).unwrap(), b"data");
     }
 
     #[test]
     fn validate_output_dir_does_not_touch_remote() {
-        // The validator must be a pure helper: it never invokes any
-        // network, SSH, or SKILL. We verify that indirectly by checking
-        // the helper ignores env vars and only inspects local metadata —
-        // it succeeds for a fresh nonexistent path under a tmpdir without
-        // touching any SSH config.
         let tmp = tempfile::tempdir().unwrap();
         let candidate = tmp.path().join("nope");
         let res = validate_output_dir_for_download(candidate.to_str().unwrap());
@@ -3287,7 +3029,6 @@ mod tests {
         assert!(msg.contains("nil"), "original failure survives: {msg}");
         assert!(msg.contains("SFE-30"), "log tail is carried back: {msg}");
         assert!(msg.contains("/tmp/d"), "says where it read from: {msg}");
-        // And it must have asked for logs, not listed the whole dir.
         let cmds = t.commands.lock().unwrap();
         assert!(cmds[0].contains("*.log"), "{cmds:?}");
     }
@@ -3360,7 +3101,6 @@ mod tests {
         );
         assert!(msg.ends_with("nil\nhint"), "{msg}");
 
-        // Ssh keeps its own variant — the exit code depends on it.
         let e = append_diagnostic(VirtuosoError::Ssh("denied".into()), "hint");
         assert!(matches!(e, VirtuosoError::Ssh(_)), "{e}");
     }
@@ -3415,13 +3155,6 @@ mod tests {
 
     #[test]
     fn with_remote_dir_context_converts_timeout_to_timeout_with_context() {
-        // `Timeout(secs)` carries no context, so `with_remote_dir_context`
-        // MUST convert it into `TimeoutWithContext(secs, remote_dir)` so
-        // the operator can correlate the timeout with the preserved
-        // remote artifacts. The Timeout-family exit-code / error_type /
-        // retryable semantics are preserved by `TimeoutWithContext`,
-        // which is why the conversion — not flattening — is the right
-        // choice.
         let e = with_remote_dir_context(VirtuosoError::Timeout(42), "/tmp/x");
         match e {
             VirtuosoError::TimeoutWithContext(secs, ctx) => {
@@ -3437,9 +3170,6 @@ mod tests {
 
     #[test]
     fn with_remote_dir_context_appends_remote_dir_to_existing_timeout_context() {
-        // An existing `TimeoutWithContext` that does NOT already mention
-        // this remote_dir must get the standard `remote_dir=…` suffix
-        // appended exactly once. The original context is preserved.
         let original = VirtuosoError::TimeoutWithContext(7, "dial timeout".into());
         let e = with_remote_dir_context(original, "/tmp/y");
         match e {
@@ -3460,9 +3190,6 @@ mod tests {
 
     #[test]
     fn with_remote_dir_context_does_not_duplicate_remote_dir_in_timeout_context() {
-        // If the existing context ALREADY contains the same
-        // `remote_dir=…` marker (e.g. from an earlier wrapping), the
-        // second wrap must NOT introduce a duplicate occurrence.
         let original = VirtuosoError::TimeoutWithContext(
             9,
             "connect refused; netlist artifacts preserved at remote_dir=/tmp/dedupe".into(),
@@ -3545,11 +3272,6 @@ mod tests {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn atomic_publish_nonexistent_target_publishes_nested_tree_and_staging_disappears() {
-        // The staging tree is constructed under a sibling of the (not yet
-        // existing) target so the rename is single-filesystem — exactly
-        // what production does. Target must NOT exist; atomic_publish
-        // materializes it. After publish, staging MUST be gone (it has
-        // been renamed) and output MUST contain the full nested tree.
         let parent = tempfile::tempdir().unwrap();
         let target = parent.path().join("netlist_target");
         let staging = parent.path().join(format!(
@@ -3564,14 +3286,12 @@ mod tests {
         let res = atomic_publish_no_replace(&staging, &target, "/tmp/rd_atom_ok");
         assert!(res.is_ok(), "atomic publish must succeed: {res:?}");
 
-        // Staging has been consumed by the rename and MUST be gone.
         assert!(
             !staging.exists(),
             "staging dir must disappear after a successful publish; \
              still present at {}",
             staging.display()
         );
-        // Output materialized with full nested tree.
         assert!(target.is_dir(), "target must now be a directory");
         assert_eq!(
             std::fs::read(target.join("top.txt")).unwrap(),
@@ -3588,9 +3308,6 @@ mod tests {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn atomic_publish_existing_empty_directory_is_conflict_and_preserved() {
-        // The preflight already rejects existing empty dirs, but the
-        // publish step itself MUST also refuse (publish is the
-        // authoritative guard) and preserve the empty directory.
         let parent = tempfile::tempdir().unwrap();
         let target = parent.path().join("existing_empty");
         std::fs::create_dir(&target).unwrap();
@@ -3612,14 +3329,12 @@ mod tests {
             err.to_string().contains("/tmp/rd_atom_empty"),
             "Conflict error must include remote_dir context: {err}"
         );
-        // Empty target still on disk, still empty.
         assert!(target.is_dir(), "empty target must remain");
         assert_eq!(
             std::fs::read_dir(&target).unwrap().count(),
             0,
             "empty target must stay empty"
         );
-        // Staging NOT consumed on failure.
         assert!(
             staging.exists(),
             "staging must survive a Conflict so the caller can clean it up"
@@ -3653,7 +3368,6 @@ mod tests {
             err.to_string().contains("/tmp/rd_atom_busy"),
             "Conflict error must include remote_dir context: {err}"
         );
-        // Every byte preserved.
         assert_eq!(
             std::fs::read(target.join("existing.txt")).unwrap(),
             b"DO NOT TOUCH"
@@ -3662,15 +3376,12 @@ mod tests {
             std::fs::read(target.join("another.txt")).unwrap(),
             b"PRESERVE"
         );
-        // Staging NOT consumed on failure.
         assert!(staging.exists(), "staging must survive a Conflict");
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn atomic_publish_existing_file_is_conflict_and_exact_bytes_preserved() {
-        // Destination is a regular file at the same path. Publish MUST
-        // refuse and the file's exact bytes must survive.
         let parent = tempfile::tempdir().unwrap();
         let target = parent.path().join("destination_file");
         std::fs::write(&target, b"ORIGINAL-12345").unwrap();
@@ -3693,7 +3404,6 @@ mod tests {
             err.to_string().contains("/tmp/rd_atom_file"),
             "Conflict error must include remote_dir context: {err}"
         );
-        // Exact bytes preserved (no truncation, no overwrite).
         assert_eq!(
             std::fs::read(&target).unwrap(),
             b"ORIGINAL-12345",
@@ -3705,23 +3415,12 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn atomic_publish_unix_destination_is_symlink_returns_conflict_without_following() {
-        // On Unix, if the destination is itself a symlink (e.g. a
-        // dangling one, or one whose target the operator does NOT want
-        // touched), the atomic rename MUST surface Conflict and MUST
-        // NOT follow the link to clobber the target. We use a real
-        // sentinel directory as the symlink target — if the publish
-        // accidentally followed the link, the sentinel contents would
-        // be clobbered.
         use std::os::unix::fs::symlink;
 
         let parent = tempfile::tempdir().unwrap();
         let real_target = tempfile::tempdir().unwrap();
-        // Sentinel inside the symlink target that MUST NOT be touched.
         std::fs::write(real_target.path().join("sentinel"), b"DO NOT TOUCH").unwrap();
 
-        // Build a parent whose only top-level entry is a symlink
-        // pointing at real_target.path(). The publish target is that
-        // symlink itself.
         let link = parent.path().join("dest_link");
         symlink(real_target.path(), &link).unwrap();
 
@@ -3743,36 +3442,23 @@ mod tests {
             err.to_string().contains("/tmp/rd_atom_symlink"),
             "Conflict error must include remote_dir context: {err}"
         );
-        // Sentinel inside the symlink target must remain untouched —
-        // proves we never followed the link.
         assert_eq!(
             std::fs::read(real_target.path().join("sentinel")).unwrap(),
             b"DO NOT TOUCH"
         );
-        // Staging NOT consumed on failure.
         assert!(staging.exists(), "staging must survive a Conflict");
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn atomic_publish_race_target_created_after_preflight_succeeds_is_conflict() {
-        // Race simulation:
-        //   1. `validate_output_dir_for_download` runs while target is
-        //      absent → returns Ok.
-        //   2. Between the preflight and the atomic rename, something
-        //      else (the operator, another tool, a parallel job)
-        //      materializes the destination.
-        //   3. The atomic rename MUST surface Conflict and the bytes
-        //      the racer just wrote MUST survive.
         let parent = tempfile::tempdir().unwrap();
         let target = parent.path().join("racey");
         assert!(!target.exists(), "precondition: target must not exist");
 
-        // (1) Preflight accepts the absent path.
         let pre = validate_output_dir_for_download(target.to_str().unwrap());
         assert!(pre.is_ok(), "preflight must accept absent target: {pre:?}");
 
-        // Build staging as a sibling so the rename is single-filesystem.
         let staging = parent.path().join(format!(
             "{}{}",
             CORNER_NETLIST_STAGING_PREFIX,
@@ -3781,11 +3467,9 @@ mod tests {
         std::fs::create_dir(&staging).unwrap();
         std::fs::write(staging.join("data.txt"), b"NEW").unwrap();
 
-        // (2) Racer creates the destination between preflight and publish.
         std::fs::write(&target, b"WRITTEN BY RACER").unwrap();
         assert!(target.exists(), "precondition: racer materialized target");
 
-        // (3) Atomic rename fires; the racer's bytes MUST survive.
         let err = atomic_publish_no_replace(&staging, &target, "/tmp/rd_atom_race")
             .expect_err("rename must conflict when target appears mid-flight");
         assert!(
@@ -3796,33 +3480,23 @@ mod tests {
             err.to_string().contains("/tmp/rd_atom_race"),
             "Conflict error must include remote_dir context: {err}"
         );
-        // Racer's bytes preserved byte-for-byte.
         assert_eq!(
             std::fs::read(&target).unwrap(),
             b"WRITTEN BY RACER",
             "racer-written target bytes must be preserved"
         );
-        // Staging NOT consumed.
         assert!(
             staging.exists(),
             "staging must survive a Conflict for caller cleanup"
         );
     }
 
-    // ── validate_staging_recursive ─────────────────────────────────
-    //
-    // The validator uses `symlink_metadata` so it must NEVER follow
-    // links. We assert that a symlink at any level is rejected up
-    // front, and that the target's contents are NOT touched (i.e. no
-    // accidental follow could have occurred).
 
     #[cfg(unix)]
     #[test]
     fn validate_staging_recursive_rejects_staging_file_symlink_without_following() {
         use std::os::unix::fs::symlink;
         let staging = tempfile::tempdir().unwrap();
-        // Outside target that validate MUST NOT read or modify; if it
-        // had followed the symlink, the content would be read.
         let outside = tempfile::tempdir().unwrap();
         std::fs::write(outside.path().join("target_file"), b"OUTSIDE").unwrap();
 
@@ -3839,7 +3513,6 @@ mod tests {
             err.to_string().contains("symlink") || err.to_string().contains("link"),
             "error must explain the symlink refusal: {err}"
         );
-        // Target still intact — proves we never followed the link.
         assert_eq!(
             std::fs::read(outside.path().join("target_file")).unwrap(),
             b"OUTSIDE"
@@ -3851,13 +3524,9 @@ mod tests {
     fn validate_staging_recursive_rejects_staging_directory_symlink_without_following() {
         use std::os::unix::fs::symlink;
         let staging = tempfile::tempdir().unwrap();
-        // Outside directory that the validator must never enter.
         let outside = tempfile::tempdir().unwrap();
         std::fs::write(outside.path().join("outside.txt"), b"OUTSIDE").unwrap();
 
-        // Place a non-empty regular file so validate does not hit the
-        // "no non-empty regular file" branch before reaching the
-        // symlink — we want to specifically exercise the symlink branch.
         std::fs::write(staging.path().join("ok.txt"), b"x").unwrap();
         let sub_link = staging.path().join("sub");
         symlink(outside.path(), &sub_link).unwrap();
@@ -3868,7 +3537,6 @@ mod tests {
             matches!(err, VirtuosoError::Ssh(_)),
             "expected Ssh variant for symlink rejection, got {err:?}"
         );
-        // Outside sentinel still intact — proves we never followed.
         assert_eq!(
             std::fs::read(outside.path().join("outside.txt")).unwrap(),
             b"OUTSIDE"
@@ -3877,9 +3545,6 @@ mod tests {
 
     #[test]
     fn validate_staging_recursive_rejects_zero_byte_only_staging() {
-        // A staging tree that has ONLY zero-byte regular files (and
-        // possibly empty directories) must be rejected. This mirrors
-        // the remote `find -size +0c` contract.
         let staging = tempfile::tempdir().unwrap();
         std::fs::write(staging.path().join("placeholder"), b"").unwrap();
         std::fs::create_dir(staging.path().join("empty_subdir")).unwrap();
@@ -3923,10 +3588,6 @@ mod tests {
 
     #[test]
     fn staging_guard_removes_own_valid_prefix_path_in_expected_parent_on_drop() {
-        // The happy path: leaf starts with the controlled prefix AND
-        // the suffix is exactly 32 lowercase hex chars AND the parent
-        // matches the parent the guard was constructed for. The guard
-        // MUST remove it on drop.
         let parent = tempfile::tempdir().unwrap();
         let path = make_valid_staging_path(parent.path());
         std::fs::write(path.join("marker"), b"data").unwrap();
@@ -3944,9 +3605,6 @@ mod tests {
 
     #[test]
     fn staging_guard_refuses_to_delete_path_with_invalid_prefix() {
-        // Construct a path whose leaf name does NOT start with the
-        // controlled prefix. The guard's prefix check must save the
-        // day — the directory and its contents must remain intact.
         let parent = tempfile::tempdir().unwrap();
         let invalid = parent.path().join(format!(
             "vcli_NOT_A_STAGING_DIR_{}",
@@ -3962,7 +3620,6 @@ mod tests {
         {
             let _guard =
                 StagingGuard::new(invalid.clone(), invalid.parent().unwrap().to_path_buf());
-            // Drop at end of scope; guard must NOT touch this path.
         }
         assert!(
             invalid.exists(),
@@ -3979,8 +3636,6 @@ mod tests {
 
     #[test]
     fn staging_guard_refuses_to_delete_path_with_wrong_suffix_length() {
-        // The leaf name has the right prefix but the suffix is NOT
-        // 32 chars. Both shorter and longer suffixes must be refused.
         let parent = tempfile::tempdir().unwrap();
         for suffix in [
             // Too short.
@@ -3998,7 +3653,6 @@ mod tests {
 
             {
                 let _guard = StagingGuard::new(bad.clone(), bad.parent().unwrap().to_path_buf());
-                // Drop at end of scope; guard must NOT touch this path.
             }
             assert!(
                 bad.exists(),
@@ -4014,9 +3668,6 @@ mod tests {
 
     #[test]
     fn staging_guard_refuses_to_delete_path_with_nonhex_suffix() {
-        // The leaf name has the right prefix and the right length but
-        // the suffix contains a non-hex char (`g` is not in [0-9a-f]).
-        // The guard's hex check MUST save the day.
         let parent = tempfile::tempdir().unwrap();
         let bad = parent.path().join(format!(
             "{}g{}",
@@ -4041,10 +3692,6 @@ mod tests {
 
     #[test]
     fn staging_guard_refuses_to_delete_path_with_uppercase_hex_suffix() {
-        // The leaf name has the right prefix and length but the
-        // suffix is uppercase hex (`A` instead of `a`). The guard's
-        // lowercase-only hex check MUST save the day so a tampered
-        // or non-UUID leaf is never confused with our own.
         let parent = tempfile::tempdir().unwrap();
         let bad = parent.path().join(format!(
             "{}{}",
@@ -4069,10 +3716,6 @@ mod tests {
 
     #[test]
     fn staging_guard_refuses_to_delete_path_in_wrong_parent() {
-        // The leaf name has the right prefix, length, and lowercase
-        // hex suffix — BUT the guard was constructed with a parent
-        // that does NOT match the path's actual parent. The guard's
-        // same-parent check MUST refuse to remove it.
         let original_parent = tempfile::tempdir().unwrap();
         let other_parent = tempfile::tempdir().unwrap();
 
@@ -4081,11 +3724,6 @@ mod tests {
         assert!(path.exists(), "precondition: path must exist");
 
         {
-            // Construct the guard with a DIFFERENT expected parent
-            // (one that does NOT match the path's actual parent).
-            // The guard's same-parent check must refuse to remove it
-            // on drop because `path.parent()` (original_parent) !=
-            // `other_parent`.
             let _guard = StagingGuard::new(path.clone(), other_parent.path().to_path_buf());
         }
         assert!(
@@ -4111,7 +3749,6 @@ mod tests {
         let output = std::path::Path::new("/tmp/some/operator_supplied/dir");
         let staging = corner_netlist_staging_path(output);
 
-        // Sibling: same parent as output.
         assert_eq!(
             staging.parent(),
             output.parent(),
@@ -4129,7 +3766,6 @@ mod tests {
             "staging leaf '{leaf}' must start with the hidden prefix '{CORNER_NETLIST_STAGING_PREFIX}'"
         );
 
-        // Suffix is exactly 32 lowercase hex chars (UUIDv4 simple).
         let suffix = &leaf[CORNER_NETLIST_STAGING_PREFIX.len()..];
         assert_eq!(
             suffix.len(),
@@ -4141,11 +3777,6 @@ mod tests {
             "suffix must be lowercase hex only; got {suffix:?}"
         );
 
-        // No fragment of the user-supplied output basename may appear
-        // anywhere in the staging leaf. The user could pass any string
-        // as the `output_dir` basename; the staging leaf must NOT be
-        // derivable from it (so a malicious or accidental user value
-        // can never shadow or collide with staging).
         let user_basename = output
             .file_name()
             .and_then(|n| n.to_str())
@@ -4155,9 +3786,6 @@ mod tests {
             "staging leaf '{leaf}' must NOT contain the user basename \
              '{user_basename}'"
         );
-        // Defensive: even when the user basename is also a hex string,
-        // the staging leaf has the hidden prefix so the basename alone
-        // could not match. This holds here because the prefix is fixed.
         assert!(
             !leaf.ends_with(user_basename),
             "staging leaf '{leaf}' must NOT end with the user basename"
@@ -4166,9 +3794,6 @@ mod tests {
 
     #[test]
     fn corner_netlist_staging_path_is_unique_across_many_calls() {
-        // Same as the remote path uniqueness contract: collisions have
-        // probability ~2^-122 across UUIDv4 calls. 256 calls is plenty
-        // to detect any regression that re-uses a suffix.
         let output = std::path::Path::new("/tmp/dir");
         let mut seen = std::collections::HashSet::new();
         for _ in 0..256 {
@@ -4287,9 +3912,6 @@ mod tests {
 
     #[test]
     fn unprovable_probe_answer_is_refused() {
-        // "unknown" is what a missing session answers, and "nil" is what the
-        // old probe answered for BOTH a writable and a missing session. Neither
-        // may let a submit through.
         for answer in ["\"unknown\"", "\"nil\"", "nil", "", "   "] {
             assert!(
                 check_writable("fnxSession4", answer).is_err(),
@@ -4318,15 +3940,11 @@ mod tests {
     fn a_duplicate_run_id_still_leaves_a_record() {
         let (_tmp, store) = temp_store();
 
-        // The first submitter owns the run id.
         let mut owner = MaestroJob::new("fnxSession4".into(), None, None);
         owner.run_id = Some("run-1".into());
         owner.status = MaestroJobStatus::Running;
         store.save(&owner).unwrap();
 
-        // The second submitter is handed the same run id. Its simulation may
-        // exist, so a record MUST exist for it — otherwise it is an orphan
-        // that no status, list or cancel can see.
         let mut second = MaestroJob::new("fnxSession4".into(), None, None);
         second.run_id = Some("run-1".into());
         second.status = MaestroJobStatus::Running;
@@ -4352,7 +3970,6 @@ mod tests {
             "the duplicate record must say why it exists: {:?}",
             recorded.error_message
         );
-        // And the record is really on disk.
         assert!(store.load(&recorded.job_id).unwrap().is_some());
     }
 
@@ -4380,8 +3997,6 @@ mod tests {
 
     #[test]
     fn client_id_gate_is_not_skipped_when_the_session_has_no_id() {
-        // A session that carries no id must not switch the gate off: the ids
-        // recorded for the session are still compared.
         let recorded = vec!["someone-else".to_string()];
         assert!(check_client_ids("prod", None, &recorded).is_err());
     }
@@ -4437,11 +4052,6 @@ mod tests {
             cmd.contains("'/remote/a dir;rm -rf x'"),
             "the path must be quoted: {cmd}"
         );
-        // The injected `;` must be inert. It is inert because it sits
-        // inside the single quotes — so the property to check is that
-        // nothing of the payload survives OUTSIDE the quoted literal, not
-        // that the payload is absent (the quoted form ends with the very
-        // bytes the payload is made of).
         let outside = cmd.replace("'/remote/a dir;rm -rf x'", "");
         assert!(
             !outside.contains("rm -rf"),
@@ -4527,7 +4137,6 @@ mod tests {
 
         let err = job_cancel_in(&store, &job.job_id, None).unwrap_err();
         assert!(err.to_string().contains("already finished"), "{err}");
-        // The record is untouched: the job did not become "cancelled".
         assert_eq!(
             store.load(&job.job_id).unwrap().unwrap().status,
             MaestroJobStatus::Completed

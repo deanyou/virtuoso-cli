@@ -27,17 +27,15 @@ pub fn size(
     let vov = point["vov"].as_f64().unwrap_or(0.0);
     let vth = point["vth"].as_f64().unwrap_or(0.0);
 
-    // W = Id_needed / id_sim_at_W=1µm → result in µm
-    // id_sim is in A at W_tb=1µm, so W(µm) = Id(A) / id_sim(A) * W_tb(µm) = Id/id_sim * 1
     let (w, id_design) = if let Some(gm) = gm_req {
         let id = gm / gmid_target;
-        let w = id / id_sim; // ratio = W in µm
+        let w = id / id_sim;
         (w, id)
     } else if let Some(id) = id_req {
         let w = id / id_sim;
         (w, id)
     } else {
-        (1.0, id_sim) // default W=1µm
+        (1.0, id_sim)
     };
 
     let result = json!({

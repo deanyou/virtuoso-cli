@@ -94,9 +94,6 @@ fn scan_source(text: &str, whole_file_is_test: bool) -> (Vec<RawString>, Vec<Ran
             continue;
         }
 
-        // Raw string: r"...", r#"..."#, r##"..."##. Record contents only —
-        // handing the delimiters to strip_skill_strings would make the
-        // opening `"` look like a SKILL string quote and blank the body.
         if c == b'r' && matches!(b.get(i + 1), Some(b'#') | Some(b'"')) {
             let mut j = i + 1;
             let mut hashes = 0usize;
@@ -149,8 +146,6 @@ fn scan_source(text: &str, whole_file_is_test: bool) -> (Vec<RawString>, Vec<Ran
             }
         }
 
-        // Byte slices: `i` walks raw bytes and may sit inside a multi-byte
-        // UTF-8 character, so slicing the &str would panic.
         if b[i..].starts_with(b"#[cfg(test)]") {
             pending_test = Some(i);
             i += b"#[cfg(test)]".len();
@@ -308,16 +303,9 @@ fn generated_skill_parens_are_balanced() {
     );
 }
 
-// A guard that cannot fail guards nothing. These pin the scanner's behaviour
-// on the cases that matter.
-//
-// Fixtures use r##"..."## because they embed r#"..."# source literals; a
-// single-hash outer string would terminate on the inner closing delimiter.
 
 #[test]
 fn scanner_flags_a_missing_closing_paren() {
-    // The exact shape that shipped in PR #122: the final `result)` closes the
-    // inner let, leaving procedure( open so the reader absorbs the rest.
     let src = r##"
         fn build() -> String {
             r#"procedure(checkGrid(cv) let((r) r = nil result)"#
@@ -374,8 +362,6 @@ fn scanner_ignores_raw_strings_inside_test_modules() {
 
 #[test]
 fn scanner_ignores_rust_delimiters_when_balancing() {
-    // Regression guard: counting from the opening delimiter instead of the
-    // content makes that quote blank the whole body and hide the defect.
     let src = r##"fn f() -> String { r#"procedure(checkGrid(cv) let((r) r = nil result)"# }"##;
     let (raw, _) = scan_source(src, false);
     let body = &src[raw[0].content.clone()];

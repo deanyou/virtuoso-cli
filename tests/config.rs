@@ -77,7 +77,6 @@ fn test_config_from_env_works() {
     let (_dir, _cg) = isolate_config_dir();
     let result = virtuoso_cli::config::Config::from_env_with_profile(None);
     assert!(result.is_ok());
-    // Should have a valid config with reasonable defaults
     let config = result.unwrap();
     assert!(config.port > 0);
     assert!(config.timeout > 0);
@@ -93,7 +92,6 @@ fn test_config_spectre_max_workers_default() {
     let _t = shield_target();
     let (_dir, _cg) = isolate_config_dir();
     let config = virtuoso_cli::config::Config::from_env_with_profile(None).unwrap();
-    // Should be 8 by default
     assert_eq!(config.spectre_max_workers, 8);
 }
 

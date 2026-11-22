@@ -28,7 +28,6 @@ impl Bridge {
             while !stopped.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
-                        // BSD sockets may inherit the listener's nonblocking flag.
                         stream.set_nonblocking(false).unwrap();
                         stream
                             .set_read_timeout(Some(Duration::from_secs(10)))
@@ -74,7 +73,7 @@ impl Bridge {
             .unwrap()
     }
 
-    #[allow(dead_code)] // exercised only by the live Virtuoso probe variants
+    #[allow(dead_code)]
     fn file(&self) -> std::path::PathBuf {
         let path = self.dir.path().join("probe with spaces.ils");
         std::fs::write(&path, "procedure(vcliTestProbe() 42)\nt\n").unwrap();
@@ -92,7 +91,7 @@ impl Drop for Bridge {
     }
 }
 
-#[allow(dead_code)] // exercised only by the live Virtuoso probe variants
+#[allow(dead_code)]
 fn assert_success(out: &Output) {
     assert!(
         out.status.success(),

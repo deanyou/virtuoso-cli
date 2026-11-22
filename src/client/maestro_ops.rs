@@ -264,9 +264,6 @@ impl MaestroOps {
             }
             None => (String::new(), String::new()),
         };
-        // `?session` is only accepted on IC25; on IC23 the call is scoped by
-        // the current session, which `test_binding` has already validated
-        // against.
         let session_arg = if version.is_ic25() {
             format!(r#" ?session "{session}""#)
         } else {
@@ -322,9 +319,6 @@ impl MaestroOps {
             }
             None => r#"quote(("dec" "0"))"#.to_string(),
         };
-        // The sed primary pattern matches " stop=" (space before stop) in the netlist.
-        // If dec=0 was in the netlist it would match first, otherwise fallback matches.
-        // After injection: " dec=N stop=" preserves spacing before stop=.
         format!(
             r#"progn(
 procedure(vcliShellQuote(value)
@@ -386,7 +380,6 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
     ///   the emitted JSON does not parse.
     pub fn get_outputs(&self, test_name: &str) -> String {
         let test_name = escape_skill_string(test_name);
-        // buildString(parseString(x "\"") "\\\"") — stateless `"` → `\"`.
         let esc = |var: &str| format!(r#"buildString(parseString({var} "\"") "\\\"")"#);
         let str_field = |field: &str| format!(r#"if(stringp(o~>{field}) then o~>{field} else "")"#);
         let (name, otype, signal) = (
@@ -394,8 +387,6 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
             str_field("outputType"),
             str_field("signalName"),
         );
-        // `expr` first (IC25 string form), then `expression` (IC23 SKILL form,
-        // printed with %L since it is a list, not a string).
         let expr = r#"if(stringp(o~>expr) then o~>expr else if(o~>expression then sprintf(nil "%L" o~>expression) else ""))"#;
         let (e_name, e_type, e_signal, e_expr) = (esc("nm"), esc("ty"), esc("sg"), esc("ex"));
         format!(
@@ -604,9 +595,6 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
     /// not user errors, since the constructor is meant to be called
     /// from a clap layer that already validated the inputs.
     pub fn export_waveform(&self, req: &ExportWaveformRequest<'_>) -> String {
-        // Validate enum + ranges up front — see AGENTS.md "no validation
-        // at system boundaries, trust types internally" rule: these
-        // bounds are part of the type contract for the new command.
         if !(1..=16).contains(&req.precision) {
             panic!(
                 "export_waveform: precision must be in 1..=16, got {}",
@@ -634,9 +622,6 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
         let precision = req.precision;
         let width = req.width;
 
-        // SKILL string literals for the format parameters; the
-        // expression is itself a SKILL expression tree, escaped so
-        // it can be embedded in a quote() form below.
         format!(
             r#"let((v) v = axlWaveformToList(axlGetWaveform(?session "{session}" ?expression "{expression_escaped}" ?analysis "{analysis}")) ocnPrint(?expr v ?numberNotation "{number_notation_escaped}" ?precision {precision} ?width {width} ?outputFile "{output_path_escaped}"))"#
         )
@@ -659,9 +644,6 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
 
     /// List all test names that have results in the current history.
     pub fn get_result_tests(&self) -> String {
-        // The loop variable must not be `t`: `t` is SKILL's protected true
-        // constant, so `foreach(t ...)` aborts with
-        // "*Error* setq/set: Variable is protected and cannot be assigned to".
         r#"let((tests out sep) tests = maeGetResultTests() out = "[" sep = "" foreach(tst tests out = strcat(out sep sprintf(nil "\"%s\"" tst)) sep = ",") strcat(out "]"))"#.into()
     }
 
@@ -721,8 +703,6 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
             None => format!(r#"maeGetOutputValue("{name}" "{test_name}")"#),
         };
 
-        // Combine: open results (ignore return), then get value
-        // Note: We don't gate on maeOpenResults return value (virtuoso-bridge-lite #81 fix)
         format!(r#"(progn (maeOpenResults ?history "{history}") {get_value})"#)
     }
 
@@ -736,41 +716,6 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
     /// List available history runs for the current Maestro session.
     /// Returns JSON array of history names.
     pub fn get_history_list(&self) -> String {
-        // History names are neither fixed nor guessable: they increment with
-        // every run and the user can rename them in the GUI, so callers must
-        // be able to enumerate them.
-        //
-        // The old directory heuristic got two things wrong on IC23.1:
-        // - `asiGetResultsDir(...)/..` lands on `<history>/psf`, two levels
-        //   below where histories live, so it listed *test* names;
-        // - the `!index(h ".")` filter drops every name containing a dot,
-        //   which excludes Cadence's own default names (`Interactive.0`,
-        //   `Interactive.1`, ...). Together these made a correct answer
-        //   impossible.
-        //
-        // Try the Maestro API first (wrapped in `errset` so an unbound symbol
-        // on a given IC release degrades instead of erroring), then fall back
-        // to scanning the histories root — the directory named `maestro` that
-        // `asiGetResultsDir` sits under, found by climbing rather than by a
-        // hard-coded level count.
-        // Probed on IC23.1: every `mae*` history accessor is unbound
-        // (maeGetHistoryNames / maeGetHistoryList / maeGetHistories /
-        // maeGetResultHistories / maeGetResultsDir / maeGetHistory), and
-        // `axlGetHistoryNames` is unbound too — only `axlGetMainSetupDB`
-        // exists. So the history list is derived from the filesystem, where
-        // each history is a directory directly under `<...>/results/maestro`.
-        //
-        // `asiGetResultsDir` returns a path *inside* one history
-        // (`<root>/<history>/psf/<test>`), so walk its components forward and
-        // stop at the first prefix ending in `/results/maestro` — that is the
-        // root, without hard-coding how many levels deep the results dir sits.
-        //
-        // Two bugs this replaces: the old code used `<resultsDir>/..`, which
-        // lands on `<history>/psf` and therefore listed *test* names; and it
-        // filtered with `!index(h ".")`, which rejects Cadence's own default
-        // history names (`Interactive.0`, `Interactive.1`, ...). History names
-        // change with every run and can be renamed in the GUI, so this has to
-        // enumerate rather than assume.
         r#"let((rd root found hs out sep) rd = car(errset(asiGetResultsDir(asiGetCurrentSession()))) root = nil found = nil when(stringp(rd) root = "" foreach(p parseString(rd "/") unless(found root = strcat(root "/" p) when(rexMatchp("/results/maestro$" root) found = t)))) hs = nil when(found && isDir(root) hs = setof(h getDirFiles(root) h != "." && h != ".." && !rexMatchp("^[.]" h) && isDir(strcat(root "/" h)))) out = "[" sep = "" foreach(h hs out = strcat(out sep sprintf(nil "\"%s\"" h)) sep = ",") strcat(out "]"))"#.into()
     }
 
@@ -887,12 +832,10 @@ fn parse_skill_pairs(alist: &str) -> Vec<String> {
     if alist.len() < 2 {
         return vec![alist.to_string()];
     }
-    // Format A: "(list (list ...) (list ...))"
     if alist.starts_with("(list (") {
         let inner = &alist[1..alist.len() - 1];
         return parse_inner_pairs(inner);
     }
-    // Format B: "((\"k1\" \"v1\") (\"k2\" \"v2\"))" — bare pairs, no outer list keyword
     if alist.starts_with("((") {
         let inner = &alist[1..alist.len() - 1];
         return parse_inner_pairs(inner);
@@ -945,7 +888,6 @@ fn skill_pair_to_quoted(pair: &str) -> String {
             .trim();
         format!("quote(({stripped}))")
     } else {
-        // Bare pair: `("key" "val")`
         format!("quote({trimmed})")
     }
 }
@@ -1109,7 +1051,6 @@ mod job_tests {
         let s = ops().submit_skill("sess");
         assert!(s.contains("maeRunSimulation"), "{s}");
         assert!(s.contains("?returnRunId"), "{s}");
-        // maeGetSetup has no ?runId keyword — the probe cannot work.
         assert!(!s.contains("maeGetSetup"), "{s}");
     }
 
@@ -1164,16 +1105,12 @@ mod tests {
 
     #[test]
     fn open_session_passes_append_mode_through() {
-        // "a" is the mode that takes the edit lock; it must reach maeOpenSetup
-        // verbatim, because a caller asking for it is asking to write.
         let s = ops().open_session("myLib", "myCell", "maestro", "a");
         assert_eq!(s, r#"maeOpenSetup("myLib" "myCell" "maestro" ?mode "a")"#);
     }
 
     #[test]
     fn set_session_mode_picks_the_matching_function() {
-        // The lock follows these two exactly (measured against the .cdslck
-        // file on IC23.1): editable takes it, read-only gives it back.
         assert_eq!(
             ops().set_session_mode("fnxSession7", true),
             r#"maeMakeEditable(?session "fnxSession7")"#
@@ -1193,12 +1130,8 @@ mod tests {
     #[test]
     fn list_vars_reads_assembler_global_scope() {
         let s = ops().list_vars();
-        // Must read the same scope `set_var` writes (`maeSetVar`/`maeGetVar`),
-        // not the per-test/Explorer scope — the two do not mirror.
         assert!(s.contains("maeGetVar("), "{s}");
         assert!(!s.contains("asiGetDesignVarList"), "{s}");
-        // IC23.1 has no `mae*` var enumerator; names come from maeGetSetup,
-        // and only the spelling "variables" works ("vars"/"var" return nil).
         assert!(s.contains(r#"?typeName "variables""#), "{s}");
     }
 
@@ -1217,10 +1150,7 @@ mod tests {
     #[test]
     fn delete_analysis_uses_symbol_and_verifies() {
         let s = ops().delete_analysis("ac");
-        // The name must reach asiDeleteAnalysis as a symbol, not a string.
         assert!(s.contains(r#"stringToSymbol("ac")"#), "{s}");
-        // asiDeleteAnalysis throws even on success, so the throw is swallowed
-        // and the outcome decided by re-reading the enabled list.
         assert!(s.contains("errset(asiDeleteAnalysis"), "{s}");
         assert!(s.contains("maeGetEnabledAnalysis"), "{s}");
     }
@@ -1241,8 +1171,6 @@ mod tests {
 
     #[test]
     fn get_analyses_ic25_uses_test_name() {
-        // 实测 IC25.1 ISR7：maeGetEnabledAnalysis(?session ...) 报错
-        // IC23/IC25 均需 positional 传测试名
         let s = ops().get_analyses("sess1", None, VirtuosoVersion::IC25);
         assert!(
             s.contains("maeGetSetup"),
@@ -1274,7 +1202,6 @@ mod tests {
         let s = ops().get_result_tests();
         assert!(s.contains("maeGetResultTests()"), "{s}");
         assert!(s.contains("foreach"), "{s}");
-        // `t` is SKILL's protected true constant — binding it aborts the loop.
         assert!(!s.contains("foreach(t "), "{s}");
     }
 
@@ -1283,8 +1210,6 @@ mod tests {
         let s = ops().get_history_list();
         assert!(s.contains("asiGetResultsDir"), "{s}");
         assert!(s.contains("foreach"), "{s}");
-        // Default history names contain a dot (`Interactive.0`), so a
-        // dot-rejecting filter can never return them.
         assert!(!s.contains(r#"!index(h ".")"#), "{s}");
     }
 
@@ -1316,11 +1241,6 @@ mod tests {
 
     #[test]
     fn export_waveform_escapes_double_quotes_in_session_and_path() {
-        // escape_skill_string escapes `\`, `"`, and control chars only —
-        // spaces, slashes, and apostrophes are literal in SKILL string
-        // literals. This test pins behavior for the most security-
-        // relevant character: the double quote, which would otherwise
-        // close the string literal early and enable injection.
         let s = ops().export_waveform(&ExportWaveformRequest {
             session: "sess\"x",
             expression: "/tmp/with spaces/wave.txt",
@@ -1330,8 +1250,6 @@ mod tests {
             width: 10,
             output_path: "/tmp/dest.txt",
         });
-        // session and output path go through escape_skill_string;
-        // double-quotes are backslash-escaped.
         assert!(
             s.contains(r#"sess\"x"#),
             "session double-quote must be escaped: {s}"
@@ -1459,7 +1377,6 @@ mod tests {
 
     #[test]
     fn set_analysis_ic25_includes_keywords() {
-        // IC25 uses ?session and ?enable t keywords (unlike IC23 positional-only)
         let s = ops().set_analysis("sess1", "ac", None, None, VirtuosoVersion::IC25);
         assert!(
             s.contains("?session"),
@@ -1475,10 +1392,6 @@ mod tests {
 
     #[test]
     fn set_analysis_ic25_with_options() {
-        // IC25: maeSetAnalysis with ?options using quote to protect inner pairs.
-        // json_to_skill_alist returns "((\"stop\" \"1e10\") (\"start\" \"1\"))" — bare pairs.
-        // skill_pair_to_quoted wraps each as quote(("stop" "1e10")).
-        // Generated: let((setup opts) setup=car(...) opts=(list quote(...)) maeSetAnalysis(...))
         let s = ops().set_analysis(
             "sess1",
             "ac",
@@ -1569,9 +1482,6 @@ mod tests {
 
     #[test]
     fn create_netlist_for_corner_format() {
-        // "Nominal", not "tt": the corner argument is an *ADE* corner label from
-        // the setup database (`maestro.list_corners`), not a PDK model section.
-        // Passing "tt" here is what made the live call fail with a bare nil.
         let s = ops().create_netlist_for_corner("AC", "Nominal", "/tmp/out", "fnxSession4");
         assert_eq!(
             s,
@@ -1581,7 +1491,6 @@ mod tests {
 
     #[test]
     fn create_netlist_for_corner_escapes_quote_in_test() {
-        // Quotes inside the test name must be SKILL-escaped (`"` → `\"`).
         let s = ops().create_netlist_for_corner(r#"te"st"#, "Nominal", "/tmp/out", "fnxSession4");
         assert!(s.contains(r#""te\"st""#), "{s}");
         assert!(s.starts_with("maeCreateNetlistForCorner("), "{s}");
@@ -1590,14 +1499,12 @@ mod tests {
 
     #[test]
     fn create_netlist_for_corner_escapes_backslash_in_corner() {
-        // Backslash inside the corner name must be doubled (`\` → `\\`).
         let s = ops().create_netlist_for_corner("AC", r#"a\b"#, "/tmp/out", "fnxSession4");
         assert!(s.contains(r#""a\\b""#), "{s}");
     }
 
     #[test]
     fn create_netlist_for_corner_escapes_quote_in_output_dir() {
-        // Quote and space inside the output dir must be SKILL-escaped.
         let s = ops().create_netlist_for_corner("AC", "Nominal", r#"/tmp/out "x""#, "fnxSession4");
         assert!(s.contains(r#""/tmp/out \"x\"""#), "{s}");
     }
@@ -1610,8 +1517,6 @@ mod tests {
 
     #[test]
     fn create_netlist_for_corner_escapes_all_four_args_independently() {
-        // All four SKILL string parameters use the same escape function,
-        // so each one must round-trip its special characters independently.
         let s = ops().create_netlist_for_corner(
             r#"te"st"#,
             r#"co\rner"#,
@@ -1622,7 +1527,6 @@ mod tests {
         assert!(s.contains(r#""co\\rner""#), "{s}");
         assert!(s.contains(r#""/tmp/out \"x\"""#), "{s}");
         assert!(s.contains(r#""fnx\"4""#), "{s}");
-        // Exactly one occurrence of the opening maeCreateNetlistForCorner( and one closing ).
         assert_eq!(s.matches("maeCreateNetlistForCorner(").count(), 1);
         assert!(s.trim_end().ends_with(')'));
         assert_eq!(s.matches("?session").count(), 1);
@@ -1631,7 +1535,6 @@ mod tests {
     #[test]
     fn create_netlist_for_corner_includes_session_keyword() {
         let s = ops().create_netlist_for_corner("AC", "Nominal", "/tmp/out", "fnxSession0");
-        // Position of the ?session keyword must come last in the builder.
         let session_pos = s.find("?session").expect("?session keyword");
         let paren_end = s.rfind(')').expect("closing paren");
         assert!(
@@ -1703,8 +1606,6 @@ mod tests {
 
     #[test]
     fn set_design() {
-        // maeSetDesignForTest takes lib/cell/view positionally. The old form
-        // used ?libName/?cellName/?viewName, which IC23.1 does not accept.
         let s = ops().set_design("sess1", "myLib", "myCell", "schematic", None);
         assert_eq!(
             s,
@@ -1718,8 +1619,6 @@ mod tests {
 
     #[test]
     fn set_design_scopes_to_one_test_when_asked() {
-        // Without ?test the design is set for every test in the session, which
-        // is the right default but the wrong thing when a session has several.
         let s = ops().set_design("sess1", "myLib", "myCell", "schematic", Some("AC"));
         assert_eq!(
             s,
@@ -1751,8 +1650,6 @@ mod tests {
 
     #[test]
     fn save_setup_refuses_a_read_only_session() {
-        // maeSaveSetup returns success on a read-only session and writes
-        // nothing, so the guard has to come before the call, not after it.
         let s = ops().save_setup("sess1");
         assert!(s.contains("axlIsSessionReadOnly"), "{s}");
         assert!(s.contains("error("), "{s}");
@@ -1760,7 +1657,6 @@ mod tests {
             s.find("axlIsSessionReadOnly") < s.find("maeSaveSetup(?session"),
             "the read-only check must run before the save: {s}"
         );
-        // Probed, not assumed — a Virtuoso without the predicate still saves.
         assert!(s.contains("getd('axlIsSessionReadOnly)"), "{s}");
     }
 
@@ -1795,59 +1691,39 @@ mod tests {
 
     #[test]
     fn run_with_dec_quotes_netpath_for_shell() {
-        // The generated SKILL must protect netPath for POSIX shell-word use in sed/grep.
-        // netPath is derived at runtime from getWorkingDir() — we cannot assume it is safe.
-        // Required: a local sh_quote procedure defined before use, a quoted binding
-        // (netPathQuoted), and that quoted binding used in the sprintf argument lists for
-        // sed and grep.  The sed command template keeps %s placeholders; SKILL's sprintf
-        // fills them with the shell-quoted strings from the argument list.
-        // Without this, a path containing spaces or single-quotes causes shell injection
-        // or argument-splitting errors at runtime inside Virtuoso's system() call.
         let s = ops().run_with_dec("sess1", "ac", None, 11);
 
-        // 1. A local quoting helper must be defined inside the procedure.
         assert!(
             s.contains("procedure(vcliShellQuote"),
             "SKILL must define a local vcliShellQuote procedure: {s}"
         );
 
-        // 2. netPath must be shell-quoted before use in system() commands.
         assert!(
             s.contains("netPathQuoted"),
             "SKILL must assign a quoted netPath (netPathQuoted): {s}"
         );
 
-        // 3. vcliShellQuote must handle embedded single-quotes via the standard
-        //    single-quote / double-quote / single-quote sequence.
         assert!(
             s.contains("'\"'\"'"),
             "vcliShellQuote must escape embedded apostrophes via '\\'\"'\"'' pattern: {s}"
         );
 
-        // 4. The sed sprintf argument list must pass netPathQuoted (not raw netPath)
-        //    so SKILL fills the %s placeholders with the shell-safe string.
-        //    Old form: sprintf(nil "sed ... %s %s" ds netPath netPath)  ← raw netPath
-        //    Fixed form: sprintf(nil "sed ... %s %s" ds netPathQuoted netPathQuoted)
         assert!(
             s.contains("ds netPathQuoted netPathQuoted"),
             "sed sprintf args must use netPathQuoted, not bare netPath: {s}"
         );
 
-        // 5. Negative: the old raw netPath sed form must be absent.
         assert!(
             !s.contains("ds netPath netPath"),
             "raw 'ds netPath netPath' must not appear — use netPathQuoted: {s}"
         );
 
-        // 6. The grep sprintf argument list must also use netPathQuoted.
-        //    Old form ends with: sprintf(nil "grep '^ac ' %s" netPath)
         assert!(
             s.contains("\"grep '^ac ' %s\" netPathQuoted")
                 || (s.contains("\"grep '^ac ' %s\"") && s.contains("netPathQuoted")),
             "grep sprintf args must use netPathQuoted, not bare netPath: {s}"
         );
 
-        // 7. Negative: bare netPath after grep pattern must not appear.
         assert!(
             !s.contains("\"grep '^ac ' %s\" netPath)"),
             "bare netPath must not follow grep pattern — use netPathQuoted: {s}"

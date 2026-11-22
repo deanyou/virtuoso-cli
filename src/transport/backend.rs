@@ -95,8 +95,6 @@ pub fn open_transport(config: &Config) -> Result<Arc<dyn RemoteTransport>, Trans
     match SshBackend::from_config(config)? {
         SshBackend::OpenSsh => {
             let transport = OpenSshTransport::from_config(config);
-            // Faithful to `SSHClient::from_env`, which applies this flag but
-            // `SSHRunner::from_config` does not.
             let transport = if config.disable_control_master {
                 transport.with_control_master_disabled()
             } else {
@@ -106,14 +104,8 @@ pub fn open_transport(config: &Config) -> Result<Arc<dyn RemoteTransport>, Trans
         }
         #[cfg(all(unix, feature = "native-ssh"))]
         SshBackend::Native => {
-            // The capacity invariant is checked here rather than in
-            // `Config::from_env` because only the native backend has a
-            // per-endpoint session ceiling — see `scheduler::validate_capacity`.
             crate::transport::scheduler::validate_capacity(config)?;
 
-            // Native backend requires a running transport daemon reachable via
-            // IPC. The daemon holds the connection pool and multiplexes requests;
-            // connecting directly would bypass the pool and re-open SSH per op.
             let socket = config
                 .transport_daemon_socket
                 .as_deref()
@@ -129,14 +121,8 @@ pub fn open_transport(config: &Config) -> Result<Arc<dyn RemoteTransport>, Trans
             .map_err(|_| TransportError::DaemonUnavailable)?;
             Ok(Arc::new(client))
         }
-        // Native on non-Unix (Windows) is not yet supported — the IPC transport
-        // is Unix-domain-socket only. Report UnsupportedBackend rather than
-        // silently falling back to a direct connection (which would bypass the
-        // daemon/pool design).
         #[cfg(all(not(unix), feature = "native-ssh"))]
         SshBackend::Native => Err(TransportError::UnsupportedBackend),
-        // Without the feature, `native` is not compiled in — report the
-        // structured error instead of silently using OpenSSH.
         #[cfg(not(feature = "native-ssh"))]
         SshBackend::Native => Err(TransportError::UnsupportedBackend),
     }
@@ -200,7 +186,6 @@ mod tests {
         }
     }
 
-    // Minimal Config for these tests — only backend selection matters here.
     fn make_test_config() -> Config {
         Config {
             profile: None,
@@ -255,8 +240,6 @@ mod tests {
 
     #[test]
     fn native_is_recognised_not_rejected_as_typo() {
-        // `native` must not surface as an unrecognised-value error even on
-        // builds without the feature.
         assert_eq!(
             SshBackend::from_config(&config_with(Some("native"))).unwrap(),
             SshBackend::Native
@@ -275,14 +258,9 @@ mod tests {
 
     #[test]
     fn native_request_reports_unsupported_backend_not_a_fallback() {
-        // `Arc<dyn RemoteTransport>` is not `Debug`, so neither `unwrap_err`
-        // nor `expect_err` applies; match on the result instead.
         let res = open_transport(&config_with(Some("native")));
         #[cfg(not(feature = "native-ssh"))]
         {
-            // Without the feature, `native` is not compiled in.
-            // `Arc<dyn RemoteTransport>` is not `Debug`, so `unwrap_err` does
-            // not compile; match on the result instead.
             let err = match res {
                 Ok(_) => panic!("native must not silently fall back to OpenSSH"),
                 Err(e) => e,
@@ -295,9 +273,6 @@ mod tests {
         }
         #[cfg(feature = "native-ssh")]
         {
-            // With the feature, `native` builds a real transport (this test
-            // config has no key, so it errors on config — but crucially it must
-            // never silently become an OpenSSH transport).
             assert!(
                 res.is_err(),
                 "native must not silently fall back to OpenSSH when the feature is enabled"
@@ -307,10 +282,6 @@ mod tests {
 
     #[test]
     fn openssh_path_is_not_subject_to_the_session_invariant() {
-        // OpenSSH multiplexes over ControlMaster and has no per-endpoint
-        // session ceiling, so a worker count that would violate the native
-        // capacity invariant must not break the default backend. Validating it
-        // here would turn configurations that work today into startup errors.
         let mut cfg = config_with(Some("openssh"));
         cfg.spectre_max_workers = 64;
         assert!(open_transport(&cfg).is_ok());
@@ -318,8 +289,6 @@ mod tests {
 
     #[test]
     fn native_path_enforces_the_capacity_invariant() {
-        // `Arc<dyn RemoteTransport>` is not `Debug`, so `expect_err` does not
-        // apply here — match on the result, as the other tests in this file do.
         let mut cfg = config_with(Some("native"));
         cfg.spectre_max_workers = 32;
         let err = match open_transport(&cfg) {
@@ -333,9 +302,6 @@ mod tests {
         );
         #[cfg(all(not(unix), feature = "native-ssh"))]
         {
-            // The native backend is not yet supported on non-Unix (IPC is a
-            // Unix-domain-socket transport), so it fails with UnsupportedBackend
-            // before any capacity validation can run.
             assert!(
                 matches!(err, TransportError::UnsupportedBackend),
                 "native must be unsupported on non-Unix, got {err:?}"
@@ -343,9 +309,6 @@ mod tests {
         }
         #[cfg(not(feature = "native-ssh"))]
         {
-            // Without the feature the backend error comes first, which is the
-            // right precedence: there is nothing to size until the backend
-            // exists.
             let _ = err;
             assert!(matches!(err, TransportError::UnsupportedBackend));
         }
@@ -354,7 +317,6 @@ mod tests {
     #[test]
     fn openssh_request_builds_a_transport() {
         assert!(open_transport(&config_with(Some("openssh"))).is_ok());
-        // Unset resolves to the same default backend.
         assert!(open_transport(&config_with(None)).is_ok());
     }
 
@@ -369,10 +331,6 @@ mod tests {
 
     #[test]
     fn windows_release_does_not_report_native_supported() {
-        // windows-x86_64 release builds pass `--features native-ssh`, then
-        // `open_transport` still returns UnsupportedBackend because IPC is a
-        // Unix-domain socket. `tunnel status` must not say
-        // `supported_in_build: true` for that combination.
         assert!(
             !native_backend_supported(true, false),
             "native compiled for a non-unix target is not usable"
@@ -412,11 +370,8 @@ mod tests {
     fn disable_control_master_is_honoured() {
         let mut config = config_with(Some("openssh"));
         config.disable_control_master = true;
-        // The flag is applied to the concrete OpenSSH backend; assert it there
-        // rather than downcasting the trait object.
         let transport = OpenSshTransport::from_config(&config).with_control_master_disabled();
         assert!(!*transport.runner().use_control_master.lock().unwrap());
-        // And `open_transport` still succeeds with the flag set.
         assert!(open_transport(&config).is_ok());
     }
 

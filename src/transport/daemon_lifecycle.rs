@@ -61,8 +61,6 @@ pub fn challenge_via_ipc(state: &TunnelState) -> bool {
         _ => return false,
     };
 
-    // Read the auth token the daemon was given at startup. Trimming mirrors
-    // `commands::transport_daemon::run_with` on the daemon side.
     let token = match std::fs::read_to_string(token_path) {
         Ok(s) => s.trim().to_string(),
         Err(_) => return false,
@@ -113,8 +111,6 @@ pub fn shutdown_via_ipc(state: &TunnelState) -> bool {
         Some(n) if !n.is_empty() => n,
         _ => return false,
     };
-    // Read the auth token the daemon was given at startup. Trimming mirrors
-    // `commands::transport_daemon::run_with` on the daemon side.
     let token = match std::fs::read_to_string(token_path) {
         Ok(s) => s.trim().to_string(),
         Err(_) => return false,
@@ -202,7 +198,6 @@ pub fn assess(state: &TunnelState, challenge: impl FnOnce(&str) -> bool) -> Verd
         }
     }
 
-    // Tier 2: the daemon is not answering, so require an OS identity match.
     let Some(recorded) = recorded_identity(state) else {
         return Verdict::Unverifiable(
             "state records no process identity (v1 or OpenSSH state)".into(),
@@ -211,8 +206,6 @@ pub fn assess(state: &TunnelState, challenge: impl FnOnce(&str) -> bool) -> Verd
 
     match identity::authorize_signal(&recorded) {
         Ok(()) => Verdict::UnresponsiveButIdentified,
-        // The process is gone, or the PID now belongs to a different one —
-        // either way the recorded daemon no longer exists.
         Err(Refusal::ProcessGone(_)) | Err(Refusal::Mismatch { .. }) => Verdict::Stale,
         Err(Refusal::Unverifiable(e)) => Verdict::Unverifiable(e.to_string()),
     }
@@ -259,8 +252,6 @@ mod tests {
 
     #[test]
     fn tier1_answer_short_circuits_tier2() {
-        // Even with a nonexistent pid, a correct challenge means Alive and
-        // Tier 2 is never consulted.
         let mut s = state();
         s.daemon_nonce = Some("nonce-abc".into());
         s.pid = 999_999;
@@ -272,14 +263,12 @@ mod tests {
     fn tier1_wrong_nonce_falls_through_to_tier2() {
         let mut s = state();
         s.daemon_nonce = Some("nonce-abc".into());
-        // Wrong nonce → not Alive; with no recorded identity it is unverifiable.
         let v = assess(&s, |nonce| nonce == "different");
         assert!(matches!(v, Verdict::Unverifiable(_)), "got {v:?}");
     }
 
     #[test]
     fn no_recorded_identity_is_unverifiable_not_stale() {
-        // The important negative: absence of identity is not proof of absence.
         let v = assess(&state(), |_| false);
         assert!(matches!(v, Verdict::Unverifiable(_)));
         assert!(!v.may_clear_state());
@@ -293,7 +282,6 @@ mod tests {
         let v = assess(&s, |_| false);
         assert_eq!(v, Verdict::UnresponsiveButIdentified);
         assert!(v.may_signal());
-        // Not Alive, so it must not be treated as answering.
         assert!(!matches!(v, Verdict::Alive));
     }
 
@@ -311,8 +299,6 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn pid_reuse_is_stale() {
-        // Same pid as a live process, but a start identity that does not match:
-        // the recorded daemon is gone even though the pid is in use.
         let s = state_for_current_process();
         let mut reused = s.clone();
         reused.start_identity = Some(s.start_identity.unwrap().wrapping_add(1));
@@ -355,7 +341,6 @@ mod tests {
 
     #[test]
     fn verdict_predicates_are_exclusive() {
-        // Only Stale may clear state; only UnresponsiveButIdentified may signal.
         for v in [
             Verdict::Alive,
             Verdict::UnresponsiveButIdentified,
@@ -408,7 +393,6 @@ mod challenge_tests {
         let listener = UnixListener::bind(&socket).expect("bind");
         listener.set_nonblocking(false).expect("blocking listener");
 
-        // Write the token to a single-line file with mode 0600.
         {
             use std::os::unix::fs::OpenOptionsExt;
             let mut f = std::fs::OpenOptions::new()
@@ -420,8 +404,6 @@ mod challenge_tests {
             f.write_all(token.as_bytes()).expect("write token");
         }
 
-        // Serve one connection. The transport is irrelevant — Challenge
-        // doesn't touch it — but the server API requires one.
         let listener_for_thread = listener.try_clone().expect("clone listener");
         let token_owned = token.to_string();
         let nonce_owned = server_nonce.to_string();
@@ -476,8 +458,6 @@ mod challenge_tests {
 
     #[test]
     fn challenge_answers_false_on_nonce_mismatch() {
-        // The daemon answers its *own* nonce; the state file recorded
-        // something else, so this must fail.
         let (socket, token_path) = spawn_challenge_daemon("real-nonce", "secret-token");
         let st = state_with(
             "WRONG-nonce",
@@ -492,8 +472,6 @@ mod challenge_tests {
     #[test]
     fn challenge_answers_false_when_auth_token_is_wrong() {
         let (socket, token_path) = spawn_challenge_daemon("recorded-nonce", "good-token");
-        // Rewrite the token file with a different token — the daemon will
-        // reject the Hello, and the challenge returns false.
         std::fs::write(&token_path, "different-token\n").unwrap();
         let st = state_with(
             "recorded-nonce",
@@ -525,20 +503,12 @@ mod challenge_tests {
 
     #[test]
     fn challenge_returns_false_when_endpoint_does_not_exist() {
-        // A path that is syntactically valid but no daemon is bound there.
         let st = state_with("x", Some("/tmp/vcli-does-not-exist-1234567890.sock"), None);
         assert!(!challenge_via_ipc(&st));
     }
 
     #[test]
     fn challenge_endpoint_uses_a_short_deadline_so_stuck_daemon_does_not_hang_stop() {
-        // A daemon that never replies must not block `tunnel stop` longer
-        // than the IPC challenge deadline. The deadline is encoded in
-        // `NativeTransportClient::challenge` and is bounded to a couple of
-        // seconds; this test guards against accidentally removing it.
-        //
-        // We exercise it by pointing at a socket whose accept loop never
-        // writes back: a listener that accepts and then idles.
         let tag = uuid::Uuid::new_v4().simple().to_string();
         let socket = std::path::PathBuf::from(format!("/tmp/vcli-ch-{tag}.sock"));
         let token_path = std::path::PathBuf::from(format!("/tmp/vcli-ch-{tag}.tok"));
@@ -546,7 +516,6 @@ mod challenge_tests {
         let listener = UnixListener::bind(&socket).expect("bind");
         let listener_for_thread = listener.try_clone().expect("clone listener");
         thread::spawn(move || {
-            // Accept and hold the stream open without responding.
             if let Ok((stream, _)) = listener_for_thread.accept() {
                 std::thread::sleep(Duration::from_secs(30));
                 drop(stream);
@@ -563,8 +532,6 @@ mod challenge_tests {
         );
         let start = std::time::Instant::now();
         assert!(!challenge_via_ipc(&st));
-        // Generous bound — a stuck daemon must not block stop beyond a few
-        // seconds; we allow up to 10s for slow CI, far below the 30s sleep.
         assert!(
             start.elapsed() < Duration::from_secs(10),
             "challenge took too long: {:?}",

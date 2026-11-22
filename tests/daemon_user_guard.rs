@@ -26,9 +26,7 @@ fn sanitize_replaces_path_separators_and_specials() {
 
 #[test]
 fn sanitize_drops_unicode_replaces_with_underscore() {
-    // 2 non-ASCII chars (each is one Unicode scalar) → 2 underscores
     assert_eq!(sanitize_client_id("meow-主机"), "meow-__");
-    // 1 non-ASCII char → 1 underscore
     assert_eq!(sanitize_client_id("xé"), "x_");
 }
 
@@ -39,7 +37,6 @@ fn sanitize_handles_empty_string() {
 
 #[test]
 fn sanitize_preserves_leading_dots_and_dashes() {
-    // Pathological but legal as a directory name
     assert_eq!(sanitize_client_id(".hidden"), ".hidden");
     assert_eq!(sanitize_client_id("-dash-prefix"), "-dash-prefix");
 }
@@ -67,7 +64,6 @@ fn client_id_uses_explicit_override() {
     clear_client_id_env();
     env::set_var("VB_CLIENT_ID", "explicit-id");
     env::set_var("VB_PROFILE", "profile-x");
-    // VB_CLIENT_ID wins over everything
     assert_eq!(resolve_client_id(), "explicit-id");
     assert_eq!(remote_scratch_root(), "/tmp/virtuoso_bridge/explicit-id");
     clear_client_id_env();
@@ -89,7 +85,6 @@ fn client_id_empty_explicit_falls_through() {
     clear_client_id_env();
     env::set_var("VB_CLIENT_ID", "  ");
     env::set_var("VB_PROFILE", "profile-fallback");
-    // Empty/whitespace VB_CLIENT_ID falls through to VB_PROFILE
     assert_eq!(resolve_client_id(), "profile-fallback");
     clear_client_id_env();
 }
@@ -99,7 +94,6 @@ fn client_id_falls_back_to_hostname() {
     let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
     env::set_var("HOSTNAME", "test-host-9");
-    // No VB_CLIENT_ID, no VB_PROFILE → use hostname
     assert_eq!(resolve_client_id(), "test-host-9");
     clear_client_id_env();
 }
@@ -109,7 +103,6 @@ fn client_id_sanitizes_hostname() {
     let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
     env::set_var("HOSTNAME", "weird/host\\name");
-    // Hostname with path separators should be sanitized
     assert_eq!(resolve_client_id(), "weird_host_name");
     clear_client_id_env();
 }
@@ -119,11 +112,6 @@ fn client_id_no_env_falls_back_to_default() {
     let _g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     clear_client_id_env();
     env::set_var("HOSTNAME", "");
-    // Both VB_CLIENT_ID and VB_PROFILE unset, HOSTNAME empty
-    // → gethostname() called, but we can't control that in tests.
-    // Either it returns "default" (if gethostname fails) or some sanitized
-    // real hostname. We just check that the result is a non-empty sanitized
-    // string under the same constraints.
     let id = resolve_client_id();
     assert!(!id.is_empty(), "client_id must never be empty");
     assert_eq!(id, sanitize_client_id(&id), "client_id must be sanitized");
@@ -147,7 +135,6 @@ fn session_info_serializes_without_daemon_user_when_none() {
         daemon_version: None,
     };
     let json = serde_json::to_string(&s).unwrap();
-    // daemon_user is None → field should be OMITTED from JSON
     assert!(
         !json.contains("daemon_user"),
         "None daemon_user should be skipped: {json}"
@@ -172,8 +159,6 @@ fn session_info_serializes_with_daemon_user_when_some() {
 
 #[test]
 fn session_info_deserializes_legacy_json_without_daemon_user() {
-    // Older ramic_bridge.il (and older CLI versions) won't write daemon_user
-    // at all. The struct must still parse such files via #[serde(default)].
     let legacy_json = r#"{
         "id": "legacy-9999",
         "port": 9999,
@@ -235,7 +220,6 @@ fn save_to_session_file_writes_to_sessions_dir() {
     s.daemon_user = Some("alice".into());
     s.save_to_session_file();
 
-    // File should exist at <XDG_CACHE_HOME>/virtuoso_bridge/sessions/<id>.json
     let path = tmp
         .path()
         .join("virtuoso_bridge")
@@ -295,10 +279,6 @@ fn dispatcher_ping_uses_plus_one_one_not_ipc_is_process_running() {
     )
     .expect("read dispatcher.rs");
 
-    // Slice the `"ping"` arm up to the next match arm. Dispatcher arms are
-    // indented 12 spaces, while the payload/comment lines inside an arm are
-    // deeper, so this boundary cannot leak into the following arm — and it
-    // stays correct no matter how long the comment block above the call grows.
     let arm_start = src
         .find("\"ping\" =>")
         .expect("dispatcher.rs should have a ping arm");
@@ -307,20 +287,11 @@ fn dispatcher_ping_uses_plus_one_one_not_ipc_is_process_running() {
         .map_or(src.len(), |offset| arm_start + offset);
     let window = &src[arm_start..arm_end];
 
-    // The actual SKILL payload must be `plus(1 1)`, pinned by exact call form
-    // rather than by any occurrence (the comments above also mention it).
-    // Since step 6c-2 the ping goes through `execute_skill_idempotent_probe`
-    // so that it survives a stale queued ticket — pinning the probe form also
-    // guards against silently reverting to the non-idempotent call.
     assert!(
         window.contains("execute_skill_idempotent_probe(\"plus(1 1)\""),
         "dispatcher::ping should pass the SKILL payload plus(1 1) to execute_skill_idempotent_probe — got: {window}"
     );
 
-    // Negative check: the SKILL payload must NOT be the broken call. We allow
-    // the comment to mention ipcIsProcessRunning (for context); the payload is
-    // a quoted string literal, so matching the leading quote keeps this from
-    // firing on the comment.
     assert!(
         !window.contains("\"ipcIsProcessRunning"),
         "dispatcher::ping must not pass ipcIsProcessRunning as its SKILL payload (it returns nil without a process handle) — got: {window}"
@@ -352,10 +323,6 @@ fn daemon_alive_uses_plus_one_one() {
 
 #[test]
 fn ensure_remote_dir_local_mode_creates_dir() {
-    // We can't easily construct a real VirtuosoClient without a tunnel
-    // (we'd need an SSHClient). The local-mode branch of ensure_remote_dir
-    // just calls std::fs::create_dir_all — replicate that here and assert
-    // the side effect, so the test is independent of the SSH machinery.
     let tmp = tempfile::tempdir().expect("tempdir");
     let target = tmp
         .path()
@@ -377,8 +344,6 @@ fn ensure_remote_dir_local_mode_creates_dir() {
 
 #[test]
 fn save_to_session_file_swallows_io_errors() {
-    // Pointing the cache to a non-writable path should NOT panic — the
-    // contract is "best-effort, errors silently ignored".
     let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
     let original_xdg = std::env::var_os("XDG_CACHE_HOME").and_then(|s| s.into_string().ok());
@@ -394,7 +359,6 @@ fn save_to_session_file_swallows_io_errors() {
         daemon_user: Some("bob".into()),
         daemon_version: None,
     };
-    // Should not panic
     s.save_to_session_file();
 
     if let Some(v) = original_xdg {
@@ -410,9 +374,6 @@ fn save_to_session_file_swallows_io_errors() {
 
 #[test]
 fn ramic_bridge_recovery_hint_strings_present() {
-    // The "already running" branch of RBStart() must tell users how to recover
-    // a stuck daemon. This protects against accidentally removing the hint
-    // during future refactors of the SKILL.
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/ramic_bridge.il");
     let src =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
@@ -434,8 +395,6 @@ fn ramic_bridge_recovery_hint_strings_present() {
         after.contains("load("),
         "recovery hint must mention re-load — got: {after}"
     );
-    // Both the bound port and the session id should be shown so the user
-    // can confirm this is THEIR daemon.
     assert!(
         after.contains("RBPort") || after.contains("bound port"),
         "recovery hint should echo RBPort / bound port"
@@ -463,7 +422,6 @@ fn session_info_serializes_without_daemon_version_when_none() {
         daemon_version: None,
     };
     let json = serde_json::to_string(&s).unwrap();
-    // daemon_version is None → field should be OMITTED from JSON
     assert!(
         !json.contains("daemon_version"),
         "None daemon_version should be skipped: {json}"
@@ -491,8 +449,6 @@ fn session_info_serializes_with_daemon_version_when_some() {
 
 #[test]
 fn session_info_deserializes_legacy_json_without_daemon_version() {
-    // Older vcli session files (and older .il) won't write daemon_version at
-    // all. The struct must still parse such files via #[serde(default)].
     let legacy_json = r#"{
         "id": "legacy-9999",
         "port": 9999,
@@ -674,8 +630,6 @@ fn session_round_trip_under_vb_cache_dir_override() {
     env::set_var("VB_CACHE_DIR", tmp.path());
     env::remove_var("XDG_CACHE_HOME");
 
-    // Compute the expected sessions dir via the public runtime_paths API
-    // (mirrors what `SessionInfo::sessions_dir()` does internally).
     let dir = runtime_paths::cache_subdir(&["sessions"]);
     assert_eq!(
         dir,
@@ -683,8 +637,6 @@ fn session_round_trip_under_vb_cache_dir_override() {
         "runtime_paths::cache_subdir([\"sessions\"]) must land under VB_CACHE_DIR"
     );
 
-    // Build a session, write it via std::fs to the env-overridden path,
-    // then reload through the public SessionInfo::load API.
     let s = SessionInfo {
         id: "round-trip-1234".into(),
         port: 49152,
@@ -699,7 +651,6 @@ fn session_round_trip_under_vb_cache_dir_override() {
     let path = dir.join(format!("{}.json", s.id));
     std::fs::write(&path, serde_json::to_string_pretty(&s).unwrap()).expect("write session");
 
-    // The public load API should find the file in the env-override location.
     let loaded = SessionInfo::load(&s.id).expect("reload session");
     assert_eq!(loaded.id, s.id);
     assert_eq!(loaded.port, s.port);
@@ -730,7 +681,6 @@ fn legacy_state_file_tracks_active_cache_root() {
     let original_vb = env::var_os("VB_CACHE_DIR");
     let original_home = env::var_os("VB_HOME");
 
-    // Case 1: VB_CACHE_DIR
     let tmp1 = tempfile::tempdir().expect("tempdir");
     env::set_var("VB_CACHE_DIR", tmp1.path());
     env::remove_var("XDG_CACHE_HOME");
@@ -744,7 +694,6 @@ fn legacy_state_file_tracks_active_cache_root() {
         tmp1.path().join("virtuoso_bridge/state_p1.json")
     );
 
-    // Case 2: VB_HOME/cache (no VB_CACHE_DIR)
     let tmp2 = tempfile::tempdir().expect("tempdir");
     env::remove_var("VB_CACHE_DIR");
     env::remove_var("XDG_CACHE_HOME");

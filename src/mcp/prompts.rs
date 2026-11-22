@@ -327,9 +327,6 @@ mod tests {
 
     #[test]
     fn every_prompt_names_only_existing_tools() {
-        // The published tool list is capability-filtered, so this checks the
-        // prompts that are actually published against the tools that are
-        // actually available.
         let available = default_available_tools();
         for prompt in available_prompts(&available) {
             for tool in mentioned_tools(prompt.template) {
@@ -344,8 +341,6 @@ mod tests {
 
     #[test]
     fn no_prompt_names_an_unknown_tool() {
-        // Even a prompt that is hidden under the default capabilities may not
-        // name a tool that does not exist at all.
         let known: Vec<String> = crate::mcp::tools::all_tools_unfiltered()
             .iter()
             .map(|t| t.name.clone())
@@ -400,8 +395,6 @@ mod tests {
 
     #[test]
     fn prompts_that_name_an_unavailable_tool_are_hidden() {
-        // `spectre-failure-triage` names `skill_exec`, which needs the Admin
-        // capability — the default capability set does not have it.
         let default_tools = default_available_tools();
         let names: Vec<&str> = available_prompts(&default_tools)
             .iter()
@@ -434,7 +427,6 @@ mod tests {
         args.insert("lib".into(), json!("myLib"));
         assert_eq!(missing_required_arguments(prompt, &args), vec!["cell"]);
 
-        // An explicit null is as good as missing.
         let mut args = Map::new();
         args.insert("lib".into(), json!("myLib"));
         args.insert("cell".into(), Value::Null);
