@@ -103,7 +103,6 @@ impl MaestroResult {
             let params_str = if clean_line.starts_with("Parameters:") {
                 Some(clean_line.strip_prefix("Parameters:").unwrap().trim())
             } else if clean_line.starts_with("\"Parameters:") {
-                // Handle quoted version: "Parameters: VDD=0.9"
                 clean_line
                     .trim_matches('"')
                     .strip_prefix("Parameters:")
@@ -113,7 +112,6 @@ impl MaestroResult {
             };
 
             if let Some(params) = params_str {
-                // Save previous point if exists
                 if let Some(pt) = current_point.take() {
                     if !current_outputs.is_empty() || !current_params.is_empty() {
                         result.points.push(MaestroPoint {
@@ -152,13 +150,11 @@ impl MaestroResult {
             // Parse data line: "1, ac_test, Gain_dB, 21.63, < 20p, 1, passed"
             let parts: Vec<&str> = line.split(',').collect();
             if parts.len() >= 4 {
-                // First column is point number
                 if let Ok(pt) = parts[0].trim().parse::<usize>() {
                     // Check if point changed (first point doesn't count as "changed")
                     let point_changed = current_point.map(|p| p != pt).unwrap_or(false);
 
                     if point_changed {
-                        // Save previous point
                         if let Some(prev_pt) = current_point.take() {
                             if !current_outputs.is_empty() || !current_params.is_empty() {
                                 result.points.push(MaestroPoint {
@@ -175,7 +171,6 @@ impl MaestroResult {
 
                     current_point = Some(pt);
 
-                    // Parse output entry
                     let test_name = parts[1].trim().to_string();
                     let output_name = parts[2].trim().to_string();
                     let value = parts
@@ -227,7 +222,6 @@ impl MaestroResult {
             }
         }
 
-        // Save last point
         if let Some(pt) = current_point {
             if !current_outputs.is_empty() || !current_params.is_empty() {
                 result.points.push(MaestroPoint {

@@ -713,7 +713,6 @@ vcliDecInject("{}" "{}" (list {}) {}))"#,
         let name = escape_skill_string(name);
         let test_name = escape_skill_string(test_name);
 
-        // Build the get_output_value call
         let get_value = match corner {
             Some(c) => {
                 let c = escape_skill_string(c);
@@ -890,12 +889,12 @@ fn parse_skill_pairs(alist: &str) -> Vec<String> {
     }
     // Format A: "(list (list ...) (list ...))"
     if alist.starts_with("(list (") {
-        let inner = &alist[1..alist.len() - 1]; // strip first '(' and last ')'
+        let inner = &alist[1..alist.len() - 1];
         return parse_inner_pairs(inner);
     }
     // Format B: "((\"k1\" \"v1\") (\"k2\" \"v2\"))" — bare pairs, no outer list keyword
     if alist.starts_with("((") {
-        let inner = &alist[1..alist.len() - 1]; // strip outer '(' and ')'
+        let inner = &alist[1..alist.len() - 1];
         return parse_inner_pairs(inner);
     }
     vec![alist.to_string()]
@@ -940,7 +939,6 @@ fn parse_inner_pairs(inner: &str) -> Vec<String> {
 fn skill_pair_to_quoted(pair: &str) -> String {
     let trimmed = pair.trim();
     if let Some(without_prefix) = trimmed.strip_prefix("(list ") {
-        // Has list keyword: strip "(list " and trailing ")"
         let stripped = without_prefix
             .strip_suffix(')')
             .unwrap_or(without_prefix)
@@ -1586,7 +1584,6 @@ mod tests {
         // Quotes inside the test name must be SKILL-escaped (`"` → `\"`).
         let s = ops().create_netlist_for_corner(r#"te"st"#, "Nominal", "/tmp/out", "fnxSession4");
         assert!(s.contains(r#""te\"st""#), "{s}");
-        // Confirm command is still single-line and well-formed.
         assert!(s.starts_with("maeCreateNetlistForCorner("), "{s}");
         assert!(s.ends_with(")"), "{s}");
     }

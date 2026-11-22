@@ -146,9 +146,7 @@ fn extract_error_messages(content: &str) -> Vec<String> {
 
     for line in content.lines() {
         let line = line.trim();
-        // Match common Spectre error patterns
         if line.contains("Error") || line.contains("ERROR") || line.contains("error:") {
-            // Skip benign messages
             if line.contains("No licences")
                 || line.contains("Warning")
                 || line.contains("info:")
@@ -501,14 +499,12 @@ impl SpectreOutcomeClassifier {
     pub fn classify(&self) -> SpectreOutcome {
         let lc = &self.log_content;
 
-        // 1. Fatal / panic / SEV
         if self.has_fatal_error(lc) {
             return SpectreOutcome::Failure {
                 reason: self.fatal_reason(lc),
             };
         }
 
-        // 2. Missing include / netlist errors
         if self.has_missing_include(lc) {
             return SpectreOutcome::Failure {
                 reason: "missing netlist include or library".to_string(),
@@ -529,7 +525,6 @@ impl SpectreOutcomeClassifier {
             }
         }
 
-        // 4. Read-in error
         if has_readin_error(lc) {
             return SpectreOutcome::Failure {
                 reason: "netlist read-in failed".to_string(),
@@ -549,7 +544,6 @@ impl SpectreOutcomeClassifier {
             }
         }
 
-        // 6. Non-zero exit
         if !self.exit_ok {
             if self.has_raw_data {
                 return SpectreOutcome::PartialFailure {
@@ -565,7 +559,6 @@ impl SpectreOutcomeClassifier {
         // 7. "No convergence difficulties" is BENIGN — not a failure
         //    (already handled by has_convergence_failure not matching it)
 
-        // 8+9. Exit ok + no critical errors — classify based on data and warnings
         let warnings = self.warnings();
         if self.has_raw_data {
             if warnings.is_empty() {
@@ -574,7 +567,6 @@ impl SpectreOutcomeClassifier {
                 SpectreOutcome::PartialSuccess { warnings }
             }
         } else {
-            // Silent exit — no data and no explicit error detected
             SpectreOutcome::Failure {
                 reason: "spectre exited cleanly but produced no output data".to_string(),
             }
@@ -584,7 +576,6 @@ impl SpectreOutcomeClassifier {
     /// "failed to converge" or SPCRTRF-* / SPCRTRF:*
     fn has_convergence_failure(&self, content: &str) -> bool {
         let lower = content.to_lowercase();
-        // Explicit convergence failure messages
         lower.contains("failed to converge")
             || lower.contains("convergence failure")
             || lower.contains("failed during convergence")
@@ -626,19 +617,15 @@ impl SpectreOutcomeClassifier {
         {
             return true;
         }
-        // "fatal" as a standalone word near error context
         if lower.contains("fatal") {
             return true;
         }
-        // SEV (Spectre Enhanced Verifier) fatal errors
         if lower.contains("sev") && lower.contains("error") {
             return true;
         }
-        // Panic strings
         if lower.contains("panic") || lower.contains("assertion") {
             return true;
         }
-        // Coredump
         if lower.contains("coredump") || lower.contains("core dumped") {
             return true;
         }
@@ -880,7 +867,6 @@ impl SpectreSimulator {
 
         let n_workers = self.max_workers.min(num_cpus::get() as u32).max(1) as usize;
 
-        // Clone immutable config for each worker thread.
         let sim = self.clone();
         let inputs_arc: Vec<_> = inputs.iter().map(|(l, n)| (l.clone(), n.clone())).collect();
 
@@ -936,9 +922,7 @@ impl SpectreSimulator {
 
         for line in content.lines() {
             let line = line.trim();
-            // Match common Spectre error patterns
             if line.contains("Error") || line.contains("ERROR") || line.contains("error:") {
-                // Skip benign messages
                 if line.contains("No licences")
                     || line.contains("Warning")
                     || line.contains("info:")
@@ -1058,7 +1042,6 @@ impl SpectreSimulator {
         let run_id = Uuid::new_v4().to_string()[..8].to_string();
         let remote_dir = format!("/tmp/virtuoso_bridge/spectre/{run_id}");
 
-        // Create dir + upload netlist
         runner.run_command(&CommandRequest::untimed(format!(
             "mkdir -p {}",
             shell_quote(&remote_dir)
@@ -1070,7 +1053,6 @@ impl SpectreSimulator {
 
         let spectre_cmd = self.remote_spectre_command(&remote_dir, true);
 
-        // Launch and capture PID
         let result = runner.run_command(&CommandRequest::with_exec_timeout(
             &spectre_cmd,
             Duration::from_secs(10),
@@ -1136,7 +1118,6 @@ impl SpectreSimulator {
             cmd.arg(arg);
         }
 
-        // Emit started event
         self.sink.emit(JobEvent::Started {
             job_id: run_id.clone(),
             created: chrono::Local::now().to_rfc3339(),
@@ -1363,20 +1344,17 @@ fn parse_spectre_progress(log_content: &str) -> Option<(f32, String)> {
     for line in lines.iter().rev() {
         let line = line.trim();
 
-        // Match time patterns like "Time: 1.23e-6 s" or "Time: 123.456u"
         if let Some(time_val) = line.strip_prefix("Time:") {
             let time_val = time_val.trim().trim_end_matches('s').trim();
             last_time = Some(time_val.to_string());
         }
 
-        // Match iteration patterns like "Iteration: 1234"
         if let Some(iter_str) = line.strip_prefix("Iteration:") {
             if let Ok(iter) = iter_str.trim().parse::<u64>() {
                 last_iteration = Some(iter);
             }
         }
 
-        // Once we have both time and iteration, we can stop
         if last_time.is_some() && last_iteration.is_some() {
             break;
         }
@@ -1400,7 +1378,6 @@ fn parse_spectre_progress(log_content: &str) -> Option<(f32, String)> {
         return Some((percent, message));
     }
 
-    // If no time/iteration found, check for generic progress indicators
     for line in lines.iter().rev() {
         let line = line.trim();
         if line.contains("Progress:") || line.contains("progress:") {
@@ -1410,7 +1387,6 @@ fn parse_spectre_progress(log_content: &str) -> Option<(f32, String)> {
         }
     }
 
-    // Check for completion or error keywords
     if is_simulation_complete(log_content) {
         return Some((100.0, "completed".to_string()));
     }
@@ -1443,7 +1419,6 @@ fn parse_time_value(s: &str) -> Option<f64> {
         return Some(0.0);
     }
 
-    // Check for unit suffix
     let (num_str, unit) = if let Some(idx) =
         s.find(|c: char| !c.is_numeric() && c != '.' && c != '-' && c != 'e' && c != 'E')
     {
@@ -1461,13 +1436,12 @@ fn parse_time_value(s: &str) -> Option<f64> {
         "u" => value * 1e-6,
         "m" => value * 1e-3,
         "" => value,
-        _ => value, // Assume base unit if unknown
+        _ => value,
     })
 }
 
 /// Extract percentage from a string like "Progress: 45%"
 fn extract_percent(s: &str) -> Option<f32> {
-    // Look for number followed by %
     if let Some(idx) = s.find(|c: char| c.is_numeric()) {
         let rest = &s[idx..];
         if let Some(end) = rest.find('%') {

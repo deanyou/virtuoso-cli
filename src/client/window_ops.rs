@@ -244,7 +244,7 @@ impl WindowOps {
                 let pattern = target.expected_name_pattern.as_deref().unwrap_or(".*");
                 let pattern_escaped = escape_skill_string(pattern);
                 let path_escaped = escape_skill_string(&canonical_path.to_string_lossy());
-                let _ = target.window_id; // reserved for future per-window targeting
+                let _ = target.window_id;
 
                 Ok(format!(
                     r#"let((matched) matched = nil foreach(w hiGetWindowList() when(rexMatchp("{pattern_escaped}" hiGetWindowName(w)) matched = t)) if(matched load("{path_escaped}") "ciw-not-found"))"#

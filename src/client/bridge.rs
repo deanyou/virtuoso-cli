@@ -496,11 +496,9 @@ impl VirtuosoClient {
     }
 
     fn require_raw_skill_access(&self) -> Result<()> {
-        // Auth check — validate API key if auth is enabled
         crate::auth::Auth::init();
         crate::auth::check_auth(None)?;
 
-        // Capability check — block raw SKILL exec unless Admin
         if let Some(warning) = self.check_capability("") {
             return Err(VirtuosoError::Execution(warning));
         }
@@ -587,7 +585,6 @@ impl VirtuosoClient {
         mode: &str,
     ) -> Result<VirtuosoResult> {
         let skill = build_open_cell_view_skill(lib, cell, view, mode);
-        // Use unchecked — capability check done at RPC dispatch level
         self.execute_skill_unchecked(&skill, None)
     }
 
@@ -604,7 +601,6 @@ impl VirtuosoClient {
         // would write one cell's edits while reporting success for another.
         let guard = cv_guard();
         let skill = format!("let((cv) cv = {EDIT_CV} {guard} dbSave(cv))");
-        // Use unchecked — capability check done at RPC dispatch level
         self.execute_skill_unchecked(&skill, None)
     }
 
@@ -709,7 +705,6 @@ impl VirtuosoClient {
              RB_SCH_CV = nil \
              t)"
         );
-        // Use unchecked — capability check done at RPC dispatch level
         self.execute_skill_unchecked(&skill, None)
     }
 
@@ -1027,7 +1022,6 @@ impl VirtuosoClient {
     /// Attempt to reconnect to a session — ping Virtuoso and clear stale flag if alive.
     /// Returns Ok(true) if session is now alive, Ok(false) if still stale.
     pub fn reconnect_session(&self, session_id: &str) -> Result<bool> {
-        // Try to ping Virtuoso on this client's port
         match self.ping() {
             Ok(()) => {
                 // Session is alive — clear stale flag if it was set
@@ -1127,7 +1121,6 @@ fn guard_cross_user(
         }
     };
 
-    // If users match, allow
     if daemon_user == expected {
         return Ok(());
     }
@@ -1343,14 +1336,12 @@ pub fn poll_log_completion(
         let result = client.execute_skill_unchecked(&read_skill, None)?;
         let content = decode_skill_string(&result.output);
 
-        // Check for failure markers
         let fail_reason = if content.contains("ERROR") || content.contains("failed") {
             Some("Log contains error indicators".to_string())
         } else {
             None
         };
 
-        // Check for completion marker
         let completed = content.contains(completion_marker);
 
         if fail_reason.is_some() || completed {

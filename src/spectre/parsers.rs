@@ -54,18 +54,14 @@ fn parse_psf_signal_file(path: &Path) -> Option<Vec<f64>> {
     let content = fs::read_to_string(path).ok()?;
     let content = content.trim();
 
-    // Skip files that look like headers or metadata
     if content.is_empty() || content.starts_with('#') || content.starts_with("title") {
         return None;
     }
 
-    // Try to detect if this is a PSF ASCII file with sections
     if content.contains("SWEEP") || content.contains("TRACE") || content.contains("VALUE") {
-        // This is a PSF ASCII format file with section headers
         return parse_psf_ascii_content(content);
     }
 
-    // Fall back to simple float-per-line parsing
     parse_simple_floats(content)
 }
 
@@ -74,7 +70,6 @@ fn parse_psf_signal_file(path: &Path) -> Option<Vec<f64>> {
 fn parse_psf_ascii_content(content: &str) -> Option<Vec<f64>> {
     let lines: Vec<&str> = content.lines().collect();
 
-    // Find section boundaries
     let mut sections: HashMap<&str, usize> = HashMap::new();
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
@@ -86,13 +81,11 @@ fn parse_psf_ascii_content(content: &str) -> Option<Vec<f64>> {
     let sweep_start = sections.get("SWEEP")? + 1;
     let sweep_end = sections.get("TRACE").copied().unwrap_or(lines.len());
 
-    // Parse sweep values (time/frequency/etc.) using iterator
     let sweep_values: Vec<f64> = lines[sweep_start..sweep_end]
         .iter()
         .enumerate()
         .filter(|(idx, line)| {
             let trimmed = line.trim();
-            // Skip empty lines and section headers
             !trimmed.is_empty()
                 && trimmed != "TRACE"
                 && trimmed != "VALUE"
@@ -766,7 +759,6 @@ fn should_skip_psf_file(name: &str) -> bool {
 fn parse_psf_type_library(content: &str) -> Option<HashMap<String, Vec<String>>> {
     let mut type_fields: HashMap<String, Vec<String>> = HashMap::new();
 
-    // Find @output-library section
     let output_lib_start = content.find("@output-library")?;
     let section = &content[output_lib_start..];
 
@@ -817,7 +809,6 @@ fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarV
         let dev_name = block_cap.get(1).unwrap().as_str().to_string();
         let dev_type = block_cap.get(2).unwrap().as_str().to_lowercase();
 
-        // Find the matching closing paren
         if let Some(block_end) = find_closing_paren(content, end_offset) {
             let inner = &content[end_offset..block_end];
             let values = parse_op_inner_values(inner);
@@ -943,7 +934,6 @@ fn parse_op_inner_values(inner: &str) -> Vec<ScalarValue> {
 fn parse_scalar(token: &str) -> Option<ScalarValue> {
     let t = token.trim();
     if (t.starts_with('"') && t.ends_with('"')) || (t.starts_with('"') && t.ends_with('"')) {
-        // Quoted string — strip quotes
         let inner = &t[1..t.len() - 1];
         return Some(ScalarValue::String(inner.to_string()));
     }
@@ -1164,7 +1154,6 @@ END"#;
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create flat sweep files
         for i in 0..3 {
             let filename = format!("sw1-{:03}_tran.tran", i);
             let path = raw.join(filename);
@@ -1173,7 +1162,6 @@ END"#;
 
         let points = parse_sweep_flat(&raw).unwrap();
         assert_eq!(points.len(), 3);
-        // Verify indices are 1-indexed
         assert_eq!(points[0].index, 1);
         assert_eq!(points[1].index, 2);
         assert_eq!(points[2].index, 3);
