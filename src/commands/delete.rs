@@ -299,9 +299,7 @@ fn open_cellviews(client: &VirtuosoClient, op: &Op) -> Result<Vec<Value>> {
         .filter(|c| {
             c["lib"] == json!(target.lib_name())
                 && c["cell"] == json!(target.cell_name())
-                && target
-                    .view_name()
-                    .is_none_or(|v| c["view"] == json!(v))
+                && target.view_name().is_none_or(|v| c["view"] == json!(v))
         })
         .cloned()
         .collect())

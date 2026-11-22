@@ -1226,9 +1226,7 @@ pub fn validate_action_params(
             let dir = output_dir.unwrap_or("");
             Some(format!("output_dir: {}", dir))
         }
-        X11Operation::Wait => {
-            None
-        }
+        X11Operation::Wait => None,
         X11Operation::Minimize => Some("minimize window".to_string()),
         X11Operation::Maximize => {
             Some("maximize window (requires xdotool >= 3.20210804.1)".to_string())
@@ -2380,12 +2378,10 @@ fn build_xdotool_actions(
     let btn = button.unwrap_or(1).to_string();
 
     match operation {
-        X11Operation::Activate => {
-            Ok(vec![(
-                "windowraise".into(),
-                vec!["windowraise".into(), wid],
-            )])
-        }
+        X11Operation::Activate => Ok(vec![(
+            "windowraise".into(),
+            vec!["windowraise".into(), wid],
+        )]),
         X11Operation::Key => {
             let t =
                 text.ok_or_else(|| VirtuosoError::Config("key operation requires --text".into()))?;
@@ -2549,49 +2545,39 @@ fn build_xdotool_actions(
             cmds.push(("click".into(), click_argv));
             Ok(cmds)
         }
-        X11Operation::Close => {
-            Ok(vec![(
-                "key".into(),
-                vec!["key".into(), "--window".into(), wid, "alt+F4".into()],
-            )])
-        }
-        X11Operation::Minimize => {
-            Ok(vec![(
-                "windowminimize".into(),
-                vec!["windowminimize".into(), wid],
-            )])
-        }
-        X11Operation::Maximize => {
-            Ok(vec![(
+        X11Operation::Close => Ok(vec![(
+            "key".into(),
+            vec!["key".into(), "--window".into(), wid, "alt+F4".into()],
+        )]),
+        X11Operation::Minimize => Ok(vec![(
+            "windowminimize".into(),
+            vec!["windowminimize".into(), wid],
+        )]),
+        X11Operation::Maximize => Ok(vec![(
+            "windowstate".into(),
+            vec![
                 "windowstate".into(),
-                vec![
-                    "windowstate".into(),
-                    "--add".into(),
-                    "MAXIMIZED_HORZ".into(),
-                    "--add".into(),
-                    "MAXIMIZED_VERT".into(),
-                    wid,
-                ],
-            )])
-        }
-        X11Operation::DoubleClick => {
-            Ok(vec![(
+                "--add".into(),
+                "MAXIMIZED_HORZ".into(),
+                "--add".into(),
+                "MAXIMIZED_VERT".into(),
+                wid,
+            ],
+        )]),
+        X11Operation::DoubleClick => Ok(vec![(
+            "click".into(),
+            vec![
                 "click".into(),
-                vec![
-                    "click".into(),
-                    "--window".into(),
-                    wid,
-                    "--repeat".into(),
-                    "2".into(),
-                    "--delay".into(),
-                    "60".into(),
-                    btn,
-                ],
-            )])
-        }
-        X11Operation::Screenshot | X11Operation::Wait => {
-            Ok(vec![])
-        }
+                "--window".into(),
+                wid,
+                "--repeat".into(),
+                "2".into(),
+                "--delay".into(),
+                "60".into(),
+                btn,
+            ],
+        )]),
+        X11Operation::Screenshot | X11Operation::Wait => Ok(vec![]),
     }
 }
 
@@ -4490,7 +4476,6 @@ mod tests {
             other => panic!("expected QueueTimeout, got {:?}", other),
         }
     }
-
 
     /// A transport that records every command it receives for inspection.
     #[derive(Default)]

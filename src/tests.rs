@@ -174,7 +174,6 @@ mod config_tests {
         assert_eq!(cfg.spectre_args, vec!["-64", "+aps", "+mt=4"]);
     }
 
-
     #[test]
     #[serial]
     fn remote_roles_all_unset_fall_back_to_remote_host() {

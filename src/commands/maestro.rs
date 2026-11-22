@@ -1272,9 +1272,7 @@ fn enumerate_local_files(root: &Path) -> Vec<String> {
 pub(crate) fn validate_output_dir_for_download(output_dir: &str) -> Result<std::path::PathBuf> {
     let path = Path::new(output_dir);
     match std::fs::metadata(path) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            Ok(path.to_path_buf())
-        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(path.to_path_buf()),
         Err(e) => Err(VirtuosoError::Config(format!(
             "cannot stat output_dir '{output_dir}': {e}"
         ))),
@@ -2837,7 +2835,6 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn enumerate_local_files_skips_symlinks_no_follow_no_include() {
-
         let root = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
 
@@ -3490,7 +3487,6 @@ mod tests {
             "staging must survive a Conflict for caller cleanup"
         );
     }
-
 
     #[cfg(unix)]
     #[test]

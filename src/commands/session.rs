@@ -571,8 +571,7 @@ pub fn current(ctx: &CommandContext) -> Result<Value> {
                     skipped.push((s.id.clone(), "endpoint_mismatch".into()));
                     continue;
                 }
-                _ => {
-                }
+                _ => {}
             }
         }
 
@@ -651,8 +650,7 @@ pub fn cleanup(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
                     skipped.push((s.id.clone(), "endpoint_mismatch".into()));
                     continue;
                 }
-                _ => {
-                }
+                _ => {}
             }
         }
 

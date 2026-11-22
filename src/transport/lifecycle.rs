@@ -692,7 +692,6 @@ mod tests {
         assert!(start.elapsed() < Duration::from_secs(1));
     }
 
-
     #[test]
     fn shutdown_runs_all_three_phases_in_order() {
         let c = ShutdownCoordinator::new(Duration::from_millis(50));
@@ -720,9 +719,7 @@ mod tests {
             || {},
             {
                 let polls = std::sync::Arc::clone(&polls);
-                move || {
-                    !polls.swap(true, Ordering::SeqCst)
-                }
+                move || !polls.swap(true, Ordering::SeqCst)
             },
             move || l.lock().unwrap().push("cancel"),
         );

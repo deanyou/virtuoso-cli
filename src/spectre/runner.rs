@@ -547,7 +547,6 @@ impl SpectreOutcomeClassifier {
             }
         }
 
-
         let warnings = self.warnings();
         if self.has_raw_data {
             if warnings.is_empty() {
@@ -570,7 +569,9 @@ impl SpectreOutcomeClassifier {
             || lower.contains("failed during convergence")
             || lower.contains("do not converge")
             || lower.contains("could not converge")
-            || Regex::new(r"(?i)SPCRTRF[:-]\d+").map(|re| re.is_match(content)).unwrap_or(false)
+            || Regex::new(r"(?i)SPCRTRF[:-]\d+")
+                .map(|re| re.is_match(content))
+                .unwrap_or(false)
             || Regex::new(r"(?i)SPCRTRF_\d+")
                 .map(|re| re.is_match(content))
                 .unwrap_or(false)
@@ -1296,7 +1297,6 @@ impl SpectreSimulator {
 /// Parse spectre log output for progress information.
 /// Returns (percent, message) if progress was found.
 fn parse_spectre_progress(log_content: &str) -> Option<(f32, String)> {
-
     let lines: Vec<&str> = log_content.lines().collect();
 
     let mut last_time: Option<String> = None;

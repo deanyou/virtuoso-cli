@@ -253,15 +253,13 @@ impl RpcDispatcher {
             "skill" => self.dispatch_skill(client, op, params),
             "libref" => Self::dispatch_libref(op, params),
             "sim" => self.dispatch_sim(client, op, params),
-            _ => {
-                match crate::plugins::PluginRegistry::get_global() {
-                    Ok(registry) => registry.dispatch(domain, op, params, client),
-                    Err(_) => Err(VirtuosoError::Execution(format!(
-                        "unknown domain '{}' in method '{}'",
-                        domain, method
-                    ))),
-                }
-            }
+            _ => match crate::plugins::PluginRegistry::get_global() {
+                Ok(registry) => registry.dispatch(domain, op, params, client),
+                Err(_) => Err(VirtuosoError::Execution(format!(
+                    "unknown domain '{}' in method '{}'",
+                    domain, method
+                ))),
+            },
         }
     }
 

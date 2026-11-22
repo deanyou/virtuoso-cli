@@ -1270,7 +1270,6 @@ END"#;
         assert!(!should_skip_psf_file("ac_op.ocn"));
     }
 
-
     #[test]
     fn test_scalar_value_accessors() {
         let f = ScalarValue::Float(1.906e-04);

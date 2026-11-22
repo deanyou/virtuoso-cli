@@ -1530,7 +1530,6 @@ mod tests {
         );
     }
 
-
     #[derive(Clone, Default)]
     struct ServerBehavior {
         /// Delay the exec reply when the command equals this (key, delay) pair.

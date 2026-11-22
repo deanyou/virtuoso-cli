@@ -303,7 +303,6 @@ fn generated_skill_parens_are_balanced() {
     );
 }
 
-
 #[test]
 fn scanner_flags_a_missing_closing_paren() {
     let src = r##"

@@ -1266,7 +1266,6 @@ mod tests {
         }
     }
 
-
     /// An unverifiable live process must be refused: no SIGTERM is sent and
     /// the state file is left in place. This is the macOS `/proc`-absent
     /// regression — the old code skipped the kill yet still cleared the state,
@@ -1487,7 +1486,6 @@ mod tests {
         let k_b = profiled_env_key("VB_LOCAL_PORT", Some("digital"));
         assert_ne!(k_a, k_b);
     }
-
 
     fn free_port() -> u16 {
         std::net::TcpListener::bind("127.0.0.1:0")

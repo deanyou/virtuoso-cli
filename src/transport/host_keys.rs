@@ -104,9 +104,7 @@ impl HostPattern {
     fn matches(&self, host: &str, port: Option<u16>) -> bool {
         match self {
             HostPattern::Any => true,
-            HostPattern::Plain { host: h, port: p } => {
-                h == host && (p.is_none() || *p == port)
-            }
+            HostPattern::Plain { host: h, port: p } => h == host && (p.is_none() || *p == port),
             HostPattern::Hashed { .. } => false, // resolved by hashed_key_matches
         }
     }

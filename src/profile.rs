@@ -273,7 +273,6 @@ pub fn read_venv_profile() -> (Option<PathBuf>, Option<String>) {
     (path, profile)
 }
 
-
 /// Where to (un)bind a profile. Mirrors the resolution ladder:
 /// - `Venv`: $VIRTUAL_ENV/.vcli-profile  (project Python venv)
 /// - `User`: ~/.vcli/profile            (user-level default)
@@ -439,7 +438,6 @@ mod tests {
         }
         panic!("Expected to find profile");
     }
-
 
     /// Test that `bind_user_profile` writes the profile name into
     /// `<config dir>/profile` and `clear_user_profile` removes it again.

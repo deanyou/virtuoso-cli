@@ -53,14 +53,14 @@ use crate::transport::ipc::framing::{
 use crate::transport::ipc::messages::{
     Hello, HelloAck, IpcError, Operation, RequestEnvelope, ResponseEnvelope, ResponseResult,
 };
+use crate::transport::lifecycle::CancellationToken;
+#[cfg(feature = "native-ssh")]
+use crate::transport::lifecycle::ShutdownCoordinator;
 #[cfg(feature = "native-ssh")]
 use crate::transport::pool::{EndpointKey, EndpointPool};
 use crate::transport::scheduler::Permit;
 #[cfg(feature = "native-ssh")]
 use crate::transport::scheduler::{Priority, SchedulerLimits};
-use crate::transport::lifecycle::CancellationToken;
-#[cfg(feature = "native-ssh")]
-use crate::transport::lifecycle::ShutdownCoordinator;
 
 /// Shared shutdown bookkeeping for the running daemon.
 ///

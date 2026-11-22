@@ -98,7 +98,6 @@ fn vcli_profile_bind_user_then_clear() {
     let profile_file = home.join(".vcli").join("profile");
     let env_file = home.join(".vcli").join(".env");
 
-
     let test_profile = "vcli_test_profile_xyz";
     let bin = vcli_bin();
 

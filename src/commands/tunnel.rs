@@ -969,7 +969,6 @@ mod tests {
         );
         assert!(!c.mismatch);
     }
-
 }
 
 #[cfg(test)]

@@ -331,10 +331,7 @@ impl LibRefFinder {
         for symbol in &self.symbols {
             for param in &symbol.params {
                 let matched = match_text(&param.name, query, mode)
-                    || param
-                        .expands_to
-                        .iter()
-                        .any(|n| match_text(n, query, mode))
+                    || param.expands_to.iter().any(|n| match_text(n, query, mode))
                     || (mode == SearchMode::Fuzzy
                         && (contains_ci(&param.label, query)
                             || contains_ci(&param.description, query)));
