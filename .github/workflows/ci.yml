@@ -24,6 +24,19 @@ jobs:
       - run: cargo clippy --features daemon -- -D warnings
       - run: cargo clippy --features native-ssh -- -D warnings
 
+  comment-budget:
+    name: Comment Budget
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The ratchet: comment lines per group may only go down. Delete
+      # comments, or move decision records into docs/decision-records/ --
+      # never raise scripts/comment-budget.json to make the gate green.
+      - run: python3 scripts/check-comment-budget.py
+
   test:
     name: Test
     runs-on: ubuntu-latest
