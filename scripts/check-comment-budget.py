@@ -29,7 +29,10 @@ REPO_ROOT = os.path.dirname(HERE)
 DEFAULT_BASELINE = os.path.join(HERE, "comment-budget.json")
 
 GROUP_DEPTH = 2
-SKIP_DIRS = {"node_modules", "dist", ".git", "coverage", "target", "__pycache__"}
+# Only the *repo-root* build directory is skipped. A same-named directory
+# deeper in the tree can be real source (src/target/ is a module here).
+SKIP_DIRS_ROOT = {"node_modules", "dist", ".git", "coverage", "target", "__pycache__"}
+SKIP_DIRS_ANY = {"node_modules", ".git", "__pycache__"}
 
 # Out of scope per the campaign brief: the three skill trees (own sync
 # discipline), the agent-tooling trees, the docs tree, and vendored resources.
@@ -273,7 +276,10 @@ def lex_python(text):
             j = i + len(m.group(0))
             closed = False
             while j < n:
-                if text[j] == "\\" and not raw:
+                # In a Python raw string a backslash still prevents the next
+                # quote from terminating the string (it just stays in the
+                # value), so the escape is skipped the same way in both kinds.
+                if text[j] == "\\":
                     j += 2
                     continue
                 if text.startswith(quote, j):
@@ -531,7 +537,11 @@ def actuals(root):
     markers = 0
     units = 0
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        is_root = os.path.abspath(dirpath) == os.path.abspath(root)
+        if is_root:
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS_ROOT)
+        else:
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS_ANY)
         for fn in sorted(filenames):
             lang = LANG_BY_EXT.get(os.path.splitext(fn)[1].lower())
             if not lang:
