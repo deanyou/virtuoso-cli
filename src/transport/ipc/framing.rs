@@ -141,7 +141,6 @@ impl<R: Read> FrameReader<R> {
                     self.buf.drain(..total);
                     return Ok(Some(payload));
                 }
-                // Prefix says more bytes are coming; read again.
             }
             let mut chunk = [0u8; 8192];
             let n = self.inner.read(&mut chunk)?;

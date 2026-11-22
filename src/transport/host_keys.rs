@@ -515,7 +515,6 @@ mod tests {
 
     #[test]
     fn hashed_entry_round_trips_and_matches() {
-        // Build a hashed entry the way OpenSSH would, then verify lookup.
         let salt = vec![0x11u8; 16];
         let host_string = "[host]:22";
         let hash = hmac_sha1(&salt, host_string.as_bytes());

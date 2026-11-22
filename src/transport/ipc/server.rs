@@ -388,10 +388,9 @@ fn serve_loop<F, G>(
     let mut reader = FrameReader::new(read_stream);
     let mut writer = FrameWriter::new(stream);
 
-    // Peek the first frame so we know the request id to echo back.
     let first_frame = match reader.read_frame() {
         Ok(Some(b)) => b,
-        _ => return, // EOF or framing error → nothing to do.
+        _ => return,
     };
     let first_env: RequestEnvelope = match serde_json::from_slice(&first_frame) {
         Ok(env) => env,
@@ -721,7 +720,6 @@ fn bind_listener(
             ));
         }
     }
-    // Best-effort cleanup of any stale socket left by a crashed previous run.
     let _ = std::fs::remove_file(socket_path);
     let listener = UnixListener::bind(socket_path)
         .map_err(|e| format!("failed to bind ipc socket {}: {e}", socket_path.display()))?;
@@ -938,7 +936,6 @@ mod tests {
         let nonce = nonce.to_string();
         let listener_for_thread = listener.try_clone().expect("clone listener");
         thread::spawn(move || {
-            // Accept exactly one connection, serve it until EOF, then exit.
             if let Ok((stream, _)) = listener_for_thread.accept() {
                 serve_one(stream, transport, &token, &nonce);
             }
@@ -1024,7 +1021,6 @@ mod tests {
         let mut reader = FrameReader::new(read);
         let mut writer = FrameWriter::new(stream);
 
-        // Handshake.
         let hello = RequestEnvelope {
             protocol_major: PROTOCOL_MAJOR,
             protocol_minor: PROTOCOL_MINOR,
@@ -1047,7 +1043,6 @@ mod tests {
         };
         assert_eq!(ack.daemon_nonce, "the-recorded-nonce");
 
-        // Challenge.
         let challenge = RequestEnvelope {
             protocol_major: PROTOCOL_MAJOR,
             protocol_minor: PROTOCOL_MINOR,
@@ -1282,7 +1277,6 @@ mod tests {
         let runner =
             thread::spawn(move || run(&path, transport_for_run, "secret-token", "n", coordinator));
 
-        // Wait for the socket to appear (bind happens on the other thread).
         let mut client = None;
         for _ in 0..100 {
             if let Ok(c) = NativeTransportClient::connect(&socket, "p", "secret-token") {
@@ -1310,7 +1304,6 @@ mod tests {
         let result = runner.join().expect("run thread panicked");
         assert!(result.is_ok(), "run returned an error: {result:?}");
 
-        // Clean exit also unlinks the socket.
         assert!(!socket.exists(), "socket must be unlinked on clean exit");
     }
 
@@ -1380,7 +1373,6 @@ mod tests {
             )
         });
 
-        // Wait for the daemon to come up before issuing the shutdown.
         let mut client = None;
         for _ in 0..100 {
             if let Ok(c) = NativeTransportClient::connect(&socket, "p", "secret-token") {

@@ -414,7 +414,6 @@ pub fn ensure_helper_uploaded(
     let source = read_helper_source()?;
     let digest = hash_helper(&source);
 
-    // Resolve username: use explicit if non-empty, otherwise call `id -un`
     let effective_user = match explicit_user {
         Some(u) if !u.is_empty() => sanitize_for_path(u),
         _ => resolve_effective_user(runner)?,
@@ -638,7 +637,6 @@ pub fn dismiss(
                 if is_verified_dismissal(&val) {
                     dismissed.push(dialog_info_from_dismiss_value(&val, None, Some(display)));
                 } else if !is_action_sent(&val) {
-                    // A plain dialog-listing record.
                     if let Ok(mut d) = serde_json::from_value::<DialogInfo>(val) {
                         d.display = Some(display.to_string());
                         found.push(d);
@@ -924,7 +922,6 @@ pub fn client_geometry(
         )));
     }
     let geometry = parse_xwininfo_geometry(&out.stdout)?;
-    // Cache it so a following action-x11 call can reuse it.
     geom_cache_write(display, window_id, &geometry);
     Ok(ClientGeometry {
         window_id: window_id.to_string(),
@@ -1125,7 +1122,6 @@ pub fn validate_action_params(
     button: Option<u8>,
     output_dir: Option<&str>,
 ) -> Result<String> {
-    // Reject empty window_id
     if window_id.is_empty() {
         return Err(VirtuosoError::Config(
             "window_id is required and cannot be empty".into(),
@@ -1141,7 +1137,6 @@ pub fn validate_action_params(
         ));
     }
 
-    // Reject empty display
     if display.is_empty() {
         return Err(VirtuosoError::Config(
             "DISPLAY is required and cannot be empty".into(),
@@ -1150,7 +1145,6 @@ pub fn validate_action_params(
 
     let op = X11Operation::from_str(operation)?;
 
-    // Operation-specific validation
     match op {
         X11Operation::Activate
         | X11Operation::Close
@@ -1245,7 +1239,6 @@ pub fn validate_action_params(
         }
     }
 
-    // Build sanitized details string
     let details = match op {
         X11Operation::Activate => None,
         X11Operation::Key => Some(format!(
@@ -1540,9 +1533,9 @@ fn action_x11_cached(
                 )) {
                     Ok(out) => {
                         if i == 0 {
-                            guard.arm(); // mousedown succeeded: arm the release guard
+                            guard.arm();
                         } else if i == 2 {
-                            guard.mark_released(); // explicit mouseup succeeded
+                            guard.mark_released();
                         }
                         results.push(out);
                     }
@@ -1672,7 +1665,6 @@ fn action_x11_cached(
         (helper, env, windows, display_prefix)
     };
 
-    // Render the PID once for every message below.
     let pid_desc = pid_label(*pid);
 
     // Step 2: Resolve the target window.
@@ -1838,7 +1830,6 @@ fn action_x11_cached(
                 out.stderr.trim()
             )));
         }
-        // Fetch the PNG back to the local evidence directory.
         match runner.fetch_file(&remote_path, dir, Duration::from_secs(*timeout_secs)) {
             Ok(()) => {}
             Err(e) => {
@@ -1874,7 +1865,7 @@ fn action_x11_cached(
                 )
             }
             Err(e) => {
-                let _ = std::fs::remove_file(&local_path_buf); // cleanup invalid file
+                let _ = std::fs::remove_file(&local_path_buf);
                                                                // Also remove the temp PNG left on the GUI host.
                 let _ = runner.run_command(&CommandRequest::untimed(format!(
                     "rm -f {}",
@@ -1925,9 +1916,9 @@ fn action_x11_cached(
             )) {
                 Ok(cmd_out) => {
                     if i == 0 {
-                        guard.arm(); // mousedown succeeded: arm the release guard
+                        guard.arm();
                     } else if i == 2 {
-                        guard.mark_released(); // explicit mouseup succeeded
+                        guard.mark_released();
                     }
                     outs.push(cmd_out);
                 }
@@ -2007,7 +1998,6 @@ fn action_x11_cached(
         }
     }
 
-    // Build sanitized details
     let details = match operation {
         X11Operation::Activate => None,
         X11Operation::Close => None,
@@ -2674,7 +2664,6 @@ fn build_xdotool_actions(
                         ay.to_string(),
                     ],
                 ),
-                // Step 2: click the button on the window at the new pointer pos.
                 (
                     "click".into(),
                     vec!["click".into(), "--window".into(), wid, btn],
@@ -2971,7 +2960,6 @@ fn validate_png_artifact(
             })?
         }
     };
-    // Check magic bytes.
     let mut header = [0u8; 8];
     file.read_exact(&mut header).map_err(|e| {
         VirtuosoError::Execution(format!(
@@ -2985,7 +2973,6 @@ fn validate_png_artifact(
         )));
     }
 
-    // Compute SHA-256 of the full file.
     file.rewind()
         .map_err(|e| VirtuosoError::Execution(format!("cannot rewind screenshot file: {e}")))?;
     let mut hasher = Sha256::new();
@@ -3300,7 +3287,6 @@ pub fn resolve_unique_window(
         .filter(|w| {
             // Require positive PID — zero/None windows are excluded
             let pid_ok = w.pid.map(|p| p == expected_pid).unwrap_or(false);
-            // Exact DISPLAY match
             let display_ok = w
                 .display
                 .as_deref()
@@ -3393,7 +3379,6 @@ fn extract_helper_errors_with(out: &CommandResult, suppress_generic_exit: bool) 
         }
     };
 
-    // 1. Structured JSON errors on stdout.
     for line in out.stdout.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -3522,7 +3507,6 @@ impl RemoteTransport for LocalTransport {
 
         let start = Instant::now();
 
-        // Compute the maximum wait time from req.timeout (if set) and remaining deadline.
         let max_wait = req.timeout.map(|t| {
             let remaining = req.deadline.0.saturating_duration_since(start);
             t.min(remaining)
@@ -3547,7 +3531,6 @@ impl RemoteTransport for LocalTransport {
                     c
                 }
                 _ => {
-                    // Fallback for empty or unparseable commands.
                     let mut c = std::process::Command::new("sh");
                     c.arg("-c").arg(&req.command);
                     c
@@ -3591,7 +3574,6 @@ impl RemoteTransport for LocalTransport {
 
             let elapsed = start.elapsed();
             if elapsed >= req.deadline.0.saturating_duration_since(start) {
-                // Deadline has passed.
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(
@@ -3603,7 +3585,6 @@ impl RemoteTransport for LocalTransport {
                 );
             }
 
-            // Wait up to 10ms before next poll.
             let remaining = req.deadline.0.saturating_duration_since(Instant::now());
             let wait_for = max_wait
                 .map(|t| t.saturating_sub(elapsed))
@@ -4999,15 +4980,12 @@ mod tests {
             let n = cmds.len();
             drop(cmds);
             if n == 1 {
-                // mousedown succeeded — arm the guard
                 Ok(mk_result("", "", 0))
             } else if n == 2 {
-                // mousemove fails mid-drag → action_x11 returns early
                 Err(crate::transport::contract::TransportError::LocalIo(
                     "simulated mid-drag failure".into(),
                 ))
             } else {
-                // guard's best-effort mouseup (and any later call) succeeds
                 Ok(mk_result("", "", 0))
             }
         }
@@ -5641,7 +5619,6 @@ mod tests {
         {
             let mut g = super::MouseButtonGuard::new(&t, "env DISPLAY=:0 ", &win, Some(1));
             g.arm();
-            // guard dropped at end of scope
         }
         let cmds = t.commands.lock().unwrap();
         assert!(
@@ -6322,7 +6299,6 @@ mod tests {
         let read = geom_cache_read(display, wid).expect("cache read should succeed");
         assert_eq!(read.w, 300);
         assert_eq!(read.h, 200);
-        // Cleanup
         let _ = std::fs::remove_file(geom_cache_path(display, wid));
     }
 

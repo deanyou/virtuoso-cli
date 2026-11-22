@@ -784,7 +784,6 @@ mod tests {
             s.try_acquire(Priority::Normal).is_none(),
             "the third slot is reserved for urgent work"
         );
-        // …and urgent work can still take it.
         assert!(s.try_acquire(Priority::Urgent).is_some());
     }
 
@@ -896,7 +895,6 @@ mod tests {
         let _h1 = s.try_acquire(Priority::Normal).unwrap();
         let h2 = s.try_acquire(Priority::Normal).unwrap();
 
-        // Queue two normal waiters.
         let sn = Arc::clone(&s);
         let tn = thread::spawn(move || {
             let _p = sn
@@ -912,7 +910,6 @@ mod tests {
         });
         thread::sleep(Duration::from_millis(60));
 
-        // Now queue the urgent waiter (last in arrival order).
         let order = Arc::new(Mutex::new(Vec::new()));
         let su = Arc::clone(&s);
         let ou = Arc::clone(&order);
@@ -931,7 +928,6 @@ mod tests {
             vec!["urgent"],
             "urgent must overtake both queued normal waiters"
         );
-        // Let the normal waiters drain so nothing is left hanging.
         drop(_h1);
         tn.join().unwrap();
         tn2.join().unwrap();
@@ -1044,7 +1040,6 @@ mod tests {
                 "past the grace the bulk waiter must be scheduled as normal"
             );
         }
-        // Release a slot; the waiter must finish rather than hang.
         drop(_n1);
         assert!(t.join().is_ok());
     }

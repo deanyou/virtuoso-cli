@@ -1419,7 +1419,6 @@ mod tests {
             crate::transport::identity::ProcessIdentity::of_pid(pid).is_ok(),
             "unverifiable live process must not have been signalled"
         );
-        // Reap the still-running child so it does not linger as a zombie.
         let _ = child.kill();
         let _ = child.wait();
     }
@@ -1479,7 +1478,6 @@ mod tests {
         } else {
             std::env::remove_var("VB_KEEP_REMOTE_FILES");
         }
-        // Reap the signalled child so it does not linger.
         let _ = child.kill();
         let _ = child.wait();
         result.unwrap();

@@ -512,7 +512,6 @@ mod tests {
     fn lock_with_deadline_bails_when_deadline_passes() {
         let mutex = Arc::new(Mutex::new(0i32));
         let mutex_clone = mutex.clone();
-        // Hold the lock in another thread for 2 seconds.
         let handle = thread::spawn(move || {
             let guard = mutex_clone.lock().unwrap();
             std::thread::sleep(Duration::from_secs(2));
@@ -648,10 +647,8 @@ mod tests {
                 };
                 match req {
                     Ok(Some(_)) => {
-                        // Write 4-byte length prefix (payload = 4 bytes).
                         stream.write_all(&4u32.to_be_bytes()).unwrap();
                         stream.flush().unwrap();
-                        // Write 1 byte every 500ms — 4 bytes = 2s total.
                         for _ in 0..4 {
                             std::thread::sleep(Duration::from_millis(500));
                             if stream.write_all(b"x").is_err() {
@@ -700,7 +697,6 @@ mod tests {
         let server_handle = thread::spawn(move || {
             use std::io::Write;
             let (mut stream, _) = listener.accept().unwrap();
-            // Handshake.
             let _hello = {
                 let mut reader = FrameReader::new(&mut stream);
                 reader.read_frame().unwrap().unwrap()
@@ -779,7 +775,6 @@ mod tests {
 
         let server_handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            // Handshake only.
             let mut reader = FrameReader::new(&stream);
             let _hello = reader.read_frame().unwrap().unwrap();
             let mut writer = FrameWriter::new(&stream);

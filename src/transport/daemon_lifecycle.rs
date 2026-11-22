@@ -196,7 +196,6 @@ pub fn record_identity(state: &mut TunnelState, identity: &ProcessIdentity) {
 /// the daemon answered correctly. It is injected rather than performed here so
 /// this decision is testable without IPC.
 pub fn assess(state: &TunnelState, challenge: impl FnOnce(&str) -> bool) -> Verdict {
-    // Tier 1.
     if let Some(nonce) = state.daemon_nonce.as_deref() {
         if challenge(nonce) {
             return Verdict::Alive;
@@ -553,7 +552,6 @@ mod challenge_tests {
                 drop(stream);
             }
         });
-        // Drop our listener so the accept loop terminates.
         drop(listener);
 
         std::fs::write(&token_path, "t").unwrap();

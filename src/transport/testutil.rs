@@ -85,7 +85,6 @@ impl SshServerFixture {
         if !gen(&host_key) || !gen(&client_key) {
             return None;
         }
-        // Copy the public key into authorized_keys and lock it down.
         let pub_key = std::fs::read_to_string(client_key.with_extension("pub")).ok()?;
         std::fs::write(&authorized, pub_key).ok()?;
         let _ = Command::new("chmod")
@@ -153,7 +152,6 @@ impl SshServerFixture {
         let deadline = Instant::now() + timeout;
         while Instant::now() < deadline {
             if TcpStream::connect(("127.0.0.1", self.port)).is_ok() {
-                // TCP is up; confirm a full handshake via the ssh client.
                 let status = Command::new("/usr/bin/ssh")
                     .args([
                         "-i",

@@ -21,7 +21,7 @@
   "src/streaming": 28,
   "src/sys": 48,
   "src/transaction": 24,
-  "src/transport": 3636,
+  "src/transport": 3574,
   "src/tui": 107,
   "tests": 687,
   "tests/docs": 19

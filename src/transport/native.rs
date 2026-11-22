@@ -1017,7 +1017,6 @@ impl RemoteTransport for NativeTransport {
                         reason: String::from_utf8_lossy(&raw.stderr).into_owned(),
                     });
                 }
-                // Atomic publish.
                 let mv_cmd = format!(
                     "mv -f {src} {dst} && rm -f {src}",
                     src = shell_quote(&staging),
@@ -1133,7 +1132,6 @@ impl RemoteTransport for NativeTransport {
 
         match write_result {
             Ok(()) => {
-                // Atomic publish: rename staging to target.
                 std::fs::rename(&local_staging_path, &req.local).map_err(|e| {
                     let _ = std::fs::remove_file(&local_staging_path);
                     TransportError::LocalIo(format!(
@@ -1548,7 +1546,6 @@ mod tests {
         rt.block_on(async {
             let (client_stream, server_stream) = tokio::io::duplex(64 * 1024);
             tokio::spawn(russh_sftp::server::run(server_stream, MemFs::default()));
-            // Let the server task reach its read loop before the client speaks.
             tokio::task::yield_now().await;
 
             let sftp = SftpSession::new(client_stream)
@@ -1575,7 +1572,6 @@ mod tests {
                 super::sftp_read_all(&mut file)
                     .await
                     .expect("sftp download stream")
-                // drop sends CLOSE
             };
 
             assert_eq!(got, payload, "SFTP roundtrip must preserve every byte");

@@ -494,7 +494,6 @@ impl SSHRunner {
                 .map_err(|e| VirtuosoError::Ssh(format!("failed to write command: {e}")))?;
         }
 
-        // Wait for process completion with timeout using a thread
         let child_pid = child.id();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
@@ -508,7 +507,6 @@ impl SSHRunner {
                 return Err(VirtuosoError::Ssh(format!("ssh failed: {e}")));
             }
             Err(_) => {
-                // Timeout - kill the process by PID
                 #[cfg(unix)]
                 {
                     let _ = Command::new("kill")
