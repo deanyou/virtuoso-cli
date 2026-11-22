@@ -124,7 +124,6 @@ pub fn broadcast(code: &str, timeout: u64) -> Result<Value> {
             .collect()
     });
 
-    // Sort by original index to preserve session list order
     let mut results: Vec<Value> = results.into_iter().map(|(_, v)| v).collect();
     results.sort_by(|a, b| {
         let idx_a = sessions
@@ -197,7 +196,6 @@ pub fn eval(
 ) -> Result<Value> {
     use std::io::Read;
 
-    // Input validation: mutually exclusive modes
     if stdin && code.is_some() {
         return Err(VirtuosoError::Config(
             "pass SKILL via argument OR --stdin, not both".into(),
@@ -258,13 +256,11 @@ fn load_finder(cfg: &Config, refresh: bool) -> Result<SKILLFinder> {
         let cshrc = cfg.cadence_cshrc.as_deref();
 
         if refresh {
-            // Force refresh: clear cache first, then sync
             let _ = crate::skill_finder::clear_cache(&host);
         }
 
         let _ = crate::skill_finder::load_or_sync(&mut finder, &host, &target, ssh_key, cshrc)?;
     } else {
-        // Local mode: find from local Cadence installation
         if let Some(dir) = find_skill_finder_dir(cfg)? {
             finder.load(&dir).map_err(|e| {
                 VirtuosoError::Config(format!("failed to load SKILL Finder: {}", e))
@@ -390,7 +386,6 @@ pub fn info(ctx: &crate::context::CommandContext, func_name: &str) -> Result<Val
 /// 2. Discover from the local Cadence installation (`virtuoso`, then `spectre`)
 /// 3. Discover on the remote host over SSH (via `VB_CADENCE_CSHRC`)
 fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
-    // 1. Check VB_SKILL_FINDER_DIR
     if let Ok(dir) = std::env::var("VB_SKILL_FINDER_DIR") {
         if !dir.is_empty() && std::path::Path::new(&dir).exists() {
             tracing::debug!("Using VB_SKILL_FINDER_DIR: {}", dir);
@@ -430,9 +425,7 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
         }
     }
 
-    // 3. For remote, try to discover using SSH if available
     if cfg.is_remote() {
-        // Try to find via SSH using the cadence cshrc
         if let Some(ref cshrc) = cfg.cadence_cshrc {
             if let Ok(Some(path)) =
                 discover_skill_finder_remote(&cfg.ssh_target(), cfg.ssh_key.as_deref(), cshrc)
@@ -491,7 +484,6 @@ pub fn sync_cache(
 
     let old_count = crate::skill_finder::cache_file_count(&target_host);
 
-    // Sync with or without progress
     let new_count = if verbose {
         fn print_progress(msg: &str) {
             eprintln!("{}", msg);
@@ -551,7 +543,6 @@ pub fn show_cache(
         }));
     }
 
-    // Show cache info
     if let Some(info) = crate::skill_finder::cache_info(&target_host) {
         Ok(json!({
             "host": target_host,

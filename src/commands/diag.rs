@@ -58,7 +58,6 @@ pub fn cdslck(
     view_filter: Option<&str>,
 ) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
-    // Step 1: resolve library readPath via the cell.read_path RPC.
     let req = crate::rpc::dispatcher::RpcRequest {
         method: "cell.read_path".into(),
         params: json!({ "lib": lib }),
@@ -80,7 +79,6 @@ pub fn cdslck(
         )));
     }
 
-    // Step 2: enumerate lock files via SSH `find`.
     let config = Config::from_env()?;
     if config.remote_host.as_deref().unwrap_or("").is_empty() {
         return Err(VirtuosoError::Config(
@@ -104,7 +102,6 @@ pub fn cdslck(
         .map(String::from)
         .collect();
 
-    // Step 3: per-lock cat + stat, batched in one SSH round-trip.
     let locks = batch_read_locks(transport.as_ref(), &lock_paths)?;
     let locks = match view_filter {
         Some(v) => locks
@@ -195,7 +192,6 @@ fn parse_batch_output(stdout: &str, paths: &[String]) -> Vec<CdsLockInfo> {
         let age = mtime.map(|m| (now - m as f64).max(0.0));
         out.push((owner_record, mtime, age));
     }
-    // zip with paths
     out.into_iter()
         .zip(paths.iter())
         .map(|((owner_record, mtime, age), path)| {

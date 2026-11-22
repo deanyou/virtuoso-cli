@@ -152,7 +152,6 @@ fn parse_grid_audit_sexp(raw: &str) -> Option<(Vec<GridLayer>, Vec<GridTail>)> {
         layers.push(GridLayer(layer, on, off));
     }
 
-    // Sort by off_grid count descending
     layers.sort_by_key(|l| std::cmp::Reverse(l.2));
     Some((layers, tails))
 }
@@ -219,7 +218,6 @@ pub fn verify_native(
 ) -> Result<Value> {
     let client = VirtuosoClient::from_context(ctx)?;
 
-    // Run the grid audit SKILL
     let skill = cell_ops::shape_grid_audit_skill(lib, cell, view);
     let r = client
         .execute_skill(&skill, None)?
@@ -257,7 +255,6 @@ pub fn verify_native(
         })
         .collect();
 
-    // Decorative tail details.
     let tail_details: Vec<Value> = tails
         .iter()
         .map(|tail| {
@@ -269,7 +266,6 @@ pub fn verify_native(
         })
         .collect();
 
-    // Determine overall status
     let status = if total_off > 0 {
         "drift"
     } else if total_tails > 0 {

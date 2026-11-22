@@ -13,10 +13,8 @@ pub fn size(
 ) -> Result<Value> {
     let lookup = load_lookup(pdk, device_type)?;
 
-    // Find closest L
     let l_data = find_closest_l(&lookup, l_target)?;
 
-    // Interpolate at gmid_target
     let point = interpolate_gmid(&l_data, gmid_target)?;
 
     let id_sim = point["id"]
@@ -166,7 +164,6 @@ fn find_closest_l(lookup: &Value, l_target: f64) -> Result<Vec<Value>> {
 }
 
 fn interpolate_gmid(points: &[Value], gmid_target: f64) -> Result<Value> {
-    // Find two closest points for linear interpolation
     let mut sorted: Vec<&Value> = points.iter().collect();
     sorted.sort_by(|a, b| {
         let da = (a["gmid"].as_f64().unwrap_or(f64::MAX) - gmid_target).abs();
@@ -178,6 +175,5 @@ fn interpolate_gmid(points: &[Value], gmid_target: f64) -> Result<Value> {
         return Err(VirtuosoError::NotFound("no points in lookup".into()));
     }
 
-    // Return closest point (simple nearest-neighbor)
     Ok(sorted[0].clone())
 }

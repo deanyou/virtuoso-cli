@@ -368,14 +368,12 @@ pub fn diagnose(ctx: &CommandContext) -> Result<Value> {
         .map(|s| s.port)
         .unwrap_or(cfg.port);
 
-    // TCP reachability
     let tcp_ok = std::net::TcpStream::connect_timeout(
         &format!("127.0.0.1:{port}").parse().unwrap(),
         std::time::Duration::from_secs(2),
     )
     .is_ok();
 
-    // Daemon responsiveness + latency
     let (daemon_ok, latency_ms, virtuoso_version) = if tcp_ok {
         let vc = crate::client::bridge::VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         let start = std::time::Instant::now();
@@ -403,7 +401,6 @@ pub fn diagnose(ctx: &CommandContext) -> Result<Value> {
         (false, None, None)
     };
 
-    // SKILL eval test
     let skill_ok = if daemon_ok {
         let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         // Idempotent health probe — same expression test_connection uses.
@@ -752,7 +749,6 @@ impl HostnameCheck {
     /// string is the only case where we can't produce a meaningful check).
     pub(crate) fn parse_gethostname_output(raw: &str) -> Result<String> {
         let trimmed = raw.trim();
-        // strip one leading + one trailing double quote if present
         let stripped = trimmed
             .strip_prefix('"')
             .and_then(|s| s.strip_suffix('"'))

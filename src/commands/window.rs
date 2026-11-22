@@ -131,7 +131,6 @@ pub fn list(ctx: &crate::context::CommandContext) -> Result<Value> {
         )));
     }
     let windows = parse_window_json(&r.output);
-    // Annotate each window with a derived mode field
     let windows = annotate_modes(windows);
     Ok(json!({ "windows": windows }))
 }
@@ -428,7 +427,6 @@ pub fn dismiss_window_x11(
         action,
     )?;
     let mut extra: Vec<(&str, Value)> = vec![("window_id", json!(id))];
-    // Report which identity was used when resolution came from a PID.
     if pid.is_some() && window_id.filter(|s| !s.is_empty()).is_none() {
         extra.push(("resolved_by_pid", json!(pid)));
     }
@@ -963,7 +961,6 @@ fn window_mode(name: &str) -> &'static str {
 /// SKILL encodes non-ASCII chars as octal escapes (e.g. `\256` = ®).
 /// Standard JSON parsers reject these, so we decode them first.
 fn parse_window_json(output: &str) -> Value {
-    // Strip surrounding SKILL string quotes
     let s = output.trim_matches('"');
     // Decode SKILL octal escapes (\NNN) → UTF-8, then un-escape \" and \\
     let decoded = decode_skill_octal(s);
@@ -979,7 +976,6 @@ fn decode_skill_octal(s: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'\\' && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit() {
-            // Collect up to 3 octal digits
             let start = i + 1;
             let mut end = start;
             while end < bytes.len() && end < start + 3 && bytes[end].is_ascii_digit() {

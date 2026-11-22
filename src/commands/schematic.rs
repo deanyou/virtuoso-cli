@@ -331,7 +331,6 @@ pub fn build(spec_path: &str) -> Result<Value> {
 
     let client = VirtuosoClient::from_env()?;
 
-    // 1. Open/create cellview
     let open_skill =
         client
             .schematic
@@ -344,7 +343,6 @@ pub fn build(spec_path: &str) -> Result<Value> {
         )));
     }
 
-    // 2. Place instances + set params
     let mut ed = SchematicEditor::new(&client);
     for inst in &spec.instances {
         let (lib, cell) = inst.master.split_once('/').ok_or_else(|| {
@@ -397,7 +395,6 @@ pub fn build(spec_path: &str) -> Result<Value> {
             }
         }
 
-        // Load the RB_connectTerminal helper procedure
         let helper_file = tempfile::Builder::new()
             .prefix("rb_schematic_helper_")
             .suffix(".il")
@@ -420,7 +417,6 @@ pub fn build(spec_path: &str) -> Result<Value> {
             )));
         }
 
-        // Generate connection script
         let mut lines = vec!["let((cv)".to_string(), "cv = RB_SCH_CV".to_string()];
         for (inst, term, net) in &assignments {
             lines.push(format!(
@@ -449,7 +445,6 @@ pub fn build(spec_path: &str) -> Result<Value> {
         }
     }
 
-    // 4. Pins
     if !spec.pins.is_empty() {
         let mut ed = SchematicEditor::new(&client);
         for p in &spec.pins {
@@ -470,7 +465,6 @@ pub fn build(spec_path: &str) -> Result<Value> {
         }
     }
 
-    // 5. Save + check
     let save_skill = client.schematic.save();
     client.execute_skill(&save_skill, None)?;
     let check_skill = client.schematic.check();

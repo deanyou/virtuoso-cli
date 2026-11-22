@@ -704,7 +704,6 @@ pub fn get_output_value_from_history(
     corner: Option<&str>,
 ) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
-    // Use the combined method that opens results first
     let skill = client
         .maestro
         .get_output_value_with_open(history, name, test_name, corner);
@@ -779,7 +778,6 @@ pub fn snapshot(
 
     let client = VirtuosoClient::from_env()?;
 
-    // 1. Resolve session and run directory
     let session_info = snapshot_resolve_session(&client, session)?;
 
     let session_name = session_info
@@ -867,7 +865,6 @@ pub fn snapshot(
         FilterRules::default()
     };
 
-    // 4. Pattern matching helper
     fn matches_pattern(filename: &str, patterns: &[String]) -> bool {
         for p in patterns {
             if let Some(suffix) = p.strip_prefix('*') {
@@ -875,7 +872,6 @@ pub fn snapshot(
                     return true;
                 }
             } else if p.contains('*') {
-                // Simple prefix glob
                 if let Some(star) = p.find('*') {
                     let prefix = &p[..star];
                     if filename.starts_with(prefix) {
@@ -906,7 +902,6 @@ pub fn snapshot(
         })
     }
 
-    // 5. Collect files from run directory structure
     let run_base = Path::new(run_dir);
     let history_dir = run_base.join(&history_name);
 
@@ -1005,7 +1000,6 @@ pub fn snapshot(
         }
     }
 
-    // 6. Create output directory and copy files
     let output_path = Path::new(output_dir);
     fs::create_dir_all(output_path).map_err(|e| VirtuosoError::Io(std::io::Error::other(e)))?;
 
@@ -1463,7 +1457,6 @@ impl Drop for StagingGuard {
         if name.len() != expected_len {
             return;
         }
-        // Prefix check.
         if !name.starts_with(CORNER_NETLIST_STAGING_PREFIX) {
             return;
         }
@@ -1799,7 +1792,6 @@ pub fn create_corner_netlist(
     //    side effects until step 5.
     let client = VirtuosoClient::from_env()?;
 
-    // 4. Build the remote transport from the same Config
     let ssh: Arc<dyn RemoteTransport> = crate::transport::backend::open_transport(&cfg)?;
 
     // 5. Generate a unique remote temp dir (fixed prefix + UUIDv4 suffix)
@@ -1933,7 +1925,6 @@ pub fn create_corner_netlist(
     //     NOT try to `remove_dir_all` the freshly-published output.
     drop(staging_guard);
 
-    // 14. Successful publish — enumerate files for the JSON reply.
     let files = enumerate_local_files(&local_path);
 
     // 15. Remote cleanup — only after successful local publish/staging
@@ -2745,7 +2736,6 @@ fn job_cancel_in(
     // running either, so it is still marked cancelled.
     let session_closed = r.skill_ok();
 
-    // Mark as Cancelled
     job.status = MaestroJobStatus::Cancelled;
     job.updated_at = Utc::now();
     store.save(&job)?;
@@ -3944,7 +3934,6 @@ mod tests {
 
         {
             let _guard = StagingGuard::new(path.clone(), path.parent().unwrap().to_path_buf());
-            // Drop at end of scope.
         }
         assert!(
             !path.exists(),
@@ -3985,7 +3974,6 @@ mod tests {
             b"DO NOT DELETE"
         );
 
-        // Cleanup: do it manually since the guard refused.
         let _ = std::fs::remove_dir_all(&invalid);
     }
 
@@ -4088,7 +4076,6 @@ mod tests {
         let original_parent = tempfile::tempdir().unwrap();
         let other_parent = tempfile::tempdir().unwrap();
 
-        // Build a valid staging-shaped path under `original_parent`.
         let path = make_valid_staging_path(original_parent.path());
         std::fs::write(path.join("marker"), b"KEEP").unwrap();
         assert!(path.exists(), "precondition: path must exist");
@@ -4109,7 +4096,6 @@ mod tests {
         );
         assert_eq!(std::fs::read(path.join("marker")).unwrap(), b"KEEP");
 
-        // Cleanup: do it manually since the guard refused.
         let _ = std::fs::remove_dir_all(&path);
     }
 

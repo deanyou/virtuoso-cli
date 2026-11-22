@@ -47,19 +47,15 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
         ));
     }
 
-    // Send analysis setup
     let analysis_skill = ocean::analysis_skill_simple(analysis, params);
     let analysis_result = client.execute_skill(&analysis_skill, None)?;
     require_non_nil(&analysis_result, "configure analysis")?;
 
-    // Send save
     let _ = client.execute_skill("save('all)", None);
 
-    // Execute run
     let result = client.execute_skill("run()", Some(timeout))?;
     require_transport(&result, "run analysis")?;
 
-    // Get actual results dir
     let rdir = client.execute_skill("resultsDir()", None)?;
     let results_dir = rdir.output.trim().trim_matches('"').to_string();
 
@@ -128,7 +124,6 @@ pub fn measure(analysis: &str, exprs: &[String]) -> Result<Value> {
 
     let client = VirtuosoClient::from_env()?;
 
-    // Open results from resultsDir PSF and select result type
     let rdir = client.execute_skill("resultsDir()", None)?;
     let rdir_val = rdir.output.trim().trim_matches('"');
     if rdir_val != "nil" && !rdir_val.is_empty() {
@@ -156,7 +151,6 @@ pub fn measure(analysis: &str, exprs: &[String]) -> Result<Value> {
         }));
     }
 
-    // Detect all-nil results and provide diagnostics
     let all_nil = !measures.is_empty()
         && measures.iter().all(|m| {
             m.get("value")
@@ -213,7 +207,6 @@ pub fn sweep(
 ) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
-    // Generate value list
     let mut values = Vec::new();
     let mut v = from;
     while v <= to + step * 0.01 {
@@ -309,7 +302,6 @@ pub fn results() -> Result<Value> {
 
     let dir = result.output.trim().trim_matches('"').to_string();
 
-    // Query available result types
     let types_result = client.execute_skill(
         &format!(r#"let((dir files) dir="{dir}" when(isDir(dir) files=getDirFiles(dir)) files)"#),
         None,
@@ -341,7 +333,6 @@ fn create_netlist_inner(
         "createNetlist(?display nil)"
     };
 
-    // First attempt
     let nr = client.execute_skill(cmd, Some(60))?;
     let nr_out = nr.output.trim().trim_matches('"').to_string();
     if nr.skill_ok() {
@@ -409,7 +400,6 @@ fn create_netlist_inner(
         )));
     }
 
-    // Retry after Check and Save
     let retry = client.execute_skill(cmd, Some(60))?;
     let retry_out = retry.output.trim().trim_matches('"').to_string();
     if !retry.skill_ok() {
@@ -510,7 +500,6 @@ pub fn netlist(
         format!("{rdir_val}/netlist/input.scs")
     };
 
-    // Step 4: Verify the file actually exists on disk.
     let check = client.execute_skill(&format!(r#"isFile("{candidate}")"#), None)?;
     let v = check.output.trim().trim_matches('"');
     let file_exists = v != "nil" && v != "0";
@@ -523,7 +512,6 @@ pub fn netlist(
         )));
     }
 
-    // Step 5: Post-process the netlist for standalone Spectre invocation.
     let mut patched = false;
     let mut unknown_analyses: Vec<&str> = Vec::new();
 
@@ -539,7 +527,6 @@ pub fn netlist(
             patched = true;
         }
 
-        // Append missing analysis blocks (skip if already present).
         for kind in analyses {
             match analysis_block(kind) {
                 Some(block) => {
@@ -783,7 +770,6 @@ pub fn check_license() -> Result<Value> {
             "stderr": stderr,
         }))
     } else {
-        // Local mode
         let spectre_bin = cfg.spectre_bin.as_deref().unwrap_or("spectre");
 
         let version_output = Command::new(spectre_bin).arg("-V").output().map_err(|e| {
@@ -809,7 +795,6 @@ pub fn check_license() -> Result<Value> {
             }
         }
 
-        // Find spectre path
         let spectre_path = Command::new("which")
             .arg(spectre_bin)
             .output()

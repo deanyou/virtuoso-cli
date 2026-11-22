@@ -132,21 +132,18 @@ fn resolve_local_direct(
 ) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
     let cfg = ctx.config();
 
-    // Step L1: confirm the session belongs to this machine.
     if !is_local_session(cfg, session) {
         return Err(ProbeSkip {
             reason: "local_ownership_unverified",
         });
     }
 
-    // Step L2: ownership validation when a target is selected.
     if ctx.target_id().is_some() && ctx.validate_session_ownership(session).is_err() {
         return Err(ProbeSkip {
             reason: "ownership_mismatch",
         });
     }
 
-    // Step L3: local port must be reachable.
     if !tcp_reachable(session.port) {
         return Err(ProbeSkip {
             reason: "local_port_unreachable",
@@ -171,7 +168,6 @@ fn resolve_remote_tunnel(
     session: &SessionInfo,
     state: Option<&TunnelState>,
 ) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
-    // Step 1: session ownership.
     if ctx.target_id().is_some() && ctx.validate_session_ownership(session).is_err() {
         return Err(ProbeSkip {
             reason: "ownership_mismatch",
@@ -214,14 +210,12 @@ fn resolve_remote_tunnel(
         });
     }
 
-    // Step 4: state matches current context.
     if ctx.validate_tunnel_ownership(state).is_err() {
         return Err(ProbeSkip {
             reason: "tunnel_context_mismatch",
         });
     }
 
-    // Step 5: forward process identity.
     if state.pid == 0 {
         return Err(ProbeSkip {
             reason: "tunnel_no_pid",
@@ -272,7 +266,6 @@ fn resolve_remote_tunnel(
         });
     }
 
-    // Step 6: local forward port reachable.
     if !tcp_reachable(state.port) {
         return Err(ProbeSkip {
             reason: "forward_port_unreachable",
@@ -468,7 +461,6 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         None
     };
 
-    // Build per-session JSON entries.
     let session_entries: Vec<Value> = displayed
         .iter()
         .map(|s| {
@@ -524,7 +516,6 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         })
         .collect();
 
-    // JSON output.
     if format == OutputFormat::Json {
         let mut result = json!({
             "status": "success",
@@ -538,7 +529,6 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         return Ok(result);
     }
 
-    // Table output.
     if displayed.is_empty() {
         println!("No active Virtuoso sessions found.");
         println!("Start Virtuoso and run RBStart() in CIW to register a session.");
@@ -1406,7 +1396,6 @@ mod tests {
     #[test]
     fn version_skew_mismatch_returns_warning_with_both_versions() {
         const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
-        // Pick something that's guaranteed not to equal CLI_VERSION.
         let other = if CLI_VERSION == "0.0.0" {
             "9.9.9"
         } else {
@@ -2113,7 +2102,7 @@ mod tests {
 
         // Create a session file with an unreachable port.
         let mut s = session();
-        s.port = 1; // unreachable
+        s.port = 1;
         s.save_to_session_file();
 
         let ctx = remote_ctx("remote-eda-01", 40000);
@@ -2167,7 +2156,6 @@ mod tests {
         // local connection) and probe_status=reachable.
         let _cache = CacheDirGuard::new();
 
-        // Bind a real listener to simulate a local daemon port.
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
         let port = listener.local_addr().expect("local addr").port();
 
@@ -2337,7 +2325,6 @@ mod tests {
                 let n = stream.read(&mut buf).unwrap_or(0);
                 let request = String::from_utf8_lossy(&buf[..n]).to_string();
                 if n == 0 {
-                    // Reachability probe (no payload) — nothing to answer.
                     continue;
                 }
                 seen2
@@ -2354,7 +2341,6 @@ mod tests {
                         } else if request.contains("RBDVersion") {
                             (0x02, version.as_bytes())
                         } else {
-                            // Liveness probe → a number.
                             (0x02, b"2")
                         }
                     }
@@ -2521,10 +2507,8 @@ mod tests {
                     continue;
                 }
                 if n == 0 {
-                    // Reachability probe (no payload) — nothing to answer.
                     continue;
                 }
-                // Version probe → a version string; liveness probe → a number.
                 let answer: &[u8] = if request.contains("RBDVersion") {
                     b"\"9.9.9\""
                 } else {
