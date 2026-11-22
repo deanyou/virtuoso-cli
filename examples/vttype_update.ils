@@ -25,7 +25,6 @@ procedure( swap_nmos_vttype(@optional (newVT "sensitive")
   ;;;   quiet    - Suppress progress messages
   
   let((cv objCount replacedCount lib cell view)
-    ; Get current cellview if not specified
     unless(libName
       when(boundp('geGetEditCellView)
         cv = geGetEditCellView()
@@ -40,20 +39,17 @@ procedure( swap_nmos_vttype(@optional (newVT "sensitive")
       error("Please specify libName and cellName, or open a cellview for editing")
     )
     
-    ; Open the cellview
     cv = dbOpenCellViewByType(libName cellName viewName "" "r")
     unless(cv
       error("Could not open cellview %L/%L/%L" libName cellName viewName)
     )
     
-    ; Find all NMOS instances
     objCount = 0
     replacedCount = 0
     
     foreach(inst cv~>instances
       objCount = objCount + 1
       
-      ; Check if it's an NMOS transistor
       when(inst~>cellName
         ; Common NMOS cell name patterns
         when(or(
@@ -77,7 +73,6 @@ procedure( swap_nmos_vttype(@optional (newVT "sensitive")
               )
               
               unless(testOnly || dryRun
-                ; Use dbReplaceProp to update the parameter
                 dbReplaceProp(inst 'vttype newVT)
               )
               replacedCount = replacedCount + 1
@@ -111,7 +106,6 @@ procedure( swap_nmos_vttype(@optional (newVT "sensitive")
       printf("================================\n\n")
     )
     
-    ; Close cellview
     dbClose(cv)
     
     ; Return counts for scripting
@@ -131,7 +125,6 @@ procedure( swap_pmos_vttype(@optional (newVT "sensitive")
   ;;; Same parameters as swap_nmos_vttype but for PMOS devices
   
   let((cv objCount replacedCount lib cell view)
-    ; Get current cellview if not specified
     unless(libName
       when(boundp('geGetEditCellView)
         cv = geGetEditCellView()
@@ -146,20 +139,17 @@ procedure( swap_pmos_vttype(@optional (newVT "sensitive")
       error("Please specify libName and cellName, or open a cellview for editing")
     )
     
-    ; Open the cellview
     cv = dbOpenCellViewByType(libName cellName viewName "" "r")
     unless(cv
       error("Could not open cellview %L/%L/%L" libName cellName viewName)
     )
     
-    ; Find all PMOS instances
     objCount = 0
     replacedCount = 0
     
     foreach(inst cv~>instances
       objCount = objCount + 1
       
-      ; Check if it's a PMOS transistor
       when(inst~>cellName
         ; Common PMOS cell name patterns
         when(or(
@@ -205,7 +195,6 @@ procedure( swap_pmos_vttype(@optional (newVT "sensitive")
       );when
     );foreach
     
-    ; Summary
     unless(quiet
       printf("\n=== PMOS VTTYPE Update Summary ===\n")
       printf("Total instances found: %d\n" objCount)
@@ -216,7 +205,6 @@ procedure( swap_pmos_vttype(@optional (newVT "sensitive")
       printf("================================\n\n")
     )
     
-    ; Close cellview
     dbClose(cv)
     
     ; Return counts for scripting
@@ -260,7 +248,6 @@ procedure( swap_all_vttype(@optional (newVT "sensitive")
       )
     )
     
-    ; Return combined result
     list(nmosResult pmosResult)
   );let
 );procedure
@@ -314,27 +301,22 @@ procedure( report_vttype(@key (libName "") (cellName "") (viewName "schematic"))
 ;;;============================================================================
 
 procedure( set_rvt()
-  ;;; Set Regular VT (RVT) for all transistors
   swap_all_vttype("regular" ?quiet nil)
 )
 
 procedure( set_lvt()
-  ;;; Set Low VT (LVT) for all transistors  
   swap_all_vttype("low" ?quiet nil)
 )
 
 procedure( set_hvt()
-  ;;; Set High VT (HVT) for all transistors
   swap_all_vttype("high" ?quiet nil)
 )
 
 procedure( set_svt()
-  ;;; Set Standard VT (SVT) for all transistors
   swap_all_vttype("sensitive" ?quiet nil)
 )
 
 procedure( set_native()
-  ;;; Set Native VT for all transistors
   swap_all_vttype("native" ?quiet nil)
 )
 

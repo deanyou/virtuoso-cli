@@ -532,7 +532,6 @@ def _skiprules_for(rel_path: str) -> frozenset:
 def expected_bytes(rel_path: str, source_bytes: bytes) -> Tuple[bytes, List[str]]:
     """Return the bytes the Codex tree should hold for one canonical file."""
     if not _is_skill_md(rel_path):
-        # Non-SKILL.md files are copied byte-for-byte.
         return source_bytes, []
     try:
         text = source_bytes.decode("utf-8")
@@ -668,7 +667,6 @@ def apply_plan(root: Path, result: SyncResult, prune: bool) -> int:
         action.status = "created" if action.status == "missing" else "updated"
         written += 1
 
-    # Drop directories that became empty after pruning.
     if prune and target_root.is_dir():
         for dirpath, dirnames, filenames in os.walk(target_root, topdown=False):
             if Path(dirpath) == target_root:

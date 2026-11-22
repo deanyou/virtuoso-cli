@@ -1,9 +1,9 @@
 {
  "groups": {
   ".github/scripts": 34,
-  "examples": 253,
-  "root": 109,
-  "scripts": 112,
+  "examples": 207,
+  "root": 105,
+  "scripts": 109,
   "src": 1904,
   "src/capability": 152,
   "src/client": 2435,

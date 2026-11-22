@@ -33,7 +33,6 @@ procedure(pascDoneCB(session resultsDir @key (errorList nil))
     printf("\n[Callback] Simulation completed\n")
     printf("  Results directory: %L\n" resultsDir)
     
-    ; Check for errors
     when(errorList
       printf("  Errors encountered:\n")
       foreach(err errorList
@@ -64,7 +63,6 @@ procedure(pascErrorCB(session errorMsg @key (errorCode 0))
     printf("  Error: %L\n" errorMsg)
     printf("  Code:  %L\n" errorCode)
     
-    ; Log error to file for later analysis
     logFile = strcat(resultsDir session "sim_errors.log")
     when(logFile
       let((fp)
@@ -96,7 +94,6 @@ procedure(pascStartCB(session params)
   let((analysisType lib cell)
     printf("\n[Callback] Simulation starting\n")
     
-    ; Extract useful info from params if available
     when(params
       when(assoc('analysis params)
         printf("  Analysis: %L\n" cadr(assoc('analysis params)))
@@ -132,17 +129,14 @@ procedure(pascProgressCB(session progressInfo)
   ;;;   progressInfo - Alist with progress data
   
   let((percent timeElapsed)
-    ; Extract progress percentage
     percent = when(assoc('percent progressInfo) 
       cdr(assoc('percent progressInfo))
     )
     
-    ; Extract elapsed time
     timeElapsed = when(assoc('time progressInfo)
       cdr(assoc('time progressInfo))
     )
     
-    ; Update progress display (non-blocking)
     when(percent
       printf("\r[Progress] %3.1f%%" percent)
       when(timeElapsed
@@ -169,7 +163,6 @@ procedure(registerSimulationCallbacks(session)
   let((cbTable)
     printf("\n>>> Registering simulation callbacks <<<\n")
     
-    ; Build callback table
     cbTable = list(
       list('pascDone    'pascDoneCB)
       list('pascError   'pascErrorCB)
@@ -178,14 +171,13 @@ procedure(registerSimulationCallbacks(session)
       list('pascProgress 'pascProgressCB)
     )
     
-    ; Register each callback
     foreach(cb cbTable
       when(boundp('pascSetCallbacks)
         ; Safe way to register - wrap in errset to catch errors
         let((result)
           result = errset(
             apply('pascSetCallbacks list(session car(cb) cdr(cb))
-            t  ; Enable error catching
+            t
           )
           when(result
             printf("  Registered: %L\n" car(cb))
@@ -208,7 +200,6 @@ procedure(unregisterSimulationCallbacks(session)
   
   printf("\n>>> Unregistering simulation callbacks <<<\n")
   
-  ; Set callbacks to nil to unregister
   when(boundp('pascSetCallbacks)
     let((result)
       result = errset(
@@ -247,19 +238,16 @@ procedure(safeSimulationRun(@key (design nil) (analysis "tran") (callbackMode t)
     printf("  Starting Safe Simulation\n")
     printf("========================================\n")
     
-    ; Get Maestro session
     maSession = maGetCurrentSession()
     unless(maSession
       error("No active Maestro session")
     )
     
-    ; Create simulation session
     session = maCreateSimulationSession(maSession ?design design)
     unless(session
       error("Failed to create simulation session")
     )
     
-    ; Register callbacks if enabled
     when(callbackMode
       registerSimulationCallbacks(session)
     )
@@ -267,20 +255,17 @@ procedure(safeSimulationRun(@key (design nil) (analysis "tran") (callbackMode t)
     ; Run simulation with protected error handling
     result = errset(
       begin
-        ; Run the simulation
         maRunSimulation(session)
         
         ; Wait for completion (non-blocking would return immediately)
         ; For blocking mode, simulation waits here
         ; maJoinSimulation(session)  ; Uncomment for blocking mode
         
-        ; Get results
         list(t "Simulation completed successfully")
       end
-      t  ; Enable error catching
+      t
     )
     
-    ; Handle result
     if(result
       then
         printf("\n>>> Simulation SUCCESS <<<\n")
@@ -293,7 +278,6 @@ procedure(safeSimulationRun(@key (design nil) (analysis "tran") (callbackMode t)
       unregisterSimulationCallbacks(session)
     )
     
-    ; Cleanup session
     when(session~>destroy
       session->destroy()
     )
@@ -317,7 +301,6 @@ procedure(debugSimulationCallbacks()
   
   printf("\n=== Callback Debug Report ===\n")
   
-  ; Check if pascSetCallbacks exists
   printf("\n1. Checking pascSetCallbacks function:\n")
   if(boundp('pascSetCallbacks)
     then
@@ -326,7 +309,6 @@ procedure(debugSimulationCallbacks()
       printf("   NOT FOUND - Callbacks may not be available\n")
   )
   
-  ; Check Maestro session
   printf("\n2. Checking Maestro session:\n")
   let((maSession)
     maSession = maGetCurrentSession()
@@ -339,7 +321,6 @@ procedure(debugSimulationCallbacks()
     )
   )
   
-  ; List current callbacks
   printf("\n3. Registered callbacks:\n")
   when(boundp('pascSetCallbacks)
     ; This would require access to internal state
@@ -382,7 +363,6 @@ procedure(testCallbacks()
     allGood = t
     allCBs = '(pascDoneCB pascErrorCB pascStartCB pascAbortCB pascProgressCB)
     
-    ; Test each callback
     foreach(cbName allCBs
       let((cb)
         cb = eval(list('quote cbName))
@@ -392,7 +372,6 @@ procedure(testCallbacks()
       )
     )
     
-    ; Test pascSetCallbacks availability
     printf("\n  pascSetCallbacks: ")
     if(boundp('pascSetCallbacks)
       then
@@ -414,23 +393,18 @@ procedure(demoCallbacks()
   
   printf("\n=== Callback Demo ===\n")
   
-  ; Demo pascStartCB
   printf("\n1. Testing pascStartCB:\n")
   pascStartCB(nil list(analysis 'tran))
   
-  ; Demo pascProgressCB
   printf("\n2. Testing pascProgressCB:\n")
   pascProgressCB(nil list(percent 45.5 time 12.3))
   
-  ; Demo pascDoneCB
   printf("\n3. Testing pascDoneCB:\n")
   pascDoneCB(nil "/path/to/results" errorList nil)
   
-  ; Demo pascErrorCB
   printf("\n4. Testing pascErrorCB:\n")
   pascErrorCB(nil "Test error message" errorCode 123)
   
-  ; Demo pascAbortCB
   printf("\n5. Testing pascAbortCB:\n")
   pascAbortCB(nil "User cancelled")
   

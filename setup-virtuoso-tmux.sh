@@ -18,24 +18,20 @@ BRIDGE_PORT="${VB_PORT:-36539}"
 BRIDGE_TIMEOUT="${VB_TIMEOUT:-60}"
 CLI_DIR="${VIRTUOSO_CLI_DIR:-$HOME/git/virtuoso-cli}"
 
-# Kill existing session
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 
 # Capture pane IDs instead of assuming the user's base-index/pane-base-index.
 LEFT_PANE="$(tmux new-session -d -P -F '#{pane_id}' -s "$SESSION" -x 180 -y 45)"
 RIGHT_PANE="$(tmux split-window -d -h -P -F '#{pane_id}' -t "$LEFT_PANE")"
 
-# Left pane: SSH to container with X11 forwarding
 tmux send-keys -t "$LEFT_PANE" "ssh -X -p $SSH_PORT -i $SSH_KEY $SSH_OPTS $SSH_USER@$SSH_HOST" Enter
 sleep 3
 
-# Source cadence environment
 tmux send-keys -t "$LEFT_PANE" "source $CADENCE_ENV" Enter
 sleep 1
 tmux send-keys -t "$LEFT_PANE" "export DISPLAY=$REMOTE_DISPLAY" Enter
 sleep 1
 
-# Right pane: Local shell for vcli
 tmux send-keys -t "$RIGHT_PANE" "export VB_PORT=$BRIDGE_PORT" Enter
 tmux send-keys -t "$RIGHT_PANE" "export VB_TIMEOUT=$BRIDGE_TIMEOUT" Enter
 tmux send-keys -t "$RIGHT_PANE" "cd $CLI_DIR" Enter
