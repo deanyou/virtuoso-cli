@@ -170,10 +170,8 @@ impl RpcDispatcher {
             api_key,
         } = request;
 
-        // Auth check (fails fast if invalid/missing key)
         let caps = check_auth(api_key.as_deref())?;
 
-        // Capability check — verify the method's domain is allowed
         if !caps.permits_method(&method) {
             return Err(VirtuosoError::Execution(format!(
                 "method '{}' not permitted: missing required capability",
@@ -261,7 +259,6 @@ impl RpcDispatcher {
             "libref" => Self::dispatch_libref(op, params),
             "sim" => self.dispatch_sim(client, op, params),
             _ => {
-                // Try plugin registry for unknown domains
                 match crate::plugins::PluginRegistry::get_global() {
                     Ok(registry) => registry.dispatch(domain, op, params, client),
                     Err(_) => Err(VirtuosoError::Execution(format!(

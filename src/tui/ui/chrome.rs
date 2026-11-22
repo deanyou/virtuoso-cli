@@ -21,9 +21,7 @@ pub fn render_header(frame: &mut Frame, app: &App, theme: &Theme, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Build tab chips
     let (tabs_spans, tabs_width) = build_tabs(app.tab, theme);
-    // Build right-side status badges
     let (status_spans, status_width) = build_status(app, theme);
 
     let title_style = if theme.no_color {
@@ -45,7 +43,6 @@ pub fn render_header(frame: &mut Frame, app: &App, theme: &Theme, area: Rect) {
     let available_for_status = if needs <= total {
         status_width
     } else {
-        // Shrink status to whatever remains after title + gutters + tabs.
         let used = title_width + gutter + tabs_width + gutter;
         total.saturating_sub(used)
     };
@@ -139,7 +136,6 @@ fn truncate_status(spans: Vec<Span<'static>>, available: u16) -> Vec<Span<'stati
     if total <= available as usize {
         return spans;
     }
-    // Simple fallback: concatenate text and truncate via ellipsis.
     let joined: String = spans.iter().map(|s| s.content.as_ref()).collect();
     let trimmed = truncate_to_display_width(&joined, available as usize);
     vec![Span::raw(trimmed)]

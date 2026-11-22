@@ -14,7 +14,7 @@
   "src/mcp": 221,
   "src/ocean": 11,
   "src/plugins": 36,
-  "src/rpc": 359,
+  "src/rpc": 356,
   "src/session": 20,
   "src/skill_finder": 249,
   "src/spectre": 490,
@@ -22,7 +22,7 @@
   "src/sys": 48,
   "src/transaction": 24,
   "src/transport": 3636,
-  "src/tui": 111,
+  "src/tui": 107,
   "tests": 687,
   "tests/docs": 19
  },
