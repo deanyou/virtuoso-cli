@@ -175,9 +175,6 @@ fn offer(client: &VirtuosoClient, op: &Op) -> Result<Value> {
     let manifest = probe(client, op)?;
     let open = open_cellviews(client, op)?;
     if !open.is_empty() {
-        // Refused here rather than at phase 2 so the nod is not spent on a
-        // delete that cannot run: `ddDeleteObj` takes an exclusive lock over
-        // the whole subtree and would fail anyway, with a less useful message.
         return Err(VirtuosoError::Conflict(format!(
             "{}: {} is open in Virtuoso ({}) — close it first ('cell.close', or the window in the GUI). \
              ddDeleteObj cannot lock a subtree that is in use.",
@@ -227,7 +224,6 @@ fn execute(client: &VirtuosoClient, op: &Op, token: &str) -> Result<Value> {
     let manifest = probe(client, op)?;
     let fresh = manifest_hash(&manifest);
     if record["manifest_hash"] != json!(fresh) {
-        // Whatever the human approved is not what is in front of us now.
         remove_token(token);
         return Err(VirtuosoError::Conflict(format!(
             "the design changed since this token was issued — approval withdrawn.\n\
@@ -241,8 +237,6 @@ fn execute(client: &VirtuosoClient, op: &Op, token: &str) -> Result<Value> {
 
     let open = open_cellviews(client, op)?;
     if !open.is_empty() {
-        // Not a token problem — the token stays valid, so closing the cellview
-        // and retrying works without asking the human to approve twice.
         return Err(VirtuosoError::Conflict(format!(
             "{}: {} was opened in Virtuoso after the manifest was approved — close it and retry with the same token",
             op.action,
@@ -250,8 +244,6 @@ fn execute(client: &VirtuosoClient, op: &Op, token: &str) -> Result<Value> {
         )));
     }
 
-    // One-shot, and spent *before* the irreversible part. A token that survived
-    // a crash mid-delete would be an approval for a state nobody has seen.
     remove_token(token);
 
     command_log::log_command(
@@ -307,11 +299,7 @@ fn open_cellviews(client: &VirtuosoClient, op: &Op) -> Result<Vec<Value>> {
         .filter(|c| {
             c["lib"] == json!(target.lib_name())
                 && c["cell"] == json!(target.cell_name())
-                // A whole-cell delete is blocked by any view of it; a
-                // single-view delete only by that view.
-                && target
-                    .view_name()
-                    .is_none_or(|v| c["view"] == json!(v))
+                && target.view_name().is_none_or(|v| c["view"] == json!(v))
         })
         .cloned()
         .collect())
@@ -523,8 +511,6 @@ mod tests {
         let _s = store();
         let a = mint("cell.delete", &manifest()).expect("mints");
         let b = mint("cell.delete", &manifest()).expect("mints");
-        // Same action, same manifest. If the token were a hash of them, a
-        // caller who knows the manifest could mint its own approval.
         assert_ne!(a, b);
     }
 
@@ -563,7 +549,6 @@ mod tests {
         let t = mint("cell.delete", &manifest()).expect("mints");
         let path = token_dir().join(format!("{t}.json"));
 
-        // Backdate it past its TTL rather than sleeping for five minutes.
         let mut record: Value =
             serde_json::from_str(&fs::read_to_string(&path).expect("reads")).expect("parses");
         record["expires_at"] = json!(unix_now() - 1);
@@ -588,8 +573,6 @@ mod tests {
             .permissions()
             .mode()
             & 0o777;
-        // Shared box: another user reading a valid approval is the whole point
-        // of 0600.
         assert_eq!(mode, 0o600, "token file mode {mode:o}");
     }
 
@@ -658,8 +641,6 @@ mod tests {
     #[test]
     #[serial]
     fn the_allow_set_is_enforced_before_any_bridge_call() {
-        // No client, no tunnel, no Virtuoso: `DeleteTarget` refuses first, so a
-        // delete aimed at the PDK never reaches the network.
         for bad in ["pdkLib", "analogLib", "basic"] {
             let e = cell(bad, "nmos", None).expect_err("must refuse");
             assert!(

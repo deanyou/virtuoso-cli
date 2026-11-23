@@ -84,7 +84,6 @@ pub fn broadcast(code: &str, timeout: u64) -> Result<Value> {
         return Err(VirtuosoError::NotFound("no live sessions found".into()));
     }
 
-    // Collect results preserving original session order (by index)
     let results: Vec<(usize, Value)> = std::thread::scope(|s| {
         let handles: Vec<_> = sessions
             .iter()
@@ -124,7 +123,6 @@ pub fn broadcast(code: &str, timeout: u64) -> Result<Value> {
             .collect()
     });
 
-    // Sort by original index to preserve session list order
     let mut results: Vec<Value> = results.into_iter().map(|(_, v)| v).collect();
     results.sort_by(|a, b| {
         let idx_a = sessions
@@ -197,7 +195,6 @@ pub fn eval(
 ) -> Result<Value> {
     use std::io::Read;
 
-    // Input validation: mutually exclusive modes
     if stdin && code.is_some() {
         return Err(VirtuosoError::Config(
             "pass SKILL via argument OR --stdin, not both".into(),
@@ -223,10 +220,6 @@ pub fn eval(
         c
     };
 
-    // Wrap in progn on its own lines so that:
-    // - Multi-statement inputs work without user adding progn
-    // - Trailing `; comment` doesn't swallow the closing paren
-    // - Embedded newlines flow through unchanged
     let wrapped = format!("progn(\n{}\n)", skill);
 
     let client = VirtuosoClient::from_context(ctx)?;
@@ -249,8 +242,6 @@ fn load_finder(cfg: &Config, refresh: bool) -> Result<SKILLFinder> {
     let mut finder = SKILLFinder::new();
 
     if cfg.is_remote() {
-        // Remote mode: use cache or sync. Reject an explicit `native` backend
-        // before any ssh/scp sync runs, so the mismatch is never swallowed.
         crate::transport::backend::require_openssh(cfg)?;
         let host = cfg.remote_host.clone().unwrap_or_default();
         let target = cfg.ssh_target();
@@ -258,13 +249,11 @@ fn load_finder(cfg: &Config, refresh: bool) -> Result<SKILLFinder> {
         let cshrc = cfg.cadence_cshrc.as_deref();
 
         if refresh {
-            // Force refresh: clear cache first, then sync
             let _ = crate::skill_finder::clear_cache(&host);
         }
 
         let _ = crate::skill_finder::load_or_sync(&mut finder, &host, &target, ssh_key, cshrc)?;
     } else {
-        // Local mode: find from local Cadence installation
         if let Some(dir) = find_skill_finder_dir(cfg)? {
             finder.load(&dir).map_err(|e| {
                 VirtuosoError::Config(format!("failed to load SKILL Finder: {}", e))
@@ -364,8 +353,6 @@ pub fn info(ctx: &crate::context::CommandContext, func_name: &str) -> Result<Val
         }));
     }
 
-    // Not documented. Offer near misses so the caller has somewhere to go, and
-    // say plainly what "not found" means here.
     let suggestions: Vec<_> = finder
         .search(func_name, SearchMode::Fuzzy, 10, false)
         .into_iter()
@@ -390,7 +377,6 @@ pub fn info(ctx: &crate::context::CommandContext, func_name: &str) -> Result<Val
 /// 2. Discover from the local Cadence installation (`virtuoso`, then `spectre`)
 /// 3. Discover on the remote host over SSH (via `VB_CADENCE_CSHRC`)
 fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
-    // 1. Check VB_SKILL_FINDER_DIR
     if let Ok(dir) = std::env::var("VB_SKILL_FINDER_DIR") {
         if !dir.is_empty() && std::path::Path::new(&dir).exists() {
             tracing::debug!("Using VB_SKILL_FINDER_DIR: {}", dir);
@@ -398,10 +384,6 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
         }
     }
 
-    // 2. For local, walk up from the Cadence binaries on PATH. `virtuoso`
-    //    first: a Spectre-only install has a `doc/finder/SKILL` too, but it
-    //    holds 2 databases instead of the DFII tree's 39 — stopping there is
-    //    what left every db/dd/ge/sch/hi lookup unanswerable.
     if !cfg.is_remote() {
         for bin in ["virtuoso", "spectre"] {
             let Ok(out) = std::process::Command::new("command")
@@ -415,9 +397,6 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
             if path.is_empty() || path == bin {
                 continue;
             }
-            // Walk up until a doc/finder/SKILL turns up, rather than assuming
-            // a fixed depth — `tools/dfII/bin/virtuoso` and
-            // `tools/spectre/bin/spectre` do not sit at the same level.
             let mut cur = std::path::Path::new(&path).parent();
             while let Some(dir) = cur {
                 let finder_dir = dir.join("doc/finder/SKILL");
@@ -430,9 +409,7 @@ fn find_skill_finder_dir(cfg: &Config) -> Result<Option<std::path::PathBuf>> {
         }
     }
 
-    // 3. For remote, try to discover using SSH if available
     if cfg.is_remote() {
-        // Try to find via SSH using the cadence cshrc
         if let Some(ref cshrc) = cfg.cadence_cshrc {
             if let Ok(Some(path)) =
                 discover_skill_finder_remote(&cfg.ssh_target(), cfg.ssh_key.as_deref(), cshrc)
@@ -491,7 +468,6 @@ pub fn sync_cache(
 
     let old_count = crate::skill_finder::cache_file_count(&target_host);
 
-    // Sync with or without progress
     let new_count = if verbose {
         fn print_progress(msg: &str) {
             eprintln!("{}", msg);
@@ -551,7 +527,6 @@ pub fn show_cache(
         }));
     }
 
-    // Show cache info
     if let Some(info) = crate::skill_finder::cache_info(&target_host) {
         Ok(json!({
             "host": target_host,
@@ -587,8 +562,6 @@ mod tests {
 
     #[test]
     fn dash_reads_stdin_and_keeps_inner_quotes() {
-        // PowerShell 5.x drops the quotes in `vcli skill exec 'getShellEnvVar("USER")'`.
-        // `vcli skill exec -` must deliver the expression bytes unchanged.
         let raw = r#"getShellEnvVar("USER")"#;
         let mut input = Cursor::new(raw.as_bytes());
         let got = resolve_skill_exec_code(Some("-"), None, &mut input).unwrap();

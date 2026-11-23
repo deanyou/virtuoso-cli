@@ -46,7 +46,6 @@ impl Drop for EnvGuard {
 #[test]
 #[serial_test::serial]
 fn cli_config_check_with_broken_active_target_emits_json_and_nonzero_exit() {
-    // Isolate every variable that could shift selection or attribution.
     let _env = EnvGuard::new(&[
         "VB_TARGETS_FILE",
         "VB_TARGET",
@@ -57,10 +56,6 @@ fn cli_config_check_with_broken_active_target_emits_json_and_nonzero_exit() {
         "VB_PORT",
     ]);
 
-    // Write a targets.yaml whose active_target points at a target that
-    // does not exist in the `targets:` map. This is the canonical
-    // "selection failure" scenario: resolve_selection / resolve_from_selection
-    // must surface the error through build_report rather than exit early.
     let tmp = tempfile::tempdir().expect("tempdir");
     let targets_path = tmp.path().join("targets.yaml");
     std::fs::write(
@@ -79,7 +74,6 @@ fn cli_config_check_with_broken_active_target_emits_json_and_nonzero_exit() {
         .output()
         .expect("vcli config check should spawn");
 
-    // 1. Non-zero exit code — a broken config must not report success.
     assert!(
         !output.status.success(),
         "expected non-zero exit for broken active_target, got success. \
@@ -87,7 +81,6 @@ fn cli_config_check_with_broken_active_target_emits_json_and_nonzero_exit() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // 2. stdout must be valid JSON (not a bare error message).
     let stdout = String::from_utf8_lossy(&output.stdout);
     let json: serde_json::Value = serde_json::from_str(&stdout).unwrap_or_else(|e| {
         panic!(
@@ -96,15 +89,12 @@ fn cli_config_check_with_broken_active_target_emits_json_and_nonzero_exit() {
         )
     });
 
-    // 3. valid must be false.
     assert_eq!(
         json.get("valid").and_then(|v| v.as_bool()),
         Some(false),
         "expected valid=false, got: {json}"
     );
 
-    // 4. An ILLEGAL_CONFIG diagnostic must be present, carrying the
-    //    underlying selection error.
     let diagnostics = json
         .get("diagnostics")
         .and_then(|v| v.as_array())
@@ -122,16 +112,12 @@ fn cli_config_check_with_broken_active_target_emits_json_and_nonzero_exit() {
         "diagnostic must be level=error, got: {diagnostics:?}"
     );
 
-    // 5. status should reflect the error (not "ok").
     assert_eq!(
         json.get("status").and_then(|v| v.as_str()),
         Some("error"),
         "expected status=error, got: {json}"
     );
 
-    // 6. The report should still contain entries (config that *could* be
-    //    read is surfaced alongside the failure — strictly more info than
-    //    a bare exit).
     assert!(
         json.get("entries").and_then(|v| v.as_array()).is_some(),
         "report should still carry entries array, got: {json}"
@@ -141,10 +127,6 @@ fn cli_config_check_with_broken_active_target_emits_json_and_nonzero_exit() {
 #[test]
 #[serial_test::serial]
 fn cli_config_check_with_valid_target_exits_zero_and_valid_true() {
-    // Complementary happy-path: a well-formed targets.yaml with a valid
-    // active_target must exit 0 with valid=true. This ensures the
-    // broken-target test above isn't passing trivially because *all*
-    // config checks fail.
     let _env = EnvGuard::new(&[
         "VB_TARGETS_FILE",
         "VB_TARGET",

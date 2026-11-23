@@ -79,14 +79,12 @@ impl SessionHeartbeat {
             let client = VirtuosoClient::new(&session.host, session.port, 5000);
             match client.reconnect_session(&session.id) {
                 Ok(true) => {
-                    // Session was stale but Virtuoso reconnected — stale flag already cleared
                     tracing::debug!(
                         "session '{}' is alive (was attempting reconnect)",
                         session.id
                     );
                 }
                 Ok(false) => {
-                    // Session is still stale — mark it
                     tracing::warn!(
                         "session '{}' on port {} is stale (Virtuoso pid={} may have crashed)",
                         session.id,

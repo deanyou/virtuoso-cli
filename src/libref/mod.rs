@@ -57,8 +57,6 @@ mod html;
 pub mod registry;
 mod types;
 
-// Re-exported as the module's public surface; the binaries use only a
-// subset of it, the way `skill_finder` re-exports `parse_fnd_directory`.
 #[allow(unused_imports)]
 pub use analoglib::{
     parse_analoglib_directory, parse_analoglib_directory_reported, APPENDIX_BASENAME,
@@ -333,13 +331,7 @@ impl LibRefFinder {
         for symbol in &self.symbols {
             for param in &symbol.params {
                 let matched = match_text(&param.name, query, mode)
-                    // `F7` is a real parameter of `vsin`; the manual just
-                    // prints it as part of `F1 - F50`. Searching the name a
-                    // caller will actually use has to find it.
-                    || param
-                        .expands_to
-                        .iter()
-                        .any(|n| match_text(n, query, mode))
+                    || param.expands_to.iter().any(|n| match_text(n, query, mode))
                     || (mode == SearchMode::Fuzzy
                         && (contains_ci(&param.label, query)
                             || contains_ci(&param.description, query)));
@@ -348,12 +340,6 @@ impl LibRefFinder {
                 }
             }
         }
-        // Exact CDF-name matches first, then name substrings, then the GUI
-        // label by how squarely it matches, and only then prose. Without the
-        // tiers, `"amplitude"` sorts purely by symbol name and the answer it
-        // exists to give — `vsin`/`va`, labelled exactly *Amplitude* — lands at
-        // rank 24 behind description-only hits, which reads as "vsin has no
-        // amplitude parameter" to anyone who passed a sane `limit`.
         let q = query.to_lowercase();
         hits.sort_by(|a, b| {
             let rank = |h: &ParamHit| {
@@ -583,8 +569,6 @@ pub fn parse_doc_dirs(stdout: &str) -> Vec<(&'static str, String)> {
         if !dir.starts_with('/') {
             continue;
         }
-        // A name the registry does not know is a probe/table mismatch, not a
-        // library — syncing it would fill the cache with unattributable files.
         let Some(doc) = registry::lookup(lib.trim()) else {
             continue;
         };
@@ -608,8 +592,6 @@ fn find_remote_doc_dirs(
 
     let dirs = parse_doc_dirs(&String::from_utf8_lossy(&output.stdout));
     if dirs.is_empty() {
-        // An ssh that never reached a shell also prints nothing on stdout;
-        // keep its stderr so a refused key is not reported as a missing manual.
         let stderr = String::from_utf8_lossy(&output.stderr);
         let ssh_said = match stderr.trim() {
             "" => String::new(),
@@ -665,8 +647,6 @@ where
     }
 
     let mut synced = 0usize;
-    // Written files per library, so a library that failed to download does not
-    // get its previous copies pruned by another library's success.
     let mut written: std::collections::BTreeMap<String, Vec<std::ffi::OsString>> =
         Default::default();
     let mut failed: std::collections::BTreeSet<String> = Default::default();
@@ -675,8 +655,6 @@ where
         let Some(doc) = registry::lookup(lib) else {
             continue;
         };
-        // An unparsed library's manual is on the box; downloading it would fill
-        // the cache with files nothing reads. Its status already says so.
         if !doc.is_parsed() {
             continue;
         }
@@ -753,7 +731,6 @@ where
         }
     }
 
-    // A half-finished sync must not delete the copies we still have.
     for (key, names) in &written {
         if failed.contains(key) || names.is_empty() {
             continue;
@@ -913,7 +890,6 @@ mod tests {
     fn label_matches_outrank_description_only_matches() {
         let mut symbols = corpus().symbols().to_vec();
         symbols.push(LibSymbol {
-            // Sorts before `vsin` alphabetically, and matches only in prose.
             name: "aaa_prose".into(),
             params: vec![param(
                 "zz",
@@ -1017,7 +993,6 @@ mod tests {
             "vsin"
         );
         assert_eq!(f.search("Passive", SearchMode::Fuzzy, 10)[0].name, "cap");
-        // Non-fuzzy modes stay name-shape filters.
         assert!(f.search("sinusoidal", SearchMode::Prefix, 10).is_empty());
     }
 
@@ -1076,9 +1051,6 @@ mod tests {
         let script = remote_doc_probe_script(None);
         assert!(script.contains("for b in virtuoso spectre"));
         assert!(script.contains("walk_up"));
-        // A `||` *inside* the loop body (`command -v … || continue`) is
-        // per-binary and correct. What defect K needs excluded is one
-        // expression that stops once the first binary resolves.
         assert!(
             !script
                 .lines()
@@ -1101,8 +1073,6 @@ mod tests {
             assert!(script.contains(l.doc_subdir), "{} not probed", l.lib);
             assert!(script.contains(l.lib), "{} not labelled", l.lib);
         }
-        // `NoManual` has no directory; probing for `""` would match `$p/` and
-        // hand back the release root as this library's manual.
         assert!(!script.contains("'' 'ahdlLib'"));
     }
 

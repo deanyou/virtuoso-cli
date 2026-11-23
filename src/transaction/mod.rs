@@ -92,13 +92,11 @@ impl TransactionManager {
             .ok_or_else(|| VirtuosoError::Execution("no active transaction".into()))?;
         let snap = &tx.snapshot;
 
-        // Re-open the cellview
         let open_skill = client
             .schematic
             .open_cellview(&snap.lib, &snap.cell, &snap.view);
         client.execute_skill(&open_skill, None)?;
 
-        // Re-create all instances from snapshot
         let mut ed = crate::client::editor::SchematicEditor::new(client);
         for inst in &snap.instances {
             ed.add_instance(

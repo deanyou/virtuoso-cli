@@ -33,13 +33,9 @@ pub fn plain(s: &str) -> String {
         .replace("&#8217;", "'")
         .replace("&#8220;", "\"")
         .replace("&#8221;", "\"")
-        // Em/en dashes: `basicLib` writes the menu path *Create — Pin* with
-        // `&#8212;`, and a literal `&#8212;` in the answer is the tool showing
-        // its own encoding rather than the manual's words.
         .replace("&#8211;", "-")
         .replace("&#8212;", "-")
         .replace("&#169;", "(c)")
-        // `&amp;` last: doing it first would re-expand `&amp;lt;` into `<`.
         .replace("&amp;", "&");
     RE_WS.replace_all(&unescaped, " ").trim().to_string()
 }
@@ -180,7 +176,6 @@ mod tests {
         assert_eq!(plain("a&nbsp;&amp;&nbsp;b"), "a & b");
         assert_eq!(plain("Create &#8212; Pin"), "Create - Pin");
         assert_eq!(plain("1 &#8211; 2"), "1 - 2");
-        // `&amp;` is expanded last so an escaped entity survives intact.
         assert_eq!(plain("&amp;lt;"), "&lt;");
     }
 
@@ -207,7 +202,6 @@ mod tests {
         assert_eq!(by("Categories").depth, 1);
         assert_eq!(by("Pins").depth, 2);
         assert_eq!(by("ipin").depth, 3);
-        // The trap: `Obsolete` has no children, so "leaf" would call it a cell.
         assert_eq!(by("Obsolete").depth, 2);
     }
 

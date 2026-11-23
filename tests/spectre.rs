@@ -13,13 +13,9 @@ use virtuoso_cli::ocean::{
 fn test_setup_skill_generates_progn() {
     let skill = setup_skill("myLib", "myCell", "schematic", "spectre");
 
-    // Should use progn to wrap multiple expressions
     assert!(skill.starts_with("progn("));
-    // Should set simulator
     assert!(skill.contains("spectre"));
-    // Should call design with escaped library/cell/view
     assert!(skill.contains(r#"design("myLib" "myCell" "schematic")"#));
-    // Should include resultsDir
     assert!(skill.contains("resultsDir()"));
 }
 
@@ -28,7 +24,6 @@ fn test_setup_skill_generates_progn() {
 fn test_setup_skill_escaping() {
     let skill = setup_skill(r#"lib"with"quotes"#, "normal", "schematic", "spectre");
 
-    // Quotes should be escaped in the lib name
     assert!(skill.contains(r#"\"#));
 }
 
@@ -57,7 +52,6 @@ fn test_analysis_skill_simple_booleans() {
 
     let skill = analysis_skill_simple("tran", &params);
 
-    // Booleans should NOT be quoted
     assert!(skill.contains("?conservative t"));
     assert!(skill.contains("?disable nil"));
 }
@@ -71,7 +65,6 @@ fn test_analysis_skill_simple_strings() {
 
     let skill = analysis_skill_simple("tran", &params);
 
-    // Strings should be quoted
     assert!(skill.contains(r#"?errpreset "moderate""#));
     assert!(skill.contains(r#"?engine "spectre""#));
 }
@@ -83,16 +76,11 @@ fn test_sweep_skill_structure() {
     let exprs = vec!["VT(\"M1\")".to_string()];
     let skill = sweep_skill("VDD", &values, "dc", &exprs);
 
-    // Should use let for results
     assert!(skill.contains("let((results)"));
-    // Should use foreach with value list
     assert!(skill.contains("foreach(val '("));
-    // Should use desVar to set sweep variable
     assert!(skill.contains(r#"desVar("VDD" val)"#));
-    // Should call run and selectResult
     assert!(skill.contains("run()"));
     assert!(skill.contains("selectResult('dc)"));
-    // Should collect results and reverse
     assert!(skill.contains("reverse(results)"));
 }
 
@@ -107,7 +95,6 @@ fn test_sweep_skill_multiple_measures() {
     ];
     let skill = sweep_skill("Vin", &values, "dc", &exprs);
 
-    // All expressions should appear
     assert!(skill.contains("VT(\"M1\" \"vgs\")"));
     assert!(skill.contains("VT(\"M2\" \"vds\")"));
     assert!(skill.contains("ID(\"I1\")"));
@@ -159,7 +146,6 @@ fn test_parse_skill_list_flat() {
     let input = "(1.0 2.0 3.0)";
     let result = parse_skill_list(input);
 
-    // Flat list becomes single row
     assert_eq!(result.len(), 1);
     assert_eq!(result[0], vec!["1.0", "2.0", "3.0"]);
 }
@@ -193,7 +179,7 @@ fn test_corner_skill_structure() {
         corners: vec![Corner {
             name: "tt".to_string(),
             section: "tt".to_string(),
-            temp: 27.0, // Use 27.0 so it outputs "27" not "-40"
+            temp: 27.0,
             vars: HashMap::new(),
         }],
         measures: vec![Measure {
@@ -204,18 +190,12 @@ fn test_corner_skill_structure() {
 
     let skill = corner_skill(&config);
 
-    // Should call simulator and design
     assert!(skill.contains("simulator('spectre)"));
     assert!(skill.contains(r#"design("myLib" "myCell" "schematic")"#));
-    // Should include analysis
     assert!(skill.contains("analysis('tran"));
-    // Should include modelFile
     assert!(skill.contains("modelFile"));
-    // Should include temp (format: temp(27))
     assert!(skill.contains("temp("));
     assert!(skill.contains("27"));
-    // Should call run
     assert!(skill.contains("run()"));
-    // Should collect results
     assert!(skill.contains("reverse(results)"));
 }

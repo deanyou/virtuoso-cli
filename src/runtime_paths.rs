@@ -75,7 +75,6 @@ pub fn log_root() -> PathBuf {
             .or_else(|| env_path("APPDATA"))
             .unwrap_or_else(|| PathBuf::from("."))
     } else {
-        // Linux: share state/log under cache so legacy `~/.cache/virtuoso_bridge/logs` still works.
         cache_root()
     };
     base.join(APP_DIR).join("logs")
@@ -85,7 +84,7 @@ pub fn log_root() -> PathBuf {
 /// `XDG_STATE_HOME/artifacts` → `cache_root()/artifacts` (so artefacts live
 /// inside the cache by default — same place the legacy code wrote screenshots
 /// to via `Path("output")` when the user passed a relative path).
-#[allow(dead_code)] // exposed for future use (digital-import, sim-output, etc.)
+#[allow(dead_code)]
 pub fn artifact_root() -> PathBuf {
     if let Some(p) = env_path("VB_OUTPUT_DIR") {
         return p;
@@ -100,7 +99,7 @@ pub fn artifact_root() -> PathBuf {
 }
 
 /// Tmp root, honouring `VB_TMP_DIR` → `VB_HOME/tmp` → `TMPDIR`/`/tmp`.
-#[allow(dead_code)] // exposed for future use (process sweeps, sim temp, etc.)
+#[allow(dead_code)]
 pub fn tmp_root() -> PathBuf {
     if let Some(p) = env_path("VB_TMP_DIR") {
         return p;
@@ -171,7 +170,7 @@ pub fn command_log_file() -> PathBuf {
 /// Legacy path (pre-runtime_paths) for state files. Returns
 /// `~/.cache/virtuoso_bridge/<name>` (or `<name>_<profile>.json`) — kept so
 /// the refactor doesn't strand files written by older versions.
-#[allow(dead_code)] // exposed for migration / future use
+#[allow(dead_code)]
 pub fn legacy_cache_file(name: &str, profile: Option<&str>) -> PathBuf {
     let mut p = cache_root().join(APP_DIR);
     if let Some(prof) = profile {
@@ -347,7 +346,6 @@ mod tests {
     #[serial]
     fn env_var_with_blank_value_is_ignored() {
         with_env("VB_CACHE_DIR", Some(""), || {
-            // Blank env var should not produce an empty path
             let p = cache_subdir(&["x"]);
             assert!(!p.to_string_lossy().is_empty());
         });
@@ -406,9 +404,6 @@ mod tests {
     #[test]
     #[serial]
     fn cache_root_vb_home_cache_takes_priority_over_xdg_cache_home() {
-        // Actual precedence: VB_CACHE_DIR > VB_HOME/cache > XDG_CACHE_HOME > dirs.
-        // Documenting this with an explicit test so a future refactor that
-        // reorders the precedence chain cannot silently flip it.
         with_env_many(
             &[
                 ("VB_HOME", Some("/tmp/test-cr-4-vbhome")),
@@ -498,9 +493,6 @@ mod tests {
     #[test]
     #[serial]
     fn state_root_vb_home_state_takes_priority_over_xdg_state_home() {
-        // Actual precedence: VB_STATE_DIR > VB_HOME/state > XDG_STATE_HOME > cache_root.
-        // Documenting this with an explicit test so a future refactor that
-        // reorders the precedence chain cannot silently flip it.
         with_env_many(
             &[
                 ("VB_HOME", Some("/tmp/test-sr-3-vbhome")),
@@ -516,8 +508,6 @@ mod tests {
     #[test]
     #[serial]
     fn state_root_falls_back_to_cache_root() {
-        // Back-compat: when nothing is set, state_root() should still produce
-        // a path inside the cache root (legacy state.json location).
         with_env_many(
             &[
                 ("VB_STATE_DIR", None),
@@ -743,8 +733,6 @@ mod tests {
     #[test]
     #[serial]
     fn legacy_cache_file_tracks_cache_root_changes() {
-        // legacy_cache_file should follow VB_CACHE_DIR / VB_HOME / XDG
-        // because it delegates to cache_root().
         with_env_many(
             &[
                 ("VB_HOME", Some("/tmp/test-legacy-3")),

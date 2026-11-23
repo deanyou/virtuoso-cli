@@ -94,16 +94,11 @@ impl MaestroResult {
                 continue;
             }
 
-            // Clean up CSV artifacts: trailing 'n' (newline in CSV cell)
             let clean_line = line.trim_end_matches('n');
 
-            // Check if this is a Parameters line
-            // Format: "Parameters: VDD=0.9, VIN=1.0, ..."
-            // Handle both "Parameters:" and "Parameters:" prefix
             let params_str = if clean_line.starts_with("Parameters:") {
                 Some(clean_line.strip_prefix("Parameters:").unwrap().trim())
             } else if clean_line.starts_with("\"Parameters:") {
-                // Handle quoted version: "Parameters: VDD=0.9"
                 clean_line
                     .trim_matches('"')
                     .strip_prefix("Parameters:")
@@ -113,7 +108,6 @@ impl MaestroResult {
             };
 
             if let Some(params) = params_str {
-                // Save previous point if exists
                 if let Some(pt) = current_point.take() {
                     if !current_outputs.is_empty() || !current_params.is_empty() {
                         result.points.push(MaestroPoint {
@@ -123,7 +117,6 @@ impl MaestroResult {
                         });
                     }
                 }
-                // Parse parameters: "VDD=0.9, VIN=1.0"
                 for param in params.split(',') {
                     let param = param.trim();
                     if let Some((key, val)) = param.split_once('=') {
@@ -134,13 +127,9 @@ impl MaestroResult {
                         }
                     }
                 }
-                // NOTE: Don't continue here - there might be data on the same line or next line
-                // Actually, in Maestro CSV, Parameters and data are on separate lines
                 continue;
             }
 
-            // Skip header/comment lines
-            // Header format: ",,Parameter,Nominal,,," or "Point,Test,Output,..."
             if line.starts_with(',')
                 || line.starts_with("Point,")
                 || line.starts_with("\"\"\"")
@@ -149,16 +138,12 @@ impl MaestroResult {
                 continue;
             }
 
-            // Parse data line: "1, ac_test, Gain_dB, 21.63, < 20p, 1, passed"
             let parts: Vec<&str> = line.split(',').collect();
             if parts.len() >= 4 {
-                // First column is point number
                 if let Ok(pt) = parts[0].trim().parse::<usize>() {
-                    // Check if point changed (first point doesn't count as "changed")
                     let point_changed = current_point.map(|p| p != pt).unwrap_or(false);
 
                     if point_changed {
-                        // Save previous point
                         if let Some(prev_pt) = current_point.take() {
                             if !current_outputs.is_empty() || !current_params.is_empty() {
                                 result.points.push(MaestroPoint {
@@ -168,14 +153,12 @@ impl MaestroResult {
                                 });
                             }
                         }
-                        // Clear state for new point (params may be set by new Parameters line)
                         current_params.clear();
                         current_outputs.clear();
                     }
 
                     current_point = Some(pt);
 
-                    // Parse output entry
                     let test_name = parts[1].trim().to_string();
                     let output_name = parts[2].trim().to_string();
                     let value = parts
@@ -219,7 +202,6 @@ impl MaestroResult {
                         },
                     );
 
-                    // Track overall spec status from first test
                     if result.overall_spec.is_none() {
                         result.overall_spec = pass_fail;
                     }
@@ -227,7 +209,6 @@ impl MaestroResult {
             }
         }
 
-        // Save last point
         if let Some(pt) = current_point {
             if !current_outputs.is_empty() || !current_params.is_empty() {
                 result.points.push(MaestroPoint {
@@ -299,7 +280,6 @@ mod tests {
 
     #[test]
     fn test_parse_single_point() {
-        // CSV format with Parameters line followed by data
         let csv = "Parameters: VDD=0.9\n1,ac_test,Gain_dB,21.63,,,passed\n1,ac_test,Phase_deg,-135,,,passed";
         let result = MaestroResult::parse_csv(csv, "Interactive.1");
 
@@ -358,7 +338,6 @@ mod tests {
 
     #[test]
     fn test_parse_with_trailing_n() {
-        // CSV with trailing 'n' on lines (Maestro CSV artifact)
         let csv = "Parameters: VDD=0.9n\n1,test,out,1.0,,,passedn";
         let result = MaestroResult::parse_csv(csv, "Test.1");
 

@@ -52,22 +52,15 @@ impl JobProgressTracker {
     }
 
     fn parse_log_content(job_id: &str, content: &str, _size: u64) -> JobEvent {
-        // Spectre progress patterns:
-        // - "Simulation running" (initial)
-        // - "Time: 1.234e-9 s" (time point progress)
-        // - "Iteration 1234" (iteration count)
-        // - "completes with 0 errors" (completion)
-        // - "Error:" (failure)
 
         let lines: Vec<&str> = content.lines().collect();
 
-        // Check for completion or errors first
         for line in lines.iter().rev() {
             let trimmed = line.trim();
             if trimmed.contains("completes with 0 errors") {
                 return JobEvent::Completed {
                     job_id: job_id.to_string(),
-                    duration_ms: 0, // Duration tracked separately
+                    duration_ms: 0,
                     errors: Vec::new(),
                 };
             }
@@ -79,7 +72,6 @@ impl JobProgressTracker {
             }
         }
 
-        // Extract progress from simulation output
         let mut percent = None;
         let mut message = String::new();
         let mut iteration = None;
@@ -87,20 +79,17 @@ impl JobProgressTracker {
 
         for line in lines.iter().rev().take(20) {
             let trimmed = line.trim();
-            // Look for iteration info: "Iteration 1234"
             if let Some(idx) = trimmed.find("Iteration ") {
                 let rest = &trimmed[idx + 10..];
                 if let Some(end) = rest.find(char::is_whitespace) {
                     if let Ok(n) = rest[..end].parse::<u64>() {
                         iteration = Some(n);
-                        // Rough percent estimate based on iteration
                         if let Some(total) = self.total_iterations {
                             percent = Some((n as f32 / total as f32) * 100.0);
                         }
                     }
                 }
             }
-            // Look for time: "Time: 1.234e-6 s" or "t=1200u"
             if let Some(idx) = trimmed.find("Time: ") {
                 let rest = &trimmed[idx + 6..];
                 if let Some(end) = rest.find(' ') {
@@ -156,7 +145,6 @@ pub fn spawn_progress_tracker(
             match tracker.poll() {
                 Ok(Some(event)) => {
                     sink.emit(event);
-                    // Stop polling on terminal events
                     match &event {
                         JobEvent::Completed { .. }
                         | JobEvent::Failed { .. }

@@ -85,7 +85,6 @@ impl SshServerFixture {
         if !gen(&host_key) || !gen(&client_key) {
             return None;
         }
-        // Copy the public key into authorized_keys and lock it down.
         let pub_key = std::fs::read_to_string(client_key.with_extension("pub")).ok()?;
         std::fs::write(&authorized, pub_key).ok()?;
         let _ = Command::new("chmod")
@@ -125,8 +124,6 @@ impl SshServerFixture {
             child,
         };
 
-        // Readiness: a real ssh round-trip, not just a TCP connect, because the
-        // server may listen yet reject connections (e.g. sandbox failures).
         if fixture.wait_until_reachable(Duration::from_secs(8)) {
             Some(fixture)
         } else {
@@ -153,7 +150,6 @@ impl SshServerFixture {
         let deadline = Instant::now() + timeout;
         while Instant::now() < deadline {
             if TcpStream::connect(("127.0.0.1", self.port)).is_ok() {
-                // TCP is up; confirm a full handshake via the ssh client.
                 let status = Command::new("/usr/bin/ssh")
                     .args([
                         "-i",
@@ -220,13 +216,9 @@ mod tests {
         assert!(text.contains("AuthorizedKeysFile /k/auth"));
         assert!(text.contains("PubkeyAuthentication yes"));
         assert!(text.contains("PasswordAuthentication no"));
-        // No `UseSandbox` — it is unsupported on this OpenSSH build and would
-        // abort config parsing.
         assert!(!text.contains("UseSandbox"));
     }
 
-    // This test is meaningful where sshd can actually serve (Linux CI). On
-    // macOS it returns None and the test is a no-op.
     #[test]
     fn fixture_allows_open_ssh_transport_roundtrip() {
         let Some(fixture) = SshServerFixture::start() else {

@@ -207,8 +207,6 @@ fn param_json(p: &crate::libref::CdfParam) -> Value {
         "description": p.description,
         "default": p.default,
     });
-    // A range row's `name` is documentation notation, not a settable name.
-    // Say so, and give the names that are.
     if !p.expands_to.is_empty() {
         v["expands_to"] = json!(p.expands_to);
         v["note"] = json!(
@@ -267,10 +265,6 @@ fn detail_json(s: &LibSymbol) -> Value {
         "params": s.params.iter().map(param_json).collect::<Vec<_>>(),
     });
 
-    // Rows vs settable names: `vsin` documents 37 rows but a live instance
-    // carries 135 names, and the whole difference is two ranges. Reporting only
-    // the row count invites a "the manual is missing 98 parameters" conclusion
-    // that is about the notation, not the device.
     let settable: usize = s.params.iter().map(|p| p.expands_to.len().max(1)).sum();
     if settable != s.params.len() {
         out["settable_name_count"] = json!(settable);
@@ -280,9 +274,6 @@ fn detail_json(s: &LibSymbol) -> Value {
         out["also_documented_in"] = json!(s.also_documented_in);
     }
 
-    // An empty parameter table is a real property of some manuals, not a parse
-    // failure — say which, so a caller never reads silence as "this device
-    // takes no parameters".
     if s.params.is_empty() {
         out["note"] = json!(if s.lib.eq_ignore_ascii_case("basic") {
             "The Basic Library reference documents no CDF parameters for any of \
@@ -305,14 +296,6 @@ fn detail_json(s: &LibSymbol) -> Value {
         s.qualified_name()
     ));
 
-    // Verified 2026-09-10 against a live `analogLib/cap`: the manual documents
-    // the last two rows as `area1` and `perim1`, and the placed instance calls
-    // them `area` and `perim` — same GUI labels, different CDF names. Setting
-    // the manual's spelling would write a junk property that no simulator
-    // reads, which is the exact `ampl`-instead-of-`va` failure this tool was
-    // built to prevent. So the manual is authoritative on *meaning* and the
-    // instance is authoritative on *names*; say so wherever there is a name
-    // list to get wrong.
     if !s.params.is_empty() {
         out["names_are_not_authoritative"] = json!(
             "Cross-check every name against the live instance before setting it. \
@@ -369,8 +352,6 @@ pub fn info(symbol: &str, lib: &str, refresh: bool) -> Result<Value> {
     let doc = resolve_lib(lib)?;
     let finder = load_finder(refresh)?;
 
-    // `libref.info --lib rfLib` with no symbol is the "tell me about this
-    // library" query, and the answer is the note.
     if symbol.is_empty() {
         let Some(doc) = doc else {
             return Err(VirtuosoError::Config("symbol name is required".into()));
@@ -411,11 +392,6 @@ pub fn info(symbol: &str, lib: &str, refresh: bool) -> Result<Value> {
                     None => format!("no cell named '{symbol}' in any parsed library reference"),
                 },
                 "suggestions": finder.suggest(symbol, 10),
-                // The likeliest name to land here is a PDK device — `n50_ckt`,
-                // `p50_ckt` — because those are what a schematic is mostly made
-                // of and no Cadence manual documents any of them. Sending that
-                // caller to `libref.list` is a dead end, so name the tool that
-                // does answer for them first.
                 "hint": NOT_FOUND_HINT,
             });
             merge(&mut out, provenance(&finder));
@@ -487,10 +463,6 @@ pub fn find(
     }
     let in_lib = |s: &LibSymbol| doc.is_none_or(|d| s.lib.eq_ignore_ascii_case(d.lib));
 
-    // Search unbounded, then truncate here, so the counts report how many
-    // matches exist rather than how many survived `limit`. A truncated count
-    // presented as a total is the same class of lie as an empty database
-    // presented as "no such parameter".
     if scope != "symbols" {
         let hits: Vec<ParamHit<'_>> = finder
             .search_params(query, search_mode, usize::MAX)
@@ -821,7 +793,6 @@ mod tests {
         };
         LibRefFinder::for_test(vec![
             LibSymbol {
-                // Sorts first, matches only loosely.
                 lib: "analogLib".into(),
                 name: "iam".into(),
                 params: vec![p("sa", "Signal amplitude")],

@@ -5,7 +5,6 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::Frame;
 
 pub fn render_content(frame: &mut Frame, app: &App, theme: &Theme, area: Rect) {
-    // Left nav list (tab-specific) + right detail pane split 50/50 vertically
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Length(26), Constraint::Min(30)])

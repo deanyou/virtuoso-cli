@@ -88,51 +88,36 @@ pub fn parse_fnd_content(content: &str, source_file: &str) -> Vec<SkillEntry> {
     let mut i = 0;
 
     while i < bytes.len() {
-        // Skip whitespace and `;`-comments between entries.
         i = skip_ws_and_comments(bytes, i);
 
         if i >= bytes.len() {
             break;
         }
 
-        // We expect an opening `(`; anything else is a format drift
-        // we should just skip.
         if bytes[i] != b'(' {
             i += 1;
             continue;
         }
-        i += 1; // consume `(`
+        i += 1;
 
-        // Inside the list: read 3 strings. Strings may contain any
-        // character including `(` and `)`, so we don't try to
-        // balance parens — we just count quoted strings.
         let mut fields: Vec<String> = Vec::new();
         while fields.len() < 3 && i < bytes.len() {
             i = skip_ws_and_comments(bytes, i);
             if i >= bytes.len() || bytes[i] != b'"' {
                 break;
             }
-            // Consume opening `"`
             i += 1;
             let start = i;
-            // Find closing `"`. Strings here are simple (no `\"` escapes
-            // observed in any .fnd shipped with IC231, but the parser
-            // is robust to anything except a `"`).
             while i < bytes.len() && bytes[i] != b'"' {
                 i += 1;
             }
             let end = i;
-            // Consume closing `"`
             if i < bytes.len() {
                 i += 1;
             }
             fields.push(String::from_utf8_lossy(&bytes[start..end]).into_owned());
         }
 
-        // After 3 strings, expect a closing `)`. We don't care if it's
-        // there or not — the entry is valid either way (some .fnd
-        // files omit it for the last entry). Just look for the next
-        // meaningful byte.
         if fields.len() == 3 && !fields[0].is_empty() {
             entries.push(SkillEntry {
                 name: fields.remove(0),
@@ -142,8 +127,6 @@ pub fn parse_fnd_content(content: &str, source_file: &str) -> Vec<SkillEntry> {
             });
         }
 
-        // Advance past the closing `)` if present, or any other junk,
-        // to the next entry.
         i = skip_ws_and_comments(bytes, i);
         if i < bytes.len() && bytes[i] == b')' {
             i += 1;
@@ -163,7 +146,6 @@ fn skip_ws_and_comments(bytes: &[u8], start: usize) -> usize {
         if b.is_ascii_whitespace() {
             i += 1;
         } else if b == b';' {
-            // Skip to end of line
             while i < bytes.len() && bytes[i] != b'\n' {
                 i += 1;
             }
@@ -227,7 +209,6 @@ mod tests {
 
     #[test]
     fn test_parse_real_abstract_fnd_sample() {
-        // Verbatim from /opt/cadence/IC231/doc/finder/SKILL/SKILL/abstract.fnd
         let content = r#";SKILL Language Functions
 ("absImportGDS"
 "absImportGDS(
@@ -255,7 +236,6 @@ mod tests {
 
     #[test]
     fn test_parse_real_dfii_skill_fnd_sample() {
-        // Verbatim from /opt/cadence/IC231/doc/finder/SKILL/DFII_SKILL/skdfref.fnd
         let content = r#";SKILL Language Functions
 ("geChangeCellView"
 "geChangeCellView(
@@ -281,7 +261,6 @@ mod tests {
             entries[0].description,
             "Opens a design in an existing window."
         );
-        // Syntax spans multiple lines but must contain all parts
         let s0 = &entries[0].syntax;
         assert!(s0.contains("geChangeCellView"));
         assert!(s0.contains("w_windowId"));
@@ -291,7 +270,6 @@ mod tests {
 
     #[test]
     fn test_parse_entry_without_closing_paren() {
-        // The last entry in some .fnd files omits the closing `)`.
         let content = r#"("foo"
 "foo( x )"
 "a description")"#;
@@ -325,8 +303,6 @@ mod tests {
 
     #[test]
     fn test_parse_skips_malformed_entries_silently() {
-        // A `(  ` with no closing strings should not panic or
-        // produce a fake entry.
         let content = r#"("good"
 "good()"
 "ok")
@@ -345,8 +321,6 @@ mod tests {
 
     #[test]
     fn test_parse_empty_name_is_skipped() {
-        // `(""  "x" "y")` should NOT produce an entry because the
-        // name is the lookup key.
         let content = r#"(""
 "x()"
 "empty name entry")
@@ -361,14 +335,8 @@ mod tests {
 
     #[test]
     fn test_parse_real_fnd_file_from_cadence_install() {
-        // The ultimate regression: a real .fnd file from a real
-        // Cadence install must parse into many entries with the
-        // right shape. We only run this if the test fixture exists
-        // — the path is the standard IC231 location.
         let path = std::path::Path::new("/opt/cadence/IC231/doc/finder/SKILL/SKILL/abstract.fnd");
         if !path.exists() {
-            // Skip silently — this test only runs in environments
-            // with a Cadence install mounted.
             eprintln!("skipping: {} not found", path.display());
             return;
         }
@@ -379,7 +347,6 @@ mod tests {
             "expected many entries from abstract.fnd, got {}",
             entries.len()
         );
-        // Spot-check a well-known function
         let gds = entries.iter().find(|e| e.name == "absImportGDS");
         assert!(gds.is_some(), "absImportGDS should be present");
         let gds = gds.unwrap();

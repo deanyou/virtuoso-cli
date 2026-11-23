@@ -61,7 +61,6 @@ fn can_resubmit_only_when_failed_or_cancelled() {
 
 #[test]
 fn derive_status_completed() {
-    // Canonical end-state: <run_dir>/psf/spectre.out exists.
     let tmp = temp_dir();
     let mut job = MaestroJob::new("s".into(), None, None);
     job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
@@ -79,7 +78,6 @@ fn derive_status_running() {
     let mut job = MaestroJob::new("s".into(), None, None);
     job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
     std::fs::create_dir(tmp.path().join("psf")).unwrap();
-    // No spectre.out → still running
     assert_eq!(
         MaestroJobStore::derive_status_from_run_dir(&job),
         MaestroJobStatus::Running
@@ -92,7 +90,6 @@ fn derive_status_failed() {
     let mut job = MaestroJob::new("s".into(), None, None);
     job.run_dir = Some(tmp.path().to_string_lossy().into_owned());
     std::fs::write(tmp.path().join("spectre.out"), "error").unwrap();
-    // psf absent, spectre.out present → failed
     assert_eq!(
         MaestroJobStore::derive_status_from_run_dir(&job),
         MaestroJobStatus::Failed
@@ -102,7 +99,6 @@ fn derive_status_failed() {
 #[test]
 fn derive_status_unknown_missing_run_dir() {
     let job = MaestroJob::new("s".into(), None, None);
-    // No run_dir → returns input status unchanged
     assert_eq!(
         MaestroJobStore::derive_status_from_run_dir(&job),
         MaestroJobStatus::Pending
@@ -129,7 +125,6 @@ fn list_newest_first() {
 
     let list = store.list().unwrap();
     assert_eq!(list.len(), 2);
-    // Newest first: j2 comes before j1
     assert_eq!(list[0].session, "s2");
     assert_eq!(list[1].session, "s1");
 }
@@ -170,7 +165,6 @@ fn find_by_run_id_skips_failed_jobs() {
     job.run_id = Some("run_xyz".into());
     job.status = MaestroJobStatus::Failed;
     store.save(&job).unwrap();
-    // Failed jobs should not block resubmission
     assert!(store.find_by_run_id("run_xyz").unwrap().is_none());
 }
 
@@ -202,9 +196,6 @@ fn filter_by_status_matches_the_stored_status_when_nothing_was_derived() {
 
 #[test]
 fn filter_by_status_uses_the_derived_status() {
-    // The whole point: a job whose run has finished is `completed` even
-    // though its record still says `running`. Filtering on the stored status
-    // made `--status completed` return nothing.
     let (_tmp, store) = temp_store();
 
     let mut job = MaestroJob::new("s1".into(), None, None);
@@ -234,10 +225,6 @@ fn filter_by_status_uses_the_derived_status() {
 
 #[test]
 fn find_by_run_id_returns_the_oldest_owner() {
-    // Two submits can be handed the same run id. The first submitter owns
-    // it; the later record is the duplicate. The store must name the owner
-    // deterministically, not "whichever the newest-first list happens to
-    // produce".
     let (_tmp, store) = temp_store();
 
     let mut owner = MaestroJob::new("s".into(), None, None);
@@ -281,8 +268,6 @@ fn submit_skill_reads_the_run_id_from_the_submit() {
 
     let submit = MaestroOps.submit_skill("fnxSession4");
     assert!(submit.contains("maeRunSimulation"), "{submit}");
-    // The run id has to come from the submit itself: `maeGetSetup` has no
-    // `?runId` keyword, so there is no pre-submit probe for it.
     assert!(submit.contains("?returnRunId"), "{submit}");
     assert!(!submit.contains("maeGetSetup"), "{submit}");
 }
@@ -306,10 +291,6 @@ fn job_helpers_use_only_functions_that_exist() {
 
 #[test]
 fn save_never_leaves_the_record_missing() {
-    // The job record is the only proof that the job was submitted, so a
-    // reader must never see it disappear while it is being replaced. The
-    // old save removed the destination and renamed the temporary file in
-    // its place, which opens exactly that window.
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
 

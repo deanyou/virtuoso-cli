@@ -139,7 +139,6 @@ mod config_tests {
         clean_env();
         let cfg = Config::from_env().unwrap();
         clean_env();
-        // Default port is derived from username hash: 65000 + sum(bytes) % 500
         assert!(cfg.port >= 65000 && cfg.port < 65500);
     }
 
@@ -175,14 +174,6 @@ mod config_tests {
         assert_eq!(cfg.spectre_args, vec!["-64", "+aps", "+mt=4"]);
     }
 
-    // === RemoteRoles tests (RED phase) ===
-    //
-    // RemoteRoles splits a single remote_host into four functional roles:
-    // GUI/CIW, bridge file deploy, daemon bridge, and Spectre compute.
-    // Each role can be set independently via VB_<ROLE>_HOST; when unset,
-    // the role falls back to VB_REMOTE_HOST so the simple one-host setup
-    // keeps working.
-
     #[test]
     #[serial]
     fn remote_roles_all_unset_fall_back_to_remote_host() {
@@ -217,14 +208,11 @@ mod config_tests {
     #[test]
     #[serial]
     fn remote_roles_unset_when_remote_host_unset() {
-        // Local mode — no remote_host, no roles. Resolves to None.
         clean_env();
         env::set_var("VB_REMOTE_HOST", "");
         let cfg = Config::from_env().unwrap();
         clean_env();
         assert!(!cfg.is_remote());
-        // In local mode all role resolvers return None; consumers must
-        // gate on cfg.is_remote() before using any role.
         assert_eq!(cfg.roles.gui_host_opt(), None);
         assert_eq!(cfg.roles.daemon_host_opt(), None);
     }
@@ -456,10 +444,8 @@ mod session_info_tests {
 
     #[test]
     fn session_load_missing_returns_error() {
-        // Point to a temp dir with no files
         let _tmp = TempDir::new().unwrap();
         let fake_id = "nonexistent-session-xyz";
-        // load() uses the real cache dir, so just verify the error message shape
         let result = SessionInfo::load(fake_id);
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
@@ -471,17 +457,12 @@ mod session_info_tests {
 
     #[test]
     fn session_list_empty_dir_returns_empty_vec() {
-        // sessions_dir() that doesn't exist → list() returns []
-        // We can't easily override the dir, but we can verify list() doesn't panic
-        // when the real dir exists and contains valid JSON.
         let result = SessionInfo::list();
         assert!(result.is_ok());
     }
 
     #[test]
     fn session_sorted_by_id() {
-        // Verify list() sorts by id ascending.
-        // Bind real ports so concurrent cleanup() calls don't delete these sessions.
         let l1 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let l2 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let p1 = l1.local_addr().unwrap().port();
@@ -509,12 +490,6 @@ mod session_info_tests {
 
     #[test]
     fn two_port_based_sessions_coexist() {
-        // Regression: before the fix every Virtuoso instance generated "host-user-1"
-        // (RBSessionSeq resets to 0 per process, increments to 1) and the second
-        // RBWriteSession call silently overwrote the first session file.
-        // After the fix RBIpcErrHandler uses the OS-assigned port as suffix, so each
-        // bridge instance writes a distinct file. Verify both survive.
-        // Bind real ports so concurrent cleanup() calls don't delete these sessions.
         let l1 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let l2 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let p1 = l1.local_addr().unwrap().port();
@@ -548,9 +523,6 @@ mod session_info_tests {
 
     #[test]
     fn session_id_suffix_equals_port() {
-        // Contract set by RBIpcErrHandler in ramic_bridge.il:
-        //   RBSessionId = sprintf(nil "%s-%d" RBSessionBase RBPort)
-        // The trailing decimal in the ID is the port, so tooling can parse either field.
         let port: u16 = 54321;
         let s = make_session("meowu-meow-54321", port);
         let suffix: u16 = s.id.rsplit('-').next().unwrap().parse().unwrap();
@@ -559,8 +531,6 @@ mod session_info_tests {
 
     #[test]
     fn session_port_survives_round_trip() {
-        // Write a port-based session file, read it back via load(), confirm the
-        // port field still matches the ID suffix after JSON round-trip.
         let dir = SessionInfo::sessions_dir();
         fs::create_dir_all(&dir).unwrap();
 
@@ -580,9 +550,6 @@ mod session_info_tests {
 
     #[test]
     fn multiple_sessions_all_visible() {
-        // When N Virtuoso instances are running, SessionInfo::list() must return all N
-        // so VirtuosoClient::from_env() can present the full "--session <id>" list.
-        // Bind real ports so concurrent cleanup() calls don't delete these sessions.
         let l1 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let l2 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let p1 = l1.local_addr().unwrap().port();
@@ -611,17 +578,9 @@ mod session_info_tests {
         assert!(found2, "second Virtuoso's session must appear in list");
     }
 
-    // Serialised against `live_session_not_removed_by_cleanup`: both write to
-    // the one real sessions directory and both call the global
-    // `session::cleanup()`. Run concurrently, the other test's cleanup() sweeps
-    // this one's stale file and reports it in *its* result, leaving this
-    // assertion looking at an empty list. `session_sorted_by_id` dodges the
-    // same race by binding real ports; a stale session has none to bind.
     #[test]
     #[serial(session_cleanup)]
     fn stale_session_filtered_in_cleanup() {
-        // Dead session files (port not bound) must be removed by session::cleanup()
-        // Bind then drop to get a port we know is currently free.
         let port = {
             let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             l.local_addr().unwrap().port()
@@ -655,7 +614,6 @@ mod session_info_tests {
     #[test]
     #[serial(session_cleanup)]
     fn live_session_not_removed_by_cleanup() {
-        // A session whose port is actually bound must survive cleanup()
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
 
@@ -785,11 +743,6 @@ mod cm_tests {
 
     #[test]
     fn windows_openssh_controlmaster_rejection_is_a_cm_failure() {
-        // Windows system OpenSSH has no Unix-domain ControlMaster socket.
-        // vcli always passes ControlMaster=auto. These stderrs are what that
-        // client prints; none of the patterns above match, so `run_command`
-        // does not retry. `list_remote` then sees empty stdout and
-        // `tunnel attach` reports "no Virtuoso sessions found".
         assert!(
             SSHRunner::is_cm_failure("getsockname failed: Not a socket\r\n"),
             "getsockname failed: Not a socket"
@@ -830,7 +783,6 @@ mod cm_tests {
         *r.use_control_master.lock().unwrap() = false;
         assert!(!*r.use_control_master.lock().unwrap());
 
-        // Verify SSH command no longer contains ControlMaster options
         let args = cmd_args(&r.build_ssh_cmd());
         assert!(
             !args.iter().any(|a| a.contains("ControlMaster")),
@@ -940,7 +892,6 @@ mod ssh_login_shell_tests {
 
     #[test]
     fn build_run_cmd_login_flag_after_host() {
-        // sh -l -s must come after the SSH host argument, not before
         let r = SSHRunner::new("eda-server").with_user("meow");
         let args = cmd_args(&r.build_run_cmd());
         let host_idx = args
@@ -976,7 +927,6 @@ mod daemon_stats_tests {
 
     #[test]
     fn load_missing_file_returns_none() {
-        // Use an unlikely port to avoid collision with a real daemon
         assert!(DaemonStats::load(1).is_none());
     }
 
@@ -1061,8 +1011,6 @@ mod suggestion_tests {
 
     #[test]
     fn execution_nil_substring_no_false_positive() {
-        // "nil" appearing mid-word or mid-string must not trigger the suggestion
-        // (only ": nil" suffix or "unbound" should match)
         let e = VirtuosoError::Execution("failed for client-nil-session".into());
         assert!(e.suggestion().is_none(), "false positive on embedded nil");
     }
@@ -1260,8 +1208,6 @@ mod virtuoso_result_tests {
         assert!(e.to_string().contains("*Error*"), "{e}");
     }
 
-    // An empty list is a legitimate nil (a library with no cells): the caller
-    // gets it back to parse, rather than a "failed: nil" error.
     #[test]
     fn ok_or_exec_nil_ok_passes_nil_through_on_transport_success() {
         let r = make_success("nil").ok_or_exec_nil_ok("list_cells").unwrap();
@@ -1269,7 +1215,6 @@ mod virtuoso_result_tests {
         assert!(make_success("42").ok_or_exec_nil_ok("op").is_ok());
     }
 
-    // ...but a SKILL raise arrives as NAK, and that is still a failure.
     #[test]
     fn ok_or_exec_nil_ok_still_errors_on_nak() {
         let r = make_error(vec!["*Error* library.list_cells: no such library".into()]);
@@ -1336,7 +1281,6 @@ mod schematic_tests {
 
     #[test]
     fn parse_skill_quoted_json() {
-        // SKILL returns the JSON as a quoted string: "\"[{...}]\""
         let v = parse_skill_json(r#""[{\"name\":\"M1\"}]""#).unwrap();
         assert_eq!(v[0]["name"], "M1");
     }
@@ -1417,7 +1361,6 @@ mod config_extra_tests {
         env::set_var("VB_REMOTE_HOST", "generic-host");
         let cfg = Config::from_env_with_profile(Some("prod")).unwrap();
         clean();
-        // empty profile-specific value → fall back to base
         assert_eq!(cfg.remote_host.as_deref(), Some("generic-host"));
     }
 }
@@ -1476,7 +1419,6 @@ mod output_format_tests {
 
     #[test]
     fn resolve_none_in_non_tty_is_json() {
-        // Test processes run without a TTY, so None → Json
         assert_eq!(OutputFormat::resolve(None), OutputFormat::Json);
     }
 
@@ -1757,7 +1699,6 @@ mod history_tests {
 
     #[test]
     fn append_and_load_cmd_entries() {
-        // Use a unique session ID so this test's entries are isolated
         let session_id = "rt-hist-cmd-basic-54321";
         let args = vec![
             "vcli".to_string(),
@@ -1949,7 +1890,6 @@ mod skill_command_tests {
     /// Test that eval's progn wrapping is correct for various inputs.
     #[test]
     fn eval_progn_wrapping_single_expression() {
-        // Verify that wrapping single expression in progn works correctly
         let code = "1+1";
         let wrapped = format!("progn(\n{}\n)", code);
         assert_eq!(wrapped, "progn(\n1+1\n)");
@@ -1967,10 +1907,8 @@ mod skill_command_tests {
 
     #[test]
     fn eval_progn_trailing_comment() {
-        // Ensure trailing comment doesn't swallow the closing paren
         let code = "1+1 ; trailing comment";
         let wrapped = format!("progn(\n{}\n)", code);
-        // The newline before ) terminates the line comment
         assert!(wrapped.ends_with("\n)"));
     }
 
@@ -2006,7 +1944,6 @@ mod skill_command_tests {
 
     #[test]
     fn eval_progn_preserves_inline_comments() {
-        // Borrowed pattern: let + inline `; comment` should survive progn wrap.
         let code = "let((a b c)\n    a = 10 ; first value\n    b = a * 2 ; double it\n    b)";
         let wrapped = format!("progn(\n{}\n)", code);
         assert!(wrapped.contains("a = 10 ; first value"));
@@ -2016,7 +1953,6 @@ mod skill_command_tests {
 
     #[test]
     fn eval_progn_preserves_full_line_comments() {
-        // Full-line `; comment` must not be stripped — the daemon parses it.
         let code = "; top comment\nlet((x) x=42 x)";
         let wrapped = format!("progn(\n{}\n)", code);
         assert!(wrapped.contains("; top comment"));
@@ -2025,8 +1961,6 @@ mod skill_command_tests {
 
     #[test]
     fn eval_progn_handles_procedure_def_then_call() {
-        // Borrowed example: define procedure, then call it on next form.
-        // Without progn wrap the daemon's let-path would only execute one form.
         let code = "procedure(_test_add(a b) a + b)\n_test_add(17 25)";
         let wrapped = format!("progn(\n{}\n)", code);
         assert!(wrapped.starts_with("progn(\n"));
@@ -2037,9 +1971,6 @@ mod skill_command_tests {
 
     #[test]
     fn eval_stdin_mode_validates_empty_input() {
-        // eval() with stdin=true and a non-empty code string must error
-        // (mutually exclusive). The empty-input path requires actual stdin,
-        // so this just covers the validation table.
         use crate::commands::skill;
         use crate::error::VirtuosoError;
 
@@ -2058,18 +1989,15 @@ mod spectre_integration_tests {
 
     #[test]
     fn test_end_to_end_sweep_directory_classic() {
-        // Simulate classic Spectre sweep output: sw1.sweep1/1/, sw1.sweep1/2/, ...
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create sweep directories with multiple signals
         for sweep_idx in 1..=3 {
             let sweep_dir = raw.join(format!("sw1.sweep{}", sweep_idx));
             let point_dir = sweep_dir.join(sweep_idx.to_string());
             fs::create_dir_all(&point_dir).unwrap();
 
-            // Create tran.tran.tran with SWEEP/TRACE/VALUE sections
             let tran_file = point_dir.join("tran.tran.tran");
             let content = r#"SWEEP
 "time"
@@ -2091,31 +2019,25 @@ END"#
             fs::write(&tran_file, content).unwrap();
         }
 
-        // Parse the sweep directory
         let sweep_data =
             crate::spectre::parsers::parse_sweep_psf_directory(&raw).expect("parse should succeed");
 
-        // Verify we have 3 sweep points
         assert_eq!(sweep_data.len(), 3);
         for idx in 1..=3 {
             assert!(sweep_data.contains_key(&idx), "Missing sweep point {}", idx);
         }
 
-        // Parse as flat sweep points
         let points = crate::spectre::parsers::parse_sweep_flat(&raw).expect("parse should succeed");
         assert_eq!(points.len(), 3);
 
-        // Verify sweep point structure
         for (i, point) in points.iter().enumerate() {
             assert_eq!(point.index, i + 1);
-            // Each point should have signal data
             assert!(!point.signals.is_empty());
         }
     }
 
     #[test]
     fn test_end_to_end_sweep_directory_lx_mode() {
-        // Simulate Spectre LX/X mode flat file naming: sw1-000_tran.tran, sw1-001_tran.tran, ...
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
@@ -2124,7 +2046,6 @@ END"#
             let filename = format!("sw1-{:03}_tran.tran", i);
             let path = raw.join(filename);
 
-            // Create PSF content with time values
             let time_values: Vec<String> = (0..=100)
                 .map(|j| format!("{:.6}", j as f64 * 1e-8))
                 .collect();
@@ -2136,7 +2057,6 @@ END"#
         let sweep_data =
             crate::spectre::parsers::parse_sweep_psf_directory(&raw).expect("parse should succeed");
 
-        // Should have 5 sweep points (converted to 1-indexed)
         assert_eq!(sweep_data.len(), 5);
         assert!(sweep_data.contains_key(&1));
         assert!(sweep_data.contains_key(&5));
@@ -2144,17 +2064,14 @@ END"#
 
     #[test]
     fn test_end_to_end_psf_ascii_regular() {
-        // Simulate regular (non-sweep) PSF output
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         let psf_dir = raw.join("psf");
         fs::create_dir_all(&psf_dir).unwrap();
 
-        // Create time signal
         let time_file = psf_dir.join("time.tran");
         fs::write(&time_file, "0.0\n1.0\n2.0\n").unwrap();
 
-        // Create voltage signals
         let vout_file = psf_dir.join("V(out).tran");
         fs::write(&vout_file, "0.0\n0.5\n1.0\n").unwrap();
 
@@ -2164,7 +2081,6 @@ END"#
         let data = crate::spectre::parsers::parse_psf_ascii(&raw).expect("parse should succeed");
 
         assert_eq!(data.len(), 3);
-        // Note: file_stem() strips the last extension, so "time.tran" -> "time"
         assert!(data.contains_key("time"));
         assert!(data.contains_key("V(out)"));
         assert!(data.contains_key("V(in)"));
@@ -2172,7 +2088,6 @@ END"#
 
     #[test]
     fn test_end_to_end_results_dir_fallback() {
-        // Test that results/ directory is used as fallback
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         let results_dir = raw.join("results");
@@ -2182,25 +2097,21 @@ END"#
         fs::write(&dc_file, "1.2\n").unwrap();
 
         let data = crate::spectre::parsers::parse_psf_ascii(&raw).expect("parse should succeed");
-        // file_stem strips last extension: "dc_op.dc" -> "dc_op"
         assert!(data.contains_key("dc_op"));
     }
 
     #[test]
     fn test_end_to_end_sweep_with_params() {
-        // Test sweep where each point has a parameter value
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Simulate VDS sweep with varying VGS values
         let sweep_params = [0.5, 1.0, 1.5, 2.0];
         for (idx, vgs) in sweep_params.iter().enumerate() {
             let sweep_dir = raw.join(format!("sw1.sweep{}", idx + 1));
             let point_dir = sweep_dir.join((idx + 1).to_string());
             fs::create_dir_all(&point_dir).unwrap();
 
-            // Create DC operating point output
             let dc_file = point_dir.join("dc_op.dc");
             let content = format!("SWEEP\n\"vgs\"\n{}\nTRACE\nVALUE\nEND", vgs);
             fs::write(&dc_file, content).unwrap();
@@ -2208,11 +2119,9 @@ END"#
 
         let points = crate::spectre::parsers::parse_sweep_flat(&raw).expect("parse should succeed");
 
-        // Verify we extracted the sweep parameter values
         assert_eq!(points.len(), 4);
         for (i, point) in points.iter().enumerate() {
             let expected_vgs = sweep_params[i];
-            // The sweep_value should be the parameter value
             assert!(
                 (point.sweep_value - expected_vgs).abs() < 0.01,
                 "Point {}: expected VGS={}, got {}",
@@ -2225,12 +2134,10 @@ END"#
 
     #[test]
     fn test_end_to_end_mixed_sweep_and_dc() {
-        // Test directory with both sweep and regular analysis
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create sweep structure
         let sweep_dir = raw.join("sw1.sweep1");
         let point_dir = sweep_dir.join("1");
         fs::create_dir_all(&point_dir).unwrap();
@@ -2238,18 +2145,15 @@ END"#
         let tran_file = point_dir.join("tran.tran.tran");
         fs::write(&tran_file, "SWEEP\n0.0\n1.0\n2.0\nTRACE\nVALUE\nEND").unwrap();
 
-        // Also create regular psf directory with DC analysis
         let psf_dir = raw.join("psf");
         fs::create_dir_all(&psf_dir).unwrap();
         let dc_file = psf_dir.join("dc_op.dc");
         fs::write(&dc_file, "0.5\n").unwrap();
 
-        // Sweep data should be returned
         let sweep_data =
             crate::spectre::parsers::parse_sweep_psf_directory(&raw).expect("parse should succeed");
         assert!(!sweep_data.is_empty());
 
-        // Verify psf data also works
         let psf_data =
             crate::spectre::parsers::parse_psf_ascii(&raw).expect("parse should succeed");
         assert!(!psf_data.is_empty());
@@ -2261,7 +2165,6 @@ END"#
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Empty directory should not cause errors
         let sweep_data =
             crate::spectre::parsers::parse_sweep_psf_directory(&raw).expect("parse should succeed");
         assert!(sweep_data.is_empty());
@@ -2273,22 +2176,16 @@ END"#
 
     #[test]
     fn test_sweep_point_scalar_extraction() {
-        // Test extracting scalar values from sweep points
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create sweep with gain measurements
-        // Note: The current parser extracts SWEEP section values (time/freq/params),
-        // not VALUE section signal data. So we verify the sweep_value (param) extraction.
         for i in 1..=3 {
             let sweep_dir = raw.join(format!("sw1.sweep{}", i));
             let point_dir = sweep_dir.join(i.to_string());
             fs::create_dir_all(&point_dir).unwrap();
 
-            // Use simple file name
             let dc_file = point_dir.join("dc.dc");
-            // Format: SWEEP with parameter values, TRACE, VALUE (signal), signal value
             let content = format!(
                 r#"SWEEP
 "vdd"
@@ -2303,7 +2200,6 @@ END"#,
 
         let points = crate::spectre::parsers::parse_sweep_flat(&raw).expect("parse should succeed");
 
-        // Verify sweep_value extraction (the parameter value at each sweep point)
         assert_eq!(points.len(), 3);
         for (i, point) in points.iter().enumerate() {
             let expected_vdd = (i + 1) as f64;
@@ -2319,13 +2215,11 @@ END"#,
 
     #[test]
     fn test_psf_ascii_delta_compressed() {
-        // Test parsing delta-compressed PSF (stores only changes)
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         let psf_dir = raw.join("psf");
         fs::create_dir_all(&psf_dir).unwrap();
 
-        // Delta-compressed format typically stores base value and deltas
         let tran_file = psf_dir.join("tran.tran");
         let content = r#"SWEEP
 "time"
@@ -2341,21 +2235,16 @@ END"#;
         fs::write(&tran_file, content).unwrap();
 
         let data = crate::spectre::parsers::parse_psf_ascii(&raw).expect("parse should succeed");
-        // The parser should at least not crash on delta format
-        // Note: file_stem of "tran.tran" is "tran"
         assert!(data.contains_key("tran"));
     }
 
     #[test]
     fn test_psf_signal_names_preserved() {
-        // Verify that signal names from file stems are preserved
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         let psf_dir = raw.join("psf");
         fs::create_dir_all(&psf_dir).unwrap();
 
-        // Create files with specific names
-        // Note: file_stem strips last extension, so "net_VDD.tran" -> "net_VDD"
         fs::write(psf_dir.join("net_VDD.tran"), "0.0\n1.0\n").unwrap();
         fs::write(psf_dir.join("net_VSS.tran"), "0.0\n0.0\n").unwrap();
         fs::write(psf_dir.join("I_vdd.i"), "1e-3\n").unwrap();
@@ -2369,12 +2258,10 @@ END"#;
 
     #[test]
     fn test_sweep_directory_preference_over_flat() {
-        // When both sweep directories and flat files exist, sweep directories should be preferred
         let tmp = TempDir::new().unwrap();
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create sweep directory
         let sweep_dir = raw.join("sw1.sweep1");
         let point_dir = sweep_dir.join("1");
         fs::create_dir_all(&point_dir).unwrap();
@@ -2384,13 +2271,11 @@ END"#;
         )
         .unwrap();
 
-        // Create flat file (should be ignored since sweep directories exist)
         fs::write(raw.join("sw1-000_tran.tran"), "0.0\n1.0\n2.0\n").unwrap();
 
         let sweep_data =
             crate::spectre::parsers::parse_sweep_psf_directory(&raw).expect("parse should succeed");
 
-        // Should find the sweep directory data (not flat files)
         assert_eq!(sweep_data.len(), 1);
         assert!(sweep_data.contains_key(&1));
     }
@@ -2427,10 +2312,6 @@ mod profile_dispatch_tests {
     #[test]
     #[serial]
     fn profile_show_explicit_wins_over_ambient_vb_profile() {
-        // Regression: `VB_PROFILE=review_ambient vcli --profile review_explicit
-        // profile show` returned the ambient profile because the config
-        // management branch skipped resolution and dispatch_profile did not
-        // receive the CLI --profile. The explicit arg must win.
         let _g = EnvGuard::set(&[("VB_PROFILE", "review_ambient")]);
         let out = crate::dispatch_profile(crate::ProfileCmd::Show, Some("review_explicit".into()))
             .expect("dispatch should succeed");

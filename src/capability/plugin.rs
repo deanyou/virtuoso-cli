@@ -41,7 +41,6 @@ impl RateLimiter {
         let now = Instant::now();
         let window = Duration::from_secs(self.window_secs);
 
-        // Remove old requests outside the window
         self.requests.retain(|t| now.duration_since(*t) < window);
 
         if self.requests.len() >= self.max_requests as usize {
@@ -77,14 +76,12 @@ pub struct IpEntry {
 
 impl IpEntry {
     pub fn matches(&self, addr: &IpAddr) -> bool {
-        // Try exact match first
         if let Ok(target) = addr.to_string().parse::<IpAddr>() {
             if let Ok(entry_ip) = self.ip.parse::<IpAddr>() {
                 return target == entry_ip;
             }
         }
 
-        // Try CIDR matching
         if let Some((ip, bits)) = self.ip.split_once('/') {
             if let (Ok(network), Ok(client)) =
                 (ip.parse::<IpAddr>(), addr.to_string().parse::<IpAddr>())
@@ -216,7 +213,6 @@ impl CapabilityPlugin {
     fn resolve_inheritance(&mut self) {
         let mut resolved = HashMap::new();
 
-        // First pass: add all capabilities without inheritance
         for cap in &self.config.capabilities {
             if cap.inherits.is_none() {
                 let domains = cap.domains.clone();
@@ -236,7 +232,6 @@ impl CapabilityPlugin {
             }
         }
 
-        // Second pass: resolve inheritance
         for cap in &self.config.capabilities {
             if let Some(ref inherits) = cap.inherits {
                 let mut domains = cap.domains.clone();
@@ -244,7 +239,6 @@ impl CapabilityPlugin {
                 let mut rate_limit = cap.rate_limit.clone();
                 let mut ttl = cap.ttl_seconds;
 
-                // Collect from parent capabilities
                 for parent_name in inherits {
                     if let Some(parent) = resolved.get(parent_name) {
                         domains.extend(parent.domains.iter().cloned());
@@ -258,7 +252,6 @@ impl CapabilityPlugin {
                     }
                 }
 
-                // Deduplicate
                 domains.sort();
                 domains.dedup();
 
@@ -301,7 +294,6 @@ impl CapabilityPlugin {
                 if d == "*" {
                     true
                 } else if d.ends_with(".*") {
-                    // Wildcard match: "schematic.*" matches "schematic.list_instances"
                     let prefix = &d[..d.len() - 2];
                     domain.starts_with(prefix) && domain.len() > prefix.len()
                 } else {
@@ -522,14 +514,11 @@ mod tests {
             description: None,
         });
 
-        // Initially no limiter exists
         assert!(plugin.rate_limit_status("revoke_test").is_none());
 
-        // Trigger rate limit by making requests
         plugin.check_rate_limit("revoke_test");
         assert_eq!(plugin.rate_limit_status("revoke_test").unwrap().0, 0);
 
-        // After revoke, limiter is removed
         plugin.revoke("revoke_test");
         assert!(plugin.rate_limit_status("revoke_test").is_none());
     }

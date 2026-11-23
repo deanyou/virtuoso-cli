@@ -387,11 +387,6 @@ pub fn standard_schema() -> RpcSchema {
             ],
             returns: "JSON object {instance, param, value, status}".into(),
         },
-        // ── Destructive (two-phase) ──────────────────────────────────
-        // Every method below answers `confirm_required` with a manifest the
-        // first time it is called, and only deletes when called again with the
-        // token it handed out. The token is bound to the manifest: if the
-        // design moved on, the approval is void.
         Method {
             name: "schematic.delete_instance".into(),
             summary: "Remove one instance from the open schematic (two-phase; in memory until cell.save)"
@@ -1632,10 +1627,6 @@ pub fn standard_schema() -> RpcSchema {
             ],
             returns: "{cache_dir, file_count, modified}".into(),
         },
-        // Virtuoso library references. Local documentation reads — no SKILL is
-        // executed and Virtuoso is never contacted, hence no capability gate.
-        // analogLib and basic are parsed; the other registered libraries report
-        // why they yield nothing rather than coming back empty.
         Method {
             name: "libref.list".into(),
             summary: "List documented library cells — analogLib (vsin, idc, cap, nmos4, ...) \

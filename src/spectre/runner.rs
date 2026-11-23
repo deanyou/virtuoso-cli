@@ -146,9 +146,7 @@ fn extract_error_messages(content: &str) -> Vec<String> {
 
     for line in content.lines() {
         let line = line.trim();
-        // Match common Spectre error patterns
         if line.contains("Error") || line.contains("ERROR") || line.contains("error:") {
-            // Skip benign messages
             if line.contains("No licences")
                 || line.contains("Warning")
                 || line.contains("info:")
@@ -248,10 +246,6 @@ fn parse_simulation_output(
 /// trustworthy outcome decision.
 fn combined_remote_log(simulation: &CommandResult, log_read: &CommandResult) -> Result<String> {
     if !log_read.success {
-        // `CommandResult` carries no pre-summarised `error` field: the contract
-        // expresses cause through `TransportError`, not through message text.
-        // The exit status is reported alongside stderr so the message stays
-        // diagnostic without reinstating a summarised-error string.
         let detail = log_read.stderr.trim();
         return Err(VirtuosoError::Ssh(format!(
             "failed to read remote spectre.out (exit {}): {}",
@@ -376,8 +370,6 @@ fn build_remote_license_command(cadence_cshrc: Option<&str>, spectre: &str) -> S
 
     match cadence_cshrc {
         Some(cshrc) if cshrc.ends_with(".csh") || cshrc.ends_with(".cshrc") => {
-            // SSHRunner feeds commands to `sh -l -s`; source the csh file only
-            // inside an explicitly invoked csh, then execute the POSIX probe.
             let csh_script = format!(
                 "source {} && exec sh -c {}",
                 shell_quote(cshrc),
@@ -501,22 +493,18 @@ impl SpectreOutcomeClassifier {
     pub fn classify(&self) -> SpectreOutcome {
         let lc = &self.log_content;
 
-        // 1. Fatal / panic / SEV
         if self.has_fatal_error(lc) {
             return SpectreOutcome::Failure {
                 reason: self.fatal_reason(lc),
             };
         }
 
-        // 2. Missing include / netlist errors
         if self.has_missing_include(lc) {
             return SpectreOutcome::Failure {
                 reason: "missing netlist include or library".to_string(),
             };
         }
 
-        // 3. Convergence failure (SPCRTRF-*, explicit "failed to converge")
-        //    These can occur even with exit code 0 — must be checked regardless.
         if self.has_convergence_failure(lc) {
             if self.has_raw_data {
                 return SpectreOutcome::PartialFailure {
@@ -529,14 +517,12 @@ impl SpectreOutcomeClassifier {
             }
         }
 
-        // 4. Read-in error
         if has_readin_error(lc) {
             return SpectreOutcome::Failure {
                 reason: "netlist read-in failed".to_string(),
             };
         }
 
-        // 5. License error — not fatal, data may still be usable
         if has_license_error(lc) {
             if self.has_raw_data {
                 return SpectreOutcome::PartialSuccess {
@@ -549,7 +535,6 @@ impl SpectreOutcomeClassifier {
             }
         }
 
-        // 6. Non-zero exit
         if !self.exit_ok {
             if self.has_raw_data {
                 return SpectreOutcome::PartialFailure {
@@ -562,10 +547,6 @@ impl SpectreOutcomeClassifier {
             }
         }
 
-        // 7. "No convergence difficulties" is BENIGN — not a failure
-        //    (already handled by has_convergence_failure not matching it)
-
-        // 8+9. Exit ok + no critical errors — classify based on data and warnings
         let warnings = self.warnings();
         if self.has_raw_data {
             if warnings.is_empty() {
@@ -574,7 +555,6 @@ impl SpectreOutcomeClassifier {
                 SpectreOutcome::PartialSuccess { warnings }
             }
         } else {
-            // Silent exit — no data and no explicit error detected
             SpectreOutcome::Failure {
                 reason: "spectre exited cleanly but produced no output data".to_string(),
             }
@@ -584,15 +564,14 @@ impl SpectreOutcomeClassifier {
     /// "failed to converge" or SPCRTRF-* / SPCRTRF:*
     fn has_convergence_failure(&self, content: &str) -> bool {
         let lower = content.to_lowercase();
-        // Explicit convergence failure messages
         lower.contains("failed to converge")
             || lower.contains("convergence failure")
             || lower.contains("failed during convergence")
             || lower.contains("do not converge")
             || lower.contains("could not converge")
-            // SPCRTRF error codes: e.g., SPCRTRF-15044
-            || Regex::new(r"(?i)SPCRTRF[:-]\d+").map(|re| re.is_match(content)).unwrap_or(false)
-            // Spectre hierarchical error format: SPCRTRF_<number>
+            || Regex::new(r"(?i)SPCRTRF[:-]\d+")
+                .map(|re| re.is_match(content))
+                .unwrap_or(false)
             || Regex::new(r"(?i)SPCRTRF_\d+")
                 .map(|re| re.is_match(content))
                 .unwrap_or(false)
@@ -618,27 +597,21 @@ impl SpectreOutcomeClassifier {
     /// Fatal: "fatal" near an error, SEV, panic, assertion failure.
     fn has_fatal_error(&self, content: &str) -> bool {
         let lower = content.to_lowercase();
-        // SFE diagnostic codes are netlist/elaboration errors, even when a
-        // wrapper process exits successfully.
         if Regex::new(r"(?im)^\s*(?:error|fatal)\b[^\n]{0,40}\(\s*SFE-\d+\s*\)")
             .map(|re| re.is_match(content))
             .unwrap_or(false)
         {
             return true;
         }
-        // "fatal" as a standalone word near error context
         if lower.contains("fatal") {
             return true;
         }
-        // SEV (Spectre Enhanced Verifier) fatal errors
         if lower.contains("sev") && lower.contains("error") {
             return true;
         }
-        // Panic strings
         if lower.contains("panic") || lower.contains("assertion") {
             return true;
         }
-        // Coredump
         if lower.contains("coredump") || lower.contains("core dumped") {
             return true;
         }
@@ -694,13 +667,7 @@ impl SpectreSimulator {
     pub fn from_config(cfg: &crate::config::Config) -> Result<Self> {
         let remote = cfg.is_remote();
 
-        // Built the same way it always was, then wrapped: this deliberately
-        // does NOT use `SSHRunner::from_config`, which would additionally pick
-        // up ssh_port / ssh_key / ssh_config. Adding those here would change
-        // behaviour, so the discrepancy is recorded rather than silently fixed.
         let transport = if remote {
-            // OpenSSH-only lifecycle: reject an explicit `native` request so it
-            // is never silently downgraded to OpenSSH.
             crate::transport::backend::require_openssh(cfg)?;
             let mut runner =
                 crate::transport::ssh::SSHRunner::new(cfg.remote_host.as_deref().unwrap_or(""));
@@ -880,7 +847,6 @@ impl SpectreSimulator {
 
         let n_workers = self.max_workers.min(num_cpus::get() as u32).max(1) as usize;
 
-        // Clone immutable config for each worker thread.
         let sim = self.clone();
         let inputs_arc: Vec<_> = inputs.iter().map(|(l, n)| (l.clone(), n.clone())).collect();
 
@@ -936,9 +902,7 @@ impl SpectreSimulator {
 
         for line in content.lines() {
             let line = line.trim();
-            // Match common Spectre error patterns
             if line.contains("Error") || line.contains("ERROR") || line.contains("error:") {
-                // Skip benign messages
                 if line.contains("No licences")
                     || line.contains("Warning")
                     || line.contains("info:")
@@ -1046,7 +1010,6 @@ impl SpectreSimulator {
             remote_dir: None,
         };
         job.save()?;
-        // Process runs detached — status checked lazily via Job::refresh()
         Ok(job)
     }
 
@@ -1058,7 +1021,6 @@ impl SpectreSimulator {
         let run_id = Uuid::new_v4().to_string()[..8].to_string();
         let remote_dir = format!("/tmp/virtuoso_bridge/spectre/{run_id}");
 
-        // Create dir + upload netlist
         runner.run_command(&CommandRequest::untimed(format!(
             "mkdir -p {}",
             shell_quote(&remote_dir)
@@ -1070,7 +1032,6 @@ impl SpectreSimulator {
 
         let spectre_cmd = self.remote_spectre_command(&remote_dir, true);
 
-        // Launch and capture PID
         let result = runner.run_command(&CommandRequest::with_exec_timeout(
             &spectre_cmd,
             Duration::from_secs(10),
@@ -1136,7 +1097,6 @@ impl SpectreSimulator {
             cmd.arg(arg);
         }
 
-        // Emit started event
         self.sink.emit(JobEvent::Started {
             job_id: run_id.clone(),
             created: chrono::Local::now().to_rfc3339(),
@@ -1178,14 +1138,11 @@ impl SpectreSimulator {
             }
         };
 
-        // Child termination is the sole completion signal for the follower.
         progress_follower.stop_and_join();
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
         let log_content = fs::read_to_string(&log_path).unwrap_or_default();
 
-        // Parse before classification so an empty directory or an empty parse does
-        // not masquerade as usable output.  OP-only output is valid data too.
         let (data, operating_points) = parse_simulation_output(&raw_dir, self.strict_psf)?;
         let outcome =
             classify_simulation_output(status.success(), &log_content, &data, &operating_points);
@@ -1270,17 +1227,12 @@ impl SpectreSimulator {
             Duration::from_secs(self.timeout * 2),
         ))?;
 
-        // SSH stdout/stderr often omit diagnostic details because Spectre writes
-        // them to +log.  Reading that log is required before classification.
-        // Do not clean up remote artifacts on any retrieval failure.
         let remote_log = runner.run_command(&CommandRequest::with_exec_timeout(
             format!("cat {}", shell_quote(&format!("{remote_dir}/spectre.out"))),
             Duration::from_secs(self.timeout),
         ))?;
         let combined_output = combined_remote_log(&result, &remote_log)?;
 
-        // Missing raw output is classifier input, not a transfer failure. A
-        // directory that exists but cannot be transferred remains an SSH error.
         let remote_raw = format!("{remote_dir}/raw");
         let raw_check = runner.run_command(&CommandRequest::with_exec_timeout(
             format!("test -d {}", shell_quote(&remote_raw)),
@@ -1301,8 +1253,6 @@ impl SpectreSimulator {
             (HashMap::new(), HashMap::new())
         };
 
-        // ── Build result from classification ───────────────────────────────────────
-        // Re-classify now that we know if raw data exists
         let outcome =
             classify_simulation_output(result.success, &combined_output, &data, &operating_points);
 
@@ -1319,8 +1269,6 @@ impl SpectreSimulator {
             }
         };
 
-        // Keep failed/partial artifacts for diagnosis.  Cleanup is allowed only
-        // once retrieval completed and classification confirmed a usable run.
         if should_cleanup_remote(&outcome, self.keep_remote_files) {
             runner.run_command(&CommandRequest::untimed(format!(
                 "rm -rf {}",
@@ -1349,58 +1297,42 @@ impl SpectreSimulator {
 /// Parse spectre log output for progress information.
 /// Returns (percent, message) if progress was found.
 fn parse_spectre_progress(log_content: &str) -> Option<(f32, String)> {
-    // Spectre outputs progress via +logstatus in formats like:
-    // "Time: 1.23e-6 s" or "Time: 123.456u" or "Iteration: 1234"
-    // We look for the last occurrence of these patterns.
-
     let lines: Vec<&str> = log_content.lines().collect();
 
-    // Look for time progress patterns
-    // Example: "Time: 1.23e-6 s" or "Time: 123.456u"
     let mut last_time: Option<String> = None;
     let mut last_iteration: Option<u64> = None;
 
     for line in lines.iter().rev() {
         let line = line.trim();
 
-        // Match time patterns like "Time: 1.23e-6 s" or "Time: 123.456u"
         if let Some(time_val) = line.strip_prefix("Time:") {
             let time_val = time_val.trim().trim_end_matches('s').trim();
             last_time = Some(time_val.to_string());
         }
 
-        // Match iteration patterns like "Iteration: 1234"
         if let Some(iter_str) = line.strip_prefix("Iteration:") {
             if let Ok(iter) = iter_str.trim().parse::<u64>() {
                 last_iteration = Some(iter);
             }
         }
 
-        // Once we have both time and iteration, we can stop
         if last_time.is_some() && last_iteration.is_some() {
             break;
         }
     }
 
     if let (Some(time), Some(iter)) = (last_time, last_iteration) {
-        // Estimate progress based on typical simulation time
-        // Fortran format output style: "t=1200u/3n" or similar
         let message = format!("t={}, iter={}", time, iter);
 
-        // Try to extract a rough percentage from the message
-        // Common patterns: "t=X/Y" where Y is the end time
         let percent = if let Some((current, total)) = parse_time_ratio(&message) {
             (current / total * 100.0).min(100.0) as f32
         } else {
-            // Fallback: just use iteration count as a rough indicator
-            // without knowing the total, we can only indicate activity
             50.0
         };
 
         return Some((percent, message));
     }
 
-    // If no time/iteration found, check for generic progress indicators
     for line in lines.iter().rev() {
         let line = line.trim();
         if line.contains("Progress:") || line.contains("progress:") {
@@ -1410,7 +1342,6 @@ fn parse_spectre_progress(log_content: &str) -> Option<(f32, String)> {
         }
     }
 
-    // Check for completion or error keywords
     if is_simulation_complete(log_content) {
         return Some((100.0, "completed".to_string()));
     }
@@ -1420,7 +1351,6 @@ fn parse_spectre_progress(log_content: &str) -> Option<(f32, String)> {
 
 /// Parse time ratio from messages like "t=1200u/3n".
 fn parse_time_ratio(msg: &str) -> Option<(f64, f64)> {
-    // Look for pattern like "t=1200u/3n" or "t=1.2e-6/3e-6"
     if let Some(start) = msg.find("t=") {
         let after_t = &msg[start + 2..];
         if let Some(slash) = after_t.find('/') {
@@ -1443,7 +1373,6 @@ fn parse_time_value(s: &str) -> Option<f64> {
         return Some(0.0);
     }
 
-    // Check for unit suffix
     let (num_str, unit) = if let Some(idx) =
         s.find(|c: char| !c.is_numeric() && c != '.' && c != '-' && c != 'e' && c != 'E')
     {
@@ -1461,13 +1390,12 @@ fn parse_time_value(s: &str) -> Option<f64> {
         "u" => value * 1e-6,
         "m" => value * 1e-3,
         "" => value,
-        _ => value, // Assume base unit if unknown
+        _ => value,
     })
 }
 
 /// Extract percentage from a string like "Progress: 45%"
 fn extract_percent(s: &str) -> Option<f32> {
-    // Look for number followed by %
     if let Some(idx) = s.find(|c: char| c.is_numeric()) {
         let rest = &s[idx..];
         if let Some(end) = rest.find('%') {
@@ -1519,7 +1447,6 @@ pub(crate) mod tests {
 
     #[test]
     fn test_has_readin_error_benign_complete() {
-        // "Circuit read-in complete" is NORMAL output, not an error
         let content = "Circuit read-in complete\nSimulation running...";
         assert!(!has_readin_error(content));
     }
@@ -1544,7 +1471,6 @@ pub(crate) mod tests {
 
     #[test]
     fn test_has_license_error_only_word() {
-        // "license" alone without error/denied/unavailable is not an error
         let content = "Using license file: /path/to/license.dat";
         assert!(!has_license_error(content));
     }
@@ -1860,17 +1786,9 @@ pub(crate) mod tests {
 
     #[test]
     fn parse_output_strict_true_propagates_malformed_psf_error() {
-        // Legacy parse_psf_ascii silently skips unparseable lines within
-        // an otherwise-parseable file, leaving the file stem in the
-        // HashMap with a partial vector — callers have no way to know
-        // anything was wrong. The strict variant must surface the parse
-        // failure as VirtuosoError::Execution so callers don't mistake
-        // parse failure for empty/partial data.
         let temp = tempfile::tempdir().unwrap();
         let psf_dir = temp.path().join("psf");
         fs::create_dir(&psf_dir).unwrap();
-        // bad.tran: legacy keeps the file but only with [1.0] (silent skip);
-        // strict fails.
         fs::write(psf_dir.join("bad.tran"), "1.0\nnot-a-number\n").unwrap();
 
         let legacy = parse_simulation_output(temp.path(), false).unwrap();
@@ -2029,7 +1947,6 @@ pub(crate) mod tests {
 
     #[test]
     fn test_parse_time_value_with_units() {
-        // Use approximate comparison for floating point
         fn approx_eq(a: Option<f64>, b: f64) -> bool {
             a.map(|v| (v - b).abs() < 1e-12).unwrap_or(false)
         }
@@ -2089,8 +2006,6 @@ pub(crate) mod tests {
     #[test]
     fn test_extract_percent_clamped() {
         assert_eq!(extract_percent("Over: 150% done"), Some(100.0));
-        // Note: negative percentages don't have practical meaning in simulation logs
-        // The function only looks for numeric chars, so "-10%" returns 10 (not -10)
         assert_eq!(extract_percent("Under: -10% done"), Some(10.0));
     }
 
@@ -2110,7 +2025,6 @@ Loading..."#;
         let (percent, msg) = result.unwrap();
         assert!(msg.contains("1.2e-6"));
         assert!(msg.contains("1234"));
-        // With t=X/Y parsing, should estimate percentage
         assert!((0.0..=100.0).contains(&percent));
     }
 
@@ -2121,7 +2035,6 @@ Iteration: 500"#;
         let result = parse_spectre_progress(log);
         assert!(result.is_some());
         let (percent, _) = result.unwrap();
-        // 500u / 1m = 0.5 = 50%
         assert!((percent - 50.0).abs() < 1.0);
     }
 

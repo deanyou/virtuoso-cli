@@ -33,9 +33,6 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
     }
     let client = VirtuosoClient::from_env()?;
 
-    // Check if resultsDir is set — do NOT override if it is, as changing
-    // resultsDir while an ADE session is active causes run() to silently
-    // return nil (ADE binds the session to a specific results path).
     let rdir = client.execute_skill("resultsDir()", None)?;
     let rdir_val = rdir.output.trim().trim_matches('"');
     if rdir_val == "nil" || rdir_val.is_empty() {
@@ -47,23 +44,18 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
         ));
     }
 
-    // Send analysis setup
     let analysis_skill = ocean::analysis_skill_simple(analysis, params);
     let analysis_result = client.execute_skill(&analysis_skill, None)?;
     require_non_nil(&analysis_result, "configure analysis")?;
 
-    // Send save
     let _ = client.execute_skill("save('all)", None);
 
-    // Execute run
     let result = client.execute_skill("run()", Some(timeout))?;
     require_transport(&result, "run analysis")?;
 
-    // Get actual results dir
     let rdir = client.execute_skill("resultsDir()", None)?;
     let results_dir = rdir.output.trim().trim_matches('"').to_string();
 
-    // Validate: run() returning nil usually means simulation didn't execute
     let run_output = result.output.trim().trim_matches('"');
     if run_output == "nil" {
         let check =
@@ -91,7 +83,6 @@ pub fn run(analysis: &str, params: &HashMap<String, String>, timeout: u64) -> Re
 /// Reject SKILL expressions that could cause side effects outside of waveform access.
 /// `measure` is intended for read-only PSF queries; block known destructive/execution APIs.
 fn validate_measure_expr(expr: &str) -> Result<()> {
-    // Case-insensitive prefix patterns that indicate non-measurement operations
     let blocked: &[&str] = &[
         "system(",
         "sh(",
@@ -128,7 +119,6 @@ pub fn measure(analysis: &str, exprs: &[String]) -> Result<Value> {
 
     let client = VirtuosoClient::from_env()?;
 
-    // Open results from resultsDir PSF and select result type
     let rdir = client.execute_skill("resultsDir()", None)?;
     let rdir_val = rdir.output.trim().trim_matches('"');
     if rdir_val != "nil" && !rdir_val.is_empty() {
@@ -141,7 +131,6 @@ pub fn measure(analysis: &str, exprs: &[String]) -> Result<Value> {
     let select_skill = format!("selectResult('{analysis})");
     let _ = client.execute_skill(&select_skill, None);
 
-    // Execute each measure expression individually for reliability
     let mut measures = Vec::new();
     for expr in exprs {
         let result = client.execute_skill(expr, None)?;
@@ -156,7 +145,6 @@ pub fn measure(analysis: &str, exprs: &[String]) -> Result<Value> {
         }));
     }
 
-    // Detect all-nil results and provide diagnostics
     let all_nil = !measures.is_empty()
         && measures.iter().all(|m| {
             m.get("value")
@@ -213,7 +201,6 @@ pub fn sweep(
 ) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
-    // Generate value list
     let mut values = Vec::new();
     let mut v = from;
     while v <= to + step * 0.01 {
@@ -309,7 +296,6 @@ pub fn results() -> Result<Value> {
 
     let dir = result.output.trim().trim_matches('"').to_string();
 
-    // Query available result types
     let types_result = client.execute_skill(
         &format!(r#"let((dir files) dir="{dir}" when(isDir(dir) files=getDirFiles(dir)) files)"#),
         None,
@@ -341,16 +327,12 @@ fn create_netlist_inner(
         "createNetlist(?display nil)"
     };
 
-    // First attempt
     let nr = client.execute_skill(cmd, Some(60))?;
     let nr_out = nr.output.trim().trim_matches('"').to_string();
     if nr.skill_ok() {
         return Ok(nr_out);
     }
 
-    // Auto-fix OSSHNL-109: run schCheck + dbSave to refresh extraction timestamp.
-    // Try to open the cv in write mode; fall back to the already-open write-mode cv
-    // (dbOpenCellViewByType returns nil if the cv is already held in "a" mode by Ocean).
     let lib_e = escape_skill_string(lib);
     let cell_e = escape_skill_string(cell);
     let view_e = escape_skill_string(view);
@@ -359,7 +341,6 @@ fn create_netlist_inner(
     );
     let fix_r = client.execute_skill(&fix, None)?;
 
-    // schCheck returns (errorCount warningCount); we wrapped it in list() → "(N)"
     let raw = fix_r
         .output
         .trim()
@@ -372,16 +353,6 @@ fn create_netlist_inner(
         .unwrap_or(-1);
 
     if err_count == -1 {
-        // cv not openable — two distinct causes:
-        //   (a) OSSHNL-109: library IS registered, cv held open in "a" mode by Ocean.
-        //       createNetlist may have written the file; return "t" so the caller
-        //       resolves via resultsDir() and verifies the file exists.
-        //   (b) Library not registered in this Virtuoso session (e.g. Virtuoso was
-        //       started from a directory without a cds.lib that includes the library).
-        //       createNetlist silently returned nil; returning "t" would produce a
-        //       confusing "file not found" error downstream.
-        //
-        // Distinguish by checking ddGetLibList() for the library name.
         let lib_probe = format!(r#"when(car(setof(l ddGetLibList() l~>name=="{lib_e}")) "found")"#);
         let probe_r = client.execute_skill(&lib_probe, None)?;
         let lib_found = probe_r.output.trim().trim_matches('"');
@@ -409,7 +380,6 @@ fn create_netlist_inner(
         )));
     }
 
-    // Retry after Check and Save
     let retry = client.execute_skill(cmd, Some(60))?;
     let retry_out = retry.output.trim().trim_matches('"').to_string();
     if !retry.skill_ok() {
@@ -449,10 +419,6 @@ pub fn netlist(
 ) -> Result<Value> {
     let client = VirtuosoClient::from_env()?;
 
-    // Step 1: Establish Ocean session (simulator + design) so createNetlist has
-    // a target even on a cold start without a prior ADE session.
-    // setup_skill ends with resultsDir() — may return "nil" if not yet bound;
-    // that's acceptable here since createNetlist returns the path directly.
     let setup = ocean::setup_skill(lib, cell, view, "spectre");
     let sr = client.execute_skill(&setup, None)?;
     if !sr.ok() {
@@ -462,22 +428,13 @@ pub fn netlist(
         )));
     }
 
-    // Step 2: createNetlist — auto-recovers from OSSHNL-109 via schCheck+dbSave.
     let nr_out = create_netlist_inner(&client, lib, cell, view, recreate)?;
 
-    // Step 3: Resolve the actual netlist path.
-    // createNetlist returns either:
-    //   (a) the full path to input.scs  — use directly
-    //   (b) the resultsDir path         — append /netlist/input.scs
-    //   (c) "t"                         — reuse resultsDir from setup (sr.output)
     let candidate = if nr_out.ends_with(".scs") {
         nr_out.clone()
     } else if nr_out != "t" && !nr_out.is_empty() {
         format!("{nr_out}/netlist/input.scs")
     } else {
-        // createNetlist returned "t"; reuse the resultsDir captured during setup,
-        // falling back to an extra SKILL call if setup returned nil or a relative path.
-        // If resultsDir is relative, prepend getWorkingDir() to make it absolute.
         let rdir_val = {
             let from_setup = sr.output.trim().trim_matches('"');
             let raw =
@@ -487,7 +444,6 @@ pub fn netlist(
                     let rdir = client.execute_skill("resultsDir()", None)?;
                     rdir.output.trim().trim_matches('"').to_string()
                 };
-            // Relative path — prepend Ocean's working directory to make it absolute.
             if !raw.is_empty() && raw != "nil" && !raw.starts_with('/') {
                 let cwd_r = client.execute_skill("getWorkingDir()", None)?;
                 let cwd = cwd_r.output.trim().trim_matches('"');
@@ -510,7 +466,6 @@ pub fn netlist(
         format!("{rdir_val}/netlist/input.scs")
     };
 
-    // Step 4: Verify the file actually exists on disk.
     let check = client.execute_skill(&format!(r#"isFile("{candidate}")"#), None)?;
     let v = check.output.trim().trim_matches('"');
     let file_exists = v != "nil" && v != "0";
@@ -523,7 +478,6 @@ pub fn netlist(
         )));
     }
 
-    // Step 5: Post-process the netlist for standalone Spectre invocation.
     let mut patched = false;
     let mut unknown_analyses: Vec<&str> = Vec::new();
 
@@ -532,14 +486,11 @@ pub fn netlist(
             VirtuosoError::Execution(format!("cannot read netlist '{candidate}': {e}"))
         })?;
 
-        // Fix ADE OA-relative model path (only resolves with +adespetkn token).
-        // Pattern: /oa/smic13mmrf_1233//../  →  /  (removes the indirection)
         if content.contains("/oa/smic13mmrf_1233//../") {
             content = content.replace("/oa/smic13mmrf_1233//../", "/");
             patched = true;
         }
 
-        // Append missing analysis blocks (skip if already present).
         for kind in analyses {
             match analysis_block(kind) {
                 Some(block) => {
@@ -614,9 +565,6 @@ pub fn run_parallel(
         ));
     }
 
-    // Read all netlist files into memory before parallel dispatch.
-    // Each worker gets its own clone of SpectreSimulator, so we read upfront
-    // to avoid file-access races and to surface I/O errors before spinning threads.
     let mut netlists: Vec<(String, String)> = Vec::with_capacity(inputs.len());
     for (label, path) in inputs {
         let content = std::fs::read_to_string(path).map_err(|e| {
@@ -783,7 +731,6 @@ pub fn check_license() -> Result<Value> {
             "stderr": stderr,
         }))
     } else {
-        // Local mode
         let spectre_bin = cfg.spectre_bin.as_deref().unwrap_or("spectre");
 
         let version_output = Command::new(spectre_bin).arg("-V").output().map_err(|e| {
@@ -809,7 +756,6 @@ pub fn check_license() -> Result<Value> {
             }
         }
 
-        // Find spectre path
         let spectre_path = Command::new("which")
             .arg(spectre_bin)
             .output()

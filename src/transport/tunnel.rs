@@ -54,10 +54,6 @@ pub fn profiled_bridge_leaf(profile: Option<&str>) -> String {
                 })
                 .take(64)
                 .collect();
-            // If sanitization left no meaningful content (empty, or
-            // all underscores), fall back to a fixed name to avoid
-            // collisions and a "virtuoso_bridge_" leaf that shadows
-            // the no-profile case.
             let meaningful = safe.chars().any(|c| c != '_');
             if !meaningful {
                 "virtuoso_bridge_profile".to_string()
@@ -273,15 +269,10 @@ enum StopDecision {
 fn verdict_to_decision(verdict: Verdict, pid: u32) -> StopDecision {
     match verdict {
         Verdict::Alive | Verdict::UnresponsiveButIdentified => StopDecision::Signal,
-        // Proven gone (or the pid now belongs to something else): the state
-        // file is stale and may be discarded.
         Verdict::Stale => StopDecision::Skip {
             reason: format!("recorded daemon (pid {pid}) is no longer running"),
             clear_state: true,
         },
-        // Not proof of absence — only of our inability to check. The design
-        // requires evidence before discarding state, so the file is left for
-        // the operator.
         Verdict::Unverifiable(reason) => StopDecision::Skip {
             reason: format!("cannot verify recorded daemon (pid {pid}): {reason}"),
             clear_state: false,
@@ -299,16 +290,8 @@ fn verdict_to_decision(verdict: Verdict, pid: u32) -> StopDecision {
 /// signal without the ssh check.
 fn decide_stop(state: &TunnelState, force: bool) -> StopDecision {
     if daemon_lifecycle::recorded_identity(state).is_some() {
-        // Recorded native daemon: two-tier assessment. Tier 1 is a real IPC
-        // nonce probe when the binary carries the native backend and the
-        // state file has the IPC endpoint recorded; otherwise Tier 1
-        // unconditionally fails and we fall through to the OS identity check.
         #[cfg(all(unix, feature = "native-ssh"))]
         let verdict = {
-            // `assess` passes the recorded nonce into the closure, but
-            // `challenge_via_ipc` reads endpoint + token from the state
-            // record. The nonce-argument is therefore ignored — the helper
-            // compares against `state.daemon_nonce` itself.
             let st_for_challenge = state;
             daemon_lifecycle::assess(state, |_nonce| {
                 daemon_lifecycle::challenge_via_ipc(st_for_challenge)
@@ -316,11 +299,6 @@ fn decide_stop(state: &TunnelState, force: bool) -> StopDecision {
         };
         #[cfg(not(all(unix, feature = "native-ssh")))]
         let verdict = daemon_lifecycle::assess(state, |_nonce| false);
-        // `Verdict::Alive` can only come from Tier 1 here — the IPC nonce
-        // challenge — and that channel is exactly the cooperative-shutdown
-        // channel. Prefer asking the proven daemon to exit over signalling
-        // it; the signal remains the fallback (and is still what Tier 2's
-        // `UnresponsiveButIdentified` maps to).
         #[cfg(all(unix, feature = "native-ssh"))]
         if matches!(verdict, Verdict::Alive) {
             return StopDecision::GracefulIpcShutdown;
@@ -378,7 +356,6 @@ pub(crate) fn stop_saved_tunnel(cfg: &Config, state: &TunnelState, force: bool) 
     match decision {
         StopDecision::Signal => {
             if let Err(e) = signal_tunnel_pid(pid) {
-                // Never report stopped, never clear, when the signal failed.
                 return Err(VirtuosoError::Ssh(format!(
                     "failed to signal tunnel pid {pid}: {e}"
                 )));
@@ -386,10 +363,6 @@ pub(crate) fn stop_saved_tunnel(cfg: &Config, state: &TunnelState, force: bool) 
             tracing::info!("signalled tunnel process {pid}");
         }
         StopDecision::GracefulIpcShutdown => {
-            // Reached only on the Unix native path, where Tier 1 proved the
-            // daemon is ours. Elsewhere the variant is never produced and
-            // this degrades to the signal, so the match stays exhaustive
-            // without feature gates.
             #[cfg(all(unix, feature = "native-ssh"))]
             let mut stopped = false;
             #[cfg(not(all(unix, feature = "native-ssh")))]
@@ -429,8 +402,6 @@ pub(crate) fn stop_saved_tunnel(cfg: &Config, state: &TunnelState, force: bool) 
     }
 
     if !may_clear {
-        // The recorded process could not be verified, so neither the state
-        // file nor the remote scratch dir is touched. The operator decides.
         tracing::warn!(
             "leaving tunnel state and remote files in place; \
              remove the state file manually once the daemon is known to be gone"
@@ -438,14 +409,6 @@ pub(crate) fn stop_saved_tunnel(cfg: &Config, state: &TunnelState, force: bool) 
         return Ok(());
     }
 
-    // Remote cleanup only after we have decided the recorded tunnel is ours
-    // (or proven gone). Never wipes a still-running daemon's scratch dir.
-    //
-    // Ownership is the second gate: only a `deployed` tunnel owns the setup dir
-    // that vcli created under /tmp. An `attached` tunnel points at a daemon that
-    // belongs to Virtuoso, whose setup dir may still be in use — removing it
-    // would break a session we did not start. `vcli tunnel detach` is the verb
-    // for dropping only the local side of an attached tunnel.
     let mode = state.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
     if mode == TUNNEL_MODE_ATTACHED {
         tracing::info!(
@@ -453,9 +416,6 @@ pub(crate) fn stop_saved_tunnel(cfg: &Config, state: &TunnelState, force: bool) 
              use `vcli tunnel detach` if you only want to disconnect)"
         );
     } else if !cfg.keep_remote_files {
-        // Remote cleanup must run against the SAME config that describes the
-        // tunnel being stopped — never re-read the environment (that could
-        // combine an ambient host with this cfg's setup dir).
         match SSHClient::from_config(cfg, cfg.keep_remote_files) {
             Ok(client) => {
                 let setup_dir = setup_dir_for_profile(cfg.profile.as_deref());
@@ -613,11 +573,6 @@ impl SSHClient {
     }
 
     pub fn stop(&self) -> Result<()> {
-        // Delegate to the single stop path so the CLI and the programmatic API
-        // never diverge. `force` is not exposed here: identity verification is
-        // mandatory for an in-process client. Uses the config this client was
-        // built from — never re-reads the environment, so cleanup cannot
-        // combine env hosts with the client's own profile.
         let state = TunnelState::load_with_profile(self.profile.as_deref())
             .ok()
             .flatten();
@@ -628,9 +583,6 @@ impl SSHClient {
     }
 
     pub fn saved_port(&self) -> Option<u16> {
-        // Read under the *config's* profile namespace, never the ambient
-        // `VB_PROFILE` — the caller (VirtuosoClient) resolves the tunnel for a
-        // specific target and must not pick up another target's state file.
         TunnelState::load_with_profile(self.profile.as_deref())
             .ok()
             .flatten()
@@ -659,9 +611,6 @@ impl SSHClient {
             }
             #[cfg(not(unix))]
             {
-                // Was `taskkill /F`, which terminated the tunnel as a side
-                // effect of asking whether it was alive, and then reported the
-                // inverse of the truth. Probing must not kill.
                 verify_ssh_pid(pid) && pid_exists(pid)
             }
         } else {
@@ -736,19 +685,8 @@ impl SSHClient {
             "ServerAliveInterval=30",
             "-o",
             "ServerAliveCountMax=3",
-            // The spawned process MUST be the sole forward holder, so
-            // connection reuse is explicitly disabled here — even a user's
-            // `~/.ssh/config` cannot turn this tunnel into a ControlMaster
-            // slave whose recorded PID is not the process owning the forward.
             "-o",
             "ControlMaster=no",
-            // -v logs the `Local forwarding listening on …` line to stderr;
-            // `wait_for_forward` uses it to prove THIS ssh actually bound the
-            // port (a pre-existing service can never produce it). `LogLevel`
-            // is pinned explicitly because `-v` only raises the level when the
-            // user config left it unset: a `LogLevel QUIET` in ~/.ssh/config
-            // would otherwise silence the marker and make every attach time
-            // out. Command-line `-o` wins over the config file.
             "-v",
             "-o",
             "LogLevel=DEBUG1",
@@ -756,10 +694,6 @@ impl SSHClient {
             "-L",
             &format!("127.0.0.1:{local_port}:127.0.0.1:{remote_port}"),
         ]);
-        // No `-f`: the spawned process IS the forward-holding ssh, so its pid
-        // and start identity are verifiable and `stop` can signal it directly.
-        // Without `-f`, ssh keeps forwarding after this CLI process exits, so
-        // the tunnel lifetime is unchanged from the old backgrounded form.
 
         if let Some(p) = self.runner().ssh_port {
             cmd.arg("-p").arg(p.to_string());
@@ -781,24 +715,12 @@ impl SSHClient {
             .spawn()
             .map_err(|e| VirtuosoError::Ssh(format!("failed to start tunnel: {e}")))?;
 
-        // Only THIS ssh's forward counts as success. `wait_for_forward` needs
-        // the ssh child alive AND a reachable port AND its stderr showing it
-        // bound the local port — a pre-existing service can never satisfy the
-        // stderr marker, so it cannot masquerade as our tunnel. Any failure
-        // reaps the child so the caller can try another local port without
-        // leaking a process.
-        //
-        // The budget covers the full SSH handshake + auth, which can be slow
-        // through a jump host; failures (`ExitOnForwardFailure`) are detected
-        // immediately by the child exiting, not by the budget running out.
         wait_for_forward(&mut child, local_port, TUNNEL_FORWARD_BUDGET)?;
 
         self.tunnel_pid = Some(child.id());
         self.tunnel_identity = crate::transport::identity::ProcessIdentity::of_pid(child.id())
             .ok()
             .map(|p| p.start_identity);
-        // The child is intentionally not waited on: it keeps forwarding after
-        // this process exits (same lifetime as the old `-f` behaviour).
         Ok(())
     }
 
@@ -915,8 +837,6 @@ fn wait_for_forward(
         .stderr
         .take()
         .ok_or_else(|| VirtuosoError::Ssh("tunnel stderr unavailable".into()))?;
-    // Drain stderr on a background thread so ssh's debug output can never fill
-    // the pipe and block the child while we poll liveness + the port below.
     let log: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     let log_reader = Arc::clone(&log);
     let reader = std::thread::spawn(move || {
@@ -930,21 +850,14 @@ fn wait_for_forward(
         }
     });
 
-    // Snapshot the bytes captured so far. The mutex guard must be dropped
-    // before the value is used, so this returns an owned, lowercased String
-    // rather than a `Cow` borrowed from the guard.
     fn snapshot(log: &std::sync::Arc<std::sync::Mutex<Vec<u8>>>) -> String {
         let guard = match log.lock() {
             Ok(g) => g,
-            // A poisoned mutex only means the reader thread panicked; the
-            // captured bytes are still safe to read for a diagnostic.
             Err(poisoned) => poisoned.into_inner(),
         };
         String::from_utf8_lossy(&guard).to_lowercase()
     }
 
-    // The marker must be followed by a NON-digit: with a plain substring
-    // match, ssh binding port 30001 would satisfy the marker for port 3000.
     fn bind_marker_present(log: &str, local_port: u16) -> bool {
         let marker = format!("local forwarding listening on 127.0.0.1 port {local_port}");
         let mut rest = log;
@@ -983,8 +896,6 @@ fn wait_for_forward(
         if bind_marker_present(&log_snapshot, local_port)
             && TcpStream::connect(("127.0.0.1", local_port)).is_ok()
         {
-            // ssh logged that IT bound the port; confirm it did not die right
-            // after (e.g. the remote end tore the connection down).
             match child.try_wait() {
                 Ok(Some(status)) => {
                     let _ = child.wait();
@@ -1001,8 +912,6 @@ fn wait_for_forward(
                     return Err(VirtuosoError::Ssh(format!("tunnel wait failed: {e}")));
                 }
             }
-            // Detach the reader: it blocks on the pipe until ssh exits (i.e.
-            // the tunnel is torn down), which is fine for a short-lived CLI.
             return Ok(());
         }
 
@@ -1043,7 +952,6 @@ mod tests {
         setup_dir_for_profile, verdict_to_decision, wait_for_forward, PidVerdict, StopDecision,
         TunnelState, Verdict,
     };
-    // Used only by non-Windows tunnel tests (which are cfg'd out on Windows).
     #[cfg(not(target_os = "windows"))]
     use super::{stop_saved_tunnel, verify_ssh_pid};
     #[cfg(not(target_os = "windows"))]
@@ -1053,8 +961,6 @@ mod tests {
     #[test]
     #[serial]
     fn sshclient_from_env_rejects_unsupported_native_backend() {
-        // The tunnel child is OpenSSH-only; an explicit `native` request must
-        // fail before any SSH child is spawned, never silently fall back.
         let saved = std::env::var_os("VB_SSH_BACKEND");
         std::env::set_var("VB_SSH_BACKEND", "native");
         let result = super::SSHClient::from_env(false);
@@ -1109,11 +1015,8 @@ mod tests {
     /// every tunnel that exists today.
     #[test]
     fn state_without_identity_does_not_take_the_native_path() {
-        // No recorded identity → the OpenSSH/classify branch, never native.
         let state = openssh_like_state(999_999);
         assert!(daemon_lifecycle::recorded_identity(&state).is_none());
-        // A dead pid is proven gone (not merely "not ssh"), so its stale state
-        // clears — the OpenSSH behaviour is preserved for today's tunnels.
         assert_eq!(
             decide_stop(&state, false),
             StopDecision::Skip {
@@ -1178,7 +1081,6 @@ mod tests {
         state.ipc_endpoint = Some(socket.to_str().unwrap().to_string());
         state.token_path = Some(token_path.to_string_lossy().into_owned());
 
-        // Tier 1 proves liveness → cooperative shutdown, never a raw Signal.
         assert_eq!(
             decide_stop(&state, false),
             StopDecision::GracefulIpcShutdown
@@ -1216,8 +1118,6 @@ mod tests {
         let me = crate::transport::identity::ProcessIdentity::current().unwrap();
         let mut state = openssh_like_state(me.pid);
         daemon_lifecycle::record_identity(&mut state, &me);
-        // Tier 1 is not wired yet (challenge answers false), so this exercises
-        // Tier 2: unresponsive but identified → still safe to signal.
         assert_eq!(
             verdict_to_decision(daemon_lifecycle::assess(&state, |_nonce| false), me.pid),
             StopDecision::Signal
@@ -1240,7 +1140,6 @@ mod tests {
                     reason.contains("no longer running"),
                     "unexpected reason: {reason}"
                 );
-                // Proven gone, so the stale state file may be discarded.
                 assert!(clear_state);
             }
             other => panic!("must refuse to signal a dead pid, got {other:?}"),
@@ -1305,8 +1204,6 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_verifies_a_real_process_by_its_executable() {
-        // A copy of `sleep` whose *name* contains "ssh" stands in for the ssh
-        // client, so the check is exercised without opening a connection.
         let dir = tempfile::tempdir().unwrap();
         let ssh_like = dir.path().join("ssh-standin");
         std::fs::copy("/bin/sleep", &ssh_like).unwrap();
@@ -1322,7 +1219,6 @@ mod tests {
         );
         reap(&mut child);
 
-        // Control: the real /bin/sleep is not ssh.
         let mut other = std::process::Command::new("/bin/sleep")
             .arg("10")
             .spawn()
@@ -1361,8 +1257,6 @@ mod tests {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     #[test]
     fn classify_reports_alive_non_ssh_as_not_verifiable() {
-        // This test process is alive and its executable is the test binary,
-        // which does not contain "ssh" in its file name.
         let me = crate::transport::identity::ProcessIdentity::current().unwrap();
         match classify_ssh_pid(me.pid) {
             PidVerdict::NotVerifiable { reason } => {
@@ -1371,13 +1265,6 @@ mod tests {
             other => panic!("self must not verify as ssh, got {other:?}"),
         }
     }
-
-    // ─── stop_saved_tunnel: the unified stop path ──────────────────────────
-    //
-    // Both the CLI command and `SSHClient::stop` delegate here. These pin the
-    // hardening: an unverifiable live process is refused (state preserved), a
-    // proven-dead pid clears the stale state, and `--force` may signal without
-    // the ssh identity check.
 
     /// An unverifiable live process must be refused: no SIGTERM is sent and
     /// the state file is left in place. This is the macOS `/proc`-absent
@@ -1400,7 +1287,6 @@ mod tests {
         std::env::set_var("VB_KEEP_REMOTE_FILES", "1");
         let cfg = Config::from_env().unwrap();
         let state = openssh_like_state(pid);
-        // `false` (no --force): an unverifiable live process is refused.
         let result = stop_saved_tunnel(&cfg, &state, false);
         if let Some(v) = saved_cache {
             std::env::set_var("VB_CACHE_DIR", v);
@@ -1412,14 +1298,11 @@ mod tests {
         } else {
             std::env::remove_var("VB_KEEP_REMOTE_FILES");
         }
-        // The operation succeeds (graceful no-op); it is *not* an error.
         result.expect("refusing an unverifiable live process must not error");
-        // The proof of refusal: the live child was never signalled.
         assert!(
             crate::transport::identity::ProcessIdentity::of_pid(pid).is_ok(),
             "unverifiable live process must not have been signalled"
         );
-        // Reap the still-running child so it does not linger as a zombie.
         let _ = child.kill();
         let _ = child.wait();
     }
@@ -1479,7 +1362,6 @@ mod tests {
         } else {
             std::env::remove_var("VB_KEEP_REMOTE_FILES");
         }
-        // Reap the signalled child so it does not linger.
         let _ = child.kill();
         let _ = child.wait();
         result.unwrap();
@@ -1505,16 +1387,12 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn pid_reuse_is_skipped_even_though_the_pid_is_live() {
-        // The case the whole two-tier design exists for: the pid is in use, but
-        // by a different process than the one recorded.
         let me = crate::transport::identity::ProcessIdentity::current().unwrap();
         let mut state = openssh_like_state(me.pid);
         daemon_lifecycle::record_identity(&mut state, &me);
         state.start_identity = Some(me.start_identity.wrapping_add(1));
         match verdict_to_decision(daemon_lifecycle::assess(&state, |_nonce| false), me.pid) {
             StopDecision::Skip { clear_state, .. } => {
-                // The pid now belongs to a different process, so the recorded
-                // daemon is proven gone and its state is stale.
                 assert!(clear_state);
             }
             other => panic!("must refuse to signal a reused pid, got {other:?}"),
@@ -1541,7 +1419,6 @@ mod tests {
 
     #[test]
     fn bridge_leaf_digits_and_punctuation() {
-        // Digits, dots, underscores, hyphens pass through unchanged.
         assert_eq!(
             profiled_bridge_leaf(Some("t28_digital_v1.2")),
             "virtuoso_bridge_t28_digital_v1.2"
@@ -1550,9 +1427,6 @@ mod tests {
 
     #[test]
     fn bridge_leaf_sanitizes_special_chars() {
-        // Slashes, spaces, exclamation marks, etc. become underscores.
-        // The CRITICAL property: no path traversal can land us in a
-        // parent of /tmp/ — the sanitization replaces `/` with `_`.
         assert_eq!(
             profiled_bridge_leaf(Some("../etc/passwd")),
             "virtuoso_bridge_.._etc_passwd"
@@ -1565,8 +1439,6 @@ mod tests {
 
     #[test]
     fn bridge_leaf_length_capped() {
-        // 64-char limit prevents runaway profile names from making
-        // an arbitrarily long path that could exceed shell ARG_MAX.
         let long: String = "a".repeat(200);
         let leaf = profiled_bridge_leaf(Some(&long));
         assert!(leaf.len() <= 64 + "virtuoso_bridge_".len());
@@ -1574,9 +1446,6 @@ mod tests {
 
     #[test]
     fn bridge_leaf_all_sanitized_falls_back() {
-        // A profile name that sanitizes to empty must NOT produce
-        // "virtuoso_bridge_" (which would shadow the no-profile
-        // case). It falls back to "virtuoso_bridge_profile".
         let leaf = profiled_bridge_leaf(Some("///"));
         assert_eq!(leaf, "virtuoso_bridge_profile");
     }
@@ -1596,8 +1465,6 @@ mod tests {
 
     #[test]
     fn env_key_preserves_base_name() {
-        // The base key is passed through verbatim — we only append
-        // a suffix, so callers can use any env-var name.
         assert_eq!(profiled_env_key("ANY_KEY", Some("p1")), "ANY_KEY_p1");
         assert_eq!(profiled_env_key("VB_PORT", Some("a.b.c")), "VB_PORT_a.b.c");
     }
@@ -1619,19 +1486,6 @@ mod tests {
         let k_b = profiled_env_key("VB_LOCAL_PORT", Some("digital"));
         assert_ne!(k_a, k_b);
     }
-
-    // ---- wait_for_forward -------------------------------------------------
-    //
-    // The regression these guard against: the old success check probed only
-    // the local TCP port, so when the port was already served by another
-    // process (and ssh exited on bind failure) the tunnel was reported as
-    // established. `wait_for_forward` now requires ssh's own stderr bind
-    // marker (`Local forwarding listening on 127.0.0.1 port <n>`) — only that
-    // proves THIS ssh bound the port; a foreign listener can never produce it.
-    //
-    // Budgets here are deliberately short: production uses
-    // `TUNNEL_FORWARD_BUDGET`, but every failure mode these tests exercise is
-    // detected without waiting it out, so the whole group runs in ~3 s.
 
     fn free_port() -> u16 {
         std::net::TcpListener::bind("127.0.0.1:0")
@@ -1666,7 +1520,6 @@ mod tests {
             err.to_string().contains("exited before forward"),
             "must not claim success on a pre-existing service, got: {err}"
         );
-        // child is reaped by wait_for_forward.
     }
 
     /// The false-success window: an unrelated service holds the port while

@@ -73,7 +73,6 @@ fn tech_grid_precision_skill_reads_the_mfg_grid() {
     let s = ops::tech_grid_precision_skill("myLib");
     assert!(s.contains("techGetMfgGridResolution"), "{s}");
     assert!(s.contains("techGetTechFile(ddGetObj("), "{s}");
-    // There is no "user grid precision" in the OpenAccess API.
     assert!(!s.contains("userGridPrecision"), "{s}");
     assert!(!s.contains("axlGetTech"), "{s}");
 }
@@ -92,9 +91,6 @@ fn shape_grid_audit_is_read_only() {
 
 #[test]
 fn shape_grid_audit_opens_the_cellview_with_a_view_type() {
-    // The four-argument form of dbOpenCellViewByType returns a WINDOW id,
-    // not a cellview, and every accessor on a window id reads nil — so the
-    // audit would report "no drift" for every cellview.
     let s = ops::shape_grid_audit_skill("st02", "qvp20", "layout");
     assert!(
         s.contains(r#"dbOpenCellViewByType("st02" "qvp20" "layout" "maskLayout" "r")"#),
@@ -114,12 +110,10 @@ fn shape_grid_audit_reads_the_real_grid() {
 #[test]
 fn shape_grid_audit_uses_real_shape_accessors() {
     let s = ops::shape_grid_audit_skill("lib", "cell", "view");
-    // layer name, bounding box, vertices
     assert!(s.contains("car(shp~>lpp)"), "{s}");
     assert!(s.contains("caar(bbox)"), "{s}");
     assert!(s.contains("cadadr(bbox)"), "{s}");
     assert!(s.contains("shp~>points"), "{s}");
-    // accessors that do not exist / cannot evaluate
     assert!(!s.contains("~>layer~>name"), "{s}");
     assert!(!s.contains("~>x1"), "{s}");
     assert!(!s.contains("~>kind"), "{s}");
@@ -128,8 +122,6 @@ fn shape_grid_audit_uses_real_shape_accessors() {
 
 #[test]
 fn shape_grid_audit_closes_the_cellview_on_every_path() {
-    // The close is the cleanup form of unwindProtect, so it also runs when
-    // the audit raises — a bare trailing dbClose would leak the cellview.
     let s = ops::shape_grid_audit_skill("lib", "cell", "view");
     assert!(s.contains("dbClose(cv)"), "must close cellview: {s}");
     assert!(s.contains("unwindProtect("), "{s}");
@@ -160,9 +152,6 @@ fn cell_info_opens_read_only() {
 fn skill_output_format_and_parser_agree() {
     let skill = ops::shape_grid_audit_skill("st02", "qvp20", "layout");
 
-    // The SKILL builds one (layer on off) entry per LAYER and appends the
-    // tails section. These are the fragments that decide the format the
-    // parser has to read.
     assert!(
         skill.contains("cons(list(lyr on off) newEntries)"),
         "per-layer entry: {skill}"
@@ -176,8 +165,6 @@ fn skill_output_format_and_parser_agree() {
         "tails section: {skill}"
     );
 
-    // ... and the parser reads exactly that: a three-element layer tuple
-    // and the tails marker.
     let (layers, tails) = parse_grid_audit_output(SKILL_OUTPUT_QVP20);
     assert_eq!(
         layers,
@@ -197,7 +184,6 @@ fn skill_output_format_and_parser_agree() {
 fn parser_reads_the_live_skill_output() {
     let (layers, tails) = parse_grid_audit_output(SKILL_OUTPUT_QVP20);
     assert_eq!(layers.len(), 6);
-    // 497 shapes in the cellview, every one of them on-grid.
     let total: u32 = layers.iter().map(|l| l.1 + l.2).sum();
     assert_eq!(total, 497);
     assert_eq!(layers.iter().map(|l| l.2).sum::<u32>(), 0);
@@ -225,10 +211,6 @@ fn parser_reads_a_result_carrying_a_tails_section() {
 
 #[test]
 fn parser_reads_the_live_result_with_no_tails() {
-    // The live output of the same cellview: it has no supply net, so the
-    // tails section is present and empty. An empty section must not be
-    // mistaken for a layer, and must not make the audit look like it found
-    // something.
     let (layers, tails) = parse_grid_audit_output(SKILL_OUTPUT_MP_NO_TAILS);
     assert_eq!(layers.len(), 6);
     assert_eq!(layers.iter().map(|l| l.1 + l.2).sum::<u32>(), 14);
@@ -238,9 +220,6 @@ fn parser_reads_the_live_result_with_no_tails() {
 
 #[test]
 fn tails_section_is_not_mistaken_for_a_layer() {
-    // The tails marker is emitted as a quoted SKILL string, so the parser
-    // has to match on the string value. When it matched on the atom type
-    // instead, the tails entry was read as a layer called "tails".
     let (layers, tails) = parse_grid_audit_output(SKILL_OUTPUT_MP_WITH_TAILS);
     assert!(
         !layers.iter().any(|l| l.0 == ops::TAILS_KEY),
@@ -251,12 +230,9 @@ fn tails_section_is_not_mistaken_for_a_layer() {
 
 #[test]
 fn off_grid_counts_are_per_layer_and_reach_the_totals() {
-    // The drift verdict is the sum of the off column, so the counts have to
-    // be per layer and not per shape.
     let raw = r#"(("M1" 100 3) ("M2" 100 200) ("M3" 100 20))"#;
     let (layers, _) = parse_grid_audit_output(raw);
     assert_eq!(layers.len(), 3);
-    // sorted by off_grid descending
     assert_eq!(layers[0], GridLayer("M2".into(), 100, 200));
     assert_eq!(layers[1], GridLayer("M3".into(), 100, 20));
     assert_eq!(layers[2], GridLayer("M1".into(), 100, 3));
@@ -265,8 +241,6 @@ fn off_grid_counts_are_per_layer_and_reach_the_totals() {
 
 #[test]
 fn empty_cellview_is_well_formed_and_reports_nothing() {
-    // A cellview with no shapes still produces a well-formed result: the
-    // SKILL always emits the tails section.
     let raw = r#"(("tails" nil))"#;
     assert!(grid_audit_output_is_well_formed(raw));
     let (layers, tails) = parse_grid_audit_output(raw);
@@ -276,13 +250,9 @@ fn empty_cellview_is_well_formed_and_reports_nothing() {
 
 #[test]
 fn parser_rejects_an_unreadable_result() {
-    // Not a list at all.
     assert!(!grid_audit_output_is_well_formed("not a sexp"));
-    // A layer entry that is not the three-element (layer on off) tuple.
     assert!(!grid_audit_output_is_well_formed(r#"(("M1" 100))"#));
-    // A count that is not a number.
     assert!(!grid_audit_output_is_well_formed(r#"(("M1" "foo" "bar"))"#));
-    // Garbage.
     let (layers, tails) = parse_grid_audit_output("(this is not s-expr at all");
     assert!(layers.is_empty());
     assert!(tails.is_empty());
@@ -290,7 +260,6 @@ fn parser_rejects_an_unreadable_result() {
 
 #[test]
 fn parser_reads_a_float_count() {
-    // SKILL can print a count that went through arithmetic as "3.0".
     let (layers, _) = parse_grid_audit_output(r#"(("M1" 100 3.0))"#);
     assert_eq!(layers, vec![GridLayer("M1".into(), 100, 3)]);
 }

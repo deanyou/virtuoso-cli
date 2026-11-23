@@ -1,0 +1,30 @@
+{
+ "groups": {
+  "examples": 181,
+  "root": 12,
+  "scripts": 100,
+  "src": 1478,
+  "src/capability": 84,
+  "src/client": 1968,
+  "src/commands": 1732,
+  "src/daemon": 112,
+  "src/libref": 495,
+  "src/maestro_jobs": 137,
+  "src/mcp": 181,
+  "src/ocean": 5,
+  "src/plugins": 30,
+  "src/rpc": 169,
+  "src/session": 19,
+  "src/skill_finder": 193,
+  "src/spectre": 346,
+  "src/streaming": 19,
+  "src/sys": 39,
+  "src/target": 127,
+  "src/transaction": 24,
+  "src/transport": 2320,
+  "src/tui": 83,
+  "tests": 385,
+  "tests/docs": 2
+ },
+ "markers": 105
+}

@@ -45,8 +45,6 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 SOURCE_DIR = ".claude/skills"
 TARGET_DIR = ".agents/skills"
 
-# Files whose adaptation is ``mirror`` are copied verbatim; only SKILL.md
-# carries host adaptations (see ADAPTATIONS for the evidence behind that).
 SKILL_FILENAME = "SKILL.md"
 
 
@@ -83,24 +81,8 @@ class Adaptation:
 
 FRONTMATTER_RE = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.S)
 
-# Bash(<command> *) -- a bare command name, no path separator.
 BASH_GLOB_RE = re.compile(r"Bash\(([^()\s]+) \*\)")
 
-# The commands whose glob the Codex tree carries with a "*/" path prefix.
-#
-# Induced from the tree itself: every SKILL.md that the Codex side adapted
-# prefixes the EDA wrapper binaries, e.g.
-#     .claude  allowed-tools: Bash(virtuoso *) Read Write
-#     .agents  allowed-tools: Bash(*/virtuoso *) Read Write
-# and no Codex-tree file prefixes "cat", "ls", "jq", "grep", "find", "wc",
-# "python" or "python3".  Restricting the rewrite to this list therefore
-# reproduces the Codex convention that is already in the tree and leaves the
-# system-utility globs alone -- it cannot tighten an allow-list that is
-# working today.
-#
-# Widened by owner ruling (2026-11): "vcli" and "spectre" are EDA binaries
-# reached the same way "virtuoso" is, so they take the prefix too.  System
-# utilities stay bare.
 CODEX_GLOB_PREFIX_COMMANDS = ("virtuoso", "vcli", "spectre")
 
 
@@ -175,10 +157,8 @@ def _rewrite_allowed_tools_globs(text: str) -> Tuple[str, int]:
                 nonlocal hits
                 command = match.group(1)
                 if "/" in command:
-                    # Already path-qualified (e.g. "*/virtuoso"): leave it.
                     return match.group(0)
                 if command not in CODEX_GLOB_PREFIX_COMMANDS:
-                    # Not part of the observed Codex convention: leave it.
                     return match.group(0)
                 hits += 1
                 return "Bash(*/%s *)" % command
@@ -190,8 +170,6 @@ def _rewrite_allowed_tools_globs(text: str) -> Tuple[str, int]:
 
 
 def _rewrite_skill_paths(text: str) -> Tuple[str, int]:
-    # Home-directory paths refer to a different installation and must not be
-    # silently relocated as if they were repository-relative paths.
     return re.subn(r"(?<!~/)(?<!\$HOME/)\.claude/skills/", ".agents/skills/", text)
 
 
@@ -279,10 +257,6 @@ class SkillRule:
     mode: str
     reason: str
     link_target: str = ""
-    # Adaptation rule ids this skill opts out of.  Used when a skill names a
-    # product that merely happens to be called "Claude Code": renaming it to
-    # the driving host would make the file describe something that does not
-    # exist.
     skiprules: Tuple[str, ...] = ()
 
 
@@ -334,8 +308,6 @@ SKILL_RULES: Dict[str, SkillRule] = {
 }
 
 
-# Existing mirror dispositions reviewed in this PR. New top-level entries are
-# pending until explicitly classified here or in SKILL_RULES.
 APPROVED_MIRRORS = frozenset((
     '_shared',
     'amp-copilot',
@@ -408,7 +380,7 @@ class FileAction:
     rel_path: str
     source: Path
     target: Path
-    status: str              # "created" | "updated" | "unchanged" | "pending" | "skipped"
+    status: str
     adaptations: List[str] = field(default_factory=list)
     detail: str = ""
 
@@ -419,7 +391,7 @@ class LinkAction:
 
     skill: str
     target: Path
-    status: str              # "ok" | "missing" | "wrong-target"
+    status: str
     detail: str = ""
 
 
@@ -427,7 +399,7 @@ class LinkAction:
 class Drift:
     """One difference between the canonical tree and the expected mirror."""
 
-    kind: str                # "missing" | "differs" | "unexpected" | "link" | "excluded-present"
+    kind: str
     rel_path: str
     detail: str = ""
 
@@ -532,7 +504,6 @@ def _skiprules_for(rel_path: str) -> frozenset:
 def expected_bytes(rel_path: str, source_bytes: bytes) -> Tuple[bytes, List[str]]:
     """Return the bytes the Codex tree should hold for one canonical file."""
     if not _is_skill_md(rel_path):
-        # Non-SKILL.md files are copied byte-for-byte.
         return source_bytes, []
     try:
         text = source_bytes.decode("utf-8")
@@ -559,9 +530,6 @@ def build_plan(root: Path) -> SyncResult:
             result.pending.append((_skill_of(rel), rule.reason))
             continue
         if rule is not None and rule.mode in (MODE_EXCLUDE, MODE_LINK):
-            # Excluded: belongs to the Claude host only.
-            # Linked: the Codex side is a symlink to the canonical directory,
-            # so there is nothing to copy -- the link is verified separately.
             result.excluded.append(rel)
             continue
         exclusion = _exclusion_for(rel)
@@ -598,10 +566,6 @@ def build_plan(root: Path) -> SyncResult:
                 continue
             exclusion = _exclusion_for(rel)
             if exclusion is not None:
-                # Runtime artifacts (bytecode caches) in the Codex tree are
-                # ignored, not drift: a local test run leaves them behind and
-                # they must never be mirrored or committed.  The sync prunes
-                # them; --check does not fail on them.
                 result.ignored.append(rel)
                 result.actions.append(
                     FileAction(rel, source_root / rel, target_root / rel, "ignored")
@@ -612,7 +576,6 @@ def build_plan(root: Path) -> SyncResult:
                 FileAction(rel, source_root / rel, target_root / rel, "unexpected")
             )
 
-    # Linked skills: verify the symlink, never rewrite it.
     for skill, rule in sorted(SKILL_RULES.items()):
         if rule.mode != MODE_LINK:
             continue
@@ -668,7 +631,6 @@ def apply_plan(root: Path, result: SyncResult, prune: bool) -> int:
         action.status = "created" if action.status == "missing" else "updated"
         written += 1
 
-    # Drop directories that became empty after pruning.
     if prune and target_root.is_dir():
         for dirpath, dirnames, filenames in os.walk(target_root, topdown=False):
             if Path(dirpath) == target_root:
@@ -784,11 +746,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     root = Path(args.root).resolve() if args.root else repo_root()
     result = build_plan(root)
 
-    # What the plan says has to change, captured before anything is written.
     planned = [a for a in result.actions if a.status in ("missing", "differs", "unexpected", "ignored")]
     if args.check or args.dry_run:
-        # "ignored" files are runtime artifacts, not problems: they are pruned
-        # by a real sync but must not be reported as drift.
         shown = [a for a in planned if a.status != "ignored"]
     else:
         shown = planned
@@ -796,7 +755,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     wrote = 0
     if not args.check and not args.dry_run:
         wrote = apply_plan(root, result, prune=not args.no_prune)
-        # Re-verify: the drift list above was computed before the write.
         result = build_plan(root)
 
     if args.as_json:

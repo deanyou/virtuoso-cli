@@ -10,7 +10,6 @@ use ratatui::Frame;
 use unicode_width::UnicodeWidthStr;
 
 pub fn render(frame: &mut Frame, form: &ConfigFormState, theme: &Theme, area: Rect) {
-    // Fixed width form, height based on content
     let width = 64.min(area.width.saturating_sub(4));
     let height = 9.min(area.height.saturating_sub(2));
     let rect = centered_rect_fixed(width, height, area);
@@ -23,7 +22,6 @@ pub fn render(frame: &mut Frame, form: &ConfigFormState, theme: &Theme, area: Re
         .border_style(overlay_border_style(theme, true));
     let inner = block.inner(rect);
 
-    // Split the cursor from the value so the underline shows where it is
     let (before, after) = form.value.as_str().split_at(form.value.cursor);
     let cursor_char = if after.is_empty() {
         " ".to_string()
@@ -78,6 +76,5 @@ pub fn render(frame: &mut Frame, form: &ConfigFormState, theme: &Theme, area: Re
     frame.render_widget(block, rect);
     frame.render_widget(Paragraph::new(lines), inner);
 
-    // Silence the unused warning if the current row is narrow
     let _ = UnicodeWidthStr::width("");
 }

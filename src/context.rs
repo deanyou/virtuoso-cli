@@ -103,8 +103,6 @@ impl CommandContext {
             return Ok(());
         }
         let target_host = self.config.remote_host.as_deref().unwrap_or("");
-        // Loopback targets run on the same machine; session.host is the
-        // machine HOSTNAME (e.g. "dean") which never equals a loopback IP.
         let is_loopback = matches!(target_host, "127.0.0.1" | "localhost" | "::1");
         if !is_loopback && !target_host.is_empty() && host != target_host {
             return Err(VirtuosoError::Config(format!(
@@ -113,10 +111,6 @@ impl CommandContext {
                 self.target_id().unwrap_or("unknown")
             )));
         }
-        // Same-host discrimination: two targets on one compute node differ by
-        // their remote bridge port, so an explicitly configured port mismatch
-        // is an ownership violation even when the host matches. A non-explicit
-        // (default) port is not a constraint and is never checked here.
         if self.config.port_explicit && self.config.port != 0 && port != self.config.port {
             return Err(VirtuosoError::Config(format!(
                 "{kind} '{id}' is on bridge port {port} but target '{}' uses port {}; \
@@ -136,7 +130,6 @@ mod tests {
     use serial_test::serial;
 
     fn cfg_with(host: &str, port: u16) -> Config {
-        // Build via env_with_profile with scoped vars, then strip profile.
         std::env::set_var("VB_REMOTE_HOST_targettest", host);
         std::env::set_var("VB_PORT_targettest", port.to_string());
         let mut c = Config::from_env_with_profile(Some("targettest")).unwrap();
@@ -203,8 +196,6 @@ mod tests {
     #[serial]
     #[test]
     fn ownership_check_skips_host_for_loopback_target() {
-        // Loopback target: session.host is the machine HOSTNAME (e.g. "dean")
-        // which never equals "127.0.0.1". Host check must be skipped.
         let ctx = CommandContext::new(cfg_with("127.0.0.1", 30001), Some("local".into())).unwrap();
         assert!(ctx
             .validate_session_ownership(&session_with("dean", 30001))
@@ -214,7 +205,6 @@ mod tests {
     #[serial]
     #[test]
     fn ownership_check_rejects_same_host_different_bridge_port() {
-        // prod/test share a compute node; only the bridge port distinguishes them.
         let ctx =
             CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
         let err = ctx
@@ -257,15 +247,11 @@ mod tests {
     #[serial]
     #[test]
     fn tunnel_ownership_pass_with_local_port_fallback_remote_fixed() {
-        // `tunnel start` may fall back to a *local* forward port when the
-        // configured bridge port is taken locally, while the remote endpoint
-        // stays fixed at the target's bridge port. Ownership must be judged on
-        // the remote port, so this freshly-created state is NOT self-rejected.
         let ctx =
             CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
         let state = crate::models::TunnelState {
             version: crate::models::CURRENT_STATE_VERSION,
-            port: 40001, // local fallback — differs from the bridge port
+            port: 40001,
             pid: 0,
             remote_host: "compute-eda-42".into(),
             setup_path: None,
@@ -282,7 +268,7 @@ mod tests {
             config_digest: None,
             mode: Some(crate::models::TUNNEL_MODE_DEPLOYED.into()),
             attached_remote_port: None,
-            remote_bridge_port: Some(30001), // fixed remote bridge port
+            remote_bridge_port: Some(30001),
             attached_session_id: None,
         };
         assert!(ctx.validate_tunnel_ownership(&state).is_ok());
@@ -291,9 +277,6 @@ mod tests {
     #[serial]
     #[test]
     fn tunnel_ownership_rejects_local_fallback_on_wrong_remote_port() {
-        // Same as above but the recorded remote bridge port belongs to another
-        // target — must be rejected even though the local port matches nothing
-        // meaningful.
         let ctx =
             CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
         let state = crate::models::TunnelState {
@@ -325,8 +308,6 @@ mod tests {
     #[serial]
     #[test]
     fn tunnel_ownership_legacy_state_uses_port_when_no_remote_port() {
-        // v1/v2 legacy state files have neither remote_bridge_port nor
-        // attached_remote_port; the remote port is then identical to `port`.
         let ctx =
             CommandContext::new(cfg_with("compute-eda-42", 30001), Some("prod".into())).unwrap();
         let state = crate::models::TunnelState {
@@ -375,8 +356,6 @@ mod tests {
     #[serial]
     #[test]
     fn ownership_default_port_is_not_a_constraint_same_host() {
-        // The daemon binds an OS-assigned port; a default cfg.port must never
-        // reject a discovered session that happens to differ from it.
         let ctx = CommandContext::new(cfg_with_default_port("compute-eda-42"), Some("prod".into()))
             .unwrap();
         assert!(ctx

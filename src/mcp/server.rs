@@ -7,16 +7,10 @@ use crate::error::Result;
 
 /// Run the MCP server (stdio mode).
 pub fn run() -> Result<()> {
-    // A set-but-invalid VB_SKILLS_DIR is a configuration error: serving a
-    // different skills root than the operator asked for is worse than
-    // refusing to start.
     crate::mcp::resources::resolve_skills_dir_override()
         .map_err(|e| crate::error::VirtuosoError::Config(format!("MCP server {e}")))?;
     crate::auth::Auth::init();
     let config = crate::mcp::McpConfig::from_env();
-    // Resolve the active target via the canonical selection path so the MCP
-    // server inherits the same target identity as any other CLI invocation —
-    // NOT a bare env-only Config that ignores targets.yaml.
     let selection = crate::target::resolve::resolve_selection(None, None).map_err(|e| {
         crate::error::VirtuosoError::Config(format!(
             "MCP server failed to resolve target selection: {e}"
@@ -85,7 +79,6 @@ mod tests {
         .expect("write targets.yaml");
         std::env::set_var("VB_TARGETS_FILE", &targets_path);
 
-        // Replicate the exact selection chain mcp::server::run() uses.
         let selection = crate::target::resolve::resolve_selection(None, None)
             .expect("resolve_selection should succeed with valid active_target");
         let resolved = crate::target::resolve::resolve_from_selection(selection)
@@ -130,9 +123,6 @@ mod tests {
         .expect("write targets.yaml");
         std::env::set_var("VB_TARGETS_FILE", &targets_path);
 
-        // resolve_selection itself validates that active_target exists in
-        // the targets map — it fails early rather than returning a
-        // Selection that resolve_from_selection would later reject.
         let result = crate::target::resolve::resolve_selection(None, None);
         assert!(
             result.is_err(),

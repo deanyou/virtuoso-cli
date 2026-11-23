@@ -36,7 +36,6 @@ impl Auth {
     /// Initialize auth from environment. Called once at startup.
     pub fn init() {
         let api_key = std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty());
-        // Load capabilities from VCLI_CAPABILITY (loaded from env by CapabilitySet::from_env)
         let capabilities = CapabilitySet::from_env();
 
         AUTH.get_or_init(|| Auth {
@@ -54,7 +53,6 @@ impl Auth {
             return Ok(());
         }
 
-        // Check lockout
         let lockout = self.lockout_until.load(Ordering::SeqCst);
         if lockout > 0 {
             let now = std::time::SystemTime::now()
@@ -67,7 +65,6 @@ impl Auth {
                     lockout - now
                 )));
             }
-            // Lockout expired
             self.lockout_until.store(0, Ordering::SeqCst);
             self.failed_attempts.store(0, Ordering::SeqCst);
         }
@@ -80,7 +77,6 @@ impl Auth {
             _ => {
                 let fail = self.failed_attempts.fetch_add(1, Ordering::SeqCst) + 1;
                 if fail >= 5 {
-                    // 5 failed attempts → 5 minute lockout
                     let lockout_until = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap()
@@ -185,9 +181,6 @@ pub fn check_auth(api_key: Option<&str>) -> Result<CapabilitySet, VirtuosoError>
         return Ok(auth.capabilities().clone());
     }
 
-    // Fall back to VCLI_API_KEY env var if no API key provided in request.
-    // This allows MCP clients to rely solely on the env var without
-    // needing to pass it in every JSON-RPC request.
     let key = api_key
         .map(String::from)
         .or_else(|| std::env::var("VCLI_API_KEY").ok().filter(|k| !k.is_empty()));

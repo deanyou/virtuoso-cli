@@ -126,7 +126,6 @@ impl<R: Read> FrameReader<R> {
                 if remaining.is_zero() {
                     return Err(FrameError::Io("ipc read deadline exceeded".into()));
                 }
-                // 1ms floor: a zero SO_RCVTIMEO means "no timeout" on Linux.
                 set_timeout(remaining.max(std::time::Duration::from_millis(1)));
             }
             if self.buf.len() >= FRAME_PREFIX_LEN {
@@ -141,12 +140,10 @@ impl<R: Read> FrameReader<R> {
                     self.buf.drain(..total);
                     return Ok(Some(payload));
                 }
-                // Prefix says more bytes are coming; read again.
             }
             let mut chunk = [0u8; 8192];
             let n = self.inner.read(&mut chunk)?;
             if n == 0 {
-                // EOF. A non-empty residual buffer means a partial frame.
                 return if self.buf.is_empty() {
                     Ok(None)
                 } else {
@@ -322,7 +319,6 @@ mod tests {
 
     #[test]
     fn oversize_claim_is_rejected_before_buffering() {
-        // A prefix claiming 9 MiB must fail even though only the prefix arrived.
         let mut prefix = Vec::new();
         prefix.extend_from_slice(&(MAX_FRAME_SIZE as u32 + 1).to_be_bytes());
         let mut reader = FrameReader::new(Cursor::new(prefix));

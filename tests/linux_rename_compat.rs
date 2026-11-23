@@ -62,7 +62,6 @@ mod linux {
             unsafe { rename_noreplace(libc::AT_FDCWD, src.as_ptr(), libc::AT_FDCWD, dst.as_ptr()) };
         assert_eq!(rc, -1, "rename onto an existing file must fail");
         assert_eq!(unsafe { *libc::__errno_location() }, libc::EEXIST);
-        // Destination must be unmodified
         assert_eq!(fs::read_to_string(dst.to_str().unwrap()).unwrap(), "B");
 
         cleanup("src2");
@@ -82,7 +81,6 @@ mod linux {
             unsafe { rename_noreplace(libc::AT_FDCWD, src.as_ptr(), libc::AT_FDCWD, dst.as_ptr()) };
         assert_eq!(rc, -1, "rename onto an existing dir must fail");
         assert_eq!(unsafe { *libc::__errno_location() }, libc::EEXIST);
-        // src must NOT be consumed (noreplace semantics).
         assert!(Path::new(src.to_str().unwrap()).exists());
 
         let _ = fs::remove_dir(dst.to_str().unwrap());
@@ -104,8 +102,6 @@ mod linux {
 
     #[test]
     fn unicode_filename() {
-        // C string with multi-byte UTF-8 bytes — exercise the lossless path
-        // that uses *CString (no OsStr).
         let name = format!("unicode_{}_细胞_🦀", std::process::id());
         let src_path = format!("/tmp/{}", name);
         let dst_path = format!("/tmp/dst_{}", name);

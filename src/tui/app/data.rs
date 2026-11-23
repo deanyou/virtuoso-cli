@@ -39,9 +39,6 @@ pub(crate) fn save_config(app: &App) -> Result<()> {
     let mut file = match ConfigFile::load() {
         Ok(Some(f)) => f,
         Ok(None) => ConfigFile::default(),
-        // A file that exists but will not parse must not be silently
-        // replaced: surfacing the error is the whole point of validating at
-        // load time.
         Err(e) => return Err(e),
     };
     let profile = crate::profile::resolve_profile_info(None).profile;

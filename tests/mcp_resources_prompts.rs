@@ -72,7 +72,6 @@ impl Server {
             let read = self.stdout.read_line(&mut line).expect("read response");
             assert!(read > 0, "server closed stdout before answering id {id}");
             let Ok(value) = serde_json::from_str::<Value>(line.trim()) else {
-                // The CLI prints its own JSON result after the loop ends.
                 continue;
             };
             if value.get("id").and_then(|v| v.as_u64()) == Some(id) {
@@ -334,7 +333,6 @@ fn prompts_get_rejects_missing_required_arguments() {
 #[test]
 fn mcp_serve_fails_fast_on_an_invalid_skills_dir() {
     let tmp = tempfile::tempdir().expect("tempdir");
-    // A file, not a directory.
     let not_a_dir = tmp.path().join("skills-file");
     std::fs::write(&not_a_dir, "not a directory").expect("write file");
 
@@ -397,7 +395,6 @@ fn prompts_get_fills_arguments_and_rejects_unknown_names() {
     );
     assert!(text.contains("wn"), "variable must be filled in: {text}");
     assert!(text.contains("2u"), "value must be filled in: {text}");
-    // The workflow must reference the real tool names.
     assert!(text.contains("maestro_run"), "{text}");
     assert!(text.contains("maestro_get_output_value"), "{text}");
 
@@ -414,7 +411,6 @@ fn prompts_get_fills_arguments_and_rejects_unknown_names() {
 
 #[test]
 fn skills_are_discovered_from_the_working_directory_tree() {
-    // The skills root is found by walking up from the working directory.
     let tmp = tempfile::tempdir().expect("tempdir");
     write_skill(tmp.path(), "demo", "---\nname: demo\n---\nbody\n");
     let nested = tmp.path().join("a").join("b");

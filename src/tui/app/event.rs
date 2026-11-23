@@ -14,7 +14,6 @@ pub fn on_key(app: &mut App, key: KeyEvent) -> Action {
         return overlay_key(app, key);
     }
 
-    // Globals first — available everywhere except inside an overlay.
     if let Some(a) = global_key(app, key) {
         return a;
     }
@@ -49,7 +48,6 @@ fn global_key(app: &mut App, key: KeyEvent) -> Option<Action> {
 
 fn content_key(app: &mut App, key: KeyEvent) -> Action {
     match (key.code, app.tab) {
-        // j/k or arrow navigation across all tabs
         (KeyCode::Char('j') | KeyCode::Down, _) => {
             app.move_selection(1);
             Action::None
@@ -59,7 +57,6 @@ fn content_key(app: &mut App, key: KeyEvent) -> Action {
             Action::None
         }
 
-        // Config: enter the form overlay for the selected field
         (KeyCode::Enter | KeyCode::Char('i'), Tab::Config) => {
             if let Some(field) = app.selected_config_field() {
                 app.overlay = Overlay::Form(ConfigFormState {
@@ -72,9 +69,6 @@ fn content_key(app: &mut App, key: KeyEvent) -> Action {
             Action::None
         }
 
-        // Jobs: 'c' would normally be a global (quit-like), but per the cascade
-        // globals already handled Ctrl-C. Plain 'c' in Jobs tab falls through to
-        // content to open the cancel confirm overlay.
         (KeyCode::Char('x'), Tab::Jobs) => cancel_job_prompt(app),
 
         _ => Action::None,
@@ -100,8 +94,6 @@ fn cancel_job_prompt(app: &mut App) -> Action {
 }
 
 fn overlay_key(app: &mut App, key: KeyEvent) -> Action {
-    // Split dispatch from mutation to avoid holding a borrow on `app.overlay`
-    // while also needing a mutable borrow on `app` itself.
     match &app.overlay {
         Overlay::None => Action::None,
         Overlay::Help => {

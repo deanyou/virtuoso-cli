@@ -29,7 +29,7 @@ fn tunnel_status_unreachable(port: u16) -> serde_json::Value {
         .args(["tunnel", "status", "--format", "json"])
         .env("VB_PORT", port.to_string())
         .env("VB_REMOTE_HOST", "compute-eda-42")
-        .env_remove("VB_SESSION") // ensure we don't pick up a real session
+        .env_remove("VB_SESSION")
         .output()
         .expect("vcli tunnel status should run");
 
@@ -52,18 +52,11 @@ fn tunnel_status_json_has_expected_top_level_keys() {
 
 #[test]
 fn tunnel_status_daemon_unreachable_has_no_hostname_check() {
-    // When the daemon port isn't reachable, the hostname_check path
-    // is short-circuited — the field should be absent (or at least
-    // not contain a populated configured/actual pair).
     let json = tunnel_status_unreachable(1);
     let daemon = &json["daemon"];
     assert_eq!(daemon["responsive"], false);
 
-    // hostname_check is only populated when the daemon is reachable.
-    // It MAY be present as `{"skipped": "..."}` or absent entirely;
-    // both are valid.
     if let Some(hc) = daemon.get("hostname_check") {
-        // If present, it must NOT contain a populated mismatch=true result.
         assert!(
             hc.get("mismatch").is_none() || hc.get("mismatch") == Some(&serde_json::json!(false)),
             "hostname_check should not be populated when daemon is unreachable, got: {hc}"
@@ -73,20 +66,15 @@ fn tunnel_status_daemon_unreachable_has_no_hostname_check() {
 
 #[test]
 fn tunnel_status_tunnel_section_reports_not_running() {
-    // No tunnel state file should be present in this test (we just
-    // pointed at an unused port), so the tunnel section should report
-    // running=false.
     let json = tunnel_status_unreachable(1);
     assert_eq!(json["tunnel"]["running"], false);
 }
 
 #[test]
 fn tunnel_status_config_section_reflects_env_overrides() {
-    // The config section should reflect the env vars we passed.
     let json = tunnel_status_unreachable(65530);
     let config = &json["config"];
     assert_eq!(config["port"], 65530);
-    // remote_host comes from VB_REMOTE_HOST
     assert_eq!(config["remote_host"], "compute-eda-42");
 }
 
@@ -103,7 +91,6 @@ fn tunnel_status_table_format_includes_daemon_section() {
         .output()
         .expect("vcli tunnel status --format table should run");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // The header is always present, even when nothing is reachable.
     assert!(
         stdout.contains("=== Virtuoso CLI Status ==="),
         "table output should have header, got: {stdout}"
@@ -127,13 +114,12 @@ fn tunnel_status_skips_hostname_check_when_no_remote_host() {
     let output = vcli()
         .args(["tunnel", "status", "--format", "json"])
         .env("VB_PORT", "1")
-        .env_remove("VB_REMOTE_HOST") // simulate local mode
+        .env_remove("VB_REMOTE_HOST")
         .env_remove("VB_SESSION")
         .output()
         .expect("vcli tunnel status should run");
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let daemon = &json["daemon"];
     assert_eq!(daemon["responsive"], false);
-    // No daemon reachable → hostname_check field should be absent.
     assert!(daemon.get("hostname_check").is_none());
 }

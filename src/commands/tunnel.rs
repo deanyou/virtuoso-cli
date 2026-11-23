@@ -24,17 +24,9 @@ pub fn start(ctx: &CommandContext, _timeout: Option<u64>, dry_run: bool) -> Resu
         }));
     }
 
-    // Deploy-only. The daemon is started by Virtuoso loading the deployed IL,
-    // at which point it binds an OS-assigned port — vcli does NOT start it and
-    // does NOT know the endpoint yet. Reporting "deployed, not ready" instead
-    // of a guessed port is what keeps the endpoint honest (the bridge's
-    // `RBStart` passes port=0; see resources/ramic_bridge.il).
     let client = SSHClient::from_config(cfg, cfg.keep_remote_files)?;
     let il_path = client.warm()?;
 
-    // Auto-discover remote sessions and sync them to local cache.
-    // This allows `vcli skill exec` to find the Virtuoso daemon port
-    // without manual docker cp or session file copying.
     let transport = client.transport();
     let sessions_synced = SessionInfo::sync_from_remote(transport.as_ref()).unwrap_or(0);
 
@@ -128,7 +120,6 @@ fn discover_live_session(ctx: &CommandContext, client: &SSHClient) -> Result<Ses
         )
     })?;
 
-    // Final ownership guard (F05) before opening the tunnel / writing state.
     ctx.validate_session_ownership(&live)?;
     Ok(live)
 }
@@ -149,9 +140,6 @@ fn discover_live_session(ctx: &CommandContext, client: &SSHClient) -> Result<Ses
 pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
     let cfg = ctx.config();
 
-    // Refuse if a tunnel of any mode is already up. The user can pick the
-    // matching verb to clean up (`detach` for attached, `stop` for deployed).
-    // Read under the config's profile namespace (same identity as the write).
     if let Some(existing) = TunnelState::load_with_profile(cfg.profile.as_deref())? {
         let mode = existing.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
         let verb = if mode == TUNNEL_MODE_ATTACHED {
@@ -165,9 +153,6 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
         )));
     }
 
-    // SSHClient here is used purely as a transport wrapper — we don't call
-    // warm() (which would deploy a fresh daemon). The runner is configured
-    // by from_config() but no remote command runs until we explicitly call one.
     let mut client = SSHClient::from_config(cfg, cfg.keep_remote_files)?;
     let live = discover_live_session(ctx, &client)?;
 
@@ -186,12 +171,6 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
         }));
     }
 
-    // Use the same port locally as the remote daemon listens on. Same-port
-    // forwarding keeps scripts that bind to the canonical daemon port
-    // working without reconfiguration. `open_tunnel` runs `ssh -L
-    // 127.0.0.1:<port>:127.0.0.1:<port>`, so this forwards to the
-    // discovered listener exactly, and only reports success once the
-    // forward-holding ssh is verified alive.
     let local_port = live.port;
     client.open_tunnel(local_port, live.port)?;
 
@@ -222,14 +201,10 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
         remote_bridge_port: Some(live.port),
         attached_session_id: Some(live.id.clone()),
     };
-    // Write under the config's profile namespace so later stop/detach/status
-    // reads (also profile-keyed) see this tunnel — never the ambient VB_PROFILE.
     state
         .save_with_profile(cfg.profile.as_deref())
         .map_err(|e| VirtuosoError::Ssh(format!("save tunnel state: {e}")))?;
 
-    // Mirror the remote session metadata into the local cache so subsequent
-    // `vcli session show` works without another SSH round-trip.
     let transport = client.transport();
     let sessions_synced = SessionInfo::sync_from_remote(transport.as_ref()).unwrap_or(0);
 
@@ -248,18 +223,12 @@ pub fn attach(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
 pub fn stop(ctx: &CommandContext, force: bool, dry_run: bool) -> Result<Value> {
     let cfg = ctx.config();
 
-    // Read the tunnel state under the *config's* profile namespace, never the
-    // ambient `VB_PROFILE` — otherwise `--target prod` could stop a tunnel
-    // recorded for `test` and then clean up using prod's config (mixed
-    // identities). Read, write and cleanup all key on `cfg.profile`.
     let state = TunnelState::load_with_profile(cfg.profile.as_deref())?;
     let state = match state {
         Some(s) => s,
         None => return Err(VirtuosoError::NotFound("no running tunnel found".into())),
     };
 
-    // Ownership (F05): never stop a tunnel that belongs to another target —
-    // including the same host with a different bridge port.
     ctx.validate_tunnel_ownership(&state)?;
 
     let mode = state.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
@@ -274,21 +243,11 @@ pub fn stop(ctx: &CommandContext, force: bool, dry_run: bool) -> Result<Value> {
                 "remote_host": state.remote_host,
                 "mode": mode,
             },
-            // Attached daemons belong to Virtuoso — stop must not rm -rf them.
             "will_cleanup_remote": !cfg.keep_remote_files && mode == TUNNEL_MODE_DEPLOYED,
             "dry_run": true,
         }));
     }
 
-    // Single, authoritative stop path. Cross-platform pid verification, the
-    // native two-tier assessment, remote scratch cleanup and state clearing all
-    // live in one place, so nothing here duplicates (or can drift from) them.
-    //
-    // Both cleanup gates are enforced inside stop_saved_tunnel:
-    //   1. authorization — cleanup only after the verdict says the recorded
-    //      tunnel is ours or proven gone (a live/unverifiable daemon is kept)
-    //   2. ownership — only a `deployed` tunnel owns its remote setup dir; an
-    //      `attached` daemon belongs to Virtuoso and is never rm -rf'd
     crate::transport::tunnel::stop_saved_tunnel(cfg, &state, force)?;
 
     Ok(json!({
@@ -315,9 +274,6 @@ pub fn detach(ctx: &CommandContext) -> Result<Value> {
     let state = TunnelState::load_with_profile(cfg.profile.as_deref())?
         .ok_or_else(|| VirtuosoError::NotFound("no attached tunnel found".into()))?;
 
-    // P0-A ownership (F05): never detach a tunnel that belongs to another
-    // target — single rule in `CommandContext::validate_tunnel_ownership`
-    // (host + remote bridge port).
     ctx.validate_tunnel_ownership(&state)?;
 
     let mode = state.mode.as_deref().unwrap_or(TUNNEL_MODE_DEPLOYED);
@@ -343,9 +299,6 @@ pub fn detach(ctx: &CommandContext) -> Result<Value> {
 }
 
 pub fn restart(ctx: &CommandContext, _timeout: Option<u64>) -> Result<Value> {
-    // Pre-flight BEFORE stopping: `start` is deploy-only and cannot restore a
-    // connection, so restart must refuse (without disconnecting the user) when
-    // there is no live daemon to re-attach to.
     let client = SSHClient::from_config(ctx.config(), ctx.config().keep_remote_files)?;
     discover_live_session(ctx, &client)?;
 
@@ -368,23 +321,18 @@ pub fn diagnose(ctx: &CommandContext) -> Result<Value> {
         .map(|s| s.port)
         .unwrap_or(cfg.port);
 
-    // TCP reachability
     let tcp_ok = std::net::TcpStream::connect_timeout(
         &format!("127.0.0.1:{port}").parse().unwrap(),
         std::time::Duration::from_secs(2),
     )
     .is_ok();
 
-    // Daemon responsiveness + latency
     let (daemon_ok, latency_ms, virtuoso_version) = if tcp_ok {
         let vc = crate::client::bridge::VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         let start = std::time::Instant::now();
         match vc.test_connection(Some(5)) {
             Ok(true) => {
                 let lat = start.elapsed().as_millis();
-                // Try to get Virtuoso version
-                // getVersion() is a fixed read-only probe; idempotent, so it
-                // may drain a stale queued ticket.
                 let ver = vc
                     .execute_skill_idempotent_probe("getVersion()", None)
                     .ok()
@@ -403,10 +351,8 @@ pub fn diagnose(ctx: &CommandContext) -> Result<Value> {
         (false, None, None)
     };
 
-    // SKILL eval test
     let skill_ok = if daemon_ok {
         let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
-        // Idempotent health probe — same expression test_connection uses.
         vc.execute_skill_idempotent_probe("1+1", None)
             .map(|r| r.output.trim() == "2")
             .unwrap_or(false)
@@ -414,12 +360,6 @@ pub fn diagnose(ctx: &CommandContext) -> Result<Value> {
         false
     };
 
-    // Hostname verification — see `HostnameCheck` doc. Skip when no
-    // remote host is configured (local mode). Gated on `tcp_ok` (not
-    // `daemon_ok`) because on strict daemons test_connection's `1+1`
-    // SKILL call is blocked, but getHostName() via execute_skill_unchecked
-    // still works — the hostname check has its own error path for
-    // genuinely-unreachable daemons.
     let hostname_check = if tcp_ok && cfg.is_remote() {
         let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         match HostnameCheck::run(&vc, cfg.remote_host.as_deref(), Some(5)) {
@@ -477,9 +417,6 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         }
     });
 
-    // Multi-host role split. Each role is independently resolvable; when
-    // all four collapse to remote_host the JSON shows the same value four
-    // times (no-op for legacy single-host setups).
     let fb = cfg.remote_host.as_deref();
     result["config"]["roles"] = json!({
         "gui_host": cfg.roles.gui_host(fb),
@@ -493,10 +430,6 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         let port_open = std::net::TcpStream::connect(format!("127.0.0.1:{}", state.port)).is_ok();
         let host_match = !cfg.is_remote() || Some(&state.remote_host) == cfg.remote_host.as_ref();
 
-        // Backend diagnostics: report both the config-selected backend and the
-        // backend recorded on disk, so an operator can spot a drift (e.g. they
-        // ran a native daemon last, then re-launched with `VB_SSH_BACKEND=
-        // openssh` and the legacy state file still says `native`).
         let (config_backend_value, tunnel_backend_value, drift_warning) =
             backend_diagnostics(cfg, Some(state.backend_or_openssh()));
         result["config"]["backend"] = config_backend_value;
@@ -518,8 +451,6 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
             "backend": tunnel_backend_value,
         })
     } else {
-        // No live tunnel — report the config-selected backend alone; the
-        // recorded backend is irrelevant until a tunnel is actually running.
         let (config_backend_value, _, _) = backend_diagnostics(cfg, None);
         result["config"]["backend"] = config_backend_value;
         json!({ "running": false })
@@ -541,11 +472,6 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         json!({ "responsive": false, "detail": "port not reachable" })
     };
 
-    // Hostname verification: ask the daemon what host it thinks it's on,
-    // compare to VB_REMOTE_HOST. Most common EDA misconfig is pointing
-    // VB_REMOTE_HOST at the jump host instead of the compute host.
-    // Uses execute_skill_unchecked because tunnel status is a diagnostic
-    // command — it must work without Admin capability.
     if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
         let vc = VirtuosoClient::new("127.0.0.1", port, cfg.timeout);
         match HostnameCheck::run(&vc, cfg.remote_host.as_deref(), Some(5)) {
@@ -574,9 +500,6 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
             println!("config:");
             for (k, v) in config.as_object().unwrap() {
                 if k == "roles" {
-                    // Render roles as nested keys; the same string repeated
-                    // four times when roles collapse onto remote_host is
-                    // the expected behavior of the legacy single-host setup.
                     if let Some(roles) = v.as_object() {
                         for (rk, rv) in roles {
                             let display = match rv {
@@ -615,7 +538,6 @@ pub fn status(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
                 };
                 println!("  {k}: {display}");
             }
-            // If hostname check found a mismatch, surface a prominent warning.
             if let Some(check) = daemon.get("hostname_check") {
                 if check.get("mismatch").and_then(|v| v.as_bool()) == Some(true) {
                     if let (Some(actual), Some(configured)) = (
@@ -662,8 +584,6 @@ pub(crate) fn backend_diagnostics(
         "selected": selected,
         "supported_in_build": match crate::transport::backend::SshBackend::parse(selected) {
             Some(backend) => backend.supported_in_this_build(),
-            // Unknown values surface honestly rather than being silently
-            // treated as openssh — the design forbids silent fallback.
             None => false,
         },
     });
@@ -712,15 +632,11 @@ impl HostnameCheck {
         configured: Option<&str>,
         timeout: Option<u64>,
     ) -> Result<Option<Self>> {
-        // Local mode — no configured remote host, nothing to verify.
         let configured = match configured {
             Some(s) if !s.is_empty() => s.to_string(),
             _ => return Ok(None),
         };
 
-        // Use the idempotent probe path because tunnel status / diagnose are
-        // diagnostic commands — they must work without Admin capability, and
-        // getHostName() is read-only (the worst it can leak is the host name).
         let result = vc.execute_skill_idempotent_probe("getHostName()", timeout)?;
         if !result.skill_ok() {
             return Err(VirtuosoError::Execution(format!(
@@ -752,7 +668,6 @@ impl HostnameCheck {
     /// string is the only case where we can't produce a meaningful check).
     pub(crate) fn parse_gethostname_output(raw: &str) -> Result<String> {
         let trimmed = raw.trim();
-        // strip one leading + one trailing double quote if present
         let stripped = trimmed
             .strip_prefix('"')
             .and_then(|s| s.strip_suffix('"'))
@@ -857,8 +772,6 @@ mod tests {
 
     #[test]
     fn attach_scope_keeps_only_target_bridge_port() {
-        // Same host, two targets: prod=30001, test=30002. Only the prod
-        // session may be attachable for a prod target.
         let sessions = vec![
             session("prod-30001", 30001, "compute-eda-42"),
             session("test-30002", 30002, "compute-eda-42"),
@@ -880,8 +793,6 @@ mod tests {
 
     #[test]
     fn attach_scope_is_port_specific_not_host_specific() {
-        // Different hosts with the same bridge port still belong to the same
-        // target port; the scope is by port, host matching happens later.
         let sessions = vec![
             session("a-30001", 30001, "compute-a"),
             session("b-30001", 30001, "compute-b"),
@@ -891,9 +802,6 @@ mod tests {
 
     #[test]
     fn attach_candidates_unfiltered_for_default_port() {
-        // A default (hash-of-USER) target port is NOT an endpoint constraint:
-        // the daemon binds an OS-assigned port, so sessions on other ports
-        // must stay discoverable.
         let sessions = vec![
             session("os-41234", 41234, "compute-eda-42"),
             session("os-41235", 41235, "compute-eda-42"),
@@ -904,7 +812,6 @@ mod tests {
 
     #[test]
     fn attach_candidates_unfiltered_for_legacy_no_target() {
-        // Legacy/profile mode (no target) keeps full auto-discovery.
         let sessions = vec![
             session("os-41234", 41234, "compute-eda-42"),
             session("os-41235", 41235, "compute-eda-42"),
@@ -961,7 +868,6 @@ mod tests {
 
     #[test]
     fn parse_gethostname_output_strips_trailing_newline() {
-        // Most common case — the RBIPC channel appends a trailing newline.
         assert_eq!(
             HostnameCheck::parse_gethostname_output("myhost\n").unwrap(),
             "myhost"
@@ -970,7 +876,6 @@ mod tests {
 
     #[test]
     fn parse_gethostname_output_strips_surrounding_quotes() {
-        // SKILL string repr is `"myhost"` (note the quotes).
         assert_eq!(
             HostnameCheck::parse_gethostname_output("\"myhost\"").unwrap(),
             "myhost"
@@ -988,7 +893,6 @@ mod tests {
 
     #[test]
     fn parse_gethostname_output_strips_internal_padding() {
-        // Defensive: some channels pad with spaces.
         assert_eq!(
             HostnameCheck::parse_gethostname_output("  myhost  \n").unwrap(),
             "myhost"
@@ -1006,7 +910,6 @@ mod tests {
 
     #[test]
     fn parse_gethostname_output_handles_fully_qualified_names() {
-        // FQDN: dots must be preserved.
         assert_eq!(
             HostnameCheck::parse_gethostname_output("eda-42.corp.example.com\n").unwrap(),
             "eda-42.corp.example.com"
@@ -1025,7 +928,6 @@ mod tests {
 
     #[test]
     fn parse_gethostname_output_errors_on_just_quotes() {
-        // The pair of quotes is stripped, leaving an empty string.
         assert!(HostnameCheck::parse_gethostname_output("\"\"").is_err());
     }
 
@@ -1049,16 +951,12 @@ mod tests {
 
     #[test]
     fn mismatch_when_actual_is_empty_string() {
-        // If getHostName() somehow returned an empty actual, the check
-        // should still distinguish mismatch (the configured host is not "").
         let c = check("eda-1", "");
         assert!(c.mismatch);
     }
 
     #[test]
     fn mismatch_case_sensitive() {
-        // Hostnames are case-sensitive on Linux. Make sure we don't
-        // accidentally do a case-insensitive comparison.
         let c = check("EDA-1", "eda-1");
         assert!(c.mismatch, "hostname comparison must be case-sensitive");
     }
@@ -1071,11 +969,6 @@ mod tests {
         );
         assert!(!c.mismatch);
     }
-
-    // The run() method needs a live VirtuosoClient; the parsing is
-    // covered by parse_gethostname_output tests above. The
-    // execute_skill_unchecked path is exercised by the bridge's own
-    // tests in client/bridge.rs.
 }
 
 #[cfg(test)]
@@ -1084,9 +977,6 @@ mod backend_diagnostics_tests {
     use crate::config::Config;
 
     fn cfg_with(backend: Option<&str>) -> Config {
-        // Config has no Default impl; build a minimal fixture inline so the
-        // tests stay hermetic (no env, no filesystem). Only the fields the
-        // backend-diagnostics logic actually reads matter here.
         Config {
             profile: None,
             remote_host: None,
@@ -1145,9 +1035,6 @@ mod backend_diagnostics_tests {
 
     #[test]
     fn config_unknown_backend_is_honest_not_silently_falls_back() {
-        // The design forbids silent fallback; an unrecognised value must
-        // surface as unsupported rather than being silently treated as
-        // openssh. Drift detection against the on-disk backend still runs.
         let (config_value, _, warning) =
             backend_diagnostics(&cfg_with(Some("banana")), Some("openssh"));
         assert_eq!(config_value["selected"], "banana");
@@ -1167,10 +1054,6 @@ mod backend_diagnostics_tests {
 
     #[test]
     fn state_native_with_config_openssh_fires_drift_warning() {
-        // Live tunnel was started by a native daemon, but the operator
-        // is now running a CLI build that defaults to openssh. The
-        // status JSON must surface the mismatch so they don't act on
-        // a stale backend assumption.
         let (_, tunnel_value, warning) = backend_diagnostics(&cfg_with(None), Some("native"));
         assert_eq!(tunnel_value, "native");
         let msg = warning.expect("drift warning must fire on config/state mismatch");

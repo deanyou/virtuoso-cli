@@ -1,25 +1,4 @@
 #!/usr/bin/env bash
-#
-# install.sh — shared / multi-user installer for virtuoso-cli.
-#
-# Installs vcli, vtui and virtuoso-daemon to a shared or per-user prefix, and
-# installs ramic_bridge.il with the daemon path baked in (the __DAEMON_PATH__
-# token is substituted to $PREFIX/bin/virtuoso-daemon). One shared install then
-# serves every user on the host with zero per-user setup — each user only adds a
-# single load(...) line to their ~/.cdsinit.
-#
-# Usage:
-#   ./install.sh [--system | --user | --prefix DIR] [--no-build]
-#
-#   --system        install to /opt/virtuoso-cli   (shared; needs write perm)
-#   --user          install to ~/.local            (per-user; default)
-#   --prefix DIR    install to DIR                 (any prefix)
-#   --no-build      skip `cargo build`; install the existing target/release bins
-#   -h, --help      show this help
-#
-# Layout created:
-#   $PREFIX/bin/{vcli,vtui,virtuoso-daemon}
-#   $PREFIX/share/virtuoso-cli/ramic_bridge.il   (with __DAEMON_PATH__ resolved)
 
 set -euo pipefail
 
@@ -31,7 +10,7 @@ BINS=(vcli vtui virtuoso-daemon)
 
 # --- defaults ---------------------------------------------------------------
 PREFIX=""
-MODE=""          # system | user | prefix
+MODE=""
 NO_BUILD=0
 
 die() { printf 'install.sh: error: %s\n' "$*" >&2; exit 1; }
@@ -61,7 +40,6 @@ case "$MODE" in
     user|"") PREFIX="${PREFIX:-$HOME/.local}"; MODE="${MODE:-user}" ;;
     prefix)  [ -n "$PREFIX" ] || die "empty --prefix" ;;
 esac
-# Expand a leading ~ if the caller quoted it.
 case "$PREFIX" in "~"/*) PREFIX="$HOME/${PREFIX#~/}" ;; esac
 
 BIN_DIR="$PREFIX/bin"
@@ -100,16 +78,10 @@ for b in "${BINS[@]}"; do
 done
 
 printf '==> installing bridge (baking __DAEMON_PATH__ = %s)\n' "$DAEMON_BIN"
-# Bash's ${var//pat/repl} is a *literal* substitution: unlike sed it has no `&`
-# ("the whole match") magic and no delimiter, so a prefix containing `&`, `|`
-# or `\` — all legal in a Unix path — cannot corrupt the baked path.
-# The trailing `X` guard keeps any trailing newlines that $(...) would strip.
 IL_CONTENT="$(cat "$IL_SRC"; printf X)"
 IL_CONTENT="${IL_CONTENT%X}"
 printf '%s' "${IL_CONTENT//__DAEMON_PATH__/$DAEMON_BIN}" > "$IL_DEST"
 chmod 0644 "$IL_DEST"
-# Fail loudly if the token survived: a half-substituted bridge makes the
-# deploy-time injection silently no-op, which is exactly what this bakes.
 if grep -q '__DAEMON_PATH__' "$IL_DEST"; then
     die "unresolved __DAEMON_PATH__ in $IL_DEST (prefix: $PREFIX)"
 fi

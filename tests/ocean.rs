@@ -11,13 +11,9 @@ use virtuoso_cli::ocean::{analysis_skill_simple, parse_skill_list, setup_skill, 
 fn test_setup_skill_generates_progn() {
     let skill = setup_skill("myLib", "myCell", "schematic", "spectre");
 
-    // Should use progn to wrap multiple expressions
     assert!(skill.starts_with("progn("));
-    // Should set simulator
     assert!(skill.contains("spectre"));
-    // Should call design
     assert!(skill.contains(r#"design("myLib" "myCell" "schematic")"#));
-    // Should include resultsDir
     assert!(skill.contains("resultsDir()"));
 }
 
@@ -26,7 +22,6 @@ fn test_setup_skill_generates_progn() {
 fn test_setup_skill_escapes_quotes() {
     let skill = setup_skill(r#"lib"with"quotes"#, "cell", "schematic", "spectre");
 
-    // Quotes should be escaped
     assert!(skill.contains(r#"\"#));
 }
 
@@ -53,7 +48,6 @@ fn test_analysis_skill_simple_booleans() {
 
     let skill = analysis_skill_simple("tran", &params);
 
-    // Booleans should NOT be quoted
     assert!(skill.contains("?conservative t"));
     assert!(skill.contains("?disable nil"));
 }
@@ -66,7 +60,6 @@ fn test_analysis_skill_simple_strings() {
 
     let skill = analysis_skill_simple("tran", &params);
 
-    // Strings should be quoted
     assert!(skill.contains(r#"?errpreset "moderate""#));
 }
 

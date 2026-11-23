@@ -326,8 +326,6 @@ mod tests {
 
     #[test]
     fn shape_grid_audit_opens_the_cellview_with_a_view_type() {
-        // The 4-argument form returns a window id, not a cellview, and every
-        // accessor on it reads nil.
         let s = shape_grid_audit_skill("st02", "qvp20", "layout");
         assert!(
             s.contains(r#"dbOpenCellViewByType("st02" "qvp20" "layout" "maskLayout" "r")"#),
@@ -358,7 +356,6 @@ mod tests {
     #[test]
     fn shape_grid_audit_aggregates_per_layer() {
         let s = shape_grid_audit_skill("lib", "cell", "view");
-        // One (layer on off) entry per layer, not one per shape.
         assert!(s.contains("cons(list(lyr on off) newEntries)"), "{s}");
         assert!(s.contains("(cadr(ent) + on)"), "{s}");
         assert!(s.contains("(caddr(ent) + off)"), "{s}");
@@ -386,7 +383,6 @@ mod tests {
         let s = shape_grid_audit_skill("lib", "cell", "view");
         assert!(s.contains("shp~>net~>name"), "{s}");
         assert!(s.contains("dbGetOverlaps(cv list(pt pt))"), "{s}");
-        // The old endpoint analysis used accessors that can never evaluate.
         assert!(!s.contains("s~>kind"), "{s}");
         assert!(!s.contains("~>objType == \"pin\""), "{s}");
         assert!(!s.contains("~>layer~>name"), "{s}");
@@ -396,8 +392,6 @@ mod tests {
     fn shape_grid_audit_closes_the_cellview_on_every_path() {
         let s = shape_grid_audit_skill("lib", "cell", "view");
         assert!(s.contains("dbClose(cv)"), "must close cellview: {s}");
-        // The close is the cleanup form of unwindProtect, so it also runs
-        // when the audit raises.
         assert!(s.contains("unwindProtect("), "{s}");
     }
 

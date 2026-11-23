@@ -54,18 +54,14 @@ fn parse_psf_signal_file(path: &Path) -> Option<Vec<f64>> {
     let content = fs::read_to_string(path).ok()?;
     let content = content.trim();
 
-    // Skip files that look like headers or metadata
     if content.is_empty() || content.starts_with('#') || content.starts_with("title") {
         return None;
     }
 
-    // Try to detect if this is a PSF ASCII file with sections
     if content.contains("SWEEP") || content.contains("TRACE") || content.contains("VALUE") {
-        // This is a PSF ASCII format file with section headers
         return parse_psf_ascii_content(content);
     }
 
-    // Fall back to simple float-per-line parsing
     parse_simple_floats(content)
 }
 
@@ -74,7 +70,6 @@ fn parse_psf_signal_file(path: &Path) -> Option<Vec<f64>> {
 fn parse_psf_ascii_content(content: &str) -> Option<Vec<f64>> {
     let lines: Vec<&str> = content.lines().collect();
 
-    // Find section boundaries
     let mut sections: HashMap<&str, usize> = HashMap::new();
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
@@ -86,13 +81,11 @@ fn parse_psf_ascii_content(content: &str) -> Option<Vec<f64>> {
     let sweep_start = sections.get("SWEEP")? + 1;
     let sweep_end = sections.get("TRACE").copied().unwrap_or(lines.len());
 
-    // Parse sweep values (time/frequency/etc.) using iterator
     let sweep_values: Vec<f64> = lines[sweep_start..sweep_end]
         .iter()
         .enumerate()
         .filter(|(idx, line)| {
             let trimmed = line.trim();
-            // Skip empty lines and section headers
             !trimmed.is_empty()
                 && trimmed != "TRACE"
                 && trimmed != "VALUE"
@@ -141,8 +134,6 @@ pub fn parse_sweep_psf_directory(
 ) -> Result<HashMap<usize, HashMap<String, Vec<f64>>>> {
     let mut sweep_data: HashMap<usize, HashMap<String, Vec<f64>>> = HashMap::new();
 
-    // Scan for sweep subdirectories at the root level (not inside psf/)
-    // Sweep directories like sw1.sweep1 are at the same level as psf/, not inside it
     if let Ok(entries) = fs::read_dir(output_dir) {
         let mut sweep_dirs: Vec<_> = entries
             .filter_map(|e| e.ok())
@@ -182,11 +173,8 @@ pub fn parse_sweep_psf_directory(
         }
     }
 
-    // Fallback: flat per-point files (Spectre X/LX mode)
-    // Files named sw1-000_tran.tran.tran, sw1-001_tran.tran.tran, ...
     if sweep_data.is_empty() {
         if let Ok(entries) = fs::read_dir(output_dir) {
-            // Pre-compile regex outside the loop for performance
             let flat_pattern = Regex::new(r"^sw\d+-\d+_").ok();
             let idx_pattern = Regex::new(r"^sw\d+-(\d+)_").ok();
 
@@ -214,7 +202,6 @@ pub fn parse_sweep_psf_directory(
                         if let Some(caps) = re.captures(file_name) {
                             if let Some(idx_str) = caps.get(1) {
                                 if let Ok(point_idx) = idx_str.as_str().parse::<usize>() {
-                                    // Convert from 0-indexed to 1-indexed
                                     let point_idx = point_idx + 1;
 
                                     if let Some(values) = parse_psf_signal_file(&psf_file) {
@@ -241,7 +228,6 @@ pub fn parse_sweep_psf_directory(
 
 /// Find the root directory to scan for PSF files.
 fn find_psf_scan_root(output_dir: &Path) -> PathBuf {
-    // Prefer psf/ subdirectory, then results/, then the dir itself
     let psf = output_dir.join("psf");
     if psf.exists() {
         return psf;
@@ -486,7 +472,6 @@ fn parse_simple_floats_strict(content: &str) -> Result<Vec<f64>> {
 /// parse as a finite `f64`.
 fn parse_sweep_section_strict(content: &str) -> Result<Vec<f64>> {
     let mut lines = content.lines();
-    // First line is "SWEEP" — already validated by caller.
     let _ = lines.next();
 
     let mut values = Vec::new();
@@ -620,9 +605,6 @@ pub fn parse_psf_ascii_strict_directory(raw_dir: &Path) -> Result<HashMap<String
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            // Skip non-files (subdirectories, symlinks, sockets) without
-            // invoking the strict reader, which would error on them. This
-            // mirrors the legacy behavior of "only consider regular files".
             let file_type = match entry.file_type() {
                 Ok(ft) => ft,
                 Err(_) => continue,
@@ -631,10 +613,6 @@ pub fn parse_psf_ascii_strict_directory(raw_dir: &Path) -> Result<HashMap<String
                 continue;
             }
 
-            // Build a relative name from the canonical parent (psf/ or
-            // results/) so find_exact_result_file's containment check
-            // applies to the file under its containing subdir, not the
-            // raw_dir root.
             let file_name = match path.file_name() {
                 Some(n) => n,
                 None => continue,
@@ -646,8 +624,6 @@ pub fn parse_psf_ascii_strict_directory(raw_dir: &Path) -> Result<HashMap<String
             let contained = find_exact_result_file(&canonical_dir, Path::new(file_name))?;
 
             let dataset = read_psf_ascii_strict(&contained)?;
-            // Strict reader keys the dataset by file_stem; merge its
-            // single entry into the aggregate.
             for (key, values) in dataset.signals() {
                 data.insert(key.clone(), values.clone());
             }
@@ -668,7 +644,6 @@ pub fn parse_sweep_flat(output_dir: &Path) -> Result<Vec<SweepPoint>> {
     for idx in indices {
         let data = &sweep_data[&idx];
 
-        // Extract sweep value (usually the first signal, e.g., "time" or parameter)
         let sweep_value = data
             .values()
             .next()
@@ -715,7 +690,6 @@ pub fn parse_structured_op_blocks(raw_dir: &Path) -> HashMap<String, ScalarValue
         let Ok(content) = fs::read_to_string(&path) else {
             continue;
         };
-        // Only scan files likely to contain OP data (not tran.tran etc.)
         if should_skip_psf_file(path.file_name().and_then(|n| n.to_str()).unwrap_or("")) {
             continue;
         }
@@ -728,9 +702,6 @@ pub fn parse_structured_op_blocks(raw_dir: &Path) -> HashMap<String, ScalarValue
 /// Files whose names look like sweep or time-domain waveforms — skip these for OP parsing.
 /// Conservatively skips transient/AC/Noise/PSS/PXF/SP analysis outputs; keeps OP files (dc_op.dc, etc.).
 fn should_skip_psf_file(name: &str) -> bool {
-    // <type>.<type> files (e.g. dc.dc, ac.ac, noise.noise) — skip
-    // <type>_<suffix>.<type> where suffix != "op" (e.g. dc_tran.dc, ac_steady.ac) — skip
-    // <type>_op.<type> (e.g. dc_op.dc, ac_op.ocn) — keep (operating-point files)
     let skip_type_pattern = |n: &str, t: &str| -> bool {
         n == format!("{t}.{t}")
             || (n.starts_with(&format!("{t}_")) && !n.starts_with(&format!("{t}_op.")))
@@ -766,12 +737,9 @@ fn should_skip_psf_file(name: &str) -> bool {
 fn parse_psf_type_library(content: &str) -> Option<HashMap<String, Vec<String>>> {
     let mut type_fields: HashMap<String, Vec<String>> = HashMap::new();
 
-    // Find @output-library section
     let output_lib_start = content.find("@output-library")?;
     let section = &content[output_lib_start..];
 
-    // Match each @types ... @fields (...) block
-    // e.g., "mos\n  @fields (gm vdsat vth region)"
     let type_re = Regex::new(r#"(?m)^(\S[^\n]*)\s+@fields\s*\(([^)]+)\)"#).ok()?;
     for caps in type_re.captures_iter(section) {
         let dev_type = caps.get(1).unwrap().as_str().trim().to_lowercase();
@@ -785,8 +753,6 @@ fn parse_psf_type_library(content: &str) -> Option<HashMap<String, Vec<String>>>
         }
     }
 
-    // If nmos isn't explicitly defined but mos is, inherit mos fields.
-    // Same for pmos, r, c, etc. (they share the same field set as mos family).
     if type_fields.contains_key("mos") && !type_fields.contains_key("nmos") {
         type_fields.insert("nmos".to_string(), type_fields["mos"].clone());
     }
@@ -799,10 +765,8 @@ fn parse_psf_type_library(content: &str) -> Option<HashMap<String, Vec<String>>>
 
 /// Extract OP blocks from a single PSF file's content.
 fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarValue>) {
-    // Parse @output-library for type field names first
     let type_fields = parse_psf_type_library(content).unwrap_or_default();
 
-    // Match quoted device name, quoted type, opening paren on same or next line
     let block_re = Regex::new(r#""([^"]+)"\s+"([^"]+)"\s*\(\s*"#).ok();
     let block_re = match block_re {
         Some(re) => re,
@@ -817,7 +781,6 @@ fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarV
         let dev_name = block_cap.get(1).unwrap().as_str().to_string();
         let dev_type = block_cap.get(2).unwrap().as_str().to_lowercase();
 
-        // Find the matching closing paren
         if let Some(block_end) = find_closing_paren(content, end_offset) {
             let inner = &content[end_offset..block_end];
             let values = parse_op_inner_values(inner);
@@ -827,7 +790,6 @@ fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarV
                 continue;
             }
 
-            // Try to use field names from @output-library if available
             if let Some(fields) = type_fields.get(&dev_type) {
                 for (idx, field_name) in fields.iter().enumerate() {
                     if idx < values.len() {
@@ -835,15 +797,12 @@ fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarV
                     }
                 }
             } else {
-                // Fallback for unknown types: apply mos-family convention if the
-                // lowercased type contains "mos", otherwise positional param<N>.
                 let is_mos_family = dev_type.contains("mos")
                     || dev_type == "nmos"
                     || dev_type == "pmos"
-                    || dev_type == "pch"; // pch = pmos in some PDKs
+                    || dev_type == "pch";
 
                 if is_mos_family && !values.is_empty() {
-                    // Standard Spectre mos OP order: gm, vdsat, vth, region
                     ops.insert(format!("{}:gm", dev_name), values[0].clone());
                 }
                 if is_mos_family && values.len() >= 2 {
@@ -856,18 +815,15 @@ fn parse_op_blocks_from_content(content: &str, ops: &mut HashMap<String, ScalarV
                     }
                 }
                 if is_mos_family && values.len() >= 4 {
-                    // Index 3 is region (string) in standard mos order: gm vdsat vth region
                     if let ScalarValue::String(_) = &values[3] {
                         ops.insert(format!("{}:region", dev_name), values[3].clone());
                     }
                 }
                 if is_mos_family {
-                    // Extra fields beyond standard gm/vdsat/vth/region go as param<N>
                     for (i, v) in values.iter().enumerate().skip(4) {
                         ops.insert(format!("{}:param{}", dev_name, i), v.clone());
                     }
                 } else {
-                    // Unknown non-mos type: all positional
                     for (i, v) in values.iter().enumerate() {
                         ops.insert(format!("{}:param{}", dev_name, i), v.clone());
                     }
@@ -929,7 +885,6 @@ fn parse_op_inner_values(inner: &str) -> Vec<ScalarValue> {
             _ => current.push(ch),
         }
     }
-    // Last value (no trailing comma)
     let trimmed = current.trim();
     if !trimmed.is_empty() && trimmed != "\"\"" {
         if let Some(sv) = parse_scalar(trimmed) {
@@ -943,7 +898,6 @@ fn parse_op_inner_values(inner: &str) -> Vec<ScalarValue> {
 fn parse_scalar(token: &str) -> Option<ScalarValue> {
     let t = token.trim();
     if (t.starts_with('"') && t.ends_with('"')) || (t.starts_with('"') && t.ends_with('"')) {
-        // Quoted string — strip quotes
         let inner = &t[1..t.len() - 1];
         return Some(ScalarValue::String(inner.to_string()));
     }
@@ -976,7 +930,6 @@ mod tests {
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create flat sweep files (X/LX mode)
         for i in 0..3 {
             let filename = format!("sw1-{:03}_tran.tran", i);
             let path = raw.join(filename);
@@ -986,7 +939,7 @@ mod tests {
 
         let result = parse_sweep_psf_directory(&raw).unwrap();
         assert_eq!(result.len(), 3);
-        assert!(result.contains_key(&1)); // 0-indexed + 1 = 1-indexed
+        assert!(result.contains_key(&1));
         assert!(result.contains_key(&2));
         assert!(result.contains_key(&3));
     }
@@ -1064,7 +1017,6 @@ END"#;
     fn test_parse_psf_signal_file_skip_header() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("test.psf");
-        // File without SWEEP/TRACE/VALUE sections should fall back to simple float parsing
         fs::write(&path, "0.0\n1.0\n").unwrap();
 
         let values = parse_psf_signal_file(&path);
@@ -1098,7 +1050,6 @@ END"#;
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create classic sweep subdirectory structure: sw1.sweep1/1/, sw1.sweep1/2/, etc.
         for i in 1..=3 {
             let sweep_dir = raw.join(format!("sw1.sweep{}", i)).join(i.to_string());
             fs::create_dir_all(&sweep_dir).unwrap();
@@ -1127,7 +1078,6 @@ END"#;
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create flat sweep files (LX mode) with proper PSF content
         for i in 0..2 {
             let filename = format!("sw1-{:03}_tran.tran", i);
             let path = raw.join(filename);
@@ -1145,17 +1095,15 @@ END"#;
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create psf/ subdirectory (should be preferred over flat files)
         let psf_dir = raw.join("psf");
         fs::create_dir_all(&psf_dir).unwrap();
-        // Note: file_stem() strips the last extension, so "tran.tran" -> "tran"
         let psf_file = psf_dir.join("tran.tran");
         let mut file = fs::File::create(&psf_file).unwrap();
         writeln!(file, "0.0\n1.0\n2.0\n").unwrap();
 
         let result = parse_psf_ascii(&raw).unwrap();
         assert!(!result.is_empty());
-        assert!(result.contains_key("tran")); // file_stem of "tran.tran" is "tran"
+        assert!(result.contains_key("tran"));
     }
 
     #[test]
@@ -1164,7 +1112,6 @@ END"#;
         let raw = tmp.path().join("raw");
         fs::create_dir_all(&raw).unwrap();
 
-        // Create flat sweep files
         for i in 0..3 {
             let filename = format!("sw1-{:03}_tran.tran", i);
             let path = raw.join(filename);
@@ -1173,7 +1120,6 @@ END"#;
 
         let points = parse_sweep_flat(&raw).unwrap();
         assert_eq!(points.len(), 3);
-        // Verify indices are 1-indexed
         assert_eq!(points[0].index, 1);
         assert_eq!(points[1].index, 2);
         assert_eq!(points[2].index, 3);
@@ -1230,7 +1176,6 @@ END"#;
 
     #[test]
     fn test_parse_op_blocks_from_content_mos() {
-        // Modern Spectre @output-library mos-family: gm, vdsat, vth, region
         let content = r#""M0" "mos" (
   1.906e-04
   4.500e-01
@@ -1324,11 +1269,6 @@ END"#;
         assert!(!should_skip_psf_file("dc_op.dc"));
         assert!(!should_skip_psf_file("ac_op.ocn"));
     }
-
-    // NOTE: find_closing_paren is tested implicitly via
-    // test_parse_op_blocks_from_content_mos (full PSF block parsing).
-    // The function requires PSF-format content (starts with '('),
-    // so testing it in isolation with non-PSF strings is misleading.
 
     #[test]
     fn test_scalar_value_accessors() {
@@ -1673,8 +1613,6 @@ END"#;
         let real = outside.path().join("real.txt");
         fs::write(&real, "x").unwrap();
 
-        // Symlink lives inside the root but resolves outside it — the
-        // containment check must catch this.
         let link = tmp.path().join("escape.txt");
         symlink(&real, &link).unwrap();
 
@@ -1708,7 +1646,6 @@ END"#;
     #[test]
     fn parse_psf_ascii_strict_directory_missing_dirs_return_empty() {
         let tmp = TempDir::new().unwrap();
-        // No psf/ or results/ subdirs — must not error.
         let data = parse_psf_ascii_strict_directory(tmp.path()).unwrap();
         assert!(data.is_empty());
     }
@@ -1727,9 +1664,6 @@ END"#;
     #[test]
     fn parse_psf_ascii_strict_directory_path_traversal_returns_config() {
         let tmp = TempDir::new().unwrap();
-        // Layout: tmp/psf/normal.tran (OK) + tmp/escape.txt (outside psf)
-        // and we manually craft a symlink-style escape inside psf/.
-        // The directory scanner must never surface files outside psf/.
         let psf_dir = tmp.path().join("psf");
         fs::create_dir_all(&psf_dir).unwrap();
         let outside = tmp.path().join("secret.txt");
@@ -1741,9 +1675,6 @@ END"#;
             symlink(&outside, &link).unwrap();
         }
 
-        // Either we discover no psf-files at all (no entries to scan)
-        // or the traversal is rejected as Config — never as Execution
-        // with leaked path contents.
         let result = parse_psf_ascii_strict_directory(tmp.path());
         if let Err(err) = result {
             assert!(matches!(err, VirtuosoError::Config(_)), "{err:?}");
@@ -1755,8 +1686,6 @@ END"#;
         let tmp = TempDir::new().unwrap();
         let psf_dir = tmp.path().join("psf");
         fs::create_dir_all(&psf_dir).unwrap();
-        // SWEEP file with malformed second value should be Execution,
-        // not silently dropped (as legacy would do).
         fs::write(
             psf_dir.join("freq.ac"),
             "SWEEP\n\"frequency\"\n1.0\nbogus\n",

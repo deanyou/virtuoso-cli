@@ -244,7 +244,7 @@ impl WindowOps {
                 let pattern = target.expected_name_pattern.as_deref().unwrap_or(".*");
                 let pattern_escaped = escape_skill_string(pattern);
                 let path_escaped = escape_skill_string(&canonical_path.to_string_lossy());
-                let _ = target.window_id; // reserved for future per-window targeting
+                let _ = target.window_id;
 
                 Ok(format!(
                     r#"let((matched) matched = nil foreach(w hiGetWindowList() when(rexMatchp("{pattern_escaped}" hiGetWindowName(w)) matched = t)) if(matched load("{path_escaped}") "ciw-not-found"))"#
@@ -284,9 +284,6 @@ mod tests {
             skill.contains("idstr = \"\""),
             "idstr must default to empty string so the JSON is always well-formed"
         );
-        // The object is assembled as `{` + idstr + `"name":"` + name + `}`, so
-        // the name key never appears as a contiguous `{"name":"` literal — the
-        // needle below is the escaped `"name":"` SKILL string literal.
         assert!(
             skill.contains(r#"name\":"#),
             "must still emit the name key so the fallback object is \
@@ -378,13 +375,6 @@ mod tests {
 
     #[test]
     fn screenshot_skill_uses_three_arg_if_and_quoted_path() {
-        // Regression: skill_capture previously emitted `if(ok {path} else nil)`
-        // (mixing the 3-arg if form with the `else` keyword), left {path}
-        // unquoted (`escape_skill_string` returns a bare escaped string), and
-        // probed `isFile` BEFORE `system` (so the freshly-created file was
-        // never seen and the SKILL always returned nil). All three make
-        // Virtuoso fail. The correct form quotes the path, uses the 3-arg if,
-        // and checks `isFile` AFTER `system`.
         let ops = WindowOps;
         let skill = ops.screenshot("/tmp/screen.png");
         assert!(
@@ -399,8 +389,6 @@ mod tests {
             !skill.contains("else nil"),
             "must not emit `else` in 3-arg if, got: {skill}"
         );
-        // isFile must come after system(cmd) so it probes the file the
-        // capture just created.
         let sys_pos = skill.find("system(cmd)").expect("must call system(cmd)");
         let isfile_pos = skill
             .find("isFile(")
@@ -436,21 +424,14 @@ mod tests {
             .build_bootstrap_skill(&target, &BootstrapAction::LoadFile(program), scratch.path())
             .unwrap();
 
-        // Programmatic SKILL only — pattern is verified via rexMatchp
-        // and the path is escaped into a SKILL string literal.
         assert!(skill.contains("rexMatchp"), "must verify CIW pattern");
         assert!(skill.contains("load("), "must use load()");
         assert!(skill.contains("ciw-not-found"), "must signal no-match");
-        // Path appears in the literal (after escaping) — sanity check.
         assert!(skill.contains("init.il"), "path must be embedded");
     }
 
     #[test]
     fn bootstrap_loadfile_preserves_apostrophes_as_skill_literal_chars() {
-        // SKILL string literals allow `'` verbatim — `escape_string`
-        // only escapes `\`, `"`, and control characters. This test
-        // pins that behavior so future escapes don't accidentally
-        // break valid filenames like "user's_lib.il".
         let scratch = tempfile::tempdir().unwrap();
         let program = scratch.path().join("with'apostrophe.il");
         fs::write(&program, "").unwrap();
@@ -463,12 +444,6 @@ mod tests {
         let skill = ops
             .build_bootstrap_skill(&target, &BootstrapAction::LoadFile(program), scratch.path())
             .unwrap();
-        // The generated SKILL must be syntactically valid: load() with a
-        // quoted string literal that contains the apostrophe verbatim. The
-        // check is restricted to `load("` rather than `load("/` because on
-        // Windows the path may use the `\\?\` UNC prefix or backslashes; the
-        // thing the test is actually pinning — that the apostrophe survives
-        // `escape_string` — is checked by the `with'apostrophe.il` substring.
         assert!(
             skill.contains(r#"load("#) && skill.contains("with'apostrophe.il"),
             "path must appear inside a quoted SKILL literal: {skill}"
@@ -496,8 +471,6 @@ mod tests {
     #[test]
     fn bootstrap_loadfile_with_parent_traversal_returns_config_error() {
         let scratch = tempfile::tempdir().unwrap();
-        // Build a path that uses '..' to escape the scratch root.
-        // canonicalize will reject the traversal at the FS level.
         let program = scratch.path().join("..").join("escape.il");
         fs::write(&program, "").unwrap();
 
@@ -543,8 +516,6 @@ mod tests {
         let skill = ops
             .build_bootstrap_skill(&target, &BootstrapAction::LoadFile(program), scratch.path())
             .unwrap();
-        // Default pattern ".*" must be embedded so the SKILL accepts
-        // any window — caller controls strictness via the pattern.
         assert!(
             skill.contains(r#""\\..\\*""#) || skill.contains("\".*\""),
             "{skill}"

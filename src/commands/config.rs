@@ -41,11 +41,6 @@ pub fn check(
             "entries": entries_json(&report),
             "warnings": report.warnings,
             "diagnostics": report.diagnostics,
-            // main() reads "dry_run" to pick DRY_RUN_OK (10) over SUCCESS (0);
-            // we re-use that mechanism so `--require-explicit` or a hard error
-            // propagates a non-zero exit without dragging a second channel
-            // through the dispatch result. The status string above remains the
-            // human-readable signal; this is the exit-code driver.
             "dry_run": status == "fail" || status == "error",
         }),
         OutputFormat::Table => render_table(&report, status),
@@ -133,9 +128,6 @@ fn render_table(report: &ConfigReport, status: &'static str) -> Value {
         lines.push("config_file: (not present)".to_string());
     }
 
-    // Column widths derived from the longest actual content so a wide SSH
-    // key path doesn't push the source column off the screen on a narrow
-    // terminal but a short value doesn't leave ugly gaps either.
     let key_width = report
         .entries
         .iter()
@@ -195,9 +187,6 @@ fn render_table(report: &ConfigReport, status: &'static str) -> Value {
         lines.push(format!("  {}. {p}", i + 1));
     }
 
-    // The match arm returns a JSON Value so the framework can apply the same
-    // --format plumbing as the JSON path. We wrap the rendered text in a
-    // single field so `output::print_value` knows what to print.
     Value::Object({
         let mut obj = serde_json::Map::new();
         obj.insert("rendered".into(), Value::String(lines.join("\n")));

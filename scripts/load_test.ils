@@ -63,5 +63,4 @@ procedure(LoadTest_RunAll()
     printf("\n========== ALL TESTS COMPLETE ==========\n")
 )
 
-; Auto-run all tests when loaded
 LoadTest_RunAll()

@@ -66,25 +66,11 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
 
     let config = crate::config::Config::from_env()?;
 
-    // The daemon constructs its SSH backend directly via `open_transport_for_daemon`,
-    // NOT `open_transport`. The latter routes native traffic over IPC to a
-    // running daemon — using it here would deadlock on first startup (the
-    // daemon can't connect to itself before it starts listening).
-    //
-    // Configuration errors surface here, before the socket is bound, with the
-    // same fail-loudly semantics as the pre-pool daemon: a backend that cannot
-    // be constructed (missing `VB_REMOTE_HOST`, missing `VB_SSH_KEY`, invalid
-    // capacity) must fail startup, not the first request. The pooled daemon
-    // then re-runs this factory only when a connection needs (re)building.
     open_transport_for_daemon(&config).map_err(transport_to_virtuoso)?;
 
-    // One endpoint key for the whole daemon: the daemon serves the config's
-    // single remote host, so all roles collapse onto one pooled connection.
     let host = config.remote_host.as_deref().unwrap_or("");
     let key = EndpointKey::from_config(&config, host);
     let limits = SchedulerLimits::from_config(&config)?;
-    // `shutdown` borrows `config` and must be computed before the `factory`
-    // closure below moves `config` into itself.
     let shutdown = ShutdownCoordinator::from_config(&config);
     let pool = Arc::new(EndpointPool::new());
     let factory: Arc<
@@ -96,11 +82,8 @@ pub fn run_with(ipc_endpoint: &str, token_path: &str, daemon_nonce: &str) -> Res
             "read auth token from {token_path}: {e}"
         )))
     })?;
-    // Trim a trailing newline that `cargo run -- ...` style launchers often
-    // add — the token file is single-line.
     let token = token.trim().to_string();
 
-    // Grace period for `Operation::Shutdown` (VB_TRANSPORT_SHUTDOWN_GRACE).
     let socket = Path::new(ipc_endpoint);
     server::run_with_pool(
         socket,
@@ -158,10 +141,6 @@ mod tests {
 
     #[test]
     fn refuses_to_serve_when_feature_is_disabled() {
-        // When the `native-ssh` feature is off, `run` is the public entry
-        // point and must report a structured Config error that names the
-        // missing feature. This is the gate that prevents the placeholder
-        // from ever being silently mistaken for a working daemon.
         let err = run("/run/vb.sock", "/run/vb.token", "n0nce").unwrap_err();
         match err {
             VirtuosoError::Config(m) => {
@@ -176,7 +155,6 @@ mod tests {
 
     #[test]
     fn refuses_regardless_of_arguments() {
-        // The parent cannot make it serve by passing different arguments.
         assert!(run("", "", "").is_err());
     }
 }

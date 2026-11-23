@@ -55,7 +55,6 @@ class ParseWindowLineTests(unittest.TestCase):
         self.assertIsNone(x11d._parse_window_line(""))
 
     def test_class_with_colon_and_space_is_title_not_class(self):
-        # A quoted token containing a space is a title, never a WM class.
         line = '  0x1a2b "Untitled: Layout Editor - X" ("libManager" "LM") 10x10+0+0'
         parsed = x11d._parse_window_line(line)
         self.assertEqual(parsed["title"], "Untitled: Layout Editor - X")
@@ -158,7 +157,6 @@ class DialogSizeClassificationTests(unittest.TestCase):
         self.addCleanup(setattr, sp, "check_output", original)
 
     def test_semantic_dialog_transient(self):
-        # WM_TRANSIENT_FOR present → modal dialog
         def fake(cmd, **kwargs):
             return b"WM_TRANSIENT_FOR(WINDOW): window id # 0x3000006\n_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL\n"
 
@@ -173,7 +171,6 @@ class DialogSizeClassificationTests(unittest.TestCase):
         self.assertEqual(x11d._semantic_dialog_classification("0x2e"), "dialog")
 
     def test_semantic_not_dialog_utility(self):
-        # Explicit utility window is never a modal dialog, even if dialog-sized
         def fake(cmd, **kwargs):
             return b"WM_TRANSIENT_FOR:  not found.\n_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_UTILITY\n"
 
@@ -188,7 +185,6 @@ class DialogSizeClassificationTests(unittest.TestCase):
         self.assertEqual(x11d._semantic_dialog_classification("0x2e"), "not_dialog")
 
     def test_semantic_normal_falls_back_to_none(self):
-        # NORMAL type with no transient → no signal → geometry heuristic applies
         def fake(cmd, **kwargs):
             return b"WM_TRANSIENT_FOR:  not found.\n_NET_WM_WINDOW_TYPE(ATOM) = _NET_WM_WINDOW_TYPE_NORMAL\n"
 
@@ -205,19 +201,15 @@ class DialogSizeClassificationTests(unittest.TestCase):
         self.assertIsNone(x11d._semantic_dialog_classification("0x2e"))
 
     def test_typical_dialog_is_dialog_sized(self):
-        # ADE "Update and Run" style: 580x140
         self.assertTrue(x11d._is_dialog_sized({"w": 580, "h": 140}))
 
     def test_tall_editor_pane_rejected(self):
-        # h > 420 → editor pane
         self.assertFalse(x11d._is_dialog_sized({"w": 600, "h": 500}))
 
     def test_large_main_frame_rejected(self):
-        # w > 1000 && h > 300 → main app frame
         self.assertFalse(x11d._is_dialog_sized({"w": 1200, "h": 700}))
 
     def test_tiny_window_rejected(self):
-        # below MIN_DIALOG_DIM
         self.assertFalse(x11d._is_dialog_sized({"w": 10, "h": 10}))
 
 
@@ -399,7 +391,6 @@ class WindowStateReaderTests(unittest.TestCase):
         )
 
     def test_unviewable_child_counts_as_mapped(self):
-        # IsUnviewable(1): a mapped child of an unmapped parent is not closed.
         reader, _ = _offline_reader(map_state=1)
         self.assertEqual(
             reader.window_state(0x10), {"exists": True, "mapped": True}
@@ -438,7 +429,6 @@ class WindowStateReaderTests(unittest.TestCase):
         self.assertEqual(reader._error_codes, [])
 
     def test_error_handler_records_the_code_and_keeps_the_process_alive(self):
-        # The default libX11 handler prints and exits; ours must return 0.
         reader, _ = _offline_reader()
         self.assertEqual(reader._handle_x_error(None, _x_error_event(3)), 0)
         self.assertEqual(reader._error_codes, [3])
@@ -550,8 +540,6 @@ class VerifyDismissalTests(unittest.TestCase):
         self.assertIn("verification_error", out)
 
     def test_legacy_dismissed_key_is_not_trusted(self):
-        # An old helper (or a caller) claiming "dismissed" with no closure
-        # evidence must not survive verification.
         out = self._verify(
             self._requested(status=None, dismissed="0x10"),
             reader=_FakeReader({0x10: {"exists": True, "mapped": True}}),
@@ -639,7 +627,6 @@ class VerifyPollTests(unittest.TestCase):
         return x11d._verify_dismissal(result, ":7")
 
     def test_slow_dialog_is_confirmed_closed_by_the_poll(self):
-        # Still mapped on the first two samples, gone on the third.
         reader = _SequenceReader([
             {"exists": True, "mapped": True},
             {"exists": True, "mapped": True},
@@ -651,8 +638,6 @@ class VerifyPollTests(unittest.TestCase):
         self.assertIs(out["still_mapped"], False)
         self.assertEqual(out["dismissed"], "0x10")
         self.assertEqual(len(reader.queried), 3)
-        # The poll waited between the samples instead of giving up after the
-        # settle time.
         self.assertEqual(self.clock.slept[-1], x11d.VERIFY_POLL_INTERVAL_SECONDS)
         self.assertTrue(reader.closed)
 
@@ -670,7 +655,6 @@ class VerifyPollTests(unittest.TestCase):
         self.assertIs(out["closure_confirmed"], False)
         self.assertIs(out["still_mapped"], True)
         self.assertNotIn("dismissed", out)
-        # The poll kept re-checking until the verification budget was spent.
         self.assertGreater(len(reader.queried), 1)
         self.assertLessEqual(len(reader.queried), x11d.VERIFY_MAX_POLLS + 1)
         spent = self.clock.now - x11d.VERIFY_SETTLE_SECONDS
@@ -693,7 +677,6 @@ class DismissExitCodeTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-        # The helper's display reachability probe is stubbed out; no X server.
         _patch(x11d.subprocess, "check_output", lambda cmd, **kw: b"")
 
         def _dismiss(*args, **kwargs):

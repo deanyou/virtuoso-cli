@@ -22,9 +22,6 @@ use crate::transport::ipc::framing::{
 use crate::transport::ipc::messages::{
     Hello, HelloAck, Operation, RequestEnvelope, ResponseEnvelope, ResponseResult,
 };
-// The wire payload types live in `ipc::server`, which is gated on
-// `(unix, any(test, feature = "native-ssh"))`. Mirror that gate here so the
-// import disappears in builds where the server is absent.
 #[cfg(all(unix, any(test, feature = "native-ssh")))]
 pub(crate) use crate::transport::ipc::server::{
     ChallengeAck, WireCommand, WireCommandResult, WireDownloadDir, WireDownloadFile,
@@ -60,10 +57,6 @@ impl NativeTransportClient {
     ) -> Result<Self, TransportError> {
         let stream =
             UnixStream::connect(socket_path).map_err(|_| TransportError::DaemonUnavailable)?;
-        // Set a generous default socket timeout (5 minutes). Individual
-        // `exchange()` calls tighten this to the request's remaining deadline
-        // before reading the response, so long-running commands (large file
-        // transfers, slow SKILL evals) are not cut off at 5 seconds.
         apply_socket_timeouts(&stream, Duration::from_secs(300));
         let conn = Mutex::new(stream);
         let nonce = do_handshake(&conn, profile, auth_token)?;
@@ -86,9 +79,6 @@ impl NativeTransportClient {
     ///
     /// [Stop and crash recovery]: ../../../docs/superpowers/specs/2026-08-29-native-remote-transport-design.md
     pub fn challenge(&self) -> Result<ChallengeAck, TransportError> {
-        // Tier-1 is a one-shot probe, not a long-running operation. A short
-        // deadline keeps `tunnel stop` responsive even when the daemon has
-        // hung the socket open without serving.
         let resp = self.exchange(
             Operation::Challenge,
             Value::Null,
@@ -140,12 +130,7 @@ impl NativeTransportClient {
         let bytes = serde_json::to_vec(&env)
             .map_err(|e| TransportError::LocalIo(format!("ipc encode: {e}")))?;
 
-        // Acquire the shared connection mutex with a deadline. A long-running
-        // request holding the lock must not cause a short-deadline request to
-        // wait indefinitely — try_lock polls and bails when the deadline passes.
         let mut guard = lock_with_deadline(&self.conn, &deadline)?;
-        // Re-check after acquiring the lock: the deadline may have passed
-        // while we were waiting. Don't send a request whose budget is gone.
         if deadline.is_expired() {
             return Err(TransportError::QueueTimeout {
                 request: RequestId::new(),
@@ -154,17 +139,11 @@ impl NativeTransportClient {
         }
         let stream = &mut *guard;
         let fd = std::os::unix::io::AsRawFd::as_raw_fd(&*stream);
-        // Write under the absolute deadline: every partial write re-applies
-        // the remaining budget as the socket send timeout, so back-pressure
-        // cannot accumulate beyond the total deadline.
         FrameWriter::new(&mut *stream)
             .write_frame_with_deadline(&bytes, Some(deadline.0), move |d| {
                 apply_socket_timeouts_fd(fd, d)
             })
             .map_err(frame_err_to_transport)?;
-        // Read the full frame under the same absolute deadline — every
-        // partial read re-applies the remaining budget, so a multi-segment
-        // response cannot reset the timer on every underlying read().
         let resp_bytes = match FrameReader::new(&mut *stream)
             .read_frame_until_with(Some(deadline.0), move |d| apply_socket_timeouts_fd(fd, d))
         {
@@ -232,8 +211,6 @@ fn do_handshake(
         .map_err(|e| TransportError::LocalIo(format!("ipc encode: {e}")))?;
 
     let mut guard = conn.lock().unwrap();
-    // Handshake should complete in well under a second on a healthy daemon.
-    // Use a 5s absolute deadline with dynamic socket timeouts.
     let handshake_deadline = std::time::Instant::now() + Duration::from_secs(5);
     let stream = &mut *guard;
     let fd = std::os::unix::io::AsRawFd::as_raw_fd(&*stream);
@@ -460,16 +437,12 @@ mod tests {
         listener: std::os::unix::net::UnixListener,
         transport: Arc<dyn RemoteTransport>,
     ) {
-        // The real `server` module is the source of truth — this test exists
-        // only to verify the client (NativeTransportClient) still round-trips
-        // through a server that uses it.
         let (stream, _) = listener.accept().unwrap();
         real_server::serve_one(stream, transport, "", "fake-daemon-nonce");
     }
 
     #[test]
     fn ipc_transport_passes_shared_contract_suite() {
-        // The bound the design calls a hard requirement.
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<NativeTransportClient>();
 
@@ -483,11 +456,8 @@ mod tests {
 
         let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
 
-        // The step-0 shared suite must pass over the IPC path exactly as it does
-        // for the OpenSSH backend.
         shared_contract_suite(&client);
 
-        // Extra: a successful command and a transfer round-trip through the daemon.
         let ok = client
             .run_command(&CommandRequest::untimed("echo hi"))
             .unwrap();
@@ -512,15 +482,12 @@ mod tests {
     fn lock_with_deadline_bails_when_deadline_passes() {
         let mutex = Arc::new(Mutex::new(0i32));
         let mutex_clone = mutex.clone();
-        // Hold the lock in another thread for 2 seconds.
         let handle = thread::spawn(move || {
             let guard = mutex_clone.lock().unwrap();
             std::thread::sleep(Duration::from_secs(2));
             drop(guard);
         });
-        // Give the thread time to acquire the lock.
         std::thread::sleep(Duration::from_millis(100));
-        // Try to acquire with a 500ms deadline — must fail in <2s.
         let deadline = Deadline::from_now(Duration::from_millis(500));
         let start = std::time::Instant::now();
         let result = lock_with_deadline(&mutex, &deadline);
@@ -585,15 +552,12 @@ mod tests {
 
         let client = Arc::new(NativeTransportClient::connect(&socket, "test-profile", "").unwrap());
 
-        // Thread A: long request (will hold the mutex for ~2s on server side).
         let client_a = client.clone();
         let handle_a = thread::spawn(move || {
             let _ = client_a.test_connection(Deadline::from_now(Duration::from_secs(10)));
         });
-        // Give thread A time to acquire the mutex and send its request.
         std::thread::sleep(Duration::from_millis(200));
 
-        // Thread B: short deadline — must time out in ~1s, not wait for A's 2s.
         let start = std::time::Instant::now();
         let result = client.test_connection(Deadline::from_now(Duration::from_secs(1)));
         let elapsed = start.elapsed();
@@ -619,9 +583,6 @@ mod tests {
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
-        // Server: handshake, then for every request write the frame prefix and
-        // 1 byte of payload every 500ms — a 4-byte response takes ~2s, which
-        // exceeds the 1s deadline.
         let server_handle = thread::spawn(move || {
             use std::io::Write;
             let (mut stream, _) = listener.accept().unwrap();
@@ -648,10 +609,8 @@ mod tests {
                 };
                 match req {
                     Ok(Some(_)) => {
-                        // Write 4-byte length prefix (payload = 4 bytes).
                         stream.write_all(&4u32.to_be_bytes()).unwrap();
                         stream.flush().unwrap();
-                        // Write 1 byte every 500ms — 4 bytes = 2s total.
                         for _ in 0..4 {
                             std::thread::sleep(Duration::from_millis(500));
                             if stream.write_all(b"x").is_err() {
@@ -667,7 +626,6 @@ mod tests {
 
         let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
 
-        // 1s deadline — the slow 2s response must be cut off at ~1s.
         let start = std::time::Instant::now();
         let result = client.test_connection(Deadline::from_now(Duration::from_secs(1)));
         let elapsed = start.elapsed();
@@ -700,7 +658,6 @@ mod tests {
         let server_handle = thread::spawn(move || {
             use std::io::Write;
             let (mut stream, _) = listener.accept().unwrap();
-            // Handshake.
             let _hello = {
                 let mut reader = FrameReader::new(&mut stream);
                 reader.read_frame().unwrap().unwrap()
@@ -717,8 +674,6 @@ mod tests {
             FrameWriter::new(&mut stream)
                 .write_frame(&serde_json::to_vec(&ack).unwrap())
                 .unwrap();
-            // For each request: wait 0.9s, send frame header (100-byte payload),
-            // then stop sending — the client must time out on the second read.
             loop {
                 let req = {
                     let mut reader = FrameReader::new(&mut stream);
@@ -727,14 +682,10 @@ mod tests {
                 match req {
                     Ok(Some(_)) => {
                         std::thread::sleep(Duration::from_millis(900));
-                        // 4-byte big-endian length = 100, then no payload.
                         if stream.write_all(&100u32.to_be_bytes()).is_err() {
                             break;
                         }
                         stream.flush().unwrap();
-                        // Stop sending payload. Loop back to read — when the
-                        // client times out and drops the connection, read_frame
-                        // returns EOF and we exit.
                     }
                     _ => break,
                 }
@@ -748,8 +699,6 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(result.is_err(), "should time out waiting for payload");
-        // With dynamic timeouts: 0.9s (header) + ~0.1s (second read) = ~1.0s.
-        // Without it: 0.9s + 1.0s = ~1.9s. Allow 1.3s for scheduling jitter.
         assert!(
             elapsed < Duration::from_millis(1300),
             "deadline not enforced on second read: waited {:?}",
@@ -772,14 +721,10 @@ mod tests {
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).unwrap();
 
-        // Channel keeps the server alive without reading the socket. The server
-        // blocks on recv() until the test tells it to exit — it never drains the
-        // receive buffer, so the client's send buffer fills and write() blocks.
         let (tx, rx) = mpsc::channel::<()>();
 
         let server_handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            // Handshake only.
             let mut reader = FrameReader::new(&stream);
             let _hello = reader.read_frame().unwrap().unwrap();
             let mut writer = FrameWriter::new(&stream);
@@ -795,16 +740,11 @@ mod tests {
             writer
                 .write_frame(&serde_json::to_vec(&ack).unwrap())
                 .unwrap();
-            // Block here — do NOT read any request frames. The client's send
-            // buffer fills and write() blocks on back-pressure.
             let _ = rx.recv();
         });
 
         let client = NativeTransportClient::connect(&socket, "test-profile", "").unwrap();
 
-        // Explicitly cap the client's send buffer at 8 KiB so a 1 MiB upload is
-        // guaranteed to block in write() — no reliance on the system default.
-        // (Linux doubles the value for bookkeeping, so actual is ~16 KiB.)
         {
             use std::os::unix::io::AsRawFd;
             let guard = client.conn.lock().unwrap();
@@ -825,8 +765,6 @@ mod tests {
             );
         }
 
-        // 1 MiB text upload — far larger than the 8 KiB send buffer, so the
-        // write will block once the buffer fills. Use an explicit 1s deadline.
         let big_text = "x".repeat(1024 * 1024);
         let req = crate::transport::contract::UploadTextRequest {
             id: RequestId::new(),
@@ -843,8 +781,6 @@ mod tests {
             result.is_err(),
             "large write to non-reading peer should fail"
         );
-        // Must be close to the 1s budget — not instant (which would mean no
-        // back-pressure and a fake pass) and not far over it.
         assert!(
             elapsed >= Duration::from_millis(500),
             "write returned too fast ({:?}) — no back-pressure, test is fake",

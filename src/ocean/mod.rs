@@ -9,9 +9,6 @@ pub fn setup_skill(lib: &str, cell: &str, view: &str, simulator: &str) -> String
     let lib = escape_skill_string(lib);
     let cell = escape_skill_string(cell);
     let view = escape_skill_string(view);
-    // progn() wraps three expressions into one — evalstring() only evaluates the
-    // first top-level expression in a string, so newline-separated calls are silently
-    // ignored.  Unless simulator is already set to avoid resetting modelFile etc.
     format!(
         r#"progn(unless(simulator()=='{simulator} simulator('{simulator})) design("{lib}" "{cell}" "{view}") resultsDir())"#
     )
@@ -35,7 +32,6 @@ pub fn analysis_skill(config: &AnalysisConfig) -> String {
 pub fn analysis_skill_simple(typ: &str, params: &HashMap<String, String>) -> String {
     let mut skill = format!("analysis('{typ}");
     for (k, v) in params {
-        // Don't quote booleans (t/nil) or numbers
         if v == "t" || v == "nil" || v.parse::<f64>().is_ok() {
             skill.push_str(&format!(" ?{k} {v}"));
         } else {
@@ -85,14 +81,12 @@ pub fn corner_skill(config: &CornerConfig) -> String {
     let model_file = escape_skill_string(&config.model_file);
     let analysis = analysis_skill(&config.analysis);
 
-    // Build corner data list
     let _corner_entries: Vec<String> = config
         .corners
         .iter()
         .map(|c| {
             let _name = escape_skill_string(&c.name);
             let section = escape_skill_string(&c.section);
-            // Collect extra vars
             let vars: Vec<String> = c
                 .vars
                 .iter()
@@ -124,7 +118,6 @@ pub fn corner_skill(config: &CornerConfig) -> String {
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Build corner names for identification
     let _corner_names: Vec<String> = config
         .corners
         .iter()
@@ -241,7 +234,6 @@ pub fn parse_skill_list(output: &str) -> Vec<Vec<String>> {
         }
     }
 
-    // Handle single value case
     if results.is_empty() && !output.starts_with('(') {
         results.push(vec![output.trim_matches('"').to_string()]);
     }
@@ -257,7 +249,6 @@ mod tests {
     #[test]
     fn setup_skill_format() {
         let s = setup_skill("myLib", "myCell", "schematic", "spectre");
-        // Must be a single top-level expression so evalstring() evaluates all parts.
         assert!(s.starts_with("progn("), "{s}");
         assert!(
             s.contains("design(\"myLib\" \"myCell\" \"schematic\")"),
@@ -281,7 +272,6 @@ mod tests {
         params.insert("conservative".into(), "t".into());
         let s = analysis_skill_simple("tran", &params);
         assert!(s.starts_with("analysis('tran"), "{s}");
-        // boolean 't' must not be quoted
         assert!(s.contains("?conservative t"), "{s}");
     }
 

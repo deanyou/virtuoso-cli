@@ -21,8 +21,6 @@ pub fn handle_action(app: &mut App, action: Action) {
         Action::Refresh => {
             crate::tui::app::data::refresh(app);
             let lines = crate::tui::app::data::load_log_lines();
-            // If a log overlay is already open, refresh its content in place;
-            // otherwise just cache nothing — `l` key reopens with fresh data.
             if let Overlay::Log(_) = app.overlay {
                 app.overlay = Overlay::Log(LogOverlay::new(lines));
             }

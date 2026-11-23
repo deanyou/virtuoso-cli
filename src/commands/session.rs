@@ -132,21 +132,18 @@ fn resolve_local_direct(
 ) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
     let cfg = ctx.config();
 
-    // Step L1: confirm the session belongs to this machine.
     if !is_local_session(cfg, session) {
         return Err(ProbeSkip {
             reason: "local_ownership_unverified",
         });
     }
 
-    // Step L2: ownership validation when a target is selected.
     if ctx.target_id().is_some() && ctx.validate_session_ownership(session).is_err() {
         return Err(ProbeSkip {
             reason: "ownership_mismatch",
         });
     }
 
-    // Step L3: local port must be reachable.
     if !tcp_reachable(session.port) {
         return Err(ProbeSkip {
             reason: "local_port_unreachable",
@@ -171,14 +168,12 @@ fn resolve_remote_tunnel(
     session: &SessionInfo,
     state: Option<&TunnelState>,
 ) -> std::result::Result<ProbeEndpoint, ProbeSkip> {
-    // Step 1: session ownership.
     if ctx.target_id().is_some() && ctx.validate_session_ownership(session).is_err() {
         return Err(ProbeSkip {
             reason: "ownership_mismatch",
         });
     }
 
-    // Step 2: TunnelState basic checks (state is pre-loaded by caller).
     let state = match state {
         Some(s) => s,
         None => {
@@ -200,7 +195,6 @@ fn resolve_remote_tunnel(
         });
     }
 
-    // Step 3: state ↔ session direct correspondence (same remote host + port).
     if state.remote_host != session.host {
         return Err(ProbeSkip {
             reason: "tunnel_host_mismatch",
@@ -214,14 +208,12 @@ fn resolve_remote_tunnel(
         });
     }
 
-    // Step 4: state matches current context.
     if ctx.validate_tunnel_ownership(state).is_err() {
         return Err(ProbeSkip {
             reason: "tunnel_context_mismatch",
         });
     }
 
-    // Step 5: forward process identity.
     if state.pid == 0 {
         return Err(ProbeSkip {
             reason: "tunnel_no_pid",
@@ -251,7 +243,6 @@ fn resolve_remote_tunnel(
         }
     };
 
-    // Verify the process is actually an ssh executable (reuse existing logic).
     match classify_ssh_pid(state.pid) {
         PidVerdict::VerifiedSsh => {}
         PidVerdict::Gone => {
@@ -272,7 +263,6 @@ fn resolve_remote_tunnel(
         });
     }
 
-    // Step 6: local forward port reachable.
     if !tcp_reachable(state.port) {
         return Err(ProbeSkip {
             reason: "forward_port_unreachable",
@@ -334,18 +324,14 @@ fn hostnames_match(a: &str, b: &str) -> bool {
     if a == b {
         return true;
     }
-    // IP addresses: exact match only.
     if is_ip_address(a) || is_ip_address(b) {
         return false;
     }
     let a_has_dot = a.contains('.');
     let b_has_dot = b.contains('.');
-    // Both are FQDNs: exact match only (already failed above).
     if a_has_dot && b_has_dot {
         return false;
     }
-    // At least one side is a short hostname (no dot). Allow first-label
-    // comparison.
     let a_short = a.split('.').next().unwrap_or(a);
     let b_short = b.split('.').next().unwrap_or(b);
     !a_short.is_empty() && a_short == b_short
@@ -374,16 +360,12 @@ fn is_local_session(cfg: &Config, session: &SessionInfo) -> bool {
         return true;
     }
 
-    // System hostname (authoritative — does not depend on process env).
-    // If available and non-empty, its verdict is final: a mismatch here is
-    // NOT overridden by $HOSTNAME below.
     if let Some(sys_host) = system_hostname() {
         if !sys_host.is_empty() {
             return hostnames_match(&sys_host, &session.host);
         }
     }
 
-    // $HOSTNAME fallback — only when system hostname is unavailable.
     if let Ok(env_host) = std::env::var("HOSTNAME") {
         if !env_host.is_empty() && hostnames_match(&env_host, &session.host) {
             return true;
@@ -429,7 +411,6 @@ fn tcp_reachable(port: u16) -> bool {
 pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
     let cfg = ctx.config();
 
-    // Remote sync: use the SAME immutable config as the rest of the invocation.
     let sync_status: &str = if cfg.is_remote() {
         match SSHClient::from_config(cfg, cfg.keep_remote_files) {
             Ok(client) => {
@@ -450,16 +431,12 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
 
     let has_target = ctx.target_id().is_some();
 
-    // Legacy: filter to locally-alive, but NEVER delete files.
-    // Target: show all cached sessions (no filtering).
     let displayed: Vec<&SessionInfo> = if has_target {
         sessions.iter().collect()
     } else {
         sessions.iter().filter(|s| s.is_alive()).collect()
     };
 
-    // Load TunnelState once for target mode (performance: don't reload per
-    // session).
     let tunnel_state = if has_target {
         TunnelState::load_with_profile(cfg.profile.as_deref())
             .ok()
@@ -468,27 +445,12 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         None
     };
 
-    // Build per-session JSON entries.
     let session_entries: Vec<Value> = displayed
         .iter()
         .map(|s| {
             if has_target {
                 let endpoint_match = compute_endpoint_match(ctx, s);
-                // Use the SHARED verification chain (same 6-step path as
-                // show). tunnel_verified=true only when the full chain
-                // passes, OR when the only failure is
-                // forward_port_unreachable (identity verified, port just
-                // down). Any earlier failure (wrong host, dead process,
-                // mismatched session id, …) → tunnel_verified=false.
                 let probe_result = resolve_probe_endpoint_with_state(ctx, s, tunnel_state.as_ref());
-                // Distinguish local direct vs remote tunnel:
-                // - Local direct: tunnel_verified=false (no tunnel exists),
-                //   probe_status=reachable/unreachable based on port check.
-                // - Remote tunnel: tunnel_verified=true only when the full
-                //   6-step chain passes (or the only failure is
-                //   forward_port_unreachable, meaning identity verified but
-                //   port is down).
-                // - Any other failure → tunnel_verified=false, not_probed.
                 let (tunnel_verified, probe_status) = match probe_result {
                     Ok(ProbeEndpoint::Local { .. }) => (false, "reachable"),
                     Ok(ProbeEndpoint::RemoteTunnel { .. }) => (true, "reachable"),
@@ -524,7 +486,6 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         })
         .collect();
 
-    // JSON output.
     if format == OutputFormat::Json {
         let mut result = json!({
             "status": "success",
@@ -538,7 +499,6 @@ pub fn list(ctx: &CommandContext, format: OutputFormat) -> Result<Value> {
         return Ok(result);
     }
 
-    // Table output.
     if displayed.is_empty() {
         println!("No active Virtuoso sessions found.");
         println!("Start Virtuoso and run RBStart() in CIW to register a session.");
@@ -604,7 +564,6 @@ pub fn current(ctx: &CommandContext) -> Result<Value> {
     let mut skipped: Vec<(String, String)> = Vec::new(); // (id, reason)
 
     for s in &all {
-        // Target mode: skip sessions that don't match the target endpoint.
         if is_target {
             match compute_endpoint_match(ctx, s) {
                 "match" => {}
@@ -612,19 +571,10 @@ pub fn current(ctx: &CommandContext) -> Result<Value> {
                     skipped.push((s.id.clone(), "endpoint_mismatch".into()));
                     continue;
                 }
-                _ => {
-                    // Legacy/unverifiable — still consider if reachable.
-                }
+                _ => {}
             }
         }
 
-        // Determine liveness.
-        //
-        // Legacy mode (no target): preserve the original `list_alive()` behaviour
-        // — a session whose local port is reachable is alive.
-        //
-        // Target mode: use the shared verification chain. Only sessions whose
-        // probe endpoint resolves successfully are considered reachable.
         let is_reachable = if is_target {
             resolve_probe_endpoint(ctx, s).is_ok()
         } else {
@@ -634,7 +584,6 @@ pub fn current(ctx: &CommandContext) -> Result<Value> {
         if is_reachable {
             reachable.push(s);
         } else if is_target {
-            // In target mode, record why a matching session was not reachable.
             if let Err(skip) = resolve_probe_endpoint(ctx, s) {
                 skipped.push((s.id.clone(), skip.reason.into()));
             }
@@ -694,7 +643,6 @@ pub fn cleanup(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
     let mut skipped: Vec<(String, String)> = Vec::new(); // (id, reason)
 
     for s in &all {
-        // Target mode: skip sessions that don't match the target endpoint.
         if is_target {
             match compute_endpoint_match(ctx, s) {
                 "match" => {}
@@ -702,26 +650,10 @@ pub fn cleanup(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
                     skipped.push((s.id.clone(), "endpoint_mismatch".into()));
                     continue;
                 }
-                _ => {
-                    // Legacy/unverifiable — still evaluate.
-                }
+                _ => {}
             }
         }
 
-        // Determine liveness.
-        //
-        // Legacy mode (no target): preserve the original `is_alive()` behaviour
-        // — a session whose local port is unreachable is dead. This avoids
-        // breaking existing cleanup semantics for non-target invocations.
-        //
-        // Target mode: use the shared verification chain. A session is "dead"
-        // only if we have DEFINITIVE evidence that the remote daemon is down.
-        // `forward_port_unreachable` does NOT qualify: the full tunnel chain
-        // passed (SSH process alive, identity verified, not reused) — only the
-        // local forward leg is unreachable. That could be a local firewall /
-        // forwarding issue while the remote daemon is still healthy. Deleting
-        // the cached session here would lose a recoverable entry. Preserve the
-        // file and report "cannot_verify" so the operator can investigate.
         let (is_dead, skip_reason) = if is_target {
             match resolve_probe_endpoint(ctx, s) {
                 Ok(_) => (false, None),
@@ -730,13 +662,8 @@ pub fn cleanup(ctx: &CommandContext, dry_run: bool) -> Result<Value> {
                     let reason: String = if is_definitive_death {
                         skip.reason.into()
                     } else if skip.reason == "forward_port_unreachable" {
-                        // Tunnel verified, local leg down — cannot confirm
-                        // remote death. Preserve, don't delete.
                         "cannot_verify:forward_port_unreachable".into()
                     } else {
-                        // Other skip reasons (no_tunnel, mismatch, etc.) —
-                        // session doesn't match this context OR tunnel state
-                        // is incomplete; preserve the cache.
                         format!("cannot_verify:{}", skip.reason)
                     };
                     (is_definitive_death, Some(reason))
@@ -793,7 +720,6 @@ pub fn history(
     let show_skill = !only_cmd;
     let show_cmd = !only_skill;
 
-    // Load session metadata for ownership verification (best-effort).
     let session_meta = SessionInfo::load(id).ok();
     let (endpoint_match, ownership_warning) = match (&session_meta, ctx.target_id()) {
         (Some(s), Some(_)) => {
@@ -864,17 +790,11 @@ pub fn history(
 /// daemon, corrupt state, …) sets `probe_skipped: true` with a
 /// `probe_skip_reason` — the cached view is still returned, never an error.
 pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Value> {
-    // Phase 1: load session. File missing / corrupt is a real error.
     let s = SessionInfo::load(id)
         .map_err(|e| VirtuosoError::NotFound(format!("session '{id}' not found: {e}")))?;
 
     let endpoint_match = compute_endpoint_match(ctx, &s);
 
-    // Phase 2: resolve a probe endpoint, then probe if allowed.
-    // daemon_responsive is Option<bool>: Some(_) = liveness probe ran,
-    // None = the probe never ran. daemon_user / daemon_version hold the LIVE
-    // probe values when the probe succeeded; the cached values from the
-    // session file are shown when it was skipped.
     let probe = match resolve_probe_endpoint(ctx, &s) {
         Ok(endpoint) => {
             let (port, source) = match &endpoint {
@@ -882,24 +802,10 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
                 ProbeEndpoint::RemoteTunnel { port } => (*port, "remote_tunnel"),
             };
 
-            // The probe client inherits the resolved config timeout
-            // (VB_TIMEOUT): the daemon-identity probe must get the same
-            // headroom the user granted the rest of the session, not a
-            // hardcoded cap. The liveness probe keeps its own short budget
-            // (daemon_alive passes Some(3)).
             let client = VirtuosoClient::new("127.0.0.1", port, ctx.config().timeout);
 
-            // LIVENESS FIRST. A dead or wedged daemon must not make the
-            // user wait out the whole identity-probe budget before they
-            // learn that the daemon is gone: the liveness probe has its own
-            // short budget, so a dead daemon is detected in seconds instead
-            // of after VB_TIMEOUT.
             let alive = client.daemon_alive();
             if !alive {
-                // Daemon is not answering: skip the identity and version
-                // probes entirely. The skip is reported through the
-                // existing probe.skip_reason channel; the cached values are
-                // shown (data_source="cached").
                 ProbeOutcome {
                     daemon_user: s.daemon_user.clone(),
                     daemon_user_warning: None,
@@ -939,10 +845,9 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
             }
         }
         Err(skip) => ProbeOutcome {
-            // Probe skipped: use cached values from the session file.
             daemon_user: s.daemon_user.clone(),
             daemon_user_warning: None,
-            daemon_responsive: None, // responsive unknown — not "false"
+            daemon_responsive: None,
             daemon_version: s.daemon_version.clone(),
             daemon_version_warning: None,
             skipped: true,
@@ -952,7 +857,6 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
         },
     };
 
-    // Cross-user check uses the resolved config (never re-reads env).
     let probe_outcome = match (probe.skipped, probe.skip_reason) {
         (true, Some(reason)) => IdentityProbeOutcome::Skipped(reason),
         (true, None) => IdentityProbeOutcome::Skipped("unknown"),
@@ -965,10 +869,6 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
         probe_outcome,
     );
 
-    // Stale-daemon hint when the liveness probe ran and the daemon did not
-    // answer (daemon_responsive == Some(false)). The identity and version
-    // probes are skipped in that case, but the hint must still fire: the
-    // port is bound while the daemon itself is wedged.
     let stale_daemon_hint = if probe.daemon_responsive == Some(false) {
         Some(
             "CIW daemon port is bound but the daemon is not responding to SKILL.\n\
@@ -982,11 +882,6 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
         None
     };
 
-    // Write back only when the probe RAN. A probe that ran and produced NO
-    // confirmed identity must CLEAR the stored daemon_user: the connect-time
-    // guard compares the stored value, so a stale one would be compared as if
-    // it had been verified. A skipped probe never mutates the cache —
-    // nothing was learned either way.
     if !probe.skipped {
         let mut s_mut = s.clone();
         let mut dirty = false;
@@ -997,8 +892,6 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
                     dirty = true;
                 }
             }
-            // Identity unconfirmed → drop the stale cached value instead of
-            // leaving it to look verified.
             None => {
                 if s_mut.daemon_user.is_some() {
                     s_mut.daemon_user = None;
@@ -1022,8 +915,6 @@ pub fn show(ctx: &CommandContext, id: &str, _format: OutputFormat) -> Result<Val
         || probe.daemon_user_warning.is_some()
         || stale_daemon_hint.is_some();
 
-    // data_source: "live" when probe ran, "cached" when skipped (values
-    // come from the session file).
     let data_source = if probe.skipped { "cached" } else { "live" };
 
     Ok(json!({
@@ -1126,9 +1017,6 @@ fn check_cross_user(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())?;
 
-    // Expected user configured, but the daemon user is unknown → the
-    // cross-user check was NOT performed. Say so, instead of returning
-    // "no warning" and letting an unchecked identity look verified.
     let daemon_user = match daemon_user {
         Some(u) => u,
         None => {
@@ -1153,9 +1041,6 @@ fn check_cross_user(
         return None;
     }
 
-    // allow_cross_user_daemon only suppresses the warning — it does NOT
-    // bypass target/session ownership validation (that happens in
-    // resolve_probe_endpoint, independently).
     if cfg.allow_cross_user_daemon {
         return None;
     }
@@ -1264,7 +1149,6 @@ mod tests {
 
     #[test]
     fn cross_user_no_remote_user_returns_none() {
-        // Config has no remote_user — nothing to compare against.
         let cfg = test_config(None, false);
         let r = check_cross_user(&cfg, &session(), Some("anyone"), IdentityProbeOutcome::Ran);
         assert!(r.is_none());
@@ -1272,9 +1156,6 @@ mod tests {
 
     #[test]
     fn cross_user_unconfirmed_daemon_user_returns_warning() {
-        // An expected user IS configured but the daemon user could not be
-        // determined (identity probe returned no USER). The check was NOT
-        // performed — that must not look like "no problem found".
         let cfg = test_config(Some("meow"), false);
         let r = check_cross_user(&cfg, &session(), None, IdentityProbeOutcome::Ran);
         let w = r.expect("unconfirmed identity must warn");
@@ -1361,8 +1242,6 @@ mod tests {
 
     #[test]
     fn cross_user_no_remote_user_and_no_daemon_user_returns_none() {
-        // Nothing configured to compare against AND no daemon user — there
-        // is no check to run, so there is nothing to warn about.
         let cfg = test_config(None, false);
         let r = check_cross_user(&cfg, &session(), None, IdentityProbeOutcome::Ran);
         assert!(r.is_none());
@@ -1380,15 +1259,9 @@ mod tests {
 
     #[test]
     fn cross_user_override_does_not_bypass_ownership() {
-        // allow_cross_user_daemon only suppresses the cross-user WARNING.
-        // It does NOT affect ownership validation (which happens in
-        // resolve_probe_endpoint, independently). This test verifies the
-        // function still returns None (suppressed) when override is on,
-        // confirming the override is scoped to warning suppression only.
         let cfg = test_config(Some("alice"), true);
         let r = check_cross_user(&cfg, &session(), Some("bob"), IdentityProbeOutcome::Ran);
         assert!(r.is_none(), "override suppresses warning");
-        // The config still records the mismatch — ownership is a separate concern.
         assert_eq!(cfg.remote_user.as_deref(), Some("alice"));
         assert!(cfg.allow_cross_user_daemon);
     }
@@ -1406,7 +1279,6 @@ mod tests {
     #[test]
     fn version_skew_mismatch_returns_warning_with_both_versions() {
         const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
-        // Pick something that's guaranteed not to equal CLI_VERSION.
         let other = if CLI_VERSION == "0.0.0" {
             "9.9.9"
         } else {
@@ -1429,8 +1301,6 @@ mod tests {
 
     #[test]
     fn version_skew_empty_string_warns() {
-        // Old daemon that never set RBDVersion reports "" — must warn so the
-        // user notices they need to upgrade.
         assert!(
             check_version_skew("").is_some(),
             "empty RBDVersion should produce a skew warning"
@@ -1439,7 +1309,6 @@ mod tests {
 
     #[test]
     fn version_skew_question_mark_placeholder_warns() {
-        // The .il uses "?" as the placeholder when RBDVersion is "".
         assert!(
             check_version_skew("?").is_some(),
             "'?' placeholder should produce a skew warning"
@@ -1534,8 +1403,6 @@ mod tests {
 
     #[test]
     fn probe_local_direct_skipped_when_session_is_remote() {
-        // Local config (no remote_host) + a session whose host is a remote
-        // machine → must NOT probe (could connect to a wrong local service).
         let mut cfg = test_config(None, false);
         cfg.remote_host = None; // truly local config
         let ctx = CommandContext::new(cfg, None).expect("ctx");
@@ -1556,7 +1423,6 @@ mod tests {
 
     #[test]
     fn probe_local_direct_skipped_when_port_unreachable() {
-        // Local config + local session + port not bound → skip.
         let mut cfg = test_config(None, false);
         cfg.remote_host = None; // truly local config
         let ctx = CommandContext::new(cfg, None).expect("ctx");
@@ -1670,7 +1536,6 @@ mod tests {
         s.host = "remote-eda-01".into();
         s.port = 40000;
 
-        // State points at a DIFFERENT remote host than the session.
         let state = make_tunnel_state(
             "remote-eda-02",
             40000,
@@ -1703,7 +1568,6 @@ mod tests {
         s.host = "remote-eda-01".into();
         s.port = 40000;
 
-        // State's remote_bridge_port differs from session.port.
         let state = make_tunnel_state(
             "remote-eda-01",
             40099, // wrong port
@@ -1826,8 +1690,6 @@ mod tests {
     #[test]
     #[serial]
     fn probe_remote_current_process_is_not_ssh() {
-        // The current test process is not ssh — classify_ssh_pid should
-        // return NotVerifiable, causing tunnel_process_not_ssh.
         let _guard = StateDirGuard::new();
         let ctx = remote_ctx("remote-eda-01", 40000);
         let mut s = session();
@@ -1865,8 +1727,6 @@ mod tests {
     #[test]
     #[serial]
     fn probe_remote_ownership_mismatch_skipped_before_tunnel_check() {
-        // Session host doesn't match target → ownership_mismatch, even if a
-        // tunnel state exists.
         let _guard = StateDirGuard::new();
         let ctx = remote_ctx("remote-eda-01", 40000);
         let mut s = session();
@@ -1928,15 +1788,11 @@ mod tests {
 
     #[test]
     fn hostnames_match_empty_short_name() {
-        // A hostname that is just ".domain" has empty short name — must not
-        // match everything.
         assert!(!hostnames_match(".example.com", "anything"));
     }
 
     #[test]
     fn hostnames_match_different_domains_same_short_label() {
-        // Two FQDNs with the same first label but different domains must
-        // NOT match. compute-42.prod.example ≠ compute-42.test.example.
         assert!(!hostnames_match(
             "compute-42.prod.example",
             "compute-42.test.example"
@@ -1949,16 +1805,13 @@ mod tests {
 
     #[test]
     fn hostnames_match_different_ips() {
-        // IP addresses must match exactly — no first-octet truncation.
         assert!(!hostnames_match("192.168.1.1", "192.168.1.2"));
         assert!(!hostnames_match("10.0.0.1", "10.0.0.2"));
-        // IP vs hostname with same first label must not match.
         assert!(!hostnames_match("192.168.1.1", "192"));
     }
 
     #[test]
     fn hostnames_match_short_vs_fqdn_same_label() {
-        // A short hostname DOES match an FQDN whose first label is the same.
         assert!(hostnames_match("compute-42", "compute-42.internal.corp"));
         assert!(hostnames_match("compute-42.internal.corp", "compute-42"));
     }
@@ -1970,17 +1823,12 @@ mod tests {
     #[test]
     #[serial]
     fn with_state_same_id_but_wrong_remote_host_is_not_verified() {
-        // TunnelState has matching attached_session_id but points at a
-        // DIFFERENT remote host than the session. The shared chain must
-        // reject it (tunnel_host_mismatch) — list must NOT mark this
-        // tunnel_verified=true.
         let _guard = StateDirGuard::new();
         let ctx = remote_ctx("remote-eda-01", 40000);
         let mut s = session();
         s.host = "remote-eda-01".into();
         s.port = 40000;
 
-        // State: same session ID, but remote_host is wrong.
         let state = make_tunnel_state(
             "remote-eda-99", // wrong host
             40000,
@@ -2006,8 +1854,6 @@ mod tests {
     #[test]
     #[serial]
     fn with_state_same_id_but_wrong_remote_port_is_not_verified() {
-        // TunnelState has matching session_id and host, but remote_bridge_port
-        // differs from session.port. Must reject.
         let _guard = StateDirGuard::new();
         let ctx = remote_ctx("remote-eda-01", 40000);
         let mut s = session();
@@ -2039,8 +1885,6 @@ mod tests {
     #[test]
     #[serial]
     fn with_state_dead_process_is_not_verified() {
-        // TunnelState passes host/port/id checks but the recorded PID is
-        // dead. Must reject with tunnel_process_dead.
         let _guard = StateDirGuard::new();
         let ctx = remote_ctx("remote-eda-01", 40000);
         let mut s = session();
@@ -2106,29 +1950,23 @@ mod tests {
     #[test]
     #[serial]
     fn list_target_mode_does_not_delete_dead_session_files() {
-        // In target mode, list must show ALL cached sessions and NEVER
-        // delete files — even if the local port is unreachable.
         let _cache = CacheDirGuard::new();
         let _state = StateDirGuard::new();
 
-        // Create a session file with an unreachable port.
         let mut s = session();
-        s.port = 1; // unreachable
+        s.port = 1;
         s.save_to_session_file();
 
         let ctx = remote_ctx("remote-eda-01", 40000);
         let result = list(&ctx, OutputFormat::Json).expect("list should succeed");
 
-        // The session should appear in the list.
         let sessions = result["sessions"].as_array().expect("sessions array");
         assert_eq!(sessions.len(), 1, "dead session should still be listed");
         assert_eq!(sessions[0]["id"], s.id);
 
-        // probe_status should be not_probed (tunnel_verified=false).
         assert_eq!(sessions[0]["probe_status"], "not_probed");
         assert_eq!(sessions[0]["tunnel_verified"], false);
 
-        // File must still exist (not deleted).
         let path = SessionInfo::sessions_dir().join(format!("{}.json", s.id));
         assert!(path.exists(), "session file must NOT be deleted by list");
     }
@@ -2136,9 +1974,6 @@ mod tests {
     #[test]
     #[serial]
     fn list_target_mode_shows_unattached_remote_session() {
-        // A remote session that has no attached tunnel must still appear
-        // in target-mode list, with tunnel_verified=false and
-        // probe_status=not_probed.
         let _cache = CacheDirGuard::new();
         let _state = StateDirGuard::new();
 
@@ -2147,7 +1982,6 @@ mod tests {
         s.port = 40000;
         s.save_to_session_file();
 
-        // No TunnelState saved → unattached.
         let ctx = remote_ctx("remote-eda-01", 40000);
         let result = list(&ctx, OutputFormat::Json).expect("list should succeed");
 
@@ -2155,19 +1989,14 @@ mod tests {
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0]["tunnel_verified"], false);
         assert_eq!(sessions[0]["probe_status"], "not_probed");
-        // endpoint_match should be "match" (host+port match the target).
         assert_eq!(sessions[0]["endpoint_match"], "match");
     }
 
     #[test]
     #[serial]
     fn list_local_target_marks_direct_connection_not_tunnel() {
-        // A local target (no remote_host) with a reachable local session must
-        // show tunnel_verified=false (no SSH tunnel exists — this is a direct
-        // local connection) and probe_status=reachable.
         let _cache = CacheDirGuard::new();
 
-        // Bind a real listener to simulate a local daemon port.
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
         let port = listener.local_addr().expect("local addr").port();
 
@@ -2181,7 +2010,6 @@ mod tests {
 
         let sessions = result["sessions"].as_array().expect("sessions array");
         assert_eq!(sessions.len(), 1, "local session should be listed");
-        // Local direct connection: tunnel_verified must be false.
         assert_eq!(
             sessions[0]["tunnel_verified"], false,
             "local direct connection must not be marked tunnel_verified"
@@ -2195,9 +2023,6 @@ mod tests {
     #[test]
     #[serial]
     fn list_local_target_unreachable_port_shows_unreachable() {
-        // A local target with an unreachable local port must show
-        // tunnel_verified=false and probe_status=unreachable (not
-        // not_probed — we did attempt the probe).
         let _cache = CacheDirGuard::new();
 
         let mut s = session();
@@ -2224,9 +2049,6 @@ mod tests {
     #[test]
     #[serial]
     fn show_skipped_probe_preserves_cached_metadata() {
-        // When probe is skipped (no tunnel), show must return the cached
-        // daemon_user / daemon_version from the session file, with
-        // data_source="cached" and daemon_responsive=null.
         let _cache = CacheDirGuard::new();
         let _state = StateDirGuard::new();
 
@@ -2240,19 +2062,16 @@ mod tests {
         let ctx = remote_ctx("remote-eda-01", 40000);
         let result = show(&ctx, &s.id, OutputFormat::Json).expect("show should succeed");
 
-        // Cached values must be present.
         assert_eq!(result["session"]["daemon_user"], "cacheduser");
         assert_eq!(result["session"]["daemon_version"], "1.2.3-cached");
         assert_eq!(result["session"]["data_source"], "cached");
 
-        // daemon_responsive must be null (not false — we never probed).
         assert!(
             result["session"]["daemon_responsive"].is_null(),
             "daemon_responsive should be null when probe skipped, got {}",
             result["session"]["daemon_responsive"]
         );
 
-        // Probe must be marked skipped.
         assert_eq!(result["probe"]["skipped"], true);
         assert_eq!(result["probe"]["skip_reason"], "no_tunnel");
     }
@@ -2260,8 +2079,6 @@ mod tests {
     #[test]
     #[serial]
     fn show_skipped_probe_does_not_mutate_session_file() {
-        // When probe is skipped, show must NOT write back to the session
-        // file (no mutation).
         let _cache = CacheDirGuard::new();
         let _state = StateDirGuard::new();
 
@@ -2283,8 +2100,6 @@ mod tests {
             "session file must NOT be mutated when probe is skipped"
         );
 
-        // Explicitly: the cached daemon_user survives a skipped probe —
-        // nothing was learned, so nothing is claimed and nothing is cleared.
         let reloaded = SessionInfo::load(&s.id).expect("reload session");
         assert_eq!(
             reloaded.daemon_user.as_deref(),
@@ -2326,8 +2141,6 @@ mod tests {
         let keep = std::sync::Arc::new(());
         let seen2 = std::sync::Arc::clone(&seen);
         let keep2 = std::sync::Arc::clone(&keep);
-        // The version answer matches the CLI version so the version-skew
-        // warning does not pollute the assertions.
         let version = format!("\"{}\"", env!("CARGO_PKG_VERSION"));
         std::thread::spawn(move || {
             let _keep = keep2;
@@ -2337,7 +2150,6 @@ mod tests {
                 let n = stream.read(&mut buf).unwrap_or(0);
                 let request = String::from_utf8_lossy(&buf[..n]).to_string();
                 if n == 0 {
-                    // Reachability probe (no payload) — nothing to answer.
                     continue;
                 }
                 seen2
@@ -2349,12 +2161,10 @@ mod tests {
                     FakeDaemonMode::Wedged => (0x15, b"wedged"),
                     FakeDaemonMode::NoIdentity => {
                         if request.contains("getShellEnvVar") {
-                            // STX + nil → the identity stays unconfirmed.
                             (0x02, b"nil")
                         } else if request.contains("RBDVersion") {
                             (0x02, version.as_bytes())
                         } else {
-                            // Liveness probe → a number.
                             (0x02, b"2")
                         }
                     }
@@ -2389,7 +2199,6 @@ mod tests {
         cfg.remote_host = None;
         cfg.port = 0;
         cfg.port_explicit = false;
-        // A large budget: if the identity probe ran, it would burn 30s.
         cfg.timeout = 30;
         let ctx = CommandContext::new(cfg, Some("local-target".into())).expect("ctx");
 
@@ -2397,7 +2206,6 @@ mod tests {
         let result = show(&ctx, &s.id, OutputFormat::Json).expect("show should succeed");
         let elapsed = started.elapsed();
 
-        // The identity and version probes must never have been sent.
         let requests = seen
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -2411,14 +2219,11 @@ mod tests {
             "the version probe must be skipped when the daemon is not alive, saw: {requests:?}"
         );
 
-        // The skip is visible through the existing probe fields.
         assert_eq!(result["probe"]["skipped"], true);
         assert_eq!(result["probe"]["skip_reason"], "daemon_not_alive");
         assert_eq!(result["session"]["daemon_responsive"], false);
         assert_eq!(result["session"]["data_source"], "cached");
 
-        // The stale-daemon hint must survive the skip: the port is bound
-        // while the daemon itself is wedged.
         assert!(
             result["warnings"]["stale_daemon"].as_str().is_some(),
             "a wedged daemon must still produce the stale-daemon hint, got {}",
@@ -2458,7 +2263,6 @@ mod tests {
 
         let result = show(&ctx, &s.id, OutputFormat::Json).expect("show should succeed");
 
-        // The probe ran and confirmed nothing.
         assert_eq!(result["probe"]["skipped"], false);
         assert!(
             result["session"]["daemon_user"].is_null(),
@@ -2466,7 +2270,6 @@ mod tests {
             result["session"]["daemon_user"]
         );
 
-        // The stored value must be gone — not left behind to look verified.
         let reloaded = SessionInfo::load(&s.id).expect("reload session");
         assert!(
             reloaded.daemon_user.is_none(),
@@ -2474,8 +2277,6 @@ mod tests {
             reloaded.daemon_user
         );
 
-        // The cross-user warning must say the probe RAN (not that it was
-        // skipped) and point at the real remedies.
         let warning = result["warnings"]["cross_user"]
             .as_str()
             .expect("cross-user warning for an unconfirmed identity");
@@ -2511,8 +2312,6 @@ mod tests {
                 let n = stream.read(&mut buf).unwrap_or(0);
                 let request = String::from_utf8_lossy(&buf[..n]).to_string();
                 if request.contains("getShellEnvVar") {
-                    // Identity probe: never answer. Hold the socket open so
-                    // the client burns its own timeout budget.
                     std::thread::spawn(move || {
                         let mut sink = [0u8; 1024];
                         let _ = stream.read(&mut sink);
@@ -2521,10 +2320,8 @@ mod tests {
                     continue;
                 }
                 if n == 0 {
-                    // Reachability probe (no payload) — nothing to answer.
                     continue;
                 }
-                // Version probe → a version string; liveness probe → a number.
                 let answer: &[u8] = if request.contains("RBDVersion") {
                     b"\"9.9.9\""
                 } else {
@@ -2542,14 +2339,6 @@ mod tests {
     #[test]
     #[serial]
     fn show_identity_probe_uses_configured_timeout_not_a_hardcoded_cap() {
-        // The identity probe inside `session show` must spend the resolved
-        // config timeout (VB_TIMEOUT), not a hardcoded 3s/5s cap: a busy
-        // daemon needs the headroom the user granted the rest of the
-        // session.
-        //
-        // With `timeout = 1` the probe must give up after ~1s. The old
-        // hardcoded 3s client budget (or the hardcoded 5s probe budget)
-        // would push the call past 2.5s.
         let _cache = CacheDirGuard::new();
         let _state = StateDirGuard::new();
 
@@ -2575,7 +2364,6 @@ mod tests {
             elapsed.as_secs_f64() < 2.5,
             "identity probe must honor the 1s configured timeout, took {elapsed:?}"
         );
-        // The probe ran (not skipped) and its failure is surfaced.
         assert_eq!(result["probe"]["skipped"], false);
         assert!(
             result["warnings"]["daemon_user"]

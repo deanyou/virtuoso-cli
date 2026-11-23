@@ -86,10 +86,6 @@ impl DeleteTarget {
     fn checked(lib: &str, cell: &str, view: Option<&str>) -> Result<Self> {
         let (lib, cell) = (lib.trim(), cell.trim());
         if cell.is_empty() {
-            // The landmine, refused at the only door into this module: with no
-            // cell name, `ddGetObj` hands back the *library*, and
-            // `ddDeleteObj` on a library ID takes the directory and the
-            // `cds.lib` entry with it.
             return Err(VirtuosoError::Config(
                 "delete: a cell name is required — a library is never a delete target".into(),
             ));
@@ -260,9 +256,6 @@ impl DeleteOps {
         let what = escape_skill_string(&target.describe());
         let lib = escape_skill_string(target.lib_name());
         let cell = escape_skill_string(target.cell_name());
-        // `instances` counts what is inside the schematic — the size of what is
-        // about to go. It is -1 when there is no schematic view to count, which
-        // reads as "not applicable" rather than as an empty cell.
         match target.view_name() {
             None => {
                 let count = instance_count(&lib, &cell, "schematic");
@@ -549,13 +542,8 @@ mod tests {
         for lib in ["DESIGN_LIB", "SIM_LIB", "SCRATCH_LIB", "analogLib", "basic"] {
             let e = DeleteTarget::cell(lib, "anything").expect_err("{lib} must be refused");
             let msg = e.to_string();
-            // Refusing is not enough — the refusal has to say how to proceed,
-            // or an operator reads "not in the delete allow-set ()" and has no
-            // idea there is a set to fill in.
             assert!(msg.contains(ALLOW_LIBS_ENV), "{msg}");
         }
-        // …and with nothing allowed, the in-SKILL guard is `member(x '())`,
-        // which is nil for every library.
         assert!(lib_guard("delete").contains("member(cv~>libName '())"));
     }
 
@@ -657,8 +645,6 @@ mod tests {
         assert!(!DeleteOps.delete_instance("M1").contains("schHiDelete"));
         let fig = FigureTarget::term("M1", "G").expect("valid");
         assert!(!DeleteOps.delete_figure(&fig).contains("schHiDelete"));
-        // Same reasoning for the move side: `schHiMove` is what the M key runs,
-        // and it prompts for points.
         assert!(!DeleteOps.delete_figure(&fig).contains("schHiMove"));
     }
 
@@ -766,8 +752,6 @@ mod tests {
     #[serial]
     fn an_empty_view_name_is_not_the_whole_cell() {
         let _env = configured();
-        // Silently widening "delete this view" into "delete every view" is the
-        // kind of helpfulness that loses work.
         assert!(DeleteTarget::view("DESIGN_LIB", "_rbscratch", "  ").is_err());
     }
 

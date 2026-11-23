@@ -54,13 +54,11 @@ impl PluginRegistry {
         let content = std::fs::read_to_string(path)
             .map_err(|e| VirtuosoError::Execution(format!("failed to read {:?}: {e}", path)))?;
 
-        // Try parsing as an array of tools first (TOML array of tables: [[tools]]...)
         if let Ok(single) = toml::from_str::<PluginTool>(&content) {
             single.validate()?;
             return Ok(vec![single]);
         }
 
-        // Try parsing as Vec<PluginTool> for multiple [[tools]] entries
         let plugins: Vec<PluginTool> = toml::from_str(&content)
             .map_err(|e| VirtuosoError::Execution(format!("failed to parse {:?}: {e}", path)))?;
 
@@ -73,7 +71,6 @@ impl PluginRegistry {
 
     /// Get the global plugin registry, initializing it if not yet loaded.
     pub fn get_global() -> Result<&'static PluginRegistry> {
-        // Use get_or_init which is stable
         Ok(PLUGIN_REGISTRY.get_or_init(|| {
             Self::discover().expect("plugin discovery should not fail at this point")
         }))
@@ -107,7 +104,6 @@ impl PluginRegistry {
         if result.output.trim().is_empty() {
             Ok(Value::Null)
         } else {
-            // Try to parse as JSON, fall back to string
             match serde_json::from_str(&result.output) {
                 Ok(v) => Ok(v),
                 Err(_) => Ok(Value::String(result.output.trim().to_string())),

@@ -9,17 +9,14 @@ use virtuoso_cli::models::{ExecutionStatus, VirtuosoResult};
 /// Test that VirtuosoError variants have correct exit codes.
 #[test]
 fn test_error_exit_codes() {
-    // Execution errors should map to exit code 1 (GENERAL_ERROR)
     let err = VirtuosoError::Execution("test failed".to_string());
     assert_eq!(err.exit_code(), 1);
     assert!(err.to_string().contains("test failed"));
 
-    // NotFound errors (exit code 3)
     let err = VirtuosoError::NotFound("CellView".to_string());
     assert_eq!(err.exit_code(), 3);
     assert!(err.to_string().contains("CellView"));
 
-    // Config errors (exit code 2)
     let err = VirtuosoError::Config("invalid port".to_string());
     assert_eq!(err.exit_code(), 2);
 }
@@ -66,7 +63,6 @@ fn test_error_from_io() {
 /// Test VirtuosoResult::ok() vs skill_ok().
 #[test]
 fn test_virtuoso_result_types() {
-    // Create a mock result where SKILL returned nil (but transport succeeded)
     let result = VirtuosoResult {
         status: ExecutionStatus::Success,
         output: "nil".to_string(),
@@ -76,9 +72,7 @@ fn test_virtuoso_result_types() {
         metadata: HashMap::new(),
     };
 
-    // Transport layer succeeded
     assert!(result.ok());
-    // But SKILL returned nil
     assert!(!result.skill_ok());
 }
 
@@ -192,7 +186,6 @@ fn test_error_suggestion() {
     let err = VirtuosoError::Connection("refused".to_string());
     let suggestion = err.suggestion();
 
-    // Connection errors should have suggestions
     assert!(suggestion.is_some());
 }
 

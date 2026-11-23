@@ -33,14 +33,9 @@ use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
-// Used only by `run`/`run_with_pool`, which are feature-gated; the test module
-// imports its own.
 #[cfg(feature = "native-ssh")]
 use std::time::Duration;
 
-// `run`/`run_with_pool` are the only consumers of these, and they are
-// feature-gated, so the imports must carry the same gate — ungated, a
-// feature-off build reports them unused.
 #[cfg(feature = "native-ssh")]
 use std::os::unix::net::UnixListener;
 #[cfg(feature = "native-ssh")]
@@ -58,20 +53,14 @@ use crate::transport::ipc::framing::{
 use crate::transport::ipc::messages::{
     Hello, HelloAck, IpcError, Operation, RequestEnvelope, ResponseEnvelope, ResponseResult,
 };
-// `EndpointKey`/`EndpointPool`/`Priority`/`SchedulerLimits` are consumed only
-// by the pooled entry points (`serve_one_pooled`/`run_with_pool`), which are
-// feature-gated — gate the imports to match so a feature-off build does not
-// report them unused. `Permit` is used by the ungated [`TransportAccess`].
+use crate::transport::lifecycle::CancellationToken;
+#[cfg(feature = "native-ssh")]
+use crate::transport::lifecycle::ShutdownCoordinator;
 #[cfg(feature = "native-ssh")]
 use crate::transport::pool::{EndpointKey, EndpointPool};
 use crate::transport::scheduler::Permit;
 #[cfg(feature = "native-ssh")]
 use crate::transport::scheduler::{Priority, SchedulerLimits};
-// `ShutdownCoordinator` is consumed only by the feature-gated `run`/`run_with_pool`
-// and `ShutdownState::coordinator`; gate the import to match.
-use crate::transport::lifecycle::CancellationToken;
-#[cfg(feature = "native-ssh")]
-use crate::transport::lifecycle::ShutdownCoordinator;
 
 /// Shared shutdown bookkeeping for the running daemon.
 ///
@@ -248,9 +237,6 @@ where
             "auth token did not match".into(),
         ));
     }
-    // Parse the hello body just to confirm the profile is a string — we don't
-    // gate on profile name yet (the daemon is per-profile, so this is mostly a
-    // sanity check).
     let _hello: Hello = match serde_json::from_value(hello_env.payload.clone()) {
         Ok(h) => h,
         Err(e) => {
@@ -388,19 +374,15 @@ fn serve_loop<F, G>(
     let mut reader = FrameReader::new(read_stream);
     let mut writer = FrameWriter::new(stream);
 
-    // Peek the first frame so we know the request id to echo back.
     let first_frame = match reader.read_frame() {
         Ok(Some(b)) => b,
-        _ => return, // EOF or framing error → nothing to do.
+        _ => return,
     };
     let first_env: RequestEnvelope = match serde_json::from_slice(&first_frame) {
         Ok(env) => env,
         Err(_) => return,
     };
     if first_env.operation != Operation::Hello {
-        // A peer that doesn't even send Hello is not a client we should
-        // answer — close silently. (An active attacker would learn nothing
-        // here that isn't in the public protocol spec.)
         return;
     }
     let request_id = first_env.request_id.clone();
@@ -415,14 +397,11 @@ fn serve_loop<F, G>(
         return;
     }
 
-    // Dispatch loop. The connection is "active work" from the shutdown
-    // coordinator's perspective for as long as this loop runs.
     let _guard = shutdown.map(|s| {
         s.active.fetch_add(1, Ordering::SeqCst);
         ActiveGuard(Arc::clone(s))
     });
     while let Ok(Some(frame)) = reader.read_frame() {
-        // Phase 1 has fired: stop taking new work on this connection too.
         if let Some(s) = shutdown {
             if s.token.is_cancelled() {
                 break;
@@ -440,11 +419,6 @@ fn serve_loop<F, G>(
                 continue;
             }
         };
-        // Fire the token BEFORE writing the ack: once the client observes the
-        // ack, "shutdown was accepted" is already true everywhere. The
-        // reverse order would let a client act on the ack while the accept
-        // loop is still serving. In-flight requests on *other* connections
-        // keep running until the grace expires.
         if env.operation == Operation::Shutdown {
             if let Some(s) = shutdown {
                 s.token.cancel();
@@ -458,9 +432,6 @@ fn serve_loop<F, G>(
             }
             break;
         }
-        // Resolve the transport for this request. A failure here is a daemon
-        // problem (no connection can be created), reported as an error frame
-        // — it does not tear down the accept loop.
         let access = match transport_for(&env) {
             Ok(access) => access,
             Err(e) => {
@@ -477,11 +448,6 @@ fn serve_loop<F, G>(
             request_id: env.request_id.clone(),
             result: dispatch(&*access.transport, &env, server_nonce),
         };
-        // A connection-level failure means the pooled transport is no longer
-        // trustworthy. Evict it so the next request reconnects instead of
-        // serving from a dead connection. The generation captured before
-        // dispatch is the safety net: a fresh endpoint built by a concurrent
-        // request stays alive even when this callback is late.
         if matches!(&resp.result, ResponseResult::Err(e) if e.is_connection_level()) {
             on_connection_error(access.captured_generation);
         }
@@ -496,9 +462,6 @@ fn serve_loop<F, G>(
             }
         };
         if writer.write_frame(&body).is_err() {
-            // Peer closed — bail out of the loop. We don't try to recover
-            // half-written state: every operation is idempotent or reports
-            // `OutcomeUnknown`, and the next request will start fresh.
             break;
         }
     }
@@ -525,9 +488,6 @@ pub fn serve_one_pooled(
     let key_for_errors = key.clone();
     let mut transport_for = move |env: &RequestEnvelope| {
         let endpoint = pool.get_or_create(key.clone(), limits, || factory())?;
-        // Meter every transport-touching operation on the endpoint scheduler.
-        // Challenge/Shutdown/Hello never touch the wire, so they must not
-        // consume a session.
         let permit = if matches!(
             &env.operation,
             Operation::RunCommand
@@ -546,11 +506,6 @@ pub fn serve_one_pooled(
         } else {
             None
         };
-        // Capture the generation of the endpoint we are about to serve on.
-        // The eviction callback uses it to drop the connection only when the
-        // slot still holds the same instance — a fresh replacement built
-        // concurrently must survive a late callback from a request that
-        // already failed.
         let captured_generation = endpoint.generation();
         Ok(TransportAccess {
             transport: Arc::clone(&endpoint.transport),
@@ -675,13 +630,6 @@ pub fn dispatch(
             }
         }
         Operation::Challenge => {
-            // Tier-1 liveness proof: the daemon echoes its nonce. The parent
-            // CLI compares the answer to its recorded `daemon_nonce` to prove
-            // the process on the other end of the socket is the recorded
-            // daemon instance. We deliberately do not include the auth_token
-            // in the answer — anyone who could present the token has already
-            // passed the handshake; this operation is the *separate* check
-            // that runs before auth is granted.
             let ack = ChallengeAck {
                 daemon_nonce: server_nonce.to_string(),
             };
@@ -721,12 +669,9 @@ fn bind_listener(
             ));
         }
     }
-    // Best-effort cleanup of any stale socket left by a crashed previous run.
     let _ = std::fs::remove_file(socket_path);
     let listener = UnixListener::bind(socket_path)
         .map_err(|e| format!("failed to bind ipc socket {}: {e}", socket_path.display()))?;
-    // Mode 0600: only the current user can connect. The owner is set by the
-    // bind above; chmod enforces the bits regardless of umask.
     use std::os::unix::fs::PermissionsExt;
     let perms = std::fs::Permissions::from_mode(0o600);
     if let Err(e) = std::fs::set_permissions(socket_path, perms) {
@@ -736,9 +681,6 @@ fn bind_listener(
         ));
     }
     let state = Arc::new(ShutdownState::new(shutdown));
-    // Non-blocking accept + poll: the token is fired from a worker thread (a
-    // connection that sent `Shutdown`), and a blocking accept would never see
-    // it until the next connection arrived.
     listener
         .set_nonblocking(true)
         .map_err(|e| format!("failed to set non-blocking accept: {e}"))?;
@@ -772,10 +714,6 @@ where
         }
         match listener.accept() {
             Ok((s, _)) => {
-                // Restore blocking mode on the accepted stream: on macOS an
-                // accepted socket inherits O_NONBLOCK from the listener, and
-                // a non-blocking stream would make every frame read return
-                // `WouldBlock` immediately.
                 let _ = s.set_nonblocking(false);
                 spawn(s, &token, &nonce, state)?;
             }
@@ -783,17 +721,10 @@ where
                 thread::sleep(Duration::from_millis(25));
             }
             Err(e) => {
-                // A spurious accept error is not fatal: the listener is still
-                // alive and the next connection might succeed. We deliberately
-                // do not return here — a transient resource exhaustion should
-                // not tear down the daemon.
                 eprintln!("vcli __transport-daemon: accept failed: {e}");
             }
         }
     }
-    // Three-phase shutdown: admission is already stopped (the loop broke);
-    // wait for in-flight connections within the grace, then return — the
-    // daemon process exits and reaps any straggler stuck in a transport call.
     let phase2_state = Arc::clone(state);
     state.coordinator.execute(
         || drop(listener),
@@ -857,9 +788,6 @@ pub fn run(
             Ok(())
         },
     );
-    // Best-effort unlink on every exit path: a stale socket from a crashed
-    // previous run is cleaned up by `bind_listener`, but a clean exit must
-    // also leave no artefact behind so the next daemon can rebind.
     let _ = std::fs::remove_file(socket_path);
     result
 }
@@ -901,7 +829,6 @@ pub fn run_with_pool(
             Ok(())
         },
     );
-    // Best-effort unlink on every exit path — see `run` for the rationale.
     let _ = std::fs::remove_file(socket_path);
     result
 }
@@ -938,7 +865,6 @@ mod tests {
         let nonce = nonce.to_string();
         let listener_for_thread = listener.try_clone().expect("clone listener");
         thread::spawn(move || {
-            // Accept exactly one connection, serve it until EOF, then exit.
             if let Ok((stream, _)) = listener_for_thread.accept() {
                 serve_one(stream, transport, &token, &nonce);
             }
@@ -958,7 +884,6 @@ mod tests {
 
         crate::transport::contract::test_support::shared_contract_suite(&client);
 
-        // A real round-trip beyond the suite: a command, an upload, a probe.
         let ok = client
             .run_command(&CommandRequest::untimed("echo hi"))
             .unwrap();
@@ -981,8 +906,6 @@ mod tests {
         let transport: Arc<dyn RemoteTransport> = Arc::new(FakeTransport::ok());
         let (socket, _listener) = start_daemon(transport, "secret-token", "n");
 
-        // Use the raw framing layer to do a Hello with the wrong token and
-        // inspect the server's reply.
         let stream = std::os::unix::net::UnixStream::connect(&socket).unwrap();
         let read = stream.try_clone().unwrap();
         let mut reader = FrameReader::new(read);
@@ -1024,7 +947,6 @@ mod tests {
         let mut reader = FrameReader::new(read);
         let mut writer = FrameWriter::new(stream);
 
-        // Handshake.
         let hello = RequestEnvelope {
             protocol_major: PROTOCOL_MAJOR,
             protocol_minor: PROTOCOL_MINOR,
@@ -1047,7 +969,6 @@ mod tests {
         };
         assert_eq!(ack.daemon_nonce, "the-recorded-nonce");
 
-        // Challenge.
         let challenge = RequestEnvelope {
             protocol_major: PROTOCOL_MAJOR,
             protocol_minor: PROTOCOL_MINOR,
@@ -1104,8 +1025,6 @@ mod tests {
             security_options: Vec::new(),
         };
 
-        // Two independent IPC sessions, both resolving to the same key. The
-        // first creates the endpoint; the second must reuse it.
         for _ in 0..2 {
             let socket =
                 std::env::temp_dir().join(format!("vcli-pool-{}.sock", uuid::Uuid::new_v4()));
@@ -1159,8 +1078,6 @@ mod tests {
         use crate::transport::scheduler::SchedulerLimits;
         use std::sync::atomic::{AtomicUsize, Ordering};
 
-        // Factory hands out a transport that fails at the connection level the
-        // first time and works afterwards.
         let calls = Arc::new(AtomicUsize::new(0));
         let pool = Arc::new(EndpointPool::new());
         let factory_calls = Arc::clone(&calls);
@@ -1188,8 +1105,6 @@ mod tests {
             security_options: Vec::new(),
         };
 
-        // Session 1: the pooled transport fails at the connection level. The
-        // client sees the error and the pool must evict the connection.
         let socket = std::env::temp_dir().join(format!("vcli-evict-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).expect("bind");
@@ -1225,8 +1140,6 @@ mod tests {
         assert_eq!(pool.len(), 0, "poisoned connection must be evicted");
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
-        // Session 2: a fresh connection is created and reports the business
-        // failure (exit 7) — which must NOT evict it.
         let socket = std::env::temp_dir().join(format!("vcli-evict-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
         let listener = UnixListener::bind(&socket).expect("bind");
@@ -1273,7 +1186,6 @@ mod tests {
         let transport: Arc<dyn RemoteTransport> = Arc::new(FakeTransport::ok());
         let socket = std::env::temp_dir().join(format!("vcli-shut-{}.sock", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_file(&socket);
-        // Short grace so the test does not sit through the 10 s default.
         let coordinator =
             crate::transport::lifecycle::ShutdownCoordinator::new(Duration::from_millis(200));
 
@@ -1282,7 +1194,6 @@ mod tests {
         let runner =
             thread::spawn(move || run(&path, transport_for_run, "secret-token", "n", coordinator));
 
-        // Wait for the socket to appear (bind happens on the other thread).
         let mut client = None;
         for _ in 0..100 {
             if let Ok(c) = NativeTransportClient::connect(&socket, "p", "secret-token") {
@@ -1295,7 +1206,6 @@ mod tests {
 
         client.request_shutdown().expect("shutdown ack");
 
-        // `run` must return Ok on its own — no process exit, no SIGKILL.
         let started = std::time::Instant::now();
         loop {
             if runner.is_finished() {
@@ -1310,7 +1220,6 @@ mod tests {
         let result = runner.join().expect("run thread panicked");
         assert!(result.is_ok(), "run returned an error: {result:?}");
 
-        // Clean exit also unlinks the socket.
         assert!(!socket.exists(), "socket must be unlinked on clean exit");
     }
 
@@ -1323,11 +1232,6 @@ mod tests {
         use crate::transport::pool::{EndpointKey, EndpointPool};
         use crate::transport::scheduler::SchedulerLimits;
 
-        // Keep the suffix short: macOS runners resolve `temp_dir()` to a long
-        // `/var/folders/.../T` path and a Unix socket's `sun_path` holds at
-        // most 104 bytes. A longer name fails to bind and the daemon never
-        // comes up — on macOS only, which makes it easy to misread as a
-        // platform bug in the server.
         let socket = std::env::temp_dir().join(format!("vcli-shp-{}.sock", uuid::Uuid::new_v4()));
         assert!(
             socket.to_string_lossy().len() <= 100,
@@ -1339,10 +1243,6 @@ mod tests {
             crate::transport::lifecycle::ShutdownCoordinator::new(Duration::from_millis(200));
 
         let pool = Arc::new(EndpointPool::new());
-        // The key here only has to be a stable identity for the duration of
-        // this test; no SSH is exercised. Construct it directly rather than
-        // through `from_config` so this test module does not depend on a
-        // full `Config`.
         let key = EndpointKey {
             profile: None,
             host: "eda-1".to_string(),
@@ -1380,7 +1280,6 @@ mod tests {
             )
         });
 
-        // Wait for the daemon to come up before issuing the shutdown.
         let mut client = None;
         for _ in 0..100 {
             if let Ok(c) = NativeTransportClient::connect(&socket, "p", "secret-token") {
@@ -1390,10 +1289,6 @@ mod tests {
             thread::sleep(Duration::from_millis(20));
         }
         let client = client.expect("daemon did not come up");
-        // Serve one real command first. `Hello` is answered before the
-        // dispatch loop and `Shutdown` breaks out of it before the transport
-        // is resolved, so without this the factory would never run and the
-        // test would not exercise the pooled path at all.
         client
             .run_command(&CommandRequest::untimed("echo hi"))
             .expect("command must succeed on a healthy pooled transport");

@@ -33,20 +33,6 @@ impl WhitelistEntry {
                 if !code_lc.contains(&pattern_lc) {
                     return false;
                 }
-                // The allowlist exists for one narrow reason: an allowlisted
-                // function's OWN NAME contains the pattern (`hiFlush(` contains
-                // `sh(`). So when the expression starts with such a call, the
-                // exemption must cover exactly that one occurrence — the name
-                // itself — and nothing else.
-                //
-                // Re-testing only the remainder is what makes that precise.
-                // A blanket `return false` on the prefix would exempt the whole
-                // expression, so `hiFlush(sh("rm -rf /"))` would sail through:
-                // SKILL evaluates innermost-first, running the shell command
-                // before the outer call is even applied.
-                //
-                // Safe:  hiFlush()   hiFlush(1 2)
-                // Block: sh(x)  system(sh(x))  Fish(sh(x))  hiFlush(sh(x))
                 for safe in *allowlist {
                     let safe_call = format!("{}(", safe.to_lowercase());
                     if let Some(rest) = code_lc.strip_prefix(&safe_call) {
@@ -76,20 +62,6 @@ fn default_dangerous() -> Vec<WhitelistEntry> {
     vec![
         // Shell invocations
         WhitelistEntry::Substring("system("),
-        // sh( blocked except when the expression starts with a UI function whose
-        // own name contains "sh(" as a substring. Only `hiFlush` qualifies:
-        //   "hiflush("  contains "sh("  -> needs the exemption
-        //   "hishell("  does NOT        -> never needed it
-        // `hiShell` was on this list too. Because a bare `hiShell()` never
-        // matches the pattern in the first place, the only expression the entry
-        // could ever permit was one that starts with `hiShell(` and contains
-        // `sh(` somewhere else — i.e. `hiShell(sh("rm -rf /"))`, which SKILL
-        // evaluates innermost-first, running the shell command before the outer
-        // call fails. It was a bypass with no legitimate use, doubly so since
-        // `hiShell` does not exist on IC23.1 (`getd` -> nil, absent from all 41
-        // SKILL Finder databases). Removed.
-        // Blocks: sh(x)  system(sh(x))  Fish(sh(x))  hiShell(sh(x))
-        // Allows: hiFlush()  hiFlush(1 2)
         WhitelistEntry::SubstringWithAllowlist {
             pattern: "sh(",
             allowlist: &["hiFlush"],
@@ -102,15 +74,12 @@ fn default_dangerous() -> Vec<WhitelistEntry> {
         WhitelistEntry::Substring("deleteFile("),
         WhitelistEntry::Substring("unlink("),
         WhitelistEntry::Substring("rmdir("),
-        // Network fetch + execute (curl/wget with shell redirect or pipe)
         WhitelistEntry::Substring("curl "),
         WhitelistEntry::Substring("wget "),
         WhitelistEntry::Substring("| sh"),
         WhitelistEntry::Substring("|sh"),
         WhitelistEntry::Substring("; sh"),
         WhitelistEntry::Substring(";sh"),
-        // Raw disk I/O. `dd` needs a word boundary: it is a substring of `VDD`,
-        // and the raw-disk form `dd if=/dev/...` is caught by `/dev/` anyway.
         WhitelistEntry::WordBoundary("dd "),
         WhitelistEntry::Substring("/dev/"),
         WhitelistEntry::Substring("/proc/"),
@@ -219,15 +188,11 @@ mod tests {
 
     #[test]
     fn block_sh_except_hi_prefixed_ui_functions() {
-        // sh( in dangerous contexts is blocked
         assert!(wl().check("sh(x)").is_some());
         assert!(wl().check("system(sh(x))").is_some());
         assert!(wl().check("Fish(sh(x))").is_some());
-        // hiFlush's own name contains 'sh(' — it needs the exemption
         assert!(wl().check("hiFlush()").is_none());
         assert!(wl().check("hiFlush(1 2)").is_none());
-        // A bare hiShell() never contains the pattern, so it passes without
-        // any allowlist entry. (It is also undefined on IC23.1.)
         assert!(wl().check("hiShell()").is_none());
     }
 
@@ -247,7 +212,6 @@ mod tests {
         assert!(wl().check(r#"hiflush(sh("id"))"#).is_some());
         assert!(wl().check(r#"hiShell(sh("rm -rf /"))"#).is_some());
         assert!(wl().check(r#"hishell(sh("id"))"#).is_some());
-        // ...while the legitimate calls still pass.
         assert!(wl().check("hiFlush()").is_none());
         assert!(wl().check("hiFlush(1 2)").is_none());
     }
@@ -268,7 +232,7 @@ mod tests {
         let mut w = wl();
         w.enable_sandbox();
         assert!(w.check("evalstring(\"system()\")").is_some());
-        assert!(w.check("1+1").is_none()); // sandbox blocks evalstring, not safe code
+        assert!(w.check("1+1").is_none());
     }
 
     #[test]
@@ -285,9 +249,7 @@ mod tests {
     #[test]
     fn allow_safe_code_sandbox() {
         let w = sandbox_wl();
-        // evalstring itself is blocked
         assert!(w.check("evalstring(\"1+1\")").is_some());
-        // but read-only expressions not containing evalstring are fine
         assert!(w
             .check("dbOpenCellViewByType(\"analogLib\" \"nmos4\" \"symbol\")")
             .is_none());
@@ -301,10 +263,7 @@ mod tests {
 
     #[test]
     fn dd_needs_a_word_boundary() {
-        // `dd` as a bare command is still blocked...
         assert!(wl().check("system(\"dd if=/x of=/y\")").is_some());
-        // ...but `VDD` is the most common net name in analog design, and it
-        // used to trip the raw-disk pattern from inside a quoted message.
         assert!(wl()
             .check("error(\"label_term: terminal VDD has no pin\")")
             .is_none());

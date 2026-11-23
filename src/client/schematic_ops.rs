@@ -265,10 +265,6 @@ impl SchematicOps {
         let inst_name = escape_skill_string(inst_name);
         let (x, y) = target;
         let guard = cv_guard();
-        // Orientation first: it pivots about the instance origin, so reorienting
-        // after the move would leave the origin where it was put — but doing it
-        // first keeps the two independent either way, and reads in the order the
-        // caller wrote them.
         let set_orient = match orient {
             Some(o) => format!(r#" inst~>orient = "{}""#, escape_skill_string(o)),
             None => String::new(),
@@ -283,16 +279,9 @@ impl SchematicOps {
         let gather_pts = term_points_of("inst", "pts");
         let gather_wires = wires_touching("pts", "wires");
         let gather_other_pts = term_points_of("oi", "opts");
-        // Ownership: a candidate wire that also lands on some *other* instance's
-        // terminal is shared. Checked against the candidate set rather than
-        // against every wire in the cellview, so the sweep is over the handful
-        // of wires this instance touches.
         let ownership = format!(
             r#"foreach(oi cv~>instances unless(oi == inst let((opts) opts = nil {gather_other_pts} foreach(p opts foreach(f dbGetOverlaps(cv list(p p)) when(f~>objType == "line" && exists(w wires w == f) && !exists(s shared s == f) shared = cons(f shared)))))))"#
         );
-        // Refused before anything moves. `orient` relocates the terminals, so
-        // translating the old stubs by the origin's displacement puts them
-        // nowhere near the new terminal positions.
         let orient_guard = if orient.is_some() {
             r#" when(wires error("%s" sprintf(nil "move_instance: %s carries %d stub(s) and 'orient' would move its terminals out from under them. Delete the stubs with 'schematic.delete_figure', move with the new orient, then redraw them with 'schematic.label_term' — or pass with_stubs:false to move the symbol alone." inst~>name length(wires))))"#
         } else {
@@ -337,9 +326,6 @@ impl SchematicOps {
     /// that segment is vertical, matching [`Self::create_net_stub`].
     pub fn create_wire(&self, points: &[(f64, f64)], net_name: &str) -> String {
         let net_name = escape_skill_string(net_name);
-        // A single point is not a wire. Say so in the same place every other
-        // failure here is reported rather than letting `schCreateWire` return
-        // nil and blaming the cellview.
         let (Some(&(x0, y0)), Some(&(x1, y1))) = (points.first(), points.get(1)) else {
             return format!(
                 r#"error("create_wire: net {net_name} needs at least two points, got {}")"#,
@@ -445,16 +431,10 @@ impl SchematicOps {
         let net_name = escape_skill_string(net_name);
         let (x, y) = origin;
         let guard = cv_guard();
-        // `orient` and `sigtype` are allowlisted just above, so neither can
-        // carry a quote. They still go through the escaper, because "checked
-        // somewhere else" is not a property the next editor of this line can
-        // see.
         let orient = escape_skill_string(orient);
         let (sig_arg, sig_json) = match sigtype {
             Some(s) => {
                 let s = escape_skill_string(s);
-                // Arguments 8 and 9 are `g_powerSens` / `g_groundSens`; both are
-                // positional, so reaching `g_sigType` means spelling them out.
                 (
                     format!(r#" nil nil "{s}""#),
                     format!(r#",\"sigtype\":\"{s}\""#),
@@ -476,16 +456,6 @@ impl SchematicOps {
         let lib = escape_skill_string(lib);
         let cell = escape_skill_string(cell);
         let view = escape_skill_string(view);
-        // dbOpenCellViewByType with viewType="schematic" mode="a":
-        //   creates cellview if absent, opens for editing (non-interactive)
-        // Store in RB_SCH_CV global — this is the *explicit target* that
-        // `cv_guard` prefers over the current window, so every later
-        // `schematic.*` call in this session lands here.
-        //
-        // Report what was bound, and whether any window shows it. A bare `ok`
-        // hid the one thing worth knowing: with `windowed: false` the edits are
-        // headless and the GUI keeps displaying some other cell, which is
-        // exactly how a `place` once went into the wrong schematic unnoticed.
         format!(
             r#"let((cv w) cv = dbOpenCellViewByType("{lib}" "{cell}" "{view}" "schematic" "a") when(!cv error("open_cell_view: cannot open {lib}/{cell}/{view}")) RB_SCH_CV = cv w = car(setof(x hiGetWindowList() x->cellView == cv)) sprintf(nil "{{\"lib\":\"%s\",\"cell\":\"%s\",\"view\":\"%s\",\"windowed\":%s}}" cv~>libName cv~>cellName cv~>viewName if(w "true" "false")))"#
         )
@@ -575,17 +545,6 @@ impl SchematicOps {
     pub fn list_cdf_params(&self, inst_name: &str) -> String {
         let inst_name = escape_skill_string(inst_name);
         let guard = cv_guard();
-        // Every field is emitted with `%L`, which supplies its own surrounding
-        // quotes *and* backslash-escapes any `"` and `\` inside — the same
-        // escaping JSON wants. Hand-wrapping in `\"%s\"` instead (the first
-        // version of this) produced invalid JSON for every real PDK device:
-        // SMIC's n50_ckt/p50_ckt carry `simM = iPar("m")` and `simW =
-        // iPar("w")`, whose embedded quotes closed the JSON string early and
-        // made the whole response unparseable. Measured 2026-09-09 — the
-        // method was 100% broken on exactly the devices it exists to describe.
-        //
-        // Non-strings are stringified first, so `%L` always sees a string and
-        // never emits a bare symbol or number where JSON needs a quoted value.
         format!(
             r#"let((cv inst cdf out sep sep2 n ty v pr un df ch ds extra) cv = {EDIT_CV} {guard} inst = car(setof(i cv~>instances i~>name == "{inst_name}")) when(!inst error("instance {inst_name} not found in this cellview")) cdf = cdfGetInstCDF(inst) out = "[" sep = "" when(cdf foreach(p cdf~>parameters n = p~>name n = if(stringp(n) n sprintf(nil "%s" n)) ty = p~>paramType ty = if(ty if(stringp(ty) ty sprintf(nil "%s" ty)) "?") v = p~>value v = if(v if(stringp(v) v sprintf(nil "%L" v)) "") pr = p~>prompt pr = if(pr if(stringp(pr) pr sprintf(nil "%s" pr)) "") un = p~>units un = if(un if(stringp(un) un sprintf(nil "%s" un)) "") df = p~>defValue df = if(df if(stringp(df) df sprintf(nil "%L" df)) "") extra = "" ch = p~>choices when(ch extra = strcat(extra ",\"choices\":[") sep2 = "" foreach(c ch extra = strcat(extra sep2 sprintf(nil "%L" if(stringp(c) c sprintf(nil "%s" c)))) sep2 = ",") extra = strcat(extra "]")) ds = p~>description when(ds && stringp(ds) && strcmp(ds "") != 0 extra = strcat(extra sprintf(nil ",\"description\":%L" ds))) out = strcat(out sep sprintf(nil "{{\"name\":%L,\"prompt\":%L,\"type\":%L,\"units\":%L,\"default\":%L,\"value\":%L%s}}" n pr ty un df v extra)) sep = ",")) strcat(out "]"))"#
         )
@@ -808,17 +767,12 @@ impl SchematicOps {
         } else {
             "0.0625"
         };
-        // A vertical stub reads better with the text turned to match it, but
-        // only when the caller asks — upright text is easier to skim in bulk.
         let (up_rot, up_just, dn_rot, dn_just) = if auto_rotate {
             ("R90", "centerLeft", "R90", "centerRight")
         } else {
             ("R0", "lowerCenter", "R0", "upperCenter")
         };
         let guard = cv_guard();
-        // The terminal's position comes from the shared locator, so the point
-        // this call draws a stub at is byte-for-byte the point
-        // `schematic.delete_figure` and `move_instance` later look for.
         let locate = term_point("label_term", inst_name_raw, term_name_raw);
 
         format!(
@@ -857,7 +811,6 @@ impl SchematicOps {
             _ => 0,
         };
 
-        // Build the optional code blocks as plain strings
         let rotate_part = if auto_rotate {
             " when(labels let((bb bbx bby orient) bb=car(labels)~>xy bbx=caar(bb) bby=cadr(bb) orient=if(bbx>10000 \"R90\" if(bbx<-10000 \"R270\" if(bby>10000 \"MY\" \"R0\"))) foreach(l labels l~>orient=orient)))".to_string()
         } else {
@@ -1007,10 +960,6 @@ mod tests {
 
     #[test]
     fn list_cdf_params_lets_skill_do_the_json_escaping() {
-        // The values this has to survive are things like `iPar("m")`, which
-        // every SMIC device carries. Emitting them into a hand-written
-        // `\"%s\"` closes the JSON string early; `%L` quotes and escapes them
-        // itself. Assert the field values are `%L` and not `\"%s\"`.
         let s = ops().list_cdf_params("M1");
         assert!(
             s.contains(r#"{\"name\":%L,\"prompt\":%L,\"type\":%L,\"units\":%L,\"default\":%L,\"value\":%L%s}"#),
@@ -1096,7 +1045,6 @@ mod tests {
     #[test]
     fn assign_net_uses_dbcreateinstterm() {
         let s = ops().assign_net("M1", "G", "VIN");
-        // must connect via the master-terminal db object, not the (lazy/empty) instTerms
         assert!(
             s.contains("dbCreateInstTerm"),
             "must use dbCreateInstTerm: {s}"
@@ -1154,8 +1102,6 @@ mod tests {
 
     #[test]
     fn open_cellview_reports_the_bound_target() {
-        // A bare `ok` cannot tell the caller which cellview later
-        // `schematic.*` calls will hit, nor whether the GUI is showing it.
         let s = ops().open_cellview("myLib", "myCell", "schematic");
         assert!(s.contains("\\\"windowed\\\":%s"), "{s}");
         assert!(s.contains("hiGetWindowList()"), "{s}");
@@ -1164,17 +1110,12 @@ mod tests {
 
     #[test]
     fn cv_guard_prefers_the_explicit_target_over_the_current_window() {
-        // `RB_SCH_CV` is what `schematic.open_cell_view` was asked to bind; the
-        // editor window is whatever the user last clicked. The explicit one has
-        // to win, or a `place` silently lands in another cell's schematic.
         let g = cv_guard();
         let rb = g.find("RB_SCH_CV").expect("guard must consult RB_SCH_CV");
-        // No `when(!cv ...)` gating the probe: it runs regardless of EDIT_CV.
         assert!(
             !g[..rb].contains("when(!cv"),
             "RB_SCH_CV must be probed unconditionally, not only when the window lookup failed: {g}"
         );
-        // The error is still last, so an unresolvable target is loud.
         assert!(g.trim_end().ends_with("first\"))"), "{g}");
     }
 
@@ -1209,7 +1150,6 @@ mod tests {
                     && !s.contains("dbCreateLabel"),
                 "no undefined or layer-based db calls: {s}"
             );
-            // The net must be named, not accepted and dropped.
             assert!(s.contains("\"VDD\""), "net name must appear quoted: {s}");
         }
     }
@@ -1235,7 +1175,6 @@ mod tests {
     fn create_wire_turns_the_label_to_follow_a_vertical_segment() {
         let h = ops().create_wire(&[(0.0, 0.0), (2.0, 0.0)], "VDD");
         assert!(h.contains(r#""VDD" "centerCenter" "R0""#), "{h}");
-        // Midpoint of the first segment.
         assert!(h.contains("list(1.0 0.0)"), "{h}");
         let v = ops().create_wire(&[(0.0, 0.0), (0.0, 3.0)], "VDD");
         assert!(v.contains(r#""VDD" "centerCenter" "R90""#), "{v}");
@@ -1245,12 +1184,10 @@ mod tests {
     #[test]
     fn set_instance_param_generates_guarded_escaped_write() {
         let s = ops().set_instance_param("M0", "w", "4u");
-        // read-only guard present (same as every other write op)
         assert!(
             s.contains("geGetEditCellView"),
             "guard must be present: {s}"
         );
-        // uses the property-write primitive, not a raw eval
         assert!(s.contains("dbReplaceProp"), "must use dbReplaceProp: {s}");
         assert!(
             s.contains("\"M0\"") && s.contains("\"w\"") && s.contains("\"4u\""),
@@ -1277,13 +1214,11 @@ mod tests {
             "must not print the first thirty in declaration order: {s}"
         );
         assert!(s.contains("k < 10"), "shortlist must be capped at ten: {s}");
-        // Ranking is case-insensitive, so the query is folded once up front.
         assert!(
             s.contains(r#"q = lowerCase("ampl")"#),
             "query must be case-folded: {s}"
         );
         assert!(s.contains("lowerCase(nm)"), "name must be case-folded: {s}");
-        // Total count survives — ten is a shortlist, not a search.
         assert!(
             s.contains("list_cdf_params"),
             "must still point at the full table: {s}"
@@ -1301,8 +1236,6 @@ mod tests {
             s.contains("lowerCase(pr)") && s.contains("index(lpr q)"),
             "must match the query against the folded prompt: {s}"
         );
-        // A prompt match prints as `va (Amplitude)` — the name alone would not
-        // explain why it was offered.
         assert!(
             s.contains(r#"sprintf(nil "%s (%s)" nm pr)"#),
             "prompt matches must show the label: {s}"
@@ -1369,7 +1302,6 @@ mod tests {
         assert!(s.contains("schCreateWire("), "must draw a real wire: {s}");
         assert!(s.contains("schCreateWireLabel("), "must glue a label: {s}");
         assert!(s.contains("geGetEditCellView"), "must have guard: {s}");
-        // The stub runs right from (100 200) for 0.5, label at the midpoint.
         assert!(s.contains("list(100.5 200.0)"), "endpoint: {s}");
         assert!(s.contains("list(100.25 200.0)"), "label midpoint: {s}");
     }
@@ -1396,8 +1328,6 @@ mod tests {
         let s = ops().label_instance_term("M1", "D", "VDD", "default", false);
         assert!(s.contains("VDD"), "net name must appear: {s}");
         assert!(s.contains("geGetEditCellView"), "must have guard: {s}");
-        // Schematic-editor APIs, not the raw db ones: only these two make the
-        // wire and label part of the schematic's connectivity.
         assert!(s.contains("schCreateWire("), "must create wire: {s}");
         assert!(s.contains("schCreateWireLabel("), "must label wire: {s}");
         assert!(
@@ -1528,7 +1458,6 @@ mod tests {
     fn label_instance_term_cosmetic_clean() {
         let s = ops().label_instance_term("X1", "G", "VIN", "clean", true);
         assert!(s.contains("0.125"), "clean should use fontSize 0.125: {s}");
-        // auto_rotate turns the label along a vertical stub.
         assert!(s.contains("R90"), "auto_rotate should emit R90: {s}");
     }
 
@@ -1609,7 +1538,6 @@ mod tests {
         assert!(s.contains("'orient' would move its terminals"), "{s}");
         assert!(s.contains(r#"inst~>orient = "R90""#), "{s}");
 
-        // …but with_stubs:false has nothing to tear, so it just reorients.
         let plain = ops().move_instance("M1", (5.0, 0.0), Some("R90"), false);
         assert!(!plain.contains("when(wires error("), "{plain}");
         assert!(plain.contains(r#"inst~>orient = "R90""#), "{plain}");

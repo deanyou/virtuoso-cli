@@ -404,9 +404,6 @@ fn report_ssh_port(cfg: &Config) -> String {
         .unwrap_or_else(|| "22".into())
 }
 fn report_ssh_key(cfg: &Config) -> String {
-    // The key path may contain sensitive info (username, custom paths).
-    // Show only "set" / "unset" to avoid leaking it through a config-check
-    // snapshot or terminal scrollback — same policy as transport_daemon_token.
     if cfg.ssh_key.is_some() {
         "***set***".to_string()
     } else {
@@ -490,8 +487,6 @@ fn report_transport_daemon_socket(cfg: &Config) -> String {
     cfg.transport_daemon_socket.clone().unwrap_or_default()
 }
 fn report_transport_daemon_token(cfg: &Config) -> String {
-    // The token is sensitive; show only "set" / "unset" to avoid leaking it
-    // through a config-check snapshot or terminal scrollback.
     if cfg.transport_daemon_token.is_some() {
         "***set***".to_string()
     } else {
@@ -628,15 +623,10 @@ fn build_report_from_target(
     target_name: &str,
     mut report: ConfigReport,
 ) -> ConfigReport {
-    // We compute a synthetic Config from the target (with defaults applied)
-    // so the display closures agree with the runtime path byte-for-byte.
     let cfg =
         Config::from_target(target, target_name).expect("target validates port at from_target");
     for spec in KEY_SPECS {
         let value = (spec.display)(&cfg);
-        // Per-field attribution: if the *target* had this field set, the value
-        // came from the target. If the target had `None` and the synthetic
-        // config shows the constant default, attribute it to "default".
         let target_provided = target_provides(spec.key, target);
         let source = if target_provided {
             ConfigSource::Target {
@@ -644,8 +634,6 @@ fn build_report_from_target(
                 file: crate::target::TargetManager::default_config_path(),
             }
         } else {
-            // None from the target means the runtime applied its built-in default.
-            // Port is derived (OS-assigned when 0); everything else is hardcoded.
             let kind = if spec.key == "VB_PORT" {
                 DefaultKind::Derived
             } else {
@@ -701,9 +689,6 @@ fn target_provides(key: &str, t: &crate::target::TargetConfig) -> bool {
         "VB_TRANSPORT_DAEMON_SOCKET" => t.transport_daemon_socket.is_some(),
         "VB_TRANSPORT_DAEMON_TOKEN" => t.transport_daemon_token.is_some(),
         "VB_ALLOW_CROSS_USER_DAEMON" => t.allow_cross_user_daemon.is_some(),
-        // TargetConfig has no equivalent for these — `from_target` always
-        // returns hard-coded constants here, so they cannot be attributed to
-        // the target.
         "VB_TRANSPORT_SHUTDOWN_GRACE"
         | "VB_GUI_HOST"
         | "VB_DEPLOY_HOST"
@@ -751,11 +736,6 @@ impl Layers<'_> {
             }
         }
         if let Some(file) = self.file {
-            // One walk, one truth. `get_with_loc` returns the value and the
-            // precise layer it was read from, so we never have to first probe
-            // with `profile_section_has` and read again with `get`. The two
-            // passes could disagree on which spelling matched, misattributing a
-            // global value to a profile section (and vice versa).
             if let Some((v, loc)) = file.get_with_loc(key, self.profile) {
                 let source = match loc {
                     FileLoc::Profile { .. } => ConfigSource::FileProfile {
@@ -940,10 +920,6 @@ impl Config {
     }
 
     pub fn from_env() -> Result<Self> {
-        // Use the hierarchical profile resolver:
-        // 1. VB_PROFILE env var
-        // 2. Virtualenv binding ($VIRTUAL_ENV/.vcli-profile)
-        // 3. User-level ~/.vcli/profile (deprecated fallback: ~/.vcli/.env)
         let profile = Self::resolve_profile();
         Self::from_env_with_profile(profile.as_deref())
     }
@@ -953,7 +929,6 @@ impl Config {
     /// `pub(crate)` so that `commands::profile::show()` and integration
     /// tests can introspect resolution without going through `from_env`.
     pub(crate) fn resolve_profile() -> Option<String> {
-        // 1. Process environment VB_PROFILE
         if let Ok(v) = env::var("VB_PROFILE") {
             let trimmed = v.trim();
             if !trimmed.is_empty() {
@@ -961,7 +936,6 @@ impl Config {
             }
         }
 
-        // 2. Virtualenv binding ($VIRTUAL_ENV/.vcli-profile)
         if let Ok(venv) = env::var("VIRTUAL_ENV") {
             if !venv.is_empty() {
                 let binding_path = std::path::PathBuf::from(&venv).join(".vcli-profile");
@@ -976,8 +950,6 @@ impl Config {
             }
         }
 
-        // 3. User-level ~/.vcli/profile (sole content is the profile name),
-        //    with ~/.vcli/.env VB_PROFILE= kept as a deprecated fallback.
         if let Some(home) = dirs::home_dir() {
             let vcli_dir = home.join(".vcli");
 
@@ -1028,14 +1000,7 @@ impl Config {
     }
 
     fn from_env_resolve(profile: Option<&str>, honor_vb_target: bool) -> Result<Self> {
-        // No `.env` loading (RFC #83): configuration comes from the process
-        // environment and from a single, fixed, queryable `config.toml`.
         if honor_vb_target {
-            // TEMPORARY bridge (P0-A): main() resolves the target/profile
-            // selection via target::resolve and syncs VB_TARGET here. This
-            // branch must be removed together with the env-var bridge when
-            // commands receive the resolved Config explicitly (CommandContext
-            // propagation).
             if let Ok(target_name) = std::env::var("VB_TARGET") {
                 if !target_name.is_empty() {
                     let manager = crate::target::TargetManager::load().map_err(|e| {
@@ -1049,14 +1014,6 @@ impl Config {
             }
         }
 
-        // One read, shared by every field below. The explicit-target branch
-        // above returns before reaching here on purpose: a target's identity
-        // comes from targets.yaml alone and must not be diluted by
-        // config.toml.
-        //
-        // `Layers::to_config` centralises the field-by-field read so that
-        // `build_report` and `from_env_resolve` share ONE code path — any
-        // change to a field's resolution rule only needs to live in ONE place.
         let file = ConfigFile::load()?;
         let lz = Layers {
             profile,
@@ -1224,10 +1181,6 @@ impl Config {
             digest: None,
         };
 
-        // Pre-check: selection/resolve failures detected before we got here.
-        // Mark invalid, emit a diagnostic, but KEEP going — seeing the
-        // selection error alongside whatever config we *can* read is more
-        // useful than bailing out.
         if let Err(e) = pre_check {
             report.valid = false;
             let msg = format!("config selection failed: {e}");
@@ -1240,19 +1193,12 @@ impl Config {
             });
         }
 
-        // Active target detection — mirrors from_env_resolve's honor_vb_target
-        // branch. We never *consume* it here; we only report whether one is
-        // driving the resolution so the user can see "your 30-second timeout
-        // came from the prod target, not from any VB_… env var".
         if let Ok(name) = std::env::var("VB_TARGET") {
             if !name.is_empty() {
                 report.active_target = Some(name);
             }
         }
 
-        // Surface the deprecated ~/.vcli/.env VB_PROFILE= fallback so the
-        // report tells users their profile moved. Cheap (one fopen); we only
-        // warn when the file exists with a non-empty VB_PROFILE=.
         if let Some(home) = dirs::home_dir() {
             let legacy_env = home.join(".vcli").join(".env");
             if legacy_env.is_file() {
@@ -1280,7 +1226,6 @@ impl Config {
         }
 
         if let Some(ref target_name) = report.active_target.clone() {
-            // Target mode: load the target and trace every key to it.
             report.targets_file = Some(crate::target::TargetManager::default_config_path());
             let manager = match crate::target::TargetManager::load() {
                 Ok(m) => m,
@@ -1313,11 +1258,6 @@ impl Config {
                 }
             };
             let mut report = build_report_from_target(target, target_name, report);
-            // Compute digest from the synthetic config so the report carries the
-            // same identity the runtime would use. If construction fails here
-            // the same error would block the live path — surface it as an
-            // error rather than returning a misleading valid=true + empty
-            // digest.
             match Config::from_target(target, target_name) {
                 Ok(cfg) => report.digest = Some(cfg.digest()),
                 Err(e) => {
@@ -1339,7 +1279,6 @@ impl Config {
             return Ok(report);
         }
 
-        // Legacy mode: walk the four-layer precedence for every known key.
         let file = match ConfigFile::load() {
             Ok(f) => f,
             Err(e) => {
@@ -1352,7 +1291,6 @@ impl Config {
                 });
                 report.valid = false;
                 report.warnings.push(msg);
-                // Still report defaults so the user sees what would be used.
                 for spec in KEY_SPECS {
                     let kind = if spec.key == "VB_PORT" {
                         DefaultKind::Derived
@@ -1394,15 +1332,6 @@ impl Config {
                     )
                 }
             };
-            // Apply the same scalar validators as the live path so a value
-            // that would fail at runtime shows up here *with the same error
-            // message*. We surface parse failures as warnings rather than
-            // aborting — the user is asking "what would happen?", not
-            // "tunnel now".
-            //
-            // Sanitise sensitive values (tokens, key paths) before they reach
-            // JSON / table output. Returns e.g. "***set***" in place of the
-            // raw secret when the key is sensitive and the value is non-empty.
             let display_value = sanitize_raw_value(spec.key, &raw);
             match (spec.validate)(&raw) {
                 Ok(()) => report.entries.push(ConfigEntry {
@@ -1421,11 +1350,6 @@ impl Config {
                         spec.key
                     );
                     report.warnings.push(msg.clone());
-                    // A value that cannot be parsed is NOT a valid runtime
-                    // config — mark the report invalid so --format json carries
-                    // valid=false and the exit code is non-zero. Previously
-                    // this only produced a warning, so an invalid timeout etc.
-                    // slipped through as valid=true + exit 0.
                     report.valid = false;
                     report.diagnostics.push(ConfigDiagnostic {
                         code: "VALUE_PARSE_FAILED",
@@ -1436,13 +1360,6 @@ impl Config {
                 }
             }
         }
-        // Compute digest from the SAME `Layers` (and therefore the SAME
-        // `ConfigFile` snapshot) the per-field loop just traced. This is the
-        // single-snapshot rule in action: `build_report` does ONE
-        // `ConfigFile::load()` and uses its result for both provenance and
-        // identity. Previously this called `Config::from_env_with_profile()`
-        // which re-loaded `config.toml` — two snapshots, double I/O, and a
-        // window where the file could change between the two passes.
         match lz.to_config() {
             Ok(cfg) => report.digest = Some(cfg.digest()),
             Err(e) => {
@@ -1538,9 +1455,6 @@ mod report_tests {
         fn new(keys: &[&'static str]) -> Self {
             let mut saved: Vec<(&'static str, Option<String>)> =
                 keys.iter().map(|k| (*k, std::env::var(k).ok())).collect();
-            // Always preserve these — they belong to the framework, not the
-            // caller's choice, and we want them unchanged even if the test
-            // didn't mention them.
             for k in ["VB_PROFILE", "VB_TARGET"].iter() {
                 if !saved.iter().any(|(name, _)| *name == *k) {
                     saved.push((k, std::env::var(k).ok()));
@@ -1672,9 +1586,6 @@ mod report_tests {
         let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
         let (tmp, prev) = isolate_config_dir();
         let _restore = ConfigDirGuard(prev);
-        // runtime_paths::config_subdir joins `vcli/` under VB_CONFIG_DIR.
-        // Match the live layout so ConfigFile::load() finds the file we
-        // write — it doesn't auto-create parent directories.
         std::fs::create_dir_all(tmp.path().join("vcli")).expect("mkdir");
         std::fs::write(
             tmp.path().join("vcli/config.toml"),
@@ -1731,8 +1642,6 @@ remote_host = "eda-prod"
             .iter()
             .find(|e| e.key == "VB_TIMEOUT")
             .expect("entry exists");
-        // The raw value is still surfaced so the user can see what was set;
-        // the warning tells them it would fail at runtime.
         assert_eq!(e.value, "not-a-number");
         assert!(matches!(e.source, ConfigSource::Env { .. }));
         assert!(
@@ -1751,7 +1660,6 @@ remote_host = "eda-prod"
         let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
         let (_tmp, prev) = isolate_config_dir();
         let _restore = ConfigDirGuard(prev);
-        // Write a targets.yaml with one explicit target.
         let target_yaml = r#"
 active_target: prod
 targets:
@@ -1762,9 +1670,6 @@ targets:
         std::fs::write(_tmp.path().join("targets.yaml"), target_yaml).expect("write targets");
         std::env::set_var("VB_TARGETS_FILE", _tmp.path().join("targets.yaml"));
         std::env::set_var("VB_TARGET", "prod");
-        // Manually invoking build_report here is tricky because the active
-        // target is detected via VB_TARGET but the target loader uses
-        // VB_TARGETS_FILE — we still need to guard that variable too.
         let report = Config::build_report(None, Ok(())).expect("build_report");
         assert_eq!(report.active_target.as_deref(), Some("prod"));
         let e = report
@@ -1774,28 +1679,20 @@ targets:
             .expect("entry exists");
         assert_eq!(e.value, "target-host");
         assert!(matches!(&e.source, ConfigSource::Target { target, .. } if target == "prod"));
-        // Clean up the VB_TARGETS_FILE we added — Drop on EnvGuard doesn't
-        // know about it because it's not in the spec list.
         std::env::remove_var("VB_TARGETS_FILE");
     }
 
     #[test]
     #[serial]
-    // `dirs::home_dir()` honours `$HOME` on unix only; on Windows it reads
-    // `USERPROFILE`, so pointing `HOME` at a tempdir would not make the
-    // `.env` visible and the warning would never fire.
     #[cfg(unix)]
     fn report_legacy_env_dotenv_fallback_emits_warning() {
         let _env = EnvGuard::new(&["VB_REMOTE_HOST"]);
-        // Pretend `~/.vcli/.env` exists with VB_PROFILE=set, by setting HOME
-        // to a tempdir.
         let prev_home = std::env::var_os("HOME");
         let dir = tempfile::tempdir().expect("home");
         std::fs::create_dir_all(dir.path().join(".vcli")).expect("mkdir");
         std::fs::write(dir.path().join(".vcli/.env"), "VB_PROFILE=stale-binding\n")
             .expect("write env");
         std::env::set_var("HOME", dir.path());
-        // Force a fresh config dir so the file lookup is consistent.
         let (_cfg, prev_cfg) = isolate_config_dir();
         let _restore = ConfigDirGuard(prev_cfg);
         let report = Config::build_report(None, Ok(())).expect("build_report");
@@ -1813,10 +1710,6 @@ targets:
     #[test]
     #[serial]
     fn all_explicit_is_true_when_no_default_sources() {
-        // Shield every key the report consults. The body of the test sets
-        // each one to a non-empty value; without an explicit shield list,
-        // EnvGuard::Drop would only restore the original value for keys the
-        // test passed to `new`, leaking "x" into the rest of the suite.
         let all_keys: Vec<&'static str> = KEY_SPECS.iter().map(|s| s.key).collect();
         let _env = EnvGuard::new(&all_keys);
         let (_tmp, prev) = isolate_config_dir();

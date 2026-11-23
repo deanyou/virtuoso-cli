@@ -177,8 +177,6 @@ impl PluginTool {
                     "malformed plugin parameter placeholder".into(),
                 ));
             } else {
-                // This is a literal brace sequence (for example a JSON object),
-                // not a plugin token. Keep scanning so nested valid tokens work.
                 rendered.push('{');
                 index += 1;
             }
@@ -535,7 +533,6 @@ msg = { type = "string", required = true, description = "Message" }
 
     #[test]
     fn test_toml_parsing_inline_params() {
-        // Test with inline table format (what users might actually write)
         let toml_content = r#"
 domain = "test"
 name = "hello"
