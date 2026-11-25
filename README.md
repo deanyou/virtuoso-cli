@@ -166,6 +166,8 @@ export VB_SSH_BACKEND=native          # optional, pure-Rust
 
 See [Configuration](#configuration) for all env vars and capability matrix.
 
+Connecting over Tailscale instead of a VPN or jump host: see [docs/tailscale-remote-access.md](docs/tailscale-remote-access.md).
+
 </details>
 
 <details>
