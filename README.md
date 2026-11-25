@@ -9,6 +9,8 @@ Local or remote, single-session or multi-instance, SKILL execution or GUI automa
 
 [**Get started ↓**](#get-started) · [GUI Debug Skill](.claude/skills/virtuoso-gui-debug/SKILL.md) · [Architecture](docs/architecture_v2_1.html) · [Releases](https://github.com/deanyou/virtuoso-cli/releases)
 
+[![crates.io](https://img.shields.io/crates/v/virtuoso-cli)](https://crates.io/crates/virtuoso-cli) [![GitHub Release](https://img.shields.io/github/v/release/deanyou/virtuoso-cli)](https://github.com/deanyou/virtuoso-cli/releases) [![CI](https://github.com/deanyou/virtuoso-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/deanyou/virtuoso-cli/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/deanyou/virtuoso-cli)](LICENSE)
+
 </div>
 
 ---
@@ -163,6 +165,39 @@ export VB_SSH_BACKEND=native          # optional, pure-Rust
 ```
 
 See [Configuration](#configuration) for all env vars and capability matrix.
+
+</details>
+
+<details>
+<summary><strong>End-to-End Example · Connect → Configure → Run</strong></summary>
+
+A full Maestro flow, from a live ADE Explorer session to a finished run:
+
+```bash
+# 1. Confirm the bridge session (auto-connects when only one is live)
+vcli session list
+
+# 2. Get the ADE session name
+vcli maestro list-sessions
+# → ["fnxSession0"]
+
+# 3. See which analyses are enabled
+vcli maestro get-analyses --session fnxSession0
+# → {"analyses": ["tran", "ac"], ...}
+
+# 4. Set the AC sweep (--options is IC25 only; IC23 rejects it)
+vcli maestro set-analysis --session fnxSession0 --analysis ac \
+  --options '{"start":"1","stop":"1e10"}'
+
+# 5. Save the setup, then run
+vcli maestro save --session fnxSession0
+vcli maestro run --session fnxSession0
+
+# 6. Read the simulation messages afterwards
+vcli skill exec 'maeGetSimulationMessages(?session "fnxSession0")'
+```
+
+Every step prints JSON, so the same flow drops straight into a script or an agent loop. Schematic work follows the same shape: `vcli schematic open --lib <lib> --cell <cell>` first, then place / wire / read.
 
 </details>
 
@@ -400,6 +435,25 @@ Use `vcli skill exec -` (stdin) or `vcli skill exec --file expr.il`.
 从任何地方控制 Cadence Virtuoso，本地或远程均可。为 AI Agent 和人类共同设计。
 
 [English](#english) · [核心特性](#key-features) · [快速开始](#get-started)
+
+### 核心特性
+
+- **多会话** — 多个 Virtuoso 实例并存，会话 ID 唯一，端口由系统动态分配不冲突；单会话时自动连接
+- **SKILL 桥** — Virtuoso 内 TCP daemon 执行 SKILL，外部以 JSON CLI 调用；`vcli skill broadcast` 可并发扇出到全部存活会话
+- **远程隧道** — 直连或 SSH 隧道（openssh 与纯 Rust native 两种后端），跨架构自动部署 daemon，可非破坏性 attach 到已有 daemon
+- **原理图编辑** — 创建、放置、连线，以及读取实例 / 网络 / 引脚 / 参数
+- **Maestro 与 Spectre** — ADE 会话管理、分析设置、同步 / 异步仿真、PSF 解析
+- **GUI 自动化** — X11 点击、输入、截图，服务端做窗口身份重校验，确定性执行
+- **Agent 原生** — 名词-动词命令结构、JSON 输出、schema 自省、语义退出码、每客户端临时目录隔离
+- **TUI 仪表盘** — `vtui` 终端面板
+
+### 快速开始
+
+```bash
+cargo install virtuoso-cli
+```
+
+在 Virtuoso CIW 中加载 `ramic_bridge.il` 后，在终端执行 `vcli skill exec 'getCurrentTime()'` 即可连通。完整的端到端示例（连接 → 配置 Maestro → 运行仿真 → 读结果）见上方 Get Started 的 End-to-End Example 折叠块。
 
 ---
 
