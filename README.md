@@ -15,6 +15,14 @@ Local or remote, single-session or multi-instance, SKILL execution or GUI automa
 
 <div align="center">
 
+<img src="docs/assets/vcli-live.gif" alt="Animated overview: an agent drives Cadence Virtuoso through the vcli Rust CLI — session connect, SKILL execution, Maestro setup, Spectre run and a verified result in one live session" width="900">
+
+*One session, end to end: connect → SKILL exec → Maestro setup → Spectre run → verified result. (Illustrative session, not a real capture.)*
+
+</div>
+
+<div align="center">
+
 **SEMANTIC FIRST. EVIDENCE FIRST. FROZEN BELOW.**
 
 Drive Virtuoso via SKILL, then X11 — never OCR, never guess.
